@@ -51,6 +51,17 @@ class PidPollingStateTest {
         }
     }
 
+    @Test
+    fun initialCycleUsesHotFirstSampleProfileOnly() {
+        val dueCommands = state.dueForCurrentCycle().map { it.command }
+
+        assertEquals(PidSchedule.FIRST_SAMPLE_COMMANDS, dueCommands)
+        assertTrue("first sample must include speed", dueCommands.contains("010D"))
+        assertTrue("first sample must include HV current", dueCommands.contains("222414"))
+        assertFalse("first sample must not spend time on adapter voltage", dueCommands.contains("ATRV"))
+        assertFalse("first sample must not spend time on deep odometer", dueCommands.contains("01A6"))
+    }
+
     // ---- B2: carry-forward age cap --------------------------------------------------
 
     @Test

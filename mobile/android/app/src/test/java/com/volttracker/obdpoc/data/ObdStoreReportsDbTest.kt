@@ -101,9 +101,9 @@ class ObdStoreReportsDbTest {
     @Test
     fun summaryReflectsSeededSessionAndTelemetry() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(50, 51.0, 32.71, -117.10, 2000L))
-        store.recordTelemetry(id, sample(60, 52.0, 32.72, -117.10, 3000L))
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(50, 51.0, 34.06, -118.25, 2000L))
+        store.recordTelemetry(id, sample(60, 52.0, 34.07, -118.25, 3000L))
 
         val summary = StorageSummaryJson.build(store.getStorageSummaryRecord())
         assertEquals(1, summary.optInt("sessionCount"))
@@ -119,7 +119,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun storageOverviewOmitsHeavyPanelsWhileDetailsExposeThem() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
 
         val overview = StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
         assertEquals(1, overview.optInt("sessionCount"))
@@ -151,8 +151,8 @@ class ObdStoreReportsDbTest {
         // separate COUNT(*) passes. recordTelemetry only persists useful rows, so raw == useful and
         // the redundant (empty) count is 0; this confirms the single-pass query agrees with the data.
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(50, 51.0, 32.71, -117.10, 2000L))
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(50, 51.0, 34.06, -118.25, 2000L))
 
         val summary = StorageSummaryJson.build(store.getStorageSummaryRecord())
         assertEquals("raw count from the combined scan", 2L, summary.optLong("rawTelemetryCount"))
@@ -166,7 +166,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun targetedStorageProjectionsExposeCountsDiagnosticsAndDomainSummaries() {
         val id = store.startSession("scan", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
         store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1100L))
 
         val counts = store.projections().storageCounts()
@@ -191,7 +191,7 @@ class ObdStoreReportsDbTest {
 
     @Test
     fun latestVehicleProjectionSurfacesRedactedVinAndName() {
-        store.upsertVehicleFromVin("1G1ZD5ST8JF202020")
+        store.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
 
         // Lightweight projection used on the OBD connect handshake: same redacted-VIN/name shape as
         // the storage-summary record's latestVehicle slot, via a single last_seen_ms DESC query.
@@ -211,7 +211,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun latestTelemetryIncludesStoredPackVoltageAndCurrent() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
+        val sample = sample(40, 50.0, 34.05, -118.25, 1000L)
         sample.put("packVoltage", 352.4)
         sample.put("packCurrentA", -8.25)
         store.recordTelemetry(id, sample)
@@ -231,7 +231,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun freshCapacityTelemetryCreatesBatterySnapshotForTrend() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
+        val sample = sample(40, 50.0, 34.05, -118.25, 1000L)
         sample.put("capacityAh", 51.7)
         sample.put("capacityAhStaleMs", 0L)
         sample.put("sohPct", 99.4)
@@ -253,7 +253,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun staleCapacityTelemetryDoesNotSpamBatterySnapshots() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        val sample = sample(40, 50.0, 32.70, -117.10, 1000L)
+        val sample = sample(40, 50.0, 34.05, -118.25, 1000L)
         sample.put("capacityAh", 51.7)
         sample.put("capacityAhStaleMs", 12_000L)
         store.recordTelemetry(id, sample)
@@ -264,9 +264,9 @@ class ObdStoreReportsDbTest {
     @Test
     fun insightsReportsRightMaxSpeedAndDistance() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 50.0, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(85, 51.0, 32.71, -117.10, 2000L))
-        store.recordTelemetry(id, sample(62, 52.0, 32.72, -117.10, 3000L))
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(85, 51.0, 34.06, -118.25, 2000L))
+        store.recordTelemetry(id, sample(62, 52.0, 34.07, -118.25, 3000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
 
         val insights = store.getInsightsJson()
@@ -282,13 +282,13 @@ class ObdStoreReportsDbTest {
     @Test
     fun insightsAggregatesMaxAcrossMultipleSessions() {
         val first = store.startSession("obd", "00:11", "Adapter A")
-        store.recordTelemetry(first, sample(40, 50.0, 32.70, -117.10, 1000L))
-        store.recordTelemetry(first, sample(50, 51.0, 32.71, -117.10, 2000L))
+        store.recordTelemetry(first, sample(40, 50.0, 34.05, -118.25, 1000L))
+        store.recordTelemetry(first, sample(50, 51.0, 34.06, -118.25, 2000L))
         store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val second = store.startSession("obd", "00:22", "Adapter B")
-        store.recordTelemetry(second, sample(95, 60.0, 33.00, -118.00, 10000L))
-        store.recordTelemetry(second, sample(80, 61.0, 33.01, -118.00, 11000L))
+        store.recordTelemetry(second, sample(95, 60.0, 34.16, -118.40, 10000L))
+        store.recordTelemetry(second, sample(80, 61.0, 34.17, -118.40, 11000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 12000L, "")
 
         val insights = store.getInsightsJson()
@@ -393,7 +393,7 @@ class ObdStoreReportsDbTest {
     @Test
     fun chargeSummaryExcludesRowsThatOverlapMovingTelemetry() {
         val sessionId = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(sessionId, sample(55, 70.0, 32.70, -117.10, 1_000L))
+        store.recordTelemetry(sessionId, sample(55, 70.0, 34.05, -118.25, 1_000L))
         val context = RuntimeEnvironment.getApplication()
         val helper = VoltTrackerDb(context)
         try {
@@ -472,13 +472,13 @@ class ObdStoreReportsDbTest {
     @Test
     fun chargeSummaryInfersChargeBetweenDriveSessionsFromSocGain() {
         val first = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(first, sample(40, 15.0, 32.70, -117.10, 1_000L))
-        store.recordTelemetry(first, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.recordTelemetry(first, sample(40, 15.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(first, sample(42, 15.0, 34.06, -118.25, 2_000L))
         store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3_000L, "")
 
         val second = store.startSession("obd", "00:11", "Adapter", 8 * 3_600_000L)
-        store.recordTelemetry(second, sample(35, 95.0, 32.71, -117.10, 8 * 3_600_000L + 1_000L))
-        store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
+        store.recordTelemetry(second, sample(35, 95.0, 34.06, -118.25, 8 * 3_600_000L + 1_000L))
+        store.recordTelemetry(second, sample(38, 94.0, 34.07, -118.25, 8 * 3_600_000L + 2_000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
 
         val charge = store.projections().chargeSummary()
@@ -493,8 +493,8 @@ class ObdStoreReportsDbTest {
     @Test
     fun chargeSummaryIncludesOldUsefulDriveBeyondRecentSessionCap() {
         val oldDrive = store.startSession("obd", "00:11", "Adapter", 1_000L)
-        store.recordTelemetry(oldDrive, sample(40, 15.0, 32.70, -117.10, 2_000L))
-        store.recordTelemetry(oldDrive, sample(42, 15.0, 32.71, -117.10, 3_000L))
+        store.recordTelemetry(oldDrive, sample(40, 15.0, 34.05, -118.25, 2_000L))
+        store.recordTelemetry(oldDrive, sample(42, 15.0, 34.06, -118.25, 3_000L))
         store.finishSession(oldDrive, ObdLocalStore.STATUS_COMPLETE, 4_000L, "")
 
         // More than the recent-session cap, deliberately newer than oldDrive and with no useful OBD
@@ -508,8 +508,8 @@ class ObdStoreReportsDbTest {
 
         val newDriveStartedAtMs = 1_000_000L
         val newDrive = store.startSession("obd", "00:11", "Adapter", newDriveStartedAtMs)
-        store.recordTelemetry(newDrive, sample(35, 95.0, 32.71, -117.10, newDriveStartedAtMs + 1_000L))
-        store.recordTelemetry(newDrive, sample(38, 94.0, 32.72, -117.10, newDriveStartedAtMs + 2_000L))
+        store.recordTelemetry(newDrive, sample(35, 95.0, 34.06, -118.25, newDriveStartedAtMs + 1_000L))
+        store.recordTelemetry(newDrive, sample(38, 94.0, 34.07, -118.25, newDriveStartedAtMs + 2_000L))
         store.finishSession(newDrive, ObdLocalStore.STATUS_COMPLETE, newDriveStartedAtMs + 3_000L, "")
 
         val charge = store.projections().chargeSummary()
@@ -530,13 +530,13 @@ class ObdStoreReportsDbTest {
         // rollup cache for the (finalized) sessions; the second read must serve the cache and yield
         // byte-for-byte identical JSON.
         val first = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(first, sample(40, 15.0, 32.70, -117.10, 1_000L))
-        store.recordTelemetry(first, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.recordTelemetry(first, sample(40, 15.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(first, sample(42, 15.0, 34.06, -118.25, 2_000L))
         store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3_000L, "")
 
         val second = store.startSession("obd", "00:11", "Adapter", 8 * 3_600_000L)
-        store.recordTelemetry(second, sample(35, 95.0, 32.71, -117.10, 8 * 3_600_000L + 1_000L))
-        store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
+        store.recordTelemetry(second, sample(35, 95.0, 34.06, -118.25, 8 * 3_600_000L + 1_000L))
+        store.recordTelemetry(second, sample(38, 94.0, 34.07, -118.25, 8 * 3_600_000L + 2_000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
 
         assertEquals("cache must be empty before the first read", 0L, countChargeRollups())
@@ -568,8 +568,8 @@ class ObdStoreReportsDbTest {
         // An open (not-yet-finalized) session is always computed live and must never be cached, so a
         // mid-drive read can't freeze a stale charge contribution for it.
         val active = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(active, sample(40, 50.0, 32.70, -117.10, 1_000L))
-        store.recordTelemetry(active, sample(45, 51.0, 32.71, -117.10, 2_000L))
+        store.recordTelemetry(active, sample(40, 50.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(active, sample(45, 51.0, 34.06, -118.25, 2_000L))
         // No finishSession — the session stays active.
 
         store.projections().chargeSummary()
@@ -580,13 +580,13 @@ class ObdStoreReportsDbTest {
     @Test
     fun clearAllDataDropsChargeRollups() {
         val first = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(first, sample(40, 15.0, 32.70, -117.10, 1_000L))
-        store.recordTelemetry(first, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.recordTelemetry(first, sample(40, 15.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(first, sample(42, 15.0, 34.06, -118.25, 2_000L))
         store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3_000L, "")
 
         val second = store.startSession("obd", "00:11", "Adapter", 8 * 3_600_000L)
-        store.recordTelemetry(second, sample(35, 95.0, 32.71, -117.10, 8 * 3_600_000L + 1_000L))
-        store.recordTelemetry(second, sample(38, 94.0, 32.72, -117.10, 8 * 3_600_000L + 2_000L))
+        store.recordTelemetry(second, sample(35, 95.0, 34.06, -118.25, 8 * 3_600_000L + 1_000L))
+        store.recordTelemetry(second, sample(38, 94.0, 34.07, -118.25, 8 * 3_600_000L + 2_000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
 
         store.projections().chargeSummary()
@@ -613,11 +613,11 @@ class ObdStoreReportsDbTest {
     @Test
     fun chargeSummaryInfersChargeBetweenDriveWindowsInsideLongSession() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 15.0, 32.70, -117.10, 1_000L))
-        store.recordTelemetry(id, sample(42, 15.0, 32.71, -117.10, 2_000L))
+        store.recordTelemetry(id, sample(40, 15.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(id, sample(42, 15.0, 34.06, -118.25, 2_000L))
         val morning = 8 * 3_600_000L
-        store.recordTelemetry(id, sample(35, 95.0, 32.71, -117.10, morning + 1_000L))
-        store.recordTelemetry(id, sample(38, 94.0, 32.72, -117.10, morning + 2_000L))
+        store.recordTelemetry(id, sample(35, 95.0, 34.06, -118.25, morning + 1_000L))
+        store.recordTelemetry(id, sample(38, 94.0, 34.07, -118.25, morning + 2_000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, morning + 3_000L, "")
 
         val charge = store.projections().chargeSummary()

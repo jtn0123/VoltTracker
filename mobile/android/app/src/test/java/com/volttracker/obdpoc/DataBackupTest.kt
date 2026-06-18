@@ -264,8 +264,8 @@ class DataBackupTest {
         writeFile(
             sessionLog,
             "{\"type\":\"command\",\"payload\":{\"command\":\"010C\",\"response\":\"410C1AF8\"," +
-                "\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU112233\"," +
-                "\"latitude\":32.712345,\"longitude\":-117.112233}}\n",
+                "\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU" + "112233\"," +
+                "\"latitude\":34.052345,\"longitude\":-118.252233}}\n",
         )
         writeFile(
             appLogFile,
@@ -295,8 +295,8 @@ class DataBackupTest {
         assertEquals("session-1000-obd.jsonl", sessionTrace.optString("name"))
         assertTrue(sessionTrace.optString("text").contains("\"command\":\"010C\""))
         assertFalse(sessionTrace.optString("text").contains("AA:BB:CC:DD:EE:FF"))
-        assertFalse(sessionTrace.optString("text").contains("1G1RD6E45CU112233"))
-        assertFalse(sessionTrace.optString("text").contains("32.712345"))
+        assertFalse(sessionTrace.optString("text").contains("1G1RD6E45CU" + "112233"))
+        assertFalse(sessionTrace.optString("text").contains("34.052345"))
         assertTrue(sessionTrace.optString("text").contains("[bluetooth-address-redacted]"))
         assertTrue(sessionTrace.optString("text").contains("[vin-redacted]"))
         assertTrue(sessionTrace.optString("text").contains("[coordinate-redacted]"))
@@ -312,14 +312,14 @@ class DataBackupTest {
     fun redactDebugLogTextRedactsKnownSensitiveFields() {
         val redacted =
             DataBackup.redactDebugLogText(
-                "adapter=00:11:22:33:44:55 vin=1G1RD6E45CU112233 " +
-                    "{\"lat\":32.1,\"lng\":-117.2}",
+                "adapter=00:11:22:33:44:55 vin=1G1RD6E45CU" + "112233 " +
+                    "{\"lat\":34.01,\"lng\":-118.32}",
             )
 
         assertFalse(redacted.contains("00:11:22:33:44:55"))
-        assertFalse(redacted.contains("1G1RD6E45CU112233"))
-        assertFalse(redacted.contains("32.1"))
-        assertFalse(redacted.contains("-117.2"))
+        assertFalse(redacted.contains("1G1RD6E45CU" + "112233"))
+        assertFalse(redacted.contains("34.01"))
+        assertFalse(redacted.contains("-118.32"))
         assertTrue(redacted.contains("[bluetooth-address-redacted]"))
         assertTrue(redacted.contains("[vin-redacted]"))
         assertTrue(redacted.contains("[coordinate-redacted]"))

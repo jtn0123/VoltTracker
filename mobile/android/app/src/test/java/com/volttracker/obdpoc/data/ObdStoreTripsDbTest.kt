@@ -86,9 +86,9 @@ class ObdStoreTripsDbTest {
         // Three points along the same longitude — ~1.1 km between each consecutive lat step.
         val route =
             arrayOf(
-                doubleArrayOf(32.7000, -117.1000),
-                doubleArrayOf(32.7100, -117.1000),
-                doubleArrayOf(32.7200, -117.1000),
+                doubleArrayOf(34.0500, -118.2500),
+                doubleArrayOf(34.0600, -118.2500),
+                doubleArrayOf(34.0700, -118.2500),
             )
         store.recordTelemetry(id, gpsSample(40, route[0][0], route[0][1], 1000L))
         store.recordTelemetry(id, gpsSample(55, route[1][0], route[1][1], 2000L))
@@ -114,9 +114,9 @@ class ObdStoreTripsDbTest {
     fun zeroMovementSessionIsNotReportedAsATrip() {
         val id = store.startSession("obd", "00:11", "Adapter")
         // All samples at the exact same coordinate — distance must be 0.
-        store.recordTelemetry(id, gpsSample(0, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, gpsSample(0, 32.70, -117.10, 2000L))
-        store.recordTelemetry(id, gpsSample(0, 32.70, -117.10, 3000L))
+        store.recordTelemetry(id, gpsSample(0, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, gpsSample(0, 34.05, -118.25, 2000L))
+        store.recordTelemetry(id, gpsSample(0, 34.05, -118.25, 3000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
 
         assertEquals(0, store.getTripsJson(40).length())
@@ -127,8 +127,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun tinyTwoPointStationaryRouteIsNotReportedAsATrip() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(0, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(0, 32.70001, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(0, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(0, 34.05001, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         assertEquals(0, store.getTripsJson(40).length())
@@ -139,8 +139,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun markedTripIsHiddenFromTripAndMapProjections() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey =
@@ -161,8 +161,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun setTripLabelPersistsAndAppearsInTripJson() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
@@ -179,8 +179,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun setTripLabelClearsWithEmptyLabel() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
@@ -208,8 +208,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun setTripFavoritePersistsAndAppearsInTripJson() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
@@ -226,8 +226,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun setTripFavoriteClearsWithFalse() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
@@ -255,8 +255,8 @@ class ObdStoreTripsDbTest {
     @Test
     fun allTripsForExportBundlesEachTripWithIdLabelAndRoute() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, gpsSample(35, 32.70000, -117.10000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71000, -117.10000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.05000, -118.25000, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06000, -118.25000, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
@@ -284,9 +284,9 @@ class ObdStoreTripsDbTest {
         val startMs = 2_000_000L
         val minuteMs = 60_000L
         val id = store.startSession("obd", "00:11", "Adapter", startMs)
-        addMovingTelemetryRun(id, startMs, 0, 5, 32.7000)
-        addStoppedTelemetryRun(id, startMs, 6, 12, 32.7100)
-        addMovingTelemetryRun(id, startMs, 13, 18, 32.7200)
+        addMovingTelemetryRun(id, startMs, 0, 5, 34.0500)
+        addStoppedTelemetryRun(id, startMs, 6, 12, 34.0600)
+        addMovingTelemetryRun(id, startMs, 13, 18, 34.0700)
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 19 * minuteMs, "")
 
         val trips = store.getTripsJson(40)
@@ -314,8 +314,8 @@ class ObdStoreTripsDbTest {
     fun activeTripCachePruneKeepsTheJustInsertedEntryUnderPressure() {
         // Active (unfinished) session with one meaningful drive window.
         val id = store.startSession("obd", "00:11", "Adapter", 1000L)
-        store.recordTelemetry(id, gpsSample(35, 32.7000, -117.1000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.7100, -117.1000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.0500, -118.2500, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.0600, -118.2500, 2000L))
 
         // Push the active-trip cache over capacity with same-session keys so the size-pressure
         // prune fires when tripsJson inserts the freshly computed trip.
@@ -354,8 +354,8 @@ class ObdStoreTripsDbTest {
         // polling thread (storage summary -> totalDistanceMeters) hit the active-trip cache
         // concurrently. The cache must be safe to read/write/iterate from multiple threads.
         val id = store.startSession("obd", "00:11", "Adapter", 1000L)
-        store.recordTelemetry(id, gpsSample(35, 32.7000, -117.1000, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.7100, -117.1000, 2000L))
+        store.recordTelemetry(id, gpsSample(35, 34.0500, -118.2500, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.0600, -118.2500, 2000L))
         // Left unfinished on purpose — only active sessions exercise the cache.
 
         val threads = 4
@@ -396,17 +396,17 @@ class ObdStoreTripsDbTest {
         val startMs = 1_000_000L
         val minuteMs = 60_000L
         val id = store.startSession("obd", "00:11", "Adapter", startMs)
-        val startLat = 32.7000
+        val startLat = 34.0500
         for (i in 0..5) {
             store.recordTelemetry(
                 id,
-                gpsSample(35, startLat + i * 0.002, -117.1000, startMs + i * minuteMs),
+                gpsSample(35, startLat + i * 0.002, -118.2500, startMs + i * minuteMs),
             )
         }
         for (i in 6..16) {
             store.recordTelemetry(
                 id,
-                inactiveGpsSample(startLat + 5 * 0.002, -117.1000, startMs + i * minuteMs),
+                inactiveGpsSample(startLat + 5 * 0.002, -118.2500, startMs + i * minuteMs),
             )
         }
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 17 * minuteMs, "")
@@ -425,12 +425,12 @@ class ObdStoreTripsDbTest {
         val startMs = 2_000_000L
         val minuteMs = 60_000L
         val id = store.startSession("obd", "00:11", "Adapter", startMs)
-        addMovingTelemetryRun(id, startMs, 0, 5, 32.7000)
-        addStoppedTelemetryRun(id, startMs, 6, 12, 32.7100)
-        addMovingTelemetryRun(id, startMs, 13, 18, 32.7200)
-        addStoppedTelemetryRun(id, startMs, 19, 23, 32.7300)
-        addMovingTelemetryRun(id, startMs, 24, 29, 32.7400)
-        addStoppedTelemetryRun(id, startMs, 30, 40, 32.7500)
+        addMovingTelemetryRun(id, startMs, 0, 5, 34.0500)
+        addStoppedTelemetryRun(id, startMs, 6, 12, 34.0600)
+        addMovingTelemetryRun(id, startMs, 13, 18, 34.0700)
+        addStoppedTelemetryRun(id, startMs, 19, 23, 34.0800)
+        addMovingTelemetryRun(id, startMs, 24, 29, 34.0900)
+        addStoppedTelemetryRun(id, startMs, 30, 40, 34.1000)
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, startMs + 41 * minuteMs, "")
 
         val trips = store.getTripsJson(40)
@@ -480,25 +480,25 @@ class ObdStoreTripsDbTest {
         val baseMs = 3_000_000L
         val minuteMs = 60_000L
         val sessionA = store.startSession("obd", "00:11", "Adapter A", baseMs)
-        store.recordTelemetry(sessionA, gpsSample(35, 32.7000, -117.1000, baseMs))
-        store.recordTelemetry(sessionA, gpsSample(35, 32.7020, -117.1000, baseMs + minuteMs))
+        store.recordTelemetry(sessionA, gpsSample(35, 34.0500, -118.2500, baseMs))
+        store.recordTelemetry(sessionA, gpsSample(35, 34.0520, -118.2500, baseMs + minuteMs))
         store.recordTelemetry(
             sessionA,
-            inactiveGpsSample(32.7020, -117.1000, baseMs + 2 * minuteMs),
+            inactiveGpsSample(34.0520, -118.2500, baseMs + 2 * minuteMs),
         )
         store.recordTelemetry(
             sessionA,
-            inactiveGpsSample(32.7020, -117.1000, baseMs + 7 * minuteMs),
+            inactiveGpsSample(34.0520, -118.2500, baseMs + 7 * minuteMs),
         )
-        store.recordTelemetry(sessionA, gpsSample(35, 32.7200, -117.1000, baseMs + 10 * minuteMs))
-        store.recordTelemetry(sessionA, gpsSample(35, 32.7220, -117.1000, baseMs + 11 * minuteMs))
+        store.recordTelemetry(sessionA, gpsSample(35, 34.0700, -118.2500, baseMs + 10 * minuteMs))
+        store.recordTelemetry(sessionA, gpsSample(35, 34.0720, -118.2500, baseMs + 11 * minuteMs))
         store.finishSession(sessionA, ObdLocalStore.STATUS_COMPLETE, baseMs + 12 * minuteMs, "")
 
         val sessionB = store.startSession("obd", "00:22", "Adapter B", baseMs - 1000L)
-        store.recordTelemetry(sessionB, gpsSample(35, 33.0000, -118.0000, baseMs + 9 * minuteMs))
+        store.recordTelemetry(sessionB, gpsSample(35, 34.1600, -118.4000, baseMs + 9 * minuteMs))
         store.recordTelemetry(
             sessionB,
-            gpsSample(35, 33.0020, -118.0000, baseMs + 9 * minuteMs + 30_000L),
+            gpsSample(35, 34.1620, -118.4000, baseMs + 9 * minuteMs + 30_000L),
         )
         store.finishSession(sessionB, ObdLocalStore.STATUS_COMPLETE, baseMs + 10 * minuteMs, "")
 
@@ -514,13 +514,13 @@ class ObdStoreTripsDbTest {
     @Test
     fun twoSessionsBothAppearInTripsJson() {
         val first = store.startSession("obd", "00:11", "Adapter A")
-        store.recordTelemetry(first, gpsSample(40, 32.70, -117.10, 1000L))
-        store.recordTelemetry(first, gpsSample(50, 32.71, -117.10, 2000L))
+        store.recordTelemetry(first, gpsSample(40, 34.05, -118.25, 1000L))
+        store.recordTelemetry(first, gpsSample(50, 34.06, -118.25, 2000L))
         store.finishSession(first, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val second = store.startSession("obd", "00:22", "Adapter B")
-        store.recordTelemetry(second, gpsSample(60, 33.00, -118.00, 10000L))
-        store.recordTelemetry(second, gpsSample(70, 33.01, -118.00, 11000L))
+        store.recordTelemetry(second, gpsSample(60, 34.16, -118.40, 10000L))
+        store.recordTelemetry(second, gpsSample(70, 34.17, -118.40, 11000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 12000L, "")
 
         val trips = store.getTripsJson(40)
@@ -543,8 +543,8 @@ class ObdStoreTripsDbTest {
         // Three real driving sessions; ask for only one.
         for (i in 0 until 3) {
             val id = store.startSession("obd", "00:0$i", "Adapter $i")
-            store.recordTelemetry(id, gpsSample(30, 32.70 + (i * 0.01), -117.10, 1000L + i))
-            store.recordTelemetry(id, gpsSample(40, 32.71 + (i * 0.01), -117.10, 2000L + i))
+            store.recordTelemetry(id, gpsSample(30, 34.05 + (i * 0.01), -118.25, 1000L + i))
+            store.recordTelemetry(id, gpsSample(40, 34.06 + (i * 0.01), -118.25, 2000L + i))
             store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L + i, "")
         }
         val trips = store.getTripsJson(1)
@@ -560,11 +560,11 @@ class ObdStoreTripsDbTest {
         val firstAtMs = 1000L
         val lastAtMs = firstAtMs + (totalSamples - 1L)
         for (i in 0 until totalSamples) {
-            val lat = 32.70 + (i * 0.00001)
+            val lat = 34.05 + (i * 0.00001)
             // Alternating ~47 m lateral offset keeps every sample a genuine corner, so the
             // shape-preserving simplifier (which collapses collinear runs) keeps the polyline
             // dense — this test pins timespan coverage, not geometry simplification.
-            val lng = -117.10 + (i * 0.00001) + (i % 2) * 0.0005
+            val lng = -118.25 + (i * 0.00001) + (i % 2) * 0.0005
             store.recordTelemetry(id, gpsSample(40, lat, lng, firstAtMs + i))
         }
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, lastAtMs + 1L, "")
@@ -610,10 +610,10 @@ class ObdStoreTripsDbTest {
         val id = store.startSession("obd", "00:11", "Adapter")
         val route =
             arrayOf(
-                doubleArrayOf(32.70, -117.10),
-                doubleArrayOf(32.71, -117.10),
-                doubleArrayOf(32.72, -117.10),
-                doubleArrayOf(32.73, -117.10),
+                doubleArrayOf(34.05, -118.25),
+                doubleArrayOf(34.06, -118.25),
+                doubleArrayOf(34.07, -118.25),
+                doubleArrayOf(34.08, -118.25),
             )
         for (i in route.indices) {
             store.recordTelemetry(id, gpsSample(40, route[i][0], route[i][1], 1000L + i))
@@ -634,8 +634,8 @@ class ObdStoreTripsDbTest {
     fun telemetryGpsBackfillsPartialLocationRoute() {
         val id = store.startSession("obd", "00:11", "Adapter")
         store.recordLocationSample(id, 900L, "gps", 0.0, 0.0, null, null, null, null, null, null)
-        store.recordTelemetry(id, gpsSample(40, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, gpsSample(42, 32.71, -117.11, 2000L))
+        store.recordTelemetry(id, gpsSample(40, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, gpsSample(42, 34.06, -118.26, 2000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val points =
@@ -645,8 +645,8 @@ class ObdStoreTripsDbTest {
                 .getJSONObject(0)
                 .getJSONArray("points")
         assertEquals(2, points.length())
-        assertEquals(32.70, points.getJSONObject(0).optDouble("lat"), 0.001)
-        assertEquals(-117.11, points.getJSONObject(1).optDouble("lng"), 0.001)
+        assertEquals(34.05, points.getJSONObject(0).optDouble("lat"), 0.001)
+        assertEquals(-118.26, points.getJSONObject(1).optDouble("lng"), 0.001)
     }
 
     @Test
@@ -656,8 +656,8 @@ class ObdStoreTripsDbTest {
             id,
             1000L,
             "gps",
-            32.70,
-            -117.10,
+            34.05,
+            -118.25,
             null,
             null,
             null,
@@ -669,8 +669,8 @@ class ObdStoreTripsDbTest {
             id,
             2000L,
             "gps",
-            32.71,
-            -117.11,
+            34.06,
+            -118.26,
             null,
             null,
             null,
@@ -678,7 +678,7 @@ class ObdStoreTripsDbTest {
             null,
             null,
         )
-        store.recordTelemetry(id, gpsSample(40, 32.70, -117.10, 1000L))
+        store.recordTelemetry(id, gpsSample(40, 34.05, -118.25, 1000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val point =
@@ -707,7 +707,7 @@ class ObdStoreTripsDbTest {
                 gpsSample(
                     35,
                     startLat + (minute - startMinute) * 0.002,
-                    -117.1000,
+                    -118.2500,
                     baseMs + minute * minuteMs,
                 ),
             )
@@ -725,7 +725,7 @@ class ObdStoreTripsDbTest {
         for (minute in startMinute..endMinute) {
             store.recordTelemetry(
                 sessionId,
-                inactiveGpsSample(lat, -117.1000, baseMs + minute * minuteMs),
+                inactiveGpsSample(lat, -118.2500, baseMs + minute * minuteMs),
             )
         }
     }

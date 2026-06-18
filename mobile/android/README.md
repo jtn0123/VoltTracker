@@ -169,6 +169,7 @@ Useful local tasks:
 ./gradlew verifyGeneratedDashboardClean  # fail if generated HTML is stale
 ./gradlew dashboardAssetReport           # print dashboard asset sizes and bundle-budget headroom
 ./gradlew verifyPerformance              # performance-focused dashboard + Android regression lane
+./gradlew verifyStartupPerformanceOptional --no-configuration-cache
 ./gradlew :app:spotlessApply             # format Kotlin/Java and dashboard partials
 ./gradlew :app:testDebugUnitTest         # JVM/Robolectric unit tests
 ```
@@ -267,6 +268,55 @@ local shell.
 The aggregate task is configuration-cache ready. For faster repeated local
 loops, run `./gradlew verifyActiveApp --configuration-cache`; the second run
 should reuse the stored configuration.
+
+### Startup and tab benchmarks
+
+`verifyPerformance` is the checked-in regression lane for dashboard bundle size,
+startup budgets, and Android perf contracts. `verifyStartupPerformanceOptional`
+adds optional local startup checks that are useful before performance-focused
+PRs, but it is not required for every edit because host/device timing varies.
+
+For phone-specific timing, use the local adb scripts against a connected device
+or wireless adb target:
+
+```sh
+bash tools/benchmark-adb-startup-local.sh <adb-serial-or-ip:port>
+bash tools/benchmark-adb-tabs-local.sh <adb-serial-or-ip:port>
+bash tools/device-baseline-local.sh <adb-serial-or-ip:port>
+```
+
+These scripts target only `com.volttracker.obdpoc`. They do not install,
+uninstall, clear app data, or mutate the database, so they are safe to run
+against a field-test phone that already has permissions accepted. Startup and
+tab reports are written under `build/reports/adb-startup-benchmark/` and
+`build/reports/adb-tab-benchmark/`, with trend JSONL files under
+`build/reports/performance-trends/`.
+
+The adb reports separate app-reported marks from host observation time:
+
+- `appFirstFrameMs` and `appDashboardReadyProbeMs` measure when the WebView
+  dashboard has painted and exposed the ready probe from inside the app.
+- `jsTabSwitchMs` and `jsTabPaintMs` measure tab switch handling and first paint
+  from dashboard JavaScript marks.
+- `hostStartToReadyMs` and `hostStartToTabReadyMs` include adb, process launch,
+  UIAutomator polling, and tap overhead, so use them for trend comparisons, not
+  as pure app work.
+
+The tab benchmark uses coordinate taps by default because accessibility text can
+make host-side tap latency look worse than the app. Set
+`VOLTTRACKER_TAB_TAP_STRATEGY=accessibility` when you specifically need the
+accessibility path.
+
+Large database timing can be checked from a pulled or backup SQLite file:
+
+```sh
+bash tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db
+```
+
+Keep durable baseline snapshots in
+[`docs/performance-baseline-history.md`](docs/performance-baseline-history.md)
+and the metric contract in
+[`docs/performance-contracts.md`](docs/performance-contracts.md).
 
 ### Environment doctor
 

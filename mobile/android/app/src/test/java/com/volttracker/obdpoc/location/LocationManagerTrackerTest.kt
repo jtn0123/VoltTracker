@@ -89,12 +89,12 @@ class LocationManagerTrackerTest {
         val seen = AtomicReference<FilteredLocation>()
         tracker.start { seen.set(it) }
 
-        invokeHandleFix(tracker, fix(32.71571234, -117.16119876, 4.44f, nowMs()))
+        invokeHandleFix(tracker, fix(34.11840123, -118.30040321, 4.44f, nowMs()))
 
         val accepted = seen.get()
         assertNotNull(accepted)
-        assertEquals(32.715712, accepted.latitude, 0.000001)
-        assertEquals(-117.161199, accepted.longitude, 0.000001)
+        assertEquals(34.118401, accepted.latitude, 0.000001)
+        assertEquals(-118.300403, accepted.longitude, 0.000001)
         assertEquals(4.4, accepted.accuracyM!!, 0.0)
         assertEquals(LocationManager.GPS_PROVIDER, accepted.provider)
         assertEquals(accepted, tracker.getLastLocation())
@@ -106,10 +106,10 @@ class LocationManagerTrackerTest {
         val delivered = AtomicInteger()
         tracker.start { delivered.incrementAndGet() }
         val t0 = nowMs()
-        invokeHandleFix(tracker, fix(32.7157, -117.1611, 4f, t0))
+        invokeHandleFix(tracker, fix(34.1184, -118.3004, 4f, t0))
 
         val first = tracker.getLastLocation()
-        invokeHandleFix(tracker, fix(32.7160, -117.1614, 200f, t0 + 1_000L))
+        invokeHandleFix(tracker, fix(34.1187, -118.3007, 200f, t0 + 1_000L))
 
         assertEquals(1, delivered.get())
         assertEquals(first, tracker.getLastLocation())
@@ -119,7 +119,7 @@ class LocationManagerTrackerTest {
     fun startClearsPreviousSessionLocation() {
         val tracker = LocationManagerTracker(context)
         tracker.start { }
-        invokeHandleFix(tracker, fix(32.7157, -117.1611, 4f, nowMs()))
+        invokeHandleFix(tracker, fix(34.1184, -118.3004, 4f, nowMs()))
         assertNotNull(tracker.getLastLocation())
 
         tracker.start { }
@@ -207,7 +207,7 @@ class LocationManagerTrackerTest {
 
         shadowOf(Looper.getMainLooper())
             .idleFor(Duration.ofMillis(LocationManagerTracker.WATCHDOG_TIMEOUT_MS / 2))
-        invokeHandleFix(tracker, fix(32.7157, -117.1611, 4f, nowMs()))
+        invokeHandleFix(tracker, fix(34.1184, -118.3004, 4f, nowMs()))
         // Past the original deadline but inside the rescheduled one: a live stream of fixes
         // must not trigger a pointless re-subscribe.
         shadowOf(Looper.getMainLooper())
@@ -262,7 +262,7 @@ class LocationManagerTrackerTest {
         tracker.start { seen.set(it) }
         tracker.stop()
 
-        invokeHandleFix(tracker, fix(32.7157, -117.1611, 4f, nowMs()))
+        invokeHandleFix(tracker, fix(34.1184, -118.3004, 4f, nowMs()))
 
         assertNull(seen.get())
         assertNotNull(tracker.getLastLocation())

@@ -205,7 +205,7 @@ class ObdPollingEngineTest {
         fake.responses["ATRV"] = "13.8V\r>"
         fake.responses["010D"] = "41 0D 28\r>"
         fake.responses["010C"] = "41 0C 0F A0\r>"
-        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF202020")
+        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF" + "202020")
         fake.delays["010D0C"] = 400L // mode-01 batch capability probe
         fake.delays["0902"] = 800L // VIN probe
         val deferredProbeMs = 400L + 800L
@@ -353,11 +353,11 @@ class ObdPollingEngineTest {
         // readObdSample (sample 1), then exit on the next while-check.
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
-        fake.responses["ATRV"] = "12.9V\r>"
         fake.responses["010D"] = "41 0D 32\r>"
+        fake.responses["222414"] = "62 24 14 00 64\r>"
 
         val firstSampleStarted = CountDownLatch(1)
-        fake.afterCommand("ATRV") {
+        fake.afterCommand("222414") {
             // Signal we are inside a poll cycle, then trigger the stop.
             firstSampleStarted.countDown()
             service.running.set(false)
@@ -367,7 +367,7 @@ class ObdPollingEngineTest {
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertEquals(
-            "test never observed the in-flight ATRV — engine did not enter poll loop",
+            "test never observed the in-flight HV current read — engine did not enter poll loop",
             0L,
             firstSampleStarted.count,
         )
@@ -659,7 +659,7 @@ class ObdPollingEngineTest {
     fun liveConnectReadsVinAfterFirstSample() {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
-        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF202020")
+        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF" + "202020")
         val cycles = AtomicInteger(0)
         fake.afterCommand("ATSH7DF") { if (cycles.incrementAndGet() >= 2) service.running.set(false) }
 
@@ -678,7 +678,7 @@ class ObdPollingEngineTest {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
         fake.afterCommand("ATSH7DF") { service.running.set(false) }
-        service.localStore!!.upsertVehicleFromVin("1G1ZD5ST8JF202020")
+        service.localStore!!.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
 
         openSession()
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }

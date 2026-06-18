@@ -46,6 +46,12 @@ type SignalActions = {
   const state = VD.state;
   const bridge = VD.bridge;
 
+  function startupMark(name: string) {
+    if (bridge && typeof bridge.startupMark === "function") {
+      bridge.startupMark(name);
+    }
+  }
+
   // AbortController for every listener bound below. resetListeners() aborts
   // the current set and rebinds — useful for hot-reloading WebView content or
   // for tests that swap fixtures between runs.
@@ -253,6 +259,10 @@ type SignalActions = {
   function refreshDevices() {
     if (!bridge) {
       VD.setStatus({ state: "ready", detail: "Browser preview ready. Start demo to view sample telemetry." });
+      return;
+    }
+    if (typeof bridge.refreshDevices === "function") {
+      bridge.refreshDevices();
       return;
     }
     // callBridge tolerates a native build that predates a method (warns once,
@@ -1359,6 +1369,21 @@ type SignalActions = {
     setHistory: VD.setHistory,
     setStatus: VD.setStatus,
     setStorage: VD.setStorage,
+    setTrips: (payload: unknown) => {
+      if (typeof VD.setTrips === "function") VD.setTrips(payload);
+    },
+    setInsights: (payload: unknown) => {
+      if (typeof VD.setInsights === "function") VD.setInsights(payload);
+    },
+    setTripRoute: (payload: unknown) => {
+      if (typeof VD.setTripRoute === "function") VD.setTripRoute(payload);
+    },
+    setCurrentSessionRoute: (payload: unknown) => {
+      if (typeof VD.setCurrentSessionRoute === "function") VD.setCurrentSessionRoute(payload);
+    },
+    setBatterySohHistory: (payload: unknown) => {
+      if (typeof VD.setBatterySohHistory === "function") VD.setBatterySohHistory(payload);
+    },
     setAppState: VD.setAppState,
     setRestoreProgress: VD.setRestoreProgress,
     updateTelemetry: VD.updateTelemetry
@@ -1395,35 +1420,61 @@ type SignalActions = {
   VD.setStatus = statusWithTroubleshooterLoader;
   window.VoltTrackerNative.setStatus = statusWithTroubleshooterLoader;
 
-  bindListeners();
-  VD.setDemoActive(false);
-  VD.renderOperationalState();
-  VD.updateLiveUi();
-  VD.renderRealV2Ui();
-  VD.renderMapIfLoaded();
-  if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
-  // Initial paint of the Drive-tab live polish — without this the session chip
-  // strip + micro-charts stay empty until the first telemetry sample arrives.
-  if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
-  // refreshDevices() re-renders the adapter picker + connect button, so it stays on the
-  // bootstrap path — deferring it to idle could re-render the button mid-interaction.
-  refreshDevices();
-  if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
-  // refreshStorage() reads the cheap overview payload after the dashboardReady handshake.
-  // Trips/Insights rollups are demand-loaded when the user opens Map/Insights, so startup
-  // no longer schedules the heavier synchronous SQLite bridge reads unconditionally.
-  const loadDeferredPanels = () => {
-    // Guarded like the other VD.* cross-module calls: this runs a frame after the
-    // dashboardReady handshake, so a bootstrap context missing a loader must not
-    // throw asynchronously and destabilize startup.
-    void refreshStorage();
+  const scheduleIdle = (work: () => void, timeout = 1500) => {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(work, { timeout });
+    } else {
+      setTimeout(work, Math.min(timeout, 1500));
+    }
   };
-  if (typeof window.requestIdleCallback === "function") {
-    window.requestIdleCallback(loadDeferredPanels, { timeout: 1500 });
-  } else {
-    setTimeout(loadDeferredPanels, 0);
-  }
-  requestAnimationFrame(() => VD.scrollAppToTop());
+
+  const schedulePostStartupIdle = (work: () => void) => {
+    setTimeout(() => scheduleIdle(work, 3000), 750);
+  };
+
+  const afterNextPaint = (work: () => void) => {
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => {
+        setTimeout(work, 0);
+      });
+    } else {
+      setTimeout(work, 0);
+    }
+  };
+
+  startupMark("actions_bootstrap_start");
+  bindListeners();
+  startupMark("actions_bind_listeners_done");
+  VD.setDemoActive(false);
+  // updateLiveUi() already renders operational state, validation, diagnostics,
+  // charge/cell panels, and the Drive live strip. Keep the first-paint path to
+  // the Drive dashboard; storage/map/diagnostic-code summaries render after the
+  // native ready handshake or when the storage payload arrives.
+  VD.updateLiveUi();
+  // Current Android builds publish devices/storage from onDashboardReady(). Only fall back to the
+  // JS-side refresh path for browser preview or an older bridge that has no ready handshake.
+  if (!bridge || typeof bridge.dashboardReady !== "function") refreshDevices();
+  startupMark("actions_initial_render_done");
+  afterNextPaint(() => {
+    startupMark("actions_first_frame");
+    if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
+    startupMark("actions_dashboard_ready_called");
+    VD.scrollAppToTop();
+  });
+  // Storage overview is published by Android after the dashboardReady handshake. Trips/Insights
+  // rollups are demand-loaded when the user opens Map/Insights, so startup no longer schedules
+  // synchronous SQLite bridge reads unconditionally.
+  const loadDeferredPanels = () => {
+    // Hidden panel cleanup is deliberately post-startup. First frame and quick
+    // tab taps get priority; storage payloads and active views still render on
+    // demand through their normal handlers.
+    startupMark("actions_secondary_render_start");
+    if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
+    if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
+    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    startupMark("actions_secondary_render_end");
+  };
+  schedulePostStartupIdle(loadDeferredPanels);
   setTimeout(() => VD.scrollAppToTop(), 200);
 
 export {};

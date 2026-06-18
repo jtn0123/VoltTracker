@@ -14,8 +14,8 @@ const TAB_SWITCH_BUDGET_PER_SWITCH_MS = 4; // ~1/4 of a 16.7ms 60fps frame, leav
 function makeRoutePoint(index) {
   const capturedAtMs = 1_720_000_000_000 + index * 1000;
   return {
-    lat: 32.80131 + index * 0.00004,
-    lng: -116.9513 - Math.sin(index / 80) * 0.0009,
+    lat: 34.11872 + index * 0.00004,
+    lng: -118.30064 - Math.sin(index / 80) * 0.0009,
     atMs: capturedAtMs,
     capturedAtMs,
     speedMps: 12 + (index % 20) * 0.15,

@@ -62,6 +62,29 @@ class DashboardPublisherTest {
     }
 
     @Test
+    fun asyncStorageCallbackFunctionsAreAllowlisted() {
+        val webView = WebView(RuntimeEnvironment.getApplication())
+        val shadow: ShadowWebView = shadowOf(webView)
+        val publisher = publisherFor(webView, true)
+
+        val callbacks =
+            listOf(
+                "setTrips",
+                "setInsights",
+                "setTripRoute",
+                "setCurrentSessionRoute",
+                "setBatterySohHistory",
+            )
+        for (functionName in callbacks) {
+            publisher.publish(functionName, "{\"ok\":true}")
+            assertTrue(
+                "expected $functionName callback",
+                shadow.getLastEvaluatedJavascript()!!.contains("window.VoltTrackerNative.$functionName("),
+            )
+        }
+    }
+
+    @Test
     fun unknownFunctionIsRefused() {
         val webView = WebView(RuntimeEnvironment.getApplication())
         val publisher = publisherFor(webView, true)

@@ -42,8 +42,8 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
       source: 'obd',
       sampleCount: 50,
       soc: 72,
-      latitude: 32.7,
-      longitude: -117.1,
+      latitude: 34.05,
+      longitude: -118.25,
       updatedAt: Date.now(),
     });
     VD.state.sessionDistanceM = 1234;
@@ -53,8 +53,8 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
       source: 'obd',
       sampleCount: 1,
       soc: 70,
-      latitude: 32.8,
-      longitude: -117.2,
+      latitude: 34.16,
+      longitude: -118.32,
       updatedAt: Date.now() + 1000,
     });
 

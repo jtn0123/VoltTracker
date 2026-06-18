@@ -75,6 +75,13 @@ def repoVersionFile = file("$rootDir/../../VERSION")
 def repoVersionName = repoVersionFile.exists() ? repoVersionFile.text.trim() : "0.0.0"
 def repoVersionSuffix = (System.getenv("GITHUB_SHA")?.take(7)) ?: "dev"
 def repoVersionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+def benchmarkDebugTarget =
+        (findProperty("voltTrackerBenchmarkDebug")?.toString()?.toBoolean() ?: false) ||
+                gradle.startParameter.taskNames.any {
+                    it == "verifyStartupPerformance" ||
+                            it.contains("startup-benchmark") ||
+                            it.contains("connectedDebugAndroidTest")
+                }
 
 android {
     namespace = "com.volttracker.obdpoc"
@@ -124,6 +131,10 @@ android {
             if (rootProject.file("keystore.properties").exists()) {
                 signingConfig = signingConfigs.release
             }
+            if (benchmarkDebugTarget) {
+                debuggable = false
+                profileable = true
+            }
         }
         release {
             minifyEnabled = true
@@ -159,6 +170,9 @@ android {
             jacoco.includeNoLocationClasses = true
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
             jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
+            if (rootProject.hasProperty("voltTrackerRealDbPath")) {
+                systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
+            }
             retry {
                 // One retry absorbs pure infra flake (emulator-less CI runners hiccuping on
                 // Robolectric/SQLite I/O) so it can't fail the job. failOnPassedAfterRetry

@@ -15,6 +15,14 @@ class DiagnosticScanRunnerTest {
         DiagnosticScanRunner(service, engine).run()
 
         assertEquals("scanning", service.statuses[0])
+        assertTrue(
+            "scan should surface protocol progress",
+            service.statusDetails.contains("Checking standard OBD protocols, capability pages, and VIN..."),
+        )
+        assertTrue(
+            "scan should surface Volt module progress",
+            service.statusDetails.contains("Reading Volt battery and charger modules..."),
+        )
         assertEquals("scan-complete", service.lastStatusState())
         assertEquals("Scan complete for Test adapter", service.lastNotification())
 
@@ -46,6 +54,7 @@ class DiagnosticScanRunnerTest {
 
     private class FakeService : ObdService() {
         val statuses: MutableList<String?> = ArrayList()
+        val statusDetails: MutableList<String?> = ArrayList()
         val notifications: MutableList<String?> = ArrayList()
         var telemetry: JSONObject? = null
 
@@ -63,6 +72,7 @@ class DiagnosticScanRunnerTest {
             blocked: Boolean,
         ) {
             statuses.add(state)
+            statusDetails.add(detail)
         }
 
         override fun updateNotification(text: String?) {

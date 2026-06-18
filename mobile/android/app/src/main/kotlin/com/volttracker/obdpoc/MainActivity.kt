@@ -11,6 +11,8 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.ViewGroup
@@ -34,6 +36,17 @@ open class MainActivity :
     DashboardHost {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private var isActivityResumed = false
+    private var postReadyDashboardRefreshPending = false
+    private val postReadyDashboardRefreshRunnable =
+        Runnable {
+            if (!postReadyDashboardRefreshPending || !isActivityResumed || isFinishing || isDestroyed) {
+                return@Runnable
+            }
+            postReadyDashboardRefreshPending = false
+            publishPostReadyDashboardRefresh()
+        }
 
     // System Back handling lives in DashboardBackPressCallback; see its KDoc.
     private val backCallback = DashboardBackPressCallback({ webView }, { exitToBackground() })
@@ -156,6 +169,8 @@ open class MainActivity :
 
                 override fun publishStorageSummaryThrottled() = this@MainActivity.publishStorageSummaryThrottled()
 
+                override fun isDashboardReady(): Boolean = dashboardPublisher?.isPageReady() == true
+
                 override fun publishAppState() = this@MainActivity.publishAppState()
 
                 override fun onAdapterStatusForReadyNotify(status: JSONObject) =
@@ -182,6 +197,22 @@ open class MainActivity :
             publishStorageJson = { storage, parsed ->
                 lastStorage.set(parsed)
                 callDashboard("setStorage", storage)
+            },
+        )
+    private val deviceListPublisher =
+        DeviceListPublisher(
+            submitBackground = { task -> submitBackground(task) },
+            runOnUi = { task -> runOnUiThread(task) },
+            readDeviceJson = {
+                val catalog = requireDeviceCatalog()
+                DeviceListPayload(
+                    devicesJson = catalog.getBondedDevicesJson(),
+                    historyJson = catalog.getDeviceHistoryJson(),
+                )
+            },
+            publishDeviceJson = { payload ->
+                callDashboard("setDevices", payload.devicesJson)
+                callDashboard("setHistory", payload.historyJson)
             },
         )
 
@@ -240,6 +271,7 @@ open class MainActivity :
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        StartupTrace.mark("activity_on_create_start")
         super.onCreate(savedInstanceState)
         restoreFilePicker =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult(), this::onRestoreFilePicked)
@@ -259,14 +291,16 @@ open class MainActivity :
         backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
         localStore =
-            try {
-                createLocalStore()
-            } catch (ex: RuntimeException) {
-                // A corrupt DB file or full disk must not crash startup. Every store access
-                // already tolerates null (localStore?. reads here; DashboardStorageReader
-                // answers storage_unavailable), and onDashboardReady surfaces the failure.
-                Log.e(TAG, "ObdLocalStore failed to open; continuing without local storage", ex)
-                null
+            StartupTrace.measure("local_store_open_start", "local_store_open_end") {
+                try {
+                    createLocalStore()
+                } catch (ex: RuntimeException) {
+                    // A corrupt DB file or full disk must not crash startup. Every store access
+                    // already tolerates null (localStore?. reads here; DashboardStorageReader
+                    // answers storage_unavailable), and onDashboardReady surfaces the failure.
+                    Log.e(TAG, "ObdLocalStore failed to open; continuing without local storage", ex)
+                    null
+                }
             }
         troubleshooter = TroubleshooterBridge(this)
         ObdNotifications.ensureChannel(this)
@@ -284,13 +318,17 @@ open class MainActivity :
             }
         }
 
+        StartupTrace.mark("webview_create_start")
         val createdWebView = WebView(this)
+        StartupTrace.mark("webview_create_end")
         webView = createdWebView
         createdWebView.id = R.id.dashboard_webview
         createdWebView.contentDescription = DASHBOARD_LOADING_DESCRIPTION
         createdWebView.layoutParams =
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        StartupTrace.mark("set_content_view_start")
         setContentView(createdWebView)
+        StartupTrace.mark("set_content_view_end")
 
         ViewCompat.setOnApplyWindowInsetsListener(createdWebView) { view, windowInsets ->
             val bars =
@@ -306,12 +344,16 @@ open class MainActivity :
             DashboardPublisher(createdWebView, { !isFinishing && !isDestroyed }) { command ->
                 runOnUiThread(command)
             }
-        WebViewBootstrap.configure(createdWebView, VoltBridge(this))
+        StartupTrace.measure("webview_configure_start", "webview_configure_end") {
+            WebViewBootstrap.configure(createdWebView, VoltBridge(this))
+        }
 
         onBackPressedDispatcher.addCallback(this, backCallback)
+        StartupTrace.mark("activity_on_create_end")
     }
 
     override fun onDashboardReady() {
+        StartupTrace.mark("dashboard_ready_bridge_start")
         Log.i(TAG, "$DASHBOARD_READY_LOG: JS is live")
         val publisher = dashboardPublisher ?: return
         if (publisher.isPageReady()) {
@@ -319,6 +361,16 @@ open class MainActivity :
         }
         publisher.setPageReady(true)
         webView?.contentDescription = DASHBOARD_READY_DESCRIPTION
+        StartupTrace.mark("dashboard_ready_content_description")
+        StartupTrace.mark("dashboard_ready_post_work_scheduled")
+        postReadyDashboardRefreshPending = true
+        mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
+        mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
+        StartupTrace.mark("dashboard_ready_native_complete")
+    }
+
+    private fun publishPostReadyDashboardRefresh() {
+        StartupTrace.mark("dashboard_ready_post_work_start")
         publishDeviceList()
         publishStorageSummary()
         publishAppState()
@@ -335,6 +387,7 @@ open class MainActivity :
         // Auto-show the guided setup walkthrough once for a genuinely fresh install (decision in
         // OnboardingFlow; completion is persisted there, so it shows at most once).
         setupGuideController.maybeAutoShow()
+        StartupTrace.mark("dashboard_ready_post_work_end")
     }
 
     // Guided first-run setup walkthrough (M7). The staged-dialog body and step cursor live in the
@@ -369,24 +422,27 @@ open class MainActivity :
 
     override fun onResume() {
         super.onResume()
+        isActivityResumed = true
         // Resume the WebView's renderer and JS timers. Without this the chromium compositor surface
         // stays suspended after a background -> foreground trip and the page repaints as a black
         // frame (the "black screen on resume" report). Paired with onPause()'s onPause() below.
         webView?.onResume()
         broadcastCoordinator.register(this)
-        publishDeviceList()
-        publishStorageSummary()
-        publishAppState()
+        if (dashboardPublisher?.isPageReady() == true) {
+            publishDeviceList()
+            publishStorageSummary()
+            publishAppState()
+        } else {
+            StartupTrace.mark("resume_dashboard_publish_skipped_not_ready")
+        }
         reportAppVisibility(true)
         maybeAutoConnect(AutoConnectController.TRIGGER_APP_RESUME, null)
-        checkMaintenanceDueOnAppOpen()
-    }
-
-    // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that has
-    // newly gone overdue. Off the UI thread (it reads SQLite); the notifier no-ops when the toggle is
-    // off and de-dups each overdue crossing via the persisted signatures, so re-running on each resume
-    // is cheap and never re-nags. A store/exception is swallowed so a resume can never crash on it.
-    private fun checkMaintenanceDueOnAppOpen() {
+        if (postReadyDashboardRefreshPending) {
+            mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
+            mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
+        }
+        // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that
+        // has newly gone overdue. Off the UI thread; failures must never crash a resume.
         submitBackground {
             try {
                 maintenanceDueNotifier.checkOnAppOpen()
@@ -398,6 +454,8 @@ open class MainActivity :
 
     override fun onPause() {
         reportAppVisibility(false)
+        isActivityResumed = false
+        mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
         // Suspend the WebView renderer/JS timers while backgrounded so chromium releases its drawing
         // surface cleanly; onResume() above brings it back. Called before super.onPause() to mirror
         // the standard Activity<->WebView lifecycle pairing.
@@ -480,9 +538,8 @@ open class MainActivity :
         }
 
     override fun publishDeviceList() {
-        val catalog = requireDeviceCatalog()
-        callDashboard("setDevices", catalog.getBondedDevicesJson())
-        callDashboard("setHistory", catalog.getDeviceHistoryJson())
+        StartupTrace.mark("publish_device_list_start")
+        deviceListPublisher.publish()
     }
 
     override fun publishStatus(
@@ -717,6 +774,13 @@ open class MainActivity :
         dashboardPublisher?.publish(functionName, jsonPayload)
     }
 
+    override fun publishDashboardPayload(
+        functionName: String,
+        jsonPayload: String?,
+    ) {
+        callDashboard(functionName, jsonPayload)
+    }
+
     open fun publishStorageSummaryThrottled() {
         storageSummaryPublisher.publishThrottled()
     }
@@ -866,6 +930,7 @@ open class MainActivity :
 
         /** Stable UiAutomator signal used by the startup Macrobenchmark. */
         const val DASHBOARD_READY_DESCRIPTION = "VoltTracker dashboard ready"
+        private const val POST_READY_REFRESH_DELAY_MS = 650L
 
         /**
          * SharedPreferences file shared by the Activity, [ObdService], the widget package, and

@@ -151,6 +151,11 @@ interface DashboardStatePublisher {
 
     fun publishStorageSummary()
 
+    fun publishDashboardPayload(
+        functionName: String,
+        jsonPayload: String?,
+    )
+
     fun publishStatus(
         state: String?,
         detail: String?,

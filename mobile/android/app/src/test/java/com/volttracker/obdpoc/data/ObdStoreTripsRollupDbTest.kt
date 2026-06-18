@@ -70,8 +70,8 @@ class ObdStoreTripsRollupDbTest {
 
     @Test
     fun repeatedReadsReturnIdenticalInsights() {
-        seedClosedTrip(32.70, -117.10, 32.71, -117.10, 1000L)
-        seedClosedTrip(33.00, -118.00, 33.01, -118.00, 10_000L)
+        seedClosedTrip(34.05, -118.25, 34.06, -118.25, 1000L)
+        seedClosedTrip(34.16, -118.40, 34.17, -118.40, 10_000L)
 
         val first = store.getInsightsJson()
         val second = store.getInsightsJson()
@@ -84,13 +84,13 @@ class ObdStoreTripsRollupDbTest {
 
     @Test
     fun newlyClosedSessionIsBackfilledOnNextRead() {
-        seedClosedTrip(32.70, -117.10, 32.71, -117.10, 1000L)
+        seedClosedTrip(34.05, -118.25, 34.06, -118.25, 1000L)
         val afterOne = store.getInsightsJson()
         assertEquals(1, afterOne.getInt("tripCount"))
         val distanceOne = afterOne.getDouble("totalDistanceMeters")
 
         // A second drive closed after the cache was first built must be picked up.
-        seedClosedTrip(33.00, -118.00, 33.05, -118.00, 10_000L)
+        seedClosedTrip(34.16, -118.40, 34.18, -118.40, 10_000L)
         val afterTwo = store.getInsightsJson()
         assertEquals(2, afterTwo.getInt("tripCount"))
         assertTrue(afterTwo.getDouble("totalDistanceMeters") > distanceOne)
@@ -99,7 +99,7 @@ class ObdStoreTripsRollupDbTest {
     @Test
     fun staleRollupVersionIsRefreshedOnRead() {
         val context = RuntimeEnvironment.getApplication()
-        val session = seedClosedTrip(32.70, -117.10, 32.72, -117.10, 1000L)
+        val session = seedClosedTrip(34.05, -118.25, 34.07, -118.25, 1000L)
         VoltTrackerDb(context).use { helper ->
             val db = helper.writableDatabase
             val stale = ContentValues()
@@ -143,8 +143,8 @@ class ObdStoreTripsRollupDbTest {
     fun activeSessionIsCountedLiveThenStaysStableOnceClosed() {
         // An open (unfinished) session is folded in live, exactly as the old per-session loop did.
         val open = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(open, gpsSample(40, 32.70, -117.10, 1000L))
-        store.recordTelemetry(open, gpsSample(55, 32.72, -117.10, 2000L))
+        store.recordTelemetry(open, gpsSample(40, 34.05, -118.25, 1000L))
+        store.recordTelemetry(open, gpsSample(55, 34.07, -118.25, 2000L))
 
         val whileOpen = store.getInsightsJson()
         assertEquals(1, whileOpen.getInt("tripCount"))
@@ -160,7 +160,7 @@ class ObdStoreTripsRollupDbTest {
 
     @Test
     fun clearAllDataResetsInsights() {
-        seedClosedTrip(32.70, -117.10, 32.71, -117.10, 1000L)
+        seedClosedTrip(34.05, -118.25, 34.06, -118.25, 1000L)
         assertEquals(1, store.getInsightsJson().getInt("tripCount"))
 
         store.clearAllData()

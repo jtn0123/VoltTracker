@@ -6,6 +6,7 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
 import java.util.Collections
+import java.util.EnumMap
 import java.util.concurrent.ConcurrentHashMap
 
 /** Owns live-poll PID scheduling, batching, carry-forward raw values, and stale timers. */
@@ -72,7 +73,7 @@ class PidPollingState(
     fun isInitialCycle(): Boolean = cycleNum == 0
 
     fun dueForCurrentCycle(): List<PidSpec> {
-        val due = if (isInitialCycle()) PidSchedule.SPECS else PidSchedule.dueOnCycle(cycleNum)
+        val due = if (isInitialCycle()) PidSchedule.firstSampleSpecs() else PidSchedule.dueOnCycle(cycleNum)
         // Drop PIDs the negative-PID cache has retired this session so we stop re-issuing dead reads.
         return if (disabledCommands.isEmpty()) due else due.filterNot { disabledCommands.contains(it.command) }
     }
@@ -146,12 +147,10 @@ class PidPollingState(
             // A successful batch means every batched PID returned data.
             PidSchedule.MODE_01_BATCH_COMMANDS.forEach { outcomes.add(it to false) }
         }
+        val specsByHeader = groupByHeader(due)
         var switched = false
         for (header in Header.entries) {
-            val headerSpecs = filterByHeader(due, header)
-            if (headerSpecs.isEmpty()) {
-                continue
-            }
+            val headerSpecs = specsByHeader[header] ?: continue
             if (header != Header.BROADCAST) {
                 val headerCommand = header.atCommand
                 if (headerCommand == null) {
@@ -181,7 +180,7 @@ class PidPollingState(
                 if (
                     batchedTier1 &&
                     header == Header.BROADCAST &&
-                    PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command)
+                    PidSchedule.isMode01BatchCommand(spec.command)
                 ) {
                     continue
                 }
@@ -340,7 +339,7 @@ class PidPollingState(
 
         @JvmStatic
         fun carryForwardMaxAgeMsFor(command: String): Long {
-            val periodCycles = PidSchedule.SPECS.firstOrNull { it.command == command }?.periodCycles ?: 1
+            val periodCycles = PidSchedule.specFor(command)?.periodCycles ?: 1
             return maxOf(CARRY_FORWARD_MAX_AGE_MS, periodCycles * CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE)
         }
 
@@ -357,7 +356,7 @@ class PidPollingState(
                 if (!isMode01Command(spec.command)) {
                     continue
                 }
-                if (batchedTier1 && PidSchedule.MODE_01_BATCH_COMMANDS.contains(spec.command)) {
+                if (batchedTier1 && PidSchedule.isMode01BatchCommand(spec.command)) {
                     continue
                 }
                 out.add(spec)
@@ -390,10 +389,13 @@ class PidPollingState(
             command: String,
         ): Boolean = due.any { it.header == Header.BROADCAST && it.command == command }
 
-        private fun filterByHeader(
-            specs: List<PidSpec>,
-            header: Header,
-        ): List<PidSpec> = specs.filter { it.header == header }
+        private fun groupByHeader(specs: List<PidSpec>): EnumMap<Header, MutableList<PidSpec>> {
+            val grouped = EnumMap<Header, MutableList<PidSpec>>(Header::class.java)
+            for (spec in specs) {
+                grouped.getOrPut(spec.header) { ArrayList() }.add(spec)
+            }
+            return grouped
+        }
 
         private fun appendRawTo(
             buf: StringBuilder,

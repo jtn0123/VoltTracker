@@ -20,6 +20,7 @@ import { prefs, units } from "./prefs";
   const state = VD.state;
   const bridge = VD.bridge;
   let storageDetailsScheduled = false;
+  let storageDetailsInFlight = false;
   let applyingStorageDetails = false;
 
   function invalidateLazyRollups() {
@@ -80,11 +81,23 @@ import { prefs, units } from "./prefs";
   }
 
   function scheduleStorageDetailsLoad() {
-    if (!bridge || typeof bridge.getStorageDetails !== "function") return;
+    if (
+      !bridge ||
+      (typeof bridge.getStorageDetails !== "function" &&
+        typeof bridge.requestStorageDetails !== "function")
+    ) {
+      return;
+    }
     if (storageDetailsScheduled) return;
+    if (storageDetailsInFlight) return;
     storageDetailsScheduled = true;
     const load = () => {
       storageDetailsScheduled = false;
+      if (typeof bridge.requestStorageDetails === "function" && bridge.requestStorageDetails()) {
+        storageDetailsInFlight = true;
+        return;
+      }
+      if (typeof bridge.getStorageDetails !== "function") return;
       const payload =
         typeof VD.callBridge === "function"
           ? VD.callBridge("getStorageDetails")
@@ -112,6 +125,7 @@ import { prefs, units } from "./prefs";
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");
       if (applyingStorageDetails || err.error === "storage_details_failed") {
+        storageDetailsInFlight = false;
         return;
       }
       const storageError: VoltStorageSummary = { message: err.message || "" };
@@ -124,6 +138,7 @@ import { prefs, units } from "./prefs";
       return;
     }
     const isDetails = isStorageDetailsPayload(parsed);
+    if (isDetails) storageDetailsInFlight = false;
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
     if (state.demoActive && state.demoPreviewStorage) {
@@ -687,10 +702,27 @@ import { prefs, units } from "./prefs";
   let sohLastRaw: string | null = null;
   let sohPoints: SohPoint[] = [];
   let sohDirty = true;
+  let sohReadInFlight = false;
   // Battery-snapshot row count at the last fetch. When it changes (a new snapshot
   // landed, or storage was cleared) we refetch immediately instead of waiting out
   // the throttle, so the chart never shows stale history after a storage change.
   let sohLastCount = -1;
+
+  function applyBatterySohHistory(payload: unknown) {
+    sohReadInFlight = false;
+    sohLastFetchMs = Date.now();
+    sohLastCount = Number((state.storage || {}).batterySnapshotCount || 0);
+    const raw = typeof payload === "string" ? payload : JSON.stringify(payload ?? []);
+    if (raw === sohLastRaw) return;
+    sohLastRaw = raw;
+    const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
+    sohPoints = Array.isArray(parsed)
+      ? parsed
+          .map((r) => ({ at: Number(r.capturedAtMs), soh: Number(r.sohPct), cap: Number(r.capacityAh) }))
+          .filter((p) => Number.isFinite(p.at) && Number.isFinite(p.soh))
+      : [];
+    sohDirty = true;
+  }
 
   function sohSpanLabel(fromMs: number, toMs: number): string {
     const days = Math.max(0, Math.round((toMs - fromMs) / 86_400_000));
@@ -762,21 +794,21 @@ import { prefs, units } from "./prefs";
     const countChanged = batteryCount !== sohLastCount;
     if (
       bridge &&
-      typeof bridge.getBatterySohHistory === "function" &&
+      (typeof bridge.getBatterySohHistory === "function" ||
+        typeof bridge.requestBatterySohHistory === "function") &&
+      !sohReadInFlight &&
       (sohLastRaw === null || countChanged || now - sohLastFetchMs >= SOH_REFETCH_MS)
     ) {
-      sohLastFetchMs = now;
-      sohLastCount = batteryCount;
-      const raw = bridge.getBatterySohHistory();
-      if (raw !== sohLastRaw) {
-        sohLastRaw = raw;
-        const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
-        sohPoints = Array.isArray(parsed)
-          ? parsed
-              .map((r) => ({ at: Number(r.capturedAtMs), soh: Number(r.sohPct), cap: Number(r.capacityAh) }))
-              .filter((p) => Number.isFinite(p.at) && Number.isFinite(p.soh))
-          : [];
-        sohDirty = true;
+      if (typeof bridge.requestBatterySohHistory === "function" && bridge.requestBatterySohHistory()) {
+        sohLastFetchMs = now;
+        sohLastCount = batteryCount;
+        sohReadInFlight = true;
+        return;
+      }
+      if (typeof bridge.getBatterySohHistory === "function") {
+        sohLastFetchMs = now;
+        sohLastCount = batteryCount;
+        applyBatterySohHistory(bridge.getBatterySohHistory());
       }
     }
     // Nothing fetched/changed since the last DOM build — skip the rebuild.
@@ -1614,6 +1646,10 @@ import { prefs, units } from "./prefs";
     stateCountSummary,
     renderRealV2Ui,
     renderVehicleUi,
+    setBatterySohHistory(payload: unknown) {
+      applyBatterySohHistory(payload);
+      renderBatterySohTrend();
+    },
     loadMaintenanceLog,
     renderMaintenanceList,
     addMaintenanceEntry,

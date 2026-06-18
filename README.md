@@ -37,12 +37,33 @@ cd mobile/android
 ./gradlew :app:installDebug
 ```
 
-Unit tests:
+## Testing and benchmarking
+
+The Android project owns the full test and benchmark workflow. From
+`mobile/android/`:
 
 ```sh
-cd mobile/android
-./gradlew :app:testDebugUnitTest
+./gradlew :app:testDebugUnitTest                         # JVM/Robolectric tests
+./gradlew verifyActiveApp                                # full local PR gate
+./gradlew verifyPerformance                              # dashboard + Android perf guards
+./gradlew verifyStartupPerformanceOptional --no-configuration-cache
 ```
+
+Optional local benchmarks can run against an already-connected device without
+installing, uninstalling, or clearing app data:
+
+```sh
+bash tools/benchmark-adb-startup-local.sh <adb-serial-or-ip:port>
+bash tools/benchmark-adb-tabs-local.sh <adb-serial-or-ip:port>
+bash tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db
+bash tools/device-baseline-local.sh <adb-serial-or-ip:port>
+```
+
+Reports are written under `mobile/android/build/reports/`. See
+[`mobile/android/docs/performance-contracts.md`](mobile/android/docs/performance-contracts.md)
+for metric definitions and
+[`mobile/android/docs/performance-baseline-history.md`](mobile/android/docs/performance-baseline-history.md)
+for the tracked startup/tab baseline snapshots.
 
 ## License
 

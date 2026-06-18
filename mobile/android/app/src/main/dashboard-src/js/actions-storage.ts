@@ -14,9 +14,9 @@ type StorageActionContext = {
 
 export function createStorageActions({ VD, bridge, withBusy }: StorageActionContext) {
   function refreshStorage() {
-    if (bridge && typeof bridge.getStorageSummary === "function") {
-      VD.setStorage(bridge.getStorageSummary());
-    }
+    if (!bridge) return;
+    if (typeof bridge.requestStorageSummary === "function" && bridge.requestStorageSummary()) return;
+    if (typeof bridge.getStorageSummary === "function") VD.setStorage(bridge.getStorageSummary());
   }
 
   function clearStorage(button?: BusyButton | null) {

@@ -25,8 +25,8 @@ const SCRUBBER_EXTRA_DOM = `
 function withTwoPointRoute() {
   return {
     points: [
-      { lat: 32.700, lng: -117.100, atMs: 1_700_000_000_000, speedMps: 0 },
-      { lat: 32.702, lng: -117.100, atMs: 1_700_000_030_000, speedMps: 10 },
+      { lat: 34.050, lng: -118.250, atMs: 1_700_000_000_000, speedMps: 0 },
+      { lat: 34.052, lng: -118.250, atMs: 1_700_000_030_000, speedMps: 10 },
     ],
   };
 }
@@ -34,7 +34,7 @@ function withTwoPointRoute() {
 function withSinglePointRoute() {
   return {
     points: [
-      { lat: 32.700, lng: -117.100, atMs: 1_700_000_000_000, speedMps: 0 },
+      { lat: 34.050, lng: -118.250, atMs: 1_700_000_000_000, speedMps: 0 },
     ],
   };
 }
@@ -52,8 +52,8 @@ function withNullEffRoute() {
   const effs = [2.5, null, null, 3.1, 3.4];
   return {
     points: effs.map((eff, i) => ({
-      lat: 32.700 + i * 0.001,
-      lng: -117.100,
+      lat: 34.050 + i * 0.001,
+      lng: -118.250,
       atMs: base + i * 10_000,
       speedMps: 10,
       eff,
@@ -65,11 +65,11 @@ function withGappyRoute() {
   const base = 1_700_000_000_000;
   return {
     points: [
-      { lat: 32.700, lng: -117.100, atMs: base + 0, speedMps: 0, altM: 100 },
-      { lat: 32.701, lng: -117.100, atMs: base + 10_000, speedMps: 8, altM: NaN },
-      { lat: 32.702, lng: -117.100, atMs: base + 20_000, speedMps: 12, altM: 130 },
-      { lat: 32.703, lng: -117.100, atMs: base + 30_000, speedMps: 14, altM: NaN },
-      { lat: 32.704, lng: -117.100, atMs: base + 40_000, speedMps: 10, altM: 150 },
+      { lat: 34.050, lng: -118.250, atMs: base + 0, speedMps: 0, altM: 100 },
+      { lat: 34.051, lng: -118.250, atMs: base + 10_000, speedMps: 8, altM: NaN },
+      { lat: 34.052, lng: -118.250, atMs: base + 20_000, speedMps: 12, altM: 130 },
+      { lat: 34.053, lng: -118.250, atMs: base + 30_000, speedMps: 14, altM: NaN },
+      { lat: 34.054, lng: -118.250, atMs: base + 40_000, speedMps: 10, altM: 150 },
     ],
     // SOC sampled only at the ends — every interior point must interpolate.
     socTrack: [
@@ -99,7 +99,7 @@ describe('scrubber.ts', () => {
   it('scrubAtLatLng is a no-op when no route is loaded', () => {
     const VD = window.VoltDashboard;
     // No throws, no side effects on the DOM. Just call it.
-    expect(() => VD.scrubAtLatLng(32.7, -117.1)).not.toThrow();
+    expect(() => VD.scrubAtLatLng(34.05, -118.25)).not.toThrow();
     expect(document.getElementById('scrubber').hidden).toBe(true);
   });
 
@@ -127,7 +127,7 @@ describe('scrubber.ts', () => {
     expect(document.getElementById('scrubber').hidden).toBe(true);
     // After hide, scrubAtLatLng should be a no-op again — proves scrubData
     // was reset (not just the panel re-hidden).
-    expect(() => VD.scrubAtLatLng(32.7, -117.1)).not.toThrow();
+    expect(() => VD.scrubAtLatLng(34.05, -118.25)).not.toThrow();
   });
 
   // ----- cursor fraction clamping (0 and 1) ---------------------------------

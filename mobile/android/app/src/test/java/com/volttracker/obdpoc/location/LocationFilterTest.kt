@@ -200,8 +200,8 @@ class LocationFilterTest {
     }
 
     companion object {
-        private const val LAT = 32.7157
-        private const val LNG = -117.1611
+        private const val LAT = 34.1184
+        private const val LNG = -118.3004
         private const val T0 = 1_700_000_000_000L
     }
 }

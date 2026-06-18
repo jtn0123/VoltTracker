@@ -47,21 +47,32 @@ internal class StorageSummaryPublisher(
     private fun runRefresh() {
         submitBackground(
             Runnable {
-                dirty.set(false)
-                val storage = readStorageJson()
-                val parsed = MainActivityUtils.parseJson(storage)
-                if (!parsed.optBoolean("ok", true)) {
+                try {
+                    dirty.set(false)
+                    val (storage, parsed) =
+                        StartupTrace.measure("storage_summary_read_start", "storage_summary_read_end") {
+                            val storageJson = readStorageJson()
+                            storageJson to MainActivityUtils.parseJson(storageJson)
+                        }
+                    if (!parsed.optBoolean("ok", true)) {
+                        dirty.set(true)
+                    }
+                    lastPublishedAtMs.set(System.currentTimeMillis())
+                    runOnUi(
+                        Runnable {
+                            StartupTrace.measure("storage_summary_publish_start", "storage_summary_publish_end") {
+                                publishStorageJson(storage, parsed)
+                            }
+                        },
+                    )
+                } catch (ex: RuntimeException) {
                     dirty.set(true)
-                }
-                lastPublishedAtMs.set(System.currentTimeMillis())
-                runOnUi(
-                    Runnable {
-                        publishStorageJson(storage, parsed)
-                    },
-                )
-                inFlight.set(false)
-                if (queued.getAndSet(false)) {
-                    publish()
+                    throw ex
+                } finally {
+                    inFlight.set(false)
+                    if (queued.getAndSet(false)) {
+                        publish()
+                    }
                 }
             },
         )

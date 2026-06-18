@@ -41,6 +41,7 @@ class DiagnosticScanRunner(
         probeCommand("ATDPN", 1800, raw)
         probeCommand("ATRV", 1800, raw)
 
+        publishProgress("Checking standard OBD protocols, capability pages, and VIN...")
         var vinResponse: String? = null
         for (protocol in ObdProbes.PROTOCOL_PROBES) {
             probeCommand(protocol, 1800, raw)
@@ -62,6 +63,7 @@ class DiagnosticScanRunner(
         probeCommand("ATSP0", 1800, raw)
         probeCommand("0100", 9000, raw)
 
+        publishProgress("Reading DTCs, freeze frames, and live-data probes...")
         ObdElmDecode.appendProbeLine(raw, "standard-diagnostics", "generic DTC and freeze-frame probes")
         collectDtcCodes("03", probeCommand("03", 3500, raw))
         collectDtcCodes("07", probeCommand("07", 3500, raw))
@@ -79,6 +81,7 @@ class DiagnosticScanRunner(
             probeCommand(probe, 3200, raw)
         }
 
+        publishProgress("Reading Volt battery and charger modules...")
         ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E4 battery and charger probes")
         probeCommand("ATSH7E4", 1800, raw)
         for (probe in ObdProbes.VOLT_7E4_PROBES) {
@@ -89,6 +92,7 @@ class DiagnosticScanRunner(
         for (probe in ObdProbes.VOLT_7E1_PROBES) {
             probeCommand(probe, 4200, raw)
         }
+        publishProgress("Reading Volt powertrain, transmission, and brake modules...")
         ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E0 maintenance and engine probes")
         probeCommand("ATSH7E0", 1800, raw)
         for (probe in ObdProbes.VOLT_7E0_PROBES) {
@@ -109,6 +113,7 @@ class DiagnosticScanRunner(
         for (probe in ObdProbes.VOLT_7E7_LAYOUT_PROBES) {
             probeCommand(probe, 4200, raw)
         }
+        publishProgress("Finishing optional TPMS discovery probes...")
         if (ObdProbes.TPMS_7E0_DISCOVERY_PROBES.isNotEmpty()) {
             ObdElmDecode.appendProbeLine(raw, "tpms-discovery", "ATSH7E0 candidate tire-pressure probes")
             probeCommand("ATSH7E0", 1800, raw)
@@ -167,6 +172,11 @@ class DiagnosticScanRunner(
         val response = engine.sendRecoverableCommand(command, timeoutMs)
         ObdElmDecode.appendProbeLine(raw, command, ObdElmDecode.summarizeForStorage(command, response))
         return response
+    }
+
+    private fun publishProgress(detail: String) {
+        service.broadcastStatus("scanning", detail, false)
+        service.updateNotification(detail)
     }
 
     /** Parses generic DTCs from a Mode 03/07/0A response and folds them into [dtcCodes]. */

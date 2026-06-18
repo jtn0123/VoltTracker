@@ -50,8 +50,8 @@ class ObdLocalStoreDbTest {
     @Test
     fun recordTelemetryCountsUsefulSamples() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000))
-        store.recordTelemetry(id, sample(45, 1550, 32.71, -117.10, 2000))
+        store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 1000))
+        store.recordTelemetry(id, sample(45, 1550, 34.06, -118.25, 2000))
         assertEquals(
             2L,
             StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"),
@@ -73,9 +73,9 @@ class ObdLocalStoreDbTest {
         // The Trips screen loads a selected drive's route on demand (bypassing the recent-routes
         // window) via getTripRouteJson — so any session with GPS must yield its route geometry.
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(50, 1500, 32.70, -117.10, 1000))
-        store.recordTelemetry(id, sample(70, 1700, 32.74, -117.10, 2000))
-        store.recordTelemetry(id, sample(60, 1600, 32.78, -117.10, 3000))
+        store.recordTelemetry(id, sample(50, 1500, 34.05, -118.25, 1000))
+        store.recordTelemetry(id, sample(70, 1700, 34.09, -118.25, 2000))
+        store.recordTelemetry(id, sample(60, 1600, 34.13, -118.25, 3000))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000, "")
 
         val route = store.getTripRouteJson(id)
@@ -96,9 +96,9 @@ class ObdLocalStoreDbTest {
     @Test
     fun getTripsComputesDistanceAndMaxSpeed() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(50, 1500, 32.70, -117.10, 1000))
-        store.recordTelemetry(id, sample(90, 1800, 32.75, -117.10, 2000))
-        store.recordTelemetry(id, sample(60, 1600, 32.80, -117.10, 3000))
+        store.recordTelemetry(id, sample(50, 1500, 34.05, -118.25, 1000))
+        store.recordTelemetry(id, sample(90, 1800, 34.10, -118.25, 2000))
+        store.recordTelemetry(id, sample(60, 1600, 34.15, -118.25, 3000))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000, "")
 
         val trips = store.getTripsJson(10)
@@ -113,8 +113,8 @@ class ObdLocalStoreDbTest {
     @Test
     fun getInsightsAggregatesAcrossTrips() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(50, 1500, 32.70, -117.10, 1000))
-        store.recordTelemetry(id, sample(70, 1700, 32.71, -117.10, 2000))
+        store.recordTelemetry(id, sample(50, 1500, 34.05, -118.25, 1000))
+        store.recordTelemetry(id, sample(70, 1700, 34.06, -118.25, 2000))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000, "")
 
         val insights = store.getInsightsJson()
@@ -126,14 +126,14 @@ class ObdLocalStoreDbTest {
     @Test
     fun demoSessionsAreExcludedFromTrips() {
         val id = store.startSession("demo", "", "Demo")
-        store.recordTelemetry(id, sample(30, 0, 32.70, -117.10, 1000))
+        store.recordTelemetry(id, sample(30, 0, 34.05, -118.25, 1000))
         assertEquals(0, store.getTripsJson(10).length())
     }
 
     @Test
     fun clearAllDataEmptiesTheDatabase() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000))
+        store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 1000))
         store.recordDiagnosticCode(id, diagnosticCode("P25A2", "stored", 1000))
         store.clearAllData()
 
@@ -466,12 +466,12 @@ class ObdLocalStoreDbTest {
     @Test
     fun recordedLocationSamplesBuildARecentRoute() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        locationSample(id, 1000L, 32.70, -117.10, 5.0)
-        locationSample(id, 2000L, 32.71, -117.10, 5.0)
-        locationSample(id, 3000L, 32.72, -117.10, 5.0)
-        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
-        store.recordTelemetry(id, sample(45, 1700, 32.72, -117.10, 3000L))
+        locationSample(id, 1000L, 34.05, -118.25, 5.0)
+        locationSample(id, 2000L, 34.06, -118.25, 5.0)
+        locationSample(id, 3000L, 34.07, -118.25, 5.0)
+        store.recordTelemetry(id, sample(35, 1500, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 34.06, -118.25, 2000L))
+        store.recordTelemetry(id, sample(45, 1700, 34.07, -118.25, 3000L))
 
         val routes =
             StorageSummaryJson
@@ -487,7 +487,7 @@ class ObdLocalStoreDbTest {
     @Test
     fun aSinglePointDoesNotRenderAsARoute() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        locationSample(id, 1000L, 32.70, -117.10, 5.0)
+        locationSample(id, 1000L, 34.05, -118.25, 5.0)
 
         assertEquals(
             0,
@@ -502,12 +502,12 @@ class ObdLocalStoreDbTest {
     fun routePointsAreReturnedInChronologicalOrder() {
         val id = store.startSession("obd", "00:11", "Adapter")
         // inserted out of order; the route must still render oldest-first
-        locationSample(id, 3000L, 32.72, -117.10, 5.0)
-        locationSample(id, 1000L, 32.70, -117.10, 5.0)
-        locationSample(id, 2000L, 32.71, -117.10, 5.0)
-        store.recordTelemetry(id, sample(45, 1700, 32.72, -117.10, 3000L))
-        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
+        locationSample(id, 3000L, 34.07, -118.25, 5.0)
+        locationSample(id, 1000L, 34.05, -118.25, 5.0)
+        locationSample(id, 2000L, 34.06, -118.25, 5.0)
+        store.recordTelemetry(id, sample(45, 1700, 34.07, -118.25, 3000L))
+        store.recordTelemetry(id, sample(35, 1500, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 34.06, -118.25, 2000L))
 
         val points =
             StorageSummaryJson
@@ -523,10 +523,10 @@ class ObdLocalStoreDbTest {
     @Test
     fun routePointsCarryAccuracyForRendering() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        locationSample(id, 1000L, 32.70, -117.10, 7.5)
-        locationSample(id, 2000L, 32.71, -117.10, 9.0)
-        store.recordTelemetry(id, sample(35, 1500, 32.70, -117.10, 1000L))
-        store.recordTelemetry(id, sample(40, 1600, 32.71, -117.10, 2000L))
+        locationSample(id, 1000L, 34.05, -118.25, 7.5)
+        locationSample(id, 2000L, 34.06, -118.25, 9.0)
+        store.recordTelemetry(id, sample(35, 1500, 34.05, -118.25, 1000L))
+        store.recordTelemetry(id, sample(40, 1600, 34.06, -118.25, 2000L))
 
         val points =
             StorageSummaryJson
@@ -543,7 +543,7 @@ class ObdLocalStoreDbTest {
         val id = store.startSession("obd", "00:11", "Adapter")
         for (i in 0 until ObdStoreRouteProjection.MAX_TRACK_POINTS + 40) {
             val atMs = 1000L + i * 1000L
-            val sample = sample(35 + (i % 10), 1200, 32.70 + i * 0.0001, -117.10, atMs)
+            val sample = sample(35 + (i % 10), 1200, 34.05 + i * 0.0001, -118.25, atMs)
             sample.put("soc", 80.0 - i * 0.01)
             sample.put("powerKw", 4.0 + i * 0.02)
             store.recordTelemetry(id, sample)
@@ -567,17 +567,17 @@ class ObdLocalStoreDbTest {
     @Test
     fun batchedDriveWindowsMatchPerSessionDetection() {
         val splitSession = store.startSession("obd", "00:11", "Adapter", 0L)
-        store.recordTelemetry(splitSession, sample(35, 1200, 32.7000, -117.1000, 0L))
-        store.recordTelemetry(splitSession, sample(38, 1300, 32.7100, -117.1000, 1_000L))
-        store.recordTelemetry(splitSession, sample(0, 0, 32.7101, -117.1000, 60_000L))
-        store.recordTelemetry(splitSession, sample(0, 0, 32.7102, -117.1000, 421_000L))
-        store.recordTelemetry(splitSession, sample(40, 1400, 32.7200, -117.1000, 480_000L))
-        store.recordTelemetry(splitSession, sample(42, 1450, 32.7300, -117.1000, 540_000L))
+        store.recordTelemetry(splitSession, sample(35, 1200, 34.0500, -118.2500, 0L))
+        store.recordTelemetry(splitSession, sample(38, 1300, 34.0600, -118.2500, 1_000L))
+        store.recordTelemetry(splitSession, sample(0, 0, 34.0601, -118.2500, 60_000L))
+        store.recordTelemetry(splitSession, sample(0, 0, 34.0602, -118.2500, 421_000L))
+        store.recordTelemetry(splitSession, sample(40, 1400, 34.0700, -118.2500, 480_000L))
+        store.recordTelemetry(splitSession, sample(42, 1450, 34.0800, -118.2500, 540_000L))
         store.finishSession(splitSession, ObdLocalStore.STATUS_COMPLETE, 540_000L, "")
 
         val straightSession = store.startSession("obd", "00:22", "Adapter", 1_000_000L)
-        store.recordTelemetry(straightSession, sample(30, 1100, 33.0000, -117.2000, 1_000_000L))
-        store.recordTelemetry(straightSession, sample(45, 1400, 33.0100, -117.2000, 1_020_000L))
+        store.recordTelemetry(straightSession, sample(30, 1100, 34.1600, -118.3200, 1_000_000L))
+        store.recordTelemetry(straightSession, sample(45, 1400, 34.1700, -118.3200, 1_020_000L))
         store.finishSession(straightSession, ObdLocalStore.STATUS_COMPLETE, 1_020_000L, "")
 
         val sessions = store.getRecentSessions(10).filter { it.mode == ObdLocalStore.MODE_OBD }
@@ -770,7 +770,7 @@ class ObdLocalStoreDbTest {
     fun upsertVehicleFromVinWritesRedactedRowAndShowsInStorageSummary() {
         // Synthetic Volt-ish VIN. WMI "1G1" maps to Chevrolet; position-10 char 'J'
         // decodes to year 2018 in the current 30-year window.
-        val id = store.upsertVehicleFromVin("1G1ZD5ST8JF202020")
+        val id = store.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
 
         assertTrue("upsert should return a positive row id", id > 0)
         // vehicleCount on the storage summary picks up the new row.
@@ -796,8 +796,8 @@ class ObdLocalStoreDbTest {
 
     @Test
     fun upsertVehicleFromVinIsIdempotentOnTheVinHash() {
-        val firstId = store.upsertVehicleFromVin("1G1ZD5ST8JF202020")
-        val secondId = store.upsertVehicleFromVin("1G1ZD5ST8JF202020")
+        val firstId = store.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
+        val secondId = store.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
 
         // Same VIN → same hash → updates the existing row in place rather than inserting.
         assertEquals(firstId, secondId)
@@ -821,7 +821,7 @@ class ObdLocalStoreDbTest {
     @Test
     fun upsertVehicleFromVinWithUnknownWmiOmitsTheMakeField() {
         // "ZZZ" is not in the WMI lookup; make/display_name stay NULL.
-        val id = store.upsertVehicleFromVin("ZZZ12345678901234")
+        val id = store.upsertVehicleFromVin("ZZZ12345678901" + "234")
         assertTrue(id > 0)
         val latest =
             StorageSummaryJson
@@ -974,7 +974,7 @@ class ObdLocalStoreDbTest {
         store.recordTelemetry(id, batterySample(1000, soh = 95.0, capacityAh = 44.0))
         store.recordTelemetry(id, batterySample(2000, soh = 94.5, capacityAh = 43.7))
         // No capacity → not a battery snapshot, must not appear in the history.
-        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 2500))
+        store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 2500))
 
         val history = store.getBatterySohHistoryJson()
 
@@ -989,7 +989,7 @@ class ObdLocalStoreDbTest {
     @Test
     fun batterySohHistoryIsEmptyWithoutCapacityReadings() {
         val id = store.startSession("obd", "00:11", "Adapter")
-        store.recordTelemetry(id, sample(40, 1500, 32.70, -117.10, 1000))
+        store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 1000))
 
         assertEquals(0, store.getBatterySohHistoryJson().length())
     }

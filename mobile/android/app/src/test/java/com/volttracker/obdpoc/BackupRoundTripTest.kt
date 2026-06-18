@@ -115,9 +115,9 @@ class BackupRoundTripTest {
     fun roundTripPreservesAllSeededRows() {
         // -- seed --
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter X", 1_000L)
-        store!!.recordTelemetry(sessionId, telemetrySample(40, 1500, 32.70, -117.10, 1_100L))
-        store!!.recordTelemetry(sessionId, telemetrySample(45, 1550, 32.71, -117.10, 1_200L))
-        store!!.recordTelemetry(sessionId, telemetrySample(50, 1600, 32.72, -117.10, 1_300L))
+        store!!.recordTelemetry(sessionId, telemetrySample(40, 1500, 34.05, -118.25, 1_100L))
+        store!!.recordTelemetry(sessionId, telemetrySample(45, 1550, 34.06, -118.25, 1_200L))
+        store!!.recordTelemetry(sessionId, telemetrySample(50, 1600, 34.07, -118.25, 1_300L))
         store!!.recordStatus(sessionId, "ready", "connected", false, JSONObject())
         store!!.recordPidObservation(
             sessionId,
@@ -136,8 +136,8 @@ class BackupRoundTripTest {
             sessionId,
             1_500L,
             "gps",
-            32.73,
-            -117.10,
+            34.08,
+            -118.25,
             5.0,
             null,
             null,
@@ -213,7 +213,7 @@ class BackupRoundTripTest {
     fun restoreReplacesExistingDataInTargetStore() {
         // -- seed the source (this is what we'll back up) --
         val sourceSessionId = store!!.startSession("obd", "AA:AA:AA", "Source", 1_000L)
-        store!!.recordTelemetry(sourceSessionId, telemetrySample(40, 1500, 32.70, -117.10, 1_100L))
+        store!!.recordTelemetry(sourceSessionId, telemetrySample(40, 1500, 34.05, -118.25, 1_100L))
         store!!.finalizeSession(
             sourceSessionId,
             ObdLocalStore.STATUS_COMPLETE,
@@ -268,7 +268,7 @@ class BackupRoundTripTest {
     @Test
     fun stageRestoreFileReportsReadableByteProgress() {
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
-        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 34.05, -118.25, 1_100L))
         store!!.finalizeSession(
             sessionId,
             ObdLocalStore.STATUS_COMPLETE,
@@ -306,7 +306,7 @@ class BackupRoundTripTest {
     @Test
     fun encryptedBackupRequiresPassphraseAndRestoresWithCorrectPassphrase() {
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
-        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 34.05, -118.25, 1_100L))
         store!!.finalizeSession(
             sessionId,
             ObdLocalStore.STATUS_COMPLETE,
@@ -353,7 +353,7 @@ class BackupRoundTripTest {
     @Test
     fun encryptedBackupWithLegacyShortPassphraseStillRestores() {
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
-        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 32.70, -117.10, 1_100L))
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 34.05, -118.25, 1_100L))
         assertNotNull(store!!.getSession(sessionId))
 
         val shortPassphrase = "old1"
@@ -412,7 +412,7 @@ class BackupRoundTripTest {
     @Test
     fun restoreOfInvalidFileIsRejectedAndLeavesTargetStoreIntact() {
         val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
-        store!!.recordTelemetry(sessionId, telemetrySample(40, 1500, 32.70, -117.10, 1_100L))
+        store!!.recordTelemetry(sessionId, telemetrySample(40, 1500, 34.05, -118.25, 1_100L))
         val beforeSamples =
             StorageSummaryJson.build(store!!.getStorageSummaryRecord()).optLong("sampleCount")
         val beforeSessions =
@@ -584,7 +584,7 @@ class BackupRoundTripTest {
                     " latitude, longitude, accuracy_m, gps_speed_mps, bearing_deg, location_age_ms," +
                     " sample_number, session_ms, charge_transition_hint, app_foreground, raw, json)" +
                     " VALUES (1, 1, 1100, 'obd', 'drive', 42, 1500, 82, 24, 11, 13.9, 66.0," +
-                    " 24.0, 12.5, 32.71, -117.10, 4.0, 12.0, 180.0, 0, 1, 100, 0, 1," +
+                    " 24.0, 12.5, 34.06, -118.25, 4.0, 12.0, 180.0, 0, 1, 100, 0, 1," +
                     " '410C1AF8', '{\"speedKph\":42,\"rpm\":1500}')",
             )
             db.version = 7

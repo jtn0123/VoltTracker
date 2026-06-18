@@ -14,10 +14,20 @@ const NATIVE_METHODS = [
   'setHistory',
   'setStatus',
   'setStorage',
+  'setTrips',
+  'setInsights',
+  'setTripRoute',
+  'setCurrentSessionRoute',
+  'setBatterySohHistory',
   'setAppState',
   'setRestoreProgress',
   'updateTelemetry',
 ];
+
+function afterStartupReadyFrame() {
+  return new Promise((resolve) => setTimeout(resolve, 0))
+    .then(() => new Promise((resolve) => setTimeout(resolve, 0)));
+}
 
 describe('window.VoltTrackerNative ABI', () => {
   beforeEach(async () => {
@@ -30,7 +40,7 @@ describe('window.VoltTrackerNative ABI', () => {
     await loadDashboard();
   });
 
-  it('exposes the 7 documented callback methods', () => {
+  it('exposes the documented callback methods', () => {
     expect(window.VoltTrackerNative).toBeDefined();
     for (const name of NATIVE_METHODS) {
       expect(typeof window.VoltTrackerNative[name], `VoltTrackerNative.${name}`).toBe('function');
@@ -56,7 +66,14 @@ describe('window.VoltTrackerNative ABI', () => {
       }
     });
 
-    await loadDashboard({ bridge: createVoltBridgeFixture({ dashboardReady }) });
+    const originalRaf = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => setTimeout(() => callback(performance.now()), 0);
+    try {
+      await loadDashboard({ bridge: createVoltBridgeFixture({ dashboardReady }) });
+      await afterStartupReadyFrame();
+    } finally {
+      window.requestAnimationFrame = originalRaf;
+    }
 
     expect(dashboardReady).toHaveBeenCalledTimes(1);
   });

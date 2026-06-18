@@ -4,8 +4,11 @@ import android.util.Log
 import android.webkit.JavascriptInterface
 
 /**
- * The [JavascriptInterface] surface the dashboard WebView calls into.
+ * The [JavascriptInterface] surface the dashboard WebView calls into. The method count is
+ * intentionally high because each dashboard bridge entry point must stay as a tiny public ABI
+ * wrapper; implementation work is delegated to helper classes below.
  */
+@Suppress("TooManyFunctions")
 class VoltBridge(
     private val activity: DashboardHost,
 ) : VoltBridgeNotifications(activity) {
@@ -17,7 +20,14 @@ class VoltBridge(
 
     @JavascriptInterface
     fun dashboardReady() {
+        StartupTrace.mark("bridge_dashboard_ready_called")
         activity.runOnUiThread(activity::onDashboardReady)
+    }
+
+    @JavascriptInterface
+    fun startupMark(name: String?) {
+        val clean = bridgeSafe(name, BRIDGE_MAX_LABEL_LEN).replace(STARTUP_MARK_SANITIZER, "_")
+        StartupTrace.mark("js:$clean")
     }
 
     @JavascriptInterface
@@ -30,9 +40,12 @@ class VoltBridge(
 
     @JavascriptInterface
     fun refreshDevices() {
+        StartupTrace.mark("bridge_refresh_devices_called")
         activity.runOnUiThread {
+            StartupTrace.mark("bridge_refresh_devices_ui_start")
             activity.publishDeviceList()
             activity.publishStorageSummary()
+            StartupTrace.mark("bridge_refresh_devices_ui_end")
         }
     }
 
@@ -85,7 +98,13 @@ class VoltBridge(
     fun getStorageSummary(): String = storage.getStorageSummary()
 
     @JavascriptInterface
+    fun requestStorageSummary(): Boolean = storage.requestStorageSummary()
+
+    @JavascriptInterface
     fun getStorageDetails(): String = storage.getStorageDetails()
+
+    @JavascriptInterface
+    fun requestStorageDetails(): Boolean = storage.requestStorageDetails()
 
     @JavascriptInterface
     fun exportDebugBundle(): String = dataExports.exportDebugBundle()
@@ -112,11 +131,20 @@ class VoltBridge(
     @JavascriptInterface
     fun getInsights(): String = storage.getInsights()
 
+    @JavascriptInterface
+    fun requestTrips(): Boolean = storage.requestTrips()
+
+    @JavascriptInterface
+    fun requestInsights(): Boolean = storage.requestInsights()
+
     /**
      * Full route geometry for a logged trip.
      */
     @JavascriptInterface
     fun getTripRoute(sessionId: String?): String = storage.getTripRoute(sessionId)
+
+    @JavascriptInterface
+    fun requestTripRoute(sessionId: String?): Boolean = storage.requestTripRoute(sessionId)
 
     /**
      * Route geometry for the in-progress session, so the dashboard can rehydrate the live track
@@ -125,9 +153,15 @@ class VoltBridge(
     @JavascriptInterface
     fun getCurrentSessionRoute(): String = storage.getCurrentSessionRoute()
 
+    @JavascriptInterface
+    fun requestCurrentSessionRoute(): Boolean = storage.requestCurrentSessionRoute()
+
     /** Battery-health snapshot history (JSON array) for the dashboard's pack-health trend chart. */
     @JavascriptInterface
     fun getBatterySohHistory(): String = storage.getBatterySohHistory()
+
+    @JavascriptInterface
+    fun requestBatterySohHistory(): Boolean = storage.requestBatterySohHistory()
 
     @JavascriptInterface
     fun clearStoredData() {
@@ -316,5 +350,9 @@ class VoltBridge(
     @JavascriptInterface
     fun cancelAdapterReadyNotify() {
         diagnostics.cancelAdapterReadyNotify()
+    }
+
+    private companion object {
+        val STARTUP_MARK_SANITIZER = Regex("[^A-Za-z0-9_.:-]")
     }
 }

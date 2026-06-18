@@ -89,6 +89,16 @@ class OnboardingFlowTest {
     }
 
     @Test
+    fun autoShownMarkerPersistsAndSuppressesFutureAutoShows() {
+        val prefs = newPrefs()
+        val flow = OnboardingFlow(prefs)
+        flow.markAutoShown()
+
+        assertFalse("auto-show should be one-shot even if the user dismisses it", flow.shouldAutoShow(freshState()))
+        assertFalse(OnboardingFlow(prefs).shouldAutoShow(freshState()))
+    }
+
+    @Test
     fun progressCountsOnlyPresentedStepsForFreshUser() {
         val flow = OnboardingFlow(newPrefs())
         val state = freshState()

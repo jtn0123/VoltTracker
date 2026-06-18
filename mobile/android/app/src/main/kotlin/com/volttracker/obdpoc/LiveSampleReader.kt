@@ -68,8 +68,8 @@ class LiveSampleReader(
 
             val speedRaw = pidPolling.lastRaw("010D")
             val speed = ObdProtocol.parseSpeedKph(speedRaw)
-            // On the initial cycle dueForCurrentCycle() returns all SPECS, which always contains the
-            // hot-lane 010D (period 1), so this is true there too — no special case needed.
+            // On the initial cycle dueForCurrentCycle() returns the first-sample hot profile, which
+            // always contains 010D, so this is true there too — no special case needed.
             val polledSpeedThisCycle = PidPollingState.wasPolledThisCycle(due, "010D")
             val chargeTransitionHint =
                 polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw)

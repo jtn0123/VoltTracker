@@ -8,7 +8,9 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import java.util.concurrent.TimeUnit
 
 /**
  * A throwing [ObdLocalStore] constructor (corrupt DB file, full disk) must not crash startup:
@@ -20,12 +22,13 @@ import org.robolectric.annotation.Config
 class MainActivityStoreInitFailureTest {
     @Test
     fun storeOpenFailureLeavesStoreNullAndSurfacesBlockedStatus() {
-        val controller = Robolectric.buildActivity(StoreFailureActivity::class.java).create()
+        val controller = Robolectric.buildActivity(StoreFailureActivity::class.java).setup()
         try {
             val activity = controller.get()
             assertNull("a failed store open must leave localStore null", activity.localStore)
 
             activity.onDashboardReady()
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
 
             assertEquals("the handshake must surface the storage failure", "blocked", activity.lastStatusState)
             assertTrue("the storage-failure status must be blocking", activity.lastStatusBlocked)

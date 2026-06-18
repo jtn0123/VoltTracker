@@ -116,8 +116,8 @@ describe('efficiency-vs-speed scatter axis + units', () => {
       recentRoutes: [{
         _effDone: true,
         points: mphs.map((mph, i) => ({
-          lat: 32.7 + i * 0.002,
-          lng: -117.1,
+          lat: 34.05 + i * 0.002,
+          lng: -118.25,
           atMs: base + i * 10_000,
           speedMps: mph / 2.2369363,
           eff: 2.5 + (i % 4) * 0.4,

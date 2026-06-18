@@ -11,7 +11,7 @@ import { filterAndSortRoutes } from '../app/src/main/dashboard-src/js/map-sessio
 function storedRoute({ id, label = '', favorite = false, distanceMeters = 1000, startedAtMs = 1_700_000_000_000 }) {
   return {
     session: { id, sessionId: id, mode: 'drive', adapterName: 'Adapter', startedAtMs, endedAtMs: startedAtMs + 60_000, label, favorite },
-    points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }],
+    points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }],
     pointCount: 2,
     distanceMeters,
   };
@@ -20,7 +20,7 @@ function storedRoute({ id, label = '', favorite = false, distanceMeters = 1000, 
 const liveRoute = {
   isLive: true,
   session: { id: '__live_current__', status: 'live', adapterName: 'Current', startedAtMs: Date.now() },
-  points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }],
+  points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }],
   pointCount: 2,
   distanceMeters: 500,
 };
@@ -98,9 +98,9 @@ describe('M4 trip-list controls (rendered)', () => {
     ];
     VD.state.storage = {
       recentRoutes: [
-        { session: { id: 'a', sessionId: 'a', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }], pointCount: 2, distanceMeters: 1000 },
-        { session: { id: 'b', sessionId: 'b', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }], pointCount: 2, distanceMeters: 5000 },
-        { session: { id: 'c', sessionId: 'c', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }], pointCount: 2, distanceMeters: 200 },
+        { session: { id: 'a', sessionId: 'a', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }], pointCount: 2, distanceMeters: 1000 },
+        { session: { id: 'b', sessionId: 'b', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }], pointCount: 2, distanceMeters: 5000 },
+        { session: { id: 'c', sessionId: 'c', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }], pointCount: 2, distanceMeters: 200 },
       ],
     };
     VD.renderMap();
@@ -159,7 +159,7 @@ describe('M4 trip-list controls (rendered)', () => {
     VD.state.trips = [{ id: 'b', sessionId: 'b', startedAtMs: base, endedAtMs: base + 60_000, pointCount: 2, hasRoute: true, distanceMeters: 5000, adapterName: 'Adapter', label: 'Costco run', favorite: false }];
     VD.state.storage = {
       recentRoutes: [
-        { session: { id: 'b', sessionId: 'b', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 32.7, lng: -117.1 }, { lat: 32.8, lng: -117.2 }], pointCount: 2, distanceMeters: 5000 },
+        { session: { id: 'b', sessionId: 'b', mode: 'drive', adapterName: 'Adapter', startedAtMs: base, endedAtMs: base + 60_000 }, points: [{ lat: 34.05, lng: -118.25 }, { lat: 34.16, lng: -118.32 }], pointCount: 2, distanceMeters: 5000 },
       ],
     };
     VD.renderMap();

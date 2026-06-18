@@ -25,8 +25,8 @@ class TripMaterializerTest {
     fun shortDistanceProducesNoTrip() {
         // Two samples ~50 m apart over 30 s — below the 100 m minimum.
         val data = StubData()
-        data.locations.add(loc(T_BASE, 32.700000, -117.100000))
-        data.locations.add(loc(T_BASE + 30 * ONE_SECOND_MS, 32.700450, -117.100000))
+        data.locations.add(loc(T_BASE, 34.050000, -118.250000))
+        data.locations.add(loc(T_BASE + 30 * ONE_SECOND_MS, 34.050450, -118.250000))
 
         val trips = TripMaterializer.materialize(input(data), data)
 
@@ -37,10 +37,10 @@ class TripMaterializerTest {
     fun continuousSegmentBecomesOneTrip() {
         // Six samples 30 s apart covering ~1 km. Should be one trip whose duration ~ 150 s.
         val data = StubData()
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0 until 6) {
             data.locations.add(
-                loc(T_BASE + i * 30 * ONE_SECOND_MS, startLat + i * 0.002, -117.100000),
+                loc(T_BASE + i * 30 * ONE_SECOND_MS, startLat + i * 0.002, -118.250000),
             )
         }
 
@@ -60,10 +60,10 @@ class TripMaterializerTest {
     fun gapOverThresholdProducesTwoTrips() {
         // Five samples, ~10 minute gap, then five more — must split.
         val data = StubData()
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0 until 5) {
             data.locations.add(
-                loc(T_BASE + i * 30 * ONE_SECOND_MS, startLat + i * 0.002, -117.100000),
+                loc(T_BASE + i * 30 * ONE_SECOND_MS, startLat + i * 0.002, -118.250000),
             )
         }
         val resumeAtMs = T_BASE + 5 * 30 * ONE_SECOND_MS + 10 * ONE_MINUTE_MS
@@ -72,7 +72,7 @@ class TripMaterializerTest {
                 loc(
                     resumeAtMs + i * 30 * ONE_SECOND_MS,
                     startLat + 0.020 + i * 0.002,
-                    -117.100000,
+                    -118.250000,
                 ),
             )
         }
@@ -86,15 +86,15 @@ class TripMaterializerTest {
     @Test
     fun sustainedInactiveTelemetryTrimsParkedTail() {
         val data = StubData()
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0..5) {
             val atMs = T_BASE + i * ONE_MINUTE_MS
-            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000))
+            data.locations.add(loc(atMs, startLat + i * 0.002, -118.250000))
             data.telemetry.add(tel(atMs, 35.0))
         }
         for (i in 6..16) {
             val atMs = T_BASE + i * ONE_MINUTE_MS
-            data.locations.add(loc(atMs, startLat + 5 * 0.002, -117.100000))
+            data.locations.add(loc(atMs, startLat + 5 * 0.002, -118.250000))
             data.telemetry.add(inactiveTel(atMs))
         }
 
@@ -110,12 +110,12 @@ class TripMaterializerTest {
     @Test
     fun gpsStopBoundariesProduceMultipleTrips() {
         val data = StubData()
-        addMovingRun(data, T_BASE, 0, 5, 32.700000)
-        addStoppedRun(data, T_BASE, 6, 12, 32.710000)
-        addMovingRun(data, T_BASE, 13, 18, 32.720000)
-        addStoppedRun(data, T_BASE, 19, 23, 32.730000)
-        addMovingRun(data, T_BASE, 24, 29, 32.740000)
-        addStoppedRun(data, T_BASE, 30, 40, 32.750000)
+        addMovingRun(data, T_BASE, 0, 5, 34.050000)
+        addStoppedRun(data, T_BASE, 6, 12, 34.060000)
+        addMovingRun(data, T_BASE, 13, 18, 34.070000)
+        addStoppedRun(data, T_BASE, 19, 23, 34.080000)
+        addMovingRun(data, T_BASE, 24, 29, 34.090000)
+        addStoppedRun(data, T_BASE, 30, 40, 34.100000)
 
         val trips = TripMaterializer.materialize(input(data), data)
 
@@ -131,20 +131,20 @@ class TripMaterializerTest {
     @Test
     fun shortInactivePauseStaysInsideTrip() {
         val data = StubData()
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0..3) {
             val atMs = T_BASE + i * ONE_MINUTE_MS
-            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000))
+            data.locations.add(loc(atMs, startLat + i * 0.002, -118.250000))
             data.telemetry.add(tel(atMs, 35.0))
         }
         for (i in 4..6) {
             val atMs = T_BASE + i * ONE_MINUTE_MS
-            data.locations.add(loc(atMs, startLat + 3 * 0.002, -117.100000))
+            data.locations.add(loc(atMs, startLat + 3 * 0.002, -118.250000))
             data.telemetry.add(inactiveTel(atMs))
         }
         for (i in 7..10) {
             val atMs = T_BASE + i * ONE_MINUTE_MS
-            data.locations.add(loc(atMs, startLat + i * 0.002, -117.100000))
+            data.locations.add(loc(atMs, startLat + i * 0.002, -118.250000))
             data.telemetry.add(tel(atMs, 35.0))
         }
 
@@ -159,12 +159,12 @@ class TripMaterializerTest {
         // Six samples → WEAK (>=5 has route, <10 still WEAK).
         val few = StubData()
         for (i in 0 until 6) {
-            few.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.7 + i * 0.002, -117.1))
+            few.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.05 + i * 0.002, -118.25))
         }
         // Twelve samples → OBSERVED.
         val many = StubData()
         for (i in 0 until 12) {
-            many.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.7 + i * 0.002, -117.1))
+            many.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.05 + i * 0.002, -118.25))
         }
 
         val weak = TripMaterializer.materialize(input(few), few)[0]
@@ -178,7 +178,7 @@ class TripMaterializerTest {
     fun maxSpeedComesFromTelemetryWithinWindow() {
         val data = StubData()
         for (i in 0 until 6) {
-            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.7 + i * 0.002, -117.1))
+            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.05 + i * 0.002, -118.25))
         }
         // Telemetry spans the same window with a spike in the middle.
         data.telemetry.add(tel(T_BASE + 10 * ONE_SECOND_MS, 35.0))
@@ -199,7 +199,7 @@ class TripMaterializerTest {
         // = 1.0 kWh.
         val data = StubData()
         for (i in 0 until 13) {
-            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.7 + i * 0.002, -117.1))
+            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.05 + i * 0.002, -118.25))
         }
         for (i in 0 until 13) {
             data.telemetry.add(telWithPower(T_BASE + i * 30 * ONE_SECOND_MS, 60.0, 10.0))
@@ -219,7 +219,7 @@ class TripMaterializerTest {
     fun singleLocationSampleProducesNoTrip() {
         // A single sample can't form a segment — no distance, no duration.
         val data = StubData()
-        data.locations.add(loc(T_BASE, 32.700000, -117.100000))
+        data.locations.add(loc(T_BASE, 34.050000, -118.250000))
 
         val trips = TripMaterializer.materialize(input(data), data)
 
@@ -232,7 +232,7 @@ class TripMaterializerTest {
         // below MIN_DISTANCE_METERS. Conservative behavior: drop, don't fabricate.
         val data = StubData()
         for (i in 0 until 6) {
-            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.700000, -117.100000))
+            data.locations.add(loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.050000, -118.250000))
         }
         // Telemetry also reports zero speed throughout.
         for (i in 0 until 6) {
@@ -251,7 +251,7 @@ class TripMaterializerTest {
         val data = StubData()
         for (i in 0 until 6) {
             data.locations.add(
-                loc(T_BASE + i * 30 * ONE_SECOND_MS, 32.700000 + i * 0.002, -117.100000),
+                loc(T_BASE + i * 30 * ONE_SECOND_MS, 34.050000 + i * 0.002, -118.250000),
             )
         }
         // Telemetry has no power columns populated.
@@ -278,10 +278,10 @@ class TripMaterializerTest {
         val sampleInterval = 5_000L
         // 18 hours of perfectly uniform samples — every gap is exactly sampleInterval.
         val count = ((18L * 60L * 60_000L) / sampleInterval).toInt() // 12_960 samples
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0 until count) {
             data.locations.add(
-                loc(T_BASE + i * sampleInterval, startLat + i * 0.00001, -117.100000),
+                loc(T_BASE + i * sampleInterval, startLat + i * 0.00001, -118.250000),
             )
         }
 
@@ -322,10 +322,10 @@ class TripMaterializerTest {
         // Half a day of samples on each side of the larger gap.
         val firstHalfStart = T_BASE
         val firstHalfCount = ((6L * 60L * 60_000L) / sampleInterval).toInt() // 4320 samples
-        val startLat = 32.700000
+        val startLat = 34.050000
         for (i in 0 until firstHalfCount) {
             data.locations.add(
-                loc(firstHalfStart + i * sampleInterval, startLat + i * 0.00001, -117.100000),
+                loc(firstHalfStart + i * sampleInterval, startLat + i * 0.00001, -118.250000),
             )
         }
         val largerGap = 4L * 60_000L
@@ -338,7 +338,7 @@ class TripMaterializerTest {
                 loc(
                     secondHalfStart + i * sampleInterval,
                     secondStartLat + i * 0.00001,
-                    -117.100000,
+                    -118.250000,
                 ),
             )
         }
@@ -431,7 +431,7 @@ class TripMaterializerTest {
             for (minute in startMinute..endMinute) {
                 val atMs = baseMs + minute * ONE_MINUTE_MS
                 data.locations.add(
-                    loc(atMs, startLat + (minute - startMinute) * 0.002, -117.100000),
+                    loc(atMs, startLat + (minute - startMinute) * 0.002, -118.250000),
                 )
                 data.telemetry.add(tel(atMs, 35.0))
             }
@@ -446,7 +446,7 @@ class TripMaterializerTest {
         ) {
             for (minute in startMinute..endMinute) {
                 val atMs = baseMs + minute * ONE_MINUTE_MS
-                data.locations.add(loc(atMs, lat, -117.100000))
+                data.locations.add(loc(atMs, lat, -118.250000))
                 data.telemetry.add(inactiveTel(atMs))
             }
         }

@@ -2,20 +2,24 @@ package com.volttracker.obdpoc
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.Context
 import android.content.DialogInterface
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
+import java.util.concurrent.TimeUnit
 
 /**
  * The guided first-run setup walkthrough (M7) must auto-show on the first dashboard handshake of a
@@ -28,6 +32,17 @@ import org.robolectric.shadows.ShadowAlertDialog
 class MainActivityOnboardingTest {
     private val controllers = mutableListOf<ActivityController<QuietActivity>>()
 
+    @Before
+    fun setUp() {
+        RuntimeEnvironment
+            .getApplication()
+            .getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
+        ShadowAlertDialog.reset()
+    }
+
     @After
     fun tearDown() {
         controllers.forEach { runCatching { it.destroy() } }
@@ -35,6 +50,12 @@ class MainActivityOnboardingTest {
     }
 
     private fun launch(): QuietActivity {
+        val controller = Robolectric.buildActivity(QuietActivity::class.java).setup()
+        controllers += controller
+        return controller.get()
+    }
+
+    private fun launchCreated(): QuietActivity {
         val controller = Robolectric.buildActivity(QuietActivity::class.java).create()
         controllers += controller
         return controller.get()
@@ -46,6 +67,10 @@ class MainActivityOnboardingTest {
 
     private fun settle() {
         shadowOf(android.os.Looper.getMainLooper()).idle()
+    }
+
+    private fun settlePostReadyWork() {
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(1, TimeUnit.SECONDS)
     }
 
     private fun clickPositive() {
@@ -81,6 +106,7 @@ class MainActivityOnboardingTest {
     fun firstDashboardReadyAutoShowsTheGuideStartingAtPairStep() {
         val activity = launch()
         activity.onDashboardReady()
+        settlePostReadyWork()
 
         assertNotNull("fresh install must auto-show the setup guide", latestDialog())
         val title = latestTitle()
@@ -97,6 +123,7 @@ class MainActivityOnboardingTest {
         pairAdapter(activity)
 
         activity.onDashboardReady()
+        settlePostReadyWork()
 
         val title = latestTitle()
         // Pair + Bluetooth are done/skipped, so the flow opens on location as step 1 of a shorter
@@ -114,6 +141,7 @@ class MainActivityOnboardingTest {
 
         // Every prerequisite is satisfied, so it must not auto-show.
         activity.onDashboardReady()
+        settlePostReadyWork()
         assertNull("a fully set-up user has nothing to guide; no auto-show", latestDialog())
 
         // But re-opening on demand still surfaces the flow — the only remaining step is the
@@ -128,6 +156,7 @@ class MainActivityOnboardingTest {
     fun completingTheGuideSuppressesAnyFurtherAutoShow() {
         val activity = launch()
         activity.onDashboardReady()
+        settlePostReadyWork()
         assertNotNull("fresh install must auto-show the setup guide", latestDialog())
 
         // Skip through every actionable step to the completion screen, then tap Done.
@@ -139,12 +168,13 @@ class MainActivityOnboardingTest {
         ShadowAlertDialog.reset()
         val second = launch()
         second.onDashboardReady()
+        settlePostReadyWork()
         assertNull("the guide must not auto-show again after completion", latestDialog())
     }
 
     @Test
     fun connectStepDemoButtonStartsDemoSession() {
-        val activity = launch()
+        val activity = launchCreated()
         // Paired + Bluetooth granted, location withheld: the next actionable step after location is
         // connect/demo. Walk: location (skip) -> connect/demo.
         grantBluetooth(activity)
@@ -175,6 +205,7 @@ class MainActivityOnboardingTest {
         val activity = launch()
         // Mark completed by walking the fresh flow to the end.
         activity.onDashboardReady()
+        settlePostReadyWork()
         repeat(SKIP_STEPS) { clickSkip() }
         clickPositive()
         ShadowAlertDialog.reset()

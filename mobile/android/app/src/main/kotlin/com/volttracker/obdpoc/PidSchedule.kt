@@ -53,6 +53,15 @@ object PidSchedule {
     val MODE_01_BATCH_PIDS_HEX: List<String> = listOf("0D", "0C", "49")
 
     /**
+     * The first live sample should prove the dashboard is alive as quickly as possible. Slow/deep
+     * lanes still phase in on normal cycles after that first broadcast.
+     */
+    @JvmField
+    val FIRST_SAMPLE_COMMANDS: List<String> = listOf("010D", "010C", "0149", "222414")
+
+    private val firstSampleCommandSet: Set<String> = FIRST_SAMPLE_COMMANDS.toSet()
+
+    /**
      * Polling spec for a single PID.
      *
      * @property command full ELM command, e.g. `010D` or `222414`.
@@ -163,6 +172,9 @@ object PidSchedule {
             PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample
         )
 
+    private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }
+    private val mode01BatchCommandSet: Set<String> = MODE_01_BATCH_COMMANDS.toSet()
+
     /** True if [spec] is due on the given (zero-based) cycle number. */
     @JvmStatic
     fun shouldPoll(
@@ -188,11 +200,20 @@ object PidSchedule {
         return SPECS.filter { shouldPoll(cycleNum, it) }
     }
 
+    @JvmStatic
+    fun firstSampleSpecs(): List<PidSpec> = SPECS.filter { firstSampleCommandSet.contains(it.command) }
+
+    @JvmStatic
+    fun specFor(command: String): PidSpec? = specsByCommand[command]
+
+    @JvmStatic
+    fun isMode01BatchCommand(command: String): Boolean = mode01BatchCommandSet.contains(command)
+
     /**
      * True if [command] is a [PidSpec.conditional] PID — one the negative-PID cache must never
      * disable because it only answers in a specific vehicle mode. Unknown commands are not
      * conditional (the cache treats them normally).
      */
     @JvmStatic
-    fun isConditional(command: String): Boolean = SPECS.firstOrNull { it.command == command }?.conditional ?: false
+    fun isConditional(command: String): Boolean = specFor(command)?.conditional ?: false
 }

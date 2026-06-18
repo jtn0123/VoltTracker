@@ -705,6 +705,44 @@ class VoltBridgeDispatchTest {
         assertEquals("[{\"sohPct\":95}]", bridge.getBatterySohHistory())
     }
 
+    @Test
+    fun asyncStorageRequestsPublishAllowlistedDashboardCallbacks() {
+        activity.storageDetailsPayload = "{\"storageDetails\":true}"
+        activity.tripsPayload = "[{\"id\":\"trip-1\"}]"
+        activity.insightsPayload = "{\"tripCount\":1}"
+        activity.tripRouteJson = "{\"ok\":true,\"points\":[{\"lat\":1,\"lng\":2}]}"
+        activity.currentRouteJson = "{\"points\":[{\"lat\":3,\"lng\":4}]}"
+        activity.sohHistoryJson = "[{\"sohPct\":95}]"
+
+        assertTrue(bridge.requestStorageSummary())
+        assertTrue(bridge.requestStorageDetails())
+        assertTrue(bridge.requestTrips())
+        assertTrue(bridge.requestInsights())
+        assertTrue(bridge.requestTripRoute("  route-42  "))
+        assertTrue(bridge.requestCurrentSessionRoute())
+        assertTrue(bridge.requestBatterySohHistory())
+
+        assertEquals("setStorage", activity.dashboardCallbacks[0].first)
+        val summaryPayload = JSONObject(activity.dashboardCallbacks[0].second!!)
+        assertEquals("volttracker_obd_poc.db", summaryPayload.getString("database"))
+        assertEquals(0, summaryPayload.getInt("sessionCount"))
+        assertEquals(0, summaryPayload.getLong("sampleCount"))
+        assertEquals("setStorage", activity.dashboardCallbacks[1].first)
+        assertEquals("{\"storageDetails\":true}", activity.dashboardCallbacks[1].second)
+        assertEquals("setTrips", activity.dashboardCallbacks[2].first)
+        assertEquals("[{\"id\":\"trip-1\"}]", activity.dashboardCallbacks[2].second)
+        assertEquals("setInsights", activity.dashboardCallbacks[3].first)
+        assertEquals("{\"tripCount\":1}", activity.dashboardCallbacks[3].second)
+        assertEquals("setTripRoute", activity.dashboardCallbacks[4].first)
+        val wrappedRoute = JSONObject(activity.dashboardCallbacks[4].second!!)
+        assertEquals("route-42", wrappedRoute.getString("routeKey"))
+        assertTrue(wrappedRoute.getJSONObject("payload").getBoolean("ok"))
+        assertEquals("setCurrentSessionRoute", activity.dashboardCallbacks[5].first)
+        assertEquals("{\"points\":[{\"lat\":3,\"lng\":4}]}", activity.dashboardCallbacks[5].second)
+        assertEquals("setBatterySohHistory", activity.dashboardCallbacks[6].first)
+        assertEquals("[{\"sohPct\":95}]", activity.dashboardCallbacks[6].second)
+    }
+
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
@@ -734,6 +772,7 @@ class VoltBridgeDispatchTest {
 
         var loggingActive = false
         var storageSummaryCalls = 0
+        val dashboardCallbacks = ArrayList<Pair<String, String?>>()
 
         var confirmationCalls = 0
         var lastConfirmationTitle: String? = null
@@ -754,6 +793,9 @@ class VoltBridgeDispatchTest {
         var tripRouteJson = "{}"
         var currentRouteJson = "{}"
         var sohHistoryJson = "[]"
+        var storageDetailsPayload = "{\"storageDetails\":true}"
+        var tripsPayload = "[]"
+        var insightsPayload = "{}"
         var lastTripRouteKey: String? = null
         var tripExportResult = "{}"
         var lastTripExportRouteKey: String? = null
@@ -861,6 +903,13 @@ class VoltBridgeDispatchTest {
             storageSummaryCalls += 1
         }
 
+        override fun publishDashboardPayload(
+            functionName: String,
+            jsonPayload: String?,
+        ) {
+            dashboardCallbacks.add(functionName to jsonPayload)
+        }
+
         override fun forceStopPackageFromBridge(packageName: String?): Boolean {
             lastForceStopPackage = packageName
             return forceStopReturn
@@ -899,6 +948,12 @@ class VoltBridgeDispatchTest {
             lastTripRouteKey = routeKey
             return tripRouteJson
         }
+
+        override fun getStorageDetailsJson(): String = storageDetailsPayload
+
+        override fun getTripsJson(): String = tripsPayload
+
+        override fun getInsightsJson(): String = insightsPayload
 
         override fun exportTripFromBridge(
             routeKey: String?,

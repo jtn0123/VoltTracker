@@ -322,4 +322,16 @@ describe('actions-storage.ts — happy confirm/restore paths (companions to the 
     expect(bridge.getStorageSummary).toHaveBeenCalledTimes(1);
     expect(VD.storage).toBe('{"dbBytes":42}');
   });
+
+  it('refreshStorage() prefers the async native summary request when available', () => {
+    const bridge = {
+      requestStorageSummary: vi.fn(() => true),
+      getStorageSummary: vi.fn(() => '{"dbBytes":42}')
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    actions.refreshStorage();
+    expect(bridge.requestStorageSummary).toHaveBeenCalledTimes(1);
+    expect(bridge.getStorageSummary).not.toHaveBeenCalled();
+    expect(VD.storage).toBeUndefined();
+  });
 });

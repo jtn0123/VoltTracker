@@ -51,7 +51,11 @@ class OnboardingFlow(
      * from the Setup guide affordance bypasses this and always shows the flow.
      */
     fun shouldAutoShow(state: State): Boolean {
-        if (state.loggingActive || prefs.getBoolean(KEY_COMPLETED, false)) {
+        if (
+            state.loggingActive ||
+            prefs.getBoolean(KEY_COMPLETED, false) ||
+            prefs.getBoolean(KEY_AUTO_SHOWN, false)
+        ) {
             return false
         }
         return !prerequisitesMet(state)
@@ -111,6 +115,10 @@ class OnboardingFlow(
         prefs.edit { putBoolean(KEY_COMPLETED, true) }
     }
 
+    fun markAutoShown() {
+        prefs.edit { putBoolean(KEY_AUTO_SHOWN, true) }
+    }
+
     /** 1-based progress: the user is on [position] of [total] presented steps. */
     data class Progress(
         val position: Int,
@@ -119,5 +127,6 @@ class OnboardingFlow(
 
     companion object {
         const val KEY_COMPLETED = "onboarding_flow_completed"
+        const val KEY_AUTO_SHOWN = "onboarding_flow_auto_shown"
     }
 }

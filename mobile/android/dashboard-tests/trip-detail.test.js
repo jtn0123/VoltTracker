@@ -17,8 +17,8 @@ function driveStorage({ id = 'd1', label = '', distanceMeters = 18000 } = {}) {
   const startedAtMs = BASE;
   const endedAtMs = BASE + 8 * 30_000; // ~4 min
   const points = mphs.map((mph, i) => ({
-    lat: 32.7 + i * 0.003,
-    lng: -117.1 - i * 0.002,
+    lat: 34.05 + i * 0.003,
+    lng: -118.25 - i * 0.002,
     atMs: startedAtMs + i * 30_000,
     speedMps: mph * MPH_TO_MPS,
     altM: 100 - i * 4,
@@ -108,7 +108,7 @@ describe('per-trip detail sheet (M7)', () => {
         _effDone: true,
         session: { id: 'd2', sessionId: 'd2', mode: 'drive', adapterName: 'Adapter', startedAtMs, endedAtMs: startedAtMs + 60_000 },
         // No eff on the points → no scatter samples.
-        points: [{ lat: 32.7, lng: -117.1, atMs: startedAtMs, speedMps: 20 }, { lat: 32.8, lng: -117.2, atMs: startedAtMs + 30_000, speedMps: 22 }],
+        points: [{ lat: 34.05, lng: -118.25, atMs: startedAtMs, speedMps: 20 }, { lat: 34.16, lng: -118.32, atMs: startedAtMs + 30_000, speedMps: 22 }],
         pointCount: 2,
         distanceMeters: 1000,
       }],

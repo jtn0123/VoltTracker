@@ -40,6 +40,35 @@ describe('battery SOH trend', () => {
     expect(document.querySelector('#sohTrendChart .soh-line')).not.toBeNull();
   });
 
+  it('requests SOH history asynchronously when the native bridge supports it', async () => {
+    const t0 = Date.now() - 10 * DAY;
+    const history = [
+      { capturedAtMs: t0, sohPct: 96, capacityAh: 44.2 },
+      { capturedAtMs: t0 + 10 * DAY, sohPct: 95.5, capacityAh: 43.9 },
+    ];
+    const getBatterySohHistory = vi.fn(() => '[]');
+    const requestBatterySohHistory = vi.fn(() => true);
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getBatterySohHistory, requestBatterySohHistory }),
+    });
+    const VD = window.VoltDashboard;
+
+    window.VoltTrackerNative.setBatterySohHistory('[]');
+    requestBatterySohHistory.mockClear();
+    getBatterySohHistory.mockClear();
+    VD.setStorage({ batterySnapshotCount: 1 });
+    VD.renderRealV2Ui();
+
+    expect(requestBatterySohHistory).toHaveBeenCalledTimes(1);
+    expect(getBatterySohHistory).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setBatterySohHistory(JSON.stringify(history));
+
+    expect(document.getElementById('sohTrendChart').hidden).toBe(false);
+    expect(document.getElementById('sohTrendLatest').textContent).toBe('95.5%');
+    expect(document.querySelector('#sohTrendChart .soh-line')).not.toBeNull();
+  });
+
   it('shows the empty prompt until at least two readings exist', async () => {
     await loadDashboard({
       bridge: createVoltBridgeFixture({ getBatterySohHistory: () => '[]' }),

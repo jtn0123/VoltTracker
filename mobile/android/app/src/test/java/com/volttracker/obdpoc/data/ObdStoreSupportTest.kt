@@ -71,7 +71,7 @@ class ObdStoreSupportTest {
         assertFalse(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("raw", "NO DATA")))
         assertTrue(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("speedKph", 40)))
         assertTrue(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("voltage", 13.8)))
-        assertTrue(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("latitude", 32.7)))
+        assertTrue(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("latitude", 34.05)))
         assertTrue(ObdStoreSupport.isUsefulTelemetry(JSONObject().put("clearDtcOk", true)))
     }
 

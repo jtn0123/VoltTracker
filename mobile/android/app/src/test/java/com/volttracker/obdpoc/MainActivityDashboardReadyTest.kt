@@ -17,6 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import java.time.Duration
 
 /**
  * Integration coverage for the [MainActivity] dashboard handshake and the OBD broadcast -> dashboard
@@ -73,13 +74,14 @@ class MainActivityDashboardReadyTest {
 
     @Test
     fun dashboardReadyPublishesDeviceListStorageAndReadyStatus() {
-        launch()
+        launchResumed()
         // Fresh launch: the dashboard page is not yet marked ready.
         assertFalse("precondition: page should not be ready before the handshake", activity.isDashboardReadyForTest())
         val webView = activity.findViewById<WebView>(R.id.dashboard_webview)
         assertEquals(MainActivity.DASHBOARD_LOADING_DESCRIPTION, webView.contentDescription)
 
         activity.onDashboardReady()
+        settleMainLooper()
 
         assertTrue("onDashboardReady must mark the dashboard page ready", activity.isDashboardReadyForTest())
         assertEquals(MainActivity.DASHBOARD_READY_DESCRIPTION, webView.contentDescription)
@@ -91,14 +93,16 @@ class MainActivityDashboardReadyTest {
 
     @Test
     fun dashboardReadyIsIdempotentOncePageIsAlreadyReady() {
-        launch()
+        launchResumed()
         activity.onDashboardReady()
+        settleMainLooper()
         val devicesAfterFirst = activity.deviceListPublishCount
         val statusAfterFirst = activity.statusPublishCount
 
         // A second handshake (e.g. a WebView reload racing the first) must short-circuit on the
         // page-ready guard and not re-publish.
         activity.onDashboardReady()
+        settleMainLooper()
 
         assertEquals(
             "a repeat handshake must not re-publish the device list",
@@ -112,11 +116,51 @@ class MainActivityDashboardReadyTest {
         )
     }
 
+    @Test
+    fun dashboardReadyPostWorkWaitsUntilActivityResumes() {
+        launch()
+
+        activity.onDashboardReady()
+        settleMainLooper()
+
+        assertTrue("dashboardReady still marks the page ready", activity.isDashboardReadyForTest())
+        assertEquals("paused post-ready work must not publish devices", 0, activity.deviceListPublishCount)
+        assertEquals("paused post-ready work must not publish storage", 0, activity.storageSummaryPublishCount)
+
+        controller.start().resume()
+        settleMainLooper()
+
+        assertTrue("resume must drain the deferred device publish", activity.deviceListPublishCount >= 1)
+        assertTrue("resume must drain the deferred storage publish", activity.storageSummaryPublishCount >= 1)
+    }
+
+    @Test
+    fun initialResumeDefersDashboardSnapshotUntilJsReady() {
+        launchResumed()
+
+        assertFalse("precondition: setup should not mark the dashboard ready", activity.isDashboardReadyForTest())
+        assertEquals("initial onResume should not publish a pre-ready device list", 0, activity.deviceListPublishCount)
+        assertEquals(
+            "initial onResume should not read storage before the dashboard can receive it",
+            0,
+            activity.storageSummaryPublishCount,
+        )
+
+        activity.onDashboardReady()
+        settleMainLooper()
+
+        assertTrue("dashboardReady marks the page ready", activity.isDashboardReadyForTest())
+        assertTrue("ready handshake publishes the device list", activity.deviceListPublishCount >= 1)
+        assertTrue("ready handshake publishes storage", activity.storageSummaryPublishCount >= 1)
+    }
+
     // ---- obdReceiver: BROADCAST_STATUS / BROADCAST_TELEMETRY -> dashboard -----------
 
     @Test
     fun statusBroadcastRoutesThroughTheReceiverToTheDashboard() {
         launchResumed() // onResume registers obdReceiver for the OBD broadcasts.
+        activity.onDashboardReady()
+        settleMainLooper()
         val baseStorage = activity.storageSummaryPublishCount
 
         val status = JSONObject()
@@ -132,6 +176,32 @@ class MainActivityDashboardReadyTest {
             activity.storageSummaryPublishCount > baseStorage,
         )
         assertTrue("the ready-notify hook must observe the status", activity.readyNotifyStatusCount >= 1)
+    }
+
+    @Test
+    fun preReadyStatusBroadcastDoesNotReadStorageThatCannotBePublished() {
+        launchResumed()
+
+        val status = JSONObject()
+        status.put("state", "idle")
+        status.put("detail", "Disconnected.")
+        status.put("blocked", false)
+        sendObdBroadcast(ObdService.BROADCAST_STATUS, status)
+
+        assertEquals(
+            "pre-ready status broadcast should not force a storage read",
+            0,
+            activity.storageSummaryPublishCount,
+        )
+        assertTrue("ready-notify hook still observes the status", activity.readyNotifyStatusCount >= 1)
+
+        activity.onDashboardReady()
+        settleMainLooper()
+
+        assertTrue(
+            "ready handshake publishes storage once the page can receive it",
+            activity.storageSummaryPublishCount >= 1,
+        )
     }
 
     @Test
@@ -164,7 +234,12 @@ class MainActivityDashboardReadyTest {
         activity.sendBroadcast(intent)
         // Robolectric's main looper is paused: sendBroadcast posts delivery to the registered
         // obdReceiver onto the queue, so drain it before asserting the receiver's effect.
-        shadowOf(Looper.getMainLooper()).idle()
+        settleMainLooper()
+    }
+
+    private fun settleMainLooper() {
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofMillis(700))
+        shadowOf(Looper.getMainLooper()).runToEndOfTasks()
     }
 
     /**

@@ -964,6 +964,23 @@ import { initialTelemetryState } from "./telemetry-state";
     return Math.max(root.scrollHeight, bodyHeight) > window.innerHeight + 2;
   }
 
+  function startupMark(name: string) {
+    const bridge = VD.bridge;
+    if (bridge && typeof bridge.startupMark === "function") {
+      bridge.startupMark(name);
+    }
+  }
+
+  function afterNextPaint(work: () => void) {
+    if (typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(() => {
+        setTimeout(work, 0);
+      });
+    } else {
+      setTimeout(work, 0);
+    }
+  }
+
   function viewNodes(): HTMLElement[] {
     return cachedViewNodes || (cachedViewNodes = Array.from(document.querySelectorAll<HTMLElement>(".view")));
   }
@@ -973,6 +990,7 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setView(view: string) {
+    startupMark("tab:" + view + ":start");
     state.view = view;
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
@@ -1008,6 +1026,8 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     updateViewHeading();
     scrollAppToTop();
+    startupMark("tab:" + view + ":end");
+    afterNextPaint(() => startupMark("tab:" + view + ":paint"));
   }
 
   // Android hardware/gesture Back. The native OnBackPressedCallback calls this and only lets the

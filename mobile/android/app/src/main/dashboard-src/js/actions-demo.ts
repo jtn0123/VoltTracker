@@ -56,8 +56,8 @@ export function runBrowserDemoStream(
     state.mode = gas ? "gas" : "ev";
     const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
     const routeDrift = Math.sin(t / 40);
-    const lat = 32.80131 + routeDrift * 0.004;
-    const lng = -116.9513 - Math.abs(routeDrift) * 0.012;
+    const lat = 34.11872 + routeDrift * 0.004;
+    const lng = -118.30064 - Math.abs(routeDrift) * 0.012;
     const speedKph = Math.round(54 + 23 * Math.sin(t / 3.4));
     const rpm = gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0;
     const coolantC = Math.round(82 + 4 * Math.sin(t / 8));

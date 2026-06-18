@@ -621,18 +621,35 @@ import type { MapSessionFilter } from "./map-session-list";
   // window, keyed by routeKey. Cleared whenever the trips payload refreshes so
   // a restore/merge/hide can never serve stale geometry.
   const fetchedRouteCache = new Map<string, MapRoute>();
+  const pendingRouteFetches = new Set<string>();
   let fetchedRouteCacheTripsRef: unknown = null;
 
   function syncRouteCacheWithTrips() {
     if (state.trips !== fetchedRouteCacheTripsRef) {
       fetchedRouteCacheTripsRef = state.trips;
       fetchedRouteCache.clear();
+      pendingRouteFetches.clear();
     }
   }
 
-  /** Resolve a stub route's full geometry via the native bridge (one synchronous
-   *  read, cached). Failed lookups cache the stub so a render loop can't hammer
-   *  the bridge. Detailed routes and the live route pass through untouched. */
+  function applyTripRoutePayload(payload: unknown) {
+    const wrapped = VD.parsePayload<Record<string, unknown>>(payload, {});
+    const id = wrapped.routeKey == null ? "" : String(wrapped.routeKey);
+    if (!id) return;
+    pendingRouteFetches.delete(id);
+    const parsed = VD.parsePayload<MapRoute>(wrapped.payload, {});
+    const existing = fetchedRouteCache.get(id);
+    const resolved =
+      parsed && Array.isArray(parsed.points) && parsed.points.length >= 2
+        ? parsed
+        : existing || ({ session: { id }, points: [], pointCount: 0 } as MapRoute);
+    fetchedRouteCache.set(id, resolved);
+    VD.renderMapIfLoaded();
+  }
+
+  /** Resolve a stub route's full geometry via the native bridge, preferring the async request path
+   *  and falling back to one synchronous read for older bridges. Failed lookups cache the stub so a
+   *  render loop can't hammer the bridge. Detailed routes and the live route pass through untouched. */
   function ensureRoutePoints(route: MapRoute): MapRoute {
     const session = route.session || {};
     const id = session.id == null ? "" : String(session.id);
@@ -641,6 +658,23 @@ import type { MapSessionFilter } from "./map-session-list";
     if (Number(route.pointCount || 0) < 2) return route;
     const cached = fetchedRouteCache.get(id);
     if (cached) return cached;
+    if (
+      bridge &&
+      typeof bridge.requestTripRoute === "function" &&
+      !pendingRouteFetches.has(id)
+    ) {
+      pendingRouteFetches.add(id);
+      fetchedRouteCache.set(id, route);
+      try {
+        if (bridge.requestTripRoute(id)) {
+          return route;
+        }
+      } catch (ignored) {
+        // Fall back to the synchronous bridge path below.
+      }
+      pendingRouteFetches.delete(id);
+      fetchedRouteCache.delete(id);
+    }
     if (!bridge || typeof bridge.getTripRoute !== "function") return route;
     let fetched: MapRoute | null = null;
     try {
@@ -1373,10 +1407,10 @@ import type { MapSessionFilter } from "./map-session-list";
     stops.push({ lat: mid.lat, lng: mid.lng, durationMs });
   }
 
-  // A real ~23 mi logged drive (session 2 of the test database), kept as [secondsFromStart,
-  // lat, lng] triples. Used only as preview content when no Android bridge is present, so
-  // the dashboard can be reviewed loaded; it never runs inside the real app.
-  const SAMPLE_ROUTE: Array<[number, number, number]> = [[0,32.80131,-116.9513],[29,32.80324,-116.95098],[58,32.80344,-116.95173],[86,32.80321,-116.95898],[112,32.80314,-116.96924],[139,32.79793,-116.97686],[167,32.78853,-116.97791],[194,32.78066,-116.9825],[220,32.77918,-116.99186],[247,32.77833,-117.00258],[273,32.77462,-117.01211],[299,32.77102,-117.02164],[326,32.77389,-117.03147],[352,32.77268,-117.04105],[378,32.77609,-117.0498],[405,32.77837,-117.05984],[431,32.77939,-117.06921],[457,32.7801,-117.07931],[483,32.78089,-117.0893],[511,32.77943,-117.09954],[537,32.77872,-117.10943],[563,32.77788,-117.1194],[590,32.77325,-117.12789],[616,32.77062,-117.13732],[642,32.76709,-117.14734],[669,32.7644,-117.15821],[695,32.76095,-117.16827],[721,32.75943,-117.17893],[748,32.76013,-117.18982],[774,32.76021,-117.19997],[800,32.75575,-117.20492],[826,32.75121,-117.20511],[852,32.74743,-117.2089],[878,32.74532,-117.21175],[905,32.74297,-117.21367],[934,32.73984,-117.21632],[961,32.73651,-117.21916],[989,32.73247,-117.22261],[1017,32.72903,-117.22553],[1045,32.7292,-117.22551],[1074,32.72893,-117.22561],[1103,32.72679,-117.22744],[1130,32.72613,-117.228],[1158,32.72348,-117.23026],[1188,32.72314,-117.23053],[1217,32.72154,-117.23188],[1245,32.7204,-117.23277],[1273,32.71904,-117.23456],[1301,32.71875,-117.23497],[1329,32.71858,-117.2352],[1358,32.71839,-117.23547],[1386,32.71828,-117.23569],[1415,32.71818,-117.2357],[1444,32.71791,-117.23587],[1473,32.71751,-117.23595],[1501,32.71704,-117.23612],[1530,32.71623,-117.23621],[1557,32.71601,-117.23646],[1585,32.71559,-117.23663],[1613,32.71527,-117.23675],[1640,32.71482,-117.23691],[1667,32.71444,-117.23707],[1693,32.71383,-117.23737],[1721,32.71325,-117.23766],[1747,32.71302,-117.23772],[1773,32.71254,-117.23785],[1801,32.71167,-117.2381],[1829,32.71131,-117.23819],[1857,32.71064,-117.23836],[1885,32.71034,-117.23846],[1913,32.70995,-117.23854],[1941,32.70949,-117.23866],[1971,32.70894,-117.2388],[1999,32.70801,-117.23906],[2027,32.70724,-117.23926],[2056,32.70754,-117.23883],[2085,32.70661,-117.23928],[2112,32.70621,-117.23918],[2140,32.70603,-117.2382],[2168,32.70531,-117.23915],[2194,32.705,-117.23913],[2221,32.70452,-117.23904],[2249,32.70137,-117.23966],[2276,32.69781,-117.24032],[2303,32.69418,-117.24076],[2331,32.69063,-117.23976],[2360,32.68805,-117.23964],[2389,32.68648,-117.23939],[2417,32.6851,-117.23849],[2445,32.68422,-117.23824],[2474,32.68409,-117.23972],[2503,32.68402,-117.23975],[2529,32.68412,-117.2397]];
+  // Fabricated Los Angeles-area preview geometry, kept as [secondsFromStart, lat, lng]
+  // triples. Used only when no Android bridge is present so the dashboard can be reviewed
+  // loaded; it is not captured device data and never runs inside the real app.
+  const SAMPLE_ROUTE: Array<[number, number, number]> = [[0,34.11872,-118.30064],[25,34.11766,-118.29943],[53,34.11699,-118.29818],[78,34.11532,-118.29755],[105,34.11502,-118.29607],[130,34.11379,-118.29581],[156,34.11331,-118.29444],[185,34.11252,-118.29361],[214,34.11012,-118.29201],[240,34.10983,-118.29046],[267,34.10874,-118.28941],[294,34.10729,-118.28843],[321,34.10664,-118.28671],[349,34.10559,-118.28549],[377,34.10511,-118.28492],[404,34.1033,-118.28202],[429,34.1023,-118.28133],[457,34.1008,-118.27949],[483,34.09991,-118.27795],[508,34.09915,-118.27716],[536,34.09834,-118.27577],[561,34.09684,-118.27385],[590,34.09515,-118.27155],[616,34.09342,-118.271],[642,34.09256,-118.26922],[668,34.09135,-118.26858],[695,34.08982,-118.26784],[720,34.08844,-118.26674],[745,34.08693,-118.26578],[771,34.0843,-118.26341],[796,34.08263,-118.26337],[822,34.0816,-118.26159],[848,34.07927,-118.2616],[873,34.07817,-118.26081],[901,34.07642,-118.25998],[926,34.07477,-118.25933],[951,34.07184,-118.25716],[980,34.07051,-118.25643],[1006,34.06868,-118.25502],[1033,34.06792,-118.25419],[1058,34.06598,-118.25286],[1087,34.06515,-118.25179],[1112,34.06331,-118.25034],[1139,34.06027,-118.2478],[1165,34.05899,-118.24718],[1191,34.05694,-118.24539],[1217,34.05534,-118.24367],[1245,34.05383,-118.24281],[1270,34.05279,-118.24071],[1299,34.05117,-118.23964],[1328,34.04818,-118.23953],[1355,34.0477,-118.24092],[1384,34.04669,-118.24208],[1409,34.04499,-118.24255],[1437,34.04389,-118.24347],[1462,34.04302,-118.24425],[1489,34.04196,-118.24531],[1518,34.03951,-118.24858],[1544,34.03842,-118.25072],[1572,34.03737,-118.25368],[1600,34.03604,-118.25494],[1626,34.0352,-118.25727],[1654,34.03402,-118.25954],[1679,34.03298,-118.26183],[1707,34.03128,-118.26548],[1733,34.03023,-118.26819],[1758,34.02976,-118.2707],[1785,34.02839,-118.27292],[1811,34.02762,-118.2752],[1837,34.02678,-118.27692],[1866,34.02614,-118.27939],[1893,34.02432,-118.28434],[1918,34.02337,-118.28802],[1946,34.02334,-118.29035],[1973,34.022,-118.29332],[2002,34.02129,-118.29641],[2031,34.02046,-118.29924],[2057,34.01996,-118.30215],[2082,34.0191,-118.30761],[2107,34.0194,-118.31139],[2135,34.02004,-118.31402],[2161,34.01943,-118.31713],[2189,34.01987,-118.31994],[2215,34.02041,-118.32298],[2240,34.02081,-118.32606],[2266,34.02166,-118.33312],[2293,34.02148,-118.33598],[2322,34.02206,-118.33889],[2347,34.02288,-118.34169],[2373,34.02263,-118.34537],[2401,34.02381,-118.34841],[2427,34.02384,-118.35127],[2456,34.02433,-118.35766],[2485,34.0248,-118.36111],[2513,34.02565,-118.36468],[2539,34.02532,-118.36794],[2566,34.02551,-118.37083],[2595,34.02644,-118.37385],[2620,34.02654,-118.37771],[2648,34.0269,-118.3805]];
 
   // Build one synthetic route from a slice of SAMPLE_ROUTE. Each route gets its
   // own session id, start time, altitude profile, socTrack, and powerTrack so
@@ -1401,8 +1435,8 @@ import type { MapSessionFilter } from "./map-session-list";
     const endMs = lastPoint.atMs;
     const distanceMeters = routeDistanceMeters(points);
 
-    // Elevation: descend from El Cajon (~150 m) to the coast with a mid-route
-    // hill, then shift by opts.elevShift so each drive feels different.
+    // Elevation: descend from the Griffith Park hills toward flatter west-side
+    // streets, then shift by opts.elevShift so each drive feels different.
     let cumM = 0;
     for (let i = 0; i < points.length; i += 1) {
       const point = points[i];
@@ -1533,7 +1567,7 @@ import type { MapSessionFilter } from "./map-session-list";
     // SOC kept close to the live browser-demo stream (~77%) so Drive's live tile
     // and the Insights HV-pack ring tell the same story in the demo.
     const sampleBattery = { id: 1, capturedAtMs: now - 6 * hour, soc: 77, capacityAh: 42.1, sohPct: 91, packVoltage: 364, packCurrentA: -5.8, packPowerKw: -2.1, batteryTempC: 23 };
-    const sampleVehicle = { year: 2017, make: "Chevrolet", model: "Volt", vin: "1G1RC6S52HU123456", odometerMiles: 48213 };
+    const sampleVehicle = { year: 2017, make: "Chevrolet", model: "Volt", vin: "redacted-demo-vin", odometerMiles: 48213 };
     const sampleDtcs = [
       { dtc: "P0420", status: "stored", statusLabel: "stored", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - 24 * hour, seenCount: 4 },
       { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - 2 * hour, seenCount: 1 }
@@ -1761,7 +1795,8 @@ import type { MapSessionFilter } from "./map-session-list";
     setLiveRoutePoints,
     setMapFollowLive,
     loadSampleData,
-    loadDemoScenario
+    loadDemoScenario,
+    setTripRoute: applyTripRoutePayload
   });
 
 export {};

@@ -258,6 +258,22 @@ class SetupGuideControllerTest {
     }
 
     @Test
+    fun maybeAutoShowIsOneShotEvenWhenDismissed() {
+        val first = newController()
+        first.maybeAutoShow()
+        assertNotNull("a fresh user auto-shows the guide", latestDialog())
+
+        ShadowAlertDialog.reset()
+
+        val second = newController()
+        second.maybeAutoShow()
+        assertNull("auto-show should not nag again after the first automatic presentation", latestDialog())
+
+        second.open()
+        assertNotNull("manual Setup guide remains available", latestDialog())
+    }
+
+    @Test
     fun maybeAutoShowIsSuppressedWhileASessionIsLogging() {
         logging = true
         newController().maybeAutoShow()

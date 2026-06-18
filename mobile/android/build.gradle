@@ -76,6 +76,126 @@ def majorVersionOrNull = { String version ->
     }
     return parts[0] as int
 }
+def startupBenchmarkDeviceStatusCache = null
+def startupBenchmarkDeviceStatus = {
+    if (startupBenchmarkDeviceStatusCache != null) {
+        return startupBenchmarkDeviceStatusCache
+    }
+    def candidates = []
+    def androidHome = System.getenv("ANDROID_HOME") ?: System.getenv("ANDROID_SDK_ROOT")
+    if (androidHome) {
+        candidates.add(new File(new File(androidHome), "platform-tools/adb").absolutePath)
+    }
+    candidates.add("adb")
+    for (candidate in candidates.unique()) {
+        try {
+            def proc = new ProcessBuilder(candidate, "devices").redirectErrorStream(true).start()
+            def output = proc.inputStream.getText("UTF-8").trim()
+            proc.waitFor()
+            if (proc.exitValue() == 0) {
+                def devices = output.readLines()
+                        .drop(1)
+                        .collect { it.trim() }
+                        .findAll { it }
+                def ready = devices.findAll { it ==~ /.+\s+device$/ }
+                startupBenchmarkDeviceStatusCache = [
+                        adb: candidate,
+                        output: output,
+                        devices: devices,
+                        readyDevices: ready,
+                        readySerial: ready ? ready[0].split(/\s+/)[0] : "",
+                        hasReadyDevice: !ready.isEmpty()]
+                return startupBenchmarkDeviceStatusCache
+            }
+        } catch (Exception ignored) {
+            // Try the next adb candidate.
+        }
+    }
+    startupBenchmarkDeviceStatusCache = [
+            adb: "unavailable",
+            output: "adb unavailable",
+            devices: [],
+            readyDevices: [],
+            readySerial: "",
+            hasReadyDevice: false]
+    return startupBenchmarkDeviceStatusCache
+}
+def startupBenchmarkReportDir = layout.buildDirectory.dir("reports/startup-benchmark-local")
+def writeStartupBenchmarkLocalReport = { String status ->
+    def reportDir = startupBenchmarkReportDir.get().asFile
+    reportDir.mkdirs()
+    def deviceStatus = startupBenchmarkDeviceStatus()
+    def benchmarkArtifactRoots = [
+            file("startup-benchmark/build/outputs/connected_android_test_additional_output"),
+            file("startup-benchmark/build/reports/androidTests/connected")]
+    def files = benchmarkArtifactRoots.findAll { it.exists() }.collectMany { root ->
+        fileTree(root) {
+                include "**/*.json"
+                include "**/*.trace"
+                include "**/*.perfetto-trace"
+                include "**/*.txt"
+                include "**/*.html"
+            }.files.findAll { it.isFile() }
+    }.sort { it.absolutePath }
+    def jsonFiles = files.findAll { it.name.endsWith(".json") }
+    def metricLines = []
+    jsonFiles.each { jsonFile ->
+        try {
+            def parsed = new groovy.json.JsonSlurper().parse(jsonFile)
+            def benchmarks = parsed instanceof Map ? parsed.benchmarks : null
+            if (benchmarks instanceof Collection) {
+                benchmarks.each { benchmark ->
+                    def name = benchmark.name ?: benchmark.className ?: jsonFile.name
+                    def metrics = benchmark.metrics instanceof Map ? benchmark.metrics : [:]
+                    metrics.each { metricName, value ->
+                        if (value instanceof Map) {
+                            def summary = ["minimum", "median", "maximum", "min", "max", "p50", "p90", "p95"]
+                                    .findAll { value.containsKey(it) }
+                                    .collect { "${it}=${value[it]}" }
+                                    .join(", ")
+                            if (summary) {
+                                metricLines.add("- `${name}` `${metricName}`: ${summary}")
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+            // Keep the report useful even if an AndroidX output shape changes.
+        }
+    }
+    def summary = new File(reportDir, "summary.md")
+    summary.text = """# Local Startup Benchmark
+
+Status: `${status}`
+
+Command:
+
+```sh
+./gradlew verifyStartupPerformanceOptional --no-configuration-cache
+```
+
+ADB: `${deviceStatus.adb}`
+
+Ready devices:
+
+${deviceStatus.readyDevices ? deviceStatus.readyDevices.collect { "- `${it}`" }.join("\n") : "- none"}
+
+Raw `adb devices` output:
+
+```text
+${deviceStatus.output ?: "(empty)"}
+```
+
+Benchmark metrics:
+
+${metricLines ? metricLines.join("\n") : "- No parsed Macrobenchmark metric JSON found yet."}
+
+Benchmark artifact files:
+
+${files ? files.collect { "- `${project.relativePath(it)}`" }.join("\n") : "- No startup-benchmark artifacts found yet."}
+"""
+}
 
 tasks.register("verifyDashboardNodeVersion") {
     description = "Fails early when dashboard tooling is not running on Node 22.x."
@@ -356,6 +476,38 @@ tasks.register("verifyPerformance") {
 tasks.register("verifyStartupPerformance") {
     description = "Runs the opt-in on-device Macrobenchmark cold-start/dashboard-ready suite. Requires a connected API 29+ device/emulator."
     dependsOn(":startup-benchmark:connectedCheck")
+}
+
+tasks.register("verifyStartupPerformanceOptional") {
+    description = "Runs startup Macrobenchmark when an authorized Android device/emulator is attached; otherwise writes a local skip report."
+    outputs.dir(startupBenchmarkReportDir)
+    outputs.upToDateWhen { false }
+    doLast {
+        def deviceStatus = startupBenchmarkDeviceStatus()
+        if (!deviceStatus.hasReadyDevice) {
+            writeStartupBenchmarkLocalReport("skipped-no-ready-device")
+            logger.lifecycle("Skipping startup Macrobenchmark: no authorized Android device/emulator from `${deviceStatus.adb} devices`.")
+            logger.lifecycle("Startup benchmark local report: ${startupBenchmarkReportDir.get().asFile}/summary.md")
+            return
+        }
+        def procBuilder = new ProcessBuilder("./gradlew", "--no-daemon", "verifyStartupPerformance", "--no-configuration-cache")
+                .directory(projectDir)
+                .redirectErrorStream(true)
+        if (deviceStatus.readySerial) {
+            procBuilder.environment().put("ANDROID_SERIAL", deviceStatus.readySerial)
+        }
+        if (System.getenv(unsupportedNodeOverrideEnv)) {
+            procBuilder.environment().put(unsupportedNodeOverrideEnv, System.getenv(unsupportedNodeOverrideEnv))
+        }
+        def proc = procBuilder.start()
+        proc.inputStream.eachLine { logger.lifecycle(it) }
+        proc.waitFor()
+        if (proc.exitValue() != 0) {
+            throw new GradleException("verifyStartupPerformance failed with exit code ${proc.exitValue()}")
+        }
+        writeStartupBenchmarkLocalReport("completed")
+        logger.lifecycle("Startup benchmark local report: ${startupBenchmarkReportDir.get().asFile}/summary.md")
+    }
 }
 
 subprojects {

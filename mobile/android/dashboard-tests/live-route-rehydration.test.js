@@ -19,8 +19,8 @@ describe('live-route rehydration', () => {
     const getCurrentSessionRoute = vi.fn(() => JSON.stringify({
       session: { id: 7, status: 'active' },
       points: [
-        { atMs: 1000, lat: 32.7, lng: -117.1, speedMps: 10 },
-        { atMs: 2000, lat: 32.71, lng: -117.11, speedMps: 12, soc: 78 },
+        { atMs: 1000, lat: 34.05, lng: -118.25, speedMps: 10 },
+        { atMs: 2000, lat: 34.06, lng: -118.26, speedMps: 12, soc: 78 },
       ],
     }));
     await loadDashboard({ bridge: createVoltBridgeFixture({ getCurrentSessionRoute }) });
@@ -30,11 +30,37 @@ describe('live-route rehydration', () => {
 
     expect(getCurrentSessionRoute).toHaveBeenCalledTimes(1);
     expect(VD.state.liveRoutePoints).toHaveLength(2);
-    expect(VD.state.liveRoutePoints[0]).toMatchObject({ lat: 32.7, lng: -117.1, atMs: 1000 });
+    expect(VD.state.liveRoutePoints[0]).toMatchObject({ lat: 34.05, lng: -118.25, atMs: 1000 });
     // speedMps is converted to speedKph for the live point shape.
     expect(VD.state.liveRoutePoints[1].speedKph).toBeCloseTo(12 * 3.6, 5);
     expect(VD.state.selectedMapSessionId).toBe('__live_current__');
     expect(VD.state.liveRouteStartedAtMs).toBe(1000);
+  });
+
+  it('requests the live route asynchronously when the native bridge supports it', async () => {
+    const getCurrentSessionRoute = vi.fn(() => JSON.stringify({ points: [] }));
+    const requestCurrentSessionRoute = vi.fn(() => true);
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getCurrentSessionRoute, requestCurrentSessionRoute }),
+    });
+    const VD = window.VoltDashboard;
+
+    VD.setStatus({ state: 'connected', detail: 'Live OBD data.' });
+
+    expect(requestCurrentSessionRoute).toHaveBeenCalledTimes(1);
+    expect(getCurrentSessionRoute).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setCurrentSessionRoute(JSON.stringify({
+      session: { id: 8, status: 'active' },
+      points: [
+        { atMs: 3000, lat: 34.07, lng: -118.28, speedMps: 8 },
+        { atMs: 4000, lat: 34.08, lng: -118.29, speedMps: 9, soc: 77 },
+      ],
+    }));
+
+    expect(VD.state.liveRoutePoints).toHaveLength(2);
+    expect(VD.state.liveRoutePoints[0]).toMatchObject({ lat: 34.07, lng: -118.28, atMs: 3000 });
+    expect(VD.state.selectedMapSessionId).toBe('__live_current__');
   });
 
   it('does not query the backend when no session is active', async () => {

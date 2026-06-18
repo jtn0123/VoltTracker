@@ -80,6 +80,35 @@ describe('storage summary lazy details', () => {
     expect(window.VoltDashboard.state.storage.storageDetails).toBeUndefined();
   });
 
+  it('uses async native storage details when the bridge accepts the request', async () => {
+    const bridge = createVoltBridgeFixture({
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      getStorageDetails: vi.fn(() => '{"storageDetails":true}'),
+      requestStorageDetails: vi.fn(() => true),
+    });
+    await loadDashboard({ bridge });
+    await flushDeferredStorageReads();
+    window.VoltTrackerNative.setStorage(JSON.stringify({ storageDetails: true }));
+    bridge.requestStorageDetails.mockClear();
+    bridge.getStorageDetails.mockClear();
+
+    window.VoltDashboard.setStorage({ sessionCount: 4, sampleCount: 9, recentSessions: [] });
+    await flushDeferredStorageReads();
+
+    expect(bridge.requestStorageDetails).toHaveBeenCalledTimes(1);
+    expect(bridge.getStorageDetails).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setStorage(JSON.stringify({
+      storageDetails: true,
+      chargeSummary: { chargeSessionCount: 3, recentSessions: [] },
+      batterySummary: { snapshotCount: 2 },
+    }));
+
+    expect(window.VoltDashboard.state.storage.sessionCount).toBe(4);
+    expect(window.VoltDashboard.state.storage.chargeSummary.chargeSessionCount).toBe(3);
+    expect(window.VoltDashboard.state.storage.batterySummary.snapshotCount).toBe(2);
+  });
+
   it('demand-loads trip and insight rollups when their views open', async () => {
     const bridge = createVoltBridgeFixture({
       getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
@@ -101,5 +130,33 @@ describe('storage summary lazy details', () => {
     await window.VoltDashboard.pendingLazyLoads();
     expect(bridge.getTrips).toHaveBeenCalledTimes(1);
     expect(bridge.getInsights).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses async native trip and insight rollups when the bridge accepts requests', async () => {
+    const bridge = createVoltBridgeFixture({
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      getTrips: vi.fn(() => '[]'),
+      getInsights: vi.fn(() => '{}'),
+      requestTrips: vi.fn(() => true),
+      requestInsights: vi.fn(() => true),
+    });
+    await loadDashboard({ bridge });
+    await flushDeferredStorageReads();
+
+    window.VoltDashboard.setView('map');
+    await window.VoltDashboard.pendingLazyLoads();
+    expect(bridge.requestTrips).toHaveBeenCalledTimes(1);
+    expect(bridge.getTrips).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setTrips(JSON.stringify([{ id: 'trip-1', hasRoute: false }]));
+    expect(window.VoltDashboard.state.trips).toHaveLength(1);
+
+    window.VoltDashboard.setView('insights');
+    await window.VoltDashboard.pendingLazyLoads();
+    expect(bridge.requestInsights).toHaveBeenCalledTimes(1);
+    expect(bridge.getInsights).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setInsights(JSON.stringify({ tripCount: 1, totalDistanceMeters: 1000 }));
+    expect(window.VoltDashboard.state.insights.tripCount).toBe(1);
   });
 });

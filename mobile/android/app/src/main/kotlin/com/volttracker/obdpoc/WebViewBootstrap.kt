@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.annotation.SuppressLint
+import android.graphics.Bitmap
 import android.util.Log
 import android.webkit.ConsoleMessage
 import android.webkit.WebChromeClient
@@ -81,7 +82,7 @@ object WebViewBootstrap {
                         ConsoleMessage.MessageLevel.TIP,
                         ConsoleMessage.MessageLevel.LOG,
                         null,
-                        -> Log.i(MainActivity.TAG, line)
+                        -> if (BuildConfig.DEBUG) Log.i(MainActivity.TAG, line)
                     }
                     return true
                 }
@@ -94,6 +95,31 @@ object WebViewBootstrap {
         // or for sub-resource loads (those are bounded by the CSP), only for navigations.
         webView.webViewClient =
             object : WebViewClient() {
+                override fun onPageStarted(
+                    view: WebView?,
+                    url: String?,
+                    favicon: Bitmap?,
+                ) {
+                    StartupTrace.mark("webview_page_started")
+                    super.onPageStarted(view, url, favicon)
+                }
+
+                override fun onPageCommitVisible(
+                    view: WebView?,
+                    url: String?,
+                ) {
+                    StartupTrace.mark("webview_page_commit_visible")
+                    super.onPageCommitVisible(view, url)
+                }
+
+                override fun onPageFinished(
+                    view: WebView?,
+                    url: String?,
+                ) {
+                    StartupTrace.mark("webview_page_finished")
+                    super.onPageFinished(view, url)
+                }
+
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     request: WebResourceRequest?,
@@ -105,8 +131,12 @@ object WebViewBootstrap {
                     url: String?,
                 ): Boolean = blockOffOrigin(url)
             }
+        StartupTrace.mark("webview_add_js_interface_start")
         webView.addJavascriptInterface(bridge, BRIDGE_NAME)
+        StartupTrace.mark("webview_add_js_interface_end")
+        StartupTrace.mark("webview_load_url_start")
         webView.loadUrl(DASHBOARD_URL)
+        StartupTrace.mark("webview_load_url_end")
     }
 
     /** Returns true (consume, do not navigate) for any URL outside the dashboard origin. */

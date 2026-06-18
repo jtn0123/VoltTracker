@@ -51,6 +51,9 @@ class DashboardBroadcastCoordinator(
         /** Publishes the storage summary throttled (overridable hook on the host). */
         fun publishStorageSummaryThrottled()
 
+        /** True once the dashboard JS callback surface has completed its ready handshake. */
+        fun isDashboardReady(): Boolean
+
         /** Pushes the current app-state snapshot to the dashboard. */
         fun publishAppState()
 
@@ -119,7 +122,9 @@ class DashboardBroadcastCoordinator(
     private fun onStatusBroadcast(json: String) {
         val state = seam.storeStatus(json)
         seam.callDashboard("setStatus", json)
-        if ("idle" == state) {
+        if (!seam.isDashboardReady()) {
+            StartupTrace.mark("status_storage_publish_skipped_not_ready")
+        } else if ("idle" == state) {
             seam.publishStorageSummary()
         } else {
             seam.publishStorageSummaryThrottled()

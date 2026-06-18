@@ -17,7 +17,7 @@ class ObdStoreRouteSimplifyTest {
         // A dead-straight line north: every interior point deviates 0 m from the end chord.
         val points = JSONArray()
         for (i in 0 until 50) {
-            points.put(point(1000L + i, 32.70 + i * 0.0001, -117.10))
+            points.put(point(1000L + i, 34.05 + i * 0.0001, -118.25))
         }
 
         val simplified = ObdStoreRouteProjection.simplifyRoutePoints(points, TOLERANCE_METERS)
@@ -33,10 +33,10 @@ class ObdStoreRouteSimplifyTest {
         // corner deviates hundreds of meters from the end-to-end chord and must survive.
         val points = JSONArray()
         for (i in 0 until 10) {
-            points.put(point(1000L + i, 32.70, -117.10 + i * 0.001))
+            points.put(point(1000L + i, 34.05, -118.25 + i * 0.001))
         }
         for (i in 1 until 10) {
-            points.put(point(1009L + i, 32.70 + i * 0.001, -117.10 + 9 * 0.001))
+            points.put(point(1009L + i, 34.05 + i * 0.001, -118.25 + 9 * 0.001))
         }
 
         val simplified = ObdStoreRouteProjection.simplifyRoutePoints(points, TOLERANCE_METERS)
@@ -54,10 +54,10 @@ class ObdStoreRouteSimplifyTest {
         val smallOffsetDeg = 0.00005 // ~5.5 m of latitude
         val bigOffsetDeg = 0.0005 // ~55 m of latitude
         val points = JSONArray()
-        points.put(point(1L, 32.70, -117.10))
-        points.put(point(2L, 32.70 + bigOffsetDeg / 2 + smallOffsetDeg, -117.09))
-        points.put(point(3L, 32.70 + bigOffsetDeg, -117.08))
-        points.put(point(4L, 32.70, -117.07))
+        points.put(point(1L, 34.05, -118.25))
+        points.put(point(2L, 34.05 + bigOffsetDeg / 2 + smallOffsetDeg, -118.24))
+        points.put(point(3L, 34.05 + bigOffsetDeg, -118.23))
+        points.put(point(4L, 34.05, -118.22))
 
         val simplified = ObdStoreRouteProjection.simplifyRoutePoints(points, TOLERANCE_METERS)
 
@@ -70,8 +70,8 @@ class ObdStoreRouteSimplifyTest {
     @Test
     fun twoOrFewerPointsPassThroughUntouched() {
         val pair = JSONArray()
-        pair.put(point(1L, 32.70, -117.10))
-        pair.put(point(2L, 32.71, -117.10))
+        pair.put(point(1L, 34.05, -118.25))
+        pair.put(point(2L, 34.06, -118.25))
 
         assertEquals(2, ObdStoreRouteProjection.simplifyRoutePoints(pair, TOLERANCE_METERS).length())
         assertEquals(0, ObdStoreRouteProjection.simplifyRoutePoints(JSONArray(), TOLERANCE_METERS).length())
@@ -81,16 +81,16 @@ class ObdStoreRouteSimplifyTest {
     fun simplifiedPointsKeepTheirFullPayload() {
         // Kept points must be the original objects (timestamps + extras), not rebuilt ones.
         val points = JSONArray()
-        points.put(point(1L, 32.70, -117.10).put("accuracyM", 4.5))
-        points.put(point(2L, 32.70 + 0.001, -117.09))
-        points.put(point(3L, 32.70, -117.08).put("accuracyM", 6.5))
+        points.put(point(1L, 34.05, -118.25).put("accuracyM", 4.5))
+        points.put(point(2L, 34.05 + 0.001, -118.24))
+        points.put(point(3L, 34.05, -118.23).put("accuracyM", 6.5))
 
         val simplified = ObdStoreRouteProjection.simplifyRoutePoints(points, TOLERANCE_METERS)
 
         assertEquals(3, simplified.length())
         assertEquals(4.5, simplified.getJSONObject(0).getDouble("accuracyM"), 1e-9)
         assertEquals(6.5, simplified.getJSONObject(2).getDouble("accuracyM"), 1e-9)
-        assertTrue(simplified.getJSONObject(1).getDouble("lat") > 32.70)
+        assertTrue(simplified.getJSONObject(1).getDouble("lat") > 34.05)
     }
 
     private fun point(

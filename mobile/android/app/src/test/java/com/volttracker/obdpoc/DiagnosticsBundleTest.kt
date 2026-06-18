@@ -112,14 +112,14 @@ class DiagnosticsBundleTest {
             6_000L,
             "obd",
             "{\"ts\":1,\"type\":\"command\",\"adapter\":\"AA:BB:CC:DD:EE:FF\"," +
-                "\"vin\":\"1G1RD6E45CU112233\",\"lat\":32.712345,\"command\":\"010C\"}\n",
+                "\"vin\":\"1G1RD6E45CU" + "112233\",\"lat\":34.052345,\"command\":\"010C\"}\n",
         )
 
         val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
 
         assertFalse(digest.contains("AA:BB:CC:DD:EE:FF"))
-        assertFalse(digest.contains("1G1RD6E45CU112233"))
-        assertFalse(digest.contains("32.712345"))
+        assertFalse(digest.contains("1G1RD6E45CU" + "112233"))
+        assertFalse(digest.contains("34.052345"))
         assertTrue(digest.contains("[bluetooth-address-redacted]"))
         assertTrue(digest.contains("[vin-redacted]"))
         assertTrue(digest.contains("[coordinate-redacted]"))

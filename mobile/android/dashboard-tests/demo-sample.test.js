@@ -115,10 +115,10 @@ describe('demo sample data', () => {
 
     expect(livePosition).toHaveBeenCalled();
     const [lat, lng] = livePosition.mock.calls.at(-1);
-    expect(lat).toBeGreaterThan(32.6);
-    expect(lat).toBeLessThan(32.9);
-    expect(lng).toBeGreaterThan(-117.3);
-    expect(lng).toBeLessThan(-116.8);
+    expect(lat).toBeGreaterThan(34.0);
+    expect(lat).toBeLessThan(34.2);
+    expect(lng).toBeGreaterThan(-118.45);
+    expect(lng).toBeLessThan(-118.2);
   });
 
   it('feeds the raw-frame panel with demo ELM327-style responses', async () => {

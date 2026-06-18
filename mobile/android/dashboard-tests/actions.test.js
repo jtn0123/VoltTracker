@@ -54,6 +54,11 @@ async function freshLoad(bridge) {
   return loadDashboard({ bridge });
 }
 
+async function flushStartupReady() {
+  await vi.advanceTimersByTimeAsync(50);
+  await Promise.resolve();
+}
+
 describe('actions.ts — bridge dispatch', () => {
   let bridge;
   let VD;
@@ -93,6 +98,38 @@ describe('actions.ts — bridge dispatch', () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.restoreAllMocks();
+  });
+
+  it('startup waits for dashboardReady native publish instead of pre-ready device refresh', async () => {
+    const startupBridge = createVoltBridgeFixture({
+      dashboardReady: vi.fn(),
+      refreshDevices: vi.fn(),
+      listDevices: vi.fn(() => '[]'),
+      getDeviceHistory: vi.fn(() => '[]'),
+    });
+
+    await freshLoad(startupBridge);
+    await flushStartupReady();
+
+    expect(startupBridge.dashboardReady).toHaveBeenCalledTimes(1);
+    expect(startupBridge.refreshDevices).not.toHaveBeenCalled();
+    expect(startupBridge.listDevices).not.toHaveBeenCalled();
+    expect(startupBridge.getDeviceHistory).not.toHaveBeenCalled();
+  });
+
+  it('startup refreshDevices falls back to synchronous getters for older native builds', async () => {
+    const startupBridge = createVoltBridgeFixture({
+      dashboardReady: undefined,
+      refreshDevices: undefined,
+      listDevices: vi.fn(() => '[{"address":"AA:BB:CC:DD:EE:FF","name":"TestOBD"}]'),
+      getDeviceHistory: vi.fn(() => '[]'),
+    });
+
+    await freshLoad(startupBridge);
+
+    expect(startupBridge.listDevices).toHaveBeenCalledTimes(1);
+    expect(startupBridge.getDeviceHistory).toHaveBeenCalledTimes(1);
+    expect(document.getElementById('deviceSelect').options).toHaveLength(1);
   });
 
   it('connectSelected(false) routes to bridge.connect with the selected adapter', () => {

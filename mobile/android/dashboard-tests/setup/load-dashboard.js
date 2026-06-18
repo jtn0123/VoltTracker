@@ -387,9 +387,9 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
     window.setTimeout = nativeSetTimeout;
   }
 
-  // The bootstrap (actions.ts) defers refreshStorage() off the first-paint path
-  // via requestIdleCallback, falling back to setTimeout(0). Trips/Insights are
-  // now demand-loaded by their views rather than drained here.
+  // The bootstrap (actions.ts) defers secondary panel renders off the first-paint
+  // path via requestIdleCallback, falling back to setTimeout(0). Trips/Insights
+  // are now demand-loaded by their views rather than drained here.
   //
   // Use the real node timer (not window.setTimeout): tests that call this under
   // vi.useFakeTimers() would otherwise schedule the drain on a faked clock that

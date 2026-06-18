@@ -11,9 +11,11 @@ import android.os.StrictMode
 class VoltTrackerApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        StartupTrace.reset("app_on_create")
         if (BuildConfig.DEBUG) {
             installStrictMode()
         }
+        StartupTrace.mark("app_on_create_complete")
     }
 
     private fun installStrictMode() {

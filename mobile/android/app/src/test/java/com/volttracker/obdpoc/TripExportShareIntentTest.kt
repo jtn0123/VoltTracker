@@ -102,22 +102,22 @@ class TripExportShareIntentTest {
             points.put(
                 JSONObject()
                     .put("atMs", 10_000L)
-                    .put("lat", 32.7)
-                    .put("lng", -117.1)
+                    .put("lat", 34.05)
+                    .put("lng", -118.25)
                     .put("speedMps", 10.0),
             )
             points.put(
                 JSONObject()
                     .put("atMs", 20_000L)
-                    .put("lat", 32.8)
-                    .put("lng", -117.15)
+                    .put("lat", 34.16)
+                    .put("lng", -118.32)
                     .put("speedMps", 11.0),
             )
             points.put(
                 JSONObject()
                     .put("atMs", 30_000L)
-                    .put("lat", 33.0)
-                    .put("lng", -117.2)
+                    .put("lat", 34.0)
+                    .put("lng", -118.32)
                     .put("speedMps", 12.0),
             )
             return JSONObject()
@@ -134,15 +134,15 @@ class TripExportShareIntentTest {
             secondPoints.put(
                 JSONObject()
                     .put("atMs", 40_000L)
-                    .put("lat", 33.1)
-                    .put("lng", -117.3)
+                    .put("lat", 34.1)
+                    .put("lng", -118.45)
                     .put("speedMps", 9.0),
             )
             secondPoints.put(
                 JSONObject()
                     .put("atMs", 50_000L)
-                    .put("lat", 33.2)
-                    .put("lng", -117.35)
+                    .put("lat", 34.2)
+                    .put("lng", -118.50)
                     .put("speedMps", 8.0),
             )
             trips.put(

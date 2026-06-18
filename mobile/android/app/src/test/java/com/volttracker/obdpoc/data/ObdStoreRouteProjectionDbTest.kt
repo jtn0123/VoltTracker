@@ -42,7 +42,7 @@ class ObdStoreRouteProjectionDbTest {
     fun routePointsForTotalJustAboveTargetSpanTheFullTimeRangeEvenly() {
         val sessionId = insertSession(db, FIRST_AT_MS)
         for (i in 0 until TOTAL) {
-            insertGpsTelemetry(db, sessionId, FIRST_AT_MS + i * INTERVAL_MS, 32.70 + i * 0.00001, -117.10, null)
+            insertGpsTelemetry(db, sessionId, FIRST_AT_MS + i * INTERVAL_MS, 34.05 + i * 0.00001, -118.25, null)
         }
 
         val points = ObdStoreRouteProjection.routePointsForSessionJson(db, sessionId, TARGET)
@@ -71,8 +71,8 @@ class ObdStoreRouteProjectionDbTest {
                 db,
                 sessionId,
                 FIRST_AT_MS + i * INTERVAL_MS,
-                32.70 + i * 0.00001,
-                -117.10,
+                34.05 + i * 0.00001,
+                -118.25,
                 50.0 + i * 0.01,
             )
         }

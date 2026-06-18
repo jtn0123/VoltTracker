@@ -39,8 +39,8 @@ describe('M4 — trip labels in the map session list', () => {
         {
           session: { id, sessionId: 7, mode: 'drive', adapterName: 'Adapter X', startedAtMs, endedAtMs },
           points: [
-            { lat: 32.7, lng: -117.1 },
-            { lat: 32.8, lng: -117.2 },
+            { lat: 34.05, lng: -118.25 },
+            { lat: 34.16, lng: -118.32 },
           ],
           pointCount: 2,
           distanceMeters: 1000,

@@ -191,22 +191,22 @@ class TripExportTest {
             points.put(
                 JSONObject()
                     .put("atMs", 10_000L)
-                    .put("lat", 32.7)
-                    .put("lng", -117.1)
+                    .put("lat", 34.05)
+                    .put("lng", -118.25)
                     .put("speedMps", 10.0),
             )
             points.put(
                 JSONObject()
                     .put("atMs", 20_000L)
-                    .put("lat", 32.8)
-                    .put("lng", -117.15)
+                    .put("lat", 34.16)
+                    .put("lng", -118.32)
                     .put("speedMps", 11.0),
             )
             points.put(
                 JSONObject()
                     .put("atMs", 30_000L)
-                    .put("lat", 33.0)
-                    .put("lng", -117.2)
+                    .put("lat", 34.0)
+                    .put("lng", -118.32)
                     .put("speedMps", 12.0),
             )
             return JSONObject()

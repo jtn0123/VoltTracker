@@ -125,8 +125,8 @@ class ObdStorePerformanceBudgetTest {
             .put("packVoltage", 356.0)
             .put("packCurrentA", -18.0 + (sampleIndex % 5))
             .put("powerKw", 6.0 + sampleIndex * 0.03)
-            .put("latitude", 32.70 + sessionIndex * 0.003 + sampleIndex * 0.00008)
-            .put("longitude", -117.10 - sampleIndex * 0.00008)
+            .put("latitude", 34.05 + sessionIndex * 0.003 + sampleIndex * 0.00008)
+            .put("longitude", -118.25 - sampleIndex * 0.00008)
             .put("updatedAt", atMs)
 
     private fun measureMs(block: () -> Unit): Long {

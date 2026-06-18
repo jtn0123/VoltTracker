@@ -52,6 +52,7 @@ class SetupGuideController(
     fun maybeAutoShow() {
         val active = flow() ?: return
         if (active.shouldAutoShow(readState())) {
+            active.markAutoShown()
             show(active)
         }
     }

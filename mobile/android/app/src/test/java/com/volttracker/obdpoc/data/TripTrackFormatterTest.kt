@@ -25,8 +25,8 @@ class TripTrackFormatterTest {
         assertTrue("must open a single track segment", gpx.contains("<trkseg>"))
         assertEquals("one trkpt per point", SAMPLE_POINTS.size, countOccurrences(gpx, "<trkpt "))
         // First point carries lat/lon, a <time>, an <ele> and the speed extension.
-        assertTrue("first trkpt lat", gpx.contains("lat=\"32.7\""))
-        assertTrue("first trkpt lon", gpx.contains("lon=\"-117.1\""))
+        assertTrue("first trkpt lat", gpx.contains("lat=\"34.05\""))
+        assertTrue("first trkpt lon", gpx.contains("lon=\"-118.25\""))
         assertEquals("one <time> per point", SAMPLE_POINTS.size, countOccurrences(gpx, "<time>"))
         assertTrue("ISO-8601 UTC time", gpx.contains("<time>1970-01-01T00:00:10Z</time>"))
         assertTrue("altitude element keeps a decimal place", gpx.contains("<ele>5.0</ele>"))
@@ -66,13 +66,13 @@ class TripTrackFormatterTest {
         assertEquals("0", firstCols[0])
         assertEquals("1970-01-01T00:00:10Z", firstCols[1])
         assertEquals("10000", firstCols[2])
-        assertEquals("32.7", firstCols[3])
-        assertEquals("-117.1", firstCols[4])
+        assertEquals("34.05", firstCols[3])
+        assertEquals("-118.25", firstCols[4])
         assertEquals("12.5", firstCols[5])
         // Third point's soc rides along in the last column. Whole-number coordinates keep one decimal
-        // place ("33.0") so they read consistently alongside the fractional points in the same file.
+        // place ("34.0") so they read consistently alongside the fractional points in the same file.
         val thirdCols = lines[3].split(",")
-        assertEquals("33.0", thirdCols[3])
+        assertEquals("34.0", thirdCols[3])
         assertEquals("88.5", thirdCols[9])
     }
 
@@ -94,12 +94,12 @@ class TripTrackFormatterTest {
 
     @Test
     fun wholeValuedCoordinatesKeepADecimalPlaceForConsistency() {
-        // A stationary sample (0.0 speed, whole-degree lat) must render as "0.0"/"33.0", not "0"/"33",
+        // A stationary sample (0.0 speed, whole-degree lat) must render as "0.0"/"34.0", not "0"/"33",
         // so it reads consistently next to the fractional points in the same exported file.
         val points =
             listOf(
                 JSONObject()
-                    .put("lat", 33.0)
+                    .put("lat", 34.0)
                     .put("lng", 0.0)
                     .put("atMs", 1_000L)
                     .put("speedMps", 0.0),
@@ -110,12 +110,12 @@ class TripTrackFormatterTest {
                 .trim()
                 .lines()[1]
                 .split(",")
-        assertEquals("33.0", csvCols[3])
+        assertEquals("34.0", csvCols[3])
         assertEquals("0.0", csvCols[4])
         assertEquals("0.0", csvCols[5])
 
         val gpx = TripTrackFormatter.toGpx(routeWith(points))
-        assertTrue("whole-degree lat keeps a decimal", gpx.contains("lat=\"33.0\""))
+        assertTrue("whole-degree lat keeps a decimal", gpx.contains("lat=\"34.0\""))
         assertTrue("whole-degree lon keeps a decimal", gpx.contains("lon=\"0.0\""))
         assertTrue("zero speed keeps a decimal", gpx.contains("<speed>0.0</speed>"))
     }
@@ -130,9 +130,9 @@ class TripTrackFormatterTest {
                 """
                 {"session":{"id":"1:0:0","sessionId":1,"adapterName":"OBDLink"},
                  "points":[
-                   {"atMs":10000,"lat":1e9999,"lng":-117.1,"speedMps":12.5},
-                   {"atMs":20000,"lat":32.8,"lng":-1e9999},
-                   {"atMs":30000,"lat":33.0,"lng":-117.2,"speedMps":14.0}
+                   {"atMs":10000,"lat":1e9999,"lng":-118.25,"speedMps":12.5},
+                   {"atMs":20000,"lat":34.16,"lng":-1e9999},
+                   {"atMs":30000,"lat":34.0,"lng":-118.32,"speedMps":14.0}
                  ]}
                 """.trimIndent(),
             )
@@ -141,7 +141,7 @@ class TripTrackFormatterTest {
         assertEquals("non-finite points are not counted", 1, TripTrackFormatter.pointCount(route))
         val gpx = TripTrackFormatter.toGpx(route)
         assertEquals("only the finite trkpt is emitted", 1, countOccurrences(gpx, "<trkpt "))
-        assertTrue("the finite point is the one written", gpx.contains("lat=\"33.0\""))
+        assertTrue("the finite point is the one written", gpx.contains("lat=\"34.0\""))
         assertTrue("document still closes cleanly", gpx.trim().endsWith("</gpx>"))
 
         val csv = TripTrackFormatter.toCsv(route)
@@ -197,7 +197,7 @@ class TripTrackFormatterTest {
     @Test
     fun allTripsCsvQuotesALabelContainingCommasAndQuotes() {
         val trips = JSONArray()
-        trips.put(tripExport("1:10000:30000", "Mom's, \"work\" run", listOf(point(10_000L, 32.7, -117.1))))
+        trips.put(tripExport("1:10000:30000", "Mom's, \"work\" run", listOf(point(10_000L, 34.05, -118.25))))
 
         val csv = TripTrackFormatter.toAllTripsCsv(trips)
 
@@ -212,9 +212,9 @@ class TripTrackFormatterTest {
         // CSV is opened (CSV injection). The export must defuse it with a leading apostrophe.
         val trips = JSONArray()
         trips.put(
-            tripExport("1:10000:30000", "=HYPERLINK(\"http://evil\",\"x\")", listOf(point(10_000L, 32.7, -117.1))),
+            tripExport("1:10000:30000", "=HYPERLINK(\"http://evil\",\"x\")", listOf(point(10_000L, 34.05, -118.25))),
         )
-        trips.put(tripExport("2:20000:30000", "-5C morning", listOf(point(20_000L, 33.0, -117.2))))
+        trips.put(tripExport("2:20000:30000", "-5C morning", listOf(point(20_000L, 34.0, -118.32))))
 
         val csv = TripTrackFormatter.toAllTripsCsv(trips)
 
@@ -321,9 +321,9 @@ class TripTrackFormatterTest {
     private companion object {
         private val SAMPLE_POINTS =
             listOf(
-                point(10_000L, 32.7, -117.1, speedMps = 12.5, altM = 5.0),
-                point(20_000L, 32.8, -117.15, speedMps = 13.0),
-                point(30_000L, 33.0, -117.2, speedMps = 14.0, soc = 88.5),
+                point(10_000L, 34.05, -118.25, speedMps = 12.5, altM = 5.0),
+                point(20_000L, 34.16, -118.32, speedMps = 13.0),
+                point(30_000L, 34.0, -118.32, speedMps = 14.0, soc = 88.5),
             )
 
         private fun point(

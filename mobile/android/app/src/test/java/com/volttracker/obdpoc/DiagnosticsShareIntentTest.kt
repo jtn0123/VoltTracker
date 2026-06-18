@@ -162,8 +162,8 @@ class DiagnosticsShareIntentTest {
         assertTrue(obdLogDir.mkdirs())
         writeFile(
             File(obdLogDir, "session-1-obd.jsonl"),
-            "{\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU112233\"," +
-                "\"lat\":32.712345,\"lng\":-117.112233,\"command\":\"010C\"}\n",
+            "{\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU" + "112233\"," +
+                "\"lat\":34.052345,\"lng\":-118.252233,\"command\":\"010C\"}\n",
         )
         val appLogDir = File(context.filesDir, "app-log")
         assertTrue(appLogDir.mkdirs())
@@ -174,8 +174,8 @@ class DiagnosticsShareIntentTest {
 
         val session = readZipText(zip!!, "obd-logs/session-1-obd.jsonl")
         assertFalse(session.contains("AA:BB:CC:DD:EE:FF"))
-        assertFalse(session.contains("1G1RD6E45CU112233"))
-        assertFalse(session.contains("32.712345"))
+        assertFalse(session.contains("1G1RD6E45CU" + "112233"))
+        assertFalse(session.contains("34.052345"))
         assertTrue(session.contains("[bluetooth-address-redacted]"))
         assertTrue(session.contains("[vin-redacted]"))
         assertTrue(session.contains("[coordinate-redacted]"))

@@ -70,6 +70,11 @@ class DashboardPublisher(
                 "setDevices",
                 "setHistory",
                 "setStorage",
+                "setTrips",
+                "setInsights",
+                "setTripRoute",
+                "setCurrentSessionRoute",
+                "setBatterySohHistory",
                 "setAppState",
                 "setRestoreProgress",
             )

@@ -202,17 +202,10 @@ import { initialTelemetryState } from "./telemetry-state";
    * the map shows the real drive instead of a blank "new run". A genuinely fresh drive returns no
    * points, so this is a harmless no-op then. Guarded to run once per activation.
    */
-  function hydrateLiveRouteIfActive() {
-    if (state.demoActive || liveRouteHydrated || !isActiveStatus()) return;
-    const existing = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
-    if (existing.length) {
-      liveRouteHydrated = true;
-      return;
-    }
-    if (!bridge || typeof bridge.getCurrentSessionRoute !== "function") return;
+  function applyCurrentSessionRoutePayload(payload: unknown) {
     let parsed: PayloadRecord;
     try {
-      parsed = VD.parsePayload(bridge.getCurrentSessionRoute(), {});
+      parsed = VD.parsePayload(payload, {});
     } catch (_err) {
       return;
     }
@@ -248,6 +241,29 @@ import { initialTelemetryState } from "./telemetry-state";
       state.liveRoutePoints = mapped;
     }
     if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
+  }
+
+  function hydrateLiveRouteIfActive() {
+    if (state.demoActive || liveRouteHydrated || !isActiveStatus()) return;
+    const existing = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
+    if (existing.length) {
+      liveRouteHydrated = true;
+      return;
+    }
+    if (
+      !bridge ||
+      (typeof bridge.getCurrentSessionRoute !== "function" &&
+        typeof bridge.requestCurrentSessionRoute !== "function")
+    ) {
+      return;
+    }
+    if (typeof bridge.requestCurrentSessionRoute === "function" && bridge.requestCurrentSessionRoute()) {
+      liveRouteHydrated = true;
+      return;
+    }
+    if (typeof bridge.getCurrentSessionRoute === "function") {
+      applyCurrentSessionRoutePayload(bridge.getCurrentSessionRoute());
+    }
   }
 
   function recordQueuedLivePosition(lat: number, lng: number) {
@@ -1436,6 +1452,7 @@ import { initialTelemetryState } from "./telemetry-state";
     getSelectedDevice,
     updateTelemetry,
     hydrateLiveRouteIfActive,
+    setCurrentSessionRoute: applyCurrentSessionRoutePayload,
     scheduleRender,
     flushRender,
     applyStaleIndicator,

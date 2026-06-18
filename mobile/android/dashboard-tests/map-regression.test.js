@@ -21,8 +21,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'new-route', startedAtMs: Date.now(), endedAtMs: Date.now() + 60_000 },
           points: [
-            { lat: 32.7, lng: -117.1 },
-            { lat: 32.8, lng: -117.2 },
+            { lat: 34.05, lng: -118.25 },
+            { lat: 34.16, lng: -118.32 },
           ],
           distanceMeters: 1000,
         },
@@ -42,8 +42,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'history-route', startedAtMs: Date.now() - 86_400_000, endedAtMs: Date.now() - 86_340_000 },
           points: [
-            { lat: 32.7, lng: -117.1, atMs: Date.now() - 86_400_000 },
-            { lat: 32.8, lng: -117.2, atMs: Date.now() - 86_340_000 },
+            { lat: 34.05, lng: -118.25, atMs: Date.now() - 86_400_000 },
+            { lat: 34.16, lng: -118.32, atMs: Date.now() - 86_340_000 },
           ],
           distanceMeters: 1000,
         },
@@ -52,8 +52,8 @@ describe('map.ts — route selection regressions', () => {
 
     VD.updateTelemetry({
       source: 'demo',
-      latitude: 32.7001,
-      longitude: -117.1001,
+      latitude: 34.0501,
+      longitude: -118.2501,
       speedKph: 24,
       powerKw: 4,
       soc: 78,
@@ -62,8 +62,8 @@ describe('map.ts — route selection regressions', () => {
     });
     VD.updateTelemetry({
       source: 'demo',
-      latitude: 32.7012,
-      longitude: -117.1014,
+      latitude: 34.0512,
+      longitude: -118.2514,
       speedKph: 31,
       powerKw: 5,
       soc: 77.9,
@@ -83,8 +83,8 @@ describe('map.ts — route selection regressions', () => {
 
     VD.updateTelemetry({
       source: 'demo',
-      latitude: 32.702,
-      longitude: -117.102,
+      latitude: 34.052,
+      longitude: -118.252,
       speedKph: 35,
       powerKw: 6,
       soc: 77.8,
@@ -106,8 +106,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'full-route', startedAtMs: start, endedAtMs: start + 600_000 },
           points: [
-            { lat: 32.7, lng: -117.1 },
-            { lat: 32.8, lng: -117.2 },
+            { lat: 34.05, lng: -118.25 },
+            { lat: 34.16, lng: -118.32 },
           ],
           distanceMeters: 10_000,
         },
@@ -130,8 +130,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'crashed-route', startedAtMs: Date.now() - 86_400_000 },
           points: [
-            { lat: 32.7, lng: -117.1 },
-            { lat: 32.8, lng: -117.2 },
+            { lat: 34.05, lng: -118.25 },
+            { lat: 34.16, lng: -118.32 },
           ],
           distanceMeters: 10_000,
         },
@@ -153,8 +153,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'history-route', startedAtMs: Date.now() - 86_400_000, endedAtMs: Date.now() - 86_340_000 },
           points: [
-            { lat: 32.7, lng: -117.1, atMs: Date.now() - 86_400_000 },
-            { lat: 32.8, lng: -117.2, atMs: Date.now() - 86_340_000 },
+            { lat: 34.05, lng: -118.25, atMs: Date.now() - 86_400_000 },
+            { lat: 34.16, lng: -118.32, atMs: Date.now() - 86_340_000 },
           ],
           distanceMeters: 1000,
         },
@@ -162,8 +162,8 @@ describe('map.ts — route selection regressions', () => {
     };
 
     // A fresh live drive selects the live route and arms follow; the button shows.
-    VD.updateTelemetry({ source: 'demo', latitude: 32.7001, longitude: -117.1001, sampleCount: 1, updatedAt: Date.now() });
-    VD.updateTelemetry({ source: 'demo', latitude: 32.7012, longitude: -117.1014, sampleCount: 2, updatedAt: Date.now() + 1000 });
+    VD.updateTelemetry({ source: 'demo', latitude: 34.0501, longitude: -118.2501, sampleCount: 1, updatedAt: Date.now() });
+    VD.updateTelemetry({ source: 'demo', latitude: 34.0512, longitude: -118.2514, sampleCount: 2, updatedAt: Date.now() + 1000 });
     VD.renderMap();
 
     const followBtn = document.getElementById('mapFollowBtn');
@@ -195,8 +195,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: 'no-start-route', endedAtMs: Date.now() },
           points: [
-            { lat: 32.7, lng: -117.1 },
-            { lat: 32.8, lng: -117.2 },
+            { lat: 34.05, lng: -118.25 },
+            { lat: 34.16, lng: -118.32 },
           ],
           distanceMeters: 10_000,
         },
@@ -214,16 +214,16 @@ describe('map.ts — route selection regressions', () => {
     const start = Date.now() - 120_000;
     VD.updateTelemetry({
       source: 'demo',
-      latitude: 32.7001,
-      longitude: -117.1001,
+      latitude: 34.0501,
+      longitude: -118.2501,
       speedKph: 24,
       sampleCount: 1,
       updatedAt: start,
     });
     VD.updateTelemetry({
       source: 'demo',
-      latitude: 32.7012,
-      longitude: -117.1014,
+      latitude: 34.0512,
+      longitude: -118.2514,
       speedKph: 31,
       sampleCount: 2,
       updatedAt: Date.now(),
@@ -251,8 +251,8 @@ describe('map.ts — route selection regressions', () => {
             endedAtMs: now - day + 2100,
           },
           points: [
-            { lat: 32.7, lng: -117.1, atMs: now - day + 1000 },
-            { lat: 32.8, lng: -117.2, atMs: now - day + 2000 },
+            { lat: 34.05, lng: -118.25, atMs: now - day + 1000 },
+            { lat: 34.16, lng: -118.32, atMs: now - day + 2000 },
           ],
           distanceMeters: 1000,
         },
@@ -311,9 +311,9 @@ describe('map.ts — route selection regressions', () => {
         mode: 'obd',
       },
       points: [
-        { lat: 32.7, lng: -117.1, atMs: now - 21 * day },
-        { lat: 32.75, lng: -117.15, atMs: now - 21 * day + 300_000 },
-        { lat: 32.8, lng: -117.2, atMs: now - 21 * day + 600_000 },
+        { lat: 34.05, lng: -118.25, atMs: now - 21 * day },
+        { lat: 34.10, lng: -118.32, atMs: now - 21 * day + 300_000 },
+        { lat: 34.16, lng: -118.32, atMs: now - 21 * day + 600_000 },
       ],
       pointCount: 3,
       distanceMeters: 8000,
@@ -352,6 +352,62 @@ describe('map.ts — route selection regressions', () => {
     expect(getTripRoute).toHaveBeenCalledTimes(1);
   });
 
+  it('requests full geometry asynchronously when the native bridge supports it', async () => {
+    const now = Date.now();
+    const day = 86_400_000;
+    const routeId = '4:6000:9500';
+    const fullRoute = {
+      session: {
+        id: routeId,
+        sessionId: 4,
+        startedAtMs: now - 12 * day,
+        endedAtMs: now - 12 * day + 700_000,
+        adapterName: 'OBDLink MX+',
+        mode: 'obd',
+      },
+      points: [
+        { lat: 34.05, lng: -118.25, atMs: now - 12 * day },
+        { lat: 34.07, lng: -118.28, atMs: now - 12 * day + 350_000 },
+        { lat: 34.10, lng: -118.32, atMs: now - 12 * day + 700_000 },
+      ],
+      pointCount: 3,
+      distanceMeters: 6000,
+    };
+    const getTripRoute = vi.fn(() => JSON.stringify(fullRoute));
+    const requestTripRoute = vi.fn(() => true);
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ getTripRoute, requestTripRoute }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [
+      {
+        id: routeId,
+        sessionId: 4,
+        hasRoute: true,
+        pointCount: 3,
+        startedAtMs: now - 12 * day,
+        endedAtMs: now - 12 * day + 700_000,
+        distanceMeters: 6000,
+        adapterName: 'OBDLink MX+',
+      },
+    ];
+    VD.state.selectedMapSessionId = routeId;
+
+    VD.renderMap();
+
+    expect(requestTripRoute).toHaveBeenCalledWith(routeId);
+    expect(getTripRoute).not.toHaveBeenCalled();
+
+    window.VoltTrackerNative.setTripRoute(JSON.stringify({ routeKey: routeId, payload: fullRoute }));
+
+    expect(document.getElementById('mapPointBadge').textContent).toBe('3 pts');
+    expect(document.getElementById('mapDistance').textContent).not.toBe('--');
+  });
+
   it('surfaces basemap tile failures with a retry affordance', () => {
     const VD = window.VoltDashboard;
     const banner = document.getElementById('mapTileError');
@@ -382,8 +438,8 @@ describe('map.ts — route selection regressions', () => {
           {
             session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
             points: [
-              { lat: 32.7, lng: -117.1, atMs: 1000 },
-              { lat: 32.8, lng: -117.2, atMs: 2000 },
+              { lat: 34.05, lng: -118.25, atMs: 1000 },
+              { lat: 34.16, lng: -118.32, atMs: 2000 },
             ],
             distanceMeters: 1000,
           },
@@ -418,8 +474,8 @@ describe('map.ts — route selection regressions', () => {
           {
             session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
             points: [
-              { lat: 32.7, lng: -117.1, atMs: 1000 },
-              { lat: 32.8, lng: -117.2, atMs: 2000 },
+              { lat: 34.05, lng: -118.25, atMs: 1000 },
+              { lat: 34.16, lng: -118.32, atMs: 2000 },
             ],
             distanceMeters: 1000,
           },
@@ -465,8 +521,8 @@ describe('map.ts — route selection regressions', () => {
         {
           session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
           points: [
-            { lat: 32.7, lng: -117.1, atMs: 1000 },
-            { lat: 32.8, lng: -117.2, atMs: 2000 },
+            { lat: 34.05, lng: -118.25, atMs: 1000 },
+            { lat: 34.16, lng: -118.32, atMs: 2000 },
           ],
           distanceMeters: 1000,
         },

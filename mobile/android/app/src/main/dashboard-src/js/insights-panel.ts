@@ -28,29 +28,65 @@ import { prefs, units } from "./prefs";
   const el = VD.el;
   const setSvgAttrs = VD.setSvgAttrs;
   const FORCE_LAZY_READ = true;
+  let tripsReadInFlight = false;
+  let insightsReadInFlight = false;
+
+  function applyTripsPayload(payload: unknown) {
+    tripsReadInFlight = false;
+    const parsed = VD.parsePayload<VoltTrip[]>(payload, []);
+    if (VD.isNativeError(parsed)) {
+      const err = parsed as VoltNativeError;
+      VD.reportNativeReadError(parsed, "Could not read logged trips.");
+      state.tripsLoaded = false;
+      state.tripsReadError = err.message || "Could not read logged trips.";
+      state.trips = [];
+    } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
+      state.tripsLoaded = true;
+      // Park real trips behind the demo preview (cross-module demo invariant).
+      VD.setState({ realTrips: Array.isArray(parsed) ? parsed : [] });
+    } else {
+      state.tripsLoaded = true;
+      state.tripsReadError = null;
+      state.trips = Array.isArray(parsed) ? parsed : [];
+    }
+    VD.renderMapIfLoaded();
+  }
 
   function loadTrips(force = false) {
     if (!force && state.tripsLoaded) return;
+    if (!force && tripsReadInFlight) return;
+    if (bridge && typeof bridge.requestTrips === "function" && bridge.requestTrips()) {
+      tripsReadInFlight = true;
+      return;
+    }
     if (bridge && typeof bridge.getTrips === "function") {
-      const parsed = VD.parsePayload<VoltTrip[]>(bridge.getTrips(), []);
-      if (VD.isNativeError(parsed)) {
-        const err = parsed as VoltNativeError;
-        VD.reportNativeReadError(parsed, "Could not read logged trips.");
-        state.tripsLoaded = false;
-        state.tripsReadError = err.message || "Could not read logged trips.";
-        state.trips = [];
-      } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
-        state.tripsLoaded = true;
-        // Park real trips behind the demo preview (cross-module demo invariant).
-        VD.setState({ realTrips: Array.isArray(parsed) ? parsed : [] });
-      } else {
-        state.tripsLoaded = true;
-        state.tripsReadError = null;
-        state.trips = Array.isArray(parsed) ? parsed : [];
-      }
+      applyTripsPayload(bridge.getTrips());
     } else {
+      tripsReadInFlight = false;
       state.tripsLoaded = true;
     }
+  }
+
+  function applyInsightsPayload(payload: unknown) {
+    insightsReadInFlight = false;
+    const parsed = VD.parsePayload<VoltInsights>(payload, {});
+    if (VD.isNativeError(parsed)) {
+      const err = parsed as VoltNativeError;
+      VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
+      state.insightsLoaded = false;
+      state.insightsReadError = err.message || "Could not read vehicle insights.";
+      state.insights = {};
+    } else if (state.demoActive && state.demoPreviewInsights) {
+      state.insightsLoaded = true;
+      // Park real insights behind the demo preview (cross-module demo invariant).
+      VD.setState({ realInsights: parsed });
+    } else {
+      state.insightsLoaded = true;
+      state.insightsReadError = null;
+      state.insights = parsed;
+    }
+    renderInsightStats();
+    renderInsightScatter();
   }
 
   function loadInsights(force = false) {
@@ -59,28 +95,19 @@ import { prefs, units } from "./prefs";
       renderInsightScatter();
       return;
     }
-    if (bridge && typeof bridge.getInsights === "function") {
-      const parsed = VD.parsePayload<VoltInsights>(bridge.getInsights(), {});
-      if (VD.isNativeError(parsed)) {
-        const err = parsed as VoltNativeError;
-        VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
-        state.insightsLoaded = false;
-        state.insightsReadError = err.message || "Could not read vehicle insights.";
-        state.insights = {};
-      } else if (state.demoActive && state.demoPreviewInsights) {
-        state.insightsLoaded = true;
-        // Park real insights behind the demo preview (cross-module demo invariant).
-        VD.setState({ realInsights: parsed });
-      } else {
-        state.insightsLoaded = true;
-        state.insightsReadError = null;
-        state.insights = parsed;
-      }
-    } else {
-      state.insightsLoaded = true;
+    if (!force && insightsReadInFlight) return;
+    if (bridge && typeof bridge.requestInsights === "function" && bridge.requestInsights()) {
+      insightsReadInFlight = true;
+      return;
     }
-    renderInsightStats();
-    renderInsightScatter();
+    if (bridge && typeof bridge.getInsights === "function") {
+      applyInsightsPayload(bridge.getInsights());
+    } else {
+      insightsReadInFlight = false;
+      state.insightsLoaded = true;
+      renderInsightStats();
+      renderInsightScatter();
+    }
   }
 
   function renderInsightStats() {
@@ -554,6 +581,8 @@ import { prefs, units } from "./prefs";
     // status. The Trips tab and all its rendering were removed.
     loadTrips,
     loadInsights,
+    setTrips: applyTripsPayload,
+    setInsights: applyInsightsPayload,
     forceLazyStorageRead: FORCE_LAZY_READ,
     renderInsightStats,
     renderInsightsEmptyState,

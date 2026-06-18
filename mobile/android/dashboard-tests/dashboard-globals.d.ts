@@ -851,17 +851,25 @@ interface VoltRestoreProgress {
     getAutoConnectState(): string;
     getEventNotificationState(): string;
     getStorageSummary(): string;
+    requestStorageSummary(): boolean;
     getStorageDetails(): string;
+    requestStorageDetails(): boolean;
     exportDebugBundle(): string;
     getTrips(): string;
     getInsights(): string;
     getTripRoute(sessionId: string): string;
     getCurrentSessionRoute(): string;
     getBatterySohHistory(): string;
+    requestTrips(): boolean;
+    requestInsights(): boolean;
+    requestTripRoute(sessionId: string): boolean;
+    requestCurrentSessionRoute(): boolean;
+    requestBatterySohHistory(): boolean;
     getRecentSessions(n: number): string;
 
     // void methods that hand work off to MainActivity / TroubleshooterBridge.
     dashboardReady(): void;
+    startupMark(name: string): void;
     requestPermissions(): void;
     refreshDevices(): void;
     connect(address: string, name: string): void;

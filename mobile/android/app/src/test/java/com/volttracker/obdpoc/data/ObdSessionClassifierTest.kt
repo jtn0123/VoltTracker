@@ -133,7 +133,7 @@ class ObdSessionClassifierTest {
     fun hasUsefulTelemetryIsTrueForAGpsOnlyRow() {
         val sessionId = insertSession(MODE_OBD)
         // No OBD speed/rpm, but a latitude counts as useful telemetry per USEFUL_TELEMETRY_WHERE.
-        insertTelemetry(sessionId, capturedAtMs = 1_000, speedKph = null, latitude = 32.7)
+        insertTelemetry(sessionId, capturedAtMs = 1_000, speedKph = null, latitude = 34.05)
         assertTrue(ObdSessionClassifier.hasUsefulTelemetry(db, sessionId))
     }
 
@@ -184,7 +184,7 @@ class ObdSessionClassifierTest {
     @Test
     fun maxSpeedKphForWindowReturnsNullWhenWindowRowsHaveNullSpeed() {
         val sessionId = insertSession(MODE_OBD)
-        insertTelemetry(sessionId, capturedAtMs = 1_500, speedKph = null, latitude = 32.7)
+        insertTelemetry(sessionId, capturedAtMs = 1_500, speedKph = null, latitude = 34.05)
         assertNull(ObdSessionClassifier.maxSpeedKphForWindow(db, sessionId, window(sessionId, 1_000, 2_000)))
     }
 

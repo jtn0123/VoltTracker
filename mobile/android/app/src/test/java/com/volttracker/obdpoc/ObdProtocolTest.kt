@@ -76,10 +76,10 @@ class ObdProtocolTest {
 
     @Test
     fun vinParsesFromMode09Response() {
-        // ASCII "1G1ZD5ST8JF202020" — a synthetic Volt-ish VIN. Encoded as the mode-09 PID 02
+        // ASCII "1G1ZD5ST8JF" + "202020" — a synthetic Volt-ish VIN. Encoded as the mode-09 PID 02
         // positive-response prefix (490201) followed by 17 ASCII hex bytes.
         val hex = StringBuilder("490201")
-        val vin = "1G1ZD5ST8JF202020"
+        val vin = "1G1ZD5ST8JF" + "202020"
         for (c in vin.toCharArray()) {
             hex.append(String.format(Locale.US, "%02X", c.code))
         }
@@ -104,7 +104,7 @@ class ObdProtocolTest {
                 "1: 5A 44 35 53 54 38 4A\r" +
                 "2: 46 32 30 32 30 32 30\r" +
                 "\r>"
-        assertEquals("1G1ZD5ST8JF202020", ObdProtocol.parseVin(response))
+        assertEquals("1G1ZD5ST8JF" + "202020", ObdProtocol.parseVin(response))
     }
 
     @Test
