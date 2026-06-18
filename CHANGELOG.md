@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.18.9 (2026-06-18)
+
+### Continuous Integration
+
+- Reduce duplicate Android slow lanes ([#235](https://github.com/jtn0123/VoltTracker/pull/235),
+  [`82b388f`](https://github.com/jtn0123/VoltTracker/commit/82b388f8ea089e4e22c0ad71ee0cb9355a6d283f))
+
+### Performance Improvements
+
+- Track startup and tab responsiveness ([#236](https://github.com/jtn0123/VoltTracker/pull/236),
+  [`60d3c14`](https://github.com/jtn0123/VoltTracker/commit/60d3c1431dd3076d9a3d4a6718c59d95f11903e2))
+
+* Codex worktree snapshot: archive-cleanup
+
+Co-authored-by: Codex
+
+* perf: track startup and tab responsiveness
+
+* test: replace private route fixtures with synthetic data
+
+* fix: harden startup async readiness
+
+
 ## v0.18.8 (2026-06-17)
 
 ### Performance Improvements
