@@ -5,6 +5,7 @@
 // topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
+import type { DataStateValue } from "./dataset-state";
 import { resolveDeviceLocale, t } from "./i18n";
 import { units } from "./prefs";
 import { formatDuration, gpsText } from "./telemetry";
@@ -143,6 +144,210 @@ function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
   } else {
     hint.hidden = true;
   }
+}
+
+// ---- Diagnostics recovery-first panel --------------------------------------
+//
+// The Diagnostics tab used to open straight into a 43-row signal console even
+// when the adapter was blocked — the actual blocker only flashed as a toast. This
+// renders a plain-language "what's wrong / what to do next / how ready / one
+// action" summary at the top of Diagnostics from the SAME status model the
+// topbar pill reads, so headline and badge can never disagree. The engineering
+// consoles below stay put (progressive disclosure).
+
+const RECOVERY_ACTIVE_STATES = ["connected", "scanning", "scan-complete"];
+
+type RecoveryView = {
+  tone: "idle" | "ok" | "warn" | "bad" | "live" | "demo";
+  state: DataStateValue;
+  kicker: string;
+  title: string;
+  next: string;
+  pill: string;
+  bt: string;
+  source: string;
+  actionLabel: string;
+  actionTarget: "settings" | "drive";
+};
+
+// Imported lazily-typed: DataStateValue lives in dataset-state; re-declare the
+// import alongside the existing setDataState import below isn't needed since the
+// values are checked by setDataState at the call site.
+function deriveRecoveryView(): RecoveryView {
+  const state = dashboardState();
+  const app: VoltAppState = state.appState || {};
+  const adapter: VoltAdapterState = app.adapter || {};
+  const session: VoltSessionState = app.session || {};
+  const permissions: NonNullable<VoltAppState["permissions"]> = app.permissions || {};
+  const status: VoltStatus = state.status || {};
+  const lastDevice: VoltDevice = state.lastDevice || {};
+  const telemetry: VoltTelemetry = state.telemetry || {};
+
+  const demo = Boolean(state.demoActive);
+  const stateName = String(status.state || session.state || "idle").toLowerCase();
+  const samples = Number(session.sampleCount || telemetry.sampleCount || 0);
+  const connecting = ["connecting", "initializing"].includes(stateName);
+  const connected =
+    adapter.connected === true || RECOVERY_ACTIVE_STATES.includes(stateName);
+  const remembered = Boolean(adapter.remembered) || Boolean(lastDevice.address);
+  const adapterName = demo
+    ? "Demo telemetry"
+    : String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
+  const btPermNeeded = permissions.bluetoothPermission === false;
+  const btOff = permissions.bluetoothEnabled === false;
+  const btReady = permissions.bluetooth === true || status.bluetoothReady === true;
+  const bt = btPermNeeded
+    ? "Permission needed"
+    : btOff
+      ? "Off"
+      : btReady
+        ? "Ready"
+        : demo
+          ? "—"
+          : "Not ready";
+  const voltage = typeof status.lastVoltage === "number" ? status.lastVoltage : null;
+  const blockedState = stateName === "blocked" || stateName === "error" || stateName === "failed";
+  // One source label threaded through every branch so the panel never claims
+  // "Real car" while a demo is running (e.g. the demo-fault scenario).
+  const source = demo
+    ? "Demo"
+    : connected || connecting || remembered || blockedState || btPermNeeded || btOff || voltage != null
+      ? "Real car"
+      : "None";
+
+  // An actively-failed status outranks demo so the demo-fault scenario (and a
+  // real adapter failure) both surface the blocker, not the demo banner.
+  if (blockedState && !btPermNeeded && !btOff) {
+    return {
+      tone: "bad", state: "blocked", kicker: "Needs attention",
+      title: "Adapter isn't responding",
+      next: String(status.detail || "Check the OBD dongle is seated and the car is awake, then try again."),
+      pill: "blocked", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    };
+  }
+  if (demo) {
+    return {
+      tone: "demo", state: "demo", kicker: "Demo preview",
+      title: "Demo preview is running",
+      next: "Preview data is isolated from your real OBD history. Stop the demo when you want live data.",
+      pill: "demo", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+    };
+  }
+  if (btPermNeeded) {
+    return {
+      tone: "bad", state: "blocked", kicker: "Blocked",
+      title: "Bluetooth permission needed",
+      next: "Grant Bluetooth (and location) access, then connect your adapter.",
+      pill: "blocked", bt, source, actionLabel: "Fix in Settings", actionTarget: "settings"
+    };
+  }
+  if (btOff) {
+    return {
+      tone: "bad", state: "blocked", kicker: "Blocked",
+      title: "Bluetooth is off",
+      next: "Turn Bluetooth on in Android settings, then reconnect your adapter.",
+      pill: "blocked", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    };
+  }
+  if (connecting) {
+    return {
+      tone: "live", state: "connecting", kicker: "Working",
+      title: "Connecting to adapter…",
+      next: "Handshaking with the OBD adapter. This usually takes a few seconds.",
+      pill: "connecting", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    };
+  }
+  if (connected && samples > 0) {
+    return {
+      tone: "ok", state: "live", kicker: "Healthy",
+      title: "Live data is flowing",
+      next: `${samples.toLocaleString()} samples logged this session. The consoles below show live signal detail.`,
+      pill: "live", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+    };
+  }
+  if (connected) {
+    return {
+      tone: "live", state: "waiting", kicker: "Connected",
+      title: "Connected — waiting for data",
+      next: "Adapter is linked. Start driving, or run a scan, to see live signals.",
+      pill: "waiting", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+    };
+  }
+  if (voltage != null && voltage <= 12.7) {
+    return {
+      tone: "warn", state: "idle", kicker: "Attention",
+      title: "Battery voltage looks low",
+      next: `Last reading was ${voltage.toFixed(2)} V — the OBD port may sleep. Start the car before the next probe.`,
+      pill: "low V", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    };
+  }
+  if (remembered) {
+    return {
+      tone: "ok", state: "ready", kicker: "Ready",
+      title: "Ready to reconnect",
+      next: `${adapterName} is remembered. Reconnect when you want live OBD logging.`,
+      pill: "ready", bt, source, actionLabel: "Reconnect in Settings", actionTarget: "settings"
+    };
+  }
+  return {
+    tone: "idle", state: "idle", kicker: "Get started",
+    title: "No adapter connected yet",
+    next: "Connect an OBD adapter in Settings to start live logging — or run the demo preview below to explore the app.",
+    pill: "idle", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+  };
+}
+
+// The panel is a polite live region (role="status"), so a blind textContent
+// rewrite on each call re-announces it to screen readers even when nothing
+// changed. Skip the whole render when the derived view is identical, and diff
+// each node before writing so only genuinely-changed text/attrs touch the DOM.
+let lastRecoverySignature = "";
+
+function renderDiagnosticsRecovery() {
+  const panel = el("diagRecovery");
+  if (!panel) return;
+  const view = deriveRecoveryView();
+  const adapterName = adapterNameForRecovery();
+  const signature = JSON.stringify({ ...view, adapterName });
+  if (signature === lastRecoverySignature) return;
+  lastRecoverySignature = signature;
+
+  setDataTone(panel, view.tone);
+  const setText = (id: string, value: string) => {
+    const node = el(id);
+    if (node && node.textContent !== value) node.textContent = value;
+  };
+  setText("diagRecoveryKicker", view.kicker);
+  setText("diagRecoveryTitle", view.title);
+  setText("diagRecoveryNext", view.next);
+  setText("diagRecoveryAdapter", adapterName);
+  setText("diagRecoveryBt", view.bt);
+  setText("diagRecoverySource", view.source);
+  const pill = el("diagRecoveryPill");
+  if (pill) {
+    if (pill.textContent !== view.pill) pill.textContent = view.pill;
+    if (pill.dataset.state !== view.state) setDataState(pill, view.state);
+  }
+  const action = el("diagRecoveryAction") as HTMLButtonElement | null;
+  if (action) {
+    if (action.textContent !== view.actionLabel) action.textContent = view.actionLabel;
+    if (action.dataset.navJump !== view.actionTarget) action.dataset.navJump = view.actionTarget;
+    if (action.getAttribute("aria-label") !== view.actionLabel) {
+      action.setAttribute("aria-label", view.actionLabel);
+    }
+  }
+}
+
+// Adapter display name resolved the same way as the popover row, exposed for the
+// recovery panel without duplicating the demo/remembered fallbacks.
+function adapterNameForRecovery(): string {
+  const state = dashboardState();
+  if (state.demoActive) return "Demo telemetry";
+  const app: VoltAppState = state.appState || {};
+  const adapter: VoltAdapterState = app.adapter || {};
+  const status: VoltStatus = state.status || {};
+  const lastDevice: VoltDevice = state.lastDevice || {};
+  return String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
 }
 
 // ---- Status popover (opened from the topbar state badge) -------------------
@@ -361,6 +566,7 @@ function noteStatus(payload: LowVoltageStatus | null | undefined) {
   renderLastConnected();
   renderLowVoltageHint(payload || {});
   renderStatusPopover();
+  renderDiagnosticsRecovery();
 }
 
 function installStatusObserver() {
@@ -397,6 +603,15 @@ function installTelemetryObserver() {
       }
       try {
         renderStatusPopover();
+        // The recovery panel changes meaningfully only on status broadcasts
+        // (handled in noteStatus). Re-rendering it on EVERY telemetry sample put
+        // state-derivation + DOM lookups on the hot enqueue path and blew the
+        // high-rate-burst budget (startup-budget.test.js). Only refresh per-sample
+        // when the user is actually looking at Diagnostics — the one case where
+        // the live sample count / "waiting → flowing" flip needs to be live.
+        if (document.body.dataset.activeView === "diagnostics") {
+          renderDiagnosticsRecovery();
+        }
       } catch (_err) {
         // Observer must never break the underlying updateTelemetry call.
       }
@@ -421,6 +636,9 @@ if (typeof window.requestIdleCallback === "function") {
 installStatusObserver();
 installTelemetryObserver();
 bindStatusPopover();
+// Initial paint so Diagnostics opens with a recovery summary even before the
+// first status broadcast (mirrors renderLastConnected's idle-defer).
+renderDiagnosticsRecovery();
 
 // Exposed for the Android Back handler (core.ts) and tests.
 VD.toggleStatusPopover = toggleStatusPopover;

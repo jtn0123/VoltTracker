@@ -213,6 +213,81 @@ type ChartPoint = {
     host.replaceChildren(...chips.map(buildDriveNowChip));
   }
 
+  // ----- data-provenance badge + first-sample reveal ------------------------
+
+  // True once any live data has been observed (counted sample or a populated
+  // history buffer). Mirrors telemetry.ts#hasLiveSamples without importing it
+  // (telemetry.ts already imports drive renders, so the reverse would cycle).
+  function driveHasLiveSamples() {
+    const t = state.telemetry || {};
+    const session = (state.appState && state.appState.session) || {};
+    const sampleCount = Number(session.sampleCount || t.sampleCount || 0);
+    return (
+      Number(state.lastSampleAt || 0) > 0 ||
+      sampleCount > 0 ||
+      (state.speedHistory || []).length > 0 ||
+      (state.powerHistory || []).length > 0 ||
+      (state.socHistory || []).length > 0
+    );
+  }
+
+  type SourceKind = "demo" | "live" | "offline" | "empty";
+
+  function deriveSource(): { kind: SourceKind; label: string; sub: string } {
+    const app = state.appState || {};
+    const adapter = app.adapter || {};
+    const status = state.status || {};
+    const stateName = String(status.state || (app.session || {}).state || "").toLowerCase();
+    const connecting = ["connecting", "initializing"].includes(stateName);
+    const connected =
+      adapter.connected === true ||
+      ["connected", "scanning", "scan-complete"].includes(stateName);
+    const live = driveHasLiveSamples();
+
+    if (state.demoActive) {
+      return { kind: "demo", label: "Demo preview", sub: "Sample data — isolated from real history" };
+    }
+    if (connecting && !connected) {
+      return { kind: "live", label: "Live car data", sub: "Connecting to your OBD adapter" };
+    }
+    if (connected) {
+      return live
+        ? { kind: "live", label: "Live car data", sub: "Streaming from your OBD adapter" }
+        : { kind: "live", label: "Live car data", sub: "Adapter linked — waiting for first sample" };
+    }
+    // Not connected: distinguish "have saved history" (offline) from "nothing yet".
+    const storage = state.storage || {};
+    const hasStored =
+      (typeof VD.dbRowCount === "function" && VD.dbRowCount(storage) > 0) ||
+      (state.trips || []).length > 0;
+    if (hasStored) {
+      return { kind: "offline", label: "Offline · stored data", sub: "Showing saved history — connect for live" };
+    }
+    return { kind: "empty", label: "No data yet", sub: "Connect an adapter to start logging" };
+  }
+
+  // Add a one-time class the first time live data appears so CSS can play a
+  // single reveal of the hero meters/trace (reduced-motion disables it). Never
+  // removed mid-session — a stale gap shouldn't replay the reveal.
+  let firstSampleRevealed = false;
+
+  function renderDriveSourceBadge() {
+    const badge = el("driveSourceBadge");
+    if (!badge) return;
+    const src = deriveSource();
+    badge.dataset.source = src.kind;
+    const label = el("driveSourceLabel");
+    if (label) label.textContent = src.label;
+    const sub = el("driveSourceSub");
+    if (sub) sub.textContent = src.sub;
+
+    const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
+    if (hero && !firstSampleRevealed && driveHasLiveSamples()) {
+      firstSampleRevealed = true;
+      hero.classList.add("is-first-sample");
+    }
+  }
+
   // ----- live speed trace ---------------------------------------------------
 
   function drawLiveSpeedTrace() {
@@ -516,6 +591,7 @@ type ChartPoint = {
 
   function renderDriveLive() {
     renderDriveNowChips();
+    renderDriveSourceBadge();
     drawLiveSpeedTrace();
     drawLivePowerBars();
     renderPowerMicroHeader();
@@ -537,6 +613,7 @@ type ChartPoint = {
   Object.assign(VD, {
     renderDriveLive,
     renderDriveNowChips,
+    renderDriveSourceBadge,
     drawLiveSpeedTrace,
     drawLivePowerBars,
     drawLiveSocTrace

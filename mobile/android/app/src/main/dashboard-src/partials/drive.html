@@ -8,6 +8,27 @@
     aria-label="Drive session status"
   ></div>
 
+  <!--
+    Persistent data-provenance badge (A2/A4/E4/H3). Always present so the user can
+    tell at a glance whether the gauges below show DEMO preview, LIVE car data,
+    OFFLINE stored history, or NO data yet. data-source is set by
+    drive.ts#renderDriveSourceBadge from the same demo/connection/storage truth
+    the rest of the Drive UI reads, so the badge can never contradict the gauges.
+  -->
+  <div
+    id="driveSourceBadge"
+    class="drive-source-badge"
+    data-source="empty"
+    role="status"
+    aria-live="polite"
+  >
+    <span class="drive-source-dot" aria-hidden="true"></span>
+    <span class="drive-source-text">
+      <strong id="driveSourceLabel">No data yet</strong>
+      <small id="driveSourceSub">Connect an adapter to start logging</small>
+    </span>
+  </div>
+
   <section class="hero">
     <!-- Speed+power cluster. aria-live sits on the small per-reading clusters
          below (speed row / power block), each aria-atomic="true", so a screen

@@ -280,16 +280,19 @@
   }
 
   .map-layer-tabs button {
+    /* Compacted for phone (B4): tighter padding + slightly smaller type so all
+       four layer tabs and the right-hand follow/full controls share the top of
+       the route without crowding it. Still a 40px touch target via min-height. */
     min-height: 40px;
-    padding: 0 14px;
+    padding: 0 10px;
     border: 0;
     border-radius: 999px;
     background: transparent;
     color: var(--muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 750;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
   }
 
@@ -445,22 +448,26 @@
   }
 
   .map-legend {
+    /* Receded to the bottom-left so the color key stops competing with route
+       inspection at the top of the frame (B4/D3). Smaller + more translucent so
+       it reads as a quiet reference, not a control. Still aria-hidden. */
     position: absolute;
     z-index: 1100;
-    top: 58px;
+    bottom: 12px;
     left: 12px;
     display: none;
-    gap: 9px;
-    padding: 6px 10px;
-    border: 1px solid var(--line-strong);
+    gap: 8px;
+    padding: 5px 9px;
+    border: 1px solid var(--line);
     border-radius: 999px;
     background: var(--surface-overlay);
     backdrop-filter: blur(8px);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 9.5px;
-    letter-spacing: 0.06em;
+    font-size: 9px;
+    letter-spacing: 0.05em;
     text-transform: uppercase;
     color: var(--muted);
+    opacity: 0.86;
   }
 
   .map-frame[data-layer="heat"] .map-legend:not(.map-legend-eff) {
@@ -866,6 +873,22 @@
   }
 
   /* ===== 7. Settings controls ===== */
+
+  /* Lower-frequency Settings cards (backup/restore, etc.) are demoted below the
+     connection/setup card (B3): muted surface + dimmer heading so the
+     setup-critical control reads as primary during setup. Still fully usable. */
+  .settings-secondary {
+    background: var(--surface-veil);
+  }
+
+  .settings-secondary > header .kicker,
+  .settings-secondary > header h3 {
+    color: var(--soft);
+  }
+
+  .settings-secondary > header h3 {
+    font-size: 15px;
+  }
 
   .setting-stack {
     display: grid;
@@ -1488,6 +1511,14 @@
 
   .scrubber {
     padding: 12px 14px;
+    /* Visually bind playback to the selected drive (C4): a map-accent top edge +
+       faint tint ties the scrubber to the route/sheet above it, so "Play" reads
+       as "play THIS drive" rather than a detached control. */
+    margin-top: 8px;
+    border-top: 2px solid var(--map-accent);
+    background:
+      linear-gradient(180deg, var(--map-accent-veil, rgba(76, 196, 255, 0.08)), transparent 64px),
+      var(--surface-raised);
   }
 
   .scrub-chart,
@@ -1851,6 +1882,104 @@
   /* Drive-tab polish ──────────────────────────────────────────────────────────
      Reuses .map-drive-chips / .scrub-chart / .scrub-readout vocabulary from the
      Map tab so the Drive screen feels like the same product. */
+
+  /* Persistent data-provenance badge (A2/A4/E4/H3): a slim, calm row that names
+     the data source (demo / live / offline / empty) with a colored dot, so the
+     four states can never be confused. data-source drives the accent. */
+  .drive-source-badge {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    padding: 9px 12px;
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--muted);
+    border-radius: 12px;
+    background: var(--surface-chip);
+  }
+
+  .drive-source-dot {
+    flex: none;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--muted);
+  }
+
+  .drive-source-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .drive-source-badge strong {
+    font-size: 12.5px;
+    font-weight: 750;
+    letter-spacing: 0.01em;
+  }
+
+  .drive-source-badge small {
+    color: var(--soft);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .drive-source-badge[data-source="live"] {
+    border-left-color: var(--volt);
+  }
+  .drive-source-badge[data-source="live"] .drive-source-dot {
+    background: var(--volt);
+    box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.7);
+    animation: drive-source-pulse 1.8s ease-in-out infinite;
+  }
+  .drive-source-badge[data-source="demo"] {
+    border-left-color: var(--accent, #6ec6ff);
+  }
+  .drive-source-badge[data-source="demo"] .drive-source-dot {
+    background: var(--accent, #6ec6ff);
+    box-shadow: 0 0 8px rgba(110, 198, 255, 0.6);
+  }
+  .drive-source-badge[data-source="offline"] {
+    border-left-color: var(--warn);
+  }
+  .drive-source-badge[data-source="offline"] .drive-source-dot {
+    background: var(--warn);
+  }
+  .drive-source-badge[data-source="empty"] {
+    border-left-color: var(--line-strong);
+  }
+
+  @keyframes drive-source-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.45; }
+  }
+
+  /* One-time live reveal (I1): the hero meters/trace fade+rise once, the first
+     time real or demo samples arrive. Class is added once by drive.ts and never
+     replays. Reduced-motion users get the end state with no animation. */
+  @media (prefers-reduced-motion: no-preference) {
+    .hero.is-first-sample .live-card,
+    .hero.is-first-sample .battery-strip {
+      animation: drive-first-sample 520ms var(--motion-ease, ease) both;
+    }
+    .hero.is-first-sample .battery-strip {
+      animation-delay: 90ms;
+    }
+  }
+
+  @keyframes drive-first-sample {
+    from {
+      opacity: 0.4;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 
   /* Top session chip strip. Inherits the .map-drive-chips horizontal scroll-snap
      behavior; this rule just tightens the vertical rhythm and adds a recording

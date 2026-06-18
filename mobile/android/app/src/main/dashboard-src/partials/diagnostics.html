@@ -5,6 +5,62 @@
   live on the Settings tab.
 -->
 <section id="view-diagnostics" class="view" data-view="diagnostics">
+  <!--
+    Recovery-first summary (A1/C3/E2/I2). Answers "what's wrong, what to do next,
+    how ready is the adapter, one button to act" BEFORE the raw signal/debug
+    consoles below. Populated by connection-status.ts#renderDiagnosticsRecovery
+    from the same status model that drives the topbar pill, so the plain-language
+    headline can never disagree with the badge. Engineering detail stays below,
+    progressively disclosed.
+  -->
+  <article
+    id="diagRecovery"
+    class="panel diag-recovery"
+    data-tone="idle"
+    role="status"
+    aria-live="polite"
+    aria-label="Connection health summary"
+  >
+    <div class="diag-recovery__head">
+      <span class="diag-recovery__dot" aria-hidden="true"></span>
+      <div class="diag-recovery__headline">
+        <span class="kicker" id="diagRecoveryKicker">Get started</span>
+        <h2 id="diagRecoveryTitle">Checking adapter…</h2>
+      </div>
+      <span
+        id="diagRecoveryPill"
+        class="signal-status-pill diag-recovery__pill"
+        data-state="idle"
+        >checking</span
+      >
+    </div>
+    <p id="diagRecoveryNext" class="diag-recovery__next">
+      Connect an OBD adapter in Settings to start live logging.
+    </p>
+    <div class="diag-recovery__meta">
+      <div>
+        <span class="kicker">Adapter</span>
+        <strong id="diagRecoveryAdapter">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Bluetooth</span>
+        <strong id="diagRecoveryBt">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Data source</span>
+        <strong id="diagRecoverySource">--</strong>
+      </div>
+    </div>
+    <button
+      type="button"
+      id="diagRecoveryAction"
+      class="primary primary-action diag-recovery__action"
+      data-nav-jump="settings"
+    >
+      Open connection settings
+    </button>
+  </article>
+
   <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
     <summary aria-label="Toggle the demo preview sandbox controls">
       Preview sandbox

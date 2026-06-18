@@ -1206,6 +1206,128 @@
     box-shadow: 0 0 10px rgba(255,184,74,0.75);
   }
 
+  /* ===== 9b. Diagnostics recovery-first panel (A1/C3/E2/I2) ===== */
+
+  /* Sits at the top of the Diagnostics tab. A plain-language status headline,
+     next-best-action, adapter readiness, and ONE primary button — so a
+     non-expert can recover before the signal/debug consoles below. Tone-driven
+     left accent + status dot mirror the data-tone severity vocabulary. */
+  .diag-recovery {
+    display: grid;
+    gap: 12px;
+    border-left: 3px solid var(--line-strong);
+  }
+
+  .diag-recovery__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .diag-recovery__dot {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    margin-top: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    box-shadow: 0 0 0 4px var(--fill-soft);
+  }
+
+  .diag-recovery__headline {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .diag-recovery__headline h2 {
+    margin: 2px 0 0;
+    font-size: 18px;
+    font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
+  }
+
+  .diag-recovery__pill {
+    align-self: center;
+  }
+
+  .diag-recovery__next {
+    margin: 0;
+    color: var(--soft);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .diag-recovery__meta {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    padding-top: 10px;
+    border-top: 1px solid var(--line);
+  }
+
+  .diag-recovery__meta div {
+    min-width: 0;
+    padding: 0 10px;
+  }
+
+  .diag-recovery__meta div:first-child {
+    padding-left: 0;
+  }
+
+  .diag-recovery__meta div + div {
+    border-left: 1px solid var(--line);
+  }
+
+  .diag-recovery__meta strong {
+    display: block;
+    margin-top: 3px;
+    overflow: hidden;
+    font-size: 14px;
+    font-weight: 750;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .diag-recovery__action {
+    width: 100%;
+  }
+
+  .diag-recovery[data-tone="ok"] {
+    border-left-color: var(--ok);
+  }
+  .diag-recovery[data-tone="ok"] .diag-recovery__dot {
+    background: var(--ok);
+    box-shadow: 0 0 0 4px rgba(53, 230, 160, 0.16);
+  }
+  .diag-recovery[data-tone="live"] {
+    border-left-color: var(--volt);
+  }
+  .diag-recovery[data-tone="live"] .diag-recovery__dot {
+    background: var(--volt);
+    box-shadow: 0 0 0 4px rgba(var(--volt-rgb), 0.18);
+  }
+  .diag-recovery[data-tone="warn"] {
+    border-left-color: var(--warn);
+  }
+  .diag-recovery[data-tone="warn"] .diag-recovery__dot {
+    background: var(--warn);
+    box-shadow: 0 0 0 4px rgba(255, 184, 74, 0.18);
+  }
+  .diag-recovery[data-tone="bad"] {
+    border-left-color: var(--bad);
+  }
+  .diag-recovery[data-tone="bad"] .diag-recovery__dot {
+    background: var(--bad);
+    box-shadow: 0 0 0 4px rgba(255, 107, 95, 0.2);
+  }
+  .diag-recovery[data-tone="demo"] {
+    border-left-color: var(--accent, #6ec6ff);
+  }
+  .diag-recovery[data-tone="demo"] .diag-recovery__dot {
+    background: var(--accent, #6ec6ff);
+    box-shadow: 0 0 0 4px rgba(110, 198, 255, 0.18);
+  }
+
   /* ===== 10. Live-signals diagnostic list ===== */
 
   /* Live-signals diagnostic list: one row per polled metric with a status dot,
