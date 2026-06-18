@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.21.0 (2026-06-18)
+
+### Features
+
+- **dashboard**: Replace soc donut with a battery gauge and de-clutter the efficiency scatter
+  ([#242](https://github.com/jtn0123/VoltTracker/pull/242),
+  [`eacd3d2`](https://github.com/jtn0123/VoltTracker/commit/eacd3d250a5bcaa7047211382c2dc6affb647b27))
+
+The Insights HV-pack tile used a conic-gradient donut to show state of charge, which read like a pie
+  chart and didn't suit an EV battery. Replace it with a vertical battery gauge that fills from the
+  bottom to --v% with a terminal nub, coloured by charge band via data-level (green/amber/red).
+  storage-status.ts now sets ring.dataset.level from the SOC reading and clears it in the waiting
+  state. The #realPackRing + --v contract is unchanged, so theming (light/high-contrast) adapts
+  automatically.
+
+The efficiency-vs-speed scatter piled high-efficiency samples into a solid false row along the top
+  gridline: enrichRouteEff clamps efficiency to a 6.5 ceiling (shared with map colouring), so
+  coasting/regen-tail points all saturated there. Drop samples at/above that ceiling from the
+  scatter (and its stats/trend) and grow the y-axis to the data within [5,7] instead of a fixed 0-7,
+  so the plot shows the real drive-efficiency spread with no dead band above the points.
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.20.0 (2026-06-18)
 
 ### Features
