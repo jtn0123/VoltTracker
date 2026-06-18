@@ -722,14 +722,22 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function requestMapRender() {
+    // Gate the first paint on the lazy Map stylesheets (leaflet.css + screens-map.css)
+    // so the map never renders before its CSS applies. mapStylesReady is set by map.ts
+    // as the chunk loads; until then it may be undefined, which resolves immediately.
+    const stylesReady = () => Promise.resolve(VD.mapStylesReady);
     if (mapModuleLoaded() && typeof VD.renderMap === "function") {
-      VD.renderMap();
-      return Promise.resolve(VD);
+      return stylesReady().then(() => {
+        VD.renderMap();
+        return VD;
+      });
     }
-    return ensureMapModule().then((dashboard) => {
-      if (typeof dashboard.renderMap === "function") dashboard.renderMap();
-      return dashboard;
-    });
+    return ensureMapModule().then((dashboard) =>
+      stylesReady().then(() => {
+        if (typeof dashboard.renderMap === "function") dashboard.renderMap();
+        return dashboard;
+      }),
+    );
   }
 
   function troubleshooterModuleLoaded() {

@@ -28,19 +28,30 @@ import type { MapSessionFilter } from "./map-session-list";
   const bridge = VD.bridge;
   const el = VD.el;
 
-  // Leaflet's stylesheet is no longer render-blocking in index.template.html (it is only needed once
-  // a map renders). Inject it once, here, as soon as this lazy map chunk loads — well before the first
-  // renderMap() — so tiles and controls are styled without costing every dashboard launch ~14 KB of
-  // critical-path CSS.
-  (function ensureLeafletCss(): void {
-    const href = "lib/leaflet/leaflet.css";
-    if (document.querySelector(`link[href="${href}"]`)) {
-      return;
+  // Leaflet's stylesheet AND the Map-tab chrome (screens-map.css, split out of the
+  // eager screens.css in G3) are not render-blocking in index.template.html — both
+  // are only needed once a map renders. Inject them here, as this lazy map chunk
+  // loads (well before the first renderMap()), so neither costs the Drive-first
+  // startup path. `VD.mapStylesReady` resolves once screens-map.css has applied;
+  // requestMapRender() awaits it so the map never paints unstyled (no FOUC).
+  VD.mapStylesReady = (function ensureMapStyles(): Promise<void> {
+    const sheets = ["lib/leaflet/leaflet.css", "css/screens-map.css"];
+    const loads: Array<Promise<void>> = [];
+    for (const href of sheets) {
+      if (document.querySelector(`link[href="${href}"]`)) continue;
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      loads.push(
+        new Promise<void>((resolve) => {
+          // Resolve on load OR error — a missing/blocked sheet must not hang render.
+          link.addEventListener("load", () => resolve(), { once: true });
+          link.addEventListener("error", () => resolve(), { once: true });
+        }),
+      );
+      document.head.appendChild(link);
     }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    document.head.appendChild(link);
+    return Promise.all(loads).then(() => undefined);
   })();
 
   type MapStop = {

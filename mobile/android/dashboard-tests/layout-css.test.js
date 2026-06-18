@@ -23,8 +23,9 @@ describe('dashboard layout css', () => {
   });
 
   it('keeps the empty map message below the overlay controls', () => {
-    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
-    const mapEmptyRule = screensCss.match(/\.map-empty\s*\{[^}]+\}/)?.[0] || '';
+    // .map-empty was split into the lazy screens-map.css (G3) — Map-tab-exclusive.
+    const mapCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens-map.css'), 'utf8');
+    const mapEmptyRule = mapCss.match(/\.map-empty\s*\{[^}]+\}/)?.[0] || '';
 
     expect(mapEmptyRule).toMatch(/padding\s*:\s*120px\s+20px\s+56px/);
   });
@@ -118,7 +119,7 @@ describe('dashboard layout css', () => {
     // The rgba(255,122,69,…) tints were tokenized to rgba(var(--volt-rgb), …)
     // (2026-06-12). The single allowed literal is the token definition itself
     // in base.css; any new raw literal is drift back to the hardcoded color.
-    const cssFiles = ['base.css', 'components.css', 'screens.css', 'status-tools.css', 'troubleshooter.css'];
+    const cssFiles = ['base.css', 'components.css', 'screens.css', 'screens-map.css', 'status-tools.css', 'troubleshooter.css'];
     const literal = /rgba\(\s*255\s*,\s*122\s*,\s*69\s*,/;
 
     for (const name of cssFiles) {

@@ -788,6 +788,9 @@ interface VoltRestoreProgress {
 
     // ----- map.ts ------------------------------------------------------------
     renderMapLoaded?: boolean;
+    /** Resolves once the lazy Map stylesheets (leaflet.css + screens-map.css) have
+     *  applied; requestMapRender() awaits it to avoid a flash of unstyled map. */
+    mapStylesReady?: Promise<void>;
     renderMap(): void;
     /** Re-render only the trip list from current storage (M4 search/sort/favorites
      *  controls call this so a keystroke/toggle re-filters without refitting the map). */
