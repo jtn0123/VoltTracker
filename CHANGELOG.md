@@ -1,6 +1,119 @@
 # CHANGELOG
 
 
+## v0.19.0 (2026-06-18)
+
+### Features
+
+- **dashboard**: Recovery-first diagnostics, drive data provenance, map polish
+  ([#238](https://github.com/jtn0123/VoltTracker/pull/238),
+  [`04a8d92`](https://github.com/jtn0123/VoltTracker/commit/04a8d928e2bb423da6ff3e62692ee735b464ed51))
+
+* Phone UI/UX: recovery-first Diagnostics, Drive data provenance, map polish
+
+Phone-only dashboard pass driven by a fresh UI/UX audit (runtime screenshots at 412x915). Three
+  areas:
+
+Diagnostics & Settings recovery (A1/C3/E2/I2, B3): - New recovery-first panel atop Diagnostics —
+  plain-language blocker/health, next-best-action, adapter readiness, and ONE primary action,
+  rendered from the same status model as the topbar pill (connection-status.ts). A real
+  blocked/error status outranks demo so failures surface the fix, not a banner. - Settings now leads
+  with the Connection/setup card; backup/restore is demoted to a secondary, muted card so
+  setup-critical controls outrank data tooling.
+
+Drive data provenance, states & live feel (A2/A3/A4/E4/H3/I1): - Persistent source badge (demo /
+  live / offline / no-data) so the four data states can never be confused; bound to the same
+  demo/connection/storage truth as the gauges so it can't contradict them. - One-time hero reveal on
+  the first live/demo sample (reduced-motion aware).
+
+Map controls & playback polish (B4/C4/D3/F4): - Compacted layer tabs and receded the legend to the
+  bottom-left so the route stays the hero; visually bound the scrubber playback to the selected
+  drive.
+
+Accessibility labels/roles, focus behavior, reduced-motion, light mode, and asset/perf budgets
+  preserved. 524 vitest + 25 Playwright e2e pass; typecheck and eslint clean; partials pass Prettier
+  3.8.3.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* test(dashboard): refresh visual baselines for phone UI/UX changes
+
+Regenerated the Linux visual snapshots (ubuntu-24.04, matching the dashboard-visual CI runner) for
+  the surfaces touched by the phone UI/UX pass: Drive (source badge), Settings (connection-first
+  hierarchy), and Map (compact layer tabs, receded legend, attached scrubber) across the demo
+  scenarios.
+
+* perf(dashboard): keep recovery panel off the per-sample telemetry hot path
+
+renderDiagnosticsRecovery() was running on every telemetry sample via the observer wrapper, adding
+  state-derivation + DOM lookups to the high-rate enqueue path and blowing the burst-coalescing
+  budget (startup-budget.test.js: 102ms vs 100ms on CI). The panel changes meaningfully only on
+  status broadcasts (already handled in noteStatus), so the per-sample refresh now runs only when
+  Diagnostics is the active view — the lone case where the live sample count / "waiting → flowing"
+  flip needs to be live. Restores the enqueue budget headroom.
+
+* refactor(dashboard): address review feedback on recovery panel + drive badge
+
+- connection-status.ts: skip recovery-panel re-render when the derived view is unchanged (signature
+  guard) and diff each node before writing text/attrs, so the polite live region no longer
+  re-announces or churns the DOM on identical ticks (CodeRabbit,
+  connection-status.ts:305-325/584-594). - drive.ts: split the connecting vs connected source-badge
+  copy so "Adapter linked — waiting for first sample" no longer shows while still connecting;
+  connecting now reads "Connecting to your OBD adapter" (CodeRabbit, drive.ts:250).
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+### Testing
+
+- **dashboard**: Phone a11y/visual/contract/perf guards for new surfaces
+  ([#239](https://github.com/jtn0123/VoltTracker/pull/239),
+  [`c0b7e37`](https://github.com/jtn0123/VoltTracker/commit/c0b7e37b91f7515e9f594ff49c1954b1d0843b6d))
+
+* test(dashboard): add phone a11y/visual/contract/perf guards for new surfaces
+
+Closes the automated-coverage gap the audit flagged for the phone UX surfaces (D2/E3/F3/G4):
+
+- F3 selector/partial contract (dashboard-tests/selector-contract.test.js): every static id the TS
+  reads via el()/getElementById must exist in the generated index.html (all 167 currently resolve),
+  plus explicit pins for the recovery panel + drive source-badge ids. - D2/E3 visual coverage:
+  Diagnostics joins the tab x scenario visual matrix, so the recovery-first panel's layout is pinned
+  across demo/fault/empty/extreme (new Linux baselines generated on ubuntu-24.04, matching the CI
+  runner). - G4 phone perf guard (dashboard-e2e/perf-guard.spec.js): boots + switches every tab
+  under 4x CDP CPU throttle within generous budgets — a catastrophic- regression tripwire for
+  low-end WebViews.
+
+527 vitest pass; perf-guard + a11y + visual (36) green in Chromium.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* chore(deps): bump undici to 7.28.0 to clear high-severity audit advisory
+
+The dashboard-tests job's `npm audit --audit-level=high` gate started failing on a newly-published
+  undici advisory (GHSA-vmh5-mc38-953g, GHSA-pr7r-676h-xcf6), pulled transitively via jsdom@29.1.1.
+  `npm audit fix` bumps undici 7.25.0 -> 7.28.0 (lockfile only; jsdom unchanged). Audit gate is
+  clean again and the jsdom-based vitest suite still passes.
+
+* test(dashboard): address review feedback on new guards
+
+- perf-guard.spec.js: wrap the throttled body in try/finally so the CPU-throttle reset always runs
+  even if a budget assertion fails (no leaked throttle for the next test on the worker). -
+  selector-contract.test.js: match single- AND double-quoted ids in el()/ getElementById() reads
+  (closes a coverage hole), and walk JS_DIR recursively so the contract still holds if sources move
+  into subfolders.
+
+Contract test + perf guard re-verified green.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.18.9 (2026-06-18)
 
 ### Continuous Integration
