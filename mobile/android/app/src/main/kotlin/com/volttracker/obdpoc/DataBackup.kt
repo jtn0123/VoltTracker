@@ -505,7 +505,13 @@ class DataBackup(
 
     companion object {
         private const val TAG = "DataBackup"
-        internal const val MAX_RESTORE_MIB = 512L
+
+        // Restore is staged to a temp file and opened as a SQLite DB (BackupMigrator) — it is
+        // disk-bound, not loaded into memory — so this ceiling only guards against a runaway file
+        // filling cache storage, not an OOM. Raised 512 MiB → 4 GiB so multi-hundred-MB / ~1 GB
+        // histories (lots of logged drives) import; a genuinely too-large file still fails cleanly
+        // with TOO_LARGE. Free cache space is the real practical limit and surfaces as an IO error.
+        internal const val MAX_RESTORE_MIB = 4096L
         internal const val MAX_RESTORE_BYTES = MAX_RESTORE_MIB * 1024L * 1024L
         const val MIN_PASSPHRASE_LENGTH = 8
         private const val MAX_DEBUG_LOG_BYTES = 64 * 1024

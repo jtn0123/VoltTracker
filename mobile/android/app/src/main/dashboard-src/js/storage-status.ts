@@ -760,9 +760,15 @@ import { prefs, units } from "./prefs";
     const yOf = (s: number) => padT + (1 - (s - yMin) / (yMax - yMin)) * plotH;
     const make = (tag: string, attrs: Record<string, string | number>) =>
       setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
+    // Tone the trend by the LATEST health band so a healthy pack reads calm
+    // (green) instead of alarm-orange: a declining-but-fine ~90% battery is
+    // normal. ok >= 85, warn 70-85, bad < 70 — colored via CSS off data-soh.
+    const latestSoh = ss[ss.length - 1];
+    const tone = latestSoh >= 85 ? "ok" : latestSoh >= 70 ? "warn" : "bad";
     const svg = make("svg", {
       viewBox: `0 0 ${w} ${h}`,
       class: "soh-trend-svg",
+      "data-soh": tone,
       role: "img",
       "aria-label": `Battery state of health trend, latest ${ss[ss.length - 1].toFixed(1)} percent`,
     });
@@ -777,6 +783,12 @@ import { prefs, units } from "./prefs";
     points.forEach((p, i) => {
       d += `${i === 0 ? "M" : "L"}${xOf(p.at).toFixed(1)} ${yOf(p.soh).toFixed(1)} `;
     });
+    // Soft area fill under the line (closed down to the plot baseline) so the
+    // trend reads as a filled band, not a lone stroke. Drawn before the line.
+    const baseY = (padT + plotH).toFixed(1);
+    const firstX = xOf(points[0].at).toFixed(1);
+    const lastX = xOf(points[points.length - 1].at).toFixed(1);
+    svg.appendChild(make("path", { d: `${d.trim()} L${lastX} ${baseY} L${firstX} ${baseY} Z`, class: "soh-area" }));
     svg.appendChild(make("path", { d: d.trim(), class: "soh-line" }));
     const last = points[points.length - 1];
     svg.appendChild(make("circle", { cx: xOf(last.at).toFixed(1), cy: yOf(last.soh).toFixed(1), r: "3", class: "soh-dot" }));

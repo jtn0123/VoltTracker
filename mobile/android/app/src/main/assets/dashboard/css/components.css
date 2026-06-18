@@ -361,6 +361,17 @@
 
   .meter.battery-meter span {
     background: var(--ev);
+    transition: background var(--motion-fast, 0.2s) var(--motion-ease, ease);
+  }
+
+  /* SOC level coloring (data-level set in telemetry.ts): a near-empty pack reads
+     amber/red instead of a full-green bar, so charge state is legible at a glance. */
+  .meter.battery-meter span[data-level="warn"] {
+    background: var(--warn);
+  }
+
+  .meter.battery-meter span[data-level="bad"] {
+    background: var(--bad);
   }
 
   /* ===== 3. Charge / SOC hero KPIs ===== */
@@ -1541,6 +1552,25 @@
     width: 100%;
     height: auto;
     display: block;
+    /* Health-band tint (set per data-soh in JS): a healthy pack trends calm
+       green, only warm/low packs go amber/red. Drives line, area, and dot. */
+    --soh-color: var(--ok);
+    --soh-rgb: 53, 230, 160;
+  }
+
+  .soh-trend-svg[data-soh="warn"] {
+    --soh-color: var(--warn);
+    --soh-rgb: 255, 184, 74;
+  }
+
+  .soh-trend-svg[data-soh="bad"] {
+    --soh-color: var(--bad);
+    --soh-rgb: 255, 107, 95;
+  }
+
+  .soh-area {
+    stroke: none;
+    fill: rgba(var(--soh-rgb), 0.14);
   }
 
   .soh-grid {
@@ -1555,7 +1585,7 @@
 
   .soh-line {
     fill: none;
-    stroke: rgba(var(--volt-rgb), 0.9);
+    stroke: var(--soh-color);
     stroke-width: 2.2;
     stroke-linejoin: round;
     stroke-linecap: round;
@@ -1581,7 +1611,7 @@
   }
 
   .soh-dot {
-    fill: var(--volt);
+    fill: var(--soh-color);
     stroke: var(--on-control);
     stroke-width: 1.5;
   }
@@ -1620,7 +1650,21 @@
     top: -1px;
     bottom: -1px;
     border-radius: 999px;
-    background: linear-gradient(90deg, rgba(76,196,255,0.55), rgba(var(--volt-rgb), 0.55));
+    /* Default/neutral fill; the parent graphic's data-tone (set in JS from the
+       mV spread) recolors it to convey balance health. */
+    background: linear-gradient(90deg, rgba(76, 196, 255, 0.5), rgba(53, 230, 160, 0.6));
+  }
+
+  .cell-balance-graphic[data-tone="ok"] .cell-balance-fill {
+    background: linear-gradient(90deg, rgba(53, 230, 160, 0.4), rgba(53, 230, 160, 0.7));
+  }
+
+  .cell-balance-graphic[data-tone="warn"] .cell-balance-fill {
+    background: linear-gradient(90deg, rgba(255, 184, 74, 0.4), rgba(255, 184, 74, 0.72));
+  }
+
+  .cell-balance-graphic[data-tone="bad"] .cell-balance-fill {
+    background: linear-gradient(90deg, rgba(255, 107, 95, 0.42), rgba(255, 107, 95, 0.74));
   }
 
   .cell-balance-marker {

@@ -243,12 +243,19 @@ class DataBackupTest {
     }
 
     @Test
-    fun restoreImportLimitAllowsTwoHundredMbBackups() {
+    fun restoreImportLimitAllowsLargeMultiHundredMbBackups() {
         val twoHundredMb = 200L * 1000L * 1000L
+        // Histories approaching ~1 GB (many logged drives) must import — the cap was raised from
+        // 512 MiB to 4 GiB. Pin a >= 1 GiB floor so it can't silently regress below that need.
+        val oneGib = 1024L * 1024L * 1024L
 
         assertTrue(
             "restore importer must accept 200 MB-class backups before SQLite validation",
             DataBackup.MAX_RESTORE_BYTES > twoHundredMb,
+        )
+        assertTrue(
+            "restore importer must accept ~1 GB-class backups",
+            DataBackup.MAX_RESTORE_BYTES >= oneGib,
         )
     }
 

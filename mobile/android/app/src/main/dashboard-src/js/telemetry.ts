@@ -777,6 +777,12 @@ import { initialTelemetryState } from "./telemetry-state";
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
     VD.setMeter("driveSocMeter", soc ?? NaN);
+    // Color the SOC bar by charge level (amber when low, red when nearly empty)
+    // so a depleted pack is obvious at a glance instead of a full-green bar.
+    const socMeterEl = el("driveSocMeter");
+    if (socMeterEl) {
+      socMeterEl.dataset.level = soc == null ? "" : soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
+    }
     VD.setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
     const power = finiteNum(t.powerKw);
     VD.setText("powerValue", power != null ? `${power.toFixed(1)} kW` : "--");
@@ -1071,10 +1077,14 @@ import { initialTelemetryState } from "./telemetry-state";
       ? Number(t.cellBalanceMv)
       : Math.round((maxV - minV) * 1000);
     VD.setText("cellBalanceTitle", "Cell-group balance");
+    const tone = cellBalanceTone(mv);
     if (deltaEl) {
       deltaEl.textContent = `${mv} mV spread`;
-      deltaEl.dataset.tone = cellBalanceTone(mv);
+      deltaEl.dataset.tone = tone;
     }
+    // Tone the spread fill to match the badge so the bar itself reads health
+    // (tight = green, drifting = amber/red) instead of a fixed decorative wash.
+    if (graphic) graphic.dataset.tone = tone;
     const span = CELL_SCALE_MAX_V - CELL_SCALE_MIN_V;
     const pos = (v: number) => Math.max(0, Math.min(100, ((v - CELL_SCALE_MIN_V) / span) * 100));
     const minPos = pos(minV);
