@@ -906,6 +906,8 @@ import { prefs, units } from "./prefs";
         ring.style.setProperty("--v", String(Math.max(0, Math.min(100, soc))));
         // Leave the "waiting" neutral track once a real SOC reading exists.
         ring.removeAttribute("data-state");
+        // Color the battery fill by charge level (amber low, red nearly empty).
+        ring.dataset.level = soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
       }
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
       VD.setText("realPackTitle", "Latest battery reading captured.");
@@ -914,6 +916,7 @@ import { prefs, units } from "./prefs";
       if (ring) {
         ring.style.setProperty("--v", "0");
         setDataState(ring, "waiting");
+        delete ring.dataset.level;
       }
       if (ringValue) ringValue.textContent = "--";
       VD.setText("realPackTitle", "Waiting for battery readings.");

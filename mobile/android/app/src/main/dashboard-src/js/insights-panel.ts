@@ -345,6 +345,11 @@ import { prefs, units } from "./prefs";
       for (let i = 0; i < pts.length; i += 1) {
         const eff = Number(pts[i].eff);
         if (!Number.isFinite(eff)) continue;
+        // enrichRouteEff clamps efficiency to a 6.5 ceiling; those saturated
+        // coasting/regen-tail samples otherwise pile into a solid false row along
+        // the top gridline. Drop them from the scatter (and the stats/trend) so
+        // the plot shows the real drive-efficiency spread, not a clamp artifact.
+        if (eff >= 6.45) continue;
         const mph = pointMph(pts, i);
         if (mph < 10) continue;
         let grade = 0;
@@ -413,7 +418,12 @@ import { prefs, units } from "./prefs";
     const fastest = pool.reduce((m, p) => Math.max(m, p.mph), 0);
     const axisMaxMph = Math.max(75, Math.ceil(fastest / 5) * 5);
     const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
-    const yS = (e: number) => padT + (1 - e / 7) * (h - padT - padB);
+    // Y-axis grows to the data (kept in [5,7]) instead of a fixed 0–7, so the
+    // plot no longer leaves a dead empty band above the points now that the
+    // saturated 6.5 pile is excluded.
+    const maxEff = pool.reduce((m, p) => Math.max(m, p.eff), 0);
+    const yMax = Math.min(7, Math.max(5, Math.ceil(maxEff)));
+    const yS = (e: number) => padT + (1 - e / yMax) * (h - padT - padB);
     const gColor = (g: number) =>
       g <= -0.006 ? downColor : g >= 0.006 ? upColor : evColor;
     const svgNs = "http://www.w3.org/2000/svg";
@@ -447,7 +457,7 @@ import { prefs, units } from "./prefs";
         "text-anchor": "middle"
       });
     }
-    for (let gy = 0; gy <= 7; gy += 1) {
+    for (let gy = 0; gy <= yMax; gy += 1) {
       appendLine({
         x1: padL,
         y1: yS(gy),

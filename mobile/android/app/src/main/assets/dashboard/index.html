@@ -1538,8 +1538,9 @@
   </article>
 
   <article class="panel ratio-card insights-hero">
-    <!-- data-state="waiting" renders a neutral track instead of a misleading
-         0% arc until the first SOC reading; storage-status.ts clears it. -->
+    <!-- .ring is a vertical battery gauge; data-state="waiting" shows an empty
+         cell until the first SOC reading, then storage-status.ts drives --v +
+         data-level (charge band) to fill and colour it. -->
     <div id="realPackRing" class="ring" style="--v: 0" data-state="waiting">
       <strong id="realPackValue">--</strong>
     </div>
