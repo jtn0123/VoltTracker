@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.19.1 (2026-06-18)
+
+### Performance Improvements
+
+- **dashboard**: Lazy-load Map-tab CSS off the startup path
+  ([#240](https://github.com/jtn0123/VoltTracker/pull/240),
+  [`36b3cef`](https://github.com/jtn0123/VoltTracker/commit/36b3ceff1c22e56f38f1daaffc2cbd77eda53880))
+
+* perf(dashboard): lazy-load Map-tab CSS off the startup path (G3)
+
+Split the Map-tab-exclusive styles out of the eager screens.css into a new screens-map.css (~9.5 KB)
+  that the Map module injects lazily — alongside the already-deferred leaflet.css — so the
+  Drive-first startup path no longer parses Map chrome + Leaflet control overrides it doesn't need.
+
+Safe extraction (verified by a usage audit): only rules whose every selector class renders
+  exclusively inside #view-map were moved. Cross-tab shared classes stay eager —
+  .map-sheet*/.map-sheet-savings (used on Insights), .scrub-chart/ .scrub-readout (Drive live),
+  .map-drive-chips (Drive), plus .route-flow/ .live-head-pulse/.detail-grid (referenced by eager
+  @media reduced-motion / min-width blocks). Specificity preserves the .map-frame ... .map-legend
+  toggles.
+
+No FOUC: VD.mapStylesReady resolves once screens-map.css applies, and requestMapRender() awaits it
+  before the first paint. All 36 visual baselines pass UNCHANGED (pixel-identical render), 527
+  vitest + map/a11y/perf e2e green, typecheck + eslint clean.
+
+Note: the bundle-size *budget* metric sums every css/ file, so it is unchanged; the win is reduced
+  eager CSS parsed/applied at launch, not the budget number.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* fix(dashboard): repair premature comment terminator in screens-map.css
+
+The header comment's prose contained `.map-sheet*/...`, whose `*/` closed the CSS comment early —
+  turning the following prose into malformed CSS (browser error-recovery masked it, but strict
+  parsers reject it and the first rule after the comment could be dropped). Reworded to remove the
+  `*/` sequence (CodeRabbit Critical). 36 visual baselines + map e2e still green.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.19.0 (2026-06-18)
 
 ### Features
