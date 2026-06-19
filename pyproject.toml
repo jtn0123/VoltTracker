@@ -33,6 +33,20 @@ assets = ["VERSION"]
 major_on_zero = true
 allow_zero_version = true
 
+[tool.semantic_release.changelog]
+# Custom changelog + GitHub-release-notes style, rendered from the Jinja
+# templates in ./templates/ (a copy of PSR 9.21's bundled angular/md templates
+# with .components/changes.md.j2 modified). Instead of PSR's default verbose
+# "### Features" headings that dump the whole commit body, each release renders
+# compact emoji sections — ✳️ New (feat) / 🔺 Fix (fix) / 🔷 Changed (everything
+# else) — with one scannable line per change plus an optional italic impact note
+# pulled from an "Impact:" line in the commit body. See templates/README.md.
+#
+# mode = "init" regenerates the whole file from git history each release, so this
+# style is applied to past versions too on the next release.
+mode = "init"
+template_dir = "templates"
+
 [tool.semantic_release.commit_parser_options]
 # Conventional Commits → bump mapping. feat=minor, fix/perf=patch, BREAKING=major.
 # Other types (chore, docs, ci, refactor, style, test, build, revert) do NOT

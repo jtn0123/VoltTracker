@@ -97,6 +97,27 @@ free-form: a short imperative title (≤72 chars) plus a body explaining "why,
 not what" is encouraged. Include the grade-report item ID if you're executing
 one (e.g. `D1`, `B2`).
 
+### Changelog entries (keep them clear + show impact)
+
+`CHANGELOG.md` and the GitHub Release notes are generated from these PR titles by
+semantic-release, rendered through the templates in [`templates/`](templates/)
+into compact emoji sections — **✳️ New** (`feat`), **🔺 Fix** (`fix`),
+**🔷 Changed** (everything else) — one scannable line per change.
+
+The line shown is the PR title, so write it as plain-language *what changed*, not
+jargon. To add a one-line **impact** ("why it matters") under the entry, put an
+`Impact:` line in the commit body — it survives the squash and renders as an
+indented note:
+
+```
+feat(dashboard): add a hide-outliers toggle to the efficiency chart
+
+Impact: lets you drop noisy GPS spikes so the efficiency trend reflects real driving.
+```
+
+Keep the impact to a single sentence; the rest of the body is intentionally
+omitted from the changelog. See [`templates/README.md`](templates/README.md).
+
 ## Project structure
 
 See `mobile/android/README.md` for the codebase map and
