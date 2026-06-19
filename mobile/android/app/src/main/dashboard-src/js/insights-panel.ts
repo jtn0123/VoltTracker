@@ -358,6 +358,36 @@ import { prefs, units } from "./prefs";
     return a[lo] + (a[hi] - a[lo]) * (pos - lo);
   }
 
+  function hideOutliers(): boolean {
+    return prefs.get<boolean>("effHideOutliers", false);
+  }
+
+  // Optional outlier rejection (off by default): drop samples beyond a 1.5×IQR
+  // fence on grade-normalized efficiency, computed per 10-mph speed bucket. Only
+  // buckets with >=4 samples are fenced (the IQR is unreliable below that); smaller
+  // buckets pass through untouched. Applied to the whole pool so the dots, the
+  // median/IQR buckets, and the city/highway averages all exclude the same points.
+  function rejectEffOutliers(pool: EffPoint[]): EffPoint[] {
+    const groups: Record<number, number[]> = {};
+    pool.forEach((p) => {
+      const b = Math.floor(p.mph / 10);
+      (groups[b] = groups[b] || []).push(p.effFlat);
+    });
+    const fence: Record<number, { lo: number; hi: number }> = {};
+    Object.keys(groups).forEach((k) => {
+      const arr = groups[Number(k)];
+      if (arr.length < 4) return;
+      const q1 = quantileJs(arr, 0.25);
+      const q3 = quantileJs(arr, 0.75);
+      const iqr = q3 - q1;
+      fence[Number(k)] = { lo: q1 - 1.5 * iqr, hi: q3 + 1.5 * iqr };
+    });
+    return pool.filter((p) => {
+      const f = fence[Math.floor(p.mph / 10)];
+      return !f || (p.effFlat >= f.lo && p.effFlat <= f.hi);
+    });
+  }
+
   // Smooth a median series with a 3-point moving average so the curve view reads
   // as a trend rather than a zig-zag of noisy buckets.
   function smooth3(vals: number[]): number[] {
@@ -628,11 +658,14 @@ import { prefs, units } from "./prefs";
         pool.push({ mph, eff, effFlat, grade });
       }
     });
+    // Card visibility tracks the raw pool so toggling outlier removal can't hide
+    // the whole card; everything downstream plots the (optionally) filtered pool.
     if (pool.length < 6) {
       card.hidden = true;
       return;
     }
     card.hidden = false;
+    const plotPool = hideOutliers() ? rejectEffOutliers(pool) : pool;
     // Units-aware axes (C2): the pool is always mph / (mi/kWh) internally (see
     // enrichRouteEff + pointMph), but a metric user must see km/h and km/kWh axes
     // so the chart never contradicts the headline (which already converts via the
@@ -667,13 +700,13 @@ import { prefs, units } from "./prefs";
     // The x-axis grows with the data (a Volt reaches ~100 mph) so fast samples
     // never render outside the viewBox; 75 mph stays the floor so sparse city
     // drives keep a familiar scale. Rounded up to the next 5 mph.
-    const fastest = pool.reduce((m, p) => Math.max(m, p.mph), 0);
+    const fastest = plotPool.reduce((m, p) => Math.max(m, p.mph), 0);
     const axisMaxMph = Math.max(75, Math.ceil(fastest / 5) * 5);
     const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
     // Y-axis grows to the data (kept in [5,7]) instead of a fixed 0–7, so the
     // plot no longer leaves a dead empty band above the points now that the
     // saturated 6.5 pile is excluded.
-    const maxEff = pool.reduce((m, p) => Math.max(m, p.effFlat), 0);
+    const maxEff = plotPool.reduce((m, p) => Math.max(m, p.effFlat), 0);
     const yMax = Math.min(7, Math.max(5, Math.ceil(maxEff)));
     const yS = (e: number) => padT + (1 - e / yMax) * (h - padT - padB);
     const svgNs = "http://www.w3.org/2000/svg";
@@ -728,7 +761,7 @@ import { prefs, units } from "./prefs";
     // bucket drive every view and the headline, so a few noisy samples can't swing
     // the story the way a per-bin mean did. Buckets with <3 samples are dropped.
     const grouped: Record<number, number[]> = {};
-    pool.forEach((p) => {
+    plotPool.forEach((p) => {
       const b = Math.floor(p.mph / 10);
       (grouped[b] = grouped[b] || []).push(p.effFlat);
     });
@@ -765,7 +798,7 @@ import { prefs, units } from "./prefs";
     } else if (view === "curve") {
       renderCurve(svg, buckets, peak, xOf, yS, evColor, bgColor);
     } else {
-      renderScatterDots(svg, pool, xOf, yS, dotColor);
+      renderScatterDots(svg, plotPool, xOf, yS, dotColor);
       appendTrendLine(svg, buckets, xOf, yS, trendColor);
     }
     const best = peak ? { e: peak.med, mph: peak.mid } : { e: 0, mph: 0 };
@@ -815,8 +848,8 @@ import { prefs, units } from "./prefs";
       // more honest than the old per-sample "Samples", where one long trip dumped
       // hundreds of correlated points. Downhill avg is gone: grade is normalized
       // out, so a city/highway split is what's left to compare.
-      const city = pool.filter((p) => p.mph < 35).map((p) => p.effFlat);
-      const hwy = pool.filter((p) => p.mph > 55).map((p) => p.effFlat);
+      const city = plotPool.filter((p) => p.mph < 35).map((p) => p.effFlat);
+      const hwy = plotPool.filter((p) => p.mph > 55).map((p) => p.effFlat);
       const avgText = (a: number[]) =>
         a.length ? units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
       statsEl.replaceChildren(
@@ -874,6 +907,28 @@ import { prefs, units } from "./prefs";
       if (card && !card.hidden) renderInsightScatter();
     });
     syncEffViewButtons();
+  })();
+
+  // "Hide outliers" toggle: a 1.5×IQR fence per speed bucket, off by default and
+  // persisted via prefs. Re-renders the card in place.
+  function syncEffOutlierToggle() {
+    const btn = el("effOutlierToggle");
+    if (!btn) return;
+    const on = hideOutliers();
+    btn.dataset.on = String(on);
+    btn.setAttribute("aria-pressed", String(on));
+  }
+
+  (function bindEffOutlierToggle() {
+    const btn = el("effOutlierToggle");
+    if (!btn) return;
+    btn.addEventListener("click", () => {
+      prefs.set("effHideOutliers", !hideOutliers());
+      syncEffOutlierToggle();
+      const card = el("effScatterCard");
+      if (card && !card.hidden) renderInsightScatter();
+    });
+    syncEffOutlierToggle();
   })();
 
   Object.assign(VD, {

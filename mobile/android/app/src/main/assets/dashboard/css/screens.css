@@ -1005,6 +1005,22 @@
   }
   .eff-view-btn.is-active { background: var(--volt); color: #1a1205; }
   .eff-view-btn:not(.is-active):hover { color: var(--text); }
+  /* "Hide outliers" toggle under the chart. */
+  .eff-outlier-row { display: flex; justify-content: flex-end; margin-top: 8px; }
+  .eff-outlier-toggle {
+    appearance: none; font: inherit; font-size: 12px; font-weight: 600;
+    color: var(--muted); background: transparent; cursor: pointer;
+    border: 1px solid var(--line-strong); border-radius: 999px;
+    padding: 6px 12px; min-height: 32px;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  }
+  .eff-outlier-toggle::before {
+    content: "○ "; font-weight: 700;
+  }
+  .eff-outlier-toggle[data-on="true"] {
+    color: var(--text); border-color: var(--volt); background: var(--fill-bold);
+  }
+  .eff-outlier-toggle[data-on="true"]::before { content: "● "; color: var(--volt); }
   .eff-scatter-stats {
     display: grid; grid-template-columns: repeat(3, 1fr);
     margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);

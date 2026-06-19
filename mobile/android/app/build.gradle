@@ -191,7 +191,12 @@ android {
         abortOnError = true
         warningsAsErrors = true
         checkDependencies = true
-        disable += ["GradleDependency"]
+        // "A newer version is available" advisories — informational only, and with
+        // warningsAsErrors they fail the build the moment Google ships a newer AGP
+        // or dependency, independent of our code. GradleDependency covers libraries;
+        // AndroidGradlePluginVersion covers AGP itself. We bump deliberately via the
+        // version catalog, so neither should abort a release preflight.
+        disable += ["GradleDependency", "AndroidGradlePluginVersion"]
         htmlReport = true
         xmlReport = true
     }

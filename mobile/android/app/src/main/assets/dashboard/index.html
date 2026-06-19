@@ -1798,6 +1798,19 @@
         </button>
       </div>
       <div class="eff-scatter" id="effScatter"></div>
+      <!-- Optional 1.5×IQR-per-speed-bucket outlier filter; off by default,
+           persisted via prefs key effHideOutliers (insights-panel.ts). -->
+      <div class="eff-outlier-row">
+        <button
+          type="button"
+          class="eff-outlier-toggle"
+          id="effOutlierToggle"
+          data-on="false"
+          aria-pressed="false"
+        >
+          Hide outliers
+        </button>
+      </div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
 

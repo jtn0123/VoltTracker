@@ -172,9 +172,10 @@ describe('efficiency-vs-speed chart view switcher + grade-normalization', () => 
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
-    // Clear any view choice a prior test persisted so each starts from default.
+    // Clear any chart prefs a prior test persisted so each starts from default.
     try {
       window.localStorage.removeItem('vt.pref.effChartView');
+      window.localStorage.removeItem('vt.pref.effHideOutliers');
     } catch (_err) {
       /* localStorage always present in jsdom */
     }
@@ -270,5 +271,38 @@ describe('efficiency-vs-speed chart view switcher + grade-normalization', () => 
     const downhillLowest = maxCy();
 
     expect(downhillLowest).toBeGreaterThan(flatLowest + 20);
+  });
+
+  it('drops per-bucket outliers only when "Hide outliers" is enabled', () => {
+    setView('scatter');
+    const base = 1_700_000_000_000;
+    // One 80-mph (highway) bucket, flat (constant altM so grade ~0): five normal
+    // efficiencies plus one clear high outlier beyond the 1.5x IQR fence.
+    const effs = [2.6, 2.8, 3.0, 3.2, 3.4, 6.0];
+    const points = effs.map((eff, i) => ({
+      lat: 34.05 + i * 0.001,
+      lng: -118.25,
+      atMs: base + i * 5000,
+      speedMps: 80 / 2.2369363,
+      altM: 100,
+      eff,
+    }));
+    const storage = { recentRoutes: [{ _effDone: true, points }] };
+    const dotCount = () => document.querySelectorAll('#effScatter svg circle').length;
+
+    // Default (toggle off): every sample is plotted, outlier included.
+    window.VoltDashboard.setStorage(storage);
+    window.VoltDashboard.renderInsightScatter();
+    expect(dotCount()).toBe(6);
+
+    // Enabled: the 6.0 sample is fenced out of the bucket.
+    window.VoltDashboard.prefs.set('effHideOutliers', true);
+    window.VoltDashboard.renderInsightScatter();
+    expect(dotCount()).toBe(5);
+
+    // Disabled again: the outlier comes back (full round-trip).
+    window.VoltDashboard.prefs.set('effHideOutliers', false);
+    window.VoltDashboard.renderInsightScatter();
+    expect(dotCount()).toBe(6);
   });
 });
