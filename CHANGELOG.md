@@ -1,6 +1,90 @@
 # CHANGELOG
 
 
+## v0.22.0 (2026-06-19)
+
+### Features
+
+- **dashboard**: Add a hide-outliers toggle to the efficiency chart
+  ([#244](https://github.com/jtn0123/VoltTracker/pull/244),
+  [`c0b5eae`](https://github.com/jtn0123/VoltTracker/commit/c0b5eaef129a3c6c8ba55ed7d64d6e8b7761dc8d))
+
+* feat(dashboard): add a hide-outliers toggle to the efficiency chart
+
+A persisted "Hide outliers" toggle (off by default) on the efficiency-vs-speed card applies a 1.5x
+  IQR fence per 10-mph speed bucket to the grade-normalized efficiency. Flagged samples are dropped
+  from the scatter dots, the median/IQR buckets that back the bars/curve views, and the city/highway
+  averages alike. Only buckets with >=4 samples are fenced (the IQR is unreliable below that), and
+  card visibility tracks the raw pool so toggling can never blank the whole card.
+
+Also stop the AndroidGradlePluginVersion lint check from failing the build: with warningsAsErrors it
+  aborts the moment Google ships a newer AGP, regardless of our code — the same informational "newer
+  version available" class as GradleDependency, which is already disabled. We bump AGP deliberately
+  via the version catalog, so neither should fail a release preflight.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* test(dashboard): assert the outlier toggle round-trips back on
+
+Address CodeRabbit on #244: after disabling effHideOutliers, re-render and assert the fenced sample
+  is plotted again, proving the full enable/disable cycle.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+- **dashboard**: Add switchable efficiency chart views with grade-normalization
+  ([#243](https://github.com/jtn0123/VoltTracker/pull/243),
+  [`67270fd`](https://github.com/jtn0123/VoltTracker/commit/67270fd15e4c86662b6cfc7a2c0bcaf4f67d58d9))
+
+* feat(dashboard): add switchable efficiency chart views with grade-normalization
+
+The Insights efficiency-vs-speed card was a single dense scatter of ~500 raw GPS samples coloured by
+  road grade — three encodings at once, an unreadable blob on a phone, and a headline ("most
+  efficient around 65 mph") that was really a downhill artifact bleeding in through grade.
+
+Grade-normalize every sample to a flat-equivalent efficiency before plotting: remove the gravity
+  term (~m·g per unit grade, converted to Wh/mi and scaled by a ~0.7 regen/drivetrain factor) from
+  the observed Wh/mi. The speed story is now honest — a fast descent no longer fakes a high-speed
+  efficiency peak — and the grade colour dimension is gone, so the plot drops to a single accent.
+
+Add an in-app view switcher (Bars / Scatter / Curve), persisted per-user via the prefs store so the
+  choice sticks across launches: - Bars: median efficiency per 10-mph bucket with an IQR whisker and
+  the within-5%-of-best buckets highlighted as the sweet spot. - Scatter: the familiar per-sample
+  dots (now single-colour, normalized) with a median trend line. - Curve: a smoothed median curve
+  over a confidence band, no dots — most glanceable.
+
+All three share grade-normalized 10-mph buckets (median + IQR, ≥3 samples) that also drive the
+  honest "most efficient around X" headline. The stat row switches from per-sample "Samples" (one
+  long drive dumped hundreds of correlated points) to "Drives", and from "Downhill avg" (meaningless
+  once grade is normalized out) to a City/Highway split.
+
+Colours are resolved to literals before injection because CSS vars and color-mix don't cascade into
+  SVG presentation attributes.
+
+Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
+
+Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
+
+* style(dashboard): apply spotless formatting to the eff-view switcher markup
+
+spotlessDashboardCheck wraps long element tags one attribute per line; the view-switcher buttons
+  tripped it. Reformat the partial and regenerate index.html.
+
+* test(dashboard): tighten bars-view dot assertion and cover the default-view fallback
+
+Address CodeRabbit review on #243: - bars view emits only the peak-marker circle, so assert exactly
+  1 (was the looser < 8, which could pass even if per-sample dots regressed back in). - add a test
+  that renders with no effChartView pref set, exercising the default scatter fallback path the
+  explicit-scatter test didn't cover.
+
+---------
+
+Co-authored-by: Claude <noreply@anthropic.com>
+
+
 ## v0.21.0 (2026-06-18)
 
 ### Features
