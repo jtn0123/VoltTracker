@@ -360,18 +360,21 @@ type SignalActions = {
     setDataState(el("enhancedBadge"), tone);
   }
 
-  function showConnectionProgress(device: VoltDevice, scan: boolean) {
+  function showConnectionProgress(device: VoltDevice, scan: boolean, profile = "full") {
     const label = device.name || device.address || "OBD adapter";
+    const quickScan = scan && profile === "quick_dtc";
     const status: VoltStatus = {
       state: scan ? "scanning" : "connecting",
-      detail: scan ? `Starting scan with ${label}...` : `Connecting to ${label}...`
+      detail: scan
+        ? (quickScan ? `Starting quick code scan with ${label}...` : `Starting scan with ${label}...`)
+        : `Connecting to ${label}...`
     };
     if (device.address) status.lastAddress = String(device.address);
     if (device.name) status.lastName = String(device.name);
     VD.setStatus(status);
   }
 
-  function connectSelected(scan: boolean, button?: BusyButton | null) {
+  function connectSelected(scan: boolean, button?: BusyButton | null, profile = "full") {
     const selected = VD.getSelectedDevice();
     if (!selected) {
       explainMissingAdapter(scan, true);
@@ -386,13 +389,22 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "Scan is only available inside the Android app." });
       return;
     }
-    showConnectionProgress(selected, scan);
+    showConnectionProgress(selected, scan, profile);
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
-      if (scan) bridge.scan(selected.address, selected.name);
-      else VD.callBridge("connect", selected.address, selected.name);
+      if (scan && profile !== "full" && typeof bridge.scanProfile === "function") {
+        bridge.scanProfile(selected.address, selected.name, profile);
+      } else if (scan) {
+        bridge.scan(selected.address, selected.name);
+      } else {
+        VD.callBridge("connect", selected.address, selected.name);
+      }
     });
+  }
+
+  function quickScanSelected(button?: BusyButton | null) {
+    connectSelected(true, button, "quick_dtc");
   }
 
   function tpmsScanSelected(button?: BusyButton | null) {
@@ -444,6 +456,7 @@ type SignalActions = {
       case "restoreEncrypted": void restoreEncryptedBackup(button); return;
       case "last": connectLastAdapter(button); return;
       case "scan": connectSelected(true, button); return;
+      case "quickScan": quickScanSelected(button); return;
       case "tpmsScan": tpmsScanSelected(button); return;
       case "detailProbe": detailProbeSelected(button); return;
       case "connect": connectSelected(false, button); return;
@@ -1317,6 +1330,7 @@ type SignalActions = {
   VD.actions = {
     refreshDevices,
     connectSelected,
+    quickScanSelected,
     tpmsScanSelected,
     detailProbeSelected,
     handleAction,
@@ -1341,6 +1355,7 @@ type SignalActions = {
   Object.assign(VD, {
     refreshDevices,
     connectSelected,
+    quickScanSelected,
     tpmsScanSelected,
     detailProbeSelected,
     handleAction,

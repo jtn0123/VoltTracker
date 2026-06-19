@@ -979,6 +979,21 @@ import { initialTelemetryState } from "./telemetry-state";
     }
   }
 
+  const DATA_HYDRATION_TABS = new Set(["map", "charge", "insights", "diagnostics", "settings"]);
+
+  function markTabData(
+    view: string | undefined,
+    phase: "request" | "received" | "rendered"
+  ) {
+    const clean = String(view || "").trim().toLowerCase();
+    if (!DATA_HYDRATION_TABS.has(clean)) return;
+    startupMark(clean + "_data_" + phase);
+  }
+
+  function markActiveTabDataRendered() {
+    afterNextPaint(() => markTabData(state.view, "rendered"));
+  }
+
   function afterNextPaint(work: () => void) {
     if (typeof window.requestAnimationFrame === "function") {
       window.requestAnimationFrame(() => {
@@ -999,6 +1014,7 @@ import { initialTelemetryState } from "./telemetry-state";
 
   function setView(view: string) {
     startupMark("tab:" + view + ":start");
+    markTabData(view, "request");
     state.view = view;
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
@@ -1262,6 +1278,8 @@ import { initialTelemetryState } from "./telemetry-state";
     scrollAppToTop,
     scrollAppBy,
     canScrollApp,
+    markTabData,
+    markActiveTabDataRendered,
     setView,
     handleAndroidBack,
     updateViewHeading,

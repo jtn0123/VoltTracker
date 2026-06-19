@@ -62,6 +62,13 @@ class VoltBridge(
     ) = connections.scan(address, name)
 
     @JavascriptInterface
+    fun scanProfile(
+        address: String?,
+        name: String?,
+        profile: String?,
+    ) = connections.scanProfile(address, name, profile)
+
+    @JavascriptInterface
     fun tpmsScan(
         address: String?,
         name: String?,

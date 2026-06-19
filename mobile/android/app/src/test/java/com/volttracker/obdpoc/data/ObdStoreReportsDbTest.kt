@@ -117,6 +117,23 @@ class ObdStoreReportsDbTest {
     }
 
     @Test
+    fun storageCountCacheInvalidatesAfterWrites() {
+        val empty = StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+        assertEquals(0, empty.optInt("sessionCount"))
+
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val afterSession = StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+        assertEquals(1, afterSession.optInt("sessionCount"))
+        assertEquals(0L, afterSession.optLong("sampleCount"))
+
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))
+        val afterSample = StorageSummaryJson.buildOverview(store.getStorageOverviewRecord())
+        assertEquals(1, afterSample.optInt("sessionCount"))
+        assertEquals(1L, afterSample.optLong("sampleCount"))
+        assertEquals(1L, afterSample.optLong("rawTelemetryCount"))
+    }
+
+    @Test
     fun storageOverviewOmitsHeavyPanelsWhileDetailsExposeThem() {
         val id = store.startSession("obd", "00:11", "Adapter")
         store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1000L))

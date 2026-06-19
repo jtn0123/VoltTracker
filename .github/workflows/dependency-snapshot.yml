@@ -35,8 +35,7 @@ jobs:
             mobile/android/dashboard-e2e/package-lock.json
       - name: Gradle dependency updates
         run: |
-          chmod +x ./gradlew
-          ./gradlew --no-daemon dependencyUpdates -Drevision=release
+          bash tools/dependency-updates-local.sh
       - name: npm dashboard dependency snapshot
         run: |
           cd dashboard-tests

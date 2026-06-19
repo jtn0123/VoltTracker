@@ -50,6 +50,12 @@ import { prefs, units } from "./prefs";
       state.trips = Array.isArray(parsed) ? parsed : [];
     }
     VD.renderMapIfLoaded();
+    if (typeof VD.markTabData === "function" && typeof VD.markActiveTabDataRendered === "function") {
+      if (state.view === "map" || state.view === "insights") {
+        VD.markTabData(state.view, "received");
+        VD.markActiveTabDataRendered();
+      }
+    }
   }
 
   function loadTrips(force = false) {
@@ -87,6 +93,10 @@ import { prefs, units } from "./prefs";
     }
     renderInsightStats();
     renderInsightScatter();
+    if (typeof VD.markTabData === "function" && typeof VD.markActiveTabDataRendered === "function") {
+      VD.markTabData("insights", "received");
+      VD.markActiveTabDataRendered();
+    }
   }
 
   function loadInsights(force = false) {

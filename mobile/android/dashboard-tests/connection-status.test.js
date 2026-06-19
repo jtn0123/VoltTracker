@@ -195,4 +195,20 @@ describe('connection-status.ts — status popover', () => {
     expect(document.getElementById('statusPopoverStateText').textContent).toBe('connecting');
     expect(document.getElementById('statusPopoverDetail').textContent).toBe('Connecting to OBDLink...');
   });
+
+  it('shows persistence queue health when writes are dropped or fail', async () => {
+    await loadWithSessions();
+    window.VoltTrackerNative.setStatus({
+      state: 'connected',
+      persistenceDroppedTelemetryCount: 12,
+      persistenceFailedTelemetryCount: 2,
+    });
+
+    badge().click();
+
+    const connection = document.getElementById('statusPopoverConnection').textContent;
+    expect(connection).toContain('Persistence');
+    expect(connection).toContain('12 queued writes dropped');
+    expect(connection).toContain('2 writes failed');
+  });
 });

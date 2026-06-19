@@ -74,6 +74,10 @@ class ObdPersistenceWorker(
 
     fun drainFailedTelemetryCount(): Long = failedTelemetryTasks.getAndSet(0L)
 
+    fun droppedTelemetryCount(): Long = droppedTelemetryTasks.get()
+
+    fun failedTelemetryCount(): Long = failedTelemetryTasks.get()
+
     fun submitTelemetry(task: Runnable) {
         val executor = telemetryExecutor ?: return
         try {

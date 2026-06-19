@@ -18,6 +18,7 @@ bash tools/benchmark-adb-startup-local.sh <ip:port-or-adb-serial>
 bash tools/benchmark-adb-tabs-local.sh <ip:port-or-adb-serial>
 bash tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db
 bash tools/device-baseline-local.sh <ip:port-or-adb-serial>
+bash tools/perf-local.sh --device <ip:port-or-adb-serial> --db /path/to/volttracker_obd_poc.db --all
 ./gradlew dashboardAssetReport
 npm --prefix dashboard-tests test -- startup-budget.test.js
 ./gradlew :app:testDebugUnitTest --tests 'com.volttracker.obdpoc.data.ObdStoreReportsDbTest' --tests 'com.volttracker.obdpoc.data.ObdStoreRouteProjectionDbTest'
@@ -87,6 +88,14 @@ default it also runs `tools/benchmark-adb-startup-local.sh` and
 `build/reports/device-baseline/`. Set `VOLTTRACKER_SKIP_STARTUP_BENCHMARK=1`
 or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 
+`tools/perf-local.sh` is the safest single local wrapper for this group. It runs
+the existing startup, tab, optional real-database, and optional device-baseline
+scripts, then writes a compact `index.md` plus JSON index under
+`build/reports/perf-local/<timestamp>/`. It does not install, uninstall, clear
+app data, or target any package other than `com.volttracker.obdpoc`. Raw pulled
+device files and real database copies stay under `build/reports/` and must not
+be committed; only redacted summary metrics belong in docs.
+
 ## Current Budgets
 
 | Surface | Contract | Gate |
@@ -102,6 +111,7 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 | Startup-to-tab responsiveness | startup plus Map/Charge/Insights/Diagnostics/Settings tab readiness is trended per device | `tools/benchmark-adb-tabs-local.sh <device>` |
 | Seeded storage reads | overview, details, trips, and route reads stay inside generous JVM budgets | `ObdStorePerformanceBudgetTest` |
 | Real database reads | optional local timing on a copied SQLite database, useful for large restored histories | `tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db` |
+| Synthetic million-row reads | privacy-safe large-history fixture can be generated locally and benchmarked through the real-DB harness | `tools/generate-synthetic-db-local.sh build/reports/local/synthetic-1m.db` |
 | Route/scalar serialization | route, SOC, and power tracks cap at `MAX_TRACK_POINTS` and preserve first/last samples | `ObdStoreRouteProjectionDbTest` |
 | Charge projection | whole-history useful OBD sessions are found without a capped all-session prefilter | `ObdStoreReportsDbTest` |
 
@@ -123,7 +133,8 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 - Wide scans should batch persistence where possible. Avoid per-observation
   lookup/update loops on the polling thread.
 - Field latency claims need log evidence: socket timing, ELM prompt timing,
-  command timing, and first useful sample timing.
+  command timing, first useful sample timing, and the first telemetry broadcast
+  mark from `VoltStartup`.
 
 ## Dashboard Rules
 

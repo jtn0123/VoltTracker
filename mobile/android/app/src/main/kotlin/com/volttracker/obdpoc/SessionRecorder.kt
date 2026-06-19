@@ -410,6 +410,22 @@ class SessionRecorder {
 
     fun drainFailedTelemetryCount(): Long = worker.drainFailedTelemetryCount()
 
+    fun persistenceHealthSnapshot(): JSONObject? {
+        val dropped = worker.droppedTelemetryCount()
+        val failed = worker.failedTelemetryCount()
+        if (dropped <= 0L && failed <= 0L) {
+            return null
+        }
+        val payload = JSONObject()
+        try {
+            payload.put("persistenceDroppedTelemetryCount", dropped)
+            payload.put("persistenceFailedTelemetryCount", failed)
+        } catch (ignored: JSONException) {
+            // Local numeric values are safe.
+        }
+        return payload
+    }
+
     private fun shouldThrottleStatus(
         state: String?,
         detail: String?,

@@ -132,6 +132,74 @@ describe('storage summary lazy details', () => {
     expect(bridge.getInsights).toHaveBeenCalledTimes(1);
   });
 
+  it('marks storage-backed tab data hydration separately from tab paint', async () => {
+    const bridge = createVoltBridgeFixture({
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      startupMark: vi.fn(),
+    });
+    await loadDashboard({ bridge });
+    await flushDeferredStorageReads();
+
+    const originalRaf = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 0);
+    try {
+      for (const view of ['charge', 'diagnostics', 'settings']) {
+        bridge.startupMark.mockClear();
+        window.VoltDashboard.setView(view);
+        window.VoltDashboard.setStorage({ sessionCount: 4, sampleCount: 9, recentSessions: [] });
+        await flushDeferredStorageReads();
+
+        const marks = bridge.startupMark.mock.calls.map((call) => call[0]);
+        expect(marks).toContain(`${view}_data_request`);
+        expect(marks).toContain(`${view}_data_received`);
+        expect(marks).toContain(`${view}_data_rendered`);
+      }
+    } finally {
+      window.requestAnimationFrame = originalRaf;
+    }
+  });
+
+  it('marks map and insights rollup hydration after async native payloads render', async () => {
+    const bridge = createVoltBridgeFixture({
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      getTrips: vi.fn(() => '[]'),
+      getInsights: vi.fn(() => '{}'),
+      requestTrips: vi.fn(() => true),
+      requestInsights: vi.fn(() => true),
+      startupMark: vi.fn(),
+    });
+    await loadDashboard({ bridge });
+    await flushDeferredStorageReads();
+
+    const originalRaf = window.requestAnimationFrame;
+    window.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 0);
+    try {
+      bridge.startupMark.mockClear();
+      window.VoltDashboard.setView('map');
+      await window.VoltDashboard.pendingLazyLoads();
+      window.VoltTrackerNative.setTrips(JSON.stringify([{ id: 'trip-1', hasRoute: false }]));
+      await flushDeferredStorageReads();
+
+      let marks = bridge.startupMark.mock.calls.map((call) => call[0]);
+      expect(marks).toContain('map_data_request');
+      expect(marks).toContain('map_data_received');
+      expect(marks).toContain('map_data_rendered');
+
+      bridge.startupMark.mockClear();
+      window.VoltDashboard.setView('insights');
+      await window.VoltDashboard.pendingLazyLoads();
+      window.VoltTrackerNative.setInsights(JSON.stringify({ tripCount: 1, totalDistanceMeters: 1000 }));
+      await flushDeferredStorageReads();
+
+      marks = bridge.startupMark.mock.calls.map((call) => call[0]);
+      expect(marks).toContain('insights_data_request');
+      expect(marks).toContain('insights_data_received');
+      expect(marks).toContain('insights_data_rendered');
+    } finally {
+      window.requestAnimationFrame = originalRaf;
+    }
+  });
+
   it('uses async native trip and insight rollups when the bridge accepts requests', async () => {
     const bridge = createVoltBridgeFixture({
       getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),

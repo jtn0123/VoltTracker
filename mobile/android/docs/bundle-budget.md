@@ -29,12 +29,12 @@ unchecked.
 
 ## Current budgets
 
-| Bucket | Files | Budget | Roughly today |
+| Bucket | Files | Budget | 2026-06-18 report |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + `css/**/*.css` | **360,000 B** | ~331 KB |
-| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~66 KB |
-| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~38 KB |
-| DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~337 KB |
+| Startup | `js/app.js` + `css/**/*.css` | **360,000 B** | 332,626 B |
+| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | 68,320 B |
+| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | 18,114 B |
+| DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | 273,606 B |
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is

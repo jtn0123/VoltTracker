@@ -173,6 +173,15 @@ android {
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {
                 systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
             }
+            if (rootProject.hasProperty("voltTrackerSyntheticDbPath")) {
+                systemProperty "volttracker.syntheticDbPath", rootProject.property("voltTrackerSyntheticDbPath")
+            }
+            if (rootProject.hasProperty("voltTrackerSyntheticSessions")) {
+                systemProperty "volttracker.syntheticSessions", rootProject.property("voltTrackerSyntheticSessions")
+            }
+            if (rootProject.hasProperty("voltTrackerSyntheticSamplesPerSession")) {
+                systemProperty "volttracker.syntheticSamplesPerSession", rootProject.property("voltTrackerSyntheticSamplesPerSession")
+            }
             retry {
                 // One retry absorbs pure infra flake (emulator-less CI runners hiccuping on
                 // Robolectric/SQLite I/O) so it can't fail the job. failOnPassedAfterRetry

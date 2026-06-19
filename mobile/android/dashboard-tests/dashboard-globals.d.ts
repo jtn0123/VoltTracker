@@ -690,6 +690,8 @@ interface VoltRestoreProgress {
     scrollAppToTop(): void;
     scrollAppBy(deltaY: number): void;
     canScrollApp(): boolean;
+    markTabData(view: string | undefined, phase: "request" | "received" | "rendered"): void;
+    markActiveTabDataRendered(): void;
     setView(view: string): void;
     updateViewHeading(): void;
     setDemoActive(active: boolean, detail?: string): void;
@@ -877,6 +879,7 @@ interface VoltRestoreProgress {
     refreshDevices(): void;
     connect(address: string, name: string): void;
     scan(address: string, name: string): void;
+    scanProfile(address: string, name: string, profile: string): void;
     tpmsScan(address: string, name: string): void;
     detailProbe(address: string, name: string, stage: string): void;
     exportDetailedSignalLog(id: string): string;

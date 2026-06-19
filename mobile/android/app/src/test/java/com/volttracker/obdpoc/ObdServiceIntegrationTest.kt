@@ -23,6 +23,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -98,6 +100,22 @@ class ObdServiceIntegrationTest {
         assertEquals("SCAN opens a 'scan'-mode session", ObdLocalStore.MODE_SCAN, service.recorder.activeMode())
         assertEquals("Scanner", service.activeName)
         assertTrue("SCAN marks the session running", service.running.get())
+    }
+
+    @Test
+    fun scanActionPassesRequestedProfileToPollingEngine() {
+        val service =
+            dispatch(
+                ObdService.ACTION_SCAN,
+                address = "AA:BB:CC:DD:EE:FF",
+                name = "Battery scanner",
+                scanProfile = "battery",
+            )
+
+        assertTrue("SCAN should dispatch to the polling engine", service.awaitEngineDispatch())
+        assertEquals("AA:BB:CC:DD:EE:FF", service.lastEngineAddress)
+        assertTrue("SCAN must set scanMode on the engine", service.lastEngineScanMode)
+        assertEquals(DiagnosticScanProfile.BATTERY, service.lastEngineScanProfile)
     }
 
     @Test
@@ -318,8 +336,9 @@ class ObdServiceIntegrationTest {
         address: String?,
         name: String?,
         detailStage: String? = null,
+        scanProfile: String? = null,
     ): TestObdService {
-        val controller = newController(intentFor(action, address, name, detailStage))
+        val controller = newController(intentFor(action, address, name, detailStage, scanProfile))
         controller.create().startCommand(0, 1)
         return controller.get()
     }
@@ -340,12 +359,14 @@ class ObdServiceIntegrationTest {
         address: String?,
         name: String?,
         detailStage: String?,
+        scanProfile: String? = null,
     ): Intent {
         val intent = Intent(RuntimeEnvironment.getApplication(), TestObdService::class.java)
         intent.action = action
         if (address != null) intent.putExtra(ObdService.EXTRA_ADDRESS, address)
         if (name != null) intent.putExtra(ObdService.EXTRA_NAME, name)
         if (detailStage != null) intent.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
+        if (scanProfile != null) intent.putExtra(ObdService.EXTRA_SCAN_PROFILE, scanProfile)
         return intent
     }
 
@@ -389,7 +410,46 @@ class ObdServiceIntegrationTest {
      * or notification changes that could race the synchronous orchestration under test.
      */
     open class TestObdService : ObdService() {
-        override fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(NeutralizedHost(this))
+        private val engineDispatchLatch = CountDownLatch(1)
+
+        @Volatile var lastEngineAddress: String? = null
+
+        @Volatile var lastEngineScanMode = false
+
+        @Volatile var lastEngineClearDtcMode = false
+
+        @Volatile var lastEngineScanProfile: DiagnosticScanProfile? = null
+
+        override fun createPollingEngine(): ObdPollingEngine = RecordingPollingEngine(NeutralizedHost(this), this)
+
+        fun recordEngineDispatch(
+            address: String?,
+            scanMode: Boolean,
+            clearDtcMode: Boolean,
+            scanProfile: DiagnosticScanProfile,
+        ) {
+            lastEngineAddress = address
+            lastEngineScanMode = scanMode
+            lastEngineClearDtcMode = clearDtcMode
+            lastEngineScanProfile = scanProfile
+            engineDispatchLatch.countDown()
+        }
+
+        fun awaitEngineDispatch(): Boolean = engineDispatchLatch.await(1, TimeUnit.SECONDS)
+    }
+
+    private class RecordingPollingEngine(
+        host: EngineHost,
+        private val service: TestObdService,
+    ) : ObdPollingEngine(host) {
+        override fun runBluetoothLoop(
+            address: String?,
+            scanMode: Boolean,
+            clearDtcMode: Boolean,
+            scanProfile: DiagnosticScanProfile,
+        ) {
+            service.recordEngineDispatch(address, scanMode, clearDtcMode, scanProfile)
+        }
     }
 
     /**

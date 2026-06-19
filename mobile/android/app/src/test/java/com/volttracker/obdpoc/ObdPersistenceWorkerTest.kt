@@ -112,6 +112,44 @@ class ObdPersistenceWorkerTest {
                 1L,
                 worker.drainFailedTelemetryCount(),
             )
+            assertEquals(
+                "draining the failure counter must reset it",
+                0L,
+                worker.failedTelemetryCount(),
+            )
+        } finally {
+            worker.shutdown()
+        }
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun countSnapshotsAreNonDrainingUntilExplicitDrain() {
+        val worker = ObdPersistenceWorker(newStore())
+        try {
+            worker.submitTelemetry { throw RuntimeException("boom") }
+            worker.awaitTelemetryDrain()
+
+            assertEquals(
+                "snapshot reads must not clear the failure count",
+                1L,
+                worker.failedTelemetryCount(),
+            )
+            assertEquals(
+                "a second snapshot read must see the same failure count",
+                1L,
+                worker.failedTelemetryCount(),
+            )
+            assertEquals(
+                "the explicit drain accessor still owns reset semantics",
+                1L,
+                worker.drainFailedTelemetryCount(),
+            )
+            assertEquals(
+                "the failure count must be reset after drain",
+                0L,
+                worker.failedTelemetryCount(),
+            )
         } finally {
             worker.shutdown()
         }

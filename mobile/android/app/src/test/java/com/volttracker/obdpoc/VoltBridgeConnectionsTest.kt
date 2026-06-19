@@ -76,6 +76,17 @@ class VoltBridgeConnectionsTest {
     }
 
     @Test
+    fun scanProfileStartsScanServiceWithNormalizedProfile() {
+        connections.scanProfile(VALID_ADDRESS, "ELM327", " quick-dtc ")
+        drain()
+
+        assertEquals(ObdService.ACTION_SCAN, activity.lastServiceAction)
+        assertEquals(VALID_ADDRESS, activity.lastServiceAddress)
+        assertEquals("ELM327", activity.lastServiceName)
+        assertEquals("quick_dtc", activity.lastServiceStage)
+    }
+
+    @Test
     fun connectRemembersTheAdapterButBlocksWhenAddressIsInvalid() {
         connections.connect("not-a-mac", "Bogus")
         drain()

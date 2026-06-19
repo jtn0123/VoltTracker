@@ -54,7 +54,7 @@ SQLite database, so it **is included in encrypted backups** and travels with
 them. Keep this in mind if you would not expect logged service history to persist
 after clearing data or to leave the device inside a shared backup file.
 
-### Per-trip GPX / CSV exports contain full-precision location
+### GPX / CSV exports can contain plaintext route and charge history
 
 The per-trip **GPX** and **CSV** exports (the "export this drive" action on a
 logged trip) are **unredacted by design**: they contain **full-precision GPS
@@ -65,11 +65,16 @@ decimal precision and per-point UTC times are included. This is **unlike the
 in-app VIN** (shown only redacted) and **unlike the diagnostics share zip**
 (where coordinates are scrubbed from the log tails).
 
-These exports are only produced when **you initiate the export** for a specific
-drive, and they leave the device only through the **Android share sheet** (the OS
-chooser), to whatever app or destination you pick. Share a trip export only with
-people, apps, or storage providers you trust, the same way you would treat a
-plaintext backup.
+The bulk **all-trips CSV** export has the same plaintext route property, but for
+multiple logged drives in one file. The **charge-history CSV** export does not
+include GPS coordinates, but it does include charge timestamps, SOC, energy, peak
+power, charger type, and optional estimated cost. These files are also plaintext
+and can reveal routines, charging habits, and vehicle-use patterns.
+
+These exports are only produced when **you initiate the export**, and they leave
+the device only through the **Android share sheet** (the OS chooser), to whatever
+app or destination you pick. Share GPX/CSV exports only with people, apps, or
+storage providers you trust, the same way you would treat a plaintext backup.
 
 ## Network Use
 

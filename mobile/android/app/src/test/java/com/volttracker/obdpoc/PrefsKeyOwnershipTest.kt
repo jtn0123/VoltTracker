@@ -60,6 +60,11 @@ class PrefsKeyOwnershipTest {
         val otherKeys =
             listOf(
                 AutoConnectController.PREF_AUTO_CONNECT_ENABLED,
+                StartupMaintenanceScheduler.PREF_LAST_ATTEMPT_MS,
+                StartupMaintenanceScheduler.PREF_LAST_RUN_MS,
+                StartupMaintenanceScheduler.PREF_LAST_DURATION_MS,
+                StartupMaintenanceScheduler.PREF_LAST_PRUNED_ROWS,
+                StartupMaintenanceScheduler.PREF_LAST_OUTCOME,
                 "raw_retention_days",
             )
 

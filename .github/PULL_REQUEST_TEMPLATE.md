@@ -12,6 +12,8 @@
 - [ ] Android Lint — `./gradlew :app:lintDebug`
 - [ ] Dashboard tests — `npm --prefix dashboard-tests run lint && npm --prefix dashboard-tests run typecheck && npm --prefix dashboard-tests test`
 - [ ] Dashboard e2e — `npx playwright test` in `mobile/android/dashboard-e2e/`
+- [ ] Performance baseline updated or explicitly not affected
+- [ ] Privacy scan considered — no real VIN, GPS route, or private device endpoint data
 - [ ] Not applicable (docs/CI-only change)
 
 ## Notes for reviewers

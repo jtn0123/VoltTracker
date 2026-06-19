@@ -39,14 +39,16 @@ release APK.
 ## Update And Audit Commands
 
 ```sh
-./gradlew dependencyUpdates -Drevision=release
+bash tools/dependency-updates-local.sh
 npm --prefix dashboard-tests audit --audit-level=high
 npm --prefix dashboard-e2e audit --audit-level=high
 ```
 
 The weekly `Dependency snapshot` workflow runs a fuller advisory snapshot with
 `npm audit --audit-level=low` for both npm workspaces and uploads the Gradle
-dependency report as an artifact.
+dependency report as an artifact. The wrapper pins the Gradle Versions plugin
+to `--no-configuration-cache --no-parallel`, which is the supported mode for the
+current plugin path.
 
 ## Review Rules
 
@@ -60,6 +62,9 @@ dependency report as an artifact.
 - For major npm or Gradle plugin upgrades, run the relevant lint/typecheck/test
   lane plus `verifyPerformance` when the dashboard bundle or build output can
   change.
+- Current minor drift from the 2026-06-18 audit: Spotless was updated to 8.7.0;
+  Kotlin stdlib drift is plugin-transitive only because AGP owns Kotlin
+  compilation here.
 
 ## Gradle 10 Deprecation Tracking
 
@@ -74,3 +79,13 @@ VOLTTRACKER_ALLOW_UNSUPPORTED_NODE=1 ./gradlew --no-daemon --warning-mode all ve
 `app/build.gradle:9`. Treat this as Detekt plugin/tooling debt and re-check when
 upgrading Detekt. The older `dependencyUpdates` warning remains isolated to the
 Gradle Versions plugin path documented in `dependency-report-2026-05-26.md`.
+
+## Configuration Cache Compatibility
+
+| Command | Cache mode | Why |
+|---|---|---|
+| `./gradlew verifyFast --configuration-cache` | compatible | Inner-loop Kotlin/dashboard checks declare stable inputs. |
+| `./gradlew verifyPerformance --configuration-cache` | compatible | Bundle budgets, dashboard tests, script self-tests, and JVM tests are cache-safe. |
+| `./gradlew verifyActiveApp --configuration-cache` | mostly compatible | Full local PR gate; Playwright and Android packaging still dominate wall-clock. |
+| `./gradlew verifyStartupPerformance --no-configuration-cache` | no cache | Connected-device Macrobenchmark launches/install flows should stay explicit. |
+| `bash tools/dependency-updates-local.sh` | no cache/no parallel | Gradle Versions plugin currently requires this mode for reliable snapshots. |

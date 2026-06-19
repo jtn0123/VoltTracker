@@ -73,6 +73,7 @@ describe('actions.ts — bridge dispatch', () => {
       connect: vi.fn(),
       connectLast: vi.fn(),
       scan: vi.fn(),
+      scanProfile: vi.fn(),
       tpmsScan: vi.fn(),
       detailProbe: vi.fn(),
       exportDetailedSignalLog: vi.fn(() => '{"ok":true,"item":{"id":5}}'),
@@ -156,12 +157,26 @@ describe('actions.ts — bridge dispatch', () => {
     VD.actions.connectSelected(true, button);
     expect(bridge.scan).toHaveBeenCalledTimes(1);
     expect(bridge.scan).toHaveBeenCalledWith(device.address, device.name);
+    expect(bridge.scanProfile).not.toHaveBeenCalled();
     expect(bridge.connect).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({
       state: 'scanning',
       detail: `Starting scan with ${device.name}...`,
     });
     expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
+  });
+
+  it('quickScanSelected() routes to bridge.scanProfile with the quick DTC profile', () => {
+    const device = seedSelectedDevice(VD);
+    VD.actions.quickScanSelected(button);
+    expect(bridge.scanProfile).toHaveBeenCalledTimes(1);
+    expect(bridge.scanProfile).toHaveBeenCalledWith(device.address, device.name, 'quick_dtc');
+    expect(bridge.scan).not.toHaveBeenCalled();
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({
+      state: 'scanning',
+      detail: `Starting quick code scan with ${device.name}...`,
+    });
   });
 
   it('tpmsScanSelected() routes to staged bridge.detailProbe with the selected adapter', () => {

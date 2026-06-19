@@ -118,6 +118,14 @@ A backup file is a plaintext header followed by the GCM ciphertext+tag:
   a weak passphrase is still brute-forceable offline. The in-app guidance steers
   the user toward a strong passphrase, and 600k iterations sets the per-guess
   cost, but this is the inherent limit of passphrase-based backup encryption.
+- **Residual in-app passphrase handling risk is accepted for now.** The native
+  crypto layer clears the `PBEKeySpec` password after derivation, but the
+  passphrase begins in dashboard JavaScript and crosses the WebView bridge as an
+  immutable string. That string cannot be reliably scrubbed from JS/WebView heap
+  memory. The current threat model accepts this because the app is local,
+  navigation-guarded, and protects exported backup files rather than an already
+  compromised unlocked device. A future hardening pass can replace the JS prompt
+  with a native password dialog so the passphrase never enters dashboard memory.
 - **No key escrow / recovery.** A forgotten passphrase means an unrecoverable
   backup, by design — there is no server and no recovery key.
 - **GCM's IV-uniqueness requirement is a standing invariant** enforced by the
