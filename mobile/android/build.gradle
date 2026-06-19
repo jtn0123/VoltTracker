@@ -20,6 +20,8 @@ tasks.named("dependencyUpdates").configure {
 def dashboardTestsDir = file("dashboard-tests")
 def dashboardE2eDir = file("dashboard-e2e")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
+// Repo root (this Gradle project lives at mobile/android/, so up two levels).
+def repoRootDir = rootProject.projectDir.parentFile.parentFile
 def requiredNodeMajor = 22
 def unsupportedNodeOverrideEnv = "VOLTTRACKER_ALLOW_UNSUPPORTED_NODE"
 def productionJavaStragglers = fileTree("app/src/main/java") {
@@ -405,6 +407,45 @@ tasks.register("verifyNoMigrationSourceStragglers") {
     }
 }
 
+tasks.register("privacyScan", Exec) {
+    description = "Fails when tracked files contain unallowlisted VIN, GPS route, or private device endpoint data."
+    workingDir = repoRootDir
+    commandLine "python3", "mobile/android/tools/privacy-scan.py"
+    inputs.files(fileTree(repoRootDir) {
+        include "README.md"
+        include "SECURITY.md"
+        include "CONTRIBUTING.md"
+        include "docs/**"
+        include ".github/**"
+        include "mobile/android/**"
+        exclude "**/build/**"
+        exclude "**/node_modules/**"
+        exclude "mobile/android/dashboard-tests/coverage/**"
+    })
+    inputs.file(file("tools/privacy-scan.py"))
+    inputs.file(file("tools/privacy-scan-allowlist.txt"))
+}
+
+tasks.register("verifyPrivacyScanSelfTest", Exec) {
+    description = "Runs the privacy scanner parser self-test."
+    workingDir = repoRootDir
+    commandLine "python3", "mobile/android/tools/privacy-scan.py", "--self-test"
+    inputs.file(file("tools/privacy-scan.py"))
+    inputs.file(file("tools/privacy-scan-allowlist.txt"))
+}
+
+tasks.register("verifyPerfReportIndexSelfTest", Exec) {
+    description = "Runs the performance report index parser self-test."
+    workingDir = rootProject.projectDir
+    commandLine "python3", "tools/perf/report_index.py", "--self-test"
+    inputs.dir(file("tools/perf"))
+}
+
+tasks.register("verifyPerformanceTooling") {
+    description = "Runs self-tests for local performance/privacy helper scripts."
+    dependsOn("verifyPrivacyScanSelfTest", "verifyPerfReportIndexSelfTest")
+}
+
 tasks.register("verifyActiveApp") {
     description = "Runs the full local validation suite for the active Android app."
     dependsOn(
@@ -419,6 +460,8 @@ tasks.register("verifyActiveApp") {
             "dashboardTest",
             "dashboardE2e",
             "verifyDashboardBundleSize",
+            "privacyScan",
+            "verifyPerformanceTooling",
             "verifyNoMigrationSourceStragglers",
             "verifyGeneratedDashboardClean")
 }
@@ -461,7 +504,9 @@ tasks.register("verifyFast") {
             ":app:testDebugUnitTest",
             "dashboardLint",
             "dashboardTypecheck",
-            "dashboardTest")
+            "dashboardTest",
+            "privacyScan",
+            "verifyPerformanceTooling")
 }
 
 tasks.register("verifyPerformance") {
@@ -470,6 +515,7 @@ tasks.register("verifyPerformance") {
             "dashboardAssetReport",
             "verifyDashboardBundleSize",
             "dashboardTest",
+            "verifyPerformanceTooling",
             ":app:testDebugUnitTest")
 }
 

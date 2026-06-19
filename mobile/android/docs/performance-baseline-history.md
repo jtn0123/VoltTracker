@@ -6,7 +6,7 @@ reports and JSONL trend files are local build artifacts under
 
 ## 2026-06-17: Local Device Startup And Tab Baseline
 
-Device serial: `10.27.27.190:34507`
+Device serial: `wireless-adb-device`
 
 Package: `com.volttracker.obdpoc`
 
@@ -82,8 +82,13 @@ regression signals.
 
 - Run `tools/benchmark-real-db-local.sh` against the 500 MB / 1 million line
   database.
-- Add first-useful-OBD-sample timing from connect tap to decoded sample publish.
-- Add scan-stage timing for discovery, command latency, persistence, and
+- Run `tools/generate-synthetic-db-local.sh build/reports/local/synthetic-1m.db`
+  and benchmark that fixture when private database access is not available.
+- Capture first-useful-OBD-sample timing from connect request to decoded sample
+  publish using the `obd_*` `VoltStartup` marks.
+- Capture per-tab data request/received/rendered timings alongside tab paint for
+  Map, Charge, Insights, Diagnostics, and Settings.
+- Capture scan-stage timing for discovery, command latency, persistence, and
   dashboard publish.
 - Establish pass/fail SLOs after a few more clean baselines show normal local
   device variance.
