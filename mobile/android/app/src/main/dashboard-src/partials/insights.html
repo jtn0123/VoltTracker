@@ -250,18 +250,46 @@
     <article class="panel eff-scatter-card" id="effScatterCard" hidden>
       <header>
         <div>
-          <span class="kicker">Efficiency vs speed - all drives</span>
+          <span class="kicker">Efficiency vs speed · grade-normalized</span>
           <h3 id="effScatterHead">
             Pooling samples across every logged drive.
           </h3>
         </div>
       </header>
-      <div class="eff-scatter" id="effScatter"></div>
-      <div class="eff-scatter-legend">
-        <span><i data-grade="downhill"></i>↘ downhill</span>
-        <span><i data-grade="flat"></i>→ flat</span>
-        <span><i data-grade="uphill"></i>↗ uphill</span>
+      <!-- View switcher: persisted per-user (prefs key effChartView). Bars and
+           Curve aggregate per 10-mph bucket; Scatter keeps per-sample dots. -->
+      <div
+        class="eff-view-switch"
+        id="effViewSwitch"
+        role="tablist"
+        aria-label="Efficiency chart style"
+      >
+        <button
+          type="button"
+          class="eff-view-btn"
+          data-eff-view="bars"
+          role="tab"
+        >
+          Bars
+        </button>
+        <button
+          type="button"
+          class="eff-view-btn"
+          data-eff-view="scatter"
+          role="tab"
+        >
+          Scatter
+        </button>
+        <button
+          type="button"
+          class="eff-view-btn"
+          data-eff-view="curve"
+          role="tab"
+        >
+          Curve
+        </button>
       </div>
+      <div class="eff-scatter" id="effScatter"></div>
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
 

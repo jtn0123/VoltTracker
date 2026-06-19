@@ -328,6 +328,252 @@ import { prefs, units } from "./prefs";
     }
   }
 
+  // Wh/mi removed per unit of road grade when grade-normalizing efficiency:
+  // gravitational energy over one mile (m·g·1609 J), converted to Wh (/3600) and
+  // scaled by a ~0.7 regen/drivetrain round-trip factor. Volt curb mass ≈ 1715 kg
+  // → 1715·9.81·1609/3600·0.7 ≈ 5200. Subtracting grade·this from observed Wh/mi
+  // recovers a flat-equivalent figure so a fast descent stops faking a high-speed
+  // efficiency peak.
+  const GRADE_WHMI_PER_UNIT = 5200;
+
+  // User-selectable chart styles for the efficiency-vs-speed card (persisted via
+  // prefs so the choice sticks across launches). "scatter" stays the default so
+  // the existing per-sample view is unchanged for anyone who never toggles.
+  const EFF_CHART_VIEWS = ["bars", "scatter", "curve"] as const;
+  type EffChartView = (typeof EFF_CHART_VIEWS)[number];
+  type EffBucket = { mid: number; n: number; med: number; q1: number; q3: number };
+  type EffPoint = { mph: number; eff: number; effFlat: number; grade: number };
+
+  function scatterView(): EffChartView {
+    const v = prefs.get<string>("effChartView", "scatter");
+    return (EFF_CHART_VIEWS as readonly string[]).includes(v) ? (v as EffChartView) : "scatter";
+  }
+
+  function quantileJs(values: number[], q: number): number {
+    const a = values.slice().sort((x, y) => x - y);
+    if (!a.length) return 0;
+    const pos = (a.length - 1) * q;
+    const lo = Math.floor(pos);
+    const hi = Math.ceil(pos);
+    return a[lo] + (a[hi] - a[lo]) * (pos - lo);
+  }
+
+  // Smooth a median series with a 3-point moving average so the curve view reads
+  // as a trend rather than a zig-zag of noisy buckets.
+  function smooth3(vals: number[]): number[] {
+    return vals.map((v, i) => {
+      const a = vals[Math.max(0, i - 1)];
+      const c = vals[Math.min(vals.length - 1, i + 1)];
+      return (a + v + c) / 3;
+    });
+  }
+
+  const EFF_SVGNS = "http://www.w3.org/2000/svg";
+  function effNode(tag: string, attrs: Record<string, string | number>) {
+    return setSvgAttrs(document.createElementNS(EFF_SVGNS, tag), attrs);
+  }
+
+  // Per-sample dots (grade-normalized, single accent). Kept for the "scatter"
+  // view; the grade is folded into effFlat so the third color dimension is gone.
+  function renderScatterDots(
+    svg: SVGElement,
+    pool: EffPoint[],
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    color: string
+  ) {
+    pool.forEach((p) => {
+      svg.append(
+        effNode("circle", {
+          cx: xOf(p.mph).toFixed(1),
+          cy: yS(p.effFlat).toFixed(1),
+          r: 2.8,
+          fill: color,
+          "fill-opacity": 0.32
+        })
+      );
+    });
+  }
+
+  function bucketTrendPath(
+    buckets: EffBucket[],
+    series: number[],
+    xOf: (mph: number) => number,
+    yS: (e: number) => number
+  ): string {
+    let d = "";
+    buckets.forEach((b, i) => {
+      d += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(series[i]).toFixed(1)} `;
+    });
+    return d;
+  }
+
+  function appendTrendLine(
+    svg: SVGElement,
+    buckets: EffBucket[],
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    color: string
+  ) {
+    if (buckets.length < 2) return;
+    svg.append(
+      effNode("path", {
+        d: bucketTrendPath(buckets, buckets.map((b) => b.med), xOf, yS),
+        fill: "none",
+        stroke: color,
+        "stroke-width": 2.5,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round"
+      })
+    );
+  }
+
+  // An interquartile band (q1..q3 across buckets) drawn as a filled ribbon. CSS
+  // vars / color-mix don't resolve inside SVG presentation attributes, so callers
+  // pass a resolved literal color plus a separate fill-opacity.
+  function appendIqrBand(
+    svg: SVGElement,
+    buckets: EffBucket[],
+    q1s: number[],
+    q3s: number[],
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    fill: string,
+    opacity: number
+  ) {
+    if (buckets.length < 2) return;
+    let top = "";
+    buckets.forEach((b, i) => {
+      top += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(q3s[i]).toFixed(1)} `;
+    });
+    let bot = "";
+    for (let i = buckets.length - 1; i >= 0; i -= 1) {
+      bot += `L${xOf(buckets[i].mid).toFixed(1)} ${yS(q1s[i]).toFixed(1)} `;
+    }
+    svg.append(effNode("path", { d: `${top}${bot}Z`, fill, "fill-opacity": opacity, stroke: "none" }));
+  }
+
+  function appendPeakMarker(
+    svg: SVGElement,
+    peak: EffBucket,
+    yVal: number,
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    color: string,
+    bg: string,
+    label: string
+  ) {
+    svg.append(
+      effNode("circle", {
+        cx: xOf(peak.mid).toFixed(1),
+        cy: yS(yVal).toFixed(1),
+        r: 4,
+        fill: color,
+        stroke: bg,
+        "stroke-width": 1.5
+      })
+    );
+    if (label) {
+      const node = effNode("text", {
+        x: xOf(peak.mid).toFixed(1),
+        y: (yS(yVal) - 8).toFixed(1),
+        fill: color,
+        "font-size": 10,
+        "font-weight": 700,
+        "text-anchor": "middle",
+        "font-family": "system-ui,sans-serif"
+      });
+      node.textContent = label;
+      svg.append(node);
+    }
+  }
+
+  // Bars view: one bar per 10-mph bucket at its median efficiency, an IQR whisker
+  // for spread, and the buckets within 5% of the best highlighted as the sweet
+  // spot.
+  function renderBuckets(
+    svg: SVGElement,
+    buckets: EffBucket[],
+    peak: EffBucket | undefined,
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    padT: number,
+    colors: { accent: string; idleBar: string; idleWhisker: string; bg: string }
+  ) {
+    if (!peak) return;
+    const thresh = peak.med * 0.95;
+    const y0 = yS(0);
+    const fullW = xOf(15) - xOf(5);
+    const bw = fullW * 0.58;
+    buckets.forEach((b) => {
+      const cx = xOf(b.mid);
+      const sweet = b.med >= thresh;
+      if (sweet) {
+        svg.append(
+          effNode("rect", {
+            x: (cx - fullW / 2).toFixed(1),
+            y: padT,
+            width: fullW.toFixed(1),
+            height: (y0 - padT).toFixed(1),
+            fill: colors.accent,
+            "fill-opacity": 0.08
+          })
+        );
+      }
+      svg.append(
+        effNode("rect", {
+          x: (cx - bw / 2).toFixed(1),
+          y: yS(b.med).toFixed(1),
+          width: bw.toFixed(1),
+          height: Math.max(0, y0 - yS(b.med)).toFixed(1),
+          rx: 3,
+          fill: sweet ? colors.accent : colors.idleBar
+        })
+      );
+      svg.append(
+        effNode("line", {
+          x1: cx.toFixed(1),
+          y1: yS(b.q1).toFixed(1),
+          x2: cx.toFixed(1),
+          y2: yS(b.q3).toFixed(1),
+          stroke: sweet ? colors.accent : colors.idleWhisker,
+          "stroke-width": 2
+        })
+      );
+    });
+    appendPeakMarker(svg, peak, peak.med, xOf, yS, colors.accent, colors.bg, "");
+  }
+
+  // Curve view: a smoothed median curve over a confidence band, with no per-sample
+  // dots — the most glanceable style.
+  function renderCurve(
+    svg: SVGElement,
+    buckets: EffBucket[],
+    peak: EffBucket | undefined,
+    xOf: (mph: number) => number,
+    yS: (e: number) => number,
+    accent: string,
+    bg: string
+  ) {
+    if (buckets.length < 2 || !peak) return;
+    const meds = smooth3(buckets.map((b) => b.med));
+    const q1s = smooth3(buckets.map((b) => b.q1));
+    const q3s = smooth3(buckets.map((b) => b.q3));
+    appendIqrBand(svg, buckets, q1s, q3s, xOf, yS, accent, 0.14);
+    svg.append(
+      effNode("path", {
+        d: bucketTrendPath(buckets, meds, xOf, yS),
+        fill: "none",
+        stroke: accent,
+        "stroke-width": 3,
+        "stroke-linejoin": "round",
+        "stroke-linecap": "round"
+      })
+    );
+    const peakIdx = buckets.findIndex((b) => b.mid === peak.mid);
+    appendPeakMarker(svg, peak, peakIdx >= 0 ? meds[peakIdx] : peak.med, xOf, yS, accent, bg, "");
+  }
+
   function renderInsightScatter() {
     const card = el("effScatterCard");
     const chart = el("effScatter");
@@ -338,7 +584,7 @@ import { prefs, units } from "./prefs";
       state.storage && Array.isArray(state.storage.recentRoutes)
         ? state.storage.recentRoutes
         : [];
-    const pool: Array<{ mph: number; eff: number; grade: number }> = [];
+    const pool: EffPoint[] = [];
     routes.forEach((route) => {
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
@@ -372,7 +618,14 @@ import { prefs, units } from "./prefs";
             Math.min(0.13, (Number(pts[i].altM) - Number(pts[i - 1].altM)) / horiz)
           );
         }
-        pool.push({ mph, eff, grade });
+        // Grade-normalize: remove the gravity term from the observed Wh/mi so the
+        // plotted value is a flat-equivalent efficiency. enrichRouteEff clamps eff
+        // to [0.8, 6.5]; keep the flat value in [0.8, 7] (Wh/mi floored so a steep
+        // descent can't divide to an absurd number).
+        const whmi = 1000 / eff;
+        const flatWhmi = Math.max(143, whmi - GRADE_WHMI_PER_UNIT * grade);
+        const effFlat = Math.max(0.8, Math.min(7, 1000 / flatWhmi));
+        pool.push({ mph, eff, effFlat, grade });
       }
     });
     if (pool.length < 6) {
@@ -403,9 +656,8 @@ import { prefs, units } from "./prefs";
     const lineColor = token("--line", "rgba(255,255,255,0.1)"); // gridlines
     const axisColor = token("--muted", "#aaaab4"); // axis tick labels
     const trendColor = token("--volt", "#ff7a45"); // best-fit trend path
-    const evColor = token("--ev", "#b8e63b"); // flat-grade dots + headline
-    const downColor = token("--map-accent", "#4cc4ff"); // downhill (negative grade)
-    const upColor = token("--bad", "#ff6b5f"); // uphill (positive grade)
+    const evColor = token("--ev", "#b8e63b"); // bars/curve accent + headline
+    const dotColor = token("--map-accent", "#4cc4ff"); // grade-normalized scatter dots
     const w = Math.max(300, chart.clientWidth || 360);
     const h = 280;
     const padL = 38;
@@ -421,11 +673,9 @@ import { prefs, units } from "./prefs";
     // Y-axis grows to the data (kept in [5,7]) instead of a fixed 0–7, so the
     // plot no longer leaves a dead empty band above the points now that the
     // saturated 6.5 pile is excluded.
-    const maxEff = pool.reduce((m, p) => Math.max(m, p.eff), 0);
+    const maxEff = pool.reduce((m, p) => Math.max(m, p.effFlat), 0);
     const yMax = Math.min(7, Math.max(5, Math.ceil(maxEff)));
     const yS = (e: number) => padT + (1 - e / yMax) * (h - padT - padB);
-    const gColor = (g: number) =>
-      g <= -0.006 ? downColor : g >= 0.006 ? upColor : evColor;
     const svgNs = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNs, "svg");
     svg.setAttribute("width", String(w));
@@ -474,40 +724,51 @@ import { prefs, units } from "./prefs";
         "text-anchor": "end"
       });
     }
-    const bins: number[][] = [];
+    // Aggregate the grade-normalized samples into 10-mph buckets; median + IQR per
+    // bucket drive every view and the headline, so a few noisy samples can't swing
+    // the story the way a per-bin mean did. Buckets with <3 samples are dropped.
+    const grouped: Record<number, number[]> = {};
     pool.forEach((p) => {
-      svg.append(
-        setSvgAttrs(document.createElementNS(svgNs, "circle"), {
-          cx: xOf(p.mph).toFixed(1),
-          cy: yS(p.eff).toFixed(1),
-          r: 3.2,
-          fill: gColor(p.grade),
-          "fill-opacity": 0.5
-        })
-      );
       const b = Math.floor(p.mph / 10);
-      (bins[b] = bins[b] || []).push(p.eff);
+      (grouped[b] = grouped[b] || []).push(p.effFlat);
     });
-    let trend = "";
-    let best = { e: 0, mph: 0 };
-    let started = false;
-    bins.forEach((arr, b) => {
-      if (!arr || arr.length < 3) return;
-      const mph = b * 10 + 5;
-      const e = arr.reduce((s, x) => s + x, 0) / arr.length;
-      trend += `${started ? "L" : "M"}${xOf(mph).toFixed(1)} ${yS(e).toFixed(1)} `;
-      started = true;
-      if (e > best.e) best = { e: e, mph: mph };
-    });
-    svg.append(
-      setSvgAttrs(document.createElementNS(svgNs, "path"), {
-        d: trend,
-        fill: "none",
-        stroke: trendColor,
-        "stroke-width": 2.5,
-        "stroke-linejoin": "round"
+    const buckets: EffBucket[] = Object.keys(grouped)
+      .map((k) => {
+        const arr = grouped[Number(k)];
+        return {
+          mid: Number(k) * 10 + 5,
+          n: arr.length,
+          med: quantileJs(arr, 0.5),
+          q1: quantileJs(arr, 0.25),
+          q3: quantileJs(arr, 0.75)
+        };
       })
+      .filter((b) => b.n >= 3)
+      .sort((a, b) => a.mid - b.mid);
+    const peak = buckets.reduce<EffBucket | undefined>(
+      (m, b) => (m && m.med >= b.med ? m : b),
+      undefined
     );
+    // SVG presentation attributes can't read CSS vars, so resolve the extra
+    // chrome tokens to literals here and pass them down.
+    const idleBar = token("--fill-bold", "rgba(255,255,255,0.16)");
+    const idleWhisker = token("--line-strong", "rgba(255,255,255,0.28)");
+    const bgColor = token("--bg", "#07080c");
+    const view = scatterView();
+    if (view === "bars") {
+      renderBuckets(svg, buckets, peak, xOf, yS, padT, {
+        accent: evColor,
+        idleBar,
+        idleWhisker,
+        bg: bgColor
+      });
+    } else if (view === "curve") {
+      renderCurve(svg, buckets, peak, xOf, yS, evColor, bgColor);
+    } else {
+      renderScatterDots(svg, pool, xOf, yS, dotColor);
+      appendTrendLine(svg, buckets, xOf, yS, trendColor);
+    }
+    const best = peak ? { e: peak.med, mph: peak.mid } : { e: 0, mph: 0 };
     appendText(`speed (${speedUnitLabel}) ->`, {
       x: w - padR,
       y: h - 4,
@@ -530,8 +791,8 @@ import { prefs, units } from "./prefs";
     svg.setAttribute(
       "aria-label",
       best.e > 0
-        ? `Efficiency versus speed scatter; most efficient around ${units.speedText(best.mph * KM_PER_MILE)}`
-        : "Efficiency versus speed scatter across logged drives"
+        ? `Efficiency versus speed chart; most efficient around ${units.speedText(best.mph * KM_PER_MILE)}`
+        : "Efficiency versus speed chart across logged drives"
     );
     chart.replaceChildren(svg);
     if (head) {
@@ -550,16 +811,18 @@ import { prefs, units } from "./prefs";
       }
     }
     if (statsEl) {
-      const hwy = pool.filter((p) => p.mph > 55).map((p) => p.eff);
-      const down = pool.filter((p) => p.grade <= -0.012).map((p) => p.eff);
-      // Pool eff is always mi/kWh (see enrichRouteEff); efficiencyText does the
-      // single metric conversion, matching the headline above.
+      // Grade-normalized averages (effFlat). "Drives" counts logged routes — far
+      // more honest than the old per-sample "Samples", where one long trip dumped
+      // hundreds of correlated points. Downhill avg is gone: grade is normalized
+      // out, so a city/highway split is what's left to compare.
+      const city = pool.filter((p) => p.mph < 35).map((p) => p.effFlat);
+      const hwy = pool.filter((p) => p.mph > 55).map((p) => p.effFlat);
       const avgText = (a: number[]) =>
         a.length ? units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
       statsEl.replaceChildren(
-        insightStat("Samples", String(pool.length)),
-        insightStat("Highway avg", avgText(hwy)),
-        insightStat("Downhill avg", avgText(down))
+        insightStat("Drives", String(routes.length)),
+        insightStat("City avg", avgText(city)),
+        insightStat("Highway avg", avgText(hwy))
       );
     }
   }
@@ -584,6 +847,34 @@ import { prefs, units } from "./prefs";
       if (card && !card.hidden) renderInsightScatter();
     }, 160);
   });
+
+  // Efficiency-chart view switcher (Bars / Scatter / Curve). The choice persists
+  // via prefs and re-renders the card in place. Bound once; the segmented control
+  // lives inside the (initially hidden) card, so the buttons exist at load.
+  function syncEffViewButtons() {
+    const active = scatterView();
+    document.querySelectorAll<HTMLElement>("[data-eff-view]").forEach((btn) => {
+      const on = btn.getAttribute("data-eff-view") === active;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", String(on));
+    });
+  }
+
+  (function bindEffViewSwitch() {
+    const group = el("effViewSwitch");
+    if (!group) return;
+    group.addEventListener("click", (event) => {
+      const target =
+        event.target instanceof Element ? event.target.closest("[data-eff-view]") : null;
+      if (!target) return;
+      const v = target.getAttribute("data-eff-view") || "scatter";
+      prefs.set("effChartView", v);
+      syncEffViewButtons();
+      const card = el("effScatterCard");
+      if (card && !card.hidden) renderInsightScatter();
+    });
+    syncEffViewButtons();
+  })();
 
   Object.assign(VD, {
     // loadTrips is kept purely as a data-loader: it populates state.trips (used by
