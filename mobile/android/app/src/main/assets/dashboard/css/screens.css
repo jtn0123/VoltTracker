@@ -1035,8 +1035,14 @@
     }
   }
 
-  @media (min-width: 640px) {
+  /* Scoped below the 900px rail breakpoint: at >=900 the side-rail .app override
+     (base.css) owns padding-left, and an unbounded padding-inline here would
+     collapse the rail gutter and re-introduce nav/content overlap. */
+  @media (min-width: 640px) and (max-width: 899px) {
     .app { padding-inline: 18px; }
+  }
+
+  @media (min-width: 640px) {
     .drive-signal-grid { grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr); }
     .detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .button-grid { grid-template-columns: repeat(6, 1fr); }

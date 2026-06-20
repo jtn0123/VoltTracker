@@ -29,6 +29,14 @@ test.describe('wide layout (>=900px rail mode)', () => {
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     );
     expect(overflow).toBeLessThanOrEqual(1);
+
+    // Content must clear the rail. Regression guard: a `@media (min-width:640px)`
+    // `padding-inline` rule was overriding the rail-mode left gutter at >=900px,
+    // collapsing `.app` padding-left to 18px so cards rendered under the rail.
+    const viewLeft = await page.evaluate(
+      () => document.getElementById('view-insights').getBoundingClientRect().left,
+    );
+    expect(viewLeft).toBeGreaterThanOrEqual(box.x + box.width);
   });
 
   test('insights renders two columns with the visible hero spanning full width', async ({

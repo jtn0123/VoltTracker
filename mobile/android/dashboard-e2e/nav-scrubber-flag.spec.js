@@ -10,6 +10,7 @@ const FIXED = '2026-06-15T12:00:00.000Z';
 test('map-scrubber-active never sticks on non-map views after an off-map render tick', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 390, height: 844 }); // narrow: exercise the compact-nav media path
   await openDashboard(page, { fixedTime: FIXED });
   await loadDemoScenario(page, 'power-user'); // has a GPS route -> scrubber renders on map
   await setView(page, 'map');
