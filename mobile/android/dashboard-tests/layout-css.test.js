@@ -45,7 +45,29 @@ describe('dashboard layout css', () => {
     expect(navRule).toMatch(/grid-template-columns\s*:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
     expect(navRule).toMatch(/gap\s*:\s*4px/);
     expect(navButtonRule).toMatch(/min-width\s*:\s*0/);
-    expect(appRule).toMatch(/calc\(112px \+ env\(safe-area-inset-bottom\)\)/);
+    // .app bottom padding now derives from the shared --nav-safe geometry token
+    // (which already folds in env(safe-area-inset-bottom)) plus a 12px breathing
+    // gap, instead of the old hardcoded 112px + env() literal.
+    expect(appRule).toMatch(/calc\(var\(--nav-safe\) \+ 12px\)/);
+  });
+
+  it('defines touch + nav geometry tokens', () => {
+    // Shared geometry/touch-target tokens live in base.css :root so screens.css
+    // and the partials can reference one source of truth. --nav-safe already
+    // folds env(safe-area-inset-bottom) in — consumers must never re-add env().
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    const buttonRule = baseCss.match(/(?:^|\n)\s*button\s*\{[^}]+\}/)?.[0] || '';
+    const scrubBtnRule = screensCss.match(/\.scrub-btn\s*\{[^}]+\}/)?.[0] || '';
+
+    expect(baseCss).toMatch(/--touch-min:\s*44px/);
+    expect(baseCss).toMatch(/--touch-min-dense:\s*40px/);
+    expect(baseCss).toMatch(/--nav-h:\s*68px/);
+    expect(baseCss).toMatch(/--nav-safe:\s*calc\(/);
+
+    // The standard control floor is wired through the token, not a raw 44px.
+    expect(buttonRule).toMatch(/min-height\s*:\s*var\(--touch-min\)/);
+    expect(scrubBtnRule).toMatch(/min-height\s*:\s*var\(--touch-min\)/);
   });
 
   it('keeps tab content from overflowing the viewport horizontally', () => {

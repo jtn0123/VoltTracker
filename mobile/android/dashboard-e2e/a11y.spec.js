@@ -6,6 +6,10 @@ const { test, expect } = require('@playwright/test');
 const path = require('node:path');
 const { loadDemoScenario, openDashboard, setView } = require('./harness');
 
+// axe-core is a devDependency of dashboard-e2e; the CI/local axe.min.js is
+// restored via `npm ci` (in dashboard-e2e) before this suite runs. If it's
+// missing the contrast block fails loudly at addScriptTag rather than silently
+// skipping — keep the install step wired so the path below resolves.
 const AXE = path.join(__dirname, 'node_modules', 'axe-core', 'axe.min.js');
 const TABS = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
 // WCAG 2.2 "Target Size (Minimum)" 2.5.8 (AA) = 24x24 CSS px.

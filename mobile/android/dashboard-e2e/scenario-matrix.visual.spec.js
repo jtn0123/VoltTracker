@@ -23,8 +23,11 @@ const { loadDemoScenario, openDashboard, setView } = require('./harness');
 
 const FIXED = '2026-06-15T12:00:00.000Z';
 const SCENARIOS = ['typical', 'empty', 'fault', 'power-user', 'extreme'];
-// Trips was folded into Insights/Map. Diagnostics needs new Linux baselines
-// before it can join this pixel matrix; the functional/a11y suites cover it.
+// Trips was folded into Insights/Map. Diagnostics is held out of the pixel
+// matrix until its *-diagnostics-visual-linux.png baselines (5 scenarios) are
+// generated on the Linux dashboard-visual CI runner and committed — adding it
+// here before those exist would red the required gate on a missing snapshot.
+// The #rawFrames mask below is already wired for when it joins.
 const TABS = ['drive', 'map', 'charge', 'insights', 'settings'];
 
 test.describe('visual matrix — tab × demo scenario', () => {
@@ -50,9 +53,15 @@ test.describe('visual matrix — tab × demo scenario', () => {
         const section = page.locator(`#view-${tab}`);
         await section.waitFor({ state: 'visible' });
         await expect(section).toHaveScreenshot(`${scenario}-${tab}.png`, {
-          // Non-deterministic regions: chart canvases and the whole Leaflet map
-          // (tiles render over the network and the live marker/breadcrumb move).
-          mask: [page.locator('canvas'), page.locator('.leaflet-container')],
+          // Non-deterministic regions: chart canvases, the whole Leaflet map
+          // (tiles render over the network and the live marker/breadcrumb move),
+          // and the Diagnostics raw-frame dump (#rawFrames streams live ELM327
+          // output whose ordering/timing isn't baseline-stable).
+          mask: [
+            page.locator('canvas'),
+            page.locator('.leaflet-container'),
+            page.locator('#rawFrames'),
+          ],
         });
       });
     }

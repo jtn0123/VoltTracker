@@ -84,8 +84,8 @@
   border: none;
   background: var(--fill-bold);
   color: var(--text);
-  width: 32px;
-  height: 32px;
+  width: var(--touch-min);
+  height: var(--touch-min);
   border-radius: 16px;
   font-size: 20px;
   line-height: 1;
@@ -375,7 +375,7 @@
   padding: 6px 12px;
   font-size: 12px;
   font-weight: 600;
-  min-height: 30px;
+  min-height: var(--touch-min-dense);
   cursor: pointer;
 }
 

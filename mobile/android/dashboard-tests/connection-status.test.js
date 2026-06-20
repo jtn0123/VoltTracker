@@ -210,3 +210,48 @@ describe('connection-status.ts — status popover', () => {
     expect(document.getElementById('statusPopoverDetail').textContent).toBe('Connecting to OBDLink...');
   });
 });
+
+describe('connection-status.ts — Diagnostics connection-health strip', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+  });
+
+  async function load() {
+    const bridge = createVoltBridgeFixture({ getRecentSessions: () => '[]' });
+    await loadDashboard({ bridge, extras: ['connection-status.js'] });
+    return window.VoltDashboard;
+  }
+
+  it('mirrors adapter, link state (ok tone) and last-sample freshness', async () => {
+    const VD = await load();
+    VD.setAppState({ adapter: { name: 'OBDLink MX+' }, session: { state: 'connected' } });
+    VD.state.lastSampleAt = Date.now() - 2_000;
+    window.VoltTrackerNative.setStatus({ state: 'connected', detail: 'Streaming.', bluetoothReady: true });
+
+    expect(document.getElementById('connHealthAdapter').textContent).toBe('OBDLink MX+');
+    expect(document.getElementById('connHealthState').textContent).toBe('connected');
+    expect(document.getElementById('connHealthState').dataset.tone).toBe('ok');
+    expect(document.getElementById('connHealthFresh').textContent).toBe('just now');
+  });
+
+  it('shows a bad tone and "None selected" when the link is blocked with no adapter', async () => {
+    await load();
+    window.VoltTrackerNative.setStatus({ state: 'blocked', detail: 'Bluetooth off.' });
+
+    expect(document.getElementById('connHealthAdapter').textContent).toBe('None selected');
+    expect(document.getElementById('connHealthState').dataset.tone).toBe('bad');
+    expect(document.getElementById('connHealthFresh').textContent).toBe('--');
+  });
+
+  it('labels a demo run as "Demo telemetry" with an ok tone', async () => {
+    const VD = await load();
+    VD.state.demoActive = true;
+    window.VoltTrackerNative.setStatus({ state: 'demo', detail: 'Demo preview.' });
+
+    expect(document.getElementById('connHealthAdapter').textContent).toBe('Demo telemetry');
+    expect(document.getElementById('connHealthState').dataset.tone).toBe('ok');
+  });
+});

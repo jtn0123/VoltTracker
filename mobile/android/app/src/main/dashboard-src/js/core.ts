@@ -872,6 +872,9 @@ import { initialTelemetryState } from "./telemetry-state";
       document.body.classList.remove("map-full-active");
       VD.renderMapIfLoaded();
     }
+    if (view !== "map") {
+      document.body.classList.remove("map-scrubber-active");
+    }
     viewNodes().forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
     navNodes().forEach((node) => {
       const active = node.dataset.nav === view;

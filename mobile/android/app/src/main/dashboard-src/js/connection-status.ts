@@ -4,7 +4,7 @@
 // on dashboard load and on every status broadcast, then renders into the
 // topbar. The low-voltage hint also lives here (the hint element is in
 // connection-tools.html but the status payload is the same).
-import { asDataState, setDataState, setDataTone } from "./dataset-state";
+import { asDataState, setDataState, setDataTone, type DataToneValue } from "./dataset-state";
 
 type RecentSession = {
   adapter?: string;
@@ -154,18 +154,26 @@ function bluetoothSummary(permissions: NonNullable<VoltAppState["permissions"]>,
   return "";
 }
 
+// The adapter label shown to the user. The popover (connectionRows) and the
+// Diagnostics health strip (renderConnectionHealth) both render it, so it lives
+// here once to keep them in sync.
+function adapterDisplayName(status: VoltStatus): string {
+  const state = dashboardState();
+  const adapter: VoltAdapterState = (state.appState || {}).adapter || {};
+  const lastDevice: VoltDevice = state.lastDevice || {};
+  if (state.demoActive) return "Demo telemetry";
+  return String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
+}
+
 function connectionRows(status: VoltStatus): StatusRow[] {
   const state = dashboardState();
   const app: VoltAppState = state.appState || {};
   const adapter: VoltAdapterState = app.adapter || {};
   const session: VoltSessionState = app.session || {};
   const gps: VoltGpsState = app.gps || {};
-  const lastDevice: VoltDevice = state.lastDevice || {};
   const demo = Boolean(state.demoActive);
 
-  const adapterName = demo
-    ? "Demo telemetry"
-    : String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
+  const adapterName = adapterDisplayName(status);
   const address = demo ? "" : String(adapter.address || "");
   const samples = Number(session.sampleCount || 0);
   const sessionState = String(status.state || session.state || "idle");
@@ -237,6 +245,39 @@ function renderStatusPopover() {
   renderRows(el("statusPopoverTrip"), tripRows(status));
 }
 
+// Map a raw link/session state to a severity tone for the health strip.
+function connHealthTone(stateName: string): DataToneValue {
+  const s = stateName.toLowerCase();
+  if (s === "connected" || s === "demo" || s === "scan-complete") return "ok";
+  if (s === "blocked" || s === "error" || s === "failed") return "bad";
+  if (s === "connecting" || s === "initializing" || s === "scanning") return "warn";
+  return "idle";
+}
+
+// Compact adapter / link-state / last-sample readout at the top of Diagnostics.
+// Reuses the same status + appState the popover reads, plus the telemetry
+// freshness clock (state.lastSampleAt), so the user can answer "is the car
+// connected and is data fresh?" without opening the topbar popover. Read-only.
+function renderConnectionHealth() {
+  const adapterEl = el("connHealthAdapter");
+  const stateEl = el("connHealthState");
+  const freshEl = el("connHealthFresh");
+  if (!adapterEl || !stateEl || !freshEl) return;
+  const state = dashboardState();
+  const status: VoltStatus = state.status || {};
+  const session: VoltSessionState = (state.appState || {}).session || {};
+  const demo = Boolean(state.demoActive);
+
+  adapterEl.textContent = adapterDisplayName(status);
+
+  const stateName = demo ? "demo" : String(status.state || session.state || "idle");
+  stateEl.textContent = stateName;
+  setDataTone(stateEl, connHealthTone(stateName));
+
+  const lastSampleAt = Number(state.lastSampleAt || 0);
+  freshEl.textContent = lastSampleAt > 0 ? formatRelative(lastSampleAt) : "--";
+}
+
 function setBadgeExpanded(expanded: boolean) {
   ["stateBadge", "lastConnectedBadge"].forEach((id) => {
     const badge = el(id);
@@ -303,6 +344,7 @@ function bindStatusPopover() {
 function noteStatus(payload: LowVoltageStatus | null | undefined) {
   renderLastConnected();
   renderLowVoltageHint(payload || {});
+  renderConnectionHealth();
   renderStatusPopover();
 }
 
@@ -339,6 +381,7 @@ function installTelemetryObserver() {
         result = prior(payload);
       }
       try {
+        renderConnectionHealth();
         renderStatusPopover();
       } catch (ignored) {
         // Observer must never break the underlying updateTelemetry call.
@@ -354,6 +397,7 @@ function installTelemetryObserver() {
 
 // Initial render on load.
 renderLastConnected();
+renderConnectionHealth();
 installStatusObserver();
 installTelemetryObserver();
 bindStatusPopover();

@@ -639,6 +639,7 @@ import { haversineMetersJs } from "./map-route-utils";
   function hideScrubber() {
     const node = el("scrubber");
     if (node) node.hidden = true;
+    document.body.classList.remove("map-scrubber-active");
     if (scrubMarker && scrubMap) {
       scrubMap.removeLayer(scrubMarker);
       scrubMarker = null;
@@ -657,6 +658,15 @@ import { haversineMetersJs } from "./map-route-utils";
       return;
     }
     node.hidden = false;
+    // Only flag the scrubber as active when the Map view is actually showing.
+    // renderScrubber() is reached off-map via renderMapIfLoaded() on telemetry
+    // ticks, so an unconditional add would leave the flag stuck on Drive/etc.,
+    // compacting the global nav with no scrubber visible.
+    const mapView = el("view-map");
+    document.body.classList.toggle(
+      "map-scrubber-active",
+      !!mapView && mapView.classList.contains("is-active"),
+    );
 
     if (scrubMap) {
       if (!scrubMarker) {
