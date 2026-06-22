@@ -63,9 +63,19 @@ import { initialTelemetryState } from "./telemetry-state";
   let lastToastDetail = "";
   let toastBaselineSeen = false;
 
-  function showStatusToast(detail: unknown) {
+  // Connection states that represent an actionable failure rather than routine
+  // progress. A screen reader should interrupt for these (assertive) instead of
+  // waiting for a pause (polite), so the user hears "adapter blocked" / "connect
+  // failed" the moment it happens rather than after whatever it was reading.
+  const URGENT_TOAST_STATES = new Set(["error", "blocked", "failed"]);
+
+  function showStatusToast(detail: unknown, statusState?: unknown) {
     const node = el("statusToast");
     if (!node) return;
+    // Re-point the live region's politeness per push: assertive for failures,
+    // polite otherwise. Set it before the text lands so assistive tech picks the
+    // right urgency for the announcement it's about to make.
+    node.setAttribute("aria-live", URGENT_TOAST_STATES.has(String(statusState == null ? "" : statusState)) ? "assertive" : "polite");
     // The very first setStatus call is the boot-time status push ("Viewing
     // local data…"), not feedback on a user action — consume the baseline
     // silently even when its detail is empty, so the first user-triggered
@@ -102,7 +112,7 @@ import { initialTelemetryState } from "./telemetry-state";
     hydrateLiveRouteIfActive();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
-    showStatusToast(status.detail);
+    showStatusToast(status.detail, next);
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
     renderOperationalState();
     updateDiagnostics();

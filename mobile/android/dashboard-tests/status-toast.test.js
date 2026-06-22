@@ -86,6 +86,24 @@ describe('status toast', () => {
     expect(toast.textContent).toContain('Pick a paired');
   });
 
+  it('announces failure states assertively and routine states politely', () => {
+    window.VoltTrackerNative.setStatus({ state: 'ready', detail: 'Boot baseline.' });
+    const toast = document.getElementById('statusToast');
+
+    // A blocked-adapter status is an actionable failure — interrupt the reader.
+    window.VoltTrackerNative.setStatus({
+      state: 'blocked',
+      detail: 'Pick a paired or remembered OBD adapter first.',
+    });
+    expect(toast.hidden).toBe(false);
+    expect(toast.getAttribute('aria-live')).toBe('assertive');
+    vi.advanceTimersByTime(3500);
+
+    // Routine progress falls back to polite so it waits for a pause.
+    window.VoltTrackerNative.setStatus({ state: 'ready', detail: 'Scan finished.' });
+    expect(toast.getAttribute('aria-live')).toBe('polite');
+  });
+
   it('stays quiet on the Settings tab where #statusCopy is visible inline', () => {
     window.VoltTrackerNative.setStatus({ state: 'ready', detail: 'Boot baseline.' });
     window.VoltDashboard.setView('settings');

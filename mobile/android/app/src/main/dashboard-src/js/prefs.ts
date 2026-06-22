@@ -39,6 +39,10 @@
         const toast = document.getElementById("statusToast");
         if (!toast) return;
         const notice = "Preferences can't be saved on this device — settings will reset when the app closes.";
+        // A degraded-storage warning is an actionable failure, so interrupt the
+        // screen reader (assertive) rather than queue behind whatever it's
+        // reading. telemetry.ts re-points this shared node per status push.
+        toast.setAttribute("aria-live", "assertive");
         toast.textContent = notice;
         toast.hidden = false;
         window.setTimeout(() => {

@@ -97,6 +97,8 @@ describe('prefs store', () => {
       const toast = document.getElementById('statusToast');
       expect(toast.hidden).toBe(false);
       expect(toast.textContent).toContain("Preferences can't be saved");
+      // A degraded-storage warning interrupts the screen reader assertively.
+      expect(toast.getAttribute('aria-live')).toBe('assertive');
       vi.advanceTimersByTime(6500);
       expect(toast.hidden).toBe(true);
     } finally {
