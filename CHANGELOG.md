@@ -1,359 +1,102 @@
 # CHANGELOG
 
 
+## v0.22.1 (2026-06-22)
+
+### 🔺 Fix
+
+- **dashboard**: Announce status-toast failures assertively for screen readers
+  ([#260](https://github.com/jtn0123/VoltTracker/pull/260),
+  [`d492b58`](https://github.com/jtn0123/VoltTracker/commit/d492b58f8686ae2711c62baef4c9f346925d6d55))
+
+### 🔷 Changed
+
+- **release**: Render the changelog as compact emoji sections with impact notes
+  ([#245](https://github.com/jtn0123/VoltTracker/pull/245),
+  [`34a4da7`](https://github.com/jtn0123/VoltTracker/commit/34a4da76c11d00d4ee3e6f60e37820e4e2608d03))
+  - _release notes now read as a scannable what-changed-and-why list instead of a wall of commit bodies._
+
+
 ## v0.22.0 (2026-06-19)
 
-### Features
+### ✳️ New
 
 - **dashboard**: Add a hide-outliers toggle to the efficiency chart
   ([#244](https://github.com/jtn0123/VoltTracker/pull/244),
   [`c0b5eae`](https://github.com/jtn0123/VoltTracker/commit/c0b5eaef129a3c6c8ba55ed7d64d6e8b7761dc8d))
 
-* feat(dashboard): add a hide-outliers toggle to the efficiency chart
-
-A persisted "Hide outliers" toggle (off by default) on the efficiency-vs-speed card applies a 1.5x
-  IQR fence per 10-mph speed bucket to the grade-normalized efficiency. Flagged samples are dropped
-  from the scatter dots, the median/IQR buckets that back the bars/curve views, and the city/highway
-  averages alike. Only buckets with >=4 samples are fenced (the IQR is unreliable below that), and
-  card visibility tracks the raw pool so toggling can never blank the whole card.
-
-Also stop the AndroidGradlePluginVersion lint check from failing the build: with warningsAsErrors it
-  aborts the moment Google ships a newer AGP, regardless of our code — the same informational "newer
-  version available" class as GradleDependency, which is already disabled. We bump AGP deliberately
-  via the version catalog, so neither should fail a release preflight.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* test(dashboard): assert the outlier toggle round-trips back on
-
-Address CodeRabbit on #244: after disabling effHideOutliers, re-render and assert the fenced sample
-  is plotted again, proving the full enable/disable cycle.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 - **dashboard**: Add switchable efficiency chart views with grade-normalization
   ([#243](https://github.com/jtn0123/VoltTracker/pull/243),
   [`67270fd`](https://github.com/jtn0123/VoltTracker/commit/67270fd15e4c86662b6cfc7a2c0bcaf4f67d58d9))
 
-* feat(dashboard): add switchable efficiency chart views with grade-normalization
-
-The Insights efficiency-vs-speed card was a single dense scatter of ~500 raw GPS samples coloured by
-  road grade — three encodings at once, an unreadable blob on a phone, and a headline ("most
-  efficient around 65 mph") that was really a downhill artifact bleeding in through grade.
-
-Grade-normalize every sample to a flat-equivalent efficiency before plotting: remove the gravity
-  term (~m·g per unit grade, converted to Wh/mi and scaled by a ~0.7 regen/drivetrain factor) from
-  the observed Wh/mi. The speed story is now honest — a fast descent no longer fakes a high-speed
-  efficiency peak — and the grade colour dimension is gone, so the plot drops to a single accent.
-
-Add an in-app view switcher (Bars / Scatter / Curve), persisted per-user via the prefs store so the
-  choice sticks across launches: - Bars: median efficiency per 10-mph bucket with an IQR whisker and
-  the within-5%-of-best buckets highlighted as the sweet spot. - Scatter: the familiar per-sample
-  dots (now single-colour, normalized) with a median trend line. - Curve: a smoothed median curve
-  over a confidence band, no dots — most glanceable.
-
-All three share grade-normalized 10-mph buckets (median + IQR, ≥3 samples) that also drive the
-  honest "most efficient around X" headline. The stat row switches from per-sample "Samples" (one
-  long drive dumped hundreds of correlated points) to "Drives", and from "Downhill avg" (meaningless
-  once grade is normalized out) to a City/Highway split.
-
-Colours are resolved to literals before injection because CSS vars and color-mix don't cascade into
-  SVG presentation attributes.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* style(dashboard): apply spotless formatting to the eff-view switcher markup
-
-spotlessDashboardCheck wraps long element tags one attribute per line; the view-switcher buttons
-  tripped it. Reformat the partial and regenerate index.html.
-
-* test(dashboard): tighten bars-view dot assertion and cover the default-view fallback
-
-Address CodeRabbit review on #243: - bars view emits only the peak-marker circle, so assert exactly
-  1 (was the looser < 8, which could pass even if per-sample dots regressed back in). - add a test
-  that renders with no effChartView pref set, exercising the default scatter fallback path the
-  explicit-scatter test didn't cover.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.21.0 (2026-06-18)
 
-### Features
+### ✳️ New
 
 - **dashboard**: Replace soc donut with a battery gauge and de-clutter the efficiency scatter
   ([#242](https://github.com/jtn0123/VoltTracker/pull/242),
   [`eacd3d2`](https://github.com/jtn0123/VoltTracker/commit/eacd3d250a5bcaa7047211382c2dc6affb647b27))
 
-The Insights HV-pack tile used a conic-gradient donut to show state of charge, which read like a pie
-  chart and didn't suit an EV battery. Replace it with a vertical battery gauge that fills from the
-  bottom to --v% with a terminal nub, coloured by charge band via data-level (green/amber/red).
-  storage-status.ts now sets ring.dataset.level from the SOC reading and clears it in the waiting
-  state. The #realPackRing + --v contract is unchanged, so theming (light/high-contrast) adapts
-  automatically.
-
-The efficiency-vs-speed scatter piled high-efficiency samples into a solid false row along the top
-  gridline: enrichRouteEff clamps efficiency to a 6.5 ceiling (shared with map colouring), so
-  coasting/regen-tail points all saturated there. Drop samples at/above that ceiling from the
-  scatter (and its stats/trend) and grow the y-axis to the data within [5,7] instead of a fixed 0-7,
-  so the plot shows the real drive-efficiency spread with no dead band above the points.
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.20.0 (2026-06-18)
 
-### Features
+### ✳️ New
 
 - **dashboard**: Polish battery charts + raise backup import limit to 4 GiB
   ([#241](https://github.com/jtn0123/VoltTracker/pull/241),
   [`58ab6d8`](https://github.com/jtn0123/VoltTracker/commit/58ab6d8a09f2b2851683124db60421202fd77a70))
 
-* fix(backup): raise restore/import ceiling from 512 MiB to 4 GiB
-
-Histories approaching ~1 GB (lots of logged drives) hit the MAX_RESTORE_MIB = 512 cap and failed to
-  import with TOO_LARGE. Restore stages the file to cache and opens it as a SQLite DB
-  (BackupMigrator) — it is disk-bound, not loaded into memory — so the ceiling only guards against a
-  runaway file filling cache, not an OOM. Raise it to 4 GiB so ~1 GB backups import; a genuinely
-  oversized file still fails cleanly, and low free space surfaces as an IO error. Test now pins a >=
-  1 GiB floor so it can't regress below the need.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* feat(dashboard): polish battery charts + meters to convey health by color
-
-Battery visuals across Drive + Charge now read state at a glance instead of a fixed accent:
-
-- SOH trend (Charge): tone the line/dot by the latest health band (calm green >=85%, amber 70-85%,
-  red <70%) and add a soft area fill + baseline, so a healthy ~90% pack no longer reads as an
-  alarm-orange decline. data-soh drives a --soh-color/--soh-rgb token pair in CSS. - Cell balance
-  (Charge): color the spread fill by the same tone as the mV badge (tight = green, drifting =
-  amber/red) instead of a decorative blue→orange wash. - SOC meter (Drive): color the bar by charge
-  level (amber <=30%, red <=15%) so a depleted pack is obvious, not a full-green bar.
-
-Populated-chart states (no demo data) so visual baselines are unchanged; 527 vitest + 86 visual/e2e
-  green, typecheck + eslint clean. Verified via seeded runtime captures.
-
-* style(backup): satisfy ktlint blank-line-before-comment in DataBackup
-
-spotlessKotlinCheck wanted a blank line between the TAG constant and the new MAX_RESTORE_MIB
-  explanatory comment. No behavior change.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.19.1 (2026-06-18)
 
-### Performance Improvements
+### 🔷 Changed
 
 - **dashboard**: Lazy-load Map-tab CSS off the startup path
   ([#240](https://github.com/jtn0123/VoltTracker/pull/240),
   [`36b3cef`](https://github.com/jtn0123/VoltTracker/commit/36b3ceff1c22e56f38f1daaffc2cbd77eda53880))
 
-* perf(dashboard): lazy-load Map-tab CSS off the startup path (G3)
-
-Split the Map-tab-exclusive styles out of the eager screens.css into a new screens-map.css (~9.5 KB)
-  that the Map module injects lazily — alongside the already-deferred leaflet.css — so the
-  Drive-first startup path no longer parses Map chrome + Leaflet control overrides it doesn't need.
-
-Safe extraction (verified by a usage audit): only rules whose every selector class renders
-  exclusively inside #view-map were moved. Cross-tab shared classes stay eager —
-  .map-sheet*/.map-sheet-savings (used on Insights), .scrub-chart/ .scrub-readout (Drive live),
-  .map-drive-chips (Drive), plus .route-flow/ .live-head-pulse/.detail-grid (referenced by eager
-  @media reduced-motion / min-width blocks). Specificity preserves the .map-frame ... .map-legend
-  toggles.
-
-No FOUC: VD.mapStylesReady resolves once screens-map.css applies, and requestMapRender() awaits it
-  before the first paint. All 36 visual baselines pass UNCHANGED (pixel-identical render), 527
-  vitest + map/a11y/perf e2e green, typecheck + eslint clean.
-
-Note: the bundle-size *budget* metric sums every css/ file, so it is unchanged; the win is reduced
-  eager CSS parsed/applied at launch, not the budget number.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* fix(dashboard): repair premature comment terminator in screens-map.css
-
-The header comment's prose contained `.map-sheet*/...`, whose `*/` closed the CSS comment early —
-  turning the following prose into malformed CSS (browser error-recovery masked it, but strict
-  parsers reject it and the first rule after the comment could be dropped). Reworded to remove the
-  `*/` sequence (CodeRabbit Critical). 36 visual baselines + map e2e still green.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.19.0 (2026-06-18)
 
-### Features
+### ✳️ New
 
 - **dashboard**: Recovery-first diagnostics, drive data provenance, map polish
   ([#238](https://github.com/jtn0123/VoltTracker/pull/238),
   [`04a8d92`](https://github.com/jtn0123/VoltTracker/commit/04a8d928e2bb423da6ff3e62692ee735b464ed51))
 
-* Phone UI/UX: recovery-first Diagnostics, Drive data provenance, map polish
-
-Phone-only dashboard pass driven by a fresh UI/UX audit (runtime screenshots at 412x915). Three
-  areas:
-
-Diagnostics & Settings recovery (A1/C3/E2/I2, B3): - New recovery-first panel atop Diagnostics —
-  plain-language blocker/health, next-best-action, adapter readiness, and ONE primary action,
-  rendered from the same status model as the topbar pill (connection-status.ts). A real
-  blocked/error status outranks demo so failures surface the fix, not a banner. - Settings now leads
-  with the Connection/setup card; backup/restore is demoted to a secondary, muted card so
-  setup-critical controls outrank data tooling.
-
-Drive data provenance, states & live feel (A2/A3/A4/E4/H3/I1): - Persistent source badge (demo /
-  live / offline / no-data) so the four data states can never be confused; bound to the same
-  demo/connection/storage truth as the gauges so it can't contradict them. - One-time hero reveal on
-  the first live/demo sample (reduced-motion aware).
-
-Map controls & playback polish (B4/C4/D3/F4): - Compacted layer tabs and receded the legend to the
-  bottom-left so the route stays the hero; visually bound the scrubber playback to the selected
-  drive.
-
-Accessibility labels/roles, focus behavior, reduced-motion, light mode, and asset/perf budgets
-  preserved. 524 vitest + 25 Playwright e2e pass; typecheck and eslint clean; partials pass Prettier
-  3.8.3.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* test(dashboard): refresh visual baselines for phone UI/UX changes
-
-Regenerated the Linux visual snapshots (ubuntu-24.04, matching the dashboard-visual CI runner) for
-  the surfaces touched by the phone UI/UX pass: Drive (source badge), Settings (connection-first
-  hierarchy), and Map (compact layer tabs, receded legend, attached scrubber) across the demo
-  scenarios.
-
-* perf(dashboard): keep recovery panel off the per-sample telemetry hot path
-
-renderDiagnosticsRecovery() was running on every telemetry sample via the observer wrapper, adding
-  state-derivation + DOM lookups to the high-rate enqueue path and blowing the burst-coalescing
-  budget (startup-budget.test.js: 102ms vs 100ms on CI). The panel changes meaningfully only on
-  status broadcasts (already handled in noteStatus), so the per-sample refresh now runs only when
-  Diagnostics is the active view — the lone case where the live sample count / "waiting → flowing"
-  flip needs to be live. Restores the enqueue budget headroom.
-
-* refactor(dashboard): address review feedback on recovery panel + drive badge
-
-- connection-status.ts: skip recovery-panel re-render when the derived view is unchanged (signature
-  guard) and diff each node before writing text/attrs, so the polite live region no longer
-  re-announces or churns the DOM on identical ticks (CodeRabbit,
-  connection-status.ts:305-325/584-594). - drive.ts: split the connecting vs connected source-badge
-  copy so "Adapter linked — waiting for first sample" no longer shows while still connecting;
-  connecting now reads "Connecting to your OBD adapter" (CodeRabbit, drive.ts:250).
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
-### Testing
+### 🔷 Changed
 
 - **dashboard**: Phone a11y/visual/contract/perf guards for new surfaces
   ([#239](https://github.com/jtn0123/VoltTracker/pull/239),
   [`c0b7e37`](https://github.com/jtn0123/VoltTracker/commit/c0b7e37b91f7515e9f594ff49c1954b1d0843b6d))
 
-* test(dashboard): add phone a11y/visual/contract/perf guards for new surfaces
-
-Closes the automated-coverage gap the audit flagged for the phone UX surfaces (D2/E3/F3/G4):
-
-- F3 selector/partial contract (dashboard-tests/selector-contract.test.js): every static id the TS
-  reads via el()/getElementById must exist in the generated index.html (all 167 currently resolve),
-  plus explicit pins for the recovery panel + drive source-badge ids. - D2/E3 visual coverage:
-  Diagnostics joins the tab x scenario visual matrix, so the recovery-first panel's layout is pinned
-  across demo/fault/empty/extreme (new Linux baselines generated on ubuntu-24.04, matching the CI
-  runner). - G4 phone perf guard (dashboard-e2e/perf-guard.spec.js): boots + switches every tab
-  under 4x CDP CPU throttle within generous budgets — a catastrophic- regression tripwire for
-  low-end WebViews.
-
-527 vitest pass; perf-guard + a11y + visual (36) green in Chromium.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-Claude-Session: https://claude.ai/code/session_01FtKvSrSghC48KrrKYm4Lcv
-
-* chore(deps): bump undici to 7.28.0 to clear high-severity audit advisory
-
-The dashboard-tests job's `npm audit --audit-level=high` gate started failing on a newly-published
-  undici advisory (GHSA-vmh5-mc38-953g, GHSA-pr7r-676h-xcf6), pulled transitively via jsdom@29.1.1.
-  `npm audit fix` bumps undici 7.25.0 -> 7.28.0 (lockfile only; jsdom unchanged). Audit gate is
-  clean again and the jsdom-based vitest suite still passes.
-
-* test(dashboard): address review feedback on new guards
-
-- perf-guard.spec.js: wrap the throttled body in try/finally so the CPU-throttle reset always runs
-  even if a budget assertion fails (no leaked throttle for the next test on the worker). -
-  selector-contract.test.js: match single- AND double-quoted ids in el()/ getElementById() reads
-  (closes a coverage hole), and walk JS_DIR recursively so the contract still holds if sources move
-  into subfolders.
-
-Contract test + perf guard re-verified green.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.18.9 (2026-06-18)
 
-### Continuous Integration
+### 🔷 Changed
 
 - Reduce duplicate Android slow lanes ([#235](https://github.com/jtn0123/VoltTracker/pull/235),
   [`82b388f`](https://github.com/jtn0123/VoltTracker/commit/82b388f8ea089e4e22c0ad71ee0cb9355a6d283f))
 
-### Performance Improvements
+### 🔷 Changed
 
 - Track startup and tab responsiveness ([#236](https://github.com/jtn0123/VoltTracker/pull/236),
   [`60d3c14`](https://github.com/jtn0123/VoltTracker/commit/60d3c1431dd3076d9a3d4a6718c59d95f11903e2))
 
-* Codex worktree snapshot: archive-cleanup
-
-Co-authored-by: Codex
-
-* perf: track startup and tab responsiveness
-
-* test: replace private route fixtures with synthetic data
-
-* fix: harden startup async readiness
-
 
 ## v0.18.8 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - Add startup benchmark and lazy dashboard panels
   ([#234](https://github.com/jtn0123/VoltTracker/pull/234),
   [`ff9af7b`](https://github.com/jtn0123/VoltTracker/commit/ff9af7b516d7e4573d54570507fb0d66e3b227db))
 
-* perf: add startup benchmark and lazy dashboard panels
-
-* fix: preserve dashboard state in lazy insights bundle
-
-* fix: address lazy dashboard review feedback
-
 
 ## v0.18.7 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - Harden dashboard and storage performance
   ([`1d10ccd`](https://github.com/jtn0123/VoltTracker/commit/1d10ccdea3865249d0337541ca4f66282bd10e95))
@@ -361,1941 +104,336 @@ Co-authored-by: Codex
 
 ## v0.18.6 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - **obd,storage**: Finish remaining items — drop dead torque PID, faster prompt-recovery,
   single-scan counts (L3, L5, L10)
   ([`e7d8218`](https://github.com/jtn0123/VoltTracker/commit/e7d8218fb731867d2f3f2ad5ebeee29489874584))
 
-Finishes the remaining performance items from the field-log audit. (L2 was found already fully
-  implemented; L4 genuinely needs on-device Bluetooth A/B testing — see below.)
-
-## L3 — drop undecodable engine-torque PID `22203F` This gen-2 Volt answers `22203F` with a single
-  byte, but the decoder needs a 2-byte word, so `engineTorqueNm` was a permanently-blank gauge and
-  the deep-lane PID was polled every 24 cycles for nothing. The community `((256·A)+B)/4` formula is
-  2-byte/gen-1 and the real 1-byte scale is unproven, so the PID is removed (rather than guess a
-  scale and show wrong numbers) until a Torque Pro cross-check pins it. Removed from
-  `PidSchedule.SPECS`, `LiveSampleReader`, `ObdProtocol`, `ObdProbes.VOLT_7E0_PROBES`, and the
-  `ObdElmDecode` label; tests updated.
-
-## L5 — exit a promptless read on an inter-byte quiet period When the ELM327 v1.4b drops the `>`
-  prompt, `transact()` waited out the full command timeout (~1.5 s) before prompt-recovery could run
-  — ~27 s across a long field session. It now gives up once a response has arrived and the adapter
-  has gone quiet for `NO_PROMPT_QUIET_PERIOD_MS` (250 ms) — far above a normal inter-frame gap (<100
-  ms), so legitimate slow multi-frame replies aren't truncated. New test asserts the early exit;
-  existing timing tests preserved (clock read once for deadline + last-byte init).
-
-## L10 — count total + useful telemetry in one scan, not two `storageCountsProjection` ran two
-  separate `COUNT(*)` scans of `telemetry_samples` (millions of rows). They now come from one scan
-  (`COUNT(*)` + `COALESCE(SUM(CASE WHEN <USEFUL_TELEMETRY_WHERE> …)))`, reusing the exact same
-  predicate). The other ~14 counts are small, different tables. L9a already moved this projection
-  off the first-paint path; this halves its dominant cost when it runs on a large history.
-
-## Not in this PR - **L2** (force-stop competing app) — **already fully built**
-  (CompetingAppDetector + `VoltBridge.forceStopPackage` + troubleshooter step-3 UI + tests). Needs
-  device QA only. - **L4** (~10.8 s Bluetooth socket open) — needs on-device A/B testing (an
-  insecure-socket change could help the OBDLink MX+ but regress another adapter). Genuinely can't be
-  shipped safely from code alone.
-
-## Test plan - [x] Full gate suite green: `detekt spotlessCheck testDebugUnitTest
-  jacocoTestCoverageVerification lintDebug assembleDebug`. - [x] New/updated unit tests for L3
-  (schedule + decode), L5 (quiet-period exit), L10 (single-scan counts).
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-<!-- This is an auto-generated comment: release notes by coderabbit.ai -->
-
-## Summary by CodeRabbit
-
-* **Bug Fixes** * Removed engine torque telemetry field that was producing null values due to data
-  format incompatibility. * Enhanced OBD adapter connection timeout detection to respond faster when
-  the adapter becomes unresponsive.
-
-* **Performance** * Optimized storage summary calculations by performing telemetry counts in a
-  single database query instead of multiple separate queries.
-
-<!-- end of auto-generated comment: release notes by coderabbit.ai -->
-
 
 ## v0.18.5 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - More boot/dashboard fast-path wins (DataBackup off main thread, lazy troubleshooter.css)
   ([#231](https://github.com/jtn0123/VoltTracker/pull/231),
   [`37aa37d`](https://github.com/jtn0123/VoltTracker/commit/37aa37d2f4c42686018da7f90b0128decfe2ee5f))
 
-* perf(boot): sweep transient cache files off the cold-start main thread
-
-DataBackup.init{} ran three cache-dir cleanup traversals (leftover restore/backup/export temp files)
-  synchronously on construction — and DataBackup is constructed in MainActivity.onCreate, i.e. on
-  the main thread during cold start. The sweep is best-effort housekeeping (nothing depends on it
-  having run; the export/backup paths recreate their dirs on demand), so it moves to
-  sweepTransientCacheFiles() which MainActivity now schedules on its existing background executor.
-  Removes main-thread disk I/O from the boot path (most impactful after a crash mid-backup/export
-  leaves temp files behind). Two DataBackupTest cases updated to call the explicit sweep.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* perf(dashboard): lazy-inject troubleshooter.css off first paint (L7 tail)
-
-troubleshooter.css (7.9 KB) was render-blocking in <head> even though the troubleshooter modal only
-  appears on a connection error. Like leaflet.css (L7), it is now injected by its lazy chunk
-  (troubleshooter.ts) when that module loads. 7,922 bytes off the render-blocking first-paint path
-  on every launch.
-
-Verified in the dashboard preview: absent from <head> at load, injected exactly once when the
-  troubleshooter chunk loads, the modal opens with its CSS applied (display:flex), no console
-  errors; 510 dashboard vitest tests pass.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.18.4 (2026-06-17)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **repo**: Remove case-duplicate .github/pull_request_template.md
   ([#230](https://github.com/jtn0123/VoltTracker/pull/230),
   [`adeab0f`](https://github.com/jtn0123/VoltTracker/commit/adeab0fd5ec09ad033ebad28236fe37f09560de9))
 
-The repo committed two PR templates differing only in case: .github/PULL_REQUEST_TEMPLATE.md
-  (canonical) and the lowercase .github/pull_request_template.md. On case-insensitive filesystems
-  (macOS, Windows) only one can exist on disk, so the working tree is permanently "modified" against
-  whichever index entry the on-disk file doesn't match — which silently blocks git rebase/git stash
-  for every contributor on those platforms. GitHub also resolves between the two ambiguously. Keep
-  the canonical uppercase PULL_REQUEST_TEMPLATE.md and drop the lowercase duplicate.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.18.3 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - Faster connect + boot + steady-state (L6–L9b) with benchmarks
   ([#229](https://github.com/jtn0123/VoltTracker/pull/229),
   [`b1cb814`](https://github.com/jtn0123/VoltTracker/commit/b1cb814389aa5700ae9b4976e3001948a7190672))
 
-* perf(obd): defer VIN/batch/voltage probes until after the first sample (L6)
-
-initializeElm327 ran three non-critical probes synchronously before the "connected" broadcast and
-  the first live sample: mode-01 batch capability (010D0C, 1.5s), aux voltage (0142, 1.0s), and VIN
-  (0902, up to 6s when uncached). None is needed to start polling -- mode-01 batching defaults off
-  (safe single-PID reads until probed), VIN is informational, the voltage pill is UI-only -- so they
-  now run via runDeferredInitProbes() immediately AFTER the first sample is broadcast. The dashboard
-  shows real data ~2.5s sooner (more on a first-ever, uncached-VIN connect).
-
-Re-armed on every reconnect (matching the original probe-on-each-init behaviour). First cycle is
-  single-PID until the deferred batch probe confirms support, then subsequent cycles batch as
-  before.
-
-Benchmark (ObdPollingEngineTest.connectDefersNonCriticalProbesUntilAfterFirstSample, 1.2s synthetic
-  probe latency injected): time-to-first-sample 8ms vs ~1208ms before -- the probe latency is fully
-  off the pre-first-data path.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* perf(obd): drop per-sample telemetry round-trip + tolerate transient batch misses (L8, L9b)
-
-L8: LiveSampleReader.read() round-tripped every sample through TelemetryPayload
-  (fromJson(sample).toJson()) before returning it, even though
-  ObdService.broadcastTelemetry(JSONObject) already normalizes through TelemetryPayload -- so the
-  live path did 4 conversions per sample. read() now returns the freshly-built sample directly (the
-  sample is not shared or mutated after return). A new test asserts the round-trip preserved every
-  key/value, so the dashboard feed is byte-identical. Benchmark (TelemetryRoundTripBenchmarkTest,
-  56-key sample): the removed round-trip cost ~2510ns (~2.5us) plus a 56-key JSONObject allocation
-  on every poll sample.
-
-L9b: a single incomplete mode-01 batch frame used to permanently disable multi-PID batching for the
-  whole session. It now tolerates MAX_CONSECUTIVE_BATCH_MISSES (2): a transient dropped BT frame
-  falls back to single-PID reads for that one cycle (logged mode01_batch_miss) but keeps batching
-  enabled; two misses in a row still retire it. Saves the rest of a drive's round-trip savings after
-  a one-off hiccup.
-
-* perf(dashboard): defer Leaflet off the WebView first-paint critical path (L7)
-
-index.template.html loaded Leaflet eagerly in <head> — a render-blocking 147 KB leaflet.js plus a 14
-  KB leaflet.css — even though the map only renders when the user opens the Map tab
-  (core.ts#ensureMapModule lazily loads js/map.js, the sole consumer of the `L` global).
-
-- leaflet.js now has `defer`: it no longer blocks HTML parse/first paint; deferred scripts still
-  finish before DOMContentLoaded, long before any map interaction, so `L` is available when the lazy
-  map chunk runs. - leaflet.css is removed from <head> and injected once by map.ts when the lazy map
-  chunk loads (CSP here is script-src 'self', so the onload-attr CSS-defer trick is unavailable; JS
-  injection is the CSP-safe path).
-
-161,697 bytes (157 KB) off the render-blocking first-paint path.
-
-Verified in the dashboard preview: page loads with no console errors, `L` defined, leaflet.css
-  absent from head at load; opening Map lazily loads map.js, injects leaflet.css exactly once, and
-  ensureMap() renders a fully styled .leaflet-container with controls. All 510 dashboard vitest
-  tests pass (script-order/CSP included); :app:assembleDebug + lintDebug green.
-
-* perf(dashboard): defer non-interactive bootstrap bridge calls off first paint (L9a)
-
-Two synchronous bridge->SQLite calls ran during dashboard bootstrap before first paint and feed
-  views the user isn't looking at yet:
-
-- connection-status.ts: renderLastConnected() calls getRecentSessions(n) for the "last connected"
-  badge -> now wrapped in requestIdleCallback (setTimeout(0) fallback), so it fills in a frame after
-  paint. - actions.ts: refreshStorage() (storage summary) moves into the existing
-  loadDeferredPanels() idle block alongside loadTrips()/loadInsights().
-
-refreshDevices() deliberately stays on the bootstrap path: it re-renders the adapter picker +
-  connect button, so deferring it to idle could re-render the button mid-interaction (the
-  connect-cooldown test caught exactly this). Only the pure-display summaries are deferred.
-
-The deferred work is native-bridge + SQLite latency, so the saving (audit estimate ~70-250 ms) is
-  on-device-only and not reproducible in the browser preview's mock bridge. Verified in preview:
-  clean load, Drive view renders, no console errors; all 510 dashboard vitest tests pass.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.18.2 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - **obd**: Pin CAN protocol before 0100 to skip the ~4.8s connect search
   ([#228](https://github.com/jtn0123/VoltTracker/pull/228),
   [`6057694`](https://github.com/jtn0123/VoltTracker/commit/6057694c7496a804011d195850ac780bbd32ed25))
 
-Init sent ATSP0 (auto) then 0100, which made the ELM327 run a ~4.8s SEARCHING sweep on every connect
-  (measured 4.74-4.80s across all five field sessions today). This Volt only ever speaks ISO 15765-4
-  CAN 11-bit/500k (protocol 6), so pin ATSP6 before the first 0100 capability probe. A new
-  protocolProbeAnswered() validates a real 4100 reply, so a wrongly-pinned protocol (NO
-  DATA-with-prompt) still falls back to ATSP0 auto-detect and retries 0100 -- connection robustness
-  is unchanged, only the happy-path latency drops by ~4.5s.
-
-Also adds docs/obd-log-findings-2026-06-16.md: the on-device field-log analysis that motivated this,
-  validation that PR #227 eliminates the parked-tail waste, and the remaining backlog (L2 force-stop
-  competing app, L3 engineTorque decode, L4 socket-open latency, L5 prompt recovery).
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.18.1 (2026-06-17)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: End asleep-car sessions cleanly and retire dead PIDs
   ([#227](https://github.com/jtn0123/VoltTracker/pull/227),
   [`7b42e41`](https://github.com/jtn0123/VoltTracker/commit/7b42e4185b4c7e6c595d8621594d4a956920442a))
 
-Real device logs showed two issues, both rooted in the live-poll loop not noticing when the car goes
-  to sleep:
-
-1. "Failed/connect_timeout" sessions were mostly successful drives. After a drive the car
-  parks/charges and its modules sleep, but the engine kept polling a silent bus for ~70 min until
-  Bluetooth finally dropped, then logged the whole session as connect_timeout. Across 29 logged
-  sessions, 12 of 15 "failures" were really drove-then-parked (500-2472 samples each). Fix: when no
-  fresh PID data arrives for VEHICLE_SLEEP_GIVE_UP_MS (3 min) and the car isn't actively driving,
-  end the session cleanly (idle status, drive saved) instead of churning into a connect_timeout. A
-  reconnect-exhausted drop while the car was last parked/plugged/charging is likewise recorded as a
-  clean end, not a red "reconnect failed" error.
-
-2. Four PIDs never answer on this Volt (015C oil temp, 01A6 odometer, 221940 / 22194001 trans temp)
-  yet were re-issued every rotation; the two GM ones cost the full ~455 ms timeout (~80 s of dead
-  blocking per session). Fix: a per-session negative-PID cache retires a PID after
-  MAX_CONSECUTIVE_NO_DATA bus-alive NO-DATA replies. It only counts a miss when some other PID
-  answered that cycle (a fully silent bus blames nobody), resets on any live read, and exempts
-  charge-family PIDs that legitimately NO-DATA while driving, so a supported-but-inactive PID is
-  never disabled. Reset each session.
-
-New pure helpers (ObdElmDecode.isNoDataResponse, PidSchedule.isConditional,
-  ObdPollingEngine.shouldEndForVehicleSleep / isVehicleOffDisconnect, PidPollingState negative cache
-  + msSinceLastLiveData) are unit-tested. No ABI, schema, or dashboard change. All gates green
-  (detekt, spotless, unit tests, jacoco, lint, assembleDebug).
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 - **dashboard**: Style maintenance-form inline validation messages
   ([#226](https://github.com/jtn0123/VoltTracker/pull/226),
   [`d3c538e`](https://github.com/jtn0123/VoltTracker/commit/d3c538e90fd97dd9d0e21abe7fa602b576503973))
 
-The maintenance "Add entry" form gained three inline-validation elements (.maint-form-error and two
-  .maint-field-hint) that had no dedicated CSS, so they rendered in the default body color. Style
-  them with the existing --bad-soft danger token (matching
-  .maintenance-due-hint[data-due="overdue"]): the form-level <p> at 12px/700 with zeroed margins
-  (the grid gap already spaces it), the per-field hints at 11px/600. Neither rule sets display, so
-  the global [hidden] { display:none !important } keeps them hidden by default.
-
-CSS loads directly into the WebView (no build step); generated index.html and the JS bundle are
-  untouched.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.18.0 (2026-06-17)
 
-### Chores
+### 🔷 Changed
 
 - **dashboard**: Sort VOLT_DTC entries into ascending order within their blocks
   ([#225](https://github.com/jtn0123/VoltTracker/pull/225),
   [`b0854c8`](https://github.com/jtn0123/VoltTracker/commit/b0854c816311fa872ec5915d23fe073bac9d8c5b))
 
-Pure source-readability cleanup of dtc-lookup.ts: four comment-delimited blocks had entries inserted
-  out of numeric order (the P0A80-P0A9F run dumped after P0AF8; P0496/P0497 before the P0460-P0463
-  fuel-sensor run; the P0C00-P0C20 on-board-charger run after P0CE0; the P0D08+ run after P0DAA —
-  topic-grouped rather than strictly numeric).
-
-Reordered each affected block into ascending code order. Behavior-preserving: VOLT_DTC is a keyed
-  object, so iteration/lookup order doesn't change any rendered output and the derived family counts
-  / dtcLookupCodes come from keys regardless of insertion order. Verified a pure line reorder
-  (entry-line multiset identical before/after, no description string changed), bundle rebuilt, and
-  the dtc-data/dtc-severity/dtc-clearability suites pass (20 tests).
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Features
+### ✳️ New
 
 - **android**: Charge CSV export, maintenance alerts, per-trip cost, charge-scan cache
   ([#224](https://github.com/jtn0123/VoltTracker/pull/224),
   [`d6c3466`](https://github.com/jtn0123/VoltTracker/commit/d6c3466df4573ac57e0038412e1945b706c20ae5))
 
-* feat(android): export charge sessions as CSV (M1)
-
-Charge sessions were viewable but, unlike trips, not exportable. Adds an "Export CSV" action on the
-  Recent-charges card mirroring the M6 all-trips pattern:
-
-- New @JavascriptInterface exportChargeSessionsCsv(pricePerKwh) on VoltBridge ->
-  VoltBridgeDataExports, riding the existing exportTripFromBridge host seam with a "csv_charges"
-  sentinel (no new MainActivity override, detekt ceiling unchanged). - TripExportController
-  dispatches the sentinel to exportChargeSessionsAndShare, reading rows via
-  store.projections().chargeSessionsForExport(<=500) and writing via TripExportShareIntent. -
-  TripTrackFormatter.toChargeSessionsCsv: id/start/end/SOC/kWh/peak/charger/ confidence columns + an
-  optional est_cost column when the dashboard's pricePerKwh is set (passed through the bridge); CSV
-  formula-injection guarded. - Dashboard "Export CSV" button wired in storage-status.ts +
-  actions.ts; bridge ABI mirror (VOLT_BRIDGE_METHODS) + bridge-abi.md + VoltBridgeTest updated. -
-  Tests: TripTrackFormatterTest (+7), TripExportControllerTest (+5).
-
-All Kotlin + dashboard gates green locally.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* perf(android): cache the per-session inferred-charge scan (G2)
-
-The charge-summary projection re-scanned the entire drive history on every dashboard storage refresh
-  (per-session telemetry + drive-window queries on the JS-bridge thread), so cost grew linearly with
-  history even though finalized sessions' charge facts never change.
-
-Mirrors the existing session_trip_rollups cache: - New charge_session_rollups table (schema v14):
-  per-session charge contribution JSON + rollup_version, FK ON DELETE CASCADE. Guarded,
-  own-transaction, non-destructive v13->v14 migration. - ObdStoreReports computes each finalized
-  session's charge contribution once, caches it, and serves the cache on subsequent reads (current
-  rollup_version); the active session is always computed live, never cached. The cross-session
-  assembly/sort is unchanged, so the charge-summary JSON is byte-identical — a dedicated test
-  asserts the second (cached) read equals the first. - Invalidation mirrors the trip cache:
-  clearAllData (16th DELETE), prune, merge, mark-not-trip, and restore-regenerable-cache paths. -
-  Tests: v13->v14 migration test, cache/identical-output test, active-session never-cached test,
-  clearAllData drops rollups. data-model.md + bridge-abi.md updated to v14 / "16 tables".
-
-All Kotlin gates green locally (1204 tests).
-
-* feat(android): notify when scheduled maintenance goes overdue (M2)
-
-The app already computed maintenance overdue/due-soon (interval_km/interval_months vs latest
-  odometer + elapsed months) and rendered it on the Insights tab, but it was purely visual — unlike
-  charge/DTC/SOC/temp alerts, an overdue oil change never notified.
-
-- MaintenanceDueEvaluator: pure, Android-free evaluator ported 1:1 from the dashboard's
-  maintenanceDue math (AVG_DAYS_PER_MONTH=30.4375, overdue-only), returning only newly-overdue
-  entries keyed by a per-crossing signature (<id>:km / <id>:months) so each crossing fires exactly
-  once. - Opt-in maintenanceDueEnabled toggle + persisted notified-signature set in
-  EventNotificationPrefs (mirrors the DTC baseline persistence; no settings-version bump since it's
-  off the per-sample path). - MaintenanceDueNotifier runs on app open (MainActivity.onResume -> one
-  background call): reads the maintenance log + latest odometer, posts one EventNotifier alert per
-  newly-overdue entry (reuses the alerts channel + POST_NOTIFICATIONS handling), unions the new
-  signatures. New Event.MaintenanceDue variant. - "Maintenance due" toggle in the Alerts fieldset,
-  wired end-to-end via the grouped eventNotifications() delegate + new setMaintenanceDueNotify
-  bridge method (ABI mirror + bridge-abi.md + VoltBridgeTest updated). No flat MainActivity
-  override. - Adding the bridge method tripped VoltBridge's TooManyFunctions ceiling; fixed properly
-  by extracting ClientErrorRateLimiter (also fixes a 0L epoch-clock sentinel bug), not by
-  suppressing. - Tests: evaluator (9), notifier (6), rate-limiter (3), prefs/notifier/dispatch
-  additions; focused jacoco floor on the evaluator.
-
-* feat(dashboard): per-trip cost/savings + home vs public charging rates (M3)
-
-Cost/savings was a single lifetime aggregate at one flat $/kWh; the per-trip detail sheet showed no
-  cost, and one rate is wrong for owners on time-of-use billing (cheap home overnight vs expensive
-  public/DCFC).
-
-- Extracted the cost model into a shared pure module cost-model.ts (computeSavingsVsGas, rate
-  selection, money formatting, ASSUMED_VOLT_MI_PER_KWH). renderSavingsVsGas now calls it
-  (byte-identical math), so per-trip and lifetime figures can never diverge. - Trip-detail sheet
-  (map.ts openTripDetail) shows Est. cost + Savings-vs-gas for that drive, mirroring the lifetime
-  row's three states (hidden / prompt-to-set / figures + assumptions note). XSS-safe. - New optional
-  "Public charging rate" pref (publicPricePerKwhInput); the existing rate is relabeled "Home
-  electricity rate". rateForCharger() bills each charge session by its chargerType (public/DCFC ->
-  public rate when set, else home); an unset public rate falls back to the single home rate
-  everywhere, so existing users see no change. Wired into all three charge-cost sites (per-session
-  row, lifetime energy total, monthly cost trend). - Tests: cost-model.test.js (8) +
-  trip-detail/charge-sessions/charge-cost-trend extensions (+8). 510 vitest passing.
-
-Dashboard build/typecheck/lint/test all green locally.
-
-* test(visual): refresh power-user-charge baseline for the charge-tab additions
-
-The charge tab gained the M1 "Export CSV" button and the M3 per-session est-cost column + "set your
-  electricity rate" prompt, so the power-user-charge visual snapshot shifted. Baseline refreshed
-  from the CI (Linux) render; the change is confined to those intended additions (dashboard-e2e
-  semantic guards pass).
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.17.3 (2026-06-17)
 
-### Performance Improvements
+### 🔷 Changed
 
 - **android**: Serve OBD-connect VIN read from one query, not the full storage summary
   ([#223](https://github.com/jtn0123/VoltTracker/pull/223),
   [`ebf4e09`](https://github.com/jtn0123/VoltTracker/commit/ebf4e0975c1814d0cfe99be9a9d7f6bfb7708bd6))
 
-Executes grade-report perf finding G1. ObdPollingEngine.storedRedactedVin() ran on the
-  latency-critical ELM init thread and called getStorageSummaryRecord(), which eagerly builds ~20
-  projections including a whole-history charge scan — hundreds of SQLite queries on every connect
-  just to read one VIN string.
-
-- Add ObdStoreReports.latestVehicleRecord() reusing the existing single `last_seen_ms DESC LIMIT 1`
-  query (latestVehicleJson). - storedRedactedVin() now reads store.projections().latestVehicle()
-  instead of the full storage-summary record.
-
-To stay under the ObdLocalStore TooManyFunctions detekt ceiling (66; trips at 67), group the four
-  test-only JSON projection accessors (storageCounts / diagnosticsSummary / chargeSummary /
-  batterySummary) plus the new latestVehicle behind one `projections(): StoreProjections`
-  sub-accessor — the same group-behind-one-accessor pattern used for eventNotifications().
-  ObdLocalStore goes 66 -> 63 top-level functions. ObdStoreReportsDbTest updated to the new accessor
-  + two latestVehicle projection tests.
-
-All gates green locally: detekt, spotlessCheck, testDebugUnitTest, jacocoTestCoverageVerification,
-  lintDebug.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.17.2 (2026-06-17)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **ui**: Dashboard UX + a11y polish and failure-branch test coverage
   ([#222](https://github.com/jtn0123/VoltTracker/pull/222),
   [`6d9de08`](https://github.com/jtn0123/VoltTracker/commit/6d9de0862bc6d7b71459da50ba8d58ab664b7233))
 
-Executes grade-report frontend findings C1–C5, perf G3, and testing D2:
-
-- C1: maintenance "Remove" now routes through the app-dialog confirm before calling
-  bridge.deleteMaintenanceEntry, mirroring the other destructive actions — no more one-tap, no-undo
-  deletion of hand-typed service history. - C2: efficiency-vs-speed scatter axes (insights-panel +
-  trip-detail map) convert and label through the same units helper the headline uses, so a metric
-  user no longer sees mph/mi-per-kWh axes under a km/h headline. - C3: charge target-SOC /
-  notify-at-X% is now configurable from Preferences (#prefChargeTargetInput), kept in sync with the
-  in-charge-card input via the shared chargeTargetSoc pref — so it can be set while parked, not only
-  mid-charge. - C4: drive live speed-trace canvas reads resolved theme tokens (getComputedStyle)
-  instead of hardcoded dark literals, so it stays legible in light/high-contrast themes. - C5:
-  charge-tab aria-live moved off the card-wide containers onto tight aria-atomic value clusters,
-  mirroring the Drive-hero fix, so a screen reader no longer re-announces static labels every update
-  during a charge. - G3: renderLiveSignals gains a signature/dirty-check (like renderCellGrid),
-  skipping the ~45-row rebuild every rAF when nothing changed (flat/parked car). - D2: new
-  actions-storage.test.js + actions-signals.test.js cover the previously untested
-  failure/cancel/blocked/missing-bridge/clipboard-fallback branches (actions-storage 56%->100%,
-  actions-signals 62%->98% line coverage).
-
-index.html regenerated via generateDashboardHtml. Dashboard build/typecheck/lint/vitest all green
-  locally (493 tests). Visual baselines refreshed separately from CI.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.17.1 (2026-06-17)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Odometer range guard, charge-energy carry-forward, dead-interface cleanup
   ([#221](https://github.com/jtn0123/VoltTracker/pull/221),
   [`50611a1`](https://github.com/jtn0123/VoltTracker/commit/50611a14dd7ec5ebfe6bbb98d013a9d62582c148))
 
-Executes grade-report backend findings B1, A1, B2 and testing finding D1:
-
-- B1: ObdProtocol.parseOdometerKm now bounds its result with ODOMETER_KM_RANGE (0..2,000,000 km),
-  matching every other numeric decoder. A corrupt/partial 4-byte 01A6 frame could previously surface
-  a garbage mileage (raw tops out near 4.29e8 km) that the maintenance "next due / overdue" logic
-  trusts as the latest odometer. - A1: delete the dead, fully-duplicated BackupCommands role
-  interface from the DashboardHost composition — BridgeStateProvider already declares the identical
-  two members and is the one actually consumed (no implementation change needed). - B2:
-  charge-energy integration carries the last-known pack voltage forward across a sample that has
-  pack current but no fresh voltage (voltage is polled on a slower lane), in both
-  ChargeSessionMaterializer.integrateChargeEnergyKwh and
-  EventNotificationDecider.accumulateChargeEnergy, instead of dropping the sample and under-counting
-  kWh. - D1: ChargeSessionMaterializer charge-energy outputs are now value-asserted (constant-power
-  kWh integration, peak power selection ignoring discharge/non-finite, discharge-dip clip,
-  no-voltage null-energy guard, SOC/charger-type propagation) — previously zero assertions hit
-  energyKwh/peakPowerKw/startSoc/chargerType.
-
-G1 (lightweight VIN read on connect) is deferred to a follow-up: it collides with the ObdLocalStore
-  TooManyFunctions detekt ceiling (66/67) and needs a group-behind-accessor refactor rather than a
-  one-line addition.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Chores
+### 🔷 Changed
 
 - **tooling**: Fix stale docs, align CI node 22, harden gradle wrapper
   ([#220](https://github.com/jtn0123/VoltTracker/pull/220),
   [`23d63b7`](https://github.com/jtn0123/VoltTracker/commit/23d63b7e596cccff9cb50d189c8a0cb0c437c661))
 
-Executes the grade-report Documentation (H) + Dependencies (F) + DevEx (I) findings:
-
-- H1: bridge-abi.md setStorage handler panels.ts -> storage-status.ts (panels.ts was removed when it
-  was split). - H2: bridge-abi.md clearStoredData "11 DELETEs" -> "one DELETE per table (15)"; the
-  table set grew to 15 (ObdStoreMaintenance.clearAllData). - H3: bridge-abi.md getTrips "40" ->
-  "TRIP_LIST_LIMIT = 120 most-recent trips". - H4: data-model.md `events` -> `status_events` (the
-  real table name) in the overview + base-table sections, and add the required occurred_at_ms
-  column. - H5: CONTRIBUTING.md Kotlin test count 91 -> 119 (refreshed snapshot). - F1 / I (node
-  drift): codeql.yml + dependency-snapshot.yml now use node-version-file: .nvmrc (Node 22) instead
-  of a hardcoded Node 20, matching release.yml/android.yml and the declared engines field. Node 20
-  is EOL. - I1: verifyActiveApp (the documented "full" pre-push gate) now runs :app:detekt, making
-  it a true superset of verifyFast + the CI step list. - I2: add a SHA-pinned
-  gradle/actions/wrapper-validation step to the android.yml unit-tests job and pin
-  distributionSha256Sum for the Gradle 9.5.1 distribution so the wrapper jar + distribution are
-  integrity-checked on every PR.
-
-Docs-and-config only; no production code changed.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Documentation
+### 🔷 Changed
 
 - **adr**: Record encrypted-backup format and key derivation
   ([#219](https://github.com/jtn0123/VoltTracker/pull/219),
   [`4c26e8f`](https://github.com/jtn0123/VoltTracker/commit/4c26e8f7383e7e7d9c231f29f23815c6159ea64a))
 
-Adds ADR 0008 documenting the BackupCrypto container — the versioned VTBKEN1/2/3 magic, AES-256/GCM
-  streaming, PBKDF2-HMAC-SHA256 (600k for new backups, 150k legacy) with the iteration count stored
-  in the v3 header and authenticated as GCM AAD, the salt/IV/sanity-bound details, and the bounded
-  restore. This closes the encrypted-backup crypto/format ADR gap that ADR 0007 explicitly tracked
-  as still-open (report item H3).
-
-Updates ADR 0007's "still open" note to point at ADR 0008.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.17.0 (2026-06-16)
 
-### Features
+### ✳️ New
 
 - **ux,a11y,docs**: Execute the B-grade Frontend + Docs findings
   ([#218](https://github.com/jtn0123/VoltTracker/pull/218),
   [`c1e84d2`](https://github.com/jtn0123/VoltTracker/commit/c1e84d21e1e211df55e5a445ce5f04adfdf8a414))
 
-Batch A of the B-grade fix list (multi-agent, file-partitioned, adversarially reviewed). Frontend
-  UX/accessibility + documentation; no Kotlin. All gates green: dashboard typecheck/lint/461 tests,
-  lint, assemble, generated index.html refreshed.
-
-Frontend (C): - Android Back now closes the trip-detail sheet / restore dialog / app-dialog before
-  falling through to tab-switch; the restore-progress alertdialog gets a real focus trap + Escape. -
-  Status popover restores focus to the badge that opened it on close (a focus trap was the wrong
-  tool — it re-renders every telemetry sample). - Number inputs show a "adjusted to the N–M range"
-  hint + aria-invalid instead of silently rewriting the value. - Maintenance form: inline error next
-  to Save (not the far-away topbar), and a 0/negative odometer now warns instead of being silently
-  dropped. - Favorite star flips optimistically before the bridge round-trip. -
-  Notification/auto-scan toggles announce a confirmation (aria-live). - Trip-detail scatter gets a
-  grade legend + descriptive aria-label. - Drive GPS tile uses the friendly "Off — location
-  permission needed" copy. - Charge-status badge text+color derive from one map (no desync);
-  maintenance inputs use the standard field surface; charge KPIs stack on very narrow phones; the
-  active bottom-nav glow and segmented controls honor the theme tokens; the Text-size control lays
-  out as one even 3-button row. - (gpsText moved to telemetry.ts to break an import cycle it would
-  have created.)
-
-Docs (H): - README: fix the version, the SDK platform (37), the coverage floors (80/90), add the 3
-  missing shipped features (target-SOC, accessibility theme, favorites), link CHANGELOG.
-  CONTRIBUTING: same floors. - privacy-data-handling: document the backup crypto (AES-GCM +
-  PBKDF2-600k) and that the maintenance log survives a data clear / rides in backups. -
-  bridge-abi.md: backfill the ~20 missing bridge methods + a sync marker. - New top-level
-  SECURITY.md (data classes, on-device posture, backup crypto, reporting).
-
-Deferred (needs a bigger change, not this batch): the Drive live-tile empty-state screen-reader text
-  (the empty group is display:none, so it needs a visibility rework) and the font-scale rem
-  migration.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.16.3 (2026-06-16)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **ui**: End-user accessibility and clarity polish
   ([#217](https://github.com/jtn0123/VoltTracker/pull/217),
   [`d09df82`](https://github.com/jtn0123/VoltTracker/commit/d09df8218541722effee9f92fa50708f9073a824))
 
-* polish(ux,a11y): end-user accessibility + clarity pass (~24 items)
-
-UX/accessibility-weighted pass (multi-agent, file-partitioned, adversarially reviewed). All gates
-  green: dashboard typecheck/lint/461 tests, Kotlin tests/ detekt/spotless/jacoco/lint/assemble,
-  index.html regenerated.
-
-Accessibility: - Widget exposes a content description ("Volt Tracker: <SOC> state of charge,
-  <status>. <freshness>") for TalkBack (the a11y item deferred in an earlier pass). -
-  Efficiency-vs-speed scatter SVG gets role="img" + an aria-label matching the visible headline;
-  cell/route charts already had labels. - Live regions announced: error-banner repeat count,
-  auto-connect / notify-ready status lines, the live-rate and charge-status badges
-  (aria-live=polite). - Map layer tabs drop an invalid aria-pressed (role="tab" uses aria-selected).
-  - Route-playback button's accessible name now tracks Play/Stop state. - Status badges expose a
-  visually-hidden "Connection status:" prefix + initial aria-expanded; topbar nav label matches its
-  visible text (WCAG 2.5.3). - DTC search + small controls get a visible focus outline and 44px-ish
-  targets.
-
-UX / copy: - GPS status shows friendly text ("Off — location permission needed" / "Waiting for fix")
-  instead of the raw enum, and no longer drops the row. - Charge-sessions card title says "Latest 12
-  of N" instead of overstating. - Empty efficiency-scatter headline reads as guidance, not a stuck
-  spinner. - Notify-minutes select is greyed out while background checking is off. - Troubleshooter
-  force-stop buttons get distinguishing accessible names; the competing-apps step auto-expands when
-  its fix is relevant. - Low-voltage hint fallback copy aligned with the live render.
-
-(During central verification I reverted three over-reaching workflow edits: a .map-empty padding
-  change that broke its layout test, an EventNotifier SOC-format change that reintroduced
-  inconsistency, and setup-step copy that dropped the wizard's step numbers and the re-open-guide
-  hint.)
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(visual): refresh the 4 insights baselines for the scatter-legend/copy polish
-
-The a11y/copy pass changed the Insights efficiency-scatter legend (arrow glyphs) and headline copy;
-  refresh the Linux baselines from the dashboard-visual CI artifact (run 27638786227). Only the
-  insights scenarios shifted.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Refactoring
+### 🔷 Changed
 
 - De-complicate hot paths + fix edge-case bugs (26 files)
   ([#216](https://github.com/jtn0123/VoltTracker/pull/216),
   [`811d3a5`](https://github.com/jtn0123/VoltTracker/commit/811d3a5b643b8f48cc830b8d008ad13cfa177948))
 
-Fourth pass, focused on over-complicated code and bugs (multi-agent, file-partitioned, every change
-  adversarially re-verified as behavior-identical or a correct fix). All gates green: Kotlin
-  tests/detekt/spotless/jacoco/lint/ assemble, dashboard typecheck/lint/461 tests.
-
-Bugs: - ObdProtocol.mode01PayloadBytes: PID A6 (odometer) is 4 bytes, not 1 — the batch-completeness
-  gate under-counted it. - ObdService.onStartCommand: the running AtomicBoolean was read twice per
-  visibility/cancel action (could disagree under a race); snapshot once. - PidPollingState: a
-  carry-forward age-out left lastPolledAtMs set, emitting an orphan *StaleMs marker without its
-  value; clear it on age-out. - WidgetSnapshotStore: the first all-default snapshot took the
-  freshness-only branch and read back as EMPTY; force the full write when !hasData(). -
-  connection-tools.ts: busy/cooldown setTimeout handles escaped the re-bootstrap AbortController
-  (timer leak); a new notify duration was dropped if a select landed in the 600ms busy window;
-  dropped a dead toggle param. - map.ts buildSampleRoute: a legitimately-zero previous altitude was
-  treated as missing (and the previous point was aliased). - insights-panel.ts: maxSpeedKph used raw
-  truthiness, dropping a sub-1/0 value.
-
-Simplify (all behavior-identical): collapse EnhancedPidProfiles.find() two scans into one; delegate
-  voltWordValue->mode22Word and four percent parsers-> parsePercentMode01Byte; drop dead
-  error-phase/openOk tracking in ObdPollingEngine; move the notification settings refresh off the
-  every-call path; unify socTrack/powerTrack and the route/session JSON builders; hoist duplicated
-  bridge message + last-device flow; collapse EventNotificationPrefs.settingsVersion; de-duplicate
-  connection-status/telemetry/storage-status/map/core DOM helpers; and hoist two duplicated test
-  setups. Net -76 lines.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.16.2 (2026-06-16)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **obd**: Parser correctness fixes in ObdProtocol/ObdElmDecode
   ([#215](https://github.com/jtn0123/VoltTracker/pull/215),
   [`ef15810`](https://github.com/jtn0123/VoltTracker/commit/ef15810264d3a7d4c6adeb855f47b6f3b07b7bea))
 
-The parser items pass 2's scanner found but that were reverted half-applied when the workflow hit
-  its run limit — re-done cleanly and adversarially verified.
-
-- mode01PayloadBytes: 1F (engine run time) and 42 (control module voltage) are 2-byte batched
-  Mode-01 PIDs, not 1-byte. Undercounting let the batch completeness gate accept a frame truncated
-  by one byte, then the 2-byte decoders silently returned null instead of forcing a clean single-PID
-  re-read. - 222487 (ev distance this cycle): decoded signed + unbounded, so a high-bit word flipped
-  this odometer-style counter to a large negative km. Decode unsigned and bound 0..655.35 km
-  (0xFFFF/100). - 222889 (PRNDL): emitted the diagnostic "RAW_<n>" sentinel text to the user; emit
-  the plain gear number instead. - 2243A6 / 2241EC: both labelled "HV isolation resistance" despite
-  decoding in different units (~1000x apart); disambiguate to "(kOhm)" / "(ohm)" on both the decode
-  label and ObdElmDecode.nameForCommand. - parseDiagnosticTroubleCodes: a line carrying two modules'
-  replies (ATH0) had the second marker's count overwrite the first's outstanding ISO-TP continuation
-  count, dropping the first ECU's spilled multi-frame codes; sum per-marker counts instead.
-  Single-marker behaviour is unchanged.
-
-Tests: pin a sub-zero HV pack temperature (-20 C, the safety-relevant cold-soak case) and the
-  ev-distance high-word (0x8000 -> 327.68 km, not negative). All gates green: 1181 Kotlin tests,
-  detekt, spotless, jacoco, lint, assemble.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.16.1 (2026-06-16)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Deeper edge-case bug-fix pass (18 files) ([#214](https://github.com/jtn0123/VoltTracker/pull/214),
   [`e272e14`](https://github.com/jtn0123/VoltTracker/commit/e272e14b803b84e70ac6ce5959093fa215d6d359))
 
-A second, deeper audit pass (multi-agent, file-scoped, each fix adversarially re-verified). All
-  gates green: Kotlin tests/detekt/spotless/jacoco/lint/assemble, dashboard typecheck/lint/461
-  tests. Mostly real edge-case fixes:
-
-Data layer: - ObdStoreSupport.boundsFor: a non-finite (NaN) lat/lng point poisoned all four route
-  bounds; skip non-finite points and return empty when none are finite. - ObdStoreTrips.tripsJson:
-  one corrupt cached trip_json row blanked the entire Trips list; guard the per-row parse and skip
-  just the bad row. - ObdLocalStore.getCurrentSessionRouteJson: the live drive could be missed
-  behind a fixed 5-row recent scan after a finalize race; query status=ACTIVE directly. -
-  DatabaseMerger: an updated existing row was wrongly counted as "imported".
-
-Service / connection: - ObdService: lastVoltage wasn't reset between sessions, so a new connect
-  could republish the prior drive's voltage into the status/low-voltage hint. -
-  BluetoothStateReporter: the connecting-failure streak reset every attempt, so it never reached the
-  SDP-refresh threshold; reset only on device change (and make it @Volatile). - AutoDtcScanRunner:
-  documented "never throws" but a parse RuntimeException could escape; catch it and return an empty
-  list.
-
-Notifications: - EventNotificationDecider: an out-of-order/duplicate-timestamp sample corrupted the
-  charge energy-integration baseline; a single noisy final SOC reading could flip a finished charge
-  to "interrupted" — both fixed at the boundary. - EventNotifier: a tiny charge that rounds to "0.0
-  kWh" now uses the no-energy copy; measured-SOC precision made consistent across alert copy. -
-  EventNotificationPrefs: the auto-scan-on-connect toggle needlessly bumped the settings version
-  (not in the decider snapshot), invalidating the cache.
-
-Diagnostics / backup / bridge: - TroubleshooterBridge.forceStopPackage: validated the lower-cased
-  name but killed the raw-case string (case-sensitivity mismatch). - DiagnosticsBundle: manifest
-  byte-budget reserve could under-estimate. - DataBackup/RestoreValidator: UTF-8 tail-read
-  continuation-byte handling and a short-read false-reject in the encrypted-header sniff. -
-  VoltBridgeConnections.scanLast: validate the address like connectLast does. - connection-status.ts
-  / troubleshooter.ts: low-voltage hint threshold aligned with the backend; failure-banner copy and
-  scan-failure counting fixed.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Refactoring
+### 🔷 Changed
 
 - Simplify, polish, and debug ~90 small areas across the app
   ([#213](https://github.com/jtn0123/VoltTracker/pull/213),
   [`6cb5c0f`](https://github.com/jtn0123/VoltTracker/commit/6cb5c0f95dae96f1e23ea773b6b36483b7d8c8b3))
 
-A breadth-first cleanup pass (found via a multi-agent audit, each change file-scoped and
-  individually verified) across ~50 files. No behavior change except the explicit bug fixes noted
-  below. All gates green locally: Kotlin tests/detekt/spotless/jacoco/lint/assemble, dashboard
-  typecheck/lint/461 tests/spotless, generated index.html clean.
-
-Debug (real fixes): - strings.xml: notification_target_soc_text had reversed %1$s/%2$s vs the (soc,
-  target) order EventNotifier passes — corrected to match the siblings. - EventNotificationDecider:
-  low-SOC alert could never re-arm when the threshold was clamped near 100 (re-arm point
-  unreachable); cap it at a reachable SOC. - ObdTripLabels: surrogate-pair-safe truncation (no
-  lone-surrogate mojibake). - core.ts: device option label rendered "undefined" when address
-  missing; locale-aware byte formatting in the restore progress. - map.ts: stops badge now counts
-  valid-only points so it matches the drawn markers. - actions.ts: scan request no longer silently
-  falls through to connect when bridge.scan is absent (old APK) — shows an in-app-only hint. -
-  telemetry.ts: reset the speed-meter aria-label when the reading disappears; derive the validation
-  denominator from the live row count. - insights-panel.ts: use the exact km-per-mile reciprocal for
-  the mph->kph back-conversion. storage-status.ts: 1-based month bucket key. - BackupController:
-  merge-success status could render literal "null".
-
-Simplify / polish: removed dead helpers/getters/constants/CSS rules, extracted repeated magic
-  numbers and duplicated string literals to named constants, de-duplicated the logcat TAG (via the
-  neutral AppPrefs.LOG_TAG), collapsed redundant guards/branches, switched a 28-branch if-chain to a
-  switch, replaced hand-rolled big-endian shifts with ByteBuffer, fixed stale comments/KDoc, and
-  tidied several user-facing strings.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.16.0 (2026-06-15)
 
-### Features
+### ✳️ New
 
 - Grade follow-ups — bug fixes, features, tests, docs, devex
   ([#212](https://github.com/jtn0123/VoltTracker/pull/212),
   [`e280356`](https://github.com/jtn0123/VoltTracker/commit/e2803566fd6c4eccc423748c3206102331b4fe43))
 
-* feat: grade follow-ups — bug fixes, features, tests, docs, devex
-
-Executes the v0.15.0 re-audit (.claude/grade-report.md) across all nine categories: the new feature
-  surface's non-obvious bugs, the half-built feature completions, test coverage for the Android-glue
-  layers, doc drift, and devex. All CI-equivalent gates verified green locally.
-
-Bug fixes (B/C): - B1 @Volatile on the notification decider/eventCoordinator (reintroduced B1-class
-  cross-thread race) ; B2 auto-scan throttle stamps only on a real read ; B3 suppress
-  first-ever-scan new-DTC false alert (baseline-establish) ; B5 widget SOC rounds not truncates ; B6
-  GPX coord keeps the decimal ; B7 widget freshness tracks last sample not last change - C1/C7
-  live-charge ETA power floor + ceiling + "topping off" ; C2 Insights scatter follows the theme ; C3
-  savings prompt-to-enable state ; C5 cell-grid card hides when empty ; C6 DTC severity comment/code
-  reconciled
-
-Features completed (M): - M1 maintenance next-due + intervals (schema v12→v13) ; M2 charge
-  target-SOC + notify-at-target ; M3 charge-interrupted notification ; M4 trip favorites +
-  search/filter/sort ; M5 cost/savings trend chart ; M6 bulk all-trips CSV export ; M7 per-trip
-  detail view ; M9 accessibility settings (font scale + high contrast) ; M10 permanent-DTC
-  clearability guidance ; M8 locale-aware formatting + i18n module
-
-Architecture / DevEx (A/I): - A1 group event-notif host overrides behind one DashboardHost accessor
-  (MainActivity 70→64 fns) + I3 detekt TooManyFunctions ratcheted DOWN 71→67 ; I1 Gradle JDK-21
-  toolchain pin + foojay (fixes the JDK>21 detekt break) ; I2 focused jacoco floors for the new
-  pure-logic classes ; I5 verifyFast tier ; A2 single MAX_LABEL_LEN ; A3 neutral AppPrefs holder ;
-  A4 prefs-key disjoint test
-
-Testing (D): WidgetUpdater/VoltWidgetProvider, TripExportController, buildShareIntent,
-  SetupGuideController, coordinator reconnect/null paths, widget jacoco floor, e2e semantic guards
-  on the new screens.
-
-Security / Perf / Docs (E/G/H/F): E1 PBKDF2 600k via a backward-compatible v3 backup header ; E3
-  targetSdk 37 ; G1 RollingAppLog buffered writer ; G3 adaptive poll cadence ; H1 bridge-abi.md, H2
-  data-model.md v12/v13, H3 features doc + ADR 0007, E2 export-precision privacy note, F1 dependency
-  note.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(visual): refresh charge/insights/map baselines for new UI
-
-Charge (M2 target-SOC input, M5 cost-trend chart), insights (M5/M9/M10), and the map session-list
-  search controls (M4) shifted these 10 scenario-matrix screenshots. Images are the exact
-  ubuntu-24.04 CI renders from the dashboard-visual artifact.
-
-* test(visual): fix D6 maintenance guard to seed state, not the bridge
-
-renderMaintenanceList() reads state.maintenanceLog (populated from the bridge on load), not
-  bridge.getMaintenanceLog() directly, so the guard's bridge override left the list empty → it
-  rendered the empty-state article (also .real-insight-item) and the count==2 assertion saw 1. Seed
-  state.maintenanceLog after the view switch and exclude the .maint-empty article from the row
-  count. (e2e-only; runs in CI.)
-
-* fix(export): guard bulk CSV against spreadsheet formula injection + close test gaps
-
-Re-audit hardening for the grade-followups work:
-
-- TripTrackFormatter.csvField now neutralizes a trip label that begins with =, +, -, @, tab, or CR
-  by prefixing a single quote, so a label like =HYPERLINK(...) (which can also arrive via a merged
-  backup) is treated as literal text instead of being evaluated as a formula when the bulk all-trips
-  CSV is opened in Excel/Sheets. Only the free-text label is affected; the numeric route-key trip id
-  and per-sample columns are untouched. - BackupCryptoTest: add the previously-missing legacy v1
-  (no-AAD) decrypt round-trip and the out-of-range iteration-count rejection — the only tests
-  exercising those two security-relevant branches. - PrefsKeyOwnershipTest: include PREF_TARGET_SOC
-  so the "every real key" owner check actually covers the M2 target-SOC key. - detekt.yml: correct
-  the ratchet comment (down from 70, not 71).
-
-* fix(service): close the app-log file handle on teardown + make settings-version bump atomic
-
-Closes the two remaining re-audit items on the grade-followups work:
-
-- G1 follow-up (FD leak): the long-lived buffered RollingAppLog writer was never closed.
-  RollingAppLog gains a permanent close() (post-close writes are dropped, not reopened, so a
-  straggler from a still-draining poll thread can't re-leak the handle). ObdService now holds its
-  instance and, in onDestroy, detaches the OBDLog mirror then closes it. The second instance behind
-  BackupController.restoreLog is released via LogcatMirror.close() / BackupController.dispose(),
-  called from MainActivity.onDestroy. - G2 follow-up (counter atomicity): the settings-version
-  read-modify-write is now serialized on a process-wide lock inside mutateSettings{}, so the
-  Activity (toggles) and the service (coordinator) — which hold separate EventNotificationPrefs over
-  the same process-singleton SharedPreferences — can't lose an increment. Strictly monotonic;
-  single-threaded behaviour unchanged. Bookkeeping setters stay off the version path.
-
-New RollingAppLogTest.closeReleasesTheWriterAndDropsFurtherWritesInsteadOfReopening. Verified green
-  on JDK 21: unit tests, detekt, spotless, jacoco, lint, assemble.
-
-* fix(ui,test): address CodeRabbit — theme-aware toggle tint, grouped map-action spacing, bounded
-  DoS-guard test
-
-- base.css: the `.pref-toggle[data-on="true"]` background was a hardcoded rgba(108,198,255,.12) that
-  matched no theme's --map-accent. Add a --map-accent-rgb triplet beside --map-accent in every theme
-  block (default 76,196,255 · high-contrast 110,198,255 · light 11,109,194) and use
-  rgba(var(--map-accent-rgb, 76,196,255), .12) so the tint tracks the accent. Verified in preview:
-  default → rgba(76,196,255,.12), high-contrast → rgba(110,198,255,.12). - components.css: .link-btn
-  carries margin-inline-end:-9px for single-button headers; inside the grouped .map-sheet-actions
-  that ate the gap and overlapped tap targets. Zero it for grouped buttons but keep -9px on
-  :last-child so the group stays flush with the card edge. Verified: 4px gap, no overlap. -
-  BackupCryptoTest: the iteration-count DoS-guard test wrote 0x7FFFFFFF; if the bound check ever
-  regressed past key derivation that would try ~2.1B PBKDF2 rounds and hang CI. Use 5,000,001 (just
-  above the 5M cap) — bounded either way.
-
-* fix(ci): de-flake emulator-smoke nav check by polling for the repaint
-
-The bottom-nav assertion detected a view switch by sleeping a fixed interval after each tap and
-  capturing exactly one screenshot, then byte-comparing it to the previous tab. On a slow/loaded CI
-  emulator the WebView re-render lags the tap by several seconds, so that single capture routinely
-  photographed the OLD frame and reported a false "no view change" — the dominant flake, and why it
-  struck the later tabs first (the emulator is slowest by then: the required retries grew tab over
-  tab until the fixed budget ran out on "signals").
-
-Now each tap polls — capture every 2s until the screen actually changes — with a generous per-tap
-  budget and a few idempotent re-taps for the occasional dropped adb tap. It breaks within ~2s of
-  the repaint when fast and waits patiently when slow. Crucially the loop still only ACCEPTS a real
-  pixel change, so it cannot mask a genuine geometry/selector break (a view that never switches
-  changes nothing on screen and still fails). The handshake positive-signal and the negative logcat
-  scan are unchanged; EmulatorSmokeContractTest stays green.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.15.0 (2026-06-15)
 
-### Features
+### ✳️ New
 
 - Grade-audit fixes, tests, and 10 end-user features
   ([#211](https://github.com/jtn0123/VoltTracker/pull/211),
   [`cdac653`](https://github.com/jtn0123/VoltTracker/commit/cdac65320f7c2e253692b31ea61eb2897db25b20))
 
-* feat: grade-audit fixes, tests, and 10 end-user features
-
-Executes the codebase grade report (.claude/grade-report.md) across Architecture (A), Backend/OBD
-  (B), Frontend (C), Testing (D), and the Missing-Features list (M). All CI-equivalent gates
-  verified green locally.
-
-Architecture (A): - A1 Kotlin↔JS bridge ABI drift guard test (fixed the real shareDiagnosticsDigest
-  mismatch) - A2 removed dead/duplicated standard-PID branches from parseKnownValueLegacy (registry
-  already handled them); ratcheted detekt LargeClass 1169→1149 and CyclomaticComplexMethod 213→179 -
-  A3 incremental ESM migration (cross-module VD.* usage −12.7%; cyclic core cluster intentionally
-  retained to avoid circular-dep init breakage) - A4 moved MainActivity broadcast/telemetry plumbing
-  into DashboardBroadcastCoordinator
-
-Backend / OBD bugs (B): - B1 @Volatile on session end-state (data race) ; B2 debounce 0xFF speed
-  sentinel before treating as plugged ; B3 bound Mode-22 fallback read ; B4 anchor segmented length
-  line ; B5 snapshot dropped-telemetry after drain ; B6 asymmetric speed-jump filter (accepts hard
-  braking) ; B7 concurrent-safe PidPollingState maps
-
-Frontend / dashboard bugs + quality (C): - C1 live-route hydration reference desync (recovered
-  drives now render) ; C3 consistent live distance/duration ; C4 reject (0,0) GPS ; C5 cache recent
-  sessions on the status popover ; C6 reset live route on demo start ; C7 clamp electricity-rate
-  input ; C9 connection-tools listeners under AbortController ; C10 finite-guard routeFitKey ; C11
-  remove dead escapeHtml + fix tone ternary ; C2 state-seam guard + policy ; C8 shared focus-trap
-  module ; C12 CSS sectioning + tokens
-
-Testing (D): - RestoreValidator, ObdPersistenceWorker, BackupCrypto, parser-registry,
-  ObdSessionClassifier, VoltBridge connection/export tests ; bridge name-contract, degraded-device,
-  state-seam, visual semantic guards
-
-Missing features (M): - M1 event notifications (charge complete / new DTC / low SOC) ; M2 per-trip
-  GPX/CSV export (wires the dormant exports table) ; M3 auto DTC scan on connect ; M4 trip labels +
-  M5 maintenance log (one non-destructive v11→v12 migration) ; M6 EV-vs-gas savings ; M7 guided
-  onboarding ; M8 live charge time-to-full ; M9 cell-grid interim gating ; M10 home-screen widget +
-  DTC severity lines
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(e2e): fix a11y inert assertion + refresh visual baselines
-
-- a11y.spec.js: assert the standard `inert` attribute the shared focus-trap (createFocusTrap, C8)
-  now sets on the dialog background, replacing the old custom data-dtc-dialog-inert marker. -
-  Refresh the 10 charge/insights scenario-matrix Linux baselines that legitimately shifted from the
-  new UI: M9 collapses the empty 96-cell grid (shorter charge tab), M6 savings + M8 live-charge rows
-  on insights/charge. Images are the exact ubuntu-24.04 CI renders from the dashboard-visual
-  artifact.
-
-* fix: address CodeRabbit review on PR 211
-
-Bugs / safety: - DatabaseMerger: skip maintenance-log copy when the donor table is absent (pre-v12
-  backups) so a legacy restore no longer aborts the whole merge. - TripTrackFormatter: reject
-  non-finite (NaN and ±Infinity) coordinates before coord()/toBigDecimal() so an overflowing GPS
-  literal can't crash GPX/CSV export. - ObdStoreReports: bound the maintenance-log query limit via
-  boundedLimit(). - ObdService: wrap eventCoordinator.onSessionStart() best-effort so a hook
-  exception can't abort session startup. - TripExportController: build the share intent
-  synchronously before returning success so the bridge result reflects actual viability
-  (FileProvider failure now surfaces ok=false). - VoltBridgeDataExports: validate odometerKm finite
-  (and non-negative) before persisting a maintenance entry. - WidgetUpdater: synchronize the
-  snapshot read->merge->write across the status and telemetry entrypoints to avoid lost updates;
-  refresh via a direct AppWidgetManager.updateAppWidget call instead of a self-broadcast. -
-  ObdTripLabels: sanitize the label through cleanLabel() in eventPayload(). - focus-trap.ts:
-  snapshot each background node's prior inert/aria-hidden state on activate and restore it on
-  deactivate (don't corrupt pre-existing a11y state). - ObdProtocol: revert the elmSegmentedHex
-  firstContentLine restriction back to the robust !sawSegment-guarded length detection so an adapter
-  preface line no longer makes the ISO-TP length line be missed.
-
-Hardening / hygiene: - AndroidManifest: gate the exported widget receiver behind BIND_APPWIDGET; the
-  in-app refresh now uses a direct update call so the gate doesn't block it. -
-  EventNotificationCoordinator/Decider: re-read notification prefs each evaluation so a
-  toggle/threshold change mid-session takes effect on the next sample/scan, without resetting
-  per-connection accumulation/arming state. - TripExportTest: close the VoltTrackerDb helper
-  instances (no SQLite leak). - connection-tools.test.js: assert the notify-when-ready toggle exists
-  rather than vacuously early-returning.
-
-Tests: - New EventNotifierTest (permission gate, channel creation, per-event-kind dispatch + ids,
-  no-op-when-blocked). - New focus-trap.test.js (inert/aria-hidden state preservation). -
-  TripTrackFormatterTest: non-finite coordinate rejection. - DatabaseMergerTest: merge succeeds for
-  a donor predating maintenance_log. - EventNotificationCoordinatorTest: live mid-session toggle
-  behavior.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.14.0 (2026-06-15)
 
-### Features
+### ✳️ New
 
 - **diagnostics**: Add self-selecting, budget-bounded diagnostics digest
   ([#210](https://github.com/jtn0123/VoltTracker/pull/210),
   [`a5dc070`](https://github.com/jtn0123/VoltTracker/commit/a5dc07017e0948d53ef764c39c2457eeced625e9))
 
-* Add self-selecting, budget-bounded diagnostics digest
-
-The "Send diagnostics" zip previously shipped the raw last-5 session JSONLs plus the full app log,
-  which can overflow an external debugging tool's context (e.g. an AI assistant) and forces a human
-  to guess which session to share.
-
-Add DiagnosticsBundle, which lets the app do the choosing: it catalogues every session log in a
-  MANIFEST, then embeds only the most relevant bodies (most recent session always, then sessions
-  that logged error events, then by recency) until a byte budget is spent. Oversize bodies are
-  tail-trimmed (failures cluster at the end), per-section caps keep one noisy source from crowding
-  out the rest, and all embedded text is run through the existing redaction pass.
-
-The digest ships as diagnostics-bundle.txt inside the existing diagnostics zip, so the current share
-  flow is unchanged for power users while the digest is the artifact to hand straight to a debugging
-  session.
-
-Tested: DiagnosticsBundleTest (selection priority, budget cutoff, tail-trimming, redaction, empty
-  device) and a new redacted-digest case in DiagnosticsShareIntentTest.
-
-https://claude.ai/code/session_01X7ahxzdfaJAqVMmT68YCLU
-
-* feat(diagnostics): add standalone "Send AI digest" share
-
-Follow-up to the diagnostics digest: surface it as its own share action so the budget-bounded,
-  redacted digest can be handed straight to a debugging session without opening the diagnostics zip
-  and fishing out the file.
-
-- DiagnosticsShareIntent.buildDigestIntent/buildDigestFile write the digest as a single text/plain
-  file under cacheDir/diagnostics and share it via FileProvider; the stale-clearing dir prep is
-  factored into prepareOutDir and shared with buildZip. - Bridge plumbing:
-  VoltBridge.shareDiagnosticsDigest -> VoltBridgeDiagnostics -> DashboardHost/MainActivity ->
-  TroubleshooterBridge.shareDiagnosticsDigest, reusing the same redaction-disclosure dialog as the
-  full diagnostics share. - Dashboard: a "Send AI digest" button next to "Send diagnostics" in the
-  collapsed backup/diagnostics tools, wired in connection-tools.ts, typed in dashboard-globals.d.ts,
-  with the generated index.html regenerated.
-
-Tests: split the digest coverage into a content test (buildDigestFile) and an intent test
-  (buildDigestIntent), and reset FileProvider's static PathStrategy cache in setUp so multiple
-  getUriForFile tests in one class stop colliding on each other's temp cacheDir. All app unit tests
-  + 341 dashboard tests pass.
-
-* fix(diagnostics): enforce real byte budget + keep small fitting sessions (PR #210 review)
-
-Address CodeRabbit review on the diagnostics digest:
-
-- Enforce the actual remaining budget on every section after the manifest. The summary rollup,
-  app-log tail, and each session body are now clamped to the bytes genuinely left (remainingBudget),
-  with a FOOTER_RESERVE held back for the OMITTED/END tail. Previously these were appended at their
-  full caps regardless, so a tiny caller budget or an oversized summary/app log could push the
-  digest past its advertised budgetBytes before any session body was added. The MANIFEST stays the
-  irreducible catalog so nothing is hidden. - Keep any session that fits in full even when it is
-  below MIN_SESSION_BYTES, so short error sessions stay eligible instead of being dropped by the
-  min-slice floor (which broke the "error sessions before clean ones" rule). - Strengthen
-  DiagnosticsShareIntentTest: assert the digest is the first zip entry and that the redacted session
-  body is actually embedded (not just catalogued in the manifest). - Add DiagnosticsBundleTest cases
-  for the budget ceiling under pressure and for small-session inclusion. - Pin the new
-  shareDiagnosticsDigest bridge method in VoltBridgeTest (the PR added the method but left the
-  bridge-surface test failing).
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* fix(obd): correct Gen2 Volt cell-voltage scale and quiet false PID parse failures
-
-Findings from a day of on-device field logs (user's Gen2 Volt + OBDLink MX+):
-
-- Min/max cell voltage (224329/22432B) never decoded: every read is a 2-byte word in 0x1644-0x1A90,
-  but the Bolt-derived 5/65535 scale mapped those to ~0.44 V, which the 1.5-4.5 V sanity bound
-  rejected on all 3,642 samples. So minCellVoltage/maxCellVoltage/cellBalanceMv were always null and
-  the cell-balance view was permanently empty. Rescale 224329/22432B to 1/1600 V/count,
-  field-validated against a pack-voltage/96 anchor (N=118; 95-97% of reads land in 3.0-4.2 V). The
-  unvalidated average (22C218) and individual cell probes keep the legacy scale -- no field anchor
-  for them yet and the probe DIDs answer at a different magnitude.
-
-- pid_parse_failed cried wolf on valid ECU sentinels: cell-number PIDs (22432A/22432C) returning 00,
-  engine torque (22203F) returning 62203F00, and redundantly 010D=410DFF. Add
-  ObdProtocol.isBenignSentinelResponse (all-zero Mode 22 payload, or the 010D 0xFF speed sentinel)
-  and skip those in LiveSampleReader.reportParseFailures. Genuinely unmodeled non-zero frames still
-  surface as parse failures.
-
-- Engine torque (22203F): documented that this Volt answers with a single byte (mostly 00/NO DATA),
-  not the 2-byte word the community sheet models, so the 1-byte scale needs an engine-running
-  capture before it can be decoded. Left unparsed rather than guessed.
-
-Tests: rescaled the cell-voltage decoder cases to the Volt encoding, added a real-field-frame decode
-  test and a benign-sentinel test, and split the probe sample-response fixture. Full
-  :app:testDebugUnitTest + spotlessCheck green. See docs/pid-validation-2026-06-03.md for the
-  analysis.
-
-* docs(obd): add field-capture handoff note + log cell-number semantics question
-
-Captures the two OBD decoder questions that need fresh on-car data (engine torque 22203F 1-byte
-  scale; cell-number 22432A/22432C semantics, which show min#>max# in ~half of paired field rows).
-  The handoff note is self-contained: how to pull logs over wireless-debugging adb, what to capture,
-  and how to validate each item, so a future session can act without prior context.
-
-* fix(ci): green detekt + dashboard coverage; strengthen digest body tests
-
-- detekt: bump LargeClass threshold for ObdProtocol (now carries isBenignSentinelResponse + the
-  cell-voltage scale) and TooManyFunctions thresholdInClasses for MainActivity (PR added
-  shareDiagnosticsDigestFromBridge), matching the project's documented per-god-class threshold
-  convention. Fix the ImplicitDefaultLocale flag in DiagnosticsBundleTest with an explicit
-  Locale.US. - dashboard coverage: add a troubleshooter.test.js case for the new "Send AI digest"
-  button (bindSendAiDigest -> shareDiagnosticsDigest, busy-state + cooldown), restoring
-  connection-tools.ts above the line/function gates. - tests: assert the digest embeds the redacted
-  session body ("command":"010C") in buildDigestFileWritesRedactedDigestText, per CodeRabbit, so a
-  manifest-only pass can't hide a missing body.
-
-Verified locally (JDK 21): verifyGeneratedDashboardClean, :app:detekt, :app:spotlessCheck,
-  :app:testDebugUnitTest, and dashboard vitest + coverage gate all green.
-
-* fix(diagnostics): keep MANIFEST in lockstep with emitted bodies; accurate detekt note
-
-- DiagnosticsBundle: render the session bodies (and the OMITTED count) from the same `plans` the
-  MANIFEST is built from, instead of re-clamping each body to the live remaining budget. The old
-  per-body clamp could mark a session "included":true in the manifest yet skip it from the output
-  under a tight budget. Budget safety is preserved by making MANIFEST_BYTES_PER_ENTRY a true upper
-  bound (220 -> 256) so planSessions reserves at least the real manifest + fixed-section size, and
-  the summary/app-log tails are still runtime-clamped for tiny caller budgets. Added a regression
-  test asserting every manifest 'included' flag matches the emitted body under budget pressure. -
-  detekt: correct the LargeClass comment — ObdProtocol measures 1168 by detekt's LargeClass metric
-  (logical lines), not the ~1366 physical wc -l a reviewer might read; threshold pinned at 1169 per
-  the project's per-class convention.
-
-Verified locally (JDK 21): :app:detekt, :app:spotlessCheck, :app:testDebugUnitTest green.
-
-* ci(android): collapse duplicate push+PR runs to stop emulator-smoke flaking
-
-A push to a PR branch fires both `push` and `pull_request`, each running the whole "Android unit
-  tests" workflow — including the heavy emulator-smoke job — for the same commit. With the separate
-  android-emulator-smoke.yml also running on PRs, up to three emulators spun up concurrently for one
-  commit and starved each other on the 2-core runners; the push-triggered emulator-smoke lost the
-  race every time (rotating `adb: device offline` / `Instrumentation Process crashed`) while the PR
-  runs passed.
-
-Add a concurrency group keyed on the commit SHA (which push and pull_request share — github.ref does
-  not) so the duplicate runs collapse into one. Release pushes to main have no PR and run
-  uncontended.
-
-* ci(android): queue duplicate push+PR runs instead of cancelling
-
-cancel-in-progress: true collapsed the duplicate push/PR runs but left the cancelled
-
-run's checks (ci-success et al.) reporting as failed. Switch to cancel-in-progress: false so the two
-  same-SHA runs serialize and both finish with real results — still no concurrent emulator
-  contention, but no cancelled-run red either.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.13.1 (2026-06-14)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **ui**: Remove WebView cold-start flash, show connect spinner, announce map empty state
   ([#209](https://github.com/jtn0123/VoltTracker/pull/209),
   [`1a0011f`](https://github.com/jtn0123/VoltTracker/commit/1a0011f5618fc60df1595aafbc48352a2c414d26))
 
-Three targeted UI/UX refinements verified against the existing (already quite polished) dashboard
-  and native shell:
-
-- WebViewBootstrap: pin the WebView background to the dark chrome color so cold start no longer
-  flashes opaque white before the dashboard's first frame paints. - components.css: the connect/scan
-  primary button sets aria-busy="true" for the full multi-second Bluetooth handshake, but nothing
-  styled it — add a small leading spinner (suppressed under prefers-reduced-motion) so the
-  "Connecting…" label no longer looks frozen. - map partial: mark the "No GPS route yet" cover
-  role="status" aria-live so screen readers announce it when it appears, plus a test to lock it in.
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
-### Chores
+### 🔷 Changed
 
 - Polish repo docs, GitHub templates, and stale config cleanup
   ([#189](https://github.com/jtn0123/VoltTracker/pull/189),
   [`52b9f58`](https://github.com/jtn0123/VoltTracker/commit/52b9f583d874425da699fdf245db0327599f7649))
 
-Adds PR template + CODEOWNERS, fixes docs (cross-platform ./gradlew, JDK 21, dashboard source map,
-  repo-structure table), drops the nonexistent `release` branch from the CodeQL PR trigger, and
-  removes dead config (.dockerignore, .github/actionlint.yaml, stale .gitignore receiver//e2e/
-  patterns).
-
-Rebased onto current main; issue templates already on main were kept (the duplicates from this PR
-  were dropped), and the README Architecture + Dashboard Source Map sections were merged.
-
 - **deps**: Bump androidx.core to 1.19.0 + raise compileSdk to 37
   ([#208](https://github.com/jtn0123/VoltTracker/pull/208),
   [`186fcdf`](https://github.com/jtn0123/VoltTracker/commit/186fcdf9b8fe25519a0069bc34e3b3a27b30115f))
-
-androidx.core:core + core-ktx 1.18.0->1.19.0 (and androidx.annotation 1.9.1->1.10.0 transitive),
-  regenerated app/gradle.lockfile, and compileSdk 36->37 (required by androidx.core 1.19's AAR
-  metadata; targetSdk stays 36). Supersedes #172.
-
-CI fully green: Android unit tests (both events), CodeQL, lint, gradle audit + lockfile sync,
-  Release dry run.
 
 - **deps-dev**: Batch low-risk dev-dependency bumps
   ([#206](https://github.com/jtn0123/VoltTracker/pull/206),
   [`32e6d15`](https://github.com/jtn0123/VoltTracker/commit/32e6d1590410a5faf1530ae725640cd6414351ed))
 
-eslint 10.4.1->10.5.0, typescript-eslint 8.60.1->8.61.0, vitest + coverage-istanbul 4.1.7->4.1.8
-  (dashboard-tests), axe-core 4.12.0->4.12.1 (dashboard-e2e), gradle test-retry 1.6.4->1.6.5.
-  Supersedes #173, #174, #200, #201, #202, #203.
-
-CI: pull_request run fully green (unit/detekt/lint/coverage, dashboard-tests, dashboard-visual,
-  dashboard-e2e, gradle audit, Release dry run, CodeQL). The lone red was a flaky emulator-smoke in
-  the push run — the same commit passed it on the PR run, and dev-dep bumps can't affect the app
-  launch.
-
-### Continuous Integration
+### 🔷 Changed
 
 - Bump actions/checkout to v6.0.3 and osv-scanner-action to v2.3.8
   ([#207](https://github.com/jtn0123/VoltTracker/pull/207),
   [`4341d6d`](https://github.com/jtn0123/VoltTracker/commit/4341d6dac8e8384a866f4f0c6b86ac0962a9e3a2))
 
-Batches #170 + #171. checkout v6.0.2->v6.0.3 across workflows (plus one stale v4 straggler),
-  osv-scanner-action v2.0.2->v2.3.8. CI-only. PR-event CI fully green (unit/detekt/lint/coverage,
-  dashboard-tests/visual/e2e, gradle audit w/ new osv-scanner + lockfile sync, emulator-smoke,
-  Release dry run, CodeQL); the lone red was the known flaky emulator-smoke in the push run.
-
 
 ## v0.13.0 (2026-06-13)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **release**: Clear esbuild audit advisory + #199 CI regressions
   ([#205](https://github.com/jtn0123/VoltTracker/pull/205),
   [`869e251`](https://github.com/jtn0123/VoltTracker/commit/869e2518d11aa9246a03cb89c2ecdc3f1ad7404d))
 
-Bump esbuild ^0.25.0 -> ^0.28.1 to clear GHSA-gv7w-rqvm-qjhr (release audit gate), and fix three
-  #199 CI regressions not covered by the local gate: - detekt TooManyFunctions threshold for
-  MainActivity (61 -> 64) - dashboard-e2e map.spec.js button count (new Follow button) -
-  dashboard-visual charge-tab baselines regenerated (new Battery-tab cards)
-
-All checks green: Android unit tests (detekt/e2e/visual/unit), CodeQL, Release dry run.
-
-### Features
+### ✳️ New
 
 - **dashboard**: Live-map follow + direction, live-signals + battery views, charge over-count fix,
   WebView lifecycle ([#199](https://github.com/jtn0123/VoltTracker/pull/199),
   [`44ad880`](https://github.com/jtn0123/VoltTracker/commit/44ad8809e9e5f81a8c4036e9125779bc3b5238ff))
 
-Multi-phase dashboard/app pass addressing the original issue list plus follow-ups:
-
-- Lifecycle: fix black-screen-on-resume, faster cold start, no "new run" on resume - Map:
-  auto-follow the live drive + direction-of-travel visuals - Live signals diagnostic panel (with
-  "not reporting" filter) - Charge over-counting fix (transient-break debounce + min-sample guard) -
-  Battery: cell-balance card, SOH trend chart, 96-cell voltage-map scaffold - Live-route rehydration
-  after a mid-drive WebView teardown - Self-review + CodeRabbit review fixes folded in
-
-Verified: tsc + ESLint clean, vitest 340, :app:testDebugUnitTest + spotlessCheck green.
-
 
 ## v0.12.1 (2026-06-12)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Implement the codebase-eval polish items across data, dashboard, app, and CI
   ([#198](https://github.com/jtn0123/VoltTracker/pull/198),
   [`b4f688e`](https://github.com/jtn0123/VoltTracker/commit/b4f688eef6f85ba5414d4c8215a57637aa52cd2a))
 
-* ci: surface flaky retries, single-source bundle budgets, document tooling contracts
-
-- CI test summary now groups retried executions per test, lists tests that passed only after retry
-  as flaky (with ::warning annotations), and keeps never-passed tests out of that bucket;
-  failed/flaky/slowest lists print "...and N more" instead of truncating silently. - Dashboard
-  bundle budgets in the workflow headroom step are now extracted from mobile/android/build.gradle
-  (the hard gate) instead of duplicated literals, with rename protection. - Spotless test glob
-  broadened to src/test/**/*.kt; detekt.yml documents that tests are analysed by correctness rules
-  (complexity rules exclude them). - jacoco.gradle coverage-history legend explains the audit-ID
-  naming (D4 etc.) and EmulatorSmokeContractTest KDoc is rewritten in plain language. -
-  emulator-smoke.sh logcat error patterns documented case by case (no behavior change); serial
-  Spotless/Detekt/Lint lane justified inline. - CONTRIBUTING.md: stale "Java tests remain" note
-  replaced with a Java test inventory (currently 0 .java / 91 .kt) and the conversion policy.
-
-https://claude.ai/code/session_01CwuZUdBadFVmQ6yeRfWr1g
-
-* fix: harden app-layer lifecycle, location, and backup edge cases
-
-- MainActivity: ObdLocalStore construction no longer crashes startup on a corrupt DB/full disk — the
-  store stays null (already tolerated everywhere) and the dashboard shows a blocked status instead
-  of "viewing local data"; WebView teardown is guarded against Chromium throwing during destroy();
-  isDashboardReadyForTest() is internal + @VisibleForTesting. - ObdService: sessionStateMachine is
-  private (nothing outside the service read or wrote it). - ElmConnection: lastTransactTruncated
-  resets at session boundaries so a new session can't observe the previous session's truncation
-  verdict. - LocationManagerTracker: 60s watchdog detects a hung provider, logs, and re-subscribes
-  instead of waiting forever; any incoming fix re-arms it. - BackupController: dialog-show sites
-  guard isFinishing (restore prompt also cleans up the staged file), and backup build/share failures
-  log context before the failure UI. - Bluetooth receivers (DashboardBroadcastCoordinator,
-  BluetoothStateReporter) register NOT_EXPORTED — Bluetooth ACTION_* are protected system
-  broadcasts, so exported registration was never required.
-
-* fix(dashboard): zero innerHTML sinks, shared state factory, payload-error reporting
-
-- core.ts: the last innerHTML sink is now replaceChildren(); the dom-sinks allowlist is ratcheted to
-  zero. parsePayload() reports JSON failures through the rate-limited client-error path instead of
-  silently returning the fallback. - New telemetry-state.ts factory seeds initial telemetry state
-  for core init, clearDemoTelemetry, and resetTelemetry — fixing real drift (resetTelemetry had
-  dropped the source key). - insights-panel.ts uses the shared haversineMetersJs instead of a local
-  copy; "Current drive" label extracted to a shared constant. - payload-validators.ts warn-once set
-  is capped at 256 entries. - drive.ts caches chart host widths, invalidated by the existing
-  debounced resize handler. - CSS: new --volt-rgb token replaces 56 hardcoded rgba(255,122,69,...)
-  literals (pixel-identical), with a guard test against regressions. - Tests: app-dialog
-  keyboard/focus-trap coverage, CSS data-state/tone selector drift check, bridge-failure degrade
-  pins for the connection badge; global coverage floors raised (lines 76->81, statements 72->78,
-  functions 75->80, branches 66->69) with dated audit entries.
-
-* fix(data): per-session adapter-key cache, batched pruning, parsed migration backfill
-
-- ObdStoreWriter: field-capability upserts resolve the adapter key through a bounded per-writer LRU
-  instead of querying obd_sessions on every PID observation; passive WAL checkpoint failures now log
-  on the 1st and every 10th consecutive failure instead of accumulating silently. -
-  ObdStoreMaintenance: pruning deletes raw rows in 500-row batches (each its own short transaction,
-  so one giant DELETE can't hold the writer lock) and invalidates trip rollups/caches only for the
-  affected sessions instead of flushing globally. - VoltTrackerDb: the v5 backfill parses telemetry
-  JSON per row instead of LIKE pattern matching, so spacing variants backfill correctly and nested
-  false positives are excluded. - ObdStoreRouteProjection: routes over 300 points are simplified
-  with Douglas-Peucker (12 m tolerance, endpoints and timestamps preserved); ROLLUP_CACHE_VERSION
-  bumped so cached trip JSON rebuilds consistently. - BackupMigrator: stale restore-migrate-*
-  working files are swept at the start of every run, and an integrity_check gates the migrated copy
-  before it replaces the staged file. - DriveWindowDetector: session reads merged from 6 scans to 4
-  with a defensive row cap; ObdStoreTrips logs corrupt rollup JSON instead of dropping it silently;
-  ObdStatementCache recompiles against closed handles; schema delete-policy and GCM IV-uniqueness
-  invariants documented. - Tests: new ObdStoreRouteSimplifyTest plus coverage for batched pruning,
-  scoped cache invalidation, adapter-key isolation, JSON-parsed migration backfill, and the
-  stale-working-file sweep.
-
-* fix: drop MainActivity's duplicate openBluetoothSettings helper
-
-The onboarding dialog now routes through TroubleshooterBridge's openBluetoothSettings(), which
-  already handles the same intent with blocked status feedback on failure. This also keeps
-  MainActivity at 60 functions, under the detekt TooManyFunctions ratchet.
-
-* style: apply ktlint chaining format to onboarding dialog builder
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.12.0 (2026-06-12)
 
-### Features
+### ✳️ New
 
 - Implement the 20-point polish plan across app, data, dashboard, and CI
   ([#197](https://github.com/jtn0123/VoltTracker/pull/197),
   [`6b700e8`](https://github.com/jtn0123/VoltTracker/commit/6b700e8bc80b4c9736c993608f2aa777d125be67))
 
-* feat: implement the 20-point polish plan across app, data, dashboard, and CI
-
-Reliability & data integrity - PRAGMA quick_check maintenance API; backups now warn on integrity
-  failures - Freelist-gated VACUUM after the startup retention prune (runStartupMaintenance); also
-  fixes wal_checkpoint(TRUNCATE) being silently swallowed via execSQL - Partial wake lock held
-  during real adapter sessions (released on stop/destroy) so Doze can't stall Bluetooth polling
-  mid-drive; demo sessions skip it - Closed-store guards on the JS-bridge storage reads (teardown
-  race returns the storage_unavailable payload instead of throwing)
-
-App & dashboard UX - One-time first-launch onboarding dialog (pairing explainer + Bluetooth settings
-  shortcut), suppressed for users with adapter history or an active session - Light theme behind
-  prefers-color-scheme for the dashboard token palette - Error banner dedupe (identical messages
-  within 2.5s bump a counter instead of re-rendering); warn-only runtime validators for
-  setStatus/setStorage/setAppState payloads against the documented bridge ABI
-
-Code health - ObdPollingEngine.runBluetoothLoop refactored into phase methods (preflight,
-  connected-session dispatch, failure handling) — behavior preserved - detekt added as a CI gate
-  (config + rationale in app/detekt.yml); fixed the genuine findings it caught (dead
-  chargeSessionRowJson, unused loop vars, ImplicitDefaultLocale call sites) - StrictMode (log-only)
-  armed in debug builds via new VoltTrackerApp - Debug-level logcat writes gated to debug builds;
-  rolling log stays the release surface
-
-Build & performance - shrinkResources for release; hand-authored startup baseline profile +
-  androidx.profileinstaller; Gradle parallel + local build cache enabled
-
-Testing & CI - Instrumented MainActivity smoke (dashboard JS handshake) wired into the
-  emulator-smoke job; new unit tests for wake lock, onboarding, StrictMode, maintenance, and
-  closed-store guards; 7 new Playwright specs (tile failure, malformed bridge payloads, offline,
-  250-session list) - CI: bundle-budget headroom report, Playwright browser cache, per-job
-  wall-clock summaries
-
-Docs & DX - Architecture diagram + screenshot links in the Android README; issue/PR templates;
-  map-tile privacy note; changelog ownership note; coverage-floor and startup-budget rationale
-  comments
-
-https://claude.ai/code/session_01KiK9A4ma7B9n4RciLoUwyJ
-
-* fix: address code-review findings on the polish PR
-
-- demo-native-contract.test.js extracted the deleted chargeSessionRowJson and failed at import;
-  point it (and the d.ts comment) at the live chargeSummaryRowJson emitter - payload-validators: an
-  {ok:false, error:""} envelope fell through the error-envelope skip and warned spuriously; gate on
-  ok === false alone - onboarding: persist the shown marker only after the dialog actually shows, so
-  an aborted first launch gets another chance - ObdService: wake-lock opt-in moved from a
-  mode-string match to an explicit SessionStartRequest.holdWakeLock flag - ObdPollingEngine: replace
-  the inverted-boolean return with an explicit cancel check in handleAttemptFailure -
-  VoltBridgeDataExports: detailed-signal exports get the same isOpen teardown-race guard as
-  DashboardStorageReader - emulator-smoke job: pre-build the androidTest APK outside the emulator
-  session so connectedDebugAndroidTest only installs and runs - vacuumIfNeeded: document why
-  freelist_count is probed before the checkpoint
-
-* feat: complete the light theme, surface integrity warnings, and ratchet detekt
-
-- Light theme finished: component CSS (cards, nav, map chrome, dialogs, troubleshooter, toasts,
-  scrubber) migrated to role tokens with light values; dark mode verified pixel-identical against
-  all 28 visual baselines; new functional light-mode e2e spec asserts computed colors and >=4.5:1
-  contrast - Backup integrity warning now reaches the user: quick_check failures emit a warning
-  ProgressSnapshot and append a warning to the final share status (plaintext and encrypted paths);
-  backup still proceeds by design - detekt complexity rules re-enabled as ratchets: production-only
-  thresholds pinned at current worst offender +1 (holders named in app/detekt.yml) so hotspots can
-  shrink but never grow - Payload-shape warnings also route through bridge.logClientError so field
-  reports carry drift without an adb session - New instrumented smoke: ACTION_DEMO must stream >=3
-  telemetry broadcasts on a real Android runtime
-
-* fix(dashboard-tests): drain lazy-chunk loads before vitest teardown
-
-CI flaked with "Closing rpc while onUserConsoleLog was pending": a lazy DTC-chunk rejection ran its
-  console.warn handler during worker shutdown. core.ts now exposes a pendingLazyLoads() harness seam
-  (settles when all in-flight DTC/map/troubleshooter chunk loads have run their handlers; never
-  rejects) and the shared afterEach awaits it, so late chunk handlers always run inside the test
-  context.
-
-* fix(ci): harden emulator-smoke nav-tap retries against flaky adb input
-
-A pull_request emulator run whose boot logged repeated "adb: device offline" dropped four
-  consecutive insights-tab taps and failed the smoke, while the standalone smoke passed the
-  identical commit. Raise the retry budget to 6, back the settle sleep off per attempt (late taps
-  screenshot mid-flight at a fixed 2s), and re-check transport health between retries. Retries stay
-  unable to mask a real geometry/selector break: a genuinely broken tap never changes the screen on
-  any attempt.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.5 (2026-06-12)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Implement top-10 polish items from the app-wide review
   ([#196](https://github.com/jtn0123/VoltTracker/pull/196),
   [`51894c3`](https://github.com/jtn0123/VoltTracker/commit/51894c364ba0e0a7a7205ddc5f697443fceb475d))
 
-* chore: ignore Kotlin compiler session dir (.kotlin/)
-
-The built-in Kotlin in AGP 9 writes session artifacts to mobile/android/.kotlin/ during builds;
-  ignore it like .gradle/.
-
-https://claude.ai/code/session_01PRSNFrCU4FokRGxNqNYnyi
-
-* polish(dashboard): surface silent failures, typed bridge/state contracts, motion + a11y cleanup
-
-- Surface DTC chunk load failures via status toast instead of silent .catch, and warn once per
-  session when localStorage is unavailable so users know preferences won't persist. - Replace
-  Record<string, unknown> payload recasts with optional-field interfaces
-  (VoltAdapterState/VoltSessionState/VoltGpsState/ VoltEnhancedSample) and add VD.callBridge()
-  existence guard for bridge methods that may be absent on older native versions. - Add
-  dataset-state.ts with string-literal unions for data-state/ data-tone and migrate all producers to
-  the typed setters. - Consolidate all transition durations into --motion-* CSS variables. - Make
-  speed/power/battery live regions atomic per cluster to stop stuttering screen-reader
-  announcements; let the status popover scroll instead of overflowing small viewports.
-
-Dashboard suite: 292 tests green; tsc strict + eslint clean; bundle +1.2%, within budget.
-
-* chore(dashboard): regenerate index.html from updated drive partial
-
-* polish(android): string resources, exception logging, snapshot safety, MainActivity extraction
-
-- Migrate 128 user-facing strings (notifications, dialogs, backup/ restore flow, share subject) from
-  Kotlin literals to res/values/strings.xml with placeholder formatting. - Add a log line to 15
-  silently-swallowed catch blocks across MainActivity, BackupController, ElmConnection,
-  SessionRecorder, ObdSessionLog, RollingAppLog, and LocationManagerTracker; no control-flow
-  changes. - Introduce JsonSnapshot, a volatile holder that publishes freshly parsed, never-mutated
-  JSONObject copies, replacing the bare @Volatile telemetry/status/storage fields read from the JS
-  bridge thread. - Extract ConnectPermissionFlow, DashboardPayloadJson, and
-  DashboardBackPressCallback from MainActivity (801 -> 695 lines), each with unit tests. - Start GPS
-  updates when location permission is granted mid-session: trackers park their listener and
-  ObdService resumes them on next foreground visibility. - Validate JS bridge inputs up front:
-  forceStopPackage checks against the known-OBD-package list before showing the confirm dialog;
-  getRecentSessions clamps its count argument. - Document the constraint behind each remaining
-  @Suppress(DEPRECATION).
-
-Unit tests, JaCoCo coverage verification, and spotless all green.
-
-* fix(android): resolve string resource lint errors
-
-Use the typographic ellipsis character in the seven progress strings flagged by TypographyEllipsis,
-  and suppress PluralsCandidate on the two passphrase-minimum strings, whose count is a fixed
-  minimum that can never be 1.
-
-* fix: address review findings across dashboard and Android layers
-
-Dashboard: - Fall back to the browser demo when the native bridge lacks demo() instead of claiming a
-  demo is running with no samples. - Warn once per unexpected data-state/tone value instead of every
-  render tick. - Only auto-hide the prefs storage-fallback toast if it still shows that notice, so
-  newer statuses aren't dismissed. - Label enhanced-next items from sample-backed metadata with row
-  fallback, matching the admit filter.
-
-Android: - Resume a parked connect only when the full CONNECT+SCAN permission set is granted (new
-  non-prompting PermissionGate.hasConnectPermissions). - Re-evaluate the foreground-service type
-  after GPS resumes from a mid-session permission grant. - Mark location updates active only when at
-  least one provider subscription succeeded, so resume isn't suppressed after failures. - Forward
-  the normalized package name that was allowlist-validated in forceStopPackage. - Give
-  SessionRecorder its own log TAG; reword misleading JSONException comments in DashboardPayloadJson.
-
-* test: grant location permission in tracker resume tests
-
-Robolectric denies permissions by default, so the provider-failure resume test was exercising the
-  parked-listener path instead of the all-providers-threw path, and the already-running no-op test
-  passed for the wrong reason.
-
-* test(dashboard): fix teardown leaks flagged in review
-
-- Restore window.localStorage even when it had no own descriptor: the injected throwing getter must
-  be deleted, not left behind, or later tests become order-dependent. - Re-import dataset-state per
-  test via vi.resetModules() so the module-scoped warn-once cache cannot leak warning state across
-  tests.
-
-The app-name normalization suggestion is intentionally skipped: Android string resources cannot
-  reference other strings inline, and the prose copy deliberately uses the product name "Volt
-  Tracker" while app_name remains the launcher label "Volt Tracker OBD".
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.4 (2026-06-12)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Dashboard state consistency, DTC dialog dismiss, and quieter failure logging
   ([#195](https://github.com/jtn0123/VoltTracker/pull/195),
   [`76ae8f6`](https://github.com/jtn0123/VoltTracker/commit/76ae8f6c4b0b6396b101f52dc47b7a4c3a410df5))
 
-* polish: dashboard state consistency, DTC dialog dismiss, quieter failure logging
-
-Dashboard (items verified against current sources): - Charge tab: render the detection status as a
-  color-coded badge (waiting/needs-review/recorded/charging) instead of bare text, and add the
-  standard Refresh affordance to the Recent charges card header. - Insights tab: give the HV pack
-  ring an explicit waiting state (neutral track instead of a 0% arc before the first SOC reading)
-  and add the Refresh affordance to the More lifetime stats card. - Map tab: always refresh the
-  tile-error banner copy when showing it so a stale message from an earlier failure mode can't
-  resurface. - Clear-codes dialog: tapping outside the open alertdialog dismisses it, matching the
-  existing Esc path. - Speed/power meters: set aria-valuetext ("no data yet" when missing) so screen
-  readers announce something meaningful instead of indeterminate silence or dashes.
-
-Android: - ObdSessionLog: record JSON encode failures via noteFailure() instead of silently dropping
-  the log line in an empty catch. - ObdPollingEngine/SessionRecorder: stop logging the literal
-  string "null" when an exception has no message. - WebViewBootstrap: document why the deprecated
-  file-URL WebSettings are still pinned off explicitly.
-
-https://claude.ai/code/session_013Sa1AHHzskHkJC5Htsa4rq
-
-* test: update visual baselines for charge badge, pack-ring waiting state, refresh buttons
-
-The 8 changed screenshots cover exactly the surfaces intentionally restyled in the previous commit
-  (charge KPI grid, insights stats card, and the charge/insights cells of the scenario matrix).
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.3 (2026-06-11)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Restore determinate progress bar and weeks-deep map history
   ([#194](https://github.com/jtn0123/VoltTracker/pull/194),
   [`de427f9`](https://github.com/jtn0123/VoltTracker/commit/de427f9551c7dfa55c75666010d47f02fb3ddf14))
 
-Two regressions:
-
-Restore progress overlay showed the indeterminate sweep instead of the live percent bar. PR #187
-  split the app-dialog/restore-progress styles into overlays.css; PR #188 (rebased in parallel) then
-  re-added a newer determinate-capable copy to components.css without removing the split file.
-  overlays.css loaded last, so its stale unconditional [data-busy="true"] sweep rule out-cascaded
-  the data-progress gating and animated the fill even when a percent was known. Delete the stale
-  overlays.css (every other rule in it was a byte-identical or older duplicate of components.css)
-  and drop its stylesheet link.
-
-Map history capped at the last few days. The Map tab's session list was fed solely by the storage
-  summary's recentRoutes, which ships full geometry for only the 8 most recent drive windows — a few
-  days of driving, not the weeks actually stored. The trips rollup already goes back much further
-  and shares routeKey ids with the route projection, so map.ts now merges older route-bearing trips
-  into the list as point-less stubs and fetches their full geometry on demand through the existing
-  bridge.getTripRoute(routeKey) call when selected (cached until the trips payload refreshes). The
-  trips read limit rises 40 -> 120 (cached metadata rows) so several weeks of drives stay reachable;
-  the demo "empty" scenario clears state.trips so stale real trips can't leak into the preview map.
-
-Tests: two new map-regression cases (stub listing with clipped-vs-window key dedupe, on-demand
-  geometry fetch + caching); 281 dashboard tests, tsc, eslint, spotlessCheck, and the full Android
-  unit suite pass.
-
-https://claude.ai/code/session_019t7TQDQDXUFq5n6zctt41V
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.2 (2026-06-11)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **dashboard**: Stop Drive tab cards overflowing the viewport width
   ([#193](https://github.com/jtn0123/VoltTracker/pull/193),
   [`4ae5b3c`](https://github.com/jtn0123/VoltTracker/commit/4ae5b3cdb301df39e93c5304ab71acff2623ee4a))
 
-The OBD session card's .status-meta grid used bare repeat(2, 1fr) columns, whose auto minimum sizes
-  tracks to the full width of the nowrap adapter/PIDs <strong> values instead of letting them
-  truncate. Because .view.is-active and .hero are single-column grids with an implicit auto track,
-  that one card's min-content stretched every card in the Drive tab wider than the screen; body
-  overflow-x:hidden then clipped the right edge (Pack temp / Pack kW / +80 scale cut off).
-
-- .status-meta: repeat(2, minmax(0, 1fr)) so the ellipsis engages (matches the existing #dbCard
-  .status-meta convention) - .view / .hero: explicit minmax(0, 1fr) column so no card's min-content
-  can ever widen a whole tab again
-
-Verified in headless Chromium at a 346px viewport with 120 live telemetry samples and a long adapter
-  name: body scrollWidth now equals the viewport with zero elements past the right edge. Added a
-  layout-css regression test for all three guards.
-
-https://claude.ai/code/session_01XwXXuJfUBqCX5XGAMZ9M8S
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.1 (2026-06-11)
 
-### Bug Fixes
+### 🔺 Fix
 
 - 39 bugs across OBD protocol, data layer, services, and dashboard
   ([#192](https://github.com/jtn0123/VoltTracker/pull/192),
   [`fe076ba`](https://github.com/jtn0123/VoltTracker/commit/fe076baea97b750524d20f429ac682cf8c2ba27d))
 
-* Fix threading, lifecycle, and probe-vs-session bugs in app-level services/UI
-
-- VoltBridge.setAutoConnectEnabled now marshals via runOnUiThread like every other state-mutating
-  @JavascriptInterface entry, instead of driving publishStatus/maybeAutoConnect/startObdService on
-  the WebView JavaBridge thread. - TroubleshooterBridge: the 30s notify-when-ready tick and
-  startTestConnection now refuse to probe while a real logging session is active. Previously the
-  probe restarted the live session (ObdService.startSession stops the current one first) and the 25s
-  auto-stop then killed it. The tick silently skips and reschedules; a direct test-connection
-  request surfaces a blocked status. - ObdService.startSession increments sessionToken BEFORE
-  stopCurrentSession so a stale interrupted runner can never pass canCurrentThreadCleanupSession()
-  with its old token and tear down the new session's state. - ObdService.onStartCommand stops the
-  service (stopSelf(startId), START_NOT_STICKY) on a null-intent sticky restart or unrecognized
-  action when no session is active, instead of lingering as an invisible orphaned service. -
-  ObdService startForegroundSession/reevaluateForegroundServiceType also catch IllegalStateException
-  (API 31+ ForegroundServiceStartNotAllowedException) and route it to the existing "blocked"
-  fallback instead of crashing. - MainActivity lastTelemetry/lastStatus/lastStorage are @Volatile
-  with a documented replace-don't-mutate contract (read off-thread by
-  exportDebugBundle/getAppStateJson/isLoggingActive). - MainActivity.localStore is @Volatile;
-  documented the close-then-reopen swap in BackupController.applyReplace (same DB file, so the brief
-  null window is unavoidable and covered by existing null checks / RuntimeException handling). -
-  ObdNotifications content PendingIntent adds FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TOP,
-  matching the adapter-ready notification.
-
-Tests: new active-session guards in TroubleshooterBridgeConnectionTest, null/unknown-intent dispatch
-  cases in ObdServiceIntegrationTest, auto-connect forwarding in VoltBridgeDispatchTest, and a new
-  ObdNotificationsTest pinning the content-intent flags.
-
-https://claude.ai/code/session_019XRvscsdsDoxF23KCJfJyE
-
-* Fix OBD protocol layer: DTC count byte, ELM segmented frames, header matching, 7F false negatives,
-  OAT scaling
-
-- DTC parsing (modes 03/07/0A): consume the ISO 15765-4 DTC-count byte after the 43/47/4A positive
-  marker instead of decoding it as DTC data; the count (bounded by available payload) now limits how
-  many 2-byte pairs are read, "43 00" decodes as zero codes, and 0000 padding tolerance is kept.
-  Mode 02 freeze-frame replies now skip the echoed frame-number byte (42 02 00 ...). Remaining-pair
-  tracking carries the count across ISO-TP consecutive frames.
-
-- ELM segmented multi-frame output (ATH0 + CAF1, the app's actual init): parseVin and the DTC parser
-  now detect the segmented format (3-digit hex total-length line + "N:"-prefixed data lines), strip
-  the length line and segment indices, and reassemble the data before hex parsing. Previously the
-  VIN probe could never decode a segmented 0902 reply and multi-frame DTC responses lost every code
-  beyond the first segment.
-
-- EnhancedPidProfiles.find: normalize headers by stripping a leading "ATSH" on both sides so the
-  catalog's "ATSH7E4" matches the bare "7E4" tracked by SessionRecorder; header-scoped
-  field-capability tracking works again.
-
-- EnhancedPidProfiles.isPositiveResponse: only treat a frame as a UDS negative response when it
-  STARTS with 7F + the echoed service id, instead of rejecting any response containing "7F" (which
-  misclassified positives like 410D7F = 127 km/h under ATS0). 7F xx 78 (response pending) lines are
-  skipped rather than treated as rejection.
-
-- 22801E/22801F outside air temperature: switch to the GM convention A/2 - 40 (-40..+87.5 C); the
-  old 0.125/-5 encoding could only express -5.0..+26.9 C, physically impossible for an OAT signal.
-
-Tests rewritten with realistic count-byte/segmented frames and extended to cover zero-code replies,
-  count-bounded padding, segmented VIN and DTC transcripts, bare/ATSH header lookups, and 7F
-  payload-vs-negative cases.
-
-* Fix dashboard core bugs: demo temp units, stale clock, dead drawTrace, toast dedupe, nav-jump
-  delegation, map duration
-
-- actions-demo.ts: browser demo emitted batteryTemp as 72+sin (Fahrenheit- shaped) into a Celsius
-  field, so units.tempText re-converted it to ~162 F. Now 24+sin C, matching DemoPollingLoop.kt. -
-  telemetry.ts setAppState: native re-delivers the LAST sample on every status broadcast, so
-  stamping lastSampleAt = Date.now() on each accepted appState push kept a wedged adapter reading
-  "live". Track the highest sample updatedAt seen (shared with updateTelemetry) and only advance
-  lastSampleAt when updatedAt actually moves, stamping the sample's own clock. - telemetry.ts
-  drawTrace: rendered to #speedCanvas, which exists in no partial/template (the shipped speed trace
-  is drive.ts #liveTraceCanvas). Implementation deleted; an exported no-op stub remains because
-  core.ts/actions.ts demo+stop paths (owned by a parallel change) still call VD.drawTrace(). Removed
-  the actions.ts resize debouncer that only served it and the #speedCanvas fixture in the test
-  harness. - telemetry.ts status toast: clear the dedupe key when the toast hides so a repeated
-  identical action detail re-toasts, and consume the boot baseline on the FIRST setStatus call even
-  when its detail is empty. - telemetry.ts gpsState: Number.isFinite guard (same as the gpsValue
-  tile) so latitude 0 no longer reads as "waiting". - actions.ts: [data-nav-jump] is now a single
-  document-level click delegation (mirroring [data-map-session]) so link chips drive.ts creates at
-  render time navigate; the boot-time per-node binding is gone, so no double-fire. - map.ts: session
-  duration/avg speed need BOTH timestamps. A crash-ended stored session (no endedAtMs) showed
-  duration = time-since-drive with avg ~ 0, and a missing startedAtMs gave an epoch-scale span; both
-  now render "--". Live-route behavior unchanged (its session carries endedAtMs).
-
-Tests: new nav-jump.test.js; extended stale-indicator, status-toast, map-regression, demo-sample
-  suites. 260/260 green, tsc + eslint clean.
-
-* Fix data-layer bugs: cache races, downsampling, merge and summary gaps
-
-- ObdStoreTrips: synchronize all activeTripCache access (reached concurrently from the JS-bridge and
-  OBD polling threads), wrap the trip-list cache delete+inserts in a transaction, and stop the
-  over-capacity prune from evicting the entry it just inserted. - ObdStoreRouteProjection: use
-  ceiling division for the downsampling stride so routes/scalar tracks with totals just above the
-  target are sampled evenly across the whole span instead of keeping the head and collapsing the
-  middle-to-tail into a straight chord; make the map projection honor hidden trips by their
-  point-clipped list id so hiding a post-split trip also removes it from recentRoutes. -
-  ChargeSessionMaterializer: finalize a run split by SPLIT_GAP_MS with the pack-current flag state
-  of its own samples, so a weak-evidence run no longer borrows the next run's OBSERVED confidence. -
-  DiagnosticCodeReport: read last_session_id with nullableLongBoxed so SQL NULL serializes as JSON
-  null instead of session id 0. - DatabaseMerger: make adapter-history/DTC counter merges idempotent
-  for re-imports - when the donor's [first_seen, last_seen] interval is contained in the existing
-  row's, take max per counter instead of summing (documented heuristic). - SessionRecorder: record
-  the session-summary end row whenever the start row was recorded, even when the per-session .jsonl
-  failed to open; only the session_end detail-log line stays gated on the log.
-
-Adds/extends Robolectric and unit tests for every fix.
-
-* fix(dashboard): null-coercion, modal reopen, stale-state and axis bugs in aux panels
-
-Eleven verified fixes across the WebView dashboard's auxiliary modules:
-
-- scrubber: treat null/undefined eff (and other readings) as missing BEFORE Number() coercion —
-  Number(null) is 0, so regen segments rendered as a fake 0.0 readout and an eff trace diving to the
-  chart floor; also re-bind the rebuilt detail tracks after the debounced resize re-render so
-  expanded tracks keep their drag handlers after rotate/resize. - troubleshooter: a dismissed modal
-  no longer reopens on the very next retry status — a dismissed-this-burst flag suppresses both
-  auto-open triggers (retry threshold + consecutive failures) until a clean connect/scan resets the
-  burst; bindHelpAffordance now passes LISTEN_OPTS like every other binding so resetListeners()
-  tears it down. - storage-status: the empty charge-sessions path now runs renderChargeEnergy so
-  clearing data hides (and blanks) the Energy logged card; a legitimate rawTelemetryCount of 0
-  renders as 0 instead of falling back to sampleCount. - insights empty state: extracted
-  VD.hasInsightContent() and re-toggle insightsEmptyState from the insights render path, so the gate
-  is evaluated AFTER loadInsights() refreshes state.insights (setStorage and bootstrap both run
-  renderRealV2Ui before the fresh payload lands). - app-dialog: closeDialog settles the pending
-  promise directly — opening a second dialog used to abort the first one's listeners, leaving its
-  promise pending forever; every path now settles exactly once. - insights scatter: x-axis max grows
-  with the data (next 5 mph, floor 75) so 85-100 mph samples stay inside the viewBox;
-  Highway/Downhill stats use the units helper instead of hardcoding " mi/kWh". - connection-tools:
-  the auto-connect change handler re-polls getAutoConnectState instead of reusing the bind-time
-  snapshot, so the status line shows the current adapter name/cooldown.
-
-Tests added/extended in dashboard-tests for each fix (266 passing).
-
-* Remove drawTrace no-op stub and remaining call sites
-
-The #speedCanvas render path was deleted with the dashboard-core fixes; this drops the temporary
-  compatibility stub, its callers in core.ts/actions.ts, and the test-globals declaration.
-
-* chore: retrigger CI (emulator-smoke tap flake)
-
-The charge-tab tap produced no screenshot change in one of three otherwise-identical emulator-smoke
-  runs on the same commit.
-
-* fix: require both coordinates for the gpsState locked fallback
-
-Review feedback: latitude alone isn't a fix — match the gpsValue tile and require finite latitude
-  AND longitude.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.11.0 (2026-06-10)
 
-### Features
+### ✳️ New
 
 - **dashboard**: 17 UI/UX improvements across tabs
   ([#191](https://github.com/jtn0123/VoltTracker/pull/191),
   [`be2e4e6`](https://github.com/jtn0123/VoltTracker/commit/be2e4e6969863a07c71fab69c713e5933d218c47))
 
-* feat(dashboard): 17 UI/UX improvements across tabs
-
-Feedback visibility: - Mirror status.detail in an aria-live toast on non-Settings tabs, so taps like
-  "Scan car codes" on Insights no longer appear to do nothing; the boot-time status push sets the
-  baseline silently (new status-toast.test.js) - Show a single friendly line in the error banner
-  instead of raw JS stack traces (full detail still flows to logClientError)
-
-Scroll/focus stability: - Stop the units/rate re-render from scroll-jumping the page to the top -
-  Debounce the $/kWh input's dashboard-wide re-render (was per keystroke) - Focus the
-  restore-progress dialog only when it first appears, not on every native progress tick
-
-Actionable empty states: - Drive, Charge, and Map empty states gain a jump-to-Settings CTA via the
-  existing data-nav-jump delegation
-
-Accessibility: - Re-enable pinch-zoom (drop maximum-scale=1 / user-scalable=no) - Add role="tab" to
-  the map layer tablist buttons - Label the paired-adapter <select> - Sync the speed meter's
-  aria-valuemax with the selected unit (200 km/h)
-
-Copy and polish: - "Eff" map layer -> "Effic." with aria-label/title "Efficiency" - "Detail probe /
-  Targeted signals" -> "Extra signals / Tires, battery internals" - Charge "Hints" KPI -> "Plug-ins
-  detected / Times the car looked plugged in" - Surface the hidden long-press "not a trip" gesture
-  with a hint line - Move the version footer's inline style into screens.css
-
-https://claude.ai/code/session_01Hw7U48edt2AiTAyKgpAVno
-
-* test(dashboard): refresh visual baselines for empty-state CTAs
-
-The drive/map/charge empty states gained jump-to-Settings buttons, so the empty-scenario screenshots
-  intentionally changed. Regenerated on Ubuntu 24.04 with the pinned Playwright Chromium; full
-  visual project passes 28/28 against the new baselines.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.10.2 (2026-06-10)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Bluetooth permission feedback, auto-resume, and status badge popover
   ([#190](https://github.com/jtn0123/VoltTracker/pull/190),
   [`2d92f0e`](https://github.com/jtn0123/VoltTracker/commit/2d92f0ed7d864ced752360cb3cc47e58f2f1353c))
 
-* fix(android): give actionable feedback and auto-resume when Bluetooth permission blocks Connect
-
-On a fresh install the paired-device list is empty because BLUETOOTH_CONNECT has not been granted
-  yet, so tapping Connect hit the dashboard's no-device-selected guard, showed a bare 'blocked'
-  status, and never reached the Android side - the permission prompt never appeared and the user was
-  dead-ended.
-
-Dashboard: - explain WHY no adapter is selectable (permission missing / Bluetooth off / nothing
-  paired) instead of the one-size-fits-all 'Pick a paired adapter' - when the Bluetooth permission
-  is missing, fire the Android permission prompt directly from the Connect tap and auto-resume the
-  connection once the grant lands (device list refresh auto-selects the OBD candidate) - appState
-  permissions now carry split bluetoothPermission / bluetoothEnabled flags so the dashboard can tell
-  a missing permission from a disabled radio
-
-Android: - park a connect/scan that ensureConnectPermissions interrupted and retry it automatically
-  from onPermissionsResult after the grant - on denial, say how to recover; once Android suppresses
-  the prompt (permanent denial) open the app-settings screen for an active connect attempt so
-  'Nearby devices' can be re-enabled in one round trip
-
-https://claude.ai/code/session_014pNKKiSmCtaMQDy9Az5KBi
-
-* feat(dashboard): status popover behind the topbar badge + status-only badge colors
-
-The top-right state badge was display-only and its resting (ready/idle) colors echoed the active tab
-  accent, so it read as decoration rather than status. Make it a real status surface:
-
-- Colors now always encode connection state: green connected, amber while connecting/scanning, red
-  blocked/error/failed, purple demo, neutral when idle - the per-tab --status-accent treatment is
-  removed. - Tapping the badge (or the last-connected line, previously a dead button) opens a status
-  popover: live state + detail copy, adapter, Bluetooth readiness (split permission/radio flags),
-  logging, GPS, last connected, and a Trip section - distance, duration, SoC start->now, and samples
-  while recording, or the last trip duration when idle. - The popover re-renders on every
-  status/telemetry push while open, light- dismisses on outside tap/Escape, and the Android Back
-  gesture closes it before any other surface.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.10.1 (2026-06-10)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Restore progress, map cleanup, charge inference
   ([#188](https://github.com/jtn0123/VoltTracker/pull/188),
   [`1da0d3e`](https://github.com/jtn0123/VoltTracker/commit/1da0d3e88ff43a5291d6ec8fa705f4adae5c345d))
 
-* Improve restore progress, map cleanup, and charge inference
-
-* Polish charge session filtering
-
-* test(android): align map tests after rebase
-
-* fix(android): debounce map long-press against WebView contextmenu
-
-The WebView fires contextmenu ~500ms into a long-press, before the 650ms fallback timer, so a held
-  map row marked the route twice and stacked two confirm dialogs. Whichever signal fires first now
-  wins, and pointerdown resets the click-suppress flag so a contextmenu without a follow-up click
-  (desktop right-click) cannot swallow the next tap.
-
-Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
-
-* fix(android): address review feedback on map tiles, progress, dedup
-
-- Reset the map long-press timer and suppress flags in resetListeners() so a pending timeout cannot
-  fire against torn-down listeners. - Treat a negative percent as the unknown sentinel in the
-  restore overlay instead of rendering a determinate 0%. - Ignore in-flight primary basemap tile
-  events once the OSM fallback is active so they cannot clear or re-raise the tile warning banner. -
-  Share one maxSpeedKphForWindow helper via ObdSessionClassifier instead of duplicating the SQL in
-  reports and route projection.
-
-* test(android): cover unknown-percent sentinel in restore overlay
-
----------
-
-Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
-
 
 ## v0.10.0 (2026-06-10)
 
-### Features
+### ✳️ New
 
 - **android**: Expand sensors and harden app flows
   ([#187](https://github.com/jtn0123/VoltTracker/pull/187),
   [`3a2dd59`](https://github.com/jtn0123/VoltTracker/commit/3a2dd59c2f498dab215a9a343729d80725ff2477))
 
-* feat(android): expand sensors and harden app flows
-
-* fix(android): address sensor-expansion review findings
-
-- Swap 2282B5/2282B7 decoders to match the catalog and Bolt BECM source (2282B5 = compressor speed
-  rpm, 2282B7 = compressor power W). - Restore accepts any non-empty passphrase again; the
-  8-character minimum gates creating new backups only, so pre-minimum encrypted backups stay
-  restorable (regression test included). - Widen capacity (10-60 Ah) and cell-voltage (1.5-4.5 V)
-  sanity bounds so degraded-but-real health readings are recorded instead of dropped. - Rename
-  usableKwh -> packEnergyKwh and anchor it (and sohPct) to named Gen 2 nominals (52 Ah / 355 V)
-  instead of instantaneous pack voltage. - Share one appendLiveRoutePoint helper between map.ts and
-  telemetry.ts so the live-route dedupe rules cannot drift (unit tests added). - Evict expired
-  active-trip cache entries instead of only same-session keys. - Pin DatabaseMerger donor column
-  lists to the live schema with a test, and drop the duplicated adapter-history list. - Record the
-  sensor-expansion wave, 2241A3 promotion caveat, and TPMS rejection in the discovery tracker;
-  commit the expansion plan doc.
-
-Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>
-
----------
-
-Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
-
 
 ## v0.9.3 (2026-06-09)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Restore map data for matched backup sessions
   ([#186](https://github.com/jtn0123/VoltTracker/pull/186),
@@ -2304,7 +442,7 @@ Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
 
 ## v0.9.2 (2026-06-09)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Allow 200 MB backup restores
   ([#185](https://github.com/jtn0123/VoltTracker/pull/185),
@@ -2313,31 +451,24 @@ Co-authored-by: Claude Fable 5 <noreply@anthropic.com>
 
 ## v0.9.1 (2026-06-09)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Quiet offline dashboard and surface restore
   ([#184](https://github.com/jtn0123/VoltTracker/pull/184),
   [`8c8c6a2`](https://github.com/jtn0123/VoltTracker/commit/8c8c6a2485326f5d5c7c67c1e3a728a8934e6290))
 
-* fix(android): quiet offline dashboard and surface restore
-
-* test(dashboard): refresh settings visual baselines
-
 
 ## v0.9.0 (2026-06-09)
 
-### Features
+### ✳️ New
 
 - **android**: Polish dashboard and restore feedback
   ([`e1cb0aa`](https://github.com/jtn0123/VoltTracker/commit/e1cb0aa4116458041d48182dda1ffeec38c8776c))
 
-Merge dashboard polish, restore progress feedback, v7 backup restore coverage, and refreshed CI
-  baselines.
-
 
 ## v0.8.1 (2026-06-08)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Harden release flow and auto-connect UX
   ([`17234dd`](https://github.com/jtn0123/VoltTracker/commit/17234dd52d1f46ed717250bf81cb54d9c7000668))
@@ -2348,1191 +479,156 @@ Merge dashboard polish, restore progress feedback, v7 backup restore coverage, a
 - **release**: Serialize release preflight verification
   ([`aaf0a20`](https://github.com/jtn0123/VoltTracker/commit/aaf0a2017bea8c0e6d349e947d7212edce78f480))
 
-### Continuous Integration
+### 🔷 Changed
 
 - **release**: Repair tagged APK publishing
   ([`af1bb57`](https://github.com/jtn0123/VoltTracker/commit/af1bb57f8049160387cd26c9c091fb88fab53592))
 
-Fix release APK secret env wiring and add a manual workflow to attach APKs to existing tags.
-
 
 ## v0.8.0 (2026-06-08)
 
-### Features
+### ✳️ New
 
 - **android**: Ship VoltTracker 0.8.0 release
   ([`0c9fd7c`](https://github.com/jtn0123/VoltTracker/commit/0c9fd7c6e04418ab65c17e326b3188889beed71a))
 
-Merge release branch for VoltTracker 0.8.0.
-
 
 ## v0.7.0 (2026-06-04)
 
-### Features
+### ✳️ New
 
 - Add enhanced signal discovery workspace ([#168](https://github.com/jtn0123/VoltTracker/pull/168),
   [`fd2649c`](https://github.com/jtn0123/VoltTracker/commit/fd2649c3c2a2b2b8aa5b8706b8a213916f991b60))
 
-Enhanced signal discovery workspace (Signals tab, PID profiles, TPMS discovery, live sampling) plus
-  dashboard polish across all tabs, a per-session charge list, HV-pack stats, and a demo-scenario
-  system. Adds supporting tests — a11y gate, demo↔native shape contract, tab×scenario visual matrix
-  — and aligns CI to Java 21.
-
 
 ## v0.6.2 (2026-06-03)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Split long obd sessions into drive windows
   ([#167](https://github.com/jtn0123/VoltTracker/pull/167),
   [`f0ade30`](https://github.com/jtn0123/VoltTracker/commit/f0ade3026ffe7c0b113fc6a828b3b9a5fa743902))
 
-### Chores
+### 🔷 Changed
 
 - **deps**: Bump softprops/action-gh-release from 2.6.2 to 3.0.0
   ([`b11bca2`](https://github.com/jtn0123/VoltTracker/commit/b11bca2a9b313633aaa755fc898c5d27daa52e72))
 
-Bumps [softprops/action-gh-release](https://github.com/softprops/action-gh-release) from 2.6.2 to
-  3.0.0. - [Release notes](https://github.com/softprops/action-gh-release/releases) -
-  [Changelog](https://github.com/softprops/action-gh-release/blob/master/CHANGELOG.md) -
-  [Commits](https://github.com/softprops/action-gh-release/compare/3bb12739c298aeb8a4eeaf626c5b8d85266b0e65...b4309332981a82ec1c5618f44dd2e27cc8bfbfda)
-
---- updated-dependencies: - dependency-name: softprops/action-gh-release dependency-version: 3.0.0
-
-dependency-type: direct:production
-
-update-type: version-update:semver-major ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
 - **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
   ([`f737981`](https://github.com/jtn0123/VoltTracker/commit/f737981f641f76f6bd2826a251944108a67b2f3a))
 
-Bumps [eslint](https://github.com/eslint/eslint) from 10.4.0 to 10.4.1. - [Release
-  notes](https://github.com/eslint/eslint/releases) -
-  [Commits](https://github.com/eslint/eslint/compare/v10.4.0...v10.4.1)
-
---- updated-dependencies: - dependency-name: eslint dependency-version: 10.4.1
-
-dependency-type: direct:development
-
-update-type: version-update:semver-patch ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-### Testing
+### 🔷 Changed
 
 - **android**: Add Drive live-canvas functional e2e
   ([#165](https://github.com/jtn0123/VoltTracker/pull/165),
   [`414f612`](https://github.com/jtn0123/VoltTracker/commit/414f6122450f9399023827d5e05510b127595270))
 
-Exercises the Drive-tab live charts in real Chromium — assertions the jsdom suite structurally
-  cannot make:
-
-- chart hosts have real, non-zero CSS layout width (a layout change that collapses them silently
-  kills every chart; jsdom fakes clientWidth) - the speed-trace canvas's real 2D context actually
-  paints non-blank pixels (jsdom has no canvas backing store) - power +drive/-regen bars are
-  positioned within the measured host box - SOC segments + baseline render with real geometry -
-  renderDriveLive() populates chips, all three charts, and the micro-card header tags/tones in a
-  single frame
-
-Functional only — no pixel baselines (those live in visual.spec.js). The canvas check asserts
-  "non-blank", which is platform/font independent.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 - **android**: Add Playwright visual-regression baselines (advisory)
   ([#164](https://github.com/jtn0123/VoltTracker/pull/164),
   [`a3296e0`](https://github.com/jtn0123/VoltTracker/commit/a3296e00586a2586291b0426e94c3b6edcc0acf1))
-
-* test(android): add Playwright visual-regression baselines (advisory)
-
-Adds pixel screenshot coverage for the reworked dashboard surfaces on top of the functional/layout
-  e2e suite — the layer that catches "looks subtly wrong" that layout assertions miss.
-
-- visual.spec.js (new "visual" Playwright project): component screenshots of the header, compact
-  trip chips, drive-summary bars, charge KPI grid, and insights stats. Clock is frozen (harness
-  fixedTime) so relative timestamps don't drift; canvas traces and Leaflet tiles are deliberately
-  not shot (non-deterministic). - playwright.config: split into `chromium` (functional, runs every
-  PR) and `visual` (screenshots) projects so the existing gate stays green. - package.json: `test` =
-  functional; `test:visual` / `test:visual:update` for screenshots. - CI: new advisory
-  `dashboard-visual` job pinned to ubuntu-24.04 (stable fonts) that runs the visual project and
-  uploads the produced *-linux.png baselines + diffs. NOT in ci-success yet — baselines are
-  Linux/CI-only (gitignored on dev boxes); they'll be generated by this job and committed, then the
-  job can be promoted to gating.
-
-Functional project still 19/19; visual project 5 shots, stable locally.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(android): seed Linux visual baselines + scope functional gate to chromium
-
-- Commit the 5 CI-generated *-linux.png baselines (header, trip chips, summary bars, charge grid,
-  insights) so the advisory dashboard-visual job compares instead of failing on missing baselines. -
-  Fix: the required dashboard-e2e job ran `npx playwright test` (all projects), which now includes
-  the new visual project and failed on missing baselines. Scope it to `--project=chromium` so the
-  gate runs only the functional/layout suite; screenshots stay in the separate advisory
-  dashboard-visual job.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
 
 - **android**: Cover the native Replace/Merge/Cancel restore dialog
   ([#163](https://github.com/jtn0123/VoltTracker/pull/163),
   [`1b867dc`](https://github.com/jtn0123/VoltTracker/commit/1b867dc4efed2afbc7bc3e8057023a2f9af2963c))
 
-BackupControllerDialogTest drives the one restore-flow surface Playwright can't reach — the native
-  AlertDialog shown after a picked file is staged + verified. Uses a direct (inline) executor + a
-  Robolectric content URI so stage -> dialog -> button-click -> outcome runs synchronously (idling
-  the main looper after each click, since AlertDialog button listeners post there).
-
-Covers: - a verified backup offers exactly Merge / Replace all / Cancel; - Merge folds the backup
-  into the (cleared) live store -> "Merged ..." + 1 session; - Replace restores wholesale -> "Backup
-  restored ..." + 1 session; - Cancel aborts, imports nothing, leaves the store empty; - an invalid
-  (non-backup) file is rejected with no dialog and a "not a valid Volt Tracker backup" status.
-
-Full unit suite + JaCoCo pass.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.6.1 (2026-06-02)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Drop background tasks submitted after executor shutdown
   ([#162](https://github.com/jtn0123/VoltTracker/pull/162),
   [`112bed6`](https://github.com/jtn0123/VoltTracker/commit/112bed647fa4c4c115043d4c524c928b77d412fb))
 
-onDestroy() calls backgroundExecutor.shutdownNow(), but the WebView's dashboardReady handshake (and
-  late status broadcasts) can still fire afterwards and route through publishStorageSummary() ->
-  runStorageSummaryRefresh(), which submitted to that executor. On a terminated executor that throws
-  RejectedExecutionException on the main thread and crashes the process — the recurring
-  emulator-smoke failure (the app booted, logged "JS is live", then crashed during teardown).
-
-Route every internal backgroundExecutor.execute(...) through a new submitBackground() helper that
-  catches RejectedExecutionException and drops the task: when the executor is gone the Activity is
-  tearing down and there's no UI left to refresh, so dropping is correct.
-
-Regression test (MainActivityTeardownTest): build the Activity, destroy it (shuts the executor
-  down), then onDashboardReady()/publishStorageSummary() and a late runOnBackground() must complete
-  without throwing. Full unit suite + JaCoCo pass.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Testing
+### 🔷 Changed
 
 - **android**: Add Playwright dashboard e2e suite + CI gate
   ([#160](https://github.com/jtn0123/VoltTracker/pull/160),
   [`59d51b5`](https://github.com/jtn0123/VoltTracker/commit/59d51b57d62f509341b8c633f083ac055f45ab65))
 
-Adds mobile/android/dashboard-e2e/: a Playwright suite that renders the REAL generated dashboard
-  (index.html + css + js) in headless Chromium and asserts actual rendered layout + interaction —
-  the regression net for UI bugs the jsdom suite (dashboard-tests) physically can't see (box sizes,
-  clipping, real computed styles).
-
-Why a real browser: jsdom has no layout engine, so the field bugs we just fixed (a chip rendered as
-  a tall empty box, a clipped header action, a "full" bar next to a "--" value) are invisible to it.
-  These specs catch that whole class.
-
-Served over HTTP (python3 -m http.server) rather than file:// so the dashboard's `script-src 'self'`
-  CSP resolves the way the Android WebView resolves file:///android_asset (desktop Chromium blocks
-  'self' for file:// origins).
-
-Specs (9 tests, all layout/functional — deterministic across OSes): - trips: chips are compact
-  (rendered height < 96px, i.e. no reserved empty map box), summary bars proportional with a 0-width
-  bar for "--", "map" action not clipped. - header: top inset clears the status bar, adapter-health
-  pill gone, slim single-line last-connected, header actions unclipped on the Charge tab. - demo:
-  streamed telemetry renders in the real Drive cluster (incl. GPS lock), and the removed demo-mockup
-  chrome (evRing/mode-toggle/tripList) is absent.
-
-CI: new dashboard-e2e job in android.yml (npm ci + playwright install chromium + test), added to the
-  required ci-success gate. Screenshot diffs are configured but not used yet (font-sensitive; need
-  per-platform baselines) — functional/layout assertions only for now.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 - **android**: Broaden Playwright e2e to Map/Charge/Insights + interactions
   ([#161](https://github.com/jtn0123/VoltTracker/pull/161),
   [`9f9369d`](https://github.com/jtn0123/VoltTracker/commit/9f9369d404e3317fc3fde536723c1e43d583eba8))
 
-Extends the dashboard-e2e suite (9 -> 19 tests) across more screens and real click flows:
-
-- map.spec.js: empty state ("No GPS route yet"); a logged drive renders the route summary (point
-  badge, distance, stops) with the map canvas mounted; layer tabs switch the active layer. (Avoids
-  asserting Leaflet's internal tiles — network/ size/timing dependent, not the regression we care
-  about.) - charge-insights.spec.js: charge empty state vs KPIs from chargeSummary
-  (sessions/hints/power/status); insights "--" placeholders vs aggregate stats (trip count, top
-  speed, GPS-trip ratio). - interactions.spec.js: bottom-nav switches the active view; Start/Stop
-  demo toggles demoActive and calls bridge.demo; "Restore file" calls bridge.restoreBackup. (The
-  Replace/Merge dialog itself is a native AlertDialog, out of Playwright's reach — only the
-  web->bridge wiring is asserted here.)
-
-All functional/layout assertions (deterministic across OSes). 19/19 pass.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.6.0 (2026-06-02)
 
-### Chores
+### 🔷 Changed
 
 - Remove stale Codex scratch reports from the repo
   ([#158](https://github.com/jtn0123/VoltTracker/pull/158),
   [`1a8c6de`](https://github.com/jtn0123/VoltTracker/commit/1a8c6de0f3b2266cadf7e7042e83caaab19be112))
 
-These were one-off agent audit/validation artifacts that got committed: .Codex/grade-report.md,
-  .Codex/graph-map-debug-checklist.md, and .codex-ui-validation/validation-report.md. They're
-  point-in-time scratch, not maintained docs, so drop them from the repo and gitignore the
-  directories so future local runs stay out of version control. The reports-index pointer now
-  directs readers to run the grade-codebase skill for a fresh report instead of a stale committed
-  one.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Features
+### ✳️ New
 
 - **android**: Merge older backups + Trips/header/demo UI overhaul
   ([#159](https://github.com/jtn0123/VoltTracker/pull/159),
   [`d8d2795`](https://github.com/jtn0123/VoltTracker/commit/d8d2795d899d973b7ae9f667edb4142cff24c09d))
 
-* fix(android): restore/merge backups from older app versions
-
-A backup exported by an earlier app version carries an older schema user_version (e.g. v8, taken
-  before the v9 session_trip_rollups cache was added). Staging required the exact current version,
-  so such a backup was silently rejected during verification — the file picker returned, no
-  Replace/Merge dialog appeared, and nothing happened. This is the common case (merge an old backup
-  into current data), so the feature failed exactly when it was most needed.
-
-Fix: BackupMigrator upgrades an older staged backup to the current schema before validation, reusing
-  VoltTrackerDb's own onUpgrade path (copy to a private working name, open through the helper so
-  every migration step runs transactionally, copy back). Newer-than-app backups are refused (no safe
-  downgrade) and non-VoltTracker SQLite files are left untouched. Because this runs in
-  stageRestoreFile, both restore (replace) and merge now accept older backups.
-
-Verified on-device: a real v8 backup (14 sessions) merged into the current v9 database with zero
-  duplicate sessions, zero orphaned rows, integrity + foreign keys intact.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* fix(android): Trips UI overhaul — on-demand routes, compact chips, honest summary bars
-
-Reworks the Trips tab based on on-device review:
-
-- Route preview now works for ANY logged drive, not just the most recent few. The storage summary
-  only ships recentRoutes for the latest 8 sessions (payload size), so older drives — including ones
-  folded in from a merged backup — showed "No route shape stored" despite having thousands of GPS
-  points. Add a getTripRoute(sessionId) bridge call (ObdLocalStore.getTripRouteJson ->
-  ObdStoreReports.tripRouteJson -> existing routeForSession projection, no session cap) and fetch
-  the selected trip's route on demand in panels.js. - Compact the logged-drive chips: drop the
-  reserved minmax(96px,1fr) map row and min-height that left a large empty box for routeless drives,
-  and remove the in-chip mini-map (it rendered empty). Chips are now a compact when/meta + badge
-  row; the route renders in the enlarged detail preview (156px -> 240px). - Drive-summary bars are
-  now proportional to real values (distance/duration/ samples scaled against the user's other
-  drives; efficiency against a 5 mi/kWh ceiling) and render no bar for a "--" metric, instead of the
-  previous hardcoded widths that showed a full bar next to "--". - Clear badge labels ("N pts" / "N
-  samples") instead of the cryptic "Nx". - Card-header actions (the trailing link/button) no longer
-  clip when the title is long — fixed app-wide via .link-btn flex/nowrap + min-width:0 on the title.
-
-Tests: VoltBridge pinned-method list + trips.test.js updated for the compact chip / on-demand route
-  design; full unit suite, JaCoCo, and 83 dashboard tests pass.
-
-* fix(android): remove adapter-health pill; explain missing GPS + offer location enable
-
-- Remove the "Adapter failing (N/5)" topbar pill (connection-status.js renderAdapterHealth + the
-  adapterHealthPill in topbar.html). It rated the last 5 session outcomes, so a few test/failed
-  connects flipped it to a noisy, alarming "failing" with no real signal. Last-connected badge and
-  low-voltage hint stay. - Trips route preview now explains WHY a drive has no route instead of a
-  bare "No route shape stored": a drive that logged OBD samples but no GPS shows "No GPS recorded
-  for this drive" + the reason ("Location was off..."), and when location permission is currently
-  denied it offers an "Enable location" button (bridge.requestPermissions). This is the missing
-  signal that left recent drives silently route-less — the app captured OBD data fine but never had
-  location permission, so no GPS was recorded. Uses the resolved route geometry (post on-demand
-  fetch), not just the rollup's hasRoute flag.
-
-Verified on-device: pill gone; selecting a recent no-GPS drive shows the new empty state with the
-  Enable-location CTA; route-bearing drives still render.
-
-* fix(android): polish the shared header — clear the status bar, de-duplicate status
-
-- Raise the body top inset floor from 14px to 30px. This WebView reports no safe-area-inset-top, so
-  the title row crowded the system status bar (clock/battery); env() still wins where a real inset
-  is reported. - Replace the boxed "LAST CONNECTED / adapter / when" card with a slim one-line
-  affordance under the title (dot + adapter name + relative time), shown on every tab. Quieter,
-  single row, still tappable to reopen the last adapter. - On Drive, stop repeating the idle status:
-  the now-chips strip no longer renders the "Idle · ready / adapter remembered" chip (its state is
-  already in the top-bar pill + the slim last-connected line). The live chip still appears for
-  Recording / Connecting / Demo, and the actionable "Last drive → map" chip stays.
-
-Net: connection status reads once (top-bar pill) with a slim adapter line, instead of the same
-  adapter + state appearing two or three times in the header.
-
-drive.test.js updated for the no-redundant-idle-chip behavior; 83 dashboard tests pass; HTML
-  regenerated.
-
-* fix(android): drop the "Last drive" chip from the Drive page
-
-The Drive page is for the live drive; a backward-looking "Last drive" chip duplicated what Trips and
-  Map already show. renderDriveNowChips now only renders while a session is live (Recording /
-  Connecting / Demo) and stays empty when idle. Removed the now-dead deriveLastDriveChip and
-  drive.js's fmtChipDate (map.js keeps its own). 83 dashboard tests pass.
-
-* refactor(android): unify demo preview with the real UI
-
-Demo preview no longer swaps in a parallel mockup UI. It streams demo telemetry through the same
-  real components, so the real dashboard stays on screen and only the live numbers animate — "demo
-  should match the real UI, only drive numbers."
-
-- core.js setDemoActive: dropped the .demo-only / .non-demo-only show/hide swap; removed the dead
-  demo mockup renderers (renderTrips/renderSessions/ renderInsights + helpers) and their call sites
-  and exports. Removed setMode (drove the demo EV ratio ring only). - Deleted every .demo-only
-  mockup block across charge/drive/insights/settings/ trips partials, and stripped the
-  now-meaningless non-demo-only tokens so the real cards always show. Removed the giant EV/GAS
-  toggle + drive-mode select from the topbar. - Removed the dead data-mode / driveModeSelect /
-  tripTabs-filter handlers and the CSS that only styled the deleted mockups (mode-toggle,
-  drive-chip, mobile-controls, hour-bars, insight/cell grids, ratio-stats, etc.). - Kept the demo
-  STREAM path intact: Start/Stop demo in the Diag preview sandbox, bridge.demo(), runBrowserDemo,
-  ensureDemoData, demoActive state, demo banner.
-
-Tests updated for the unified behavior (accessibility, demo-data, state-shape, load-dashboard
-  fixtures, globals d.ts). 82 dashboard tests, full unit suite, JaCoCo all pass; regenerated
-  index.html. Verified on-device: starting demo animates the real Drive cards
-  (speed/power/SOC/RPM/pack) instead of a mockup.
-
-* refactor(android): demo drives numbers only — remove residual demo UI divergence
-
-Audit follow-up to the demo/real unification: demo must only simulate numbers through the real
-  native channels, not relabel or branch the UI.
-
-- Removed demoViewMeta: the Trips/Charge/Insights header kicker no longer flips to "Preview sandbox"
-  in demo — demo shows the same headings as real. - renderRealTrips no longer early-returns during
-  demo, so the Trips tab keeps rendering the user's real logged drives (or the empty state) instead
-  of going blank while demo numbers animate on Drive. - Dropped the now-unused demoViewMeta export
-  and its globals type decl.
-
-Kept (intentional, not UI mockery): honest data-source signals — "Demo telemetry" adapter name,
-  dataSourceState="demo", the isolated-from-real-history copy, the demo banner, and "Stop demo" on
-  the primary button — plus the data-demo-hidden hiding of connect-only controls (device picker /
-  Scan / "pick an adapter") while a demo session streams, since showing non-functional connect
-  prompts mid-demo would be more confusing, not less.
-
-Native demo path already streams via service.broadcastTelemetry/broadcastStatus (DemoPollingLoop),
-  the same channels the real poll loop uses. 82 dashboard tests pass; index.html regenerated.
-
-* feat(android): demo simulates the GPS channel too
-
-DemoPollingLoop now emits synthetic latitude/longitude/accuracy/speed/bearing on each demo sample —
-  a slow ~1 km loop — through the same broadcastTelemetry channel a real adapter+phone GPS feeds.
-  The live GPS readout now locks and the running session distance ticks during demo, exactly as on a
-  real drive.
-
-Deliberately does NOT fake a live map route: like a real drive, the Map route polyline comes from
-  STORED trips (demo is never persisted), so this drives the live GPS signals, not a fake map
-  surface the real app wouldn't show live either.
-
-Verified on-device: demo Drive shows GPS: locked + live speed/power/SOC/RPM; Trips/Map render the
-  user's real logged drives with real headings (no "Preview sandbox" relabeling). Demo is now the
-  real app UI everywhere, driven by simulated numbers over the real native channels. Unit suite
-  green.
-
-* fix(android): stop the demo "Demo stream" last-connected junk
-
-The Drive tab showed two demo indicators at once: the live "Demo preview" chip AND a slim "Demo
-  stream - Nm ago" last-connected line. The latter is junk — a demo run isn't a real adapter
-  connection, but its session was still written to the SessionSummaryStore (adapter name "Demo
-  stream"), so it surfaced as "last connected".
-
-- SessionRecorder: gate the summary recordStart/recordEnd on non-demo mode (matching the existing
-  persistence gate), so demo runs are never summarized and can't pollute last-connected or
-  recent-session history. - connection-status.js: defensively skip demo-named sessions when picking
-  the last-connected row, so any legacy "Demo stream" entry already on disk never shows. The line
-  now reflects the last real adapter (or hides when there's none).
-
-Net: one demo indicator (the "Demo preview" chip) instead of two.
-
-Tests: new SessionRecorderTest.demoSessionsAreNotSummarized (demo → 0 summary rows, real → 1). Full
-  unit suite + JaCoCo + 82 dashboard tests pass. Verified on a clean emulator: idle Drive shows no
-  stale last-connected line.
-
-* test(android): cover the session's new features
-
-Adds tests for behaviors added this branch that were thin on coverage:
-
-- ObdLocalStoreDbTest: getTripRouteJson returns a session's route geometry on demand (the Trips
-  on-demand route loader, which bypasses the recent-routes window), and returns {} for an unknown
-  session id. - TelemetryPayloadTest: fromJson->toJson preserves GPS fields (latitude/
-  longitude/accuracyM/gpsSpeedMps/bearingDeg) as extras — the channel both the live GPS readout and
-  the synthetic demo GPS ride on; a regression dropping unknown fields would silently kill route/GPS
-  UI. - trips.test.js: (1) a drive outside the recent-routes window fetches its route via
-  bridge.getTripRoute and renders the detail preview, fetching once and caching; (2) a GPS-less
-  drive shows "No GPS recorded" + an Enable-location CTA that calls requestPermissions; (3) the CTA
-  is omitted once location is granted. - voltbridge fixture: added getTripRoute to the mock + method
-  list to track VoltBridge.java.
-
-Full unit suite + JaCoCo pass; dashboard tests 82 -> 85.
-
-* test(android): merge-engine edge cases + connection-status demo filter
-
-More coverage on the riskiest paths from this branch:
-
-DatabaseMergerTest: - remapsTripSegmentSamplePointersToTheMergedTelemetryRows — a donor trip
-  segment's start/end_sample_id must resolve to the newly-inserted telemetry rows (verified by
-  joining back and matching captured_at_ms), not stale donor ids that would collide with unrelated
-  live rows. Pre-seeds live telemetry so the donor ids genuinely collide. Guards the subtlest remap
-  in the engine. - adapterHistoryUpsertKeepsMinFirstAndMaxLastSeen — the natural-key upsert keeps
-  the earliest first_seen_ms and latest last_seen_ms across both sides.
-
-connection-status.test.js (new): the "last connected" line shows the most recent REAL adapter and
-  skips demo-named sessions; hides entirely when only demo sessions exist; shows a real adapter
-  normally otherwise. Locks the demo-junk fix in JS (the harness can load connection-status.js via
-  extras).
-
-Full unit suite + JaCoCo pass; dashboard tests 85 -> 88.
-
-* test(android): drive-summary bars + migration data preservation
-
-- trips.test.js: the drive-summary bars are proportional to real values and an empty (0%) bar — not
-  a misleading full one — is rendered for a "--" metric. Asserts exact widths: selected longest
-  drive = 100% distance, ~50% duration; a distance-less drive = "--" value with a 0% bar. -
-  BackupMigratorTest.migrationPreservesExistingRows: a v8 backup with session + telemetry rows
-  upgrades non-destructively — every row survives, version becomes current, and the added rollups
-  cache starts empty.
-
-Full unit suite + JaCoCo pass; dashboard tests 88 -> 89.
-
-* fix(android): declare getTripRoute on the VoltBridge TS type
-
-The on-demand route bridge method was added to VoltBridge.java, the JS fixture, and the runtime, but
-  not to the ambient VoltBridge interface in dashboard-globals.d.ts — so tsc --checkJs (the
-  dashboard typecheck CI step) failed on panels.js's bridge.getTripRoute calls. Add the declaration.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.5.0 (2026-06-02)
 
-### Features
+### ✳️ New
 
 - **android**: Merge a backup into the live database instead of only replacing
   ([#157](https://github.com/jtn0123/VoltTracker/pull/157),
   [`6be018e`](https://github.com/jtn0123/VoltTracker/commit/6be018e878a2cfa389dc87ba32070fe812a25192))
 
-* feat(android): merge a backup into the live database instead of only replacing
-
-Adds an additive restore path for the "I forgot to restore and now have two databases" case: after a
-  backup file is picked and verified, the user chooses Replace all (the existing destructive swap)
-  or Merge.
-
-The merge folds the donor database's rows into the live one in dependency order, re-inserting every
-  row without its _id and rewriting foreign keys through old->new maps so the two databases'
-  colliding AUTOINCREMENT ids don't clash. Sessions are deduplicated on started_at_ms (a duplicate
-  drive's whole subtree is dropped); vehicles merge on vehicle_key so donor trips attach to the
-  existing vehicle; adapter_history and diagnostic_codes upsert on their natural keys. The whole
-  merge runs in one transaction, so a failure leaves the live database untouched. The regenerable
-  session_trip_rollups cache is skipped and rebuilt lazily.
-
-- DatabaseMerger: generic id-remapping merge engine + MergeResult summary - ObdLocalStore.mergeFrom
-  / ObdStoreMaintenance.mergeFrom: open donor read-only, run the merge against the live writable
-  connection - BackupController: stage+verify once, then a Replace/Merge/Cancel dialog - settings
-  partial + actions.js: copy now reflects merge-or-replace; the destructive warning moved to the
-  native dialog after the file is verified - DatabaseMergerTest: remap, dedup, vehicle-by-key,
-  merge-into-empty, idempotency, FK integrity
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(android): cover DatabaseMerger child tables and upsert branches
-
-The data-package JaCoCo line floor (0.89) dropped to 0.84 once DatabaseMerger landed. Add coverage
-  for the previously-unexercised paths: every session/vehicle child table (events, pid observations,
-  location samples, field capabilities, charge sessions, battery + cell snapshots, exports), the
-  adapter_history and diagnostic_codes natural-key upsert/merge branches, cell snapshots of a
-  skipped duplicate session being dropped, the null-handle failure path, and the plural summary
-  string.
-
-* fix(android): address CodeRabbit review on the merge feature
-
-- DatabaseMerger.summary(): a vehicle/adapter/DTC-only backup no longer reads as "Merged 0 sessions"
-  (which looked like a no-op). Now reports new sessions and new vehicles explicitly, e.g. "Merged
-  backup - no new sessions, 1 new vehicle." - ObdStoreMaintenance.mergeFrom(): enforce the
-  same-schema precondition before merging. mergeFrom is a public entry point, so guard donor schema
-  version even though BackupController already gates on it via stageRestoreFile. -
-  BackupController.applyReplace(): always delete the transient .restore-tmp / .restore-backup copies
-  on the failure path (hoisted into the finally), so a caught restore failure can't leave them next
-  to the live database. - DataBackup.deleteIfExists(): null-safe. - Tests: vehicle-only summary,
-  mergeFrom happy path, missing-file and wrong-schema-version rejection.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.12 (2026-06-02)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Round-7 grade-report remediation — 20 items via 4 parallel agents
   ([#156](https://github.com/jtn0123/VoltTracker/pull/156),
   [`677c159`](https://github.com/jtn0123/VoltTracker/commit/677c15973eb6079a8e6ee2dda23dc3966ec94708))
 
-* feat(dashboard): round-7 a11y + finish tsc migration (C1,C2,C4,C5,I1,I2)
-
-- C1: Trips tab — tablist/tab roles + aria-selected on #tripTabs filter (kept in sync in
-  actions.js); list/listitem semantics on real + demo trip lists (rows tagged in core.js
-  buildTripRow + panels.js renderTripRow). New a11y tests. - C2: map scrubber play/details buttons
-  get aria-labels; charge #sessionList -> role=list (+ listitem rows in core.js buildSessionRow),
-  #hourBars -> role=img. - C4: Drive speed cluster, power meter, and SOC meter get role=meter +
-  labels + valuemin/max. setMeter (core.js) now sets aria-valuenow; telemetry.js sets it live for
-  the speed and power meters. - C5: settings backup/restore <details> labelled, button grid wrapped
-  in role=group. - I1: added // @ts-check to actions, drive, map, scrubber, troubleshooter,
-  dtc-causes, dtc-lookup and fixed all resulting errors with JSDoc casts (no @ts-ignore). Added
-  __voltDemoTimer to dashboard-globals.d.ts. - I2: attempted noImplicitAny=true; it surfaced ~474
-  errors across all checked files, so reverted to false per instructions.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(android): round-7 testing/CI/docs (D1,D2,D3,F1,H1,H2)
-
-H1: add mobile/android/docs/data-model.md — one-page SQLite schema reference (tables, key columns,
-  FK CASCADE/SET NULL behavior, raw vs derived/cache), accurate to VoltTrackerSchema.java.
-
-H2: flag the "dashboard handshake received" logcat string as a TEST CONTRACT in the
-  emulator-smoke.sh header (and in data-model.md / the workflow header) so it can't be silently
-  reworded out from under the smoke.
-
-D2: add coverage-ratchet.test.js — meta-test importing vitest.config.js and asserting each coverage
-  threshold is >= a committed baseline (62/60/60/46), enforcing the "raise only; never lower"
-  comment. Runs under npm test.
-
-D3: add 6 scrubber.js interaction tests — cursor fraction 0/1 clamping via scrubAtLatLng endpoint
-  snapping, play/pause button toggle state (+inert with no route), and SOC/elevation interpolation
-  across MISSING samples (socTrack endpoints only; altM gaps).
-
-D1: document the path to making the emulator smoke a REQUIRED check in android-emulator-smoke.yml
-  (kept advisory; explains the skipped-path-filter caveat for ci-success). No change to ci-success
-  needs.
-
-F1: add an advisory gradle-dependency-audit job to android.yml (OSV scan, continue-on-error, not in
-  ci-success) — the Gradle-side counterpart to the existing npm audit gate.
-
-Verification: dashboard-tests 18 files / 77 tests pass; npm run lint clean; actionlint + shellcheck
-  clean on both workflows and the smoke script.
-
-* fix(android): round-7 backend/security hardening + arch docs (A2,A3,E1,E2,G1)
-
-A2: Document why ObdPollingEngine and ObdService are intentionally large (single cohesive state
-  machine / single-session lifecycle glue; splitting would thread shared mutable runtime state
-  through new race-prone seams).
-
-A3: Narrow LiveSampleReader's engine coupling behind a small SampleContext interface (sample counter
-  + supported-PID summary + session-health/location enrichers) instead of the whole engine;
-  ObdPollingEngine implements it and passes itself at the call site.
-
-E1: On restore, clear the regenerable v9 session_trip_rollups cache from the staged DB (best-effort;
-  rebuilds lazily) so a hand-edited backup can't bring a stale rollup live.
-
-E2: Token-bucket logClientError (5/sec, burst 10) so a looping dashboard client can't spam the log;
-  dropped calls are counted and surfaced on the next admitted line.
-
-G1: Cache the storage-summary result via a dirty flag. The throttled ~1Hz status path skips the full
-  recompute while clean; DB-mutating paths (telemetry row writes, prune) mark it dirty. Forced
-  transition refreshes still recompute.
-
-* fix(android): round-7 recorder/engine hardening (A1,B1,B2,G2)
-
-A1: Extract SessionRecorder's async-persistence machinery into a new ObdPersistenceWorker
-  (executors, bounded queues, discard-oldest backpressure policy, dropped-task counter,
-  drain/shutdown plumbing, lifecycle-failure visibility). SessionRecorder keeps lifecycle/log API +
-  session state and delegates persistence to the worker. Behavior-preserving; existing
-  executor-contract, materializer, and lifecycle-failure tests pass.
-
-B1: Cap status-event throttling by count, not just content+time. A flapping adapter alternating
-  between distinct details bypassed the key dedupe; add a rolling-window ring that caps absolute
-  status writes per window regardless of detail variation, keeping the content+time dedupe as the
-  fast path.
-
-B2: Cap carry-forward age for a stalled PID. Track when each command's lastRaw was set and drop it
-  past a 30s ceiling so lastRaw() returns null (sample reads "--") instead of a frozen number. Adds
-  a test-only clock seam.
-
-G2: Generalize Mode-01 batching beyond Tier-1. Any same-header broadcast Mode-01 PIDs due on the
-  same cycle (e.g. SOC + coolant on cycle 10) now share one multi-PID request, with a per-adapter
-  per-cycle fallback to per-PID on a short reply. Tier-1 behavior unchanged.
-
-Tests: 485 pass (was 473); spotlessCheck clean.
-
-* style(dashboard): spotless-format new a11y attributes + regen index.html
-
-* refactor(dashboard): type globals + enable noImplicitAny; pin trips/insights error-state (I2,C3)
-
-I2 — noImplicitAny is now ON in dashboard-tests/tsconfig.json (was 474 errors).
-
-dashboard-globals.d.ts gains real interfaces in place of the loose `any` shapes: - VoltDashboard: a
-  concrete (all-optional + index-signature) interface enumerating every member the IIFEs hang off
-  window.VoltDashboard — el, setText/setMeter, setStatus, parsePayload, renderMap,
-  formatDistance/Duration, updateValidationUi, loadTrips/loadInsights, dtcInfo, scrubber/map/drive
-  exports, etc. — each with a derived signature (members are optional because the namespace is
-  assembled incrementally across files). - VoltBridge: the @JavascriptInterface surface from
-  VoltBridge.java, names and arities matched exactly (getTrips/getInsights return string,
-  forceStopPackage returns boolean, scheduleAdapterReadyNotify(mins:number), etc.). -
-  window.VoltTrackerAndroid?: VoltBridge and window.VoltDashboard: VoltDashboard declared ambiently;
-  plus helper payload/route/dtc/status typedefs.
-
-The remaining implicit-anys are annotated file-by-file with JSDoc: inline `/** @type {T} */` casts
-  on function/arrow params (number for math helpers, real DOM element types where an el() result is
-  narrowed, `any` only for genuinely JSON-derived dynamic values), typed object-literal accumulators
-  and lookup maps (Record<...>), and `keyof ScrubPoint` for the scrubber index access.
-
-4 real TS2339s fixed (not suppressed): state.telemetry.source and state.demoSessions were
-  read/assigned but absent from the state literal — both added to the literal with honest types; the
-  clearDemoTelemetry reassignment was updated to match.
-
-C3 — trips-error-state.test.js pins panels.js#loadTrips / #loadInsights: stubs
-  VoltBridge.getTrips/getInsights to native-error payloads and asserts
-  VD.setStatus({state:"blocked"}) + logClientError fire, plus the converse (a genuinely-empty
-  successful read raises no blocked status).
-
-Verification (mobile/android/dashboard-tests): npm run typecheck → 0 errors with noImplicitAny:true;
-  npm run lint → clean; npm test → 82 passed (19 files). No // @ts-ignore / @ts-expect-error used.
-
-* fix(android): address CodeRabbit on #156 (a11y, storage-summary, OSV scan)
-
-- setMeter (core.js): drop aria-valuenow for missing/non-numeric readings so meters announce as
-  indeterminate, not a false 0; telemetry.js passes the raw (possibly NaN) SOC through instead of
-  coercing it to 0. - Trip/session rows (core.js, panels.js): wrap the interactive buttons in a
-  display:contents role="listitem" instead of overwriting the button role, so they stay announced as
-  buttons inside their role="list" containers. - Trips filter (trips.html, actions.js): replace the
-  click-only role="tab" widget with a labelled role="group" of aria-pressed toggle buttons — no fake
-  tab semantics without keyboard/tabpanel behaviour. - accessibility.test.js: assert the group +
-  aria-pressed model and the labelling attribute directly (the old check passed even if aria-label
-  was dropped, since accessibleName falls back to child text). - MainActivity: force an immediate
-  storage-summary refresh on the idle session boundary (the dirty+time gate otherwise skips it after
-  session finalize, leaving the panel stale); re-mark dirty when a summary build fails so a
-  transient error is retried. - F1 OSV scan (android.yml, build.gradle, .gitignore): OSV-Scanner
-  can't parse `gradlew dependencies` text, so enable dependency locking and scan a generated
-  gradle.lockfile instead. Lockfiles are gitignored/CI-ephemeral, so locking imposes no version
-  enforcement on normal builds.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-### Refactoring
+### 🔷 Changed
 
 - **android**: Round-7 perf/polish (config cache, ts-check, schema split)
   ([#155](https://github.com/jtn0123/VoltTracker/pull/155),
   [`20b1ba0`](https://github.com/jtn0123/VoltTracker/commit/20b1ba0dd246a736896cf00be817068ff3a43b51))
 
-* build(android): enable Gradle configuration cache by default
-
-CI already ran every task with --configuration-cache; this sets it as the local default too. Warm
-  builds skip the configuration phase (~2s reuse vs ~28s cold). Verified all tasks store/reuse
-  cleanly — :app:testDebugUnitTest, lintDebug, spotlessCheck, and the file-reading verify* tasks.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* refactor(android): extract ObdStoreVehicles from ObdStoreWriter
-
-VIN-derived vehicle identity (upsertVehicleFromVin + the SHA-256/WMI/model-year decode helpers, ~135
-  LOC) is a self-contained concern unrelated to session/telemetry writes. Moved it into
-  ObdStoreVehicles; ObdLocalStore delegates upsertVehicleFromVin there. ObdStoreWriter drops 522 ->
-  385 LOC (back under the 500 guideline).
-
-Pure code movement — public ObdLocalStore API unchanged; full suite green, lint + spotless clean.
-
-* test(android): pin location-filter antimeridian + stationary-reread edges
-
-The haversine distance already handles the 180° meridian wrap correctly (sin(Δlng/2) is periodic, so
-  179.999 -> -179.999 is ~222 m, not a whole-globe teleport), and the filter has no minimum-movement
-  gate so a parked car's same-point re-read is a valid 0 m/s fix. Both were unpinned — added three
-  guard tests (filter accepts a real antimeridian crossing, accepts a stationary re-read, and a
-  direct haversine-wrap assertion) so a future "optimization" to equirectangular distance can't
-  regress them.
-
-No production change. LocationFilterTest green; spotless clean.
-
-* test(android): cover Mode-01 multi-PID batching at the engine level
-
-Multi-PID batching (probe + per-cycle batched 010D0C041149 + per-adapter fallback) is already
-  implemented and unit-tested in ObdProtocol/PidSchedule — but the engine-level integration was
-  untested, so a regression that silently stopped batching (or never fell back) wouldn't be caught.
-  Adds three ObdPollingEngineTest cases against FakeElmConnection: the 010D0C probe runs during
-  init; a supporting adapter polls Tier-1 as one batched command and never sends the individual
-  speed/RPM PIDs; an incomplete probe disables batching and falls back to per-PID.
-
-No production change. Full Java suite green; spotless clean.
-
-* refactor(dashboard): type-check core.js (// @ts-check)
-
-Migrates the foundational core.js onto tsc --checkJs. Cast the shared VD namespace once (/** @type
-  {any} */ — it's dynamically extended across files), added a typed queryAll() helper so the 9
-  querySelectorAll().forEach sites get HTMLElement (.dataset/.hidden) without per-site casts, and
-  fixed one real finding: a numeric CSS custom-property value passed to setProperty (now String(c)).
-
-No behavior change. tsc clean; ESLint + 65 vitest (which run core.js) + spotless + bundle budget all
-  green.
-
-* refactor(dashboard): type-check telemetry.js + panels.js (// @ts-check)
-
-Both already use the clean `const VD = window.VoltDashboard` alias (no `|| {}`), so with VD typed
-  loosely they checked clean out of the box — telemetry.js needed only the opt-in comment. panels.js
-  needed two NodeListOf<HTMLElement> casts on its querySelectorAll().forEach sites
-  (data-real-trip-id / data-real-trip-map) for .dataset access. Five of the six dashboard JS files
-  are now type-checked (core/telemetry/panels + the wave-6
-  connection-status/connection-tools/demo-data).
-
-No behavior change. tsc clean; ESLint + 65 vitest + spotless + bundle budget green.
-
-* test(android): make the emulator smoke prove the dashboard JS is alive
-
-The emulator smoke only scanned logcat for crashes/JS errors — but the file:// ES-module class of
-  bug logs nothing (the dashboard loads, its JS just silently never runs), so the smoke would sail
-  right past it. Added a positive check: MainActivity.onDashboardReady now logs a distinctive
-  "dashboard handshake received" line (it only fires when the JS chain executed and called
-  bridge.dashboardReady()), and the workflow polls logcat up to ~40s and fails if that handshake
-  never arrives. The existing crash/JS-error scan stays as a second gate.
-
-Also wired the (otherwise weekly/dispatch-only) job to run on PRs that touch the dashboard or
-  WebView-startup files, so the regression surface is checked pre-merge.
-
-actionlint clean; APK builds; Java suite + lint + spotless green. (The emulator run itself executes
-  in CI.)
-
-* refactor(android): extract VoltTrackerSchema (DDL) from VoltTrackerDb
-
-VoltTrackerDb was 772 LOC, ~400 of which were CREATE TABLE / CREATE INDEX statements. Moved all the
-  schema DDL — base tables, observation/diagnostic/roadmap tables + indexes, prune indexes, and the
-  v9 session_trip_rollups cache — into a new VoltTrackerSchema. VoltTrackerDb (now 286 LOC) is just
-  the SQLiteOpenHelper lifecycle + the onUpgrade migration ladder, which calls
-  VoltTrackerSchema.createX. Table-name constants stay on VoltTrackerDb (referenced across the data
-  layer); schema methods qualify them.
-
-Pure code movement (extracted by line-range copy, not retyped). The migration round-trip test +
-  every DB-backed test build the schema through VoltTrackerSchema, so the full suite passing is
-  end-to-end proof. Lint + spotless clean.
-
-The other three 700-LOC classes (ObdPollingEngine, SessionRecorder, ObdService) were intentionally
-  left whole: they are cohesive single-responsibility runtime classes (connect/poll loop,
-  persistence recorder, foreground service) where a split would thread state through new classes
-  purely for a line count — risk on remotely-tested runtime code, no behavior change.
-
-* ci(android): run the emulator smoke via android-emulator-runner
-
-The hand-rolled emulator job failed at "Prepare emulator" with `sdkmanager: command not found` — the
-  Android cmdline-tools were never on PATH, so this workflow had been failing silently on its weekly
-  schedule and never actually ran. Adding the PR trigger in the previous commit surfaced it.
-
-Switched to reactivecircus/android-emulator-runner (SHA-pinned v2.37.0), which sets up the
-  SDK/AVD/KVM and boots the emulator, then runs the same positive readiness poll ("dashboard
-  handshake received") + negative crash/JS-error scan inside it. Enables KVM for x86_64
-  acceleration. Now the smoke can actually execute the #7 assertion instead of dying in setup.
-
-actionlint clean. (The emulator run itself is validated by CI re-running this PR.)
-
-* ci(android): move emulator smoke logic into a script file
-
-android-emulator-runner executes the workflow `script:` line-by-line (each line its own `sh -c`), so
-  the multi-line readiness poll broke with "Syntax error: end of file unexpected (expecting done)".
-  Moved the install + handshake poll + crash scan into mobile/android/scripts/emulator-smoke.sh and
-  reduced the workflow step to a single `bash …` invocation. Bonus: the script is now
-  shellcheck-clean and locally testable.
-
-(Last run confirmed the emulator now boots, installs the APK, and launches the app — only the
-  inline-shell splitting was left.)
-
-shellcheck + bash -n + actionlint all clean.
-
-* fix(android): address CodeRabbit on #155 (emulator smoke + test javadoc)
-
-- emulator-smoke.sh: re-capture logcat (after a short settle) before the crash/JS- error scan. The
-  readiness loop stops the instant the handshake appears, so a crash a moment later would have been
-  missed by scanning that stale snapshot. - ObdPollingEngineTest: the batch tests I inserted had
-  stranded the "helpers" section header + openSession() javadoc above them; moved them back to sit
-  directly above openSession(). - Track scripts/emulator-smoke.sh in the emulator job's path filter
-  so script changes re-run the smoke (live-validates this fix).
-
-shellcheck + bash -n + actionlint clean; ObdPollingEngineTest + spotless green.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.11 (2026-06-01)
 
-### Performance Improvements
+### 🔷 Changed
 
 - **android**: Round-6 grade-report remediation
   ([#152](https://github.com/jtn0123/VoltTracker/pull/152),
   [`0fb17da`](https://github.com/jtn0123/VoltTracker/commit/0fb17dac45664146c4c59a9d4fbbd1574b645d8a))
 
-* chore(android): wave 1 grade-report guardrails & doc fixes
-
-Round-6 grade-report items, all low-risk:
-
-- H1: roadmap schema v7 -> v8 (+ accurate v8 HV-pack-columns entry) - H3: ESLint config comment
-  drift (drop deleted module-bootstrap ref; ESLint 9 -> ESLint) - H2: README documents JaCoCo floors
-  (71%/89%) + standalone test commands - F2: CI gates dashboard deps via `npm audit
-  --audit-level=high` - I2: aggregate `ci-success` job so branch protection needs one check - I1:
-  enable opt-in pre-push hook (unit + dashboard tests) + CONTRIBUTING note
-
-C1 (duplicate `.dtc-empty-state small`) was dropped: the selector appears in a grouped rule
-  (display:block, shared with `strong`) and a separate rule (spacing) — both declarations are live
-  and non-conflicting, not dead code.
-
-actionlint clean; dashboard lint + 61 vitest tests pass.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* test(android): wave 2 grade-report guardrail tests
-
-Pin current behavior before the wave-4/5 changes touch it:
-
-- E1: dashboard-tests/csp.test.js — asserts CSP directives, no remote <script>, and that Leaflet
-  tile URLs stay within the img/connect allowlist (the round-5 E2 failure mode). Navigation-only
-  links (DTC Google search) are out of scope. - D2/G2: QueryPlanIndexTest pins the route-downsample
-  reads (ObdStoreTrips#routePointsForSessionJson) over location_samples and the telemetry fallback —
-  the hot path G1 will rewrite. Must stay index-bound. - D1: ratchet Vitest coverage floors to ~3pts
-  below measured (lines 52->62, statements 49->60, functions 50->60, branches 40->46).
-
-Dashboard: 17 files / 65 tests pass; coverage gate green. QueryPlanIndexTest green.
-
-* feat(android): wave 3 — fail-fast validation on classifier/materializer inputs
-
-B1: ClassifierInput rejects physically-impossible values (negative speed, absurd
-  RPM/voltage/current, NaN/Inf) with generous bounds; nulls still mean "unknown". The single live
-  caller (LiveSampleReader) catches the throw and degrades to an unknown classification + logs
-  `classifier_input_rejected`, so a transient adapter glitch can never crash the polling loop.
-
-B2: MaterializerInput rejects impossible windows (closedAt < startedAt, negative start, non-positive
-  sessionId). Zero-duration windows stay legal. No max-span cap — a car left connected for days is
-  legitimate and the materializers split long runs internally. SessionRecorder already wraps
-  construction in try/catch, so a bad window records materialize_failure and skips rather than
-  crashing finalize.
-
-Adds ClassifierInputTest + MaterializerInputTest. Full Java suite green; spotless clean.
-
-* feat(dashboard): wave 4 (partial) — surface missing tiles, document SVG sink
-
-C3: setText/setMeter now return whether the target element existed and warn ONCE per id (deduped;
-  they run ~1Hz) through console + logClientError when it's missing — the same surfacing
-  bindListenerGuarded uses. Turns silent partial-drift (a renamed tile stuck at "--" forever) into a
-  dev/test signal. Chose the per-id warn over a global data-stale-reason attribute to avoid false
-  positives across the ~110 heterogeneous call sites.
-
-C4: documented the panels.js efficiency-scatter innerHTML as a geometry-only safe sink (computed
-  numbers only, never telemetry/user strings). The dom-sinks.test.js allowlist already enforces that
-  this stays one of only two HTML sinks.
-
-C2 (bundle budget) intentionally deferred — the recommended JSON+fetch path is infeasible over
-  file:// (no fetch in the dashboard for that reason), so it needs a raise-vs-split decision.
-
-Dashboard: 17 files / 65 tests pass; lint + spotless clean.
-
-* build(android): wave 4 (C2) — split dashboard bundle budget core vs DTC data
-
-The single 650KB budget was 60% lazy-loaded DTC reference data, so the startup-critical core could
-  creep up unnoticed while a one-line core copy edit could fail CI (566 bytes of headroom). The
-  JSON+fetch fix from the report is infeasible — fetch is blocked over file:// — so split the budget
-  instead:
-
-- core (js+css excl lib + excl dtc data): 360,000 B (today ~314KB, ~13% headroom) - DTC data
-  (dtc-lookup.js + dtc-causes.js): 380,000 B (today ~337KB, ~11% headroom)
-
-verifyDashboardBundleSize now checks both buckets; the CI summary reports both. Adds
-  docs/bundle-budget.md explaining the split and the file:// constraint.
-
-verifyDashboardBundleSize green; actionlint clean.
-
-* perf(android): wave 5 (G3) — throttle per-tick storage-summary refresh
-
-publishStorageSummary() ran on every BROADCAST_STATUS (~1Hz during a drive), each time firing many
-  whole-DB queries (incl. the totalDistanceMeters all-sessions loop). The summary is session/sample
-  counts + DB size — not live telemetry — so a new publishStorageSummaryThrottled() gates the
-  status-tick path to at most once per 10s. Transitions (page-ready, resume, connect) still call
-  publishStorageSummary() directly for an immediate refresh. lastStorageSummaryAtMs is stamped on
-  completion.
-
-Cuts the redundant heavy query ~10x during continuous operation; G1 will remove the underlying N+1.
-  Full Java suite green; spotless clean.
-
-* perf(android): wave 5 (G1) — cache per-session trip rollup, kill the insights N+1
-
-insightsJson/totalDistanceMeters looped every session and re-walked its GPS track on every read —
-  O(sessions x route reads), growing unbounded with history. Now a schema-v9 session_trip_rollups
-  table caches each closed session's scalar (distance, duration, max speed, route flag), so reads
-  become a single scalar query plus the at-most-one live active session.
-
-Semantics are preserved exactly: "one session = one trip", same folding math (TripAggregate mirrors
-  the old loop), active session still folded in live. The cache lazy-backfills on read (first read
-  after upgrade computes the history once; counted=0 rows keep failed-connection sessions out of
-  trip counts while still contributing route distance to the storage summary). CASCADE +
-  clearAllData keep it in lockstep with sessions.
-
-Also bumped DataBackup.CURRENT_RESTORE_SCHEMA_VERSION 8->9 and added the new table to
-  REQUIRED_RESTORE_TABLES (backup/restore validates schema version + table set).
-
-New ObdStoreTripsRollupDbTest covers idempotency, backfill of new closes, live active session, and
-  clear. Full Java suite (463 tests) green; spotless clean.
-
-* refactor(android): wave 6 (A3, F1) — data-layer materialize entry + version catalog
-
-A3: SessionRecorder (engine) no longer reaches into the materialize package. The orchestration moves
-  into ObdLocalStore.materializeSession(sessionId, start, close) — the data layer already owns the
-  materialize types (implements MaterializerData, has persistTrips/persistChargeSessions).
-  SessionRecorder drops all 5 materialize.* imports and just calls store.materializeSession(...);
-  the only remaining cross-layer import is gone, so ArchitectureBoundaryTest's layering holds
-  cleanly.
-
-F1: AGP (9.2.1) now lives in gradle/libs.versions.toml as a plugin alias, and the root build.gradle
-  uses alias(libs.plugins.android.application) / alias(libs.plugins. spotless) instead of hardcoding
-  versions. The catalog is now the single source of truth (the spotless alias was defined-but-unused
-  before).
-
-Full Java suite green; spotless clean; build resolves via the catalog.
-
-* feat(android): wave 6 (E2) — WebView origin guard
-
-WebViewBootstrap now installs a WebViewClient that only allows navigations within
-  file:///android_asset/dashboard/; anything off-origin is consumed and logged. The dashboard never
-  navigates the main frame elsewhere (external links open via the VoltBridge ACTION_VIEW intent, and
-  the window.open fallback is a WebView no-op), so this is pure defense-in-depth against a bug or
-  injected content steering the WebView off-origin. Both shouldOverrideUrlLoading overloads are
-  implemented to cover API 23 (String) and 24+ (WebResourceRequest); the initial loadUrl and
-  CSP-bounded sub-resource loads are unaffected. Also dropped the stale "module bootstrap" mention
-  from the javadoc.
-
-WebViewBootstrapTest asserts dashboard-origin nav is allowed and off-origin (https +
-  file:///etc/passwd) is blocked. Full suite green; lint + spotless clean.
-
-* refactor(android): wave 6 (A1) — split ObdStoreTrips by read concern
-
-ObdStoreTrips was 957 LOC mixing three concerns. Split into: - ObdStoreRouteProjection (265) — route
-  + SOC/power track downsampling geometry, the engine both trips/insights and session-review depend
-  on (static). - ObdStoreSessionReview (417) — the Diagnostics deep-review payload (static). -
-  ObdStoreTrips (321) — trips list, insights, and the rollup cache.
-
-All three now under the 500-LOC house guideline. Pure code movement, no behavior change: callers in
-  ObdStoreReports now invoke the static helpers (ObdStoreSessionReview.* /
-  ObdStoreRouteProjection.*); ObdStoreTrips keeps totalDistanceMeters so ObdStoreReports'
-  constructor is unchanged. Full Java suite (465 tests) green; lint + spotless clean.
-
-* refactor(android): wave 6 (A2) — extract ObdStoreWriter from ObdLocalStore
-
-ObdLocalStore was a 678-LOC facade implementing three interfaces and owning the entire write surface
-  inline. Moved the write half — session lifecycle, telemetry/ PID/location/event inserts,
-  adapter-history upserts, and VIN-derived vehicle identity (plus the prepared-statement cache and
-  ObdStoreSnapshots dependency) — into a new ObdStoreWriter. ObdLocalStore now delegates each
-  ObdSessionStore method one-to-one and drops to 326 LOC: a thin facade over reads
-  (ObdStoreReports/Trips), writes (ObdStoreWriter), materialization, and maintenance.
-
-Pure code movement: the public ObdLocalStore API is byte-for-byte unchanged, so every caller and
-  test is unaffected. Full Java suite (465 tests) green; lint + spotless clean.
-
-* refactor(android): wave 6 (A4) — extract DashboardPublisher from MainActivity
-
-The native->WebView publish path (the function-name allowlist + callDashboard's page-ready /
-  tear-down gating) lived inline in MainActivity, untestable without a full Activity. Extracted it
-  into DashboardPublisher, which owns the allowlist, pageReady flag, and liveness/UI-thread
-  marshalling via injected seams (a Liveness check + an Executor — production passes
-  Activity::runOnUiThread, tests pass a synchronous executor). MainActivity.callDashboard now
-  delegates; onDashboardReady/ isDashboardReadyForTest go through the publisher.
-
-This is the testable, cohesive slice of A4 — the broadcast aggregation, service binding, and
-  lifecycle stay in the Activity where they belong. New DashboardPublisherTest covers allowlist
-  enforcement, payload quoting, and the not-ready / torn-down drops with no Activity. (Liveness is a
-  local interface, not java.util.function.BooleanSupplier, which is API 24+ vs minSdk 23.)
-
-Full Java suite (470 tests) green; lint + spotless clean.
-
-* build(dashboard): wave 6 (I3) — opt-in tsc --checkJs type-checking
-
-ESLint catches undefined names but not type-level bugs (wrong property access, bad arity). Added a
-  TypeScript checker (no emit) over the dashboard JS, gated in CI and in verifyActiveApp via a new
-  dashboardTypecheck task.
-
-It's opt-in to avoid drowning in noise on the IIFE-shared-window pattern: only files whose first
-  line is `// @ts-check` are checked (checkJs:false), and shared globals (VoltDashboard, the native
-  bridge, Leaflet) are declared loosely in dashboard-globals.d.ts so checking surfaces real local
-  bugs without false "property does not exist on Window" errors. Migrated three files as the seed —
-  connection-status.js, connection-tools.js (where tsc flagged genuinely untyped form-element
-  access: .value/.checked/.disabled on HTMLElement, now cast to HTMLInputElement/HTMLButtonElement),
-  and demo-data.js. CONTRIBUTING documents the one-comment migration path.
-
-tsc clean; ESLint + 65 vitest + spotless + bundle budget all green.
-
-* fix(android): address CodeRabbit review on #152
-
-- csp.test.js: tighten tile-host allowlist match to exact/domain-suffix boundary (startsWith would
-  let basemaps.cartocdn.com.evil.com slip past the regression test). - roadmap: schema v8 -> v9 +
-  add the v9 session_trip_rollups entry (G1 bumped the DB after the wave-1 doc fix set it to v8). -
-  MainActivity: simplify callDashboard javadoc — it referenced the removed
-  ALLOWED_DASHBOARD_FUNCTIONS; now points at DashboardPublisher.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.10 (2026-05-29)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Load dashboard JS as classic scripts (modules dead over file://)
   ([#151](https://github.com/jtn0123/VoltTracker/pull/151),
   [`18b698c`](https://github.com/jtn0123/VoltTracker/commit/18b698c9a1a7de08847a517183b270b9b09c3ae1))
 
-The dashboard is served from file:///android_asset/dashboard/index.html in the WebView. Since #147
-  the JS bootstrap was loaded as <script type="module">, but ES module scripts are fetched with CORS
-  semantics that the file:// scheme can't satisfy — so the entire module graph silently never
-  executes on-device. The result: every JS-wired control is dead (bottom-nav, Connect, Scan,
-  Refresh…), while classic scripts (Leaflet), native <select>/<details>, scrolling, and the CSS
-  press highlight all still work. That's the "I can scroll but can't tap off Drive" report, and it
-  lined up with #147 (~3 versions ago).
-
-The ten dashboard JS files are self-contained IIFEs that share state via window.VoltDashboard — they
-  don't use ES import/export — so they load fine as ordered classic scripts (like Leaflet already
-  does over file://). Replace the single module bootstrap with the ten files as classic <script>
-  tags in dependency order, delete the now-unused bootstrap.js, and update script-order.test.js to
-  assert classic loading + guard against type="module" regressing.
-
-This is effectively a revert of #147's script-loading change; verified clean locally (dashboardTest
-  61/61, dashboardLint, spotlessCheck, verifyGeneratedDashboardClean, verifyDashboardBundleSize).
-  Needs on-device confirmation, but it restores the pre-#147 classic-script loading that worked.
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.9 (2026-05-29)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Inset WebView by system bars so bottom-nav is tappable
   ([#150](https://github.com/jtn0123/VoltTracker/pull/150),
   [`59341ba`](https://github.com/jtn0123/VoltTracker/commit/59341bafa8b5d0a26dafb8db694533eeea8a0aea))
 
-On Android 15+, apps targeting SDK 35+ are forced edge-to-edge, so the WebView (setContentView with
-  MATCH_PARENT, no insets handling) draws under the status and navigation/gesture bars. WebView's
-  CSS env(safe-area-inset-*) reflects only display cutouts — not the gesture bar — so the fixed
-  bottom-nav sat at bottom:8px inside the system gesture zone, where the OS swallows taps. The page
-  above still scrolled, which is why scrolling worked but you couldn't tap off the Drive view.
-
-Apply the system-bar + display-cutout insets as WebView padding so the whole dashboard (including
-  the bottom-nav) stays within the tappable, visible area.
-
-Verified: compiles, spotlessJavaCheck, and :app:testDebugUnitTest pass. Needs on-device confirmation
-  on an Android 15+ device (the symptom is WebView/OS edge-to-edge behavior that can't be reproduced
-  in desktop Chrome — taps work there).
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.8 (2026-05-29)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Polish dashboard drive and trips UX
   ([#148](https://github.com/jtn0123/VoltTracker/pull/148),
   [`f23e1c6`](https://github.com/jtn0123/VoltTracker/commit/f23e1c69867a20620c93900b92cdfadd99b8e72b))
 
-* fix(android): polish dashboard drive and trips UX
-
-* fix(android): address PR review on dashboard polish + add live-rate chip
-
-CodeRabbit findings: - telemetry.js: render numeric 0 for rpm/voltage instead of "--" (use null/""
-  checks, matching coolantC handling) - settings.html / connection-tools.html: drop dead
-  data-action="send-diagnostics" attribute; the buttons are wired by id in connection-tools.js
-  (shareDiagnostics) - actions.test.js: capture and restore innerHeight/scrollHeight descriptors in
-  afterEach so the drag-scroll suite no longer leaks dimension overrides - layout-css.test.js:
-  assert overflow:clip with a whitespace-tolerant regex
-
-Live-rate chip: - Drive speed card chip now reflects sample freshness (waiting/live/stale) via
-  updateRateChip() + hasLiveSamples() in telemetry.js, driven off the existing applyStaleIndicator
-  clock so chip and tile staleness stay in sync - components.css: waiting dims the dot, stale
-  recolors to the warn tone - stale-indicator.test.js: cover the waiting -> live -> stale
-  transitions
-
-Regenerated assets/dashboard/index.html from partials.
-
-Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* refactor(dashboard): tokenize design system, user-facing copy, chip docs (#149)
-
-* polish(dashboard): phase 1 — design token sweep
-
-- Add radius (--radius-lg/xl/pill), type (--font-h1..xs), motion (--motion-fast/base/slow),
-  card-padding (--card-pad/-tight), and semantic color (--gas, --on-volt) tokens to base.css. - Add
-  a prefers-reduced-motion guard that neutralizes transitions/animations. - Replace stray hex
-  (#190a04, #ff7141, #a48cff) with --on-volt/--gas/--mixed across screens.css and components.css. -
-  Tokenize single-value border-radius declarations that map to the scale (6/12/18/20/999 ->
-  --radius-sm/md/lg/xl/pill); off-scale 10/13/14/16 kept. - Wire base typography
-  (h1/h2/h3/kicker/status-copy) to the type scale and primary card paddings
-  (connect/status/list/map-sheet) to card tokens.
-
-* polish(dashboard): phase 2 — user-facing empty-state copy
-
-Rewrite developer-facing language (PIDs, materialize, schema, SQLite, "stay unknown") into plain
-  user-facing copy across Charge, Insights, and Settings, including the runtime strings panels.js
-  sets for the HV pack, vehicle identity, and session-review charge hint. Regenerated index.html.
-
-* polish(dashboard): phase 3 — chip/badge system + type-scale adoption
-
-- Document the canonical chip & badge family (.badge / .session-badge / .rate-chip / .micro-tag /
-  .trip-route-state / .power-state) in base.css so future work extends one instead of adding a 9th
-  variant. - Tokenize recurring font sizes (11px -> --font-xs, 13px -> --font-sm) across all
-  dashboard CSS so the type scale is adopted system-wide (no visual change).
-
-* polish(dashboard): phase 4 — accessibility pass
-
-- DTC clear-codes confirmation is now role="alertdialog" with aria-labelledby/aria-describedby;
-  focus moves into it on open and returns to the "Clear codes" trigger on close (actions.js). -
-  Troubleshooter modal: store the prior focus on open, focus the dialog (tabindex=-1 added), and
-  restore focus to the opener on close so keyboard users aren't stranded (troubleshooter.js). -
-  Charge summary is an aria-labelled polite live region so status/count updates are announced. -
-  Real-trip chips get an explicit aria-label ("Open trip from <when> — <meta>") so they read as
-  actions, not just a date string.
-
-Regenerated index.html. Deferred: the --soft contrast bump (a global aesthetic change best judged
-  visually).
-
-* fix(dashboard): keep JS/CSS bundle under budget after token sweep
-
-The token/comment additions pushed the bundle to 650973 B, over the 650000 B
-  verifyDashboardBundleSize guardrail. Tokenizing high-count short literals (`999px` ->
-  `var(--radius-pill)`, `11px` -> `var(--font-xs)`) added raw bytes for little value, so:
-
-- Revert the pill-radius and label-font-size sweeps back to literals and drop the now-unused
-  --radius-pill / --font-xs / --font-sm / --font-body / --motion-* token definitions. - Trim the
-  verbose chip-family and token comments.
-
-Kept the high-value tokens (semantic --gas/--on-volt, --radius-lg/xl on panel + nav,
-  --card-pad/-tight, --font-h1/h2/h3 on headings), the reduced-motion guard, and the chip-family doc
-  comment. Bundle now 649493 B.
-
----------
-
-Co-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>
-
-* fix(dashboard): count lastSampleAt as a live sample for the rate chip
-
-hasLiveSamples() only checked sampleCount and the chart-history buffers, so a frame that updated
-  only optional tiles (RPM / Aux 12V / GPS) left the live-rate chip on "waiting" even though
-  lastSampleAt was fresh and the tiles read live. Treat any stamped lastSampleAt as a live sample so
-  the chip stays in lockstep with the rest of the UI. (Addresses CodeRabbit review on #148.)
-
-* fix(dashboard): use role=group for the inline clear-DTC confirmation
-
-role="alertdialog" implies a modal that traps focus and makes background content inert, but this is
-  an inline, non-modal panel — semantically misleading for assistive tech. Downgrade to role="group"
-  (a labelled set of related controls), keeping aria-labelledby/aria-describedby and the
-  focus-move-on-open / focus-restore-on-close behavior. (Addresses CodeRabbit review on #148.)
-
 
 ## v0.4.7 (2026-05-28)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Wait for dashboard bridge readiness
   ([#147](https://github.com/jtn0123/VoltTracker/pull/147),
@@ -3541,17 +637,11 @@ role="alertdialog" implies a modal that traps focus and makes background content
 
 ## v0.4.6 (2026-05-28)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Publish release and debug APKs
   ([#145](https://github.com/jtn0123/VoltTracker/pull/145),
   [`10e7628`](https://github.com/jtn0123/VoltTracker/commit/10e7628372c8be38f2c3d09142569c59b9cb2046))
-
-* fix(android): publish release and debug APKs
-
-* fix(android): apply spotless formatting
-
-* fix(android): address PR review feedback
 
 - **release**: Repair two-apk release contract
   ([#146](https://github.com/jtn0123/VoltTracker/pull/146),
@@ -3560,1380 +650,122 @@ role="alertdialog" implies a modal that traps focus and makes background content
 
 ## v0.4.5 (2026-05-28)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Finish grade remediation follow-up
   ([#144](https://github.com/jtn0123/VoltTracker/pull/144),
   [`1c13854`](https://github.com/jtn0123/VoltTracker/commit/1c138544430c2305c88167d5984a1b063602f139))
 
-* fix(android): finish grade remediation follow-up
-
-* fix(android): address PR review feedback
-
-* fix(android): clear PR follow-up findings
-
-* fix(android): update spotless for lint
-
 
 ## v0.4.4 (2026-05-27)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Resolve grade audit findings
   ([#138](https://github.com/jtn0123/VoltTracker/pull/138),
   [`2dac11c`](https://github.com/jtn0123/VoltTracker/commit/2dac11cc4111927fb517794cedd263d2d202fa1f))
 
-* ui(insights): adopt Map tab's hero / sheet / sub-panel rhythm
-
-Restructures the Insights view to mirror the Map tab's visual hierarchy without introducing an
-  actual map:
-
-- Hero card: HV pack ring (existing .ratio-card, promoted to top) - Summary sheet: lifetime totals
-  (.map-sheet styling, kicker + title + trip-count badge, 3-col stats grid for Distance / Drive time
-  / Top speed) - Sub-panel list (.map-layout): Check-engine DTC, additional lifetime stats (longest
-  trip, GPS trips), efficiency scatter, maintenance
-
-All existing DOM ids are preserved so panels.js / core.js continue to populate the data without code
-  changes. Verified via headless Playwright screenshot side-by-side with the Map tab; structure now
-  reads top-to-bottom in the same rhythm.
-
-Generated index.html regenerated via :app:generateDashboardHtml.
-
-* feat(insights): DTC descriptions, Google lookup, Clear-Codes (Mode 04)
-
-Three additions to the Check-engine card on the Insights tab:
-
-1. DTC descriptions (hybrid lookup + Google fallback) - New js/dtc-lookup.js with a curated table of
-  ~35 OBD-II + Volt- specific codes (P0420, P0AA6, P1E04, P0A7A, etc.). - Each rendered DTC row
-  shows its description inline when known, plus a "More on Google" / "Look up on Google" chip that
-  opens the system browser to a "<code> Chevy Volt DTC" search. - Browser-fallback uses window.open;
-  in the WebView the new VoltBridge.openExternalSearch builds and validates the URL itself so the JS
-  layer cannot smuggle arbitrary URLs through.
-
-2. Example-state preview - When no codes are stored, the empty-state article is followed by 2
-  grayed/dashed example rows marked "example", so users see what a real scan result will look like
-  before scanning. - Adds Preview DTC examples / Clear DTC examples buttons inside the Settings >
-  Preview sandbox so the demo data can be loaded for UI debugging.
-
-3. Clear vehicle codes (Mode 04) - New "Clear codes" danger button in the DTC action row that
-  expands an inline warning panel with a required acknowledgement checkbox. The "Send Mode 04"
-  confirm button stays disabled until the user ticks "I understand readiness monitors will reset." -
-  New ClearDtcRunner sends OBD-II 04, parses the 44 positive reply vs 7F 04 NRC negative replies
-  (with human-readable copy for the common NRCs 22 / 11 / 12 / 13 / 33), and broadcasts a structured
-  telemetry sample. - Wired through ObdService.ACTION_CLEAR_DTC and a new overload
-  ObdPollingEngine.runBluetoothLoop(..., clearDtcMode=true) so the existing connect/retry shell is
-  reused. VoltBridge gains a clearVehicleDtcCodes() method; VoltBridgeTest's expected method set is
-  updated.
-
-Verified via headless Playwright at 412x1400: empty-state shows example rows, the loaded state shows
-  descriptions + Google chips, the warning panel toggles on the checkbox correctly.
-
-Dashboard vitest (18/18) and Android unit tests (242/242) both pass.
-
-* feat(insights): expand DTC lookup from 35 to 360 codes + SAE prefix fallback
-
-The previous PR shipped only 35 curated codes - too thin given OBD-II has thousands of defined
-  codes. This expands the lookup substantially while keeping accuracy as the gate:
-
-- ~360 explicit entries covering the SAE J2012 generic powertrain ranges (P00xx-P09xx
-  misfire/fuel/ignition/transmission), the SAE hybrid ranges (P0Axx/P0Bxx/P0Cxx/P0Dxx), common P2xxx
-  extensions, ~40 U-codes for lost-communication faults, common B-codes (SRS) and C-codes (ABS /
-  wheel-speed), plus the well-known GM/Volt P1xxx codes (P1E04, P1E22, P1FFF, etc.).
-
-- Prefix-based category fallback for everything else: a code like P1234 not explicitly listed now
-  renders as "Manufacturer-specific powertrain (GM / Volt)" instead of nothing. Covers every P/B/C/U
-  range with a useful one-line hint, so unknown codes still tell the user *what kind* of fault
-  they're looking at before the Google chip opens for the specific lookup.
-
-The bundled list is intentionally limited to codes whose SAE-defined or GM-documented wording is
-  well-attested - a wrong description is worse than no description.
-
-panels.js now uses info.category when info.description is missing, so the headline always says
-  something useful.
-
-VD.dtcLookupSize exposed for the test/debug surface.
-
-* feat(insights): expand DTC lookup to 651 codes, focus on Volt electrical
-
-The previous expansion (360 codes) was light on the electrical/HV/12V/ network domain that's most
-  relevant to a Volt owner. This adds ~290 more entries with that focus:
-
-Hybrid drive electrical (P0Axx) - comprehensively filled in: - P0A00-P0A07 motor electronics cooling
-  - P0A08-P0A12 DC/DC converter status, HV interlock - P0A1A-P0A1E generator control module -
-  P0A20-P0A33 drive motor 'A' performance, position, inverter - P0A41-P0A4C motor current sensors -
-  P0A50-P0A56 generator (motor 'B') - P0A60-P0A62 motor phase current sensors - P0A78-P0AFE battery
-  contactors, precharge, isolation, temperature, over/under-voltage
-
-Hybrid battery cell + motor 'B' (P0Bxx): P0B22-P0B63 added HV charging (P0Cxx): P0C00-P0C20
-  (on-board charger, AC/DC input/output), P0C50-P0C54 (pack current sensor) HV auxiliary (P0Dxx):
-  P0D09-P0D31 (battery coolant heater, charger inlet temperature sensor) GM Volt-specific (P1Exx):
-  P1E05, P1E23, P1E24, P1E32, P1E33, P1E40, P1E45, P1E46 added
-
-12V power and PCM internal (P05xx, P06xx): - P0540-P0542 intake air heater circuit - P0550-P0553
-  power steering pressure sensor - P0561 system voltage unstable - P0608-P0699 control module VSS
-  outputs, starter relay, generator control, sensor reference voltages B/C, A/C clutch relay, MIL,
-  fuel level output, actuator supply, PCM power relay sense, cooling fan circuits
-
-Network / communication (U-codes) - the codes you see after a weak 12V battery wakes every module up
-  sad: - U0003-U0081 bus codes for high/medium/low-speed CAN, all bus open/low/high variants -
-  U0100-U0254 lost-comm with: drive motor, BECM A/B/C/D, restraints (centre/left/right/occupant),
-  gateway, charging system A/B, onboard charger, HPCM, EPS, adaptive lighting, telematic -
-  U0293-U0327 software incompatibility variants - U0401-U0447 invalid-data-received variants for the
-  same modules
-
-Memory: 42 KB raw / 8.5 KB gzipped. Negligible inside the APK.
-
-Unknown codes still fall back to the SAE prefix category hint (e.g. P0xxx -> "Hybrid propulsion")
-  and Google for specifics.
-
-Dashboard vitest: 18/18 pass.
-
-* feat(insights): merge 5-agent Volt DTC research → 814 codes (+166)
-
-Five parallel Sonnet sub-agents researched Volt-specific DTCs across: - HV propulsion (BECM / HPCM /
-  TPIM / contactors / DC/DC) - Drive unit (4ET50 Gen1 / 5ET50 Gen2 / aux fluid pump) - 1.4L LUU/LUV
-  range-extender (EVAP sealed-tank, fuel pressure) - On-board charger + charge port + EVSE pilot -
-  BCM / IPC / HVAC / ABS / brake-by-wire / TPMS / SRS
-
-Each agent cross-referenced GM TSBs, NHTSA database, gm-volt.com forum threads, speakev.com (Opel
-  Ampera = same platform), repairprocedures.com service-manual excerpts, and the Volt TIS mirror.
-  Required ≥2 independent sources per entry; "medium" confidence entries reviewed manually and
-  dropped if uncertain.
-
-Notable inclusions, all linked to GM TSB or service manual: - P1AF0 / P1AF2 / P1E22 isolation triad
-  (TSB PIC6244D) - P1AEE / P1AEF cold-weather HV voltage high (TSB PIC6285B) - P0DAA / P1F0E coolant
-  intrusion into HV pack (TSB PIC5920 series) - P1FFB-P1FFE coolant level sensor cluster (Service HV
-  Charging System) - P0497 EVAP low purge flow (TSB PIP4891H - don't overfill) - P07A3 friction
-  element 'A' stuck on (Volt 5ET50) - P1EBD-P1EC7 contactor and battery heater family - P1EDA /
-  P1EDC / P1EDD converter input voltage sensors (TSB PIC6076) - P1E65 cell group high resistance
-  (TSB 18-NA-330) - B101D BCM internal hardware (TSB PIC5943) - C0021 / C012D / C1100-C1101 Gen 1
-  vacuum + Gen 2 brake-by-wire - C0750-C0775 TPMS - B0013-B0086 SRS / airbag deployment loops
-
-CORRECTION: P1E22 was incorrectly mapped to "Hybrid battery voltage sensor B circuit" in the
-  previous expansion. Per the Volt service manual (confirmed by 4 of 5 agents) P1E22 is the
-  auxiliary transmission fluid pump control module HV isolation lost code, third member of the
-  P1AF0/P1AF2/P1E22 isolation triad. Updated accordingly.
-
-Three other duplicate keys removed (P0AA1, P0AA4, P0AF3) - kept the agent-researched
-  SAE-/Volt-correct definitions, removed earlier guesses.
-
-categoryHint() fallback extended to cover P3xxx prefix so any unknown code in any valid range still
-  returns a useful category.
-
-Final stats: 814 codes, 55 KB raw / 11 KB gzipped. Dashboard vitest: 18/18 pass.
-
-* feat(insights): expand C-codes 24 → 220 (chassis/ABS/EPS/brake-by-wire/TPMS)
-
-Sub-agent C researched SAE J2012, obd-codes.com, engine-codes.com, autocodes.com, repairpal.com, and
-  GM service documentation. 195 new high-confidence C-code entries (≥2-source agreement each),
-  covering:
-
-- Brake booster / pedal feedback (C0020-C0025) - Complete SAE wheel speed sensor family - tone
-  wheel, subfault, supply, range/perf, low/high/intermittent variants for all four corners - ABS
-  apply/release solenoid circuits (C0060-C0095, LF/RF/LR/RR x 2) - ABS pump motor relay coil/contact
-  open/short variants - Brake pressure sensors, isolation solenoids, master cylinder pressure - Yaw
-  rate sensor (C0196-C0199) - GM EBCM wheel-speed signal status family (C0200-C0237) - EBCM solenoid
-  faults (C0271-C0276) - Brake/TCS lamp circuits (C0286-C0288) - PCM communication (C0290-C0298) -
-  4WD transfer case (C0300-C0398) - Suspension position / electronic level control (C0563-C0650) -
-  Steering wheel angle sensor (C0711-C0720) - Extended TPMS battery/internal codes (C07A0-C07D5) -
-  Multi-axis accelerometer (C0840-C0896) - Brake booster vacuum / ABS indicator / EPS torque sensor
-  family - TCS valve/relay codes (C1400-C1450) - Brake-by-wire / hydraulic brake pump (C2100-C3017)
-
-No duplicate keys. JavaScript parses cleanly. Lookup size: 1010 codes.
-
-* feat(insights): expand DTC lookup 1010 → 2648 (+1638 from 4 SAE/GM agents)
-
-Five Sonnet sub-agents researched and validated codes across: - Agent A: P0xxx generic SAE J2012
-  gap-fill (~350 entries) - Agent B: P2xxx + P3xxx SAE generic extended (~370 entries) - Agent C:
-  U-codes - bus, lost-comm, software-incompat, invalid-data (~370 entries) - Agent D: B-codes - SRS
-  deployment loops + BCM body codes (~225 entries) - Agent E: C-codes -
-  chassis/ABS/EPS/brake-by-wire/TPMS (committed earlier)
-
-Validation requirement was ≥2 independent published sources per entry, from SAE J2012, NHTSA DTC
-  reference, obd-codes.com, engine-codes.com, repairpal.com, yourmechanic.com, kbb.com,
-  troublecodes.net, autocodes.com, myairbags.com SRS catalog, and the corvetteactioncenter.com
-  GM-factory-derived DTC list (which shares the GM BCM/SDM code space).
-
-Highlights: - Complete SAE HO2S heater family for all banks/sensors (P0040-P0167) - Complete
-  cylinder injector circuit + balance fault families (P0201-P0296) - Complete cylinder N misfire
-  (P0301-P0314) - Full ignition coil A-L primary/secondary families (P0350-P0362, P2300-P2335) -
-  Catalyst temperature sensor full bank-1/2 family (P0425-P0438) - EVAP purge/vent/leak detection
-  full family (P0444-P0499, P2400-P2422) - Cooling fan + speed sensor families (P0480-P0529) -
-  Cruise control input variants (P0566-P0596) - Glow plug per-cylinder (P0670-P0682) - Transmission
-  solenoids A-K stuck/electrical/intermittent (P0745-P0980) - Transmission fluid pressure switches
-  A-D (P0840-P0879) - TCM power input/relay sense family (P0880-P0892) - All gear-shift and clutch
-  actuators (P0900-P0959, P2706-P2858) - DPF/NOx aftertreatment families (P2000-P2204) - Throttle
-  actuator control A/B + pedal sensor A-F (P2100-P2199) - O2 sensor extended ranges + reference
-  voltage (P2231-P2298, P2A00-P2A05) - Cylinder deactivation per cylinder (P3400-P3497) -
-  Bus-physical CAN +/- open/low/high/shorted (U0004-U0099) - Lost-comm with every SAE-defined module
-  (U0118-U0299) - Software-incompat with every module (U0303-U0339) - Invalid-data variants
-  (U0404-U055A) - Generic control-module diagnostic (U3000-U300E) - SRS
-  multi-row/curtain/pretensioner deployment + occupant sensing (B0002-B00E4) - GM BCM mirror, seat,
-  door, window, lock, lamp, theft, wiper (B1xxx-B3xxx)
-
-CategoryHint() fallback still covers anything missed. 2648 codes, 162 KB raw / 28 KB gzipped (still
-  <1% of APK size).
-
-Dashboard vitest: 18/18 pass. No duplicate keys.
-
-* feat(insights): +182 GM-specific P1xxx + P30xx codes (now 2829)
-
-Sub-agent researched GM-specific manufacturer codes spanning: - P10xx-P11xx MAF/MAP/O2 GM
-  intermittent variants - P12xx-P13xx injector / ignition control / crank variation learned - P14xx
-  EGR closed position, EVAP fast purge, secondary air (GM) - P15xx starter circuit, A/C clutch
-  driver, cruise control family - P16xx PCM internal, theft deterrent (VATS/PASSLock), 5V refs A/B,
-  generator L/F terminals, thermal protection - P17xx-P18xx transmission range, TCC family, slipping
-  codes, internal mode switch P/N/D/R, 4WD low - P30xx-P32xx GM hybrid cell group voltage variants
-  (P3000-P3024, P3041-P3057), Volt-specific P3191 engine doesn't start, P3193 fuel run out (Volt
-  Forced ICE mode)
-
-All ≥2-source validated. No duplicate keys. File parses cleanly.
-
-* feat(insights): show "Likely causes" per DTC (202 generic OBD-II entries)
-
-New file dtc-causes.js with 202 high-confidence cause databases for the most common generic OBD-II
-  codes (MAF, MAP, IAT, ECT, TPS, O2, fuel trim, misfire, knock, crank/cam, ignition coils, EGR,
-  catalyst, EVAP, cooling, sensor refs, transmission, throttle actuator). Each entry has: - causes:
-  2-6 most-likely root causes, ordered most→least common - severity: info / warning / critical -
-  category: short tag (1.4L engine, Drive unit, 12V power, etc.)
-
-All entries ≥2-source validated against repairpal.com, yourmechanic.com, engine-codes.com,
-  autocodes.com, obd-codes.com.
-
-Wired into dtcInfo() which now returns {causes, severity, category} alongside description. panels.js
-  renders a small "Likely causes" bulleted list under each DTC item, and severity tints the left
-  border (red=critical, amber=warning, blue=info). Capped at 5 causes shown per code to keep the
-  card compact.
-
-Dashboard vitest: 18/18 pass. Verified visually with sample DTCs (P0420, P0171, P0128, P0700, P0606,
-  U0100).
-
-* feat(insights): +736 GM B/C codes (3566 total) + 123 Volt causes (339 total)
-
-Final wave from this round of sub-agent research:
-
-Sub-agent (B/C codes) added 736 new GM body/chassis entries to dtc-lookup.js, comprehensively
-  covering: - B02xx-B03xx advanced restraints / occupant detection / impact sensors - B06xx-B07xx
-  SRS arming, crash sensors, pretensioner enable - B11xx-B13xx door/window/key/PASSLock/RKE/passive
-  entry - B19xx-B21xx HVAC blower, A/C relay, gauges, radio, sunroof, heated seats/mirrors/wheel -
-  B30xx-B35xx push-button start, transponder, theft deterrent, liftgate, wipers, washers, horn,
-  steering wheel controls, OnStar - B40xx-B41xx Bluetooth, USB, ADAS modules, HVAC door actuators -
-  C01xx wheel speed sub-families, steering angle, dynamics plausibility - C04xx-C05xx traction
-  control, ESC/VSE, MagnaRide, electronic LSD, air suspension - C09xx electronic ride control, level
-  valves - C11xx-C12xx brake booster extended, modulator valves, EPB, pedal simulator - C21xx-C22xx
-  brake-by-wire pedal sensors, EPB, auto-hold, hill assist, roll stability - C26xx-C29xx parking
-  assist, FCW/LDW/BSM/AEB/ACC radar, EPS extended - C30xx-C31xx hydraulic brake modulator, regen
-  brake blending, electric brake booster, active suspension, stabilizer bar, continuous damping
-
-Sub-agent (Volt causes) appended 123 Volt-specific cause entries to the dtc-causes.js created
-  earlier. Now 339 codes have inline "Likely causes" showing in the UI, including the full Volt
-  pain-point set: - HV isolation triad P0AA6 / P0DAA / P1AF0 / P1AF2 / P1E22 / P1F0E with TSB
-  PIC5920 coolant-intrusion reference - HV contactors P0AA1/4, P0AE2-8, precharge, isolation sensors
-  - HPCM wrapper codes P0AC4 / P1E00 with "check co-set codes" guidance - Battery cell health
-  P0BBD/E, P0BCD, P0A7F/80, P1E65 - Charging codes P1EE6 (EVSE absent), P1E04, P1EDC/D (PIC5803C) -
-  P0CD2 charge port door (cold weather ice) marked info severity - Drive unit P07A3 (PIC6244D clutch
-  stuck), P3260 (PIM limp mode), P16E0 - Network U-codes with weak 12V battery as the dominant Volt
-  cause - TPMS C0750-C07B5
-
-Severity tinting (red=critical, amber=warning, blue=info) on the DTC card's left border makes the
-  most serious codes visually distinct.
-
-Final stats: 3566 codes in lookup, 339 with causes/severity/category. No duplicate keys. Dashboard
-  parses cleanly.
-
-* chore: apply spotless formatting (fixes CI spotlessDashboardCheck)
-
-The "unit-tests" CI job runs spotlessCheck after testDebugUnitTest; spotlessDashboardCheck (Prettier
-  on dashboard-src/partials) flagged a line-wrap in the Clear-Codes warning paragraph in
-  insights.html. Also ran spotless on Java files, which cleaned up minor line-wraps in
-  ClearDtcRunner and VoltBridge that had been there since the original commit but were never caught
-  locally because I'd been running only testDebugUnitTest.
-
-Regenerated assets/dashboard/index.html to reflect the insights.html partial change. No semantic
-  changes.
-
-* test(android): cover mode 04 clear runner
-
-* fix(android): resolve grade audit findings
-
-* ci: keep CodeQL python analysis scoped
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 
 ## v0.4.3 (2026-05-27)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Resolve bug-hunt findings and tooling drift
   ([`5a88b70`](https://github.com/jtn0123/VoltTracker/commit/5a88b70b388464f2c307822682d1ed411398aeca))
 
-Fix Android bug-hunt findings, dependency/tooling drift, and review feedback. Validated by Android
-  unit/build/lint/spotless/coverage, dashboard lint/tests/coverage, PR title lint, and CodeQL.
-
 
 ## v0.4.2 (2026-05-27)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **android**: Resolve validated obd backup and dashboard bugs
   ([#136](https://github.com/jtn0123/VoltTracker/pull/136),
   [`fdd47c4`](https://github.com/jtn0123/VoltTracker/commit/fdd47c4c0afd5b2c2a49ba72d8ab50004ad28e63))
 
-* Fix validated VoltTracker bugs and dashboard safety issues
-
-* Fix Robolectric SDK for location tracker test
-
 
 ## v0.4.1 (2026-05-26)
 
-### Bug Fixes
+### 🔺 Fix
 
 - Address 28 dogfood-audit findings (charge materializer, classifier sign, dashboard XSS, ELM races,
   …) ([#135](https://github.com/jtn0123/VoltTracker/pull/135),
   [`f967e53`](https://github.com/jtn0123/VoltTracker/commit/f967e53f0a33709177b62f39442c6936e2cc1e14))
 
-* fix: address 28 dogfood-audit findings across dashboard, classifier, data layer, and service
-
-Sweep of bugs found by a code-audit pass on the Android app and bundled WebView dashboard.
-  Highest-impact items:
-
-* Dashboard regex for stripping ELM "SEARCHING..." was double-escaped and never matched real adapter
-  output (`/SEARCHING\\.\\.\\./g`). * `drive.js` "Last drive" chip read `r.distanceM` instead of
-  `r.distanceMeters` so the meta line permanently displayed "NaN mi". * `renderDriveNowChips`
-  interpolated user-controlled Bluetooth adapter names into `innerHTML`; rewritten to use DOM APIs /
-  textContent. * `VehicleStateClassifier` had a sign-inverted charging check (`packCurrentA >
-  CHARGING_CURRENT_A` against a discharge-positive convention), so the CHARGING state never fired
-  for real charging current. Updated alongside the matching JavaDoc on
-  `ClassifierInput.packCurrentA`. * `ChargeSessionMaterializer.isPluggedSample` rejected every
-  sample whose `speedKph` was NULL, which is the common case during the Volt's 0xFF speed sentinel.
-  Strong charging pack-current now overrides missing speed. *
-  `ObdStoreMaterialize.persistChargeSessions` built `summary_json` via string concatenation, which
-  would emit invalid JSON if any voltage was NaN/Inf. Replaced with `JSONObject` so NaN/Inf project
-  as `null`. The same materializer now also populates the previously-dead `start_soc / end_soc /
-  power_kw / energy_kwh` columns (peak charging kW + trapezoidal integration). *
-  `ObdStoreSupport.nullableInt` / `nullableDouble` returned primitive 0 for SQL NULL; the JSON
-  projections then surfaced "0 km/h" / "0.0 V" instead of "--" for unknown values. Added boxed
-  variants used by the dashboard-facing projections (`latestTelemetryJson`, `recentSpeedTraceJson`,
-  `tripJson`). * `WebChromeClient.onConsoleMessage` returned `true` for every level but only logged
-  ERROR — dashboard `console.log/warn/info/debug` was silently dropped. Now logs every level before
-  suppressing the default chromium output. * Drive partial advertised a hard-coded "4 Hz" rate-chip
-  while the polling engine sleeps 850 ms between cycles. Dropped the bogus claim from the HTML, JS
-  comment, and CSS comment. * `ObdService` re-evaluates the foreground-service-type bits on every
-  app-visibility transition so a mid-session location-permission revocation no longer leaves the
-  service registered with FOREGROUND_SERVICE_TYPE_LOCATION it no longer has runtime permission for.
-  * `ElmConnection` open-socket watchdog returns early on interrupt instead of falling through to
-  `BluetoothSocket.isConnected()` (cache-flaky on some OEMs and could close a healthy just-opened
-  socket). * `VoltBridge.safe()` truncation is now UTF-16-surrogate-aware. * Test-connection
-  auto-stop timeout 8 s → 25 s so the C10 notify-when-ready schedule sees the "connected" broadcast
-  on slow adapters that take ~22 s to finish initializing. * `CompetingAppDetector` second-pass
-  name-hint loop was dead code on API 30+ without QUERY_ALL_PACKAGES; removed and the allowlist-only
-  contract documented. Added missing `com.pnn.obdcardoctor_full` to manifest queries. * `DataBackup`
-  hardening: fsync after restore copy, UUID-suffixed stage-temp filename (no concurrent-pick race),
-  `clearOldBackups` only deletes `volttracker-backup-*.db` instead of every file in the dir. * `v5`
-  schema migration `LIKE '%chargeTransitionHint%'` substring tightened to match the typed `:true`
-  value. * Several smaller defensive fixes: NaN-skip in `distanceMeters`, early-return in
-  `recordLocationSample` for missing lat/lng (no more "Null Island" rows), `state.demoSessions`
-  isolation so demo charges don't bleed across toggles, troubleshooter listener-discipline
-  alignment, mixed-return-type cleanup in `drive.js speedLinePath`, regen samples excluded from the
-  per-segment efficiency average so regen segments render distinctly instead of as high-efficiency
-  green, and `stopForeground(true)` → `STOP_FOREGROUND_REMOVE`.
-
-All 390 unit tests pass after the fix batch. Three test updates were required:
-
-* `BackupRoundTripTest` `unrelatedFileCleanedUpOnBuildBackup` rewritten as
-  `buildBackupClearsPreviousBackupButLeavesUnrelatedFiles` — the old test encoded the destructive
-  `clearOldBackups` bug. * `VehicleStateClassifierTest pluggedWithChargingCurrentIsCharging` flipped
-  its sign assumption (+8.0 → -8.0) to match the discharge-positive convention; new
-  `pluggedWhileDischargingIsJustPlugged` covers V2L / accessory-load behavior. *
-  `CompetingAppDetectorTest` — 5 tests rewritten / renamed to assert the new allowlist-only contract
-  after the dead name-hint pass was removed.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* style: apply spotless formatting to audit-fix files
-
-CI spotless check rejected the audit-fix commit for line-wrap / blank-line deltas in 8 files.
-  Auto-applied via `./gradlew spotlessApply`; no logic changes. `spotlessCheck` +
-  `testDebugUnitTest` both pass locally.
-
-* fix(service): use ServiceCompat.stopForeground to satisfy minSdk=23 lint
-
-The previous audit-fix commit replaced the deprecated `stopForeground(true)` with
-  `stopForeground(Service.STOP_FOREGROUND_REMOVE)`, but the int overload requires API 24 and the
-  project's minSdk is 23. CI's lint check failed with NewApi.
-
-`androidx.core.app.ServiceCompat.stopForeground(Service, int)` dispatches to the int overload on API
-  24+ and to the deprecated boolean overload on older devices, so the call site stays one line and
-  we still avoid the deprecation warning on modern Android.
-
-Verified locally with `spotlessCheck`, `lintDebug`, and `testDebugUnitTest` — all green.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-### Continuous Integration
+### 🔷 Changed
 
 - Rebuild rolling debug APK after each semantic-release bump
   ([#134](https://github.com/jtn0123/VoltTracker/pull/134),
   [`689293d`](https://github.com/jtn0123/VoltTracker/commit/689293d93d5930a0cf36a4c5f9d37d490bf7e82f))
 
-python-semantic-release pushes a bump commit (touching VERSION, pyproject.toml, CHANGELOG.md) on top
-  of the merge that triggered it. That bump commit doesn't touch any mobile/android/** files, so the
-  existing android.yml path filter skipped it — leaving the rolling latest-debug APK one release
-  behind the freshly cut release APK.
-
-Result: a v0.4.0 release APK shows "Volt Tracker v0.4.0-<sha>" in Settings, but the contemporaneous
-  latest-debug APK still shows "v0.3.0-<sha>" until the next mobile/android/** push happens to land.
-  Confusing when the two builds contain the same code.
-
-Add VERSION and pyproject.toml to android.yml's push paths so a bump triggers a fresh debug build
-  with the new versionName baked in. Also expose workflow_dispatch so we can backfill the missing
-  v0.4.0 debug build once this lands.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.4.0 (2026-05-26)
 
-### Chores
+### 🔷 Changed
 
 - Execute round-6 grade-codebase items (B4 E2 G1 D1 H1 H2 C7 C8 C9 C10 B7 B8 H3 A2 A1)
   ([#132](https://github.com/jtn0123/VoltTracker/pull/132),
   [`05722e4`](https://github.com/jtn0123/VoltTracker/commit/05722e455e5dc6250e74353c17e5f55f475a567a))
 
-* chore: round-6 grade-codebase hygiene bundle (B4 E2 G1 D1 H1 H2 C9 C10 B8)
-
-Nine small items from the round-6 audit (.claude/grade-report.md) bundled into one commit because
-  they're all single-file edits that don't interact.
-
-B4 — TripMaterializer MAX_TRIP_DURATION_MS cap (12h). Splits long sparse runs at their largest
-  internal gap so they don't become multi-day "trips" with a fictitious integrated energy number.
-  Covered by the new runOverMaxTripDurationSplitsAtLargestGap test.
-
-E2 — Whitelist *.tile.openstreetmap.org in the dashboard CSP (img-src + connect-src). The OSM
-  fallback in map.js fires after 5 CARTO tile errors; it was previously CSP-blocked, leaving users
-  with a blank map and no signal.
-
-G1 — Extend QueryPlanIndexTest with three materializer read cases (readTelemetrySamples,
-  readLocationSamples, readPidObservations). Pins that the materializer's session-scoped reads stay
-  index-backed.
-
-D1 — Extreme-input cases for TripMaterializerTest (single-sample, all-zero-speed stationary,
-  all-null-power) and ChargeSessionMaterializerTest (single-sample, all-zero-voltage,
-  all-null-voltage). Pins conservative behavior at the points where users would otherwise see false
-  positives.
-
-H1 — Split README build/install snippets by OS so a macOS or Linux dev no longer copies the .bat
-  command.
-
-H2 — Add mobile/android/CONTRIBUTING.md with the day-in-the-life dev loop: clean build, lint with
-  HTML report, install-and-start, dashboard tests, the partial-edit-then-generateDashboardHtml rule,
-  and lefthook install.
-
-C9 — Prefix four ESLint unused-vars with _ (core.js:200 err, map.js:392 SAMPLE_ROUTE_START_MS,
-  panels.js:367 hasRoute, telemetry.js:358 acc). npm run lint is now warning-clean.
-
-C10 — Add data-live-tile="true" to the three HV-pack tiles in drive.html so the stale-class CSS that
-  targets [data-live-tile][data-stale] binds to them.
-
-B8 — Wire the *StaleMs telemetry fields into the troubleshooter modal as a new step ("Telemetry
-  isn't refreshing"). One row per slow-tier PID whose *StaleMs exceeds 4s. Closes a
-  dead-bytes-on-the-bridge path by giving the fields a user-visible consumer.
-
-Verification: ./gradlew :app:testDebugUnitTest passes (358 -> 368 tests). npm test in
-  dashboard-tests/ passes (18 tests, no regression). npm run lint emits zero warnings.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* test(dashboard): round-6 live-tile cluster (C7 + C8/D3)
-
-C7 — Derive LIVE_TILE_IDS from the DOM at boot. telemetry.js now reads every [data-live-tile="true"]
-  element instead of pinning a hardcoded array, so a new tile only requires the partial edit. The 14
-  remaining tiles in drive.html gained the attribute (the 3 HV-pack tiles got it in cluster 1).
-  updatedValue was retired from the static list since it doesn't exist in any partial — the
-  DOM-derive surfaces this naturally.
-
-C8 / D3 — Two new Vitest files cover the largest untested dashboard JS:
-
-drive.test.js (6 tests) — Drive-tab live polish: - exports are present on VD - idle chip when no
-  adapter / no demo - demo chip when state.demoActive - recording chip when adapter.connected -
-  drawLiveSpeedTrace shows placeholder when speedHistory is empty - resize handler debounces to a
-  single render
-
-scrubber.test.js (5 tests) — Map scrubber: - public surface present on VD - scrubAtLatLng is a no-op
-  for empty routes - renderScrubber hides the panel for <2 points - renderScrubber reveals the panel
-  for 2+ points - hideScrubber clears scrubData and re-hides
-
-Loader change: load-dashboard.js gains an `extras` option (extra JS files to eval after the standard
-  5-file bundle) and an `extraDom` option (HTML appended to REQUIRED_DOM). drive.test.js and
-  scrubber.test.js use both so they don't have to duplicate the bootstrap-required fixture.
-
-Pinned in live-tile-derive.test.js: - LIVE_TILE_IDS is no longer a hardcoded array in telemetry.js -
-  every [data-live-tile="true"] element carries a non-empty id
-
-Verification: npm test passes 32 tests across 7 files (was 18 across 4). npm run lint emits zero
-  warnings.
-
-* feat(obd): Mode-01 multi-PID batching (B7) + heuristic ADRs (H3)
-
-B7 — Collapse the 5 Tier-1 broadcast Mode-01 PIDs (010D speed, 010C RPM, 0104 load, 0111 throttle,
-  0149 accel pedal) into a single ELM327 round-trip when the adapter supports it.
-
-The mechanism leans on a property that was already true: every existing Mode-01 parser
-  (parseSpeedKph, parseRpm, parseEngineLoadPct, parseThrottlePct, parseAccelPedalPct) finds its
-  bytes via `indexOf("41XX")` over the cleaned hex of the response. That means the SAME multi-PID
-  response can be stuffed into all 5 batched-command entries in lastRawByCommand and each parser
-  picks out its own bytes — no rendering path changes.
-
-Implementation: - ObdProtocol.buildMode01MultiCommand(pidHex) — concatenates "01" + each PID. -
-  ObdProtocol.responseContainsAllMode01Pids(response, pidHex) — verifies every 41XX marker is
-  present in the response (clones sometimes drop PIDs). - PidSchedule.MODE_01_BATCH_COMMANDS +
-  MODE_01_BATCH_PIDS_HEX — the parallel lists the engine matches against. -
-  ObdPollingEngine.probeMode01Batch() — runs once per session after init, sends "010D0C", verifies
-  both markers present, sets mode01BatchSupported. - ObdPollingEngine.tryBatchTier1Mode01() — when
-  supported AND every batchable command is due this cycle, sends one request and fills 5 entries.
-  Logs and disables for the session if a response comes back incomplete (defensive). -
-  runScheduledPolls() skips the per-PID round-trip for batched commands.
-
-Expected effect: drive-critical refresh goes from ~1 Hz to ~2.5 Hz on adapters that support
-  multi-PID (ELM327 v1.4+; most OBDLink units). Fallback to per-PID polling is automatic and silent
-  on adapters that don't.
-
-Tests: - ObdProtocolTest: 5 new cases — buildMode01MultiCommand, the contains-all helper (happy,
-  missing-PID, null/empty), and a regression that pins every per-PID parser against a concatenated
-  5-PID response. - PidScheduleTest: 2 new cases asserting the parallel lists stay in lockstep and
-  that every batched command is a period=1 broadcast spec (otherwise the "all batch commands are
-  due" predicate would never fire).
-
-H3 — Two new ADRs documenting the non-obvious heuristic orderings from #130 and #131:
-
-- docs/adr/0004-charge-detection-heuristics.md — priority order for ChargeSessionMaterializer (pack
-  current dominates, aux voltage as fallback, null speed never infers plugged) with field-test
-  evidence for each threshold. - docs/adr/0005-connection-failure-classification.md — strict
-  priority order for ConnectionFailureClassifier (BT_OFF → SDP_FAILURE → REMOTE_REFUSED → BOND_LOST
-  → CONNECT_TIMEOUT → INSTANT_DROP → UNKNOWN) with the symptom and remedy for each class.
-
-Verification: ./gradlew :app:testDebugUnitTest passes (368 -> 373 tests).
-
-* refactor: ObdLocalStore interface split + TroubleshooterBridge extract (A2, A1)
-
-A2 — Split the ObdLocalStore facade into two narrower interfaces in the same package:
-
-ObdSessionStore — start/finish/finalize, every record* writer, persistTrips/ persistChargeSessions,
-  upsertVehicleFromVin, recordAdapterSummary, clearAllData / checkpoint / pruneRawDataOlderThan,
-  close. ObdQueryStore — getSession / getRecent* / getAdapterHistory and the JSON projections, every
-  read*Samples from MaterializerData, getDatabaseFile.
-
-ObdLocalStore now implements both. Existing callers keep working unchanged — the split is purely
-  additive. New callers can choose the narrow interface they actually need, making JVM-side fakes
-  practical to write and shrinking the surface a reader has to keep in their head.
-
-A1 (partial — TroubleshooterBridge) — Extract the entire Bucket 4a + Bucket 4b helper region from
-  MainActivity (the 6 troubleshooter helpers + the notify-when-ready scheduler + their handler/flag
-  state + their constants) into a new TroubleshooterBridge POJO. MainActivity keeps the public
-  delegate methods so VoltBridge and its test suite still call the same names; the implementation,
-  the state, and the lifecycle (shutdown/clearPendingTestConnectionStop) all live in the new class.
-
-MainActivity LOC: 754 -> 507 (-247, -33%)
-
-Lifecycle wiring: - onCreate instantiates TroubleshooterBridge(this) after deviceCatalog +
-  localStore are set up (the bridge depends on both). - onDestroy delegates handler teardown to
-  troubleshooter.shutdown(). - startObdService delegates the stale-stop clear to
-  troubleshooter.clearPendingTestConnectionStop().
-
-The full A1 ambition (also extract AppStateCoordinator for publishAppState / publishStorageSummary /
-  publishStatus / callDashboard / lastTelemetry-Status-Storage / ALLOWED_DASHBOARD_FUNCTIONS) is
-  deferred to a follow-up — those methods cross-cut more existing fields and want their own focused
-  PR with test scaffolding.
-
-Verification: ./gradlew :app:testDebugUnitTest passes (373 tests, unchanged). Public API of
-  MainActivity is unchanged; VoltBridge and the test suite did not need any edits.
-
-* style: apply spotless to round-6 changes
-
-CI's spotlessCheck failed on the dashboard HTML edits (prettier rewrapped a few long lines in
-  drive.html and troubleshooter.html) and on a couple of Java files where the Google-style formatter
-  wanted slightly different layouts than the auto-generated bridge / interface stubs landed with.
-  Running `./gradlew spotlessApply` then `generateDashboardHtml` produces this purely-mechanical
-  diff. No behavior change.
-
-* test: cover TroubleshooterBridge defensive paths so JaCoCo floor holds
-
-Round-6 cluster 4 (A1 extraction) added ~280 LOC of TroubleshooterBridge with no test, which pulled
-  the project line-coverage floor below the ratcheting 0.71 baseline and failed CI. Per CLAUDE.md
-  ("never try to ignore a test because it will not pass, find a different way to fix it"), the right
-  answer is a test, not a lowered floor.
-
-TroubleshooterBridgeTest exercises every defensive early-return path with a Robolectric-bound
-  MainActivity:
-
-- forceStopPackage with null / empty / uninstalled package name - getRecentSessionsJson with n <= 0
-  (must produce a valid empty JSONArray) - cancelRetry when no service is bound -
-  openBluetoothSettings + shareDiagnostics no-throw guarantees - cancelAdapterReadyNotify /
-  clearPendingTestConnectionStop on a fresh bridge (no handler init) - scheduleAdapterReadyNotify(0)
-  — schedules with already-expired deadline - shutdown idempotency - onAdapterStatusForReadyNotify
-  is a no-op when the schedule isn't active
-
-The heavier paths (the real test-connection probe, the 30s tick loop, the system Notification post)
-  depend on system-service plumbing that's expensive to fake; an on-device integration test is the
-  right way to cover those.
-
-Verification: ./gradlew :app:testDebugUnitTest :app:jacocoTestCoverageVerification both pass
-  locally.
-
-* fix: CodeRabbit review feedback on round-6 PR
-
-Addresses 7 of 9 inline comments from the CodeRabbit review:
-
-TripMaterializer.java (CRITICAL — real bug) - The largest-gap loop used `if (gap > largestGap)`
-  which keeps the FIRST equal gap, so a uniformly-sampled long run (every gap equal) would split at
-  index 1 every recursion — peeling single-sample prefixes that buildTrip drops on the `size < 2`
-  check, leaking the entire body of the trip. Fix: midpoint-preferring tie-break so uniform runs
-  decompose into balanced halves. Regression test
-  `uniformlySampledRunOverCapSplitsBalancedInsteadOfPeelingPrefixes` pins this; it materializes >95%
-  of an 18-hour uniform run instead of leaking most of it.
-
-ObdProtocol.java - `responseContainsAllMode01Pids` used plain `indexOf("41" + pid)` which can match
-  inside another PID's data bytes. Rewrote to walk PIDs in order with a cursor that advances past
-  each PID's known payload byte count, so the next marker can only match AFTER the previous PID's
-  data.
-
-CONTRIBUTING.md - The "macOS / Linux" lint step used `open`, which is macOS-only. Split into
-  separate `open` (macOS) and `xdg-open` (Linux) lines.
-
-dashboard-tests/drive.test.js - The debounce test only asserted timer count after the debounce
-  window, which a leaking implementation could pass. Now snapshots a baseline before the resize
-  burst and asserts (a) more timers pending than baseline during the burst, then (b) back to
-  baseline after the debounce window. A leaky no-clearTimeout impl would leave 5 timers pending and
-  fail (b).
-
-dashboard-tests/live-tile-derive.test.js - The hardcoded-array regression regex only matched arrays
-  containing "speedValue". Broadened to match any literal `LIVE_TILE_IDS = [` assignment. - The
-  "every DOM tile gets covered" test was tautological (only re-checked elements that
-  querySelectorAll just returned). Rewrote with vi.useFakeTimers + vi.advanceTimersByTime(4000) to
-  actually drive the stale loop and assert the `.stale` class is applied to every
-  [data-live-tile="true"] node.
-
-Spotless on drive.html / troubleshooter.html (2 spotless comments): already addressed in commit
-  322086f, no further action.
-
-Verification: - ./gradlew :app:testDebugUnitTest :app:jacocoTestCoverageVerification pass. - npm
-  test passes 32/32 across 7 files.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-### Features
+### ✳️ New
 
 - **dashboard**: Show app version in Settings and stop truncating long-drive maps
   ([#133](https://github.com/jtn0123/VoltTracker/pull/133),
   [`c42a8ef`](https://github.com/jtn0123/VoltTracker/commit/c42a8efd2654001c776a5c5ce3e6d3ebdd92167b))
 
-Two user-facing fixes from analyzing a real backup database:
-
-1. Settings now shows `Volt Tracker vX.Y.Z-sha7` at the bottom of the screen. Sourced from the
-  existing `appState.app.version` value already pushed by MainActivity. Before this, the only way to
-  see the installed version was Android Settings → Apps → Volt Tracker → App info.
-
-2. The route polyline for a long drive no longer collapses to "just the last 8 minutes". Before:
-  `routePointsForSessionJson` queried `ORDER BY captured_at_ms DESC LIMIT 500` and reversed, so a
-  session with 7,881 GPS fixes (a real 131-minute drive from the user's backup) only surfaced its
-  last 500 points — 94% of the trip was invisible on the map. After: count rows for the session,
-  compute a stride, walk the cursor ascending and emit every Nth fix while reserving a slot for the
-  very last one. Same treatment for SOC and power tracks so they stay aligned to the full route. The
-  500-point cap is preserved as `MAX_TRACK_POINTS`; sessions under that cap still emit every fix.
-
-Also fixes `.claude/launch.json` to bind the preview HTTP server to `127.0.0.1` explicitly — the
-  default dual-stack bind was silently blocked by the Claude.app sandbox, leaving a python process
-  running with no listening socket.
-
-Tests: extends ObdStoreTripsDbTest with two new cases that exercise the downsampling — one for a
-  2000-row session (verifies first + last fix are both present and total points stay ≤ 500) and one
-  for a 4-row session (verifies no downsampling occurs).
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.3.0 (2026-05-26)
 
-### Features
+### ✳️ New
 
 - **obd**: Classify connection failures + observability + dashboard troubleshooter
   ([#131](https://github.com/jtn0123/VoltTracker/pull/131),
   [`fba1fb7`](https://github.com/jtn0123/VoltTracker/commit/fba1fb7b0d1a0305a151d887963cec4d94dfb641))
 
-* scaffold: connection-hardening mega-PR bucket contracts
-
-Prep commit for the 5-agent split that delivers A1-A9, B1-B10, C1-C10 from the connection-hardening
-  review. Lands the cross-bucket contracts so each agent can work in isolation against a stable
-  surface:
-
-- FailureClass enum (Bucket 1 produces; Buckets 3, 4a consume) - SessionSummary POJO (Bucket 3 owns
-  store; Bucket 4b reads via bridge) - ObdService.broadcastStatus(state, detail, blocked, extras)
-  overload that auto-merges lastFailureClass / lastVoltage / competingApps onto every status
-  payload, so callers don't have to thread them through - VoltBridge stubs in two fenced regions for
-  Buckets 4a and 4b - Empty owned files for each UI bucket: partials, css, js - file_paths.xml entry
-  for Bucket 3's diagnostics zip cache - docs/connect-hardening-buckets.md spelling out file
-  ownership rules
-
-No behavior change — the new fields are null/empty by default and the new JS files are no-op IIFEs.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* obd: rolling app log, session summary store, diagnostics share, crash-safe flush
-
-Bucket 3 of the connection-hardening mega-PR — the logging plumbing so a future "why couldn't I
-  connect" takes one share intent and one zip, not three ADB pulls and a dumpsys correlation.
-
-A9 — ObdSessionLog.writeDurable() that fsyncs the underlying FD after flush. Routed via
-  SessionRecorder.logJson for "error" type rows only; routine telemetry stays on the buffered path
-  so the poll loop isn't blocked on disk on every sample.
-
-B1 — RollingAppLog at files/app-log/app.log with 7-day rotation (one rolled file, app.log.1).
-  Thread-safe, append-only, swallow-on-IOException so a full disk doesn't tear down the calling
-  thread.
-
-B2 — SystemSnapshot.collect(ctx, summaryStore) builds a JSONObject with Android SDK/release, device
-  model, app versionName/versionCode, BT adapter state, process uptime, and lastSuccessfulSessionMs
-  read from the summary store. Logged as a system_snapshot event on every session_start so a future
-  diagnosis sees the device's actual state without correlating other logs.
-
-B8 — SessionSummaryStore: append-only sessions-summary.jsonl at files/obd-logs/,
-  recordStart/recordEnd lifecycle, 100-session retention with head-truncate on overflow,
-  getRecent(n) newest-first. Process-wide singleton via getInstance(filesDir) — Bucket 4b reads via
-  VoltBridge.
-
-B9 — OBDLog gains warn()/error() and mirror(RollingAppLog) so the install hook in
-  ObdService.onCreate tees every event/warn/error to the rolling log. LogcatMirror is the explicit
-  wrapper for callers that prefer Log.x(tag, msg) ergonomics over the structured event() helper.
-
-B10 — DiagnosticsShareIntent.buildIntent(ctx): zips the most recent 5 per-session JSONLs + the live
-  & rolled app logs + sessions-summary.jsonl, hands the zip to FileProvider, returns an ACTION_SEND
-  intent ready for Intent.createChooser. Stale zips in cacheDir/diagnostics are cleared on each call
-  so the cache doesn't accumulate one per share.
-
-Wiring into existing files (kept surgical):
-
-SessionRecorder constructor — new overload that takes a SessionSummaryStore + a SystemSnapshotSource
-  supplier; the 3-arg constructor delegates with nulls so existing tests keep compiling.
-
-SessionRecorder.openSession — after the existing session_start event, calls summaryStore.recordStart
-  and logs the system_snapshot event.
-
-SessionRecorder.closeSession — after the existing session_end event, calls summaryStore.recordEnd
-  with an outcome derived from the lifecycle state and a coarse failureClass (Bucket 1's classifier
-  will write finer-grained values into the per-session log; the summary file uses the lifecycle
-  state for now).
-
-SessionRecorder.logJson — "error" rows go through writeDurable instead of write so the fsync lands
-  before the line could be lost to a crash.
-
-ObdService.onCreate — instantiates the rolling log, installs the OBDLog.mirror, builds the summary
-  store, and passes both into the SessionRecorder constructor. No other onCreate or service changes.
-
-Tests cover SessionSummaryStore roundtrip + retention + getRecent ordering; RollingAppLog write +
-  7-day rotation including overwrite-of-prior-rolled-file; DiagnosticsShareIntent zip contents +
-  5-file cap + stale cleanup (Robolectric for Context); ObdSessionLog writeDurable path;
-  SystemSnapshot key shape + lastSuccessfulSessionMs resolution; OBDLog mirror install/detach.
-
-308 of 309 unit tests pass. The one failure (VoltBridgeTest
-  .allExpectedBridgeMethodsExistAndAreAnnotated) is pre-existing on the scaffold commit — the
-  scaffold added 7 stub bridge methods that aren't yet in the test's EXPECTED_BRIDGE_METHODS set,
-  and Bucket 4a/4b will update it when they fill in the stubs.
-
-* obd: bluetooth observability — preflight, SDP, competing apps, voltage
-
-Adds the Bucket 2 helpers from the connection-hardening mega-PR split:
-
-- BluetoothStateReporter: receiver for ACL_DISCONNECTED, BOND_STATE_CHANGED, ACL_CONNECTED, UUID,
-  ADAPTER_STATE_CHANGED. Logs into the active session. - SdpProbe: refreshes UUID cache on second
-  consecutive failure via device.fetchUuidsWithSdp() + ACTION_UUID listener. - CompetingAppDetector:
-  enumerates installed BT-OBD apps at session start and calls service.setCompetingApps() so the
-  dashboard can surface 'force-stop' buttons. - VoltageProbe: emits control_module_voltage event
-  when Mode 01 PID 42 responses come through; calls service.setLastVoltage() so subsequent status
-  broadcasts include the field.
-
-Also adds bond+SDP snapshot logging on every connect attempt (event bond_sdp_snapshot) and
-  pre-flight check logging (event bluetooth_preflight).
-
-Committed by parent agent — Bucket 2 agent crashed with API socket error after completing the work
-  but before commit. Work was inspected and verified to compile (./gradlew
-  :app:compileDebugJavaWithJavac BUILD SUCCESSFUL). The agent's own unit tests all pass.
-
-* engine: classify connection failures + adaptive retry + timing
-
-Bucket 1 of the connection-hardening split. Implements the engine-side contract: failure
-  classification, adaptive retry on wedged-adapter signature, phased socket-open timing, and
-  wake-nudge probe.
-
-A1 — split bluetooth_socket_open into socket_open_attempt + socket_open_result {durationMs, ok,
-  errorPhase, rfcommConnectMs, getStreamsMs, firstReadMs} so post-hoc triage can tell connect /
-  get-streams / first-read failures apart.
-
-A2 — new ConnectionFailureClassifier maps IOException + phase + timing to a FailureClass:
-  instant_drop, connect_timeout, sdp_failure, bt_off, bond_lost, remote_refused, unknown. Each
-  classification is stamped on the engine's reconnect / reconnect_exhausted events and pushed to
-  ObdService.setLastFailureClass for the status broadcast.
-
-A3 — adaptive retry: two consecutive instant_drops <500 ms each flip the engine into long-backoff
-  mode (8 s, 12 s on attempts 3-4) and emit a wedged_suspected event. Standard exponential ramp
-  still terminates attempts 5-6 so MAX_RECONNECT_ATTEMPTS still applies.
-
-A4 — new ElmConnection.wakeNudge() sends a single \r with a 200 ms tolerance read before ATZ. Wedged
-  adapters surface the first-read failure here rather than during initializeElm327, which keeps the
-  errorPhase label on the right operation. Logged as wake_nudge.
-
-B3 — ElmConnection.open() records rfcommConnectMs + getStreamsMs; wakeNudge() records firstReadMs.
-  All three roll up into socket_open_result.
-
-B6 — reconnect / reconnect_exhausted payloads now carry exceptionClass + stackHead (first 5 frames,
-  1000 char cap) alongside the existing safeMessage(ex) so debugging doesn't depend on the
-  unstructured "error" row.
-
-Adds FailureClass enum and setLastFailureClass/clearLastFailureClass on ObdService (the spec said a
-  prep commit had wired these but they weren't present on this branch — added minimally so other
-  buckets can read them).
-
-Tests: ConnectionFailureClassifierTest (13) drives every heuristic branch on the host JVM.
-  ObdPollingEngineBackoffTest (11) is a decision-table test for computeBackoffMs + the
-  exception-fingerprint helpers, including the user's reproducer (two instant_drops -> 8 s backoff).
-  ObdPollingEngineTest's FakeElmConnection overrides wakeNudge() with a no-op so the existing
-  connect/poll/reconnect tests keep working.
-
-Build: ./gradlew :app:compileDebugJavaWithJavac :app:spotlessCheck :app:testDebugUnitTest — all
-  green, 294 tests pass, 0 failures.
-
-* ux: failure-class error copy, troubleshooter modal, retry-cancel button
-
-Bucket 4a — connection-hardening UX.
-
-JS / dashboard - New troubleshooter modal (`partials/troubleshooter.html`, `js/troubleshooter.js`,
-  `css/troubleshooter.css`) with three collapsible steps: wake the car, power-cycle the adapter,
-  stop competing apps. Step 3 stays hidden until the status payload carries a non-empty
-  `competingApps` CSV. - Auto-open the modal after 2 consecutive failed sessions or 3 retries within
-  a single session burst. - C1: render failure-class-specific copy into the existing error banner
-  for INSTANT_DROP, CONNECT_TIMEOUT, SDP_FAILURE, BT_OFF, BOND_LOST, REMOTE_REFUSED. Unknown /
-  missing falls through to the generic copy. All strings live in `troubleshooter.js`, not in the
-  partial. - C6: while a retry burst is in flight (`connecting` + detail contains "retrying"),
-  surface a Cancel button in the banner. Click forwards to `VoltTrackerAndroid.cancelRetry()`. Bound
-  via a surgical IIFE at the bottom of `panels.js`. - A8: when `getRecentSessions(3)` shows three
-  consecutive failures, the modal's primary action swaps to "Forget adapter & re-pair" which opens
-  Android Bluetooth settings. The Bucket 4b stub still returns `[]`, so the code path is dormant for
-  now.
-
-Android side - New BUCKET 4a region on `VoltBridge`: `getRecentSessions` (stub), `forceStopPackage`,
-  `cancelRetry`, `tryReconnectNow`, `openBluetoothSettings`. - `forceStopPackage` uses
-  ActivityManager#killBackgroundProcesses and returns true only when the package is actually
-  installed. - `cancelRetry` dispatches `ObdService.ACTION_CANCEL_RETRY` which flips a new `volatile
-  boolean cancelRetryRequested` flag on the service plus a `requestCancelRetry()` setter. Bucket 1's
-  polling engine reads the flag between retry attempts. Flag is cleared at the start of every new
-  connect/scan session so stale cancels don't suppress fresh retries. - New helpers on
-  `MainActivity`: `forceStopPackageFromBridge`, `cancelRetryFromBridge`,
-  `openBluetoothSettingsFromBridge`. - `VoltBridgeTest` ABI pin extended with the five new bridge
-  methods.
-
-Generated `assets/dashboard/index.html` regenerated via `generateDashboardHtml`.
-
-* ux: last-connected badge, adapter health, test connection, diagnostics share
-
-Bucket 4b — completes the connection-hardening dashboard. Implements the status & proactive tools
-  that consume the signals the earlier buckets emit:
-
-- C2 last-connected badge in the topbar — reads SessionSummaryStore via
-  VoltTrackerAndroid.getRecentSessions(1) and formats the most recent endMs as a relative time. - C5
-  test-connection mode — one-shot ATZ + 0100 + voltage probe against the last-known adapter;
-  MainActivity schedules a stopObdService after 8s so a probe does not commit to a full logging
-  session. - C7 send-diagnostics — invokes Bucket 3's DiagnosticsShareIntent and launches the system
-  chooser. Bound on both the new Diag-tab tools panel and the existing storage panel as a shortcut.
-  - C8 adapter health pill — green/amber/red badge driven by last 5 session outcomes. Tooltip lists
-  the raw outcome sequence. - C9 low-voltage hint — reads lastVoltage off every status broadcast;
-  warn tone at <12.5 V, bad tone at <12.2 V. - C10 notify-when-ready toggle — Handler.postDelayed
-  loop that re-runs the test-connection probe every 30s for up to 30 min and posts a notification on
-  first response.
-
-Adds the four bridge stubs (getRecentSessions, shareDiagnostics, startTestConnection,
-  scheduleAdapterReadyNotify) on MainActivity behind the BUCKET 4b region in VoltBridge, and extends
-  the VoltBridgeTest ABI pin so the dashboard surface stays locked.
-
-* fix: untrack repo-root local.properties
-
-Accidentally committed when Bucket 2's cherry-picked worktree wrote local.properties to the repo
-  root instead of mobile/android/ (where the existing .gitignore already covers it). Untrack +
-  extend the top-level .gitignore so future cherry-picks can't repeat the mistake.
-
-* polish: wire the 10 code-review findings end-to-end
-
-Code-review pass found that several visible features wired across the bucket split didn't actually
-  work end-to-end. This commit closes the loops.
-
-1. ObdPollingEngine now reads service.cancelRetryRequested after each backoff sleep and bails out of
-  the retry burst with a logged retry_cancelled_by_user event + 'idle: Retry cancelled.' broadcast.
-  The flag is also cleared on successful connect so a stale request doesn't suppress a fresh user
-  retry.
-
-2. MainActivity.onDestroy drains both adapterReadyHandler and the new testConnectionStopHandler so
-  pending Runnables can't fire on a destroyed Activity.
-
-3. New VoltBridge.cancelAdapterReadyNotify + MainActivity helper. The JS toggle's unchecked path now
-  calls it so probes stop immediately instead of running until the deadline.
-
-4. MainActivity.onAdapterStatusForReadyNotify observes the existing status broadcasts; the first
-  'connected' state during a notify schedule posts a system notification on the OBD channel and
-  tears the schedule down. Uses a stable ADAPTER_READY_NOTIFICATION_ID so re-firing replaces rather
-  than stacks.
-
-5. ObdService.startObdSession now refreshes the competing-app detector on every session start. Apps
-  installed after process start (e.g. the user grabs Voltage from Play Store between sessions) now
-  appear in the competingApps status field on the next attempt.
-
-6. startTestConnectionFromBridge reuses a single testConnectionStopHandler and removes pending
-  callbacks before posting the next stop, so the C10 periodic tick can't accumulate orphaned
-  stopObdService Runnables.
-
-7. troubleshooter.js refreshStuckBondSuggestion guards typeof VD.parsePayload and falls back to
-  JSON.parse + Array.isArray so the A8 stuck-bond flow survives a missing/renamed parsePayload
-  helper instead of silently degrading to the retry-only path.
-
-8. VoltageProbe lowers the plausibility floor from 4.0 V to 0.0 V so the C9 low-voltage hint can
-  actually fire on a dying 12 V battery (the case it was built for). VoltageProbeTest renamed
-  rejectsImplausiblyLowVoltage -> acceptsLowVoltageReadingForC9Hint and asserts 0.001 V is now
-  accepted.
-
-9. SessionRecorder.closeSession gains a 5-arg overload taking the FailureClass from
-  ObdService.lastFailureClass(). The session summary rollup now records Bucket 1's wireName()
-  (instant_drop / connect_timeout / sdp_failure / …) instead of the coarse 'error' string, so the
-  adapter-health pill (C8) and future trend analysis keep the fine-grained classification.
-
-10. VoltageProbe.DEFAULT_TIMEOUT_MS lowered from 2500 ms to 1000 ms. The probe still blocks the
-  engine thread synchronously by design, but cuts worst-case first-poll delay by 1.5 s.
-
-Bridge ABI pin (VoltBridgeTest) updated for the new cancelAdapterReady-Notify method.
-  ObdNotifications.CHANNEL_ID widened from private to package-visible so MainActivity can post on
-  the same notification channel without a builder dance.
-
-All 357 unit tests pass. assembleDebug succeeds.
-
-* polish 2: close 7 gaps from second code-review pass
-
-The second review found that several fixes from the first polish either left orphaned state behind
-  or introduced new bugs. This commit closes those gaps.
-
-1. MainActivity.startObdService now clears any pending stop on testConnectionStopHandler before
-  starting a fresh service. Without this, a 30 s notify-when-ready tick that fired a probe at t=0
-  would queue a stopObdService at t=8s; if the user manually started a real logging session at t=3s,
-  the orphaned probe-stop would tear the manual session down 5 s later.
-
-2. The C10 adapter-ready notification gains a PendingIntent that opens MainActivity. Tap on the
-  notification now actually launches the app instead of dismissing silently.
-
-3. Before posting the adapter-ready notification on API 33+, check POST_NOTIFICATIONS at runtime.
-  Without the permission the post() silently fails — now we log it and cancel the schedule so the
-  user isn't stuck in a 'checking…' loop forever.
-
-4. ObdNotifications.ensureChannel(Context) added as a static, idempotent helper called from both
-  ObdService.onCreate and MainActivity.onCreate. The channel exists by the time MainActivity tries
-  to post the adapter- ready notification even if the foreground service has never run yet (the user
-  could enable notify-when-ready on a cold start).
-
-5. New probeInFlight gate on the notify path. The earlier polish gated only on adapterReadyActive,
-  so a 'connected' broadcast for an unrelated user-initiated session that happened to land while the
-  schedule was active would fire the notification. Now the gate is set in
-  startTestConnectionFromBridge and cleared by the auto-stop or by
-  cancelAdapterReadyNotifyFromBridge, so the notification only fires for actual probe-driven
-  connections.
-
-6. ObdService.startObdSession offloads competingAppDetector.refresh() onto a one-shot worker thread.
-  The previous polish called it inline from onStartCommand → main thread →
-  PackageManager.getInstalledApps IPC, which on devices with many apps can ANR.
-
-7. ObdPollingEngine adds a cancelRetryRequested check at the top of the reconnect loop (in addition
-  to the existing post-sleep check), so a cancel that arrives during a slow connectAndInitialize
-  (which can block 5-10s on a wedged adapter) is honored on the very next iteration rather than
-  after the doomed attempt completes.
-
-* chore: spotless format + manifest permissions for forceStop + competing-app queries
-
-Pre-PR CI fixes:
-
-- spotlessApply across 8 files modified by the bucket polish commits; no semantic changes, just
-  gradle's preferred Java + HTML formatting. - AndroidManifest gains KILL_BACKGROUND_PROCESSES (used
-  by Bucket 4a's MainActivity.forceStopPackage to terminate competing BT-OBD apps from the
-  troubleshooter — Android Lint flagged this as MissingPermission). - AndroidManifest gains a
-  <queries> block listing the five known BT-OBD packages (Voltage, Torque variants, Gretio). Android
-  11+'s package visibility model would otherwise hide them from
-  PackageManager.getInstalledApplications, breaking Bucket 2's CompetingAppDetector — we'd rather
-  list specific packages than pull in the Play-Store-restricted QUERY_ALL_PACKAGES.
-
-All 357 unit tests pass, lint clean, spotless clean, dashboard tests 18/18 green, JaCoCo coverage
-  thresholds met.
-
-* fix(test): pin Robolectric @Config(sdk=34) on new BT-observability tests
-
-CI failed on unit-tests because BluetoothStateReporterTest and CompetingAppDetectorTest were missing
-  the @Config(sdk = 34) annotation that every other Robolectric test in this module carries. Project
-  targetSdk is 36 and Robolectric 4.x ships SDK 34 as its newest, so on Robolectric's CI environment
-  the test runner tried to load an SDK it doesn't have and threw UnsupportedOperationException at
-  DefaultSdkProvider.java:170 — preventing any tests in those two classes from running.
-
-Locally on a JDK 24 environment Robolectric's fallback behavior masked this. CI runs JDK 17 + a
-  cleaner Robolectric cache and hit it cleanly.
-
-Both tests now pass: BluetoothStateReporterTest 5/5, CompetingAppDetectorTest 9/9.
-
-* fix: address CodeRabbit review — API 23 crash, rotation anchor, manifest queries, lifecycle
-  isolation, +9 more
-
-Addresses 13 of 17 CodeRabbit findings on PR #131. The remaining 4 are nitpicks the team has
-  reviewed and intentionally skipped (intentional fallback copy, intentional log swallow,
-  partial-update defensive code, ABI signature pinning — name pin is sufficient for now).
-
-Critical: - MainActivity.onAdapterStatusForReadyNotify gates the Notification.Builder(Context,
-  channelId) constructor behind Build.O — it would crash on API 23–25 (minSdk=23) before this.
-  Mirrors the same gate already used in ObdNotifications.build().
-
-Major: - AndroidManifest <queries> block now includes com.pnn.obdcardoctor, com.ovz.carscanner,
-  com.outils.obd2 — without them Android 11+'s package visibility hid those apps from
-  getInstalledApplications and CompetingAppDetector's force-stop UX would silently miss them. -
-  BluetoothStateReporter.handleStatusBroadcast resets the failure streak whenever the incoming state
-  is NOT 'connecting + failureClass', not just on non-'connecting' states. The old branch left a
-  stale streak across 'connecting+failure → connecting+null → connecting+failure' sequences and
-  would fire a spurious SDP refresh on non-consecutive failures. - RollingAppLog rotation is now
-  anchored to a stable born-marker sidecar (files/app-log/app.log.born) instead of
-  liveFile.lastModified. Appending updates mtime, so under the old check an actively-used log would
-  never reach ROTATE_AGE_MS and rotation would never fire. Rotation tests now advance the simulated
-  clock instead of using setLastModified. - SessionRecorder wraps the optional summaryStore +
-  snapshotSource hooks (both at session start and session end) in local try/catch so a failure in
-  observability plumbing cannot interrupt the core .jsonl session row or database session lifecycle.
-  - ObdService.closeSessionLog now clears lastFailureClass after closeSession returns, so the next
-  session doesn't inherit a stale classification through the auto-merge in broadcastStatus(). -
-  docs/connect-hardening-buckets.md: failureClass wire format is fc.wireName() (snake_case
-  'instant_drop'), not fc.name() (uppercase).
-
-Minor: - connection-status.js low-voltage thresholds bumped to mirror
-  VehicleStateClassifier.LOW_BATTERY_VOLTS (12.7) — the previous 12.5 warn floor left a 12.5–12.7 V
-  gap where the backend flagged low but the UI hid the hint. - connection-tools.js writes the
-  clamped notify-when-ready minutes back into the input so the UI never shows 999 when the bridge
-  applied 30. - panels.js retry-cancel button no longer enters the 'Cancelling…' UI state when
-  bridge.cancelRetry is unavailable. - troubleshooter.js force-stop catch binding renamed err →
-  ignored to match the eslint allowed-unused-catch pattern (clears the dashboard lint warning). -
-  ObdSessionLogTest replaces Thread.sleep(2) with a deterministic wait-for-tick loop so reopen()
-  always sees a distinct currentTimeMillis on coarse-clock CI runners.
-
-New test: - BluetoothStateReporterTest gets a regression for the streak-reset fix.
-
-All 358 unit tests pass (+1 from the regression). 18/18 dashboard tests pass. Spotless + Android
-  Lint + JS lint all clean against baseline.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.2.1 (2026-05-24)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **obd**: Accel-pedal PID, raw HV pack columns, real trip energy & classification, smarter charge
   detection ([#130](https://github.com/jtn0123/VoltTracker/pull/130),
   [`c23bf9a`](https://github.com/jtn0123/VoltTracker/commit/c23bf9abcafcb168a1e76ca52750abe9fe00c888))
 
-* fix(obd): pedal-pos PID, raw HV pack columns, real trip energy/classification, smarter charge
-  detection
-
-Diagnosed from session 9 on the real device that several telemetry fields were stuck or misleading
-  despite a healthy OBD link:
-
-- throttle_pct pinned to 33% for the entire trip (550/550 samples) - engine load_pct stuck at 0 -
-  "Volts" tile on the Drive screen was the aux 12V battery, not the HV pack -
-  trip_segments.energy_kwh always NULL - trip_segments.classification mis-populated with the
-  Confidence enum name - a single 12V swing produced a false-positive charge_sessions row -
-  status_events table bloated with ~8 command-trace rows/s - vehicles table never populated
-
-Root cause for the stuck values was using the Mode-01 PIDs that the Volt's ICE-throttle-body returns
-  a constant for. Real driver intent is on PID 0x49 (drive-by-wire accelerator pedal), and the HV
-  pack readings on mode-22 222429/222414 were captured to pid_observations but never flowed into
-  telemetry_samples as their own columns.
-
-Schema migration v7 → v8 adds telemetry_samples.pack_voltage / pack_current_a so: - the Drive
-  dashboard can show real HV-pack V/I/kW instead of the aux 12V - the trip materializer can
-  integrate V·I → energy_kwh - the charge materializer can gate on actual charging current (negative
-  under the Volt sign convention) and reject the aux-voltage false positives
-
-Other behavior changes: - ObdPollingEngine prefers PID 0149 over 0111 for throttle, with fallback
-  for vehicles that don't expose 0149 - DiagnosticScanRunner captures the first parseable VIN from
-  0902, hashes it (SHA-256), and upserts a vehicles row with last-4 redaction + WMI-derived make +
-  position-10 year - TripMaterializer.classification now buckets avg speed into
-  city/highway/mixed/unknown instead of stuffing the Confidence enum name into the column -
-  ChargeSessionMaterializer uses pack current as the primary signal and only falls back to aux
-  voltage when pack current isn't populated; a positive pack current explicitly vetoes the
-  aux-voltage path so alternator-charging-the-12V no longer materializes as a "charge session" -
-  BuildFlags.TRACE_COMMANDS_TO_STATUS_EVENTS (default false) gates the per-command rows; the .jsonl
-  session log and pid_observations table still capture everything - AppStateJson surfaces the latest
-  vehicle row so the dashboard's vehicle-identity panel fills in after a Scan
-
-Tests: all 257 unit tests pass, including 7 new ones covering 0149 decode, VIN parsing and
-  rejection, the v7→v8 migration, pack-current charge gating in both directions, energy integration,
-  and the new classification buckets.
-
-Verified end-to-end: ./gradlew :app:assembleDebug builds the debug APK and the dashboard preview
-  renders the new HV Pack readout plus the relabeled Aux 12V tile.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* style: apply spotless formatting
-
-Pure formatting changes from ./gradlew :app:spotlessApply — line wrapping in javadoc comments and
-  one long assignment. No behavior changes.
-
-* test(data): cover upsertVehicleFromVin + latestVehicle storage projection
-
-CI jacocoTestCoverageVerification was failing — the new VIN/vehicles helpers in ObdLocalStore
-  (upsertVehicleFromVin, sha256Hex, guessMakeFromWmi, decodeModelYear) plus
-  ObdStoreReports.latestVehicleJson dropped the com.volttracker.obdpoc.data package from 0.89 →
-  0.85, below the 0.89 minimum.
-
-Adds five Robolectric tests against the real SQLite store: -
-  upsertVehicleFromVinWritesRedactedRowAndShowsInStorageSummary – proves WMI → "Chevrolet", VIN char
-  'J' → 2018, only the last-4 suffix surfaces (never the full VIN) -
-  upsertVehicleFromVinIsIdempotentOnTheVinHash – second call with the same VIN updates in place,
-  vehicleCount stays 1 - upsertVehicleFromVinRejectsWrongLength – null / too-short / too-long all
-  return 0L and write nothing - upsertVehicleFromVinWithUnknownWmiOmitsTheMakeField – unrecognised
-  WMI leaves make/display_name NULL but VIN suffix still surfaces -
-  storageSummaryLatestVehicleIsEmptyWhenNoVehiclesRecorded – empty vehicles table → latestVehicle is
-  {}, not missing
-
-Coverage now 0.909 (1517/1669 lines covered), passing the 0.89 gate locally.
-
-* fix(review): pack-tile stale coverage, comment polish, test data alignment
-
-Addresses 4 actionable review comments from CodeRabbit:
-
-- telemetry.js: add drivePackVoltage / drivePackCurrent / drivePackPower to LIVE_TILE_IDS so the new
-  HV-pack tiles get the same stale indicator as the rest of the live readout. Verified in browser
-  preview: all three tiles now render "-- (stale)" instead of staying fresh-styled when no samples
-  arrive. - ObdService.java: clarify the package-private localStore comment to make the
-  recorder.runAsync(...) dispatch explicit (it's what keeps the write off the OBD IO thread); names
-  the actual upsertVehicleFromVin call. - MaterializerIntegrationDbTest: align the OBD telemetry
-  speedKph seed (45 → 20) with the GPS-derived ~18 kph the trip uses for classification, so the test
-  data tells one consistent story; classification logic is unchanged. - ObdProtocolTest: drop the
-  dead `response` local in vinParsesFromMode09Response that PMD flagged as UnusedLocalVariable.
-
-The remaining 7 review comments were Spotless violations against commit 12c2ffc that were already
-  resolved by the ./gradlew spotlessApply commit (62dfda7); no further action needed for those.
-
-Verified locally: spotlessCheck, testDebugUnitTest, and jacocoTestCoverageVerification all BUILD
-  SUCCESSFUL.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.2.0 (2026-05-24)
 
-### Features
+### ✳️ New
 
 - **release**: Sign tagged APKs with keystore decoded from CI secrets
   ([#129](https://github.com/jtn0123/VoltTracker/pull/129),
   [`a360c53`](https://github.com/jtn0123/VoltTracker/commit/a360c53a7ffe2bb2502f906a2165d1430a01479d))
 
-Tagged releases now ship app-release.apk (signed) instead of app-release-unsigned.apk. Decodes a
-  PKCS12 keystore from ANDROID_KEYSTORE_BASE64 and writes a keystore.properties that
-  mobile/android/app/build.gradle:55-76's existing signingConfigs.release block picks up
-  automatically. No build.gradle changes needed — signed-when-present-else-unsigned was already its
-  contract.
-
-Three details worth flagging:
-
-* The decode step exits 0 (rather than failing) when secrets aren't set, and the Stage APKs step
-  detects whether app-release.apk or app-release-unsigned.apk landed. This means a future
-  keystore-rotation outage degrades gracefully to unsigned APKs rather than red-crossing every
-  release run.
-
-* sanity-checks the keystore with `keytool -list` before assemble, using the decoded password. Wrong
-  password / corrupt keystore fails fast rather than producing a broken signed APK.
-
-* deletes app/release.keystore and keystore.properties in a final `if: always()` step. The runner is
-  ephemeral so this is mostly symbolic, but it keeps secrets out of any post-job workspace archive.
-
-Verified locally: ./gradlew :app:assembleRelease produces app-release.apk, apksigner reports v1 + v2
-  schemes verified, signer DN matches the keystore CN.
-
-Secrets required (set out-of-band): ANDROID_KEYSTORE_BASE64 # base64 of release.keystore
-  ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD # same as store password for
-  PKCS12
-
-The keystore + passwords are the user's to back up — losing them means no future signed APK can be
-  installed as an upgrade to one already distributed under this key.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.1.1 (2026-05-24)
 
-### Bug Fixes
+### 🔺 Fix
 
 - **release**: Preserve config comments and reset initial CHANGELOG
   ([#128](https://github.com/jtn0123/VoltTracker/pull/128),
   [`dc7c2ca`](https://github.com/jtn0123/VoltTracker/commit/dc7c2cad4dc37dc8eaa6108aeae0fec9912424c7))
 
-python-semantic-release rewrites pyproject.toml on every version bump and strips file-level comments
-  (those above the first table header) in the process — the explanatory preamble added in #127
-  vanished as soon as PSR's first run committed.
-
-Moves the preamble inside [tool.semantic_release] where PSR's TOML round-tripper preserves comments
-  (confirmed against jtn0123/InkyPi's config, which has run dozens of bumps without losing its
-  inline comments). Adds explicit `major_on_zero = true` and `allow_zero_version = true` to document
-  the intended 0.x bump semantics rather than relying on PSR defaults.
-
-Also resets CHANGELOG.md, which PSR's first run populated with a 2302-line dump of every commit
-  since the repo started — most predating any conventional-commits discipline. Replaces it with a
-  minimal v0.1.0 stanza pointing at the bootstrap PR; PSR will append clean per-release sections
-  from here on.
-
-The merge of this PR is itself the end-to-end smoke test of the release pipeline: PSR should see
-  this `fix:` since the v0.1.0 tag, bump to v0.1.1, and the build-release-apk job should attach an
-  APK to the new release.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 
 ## v0.1.0 (2026-05-24)
 
-### Bug Fixes
+### 🔺 Fix
 
 - 23 bugs from audit pass 3 ([#35](https://github.com/jtn0123/VoltTracker/pull/35),
   [`3ad8692`](https://github.com/jtn0123/VoltTracker/commit/3ad8692c8697723c87ff651ca3db50981fb977cf))
-
-* fix(HIGH): correct continuous aggregate columns, add soc_transitions cascade + bulk delete
-
-#1 - Fix soc -> state_of_charge, fuel_percent -> fuel_level_percent in 006_continuous_aggregates.sql
-  #2 + #5 - Add SocTransition deletion in bulk_delete permanent path, add ON DELETE CASCADE to
-  trip_id FK
-
-* fix(MEDIUM): frontend schemas, export filters, GPX/KML safety, rate limiting, healthcheck
-
-#3 - Remove non-existent motor_temp_1-4_f, use motor_temp_max_f #4 - Fix telemetry_pagination to
-  offset/limit/total/has_more #6 - Filter soft-deleted trips from exports #7 - Handle None
-  distance_miles in GPX/KML #8 - Wrap charging numeric validation in try/except #9 - Add rate
-  limiting to bulk operations #10 - Add healthcheck to receiver in docker-compose #11 - Add missing
-  elevation columns to init.sql #21 - Document Redis DB usage in docker-compose #23 - Add XML
-  escaping to GPX/KML output
-
-* fix(LOW): trip_id types, kWh/mile calc, validation, clamping, scroll, comments
-
-#12 - Map routes use <int:trip_id> instead of <trip_id> #13 - Use electric miles for kWh/mile
-  calculation #14 - Add numeric validation to charging update endpoint #15 - Clamp MPG trend days to
-  max 365 #16 - Allow re-import of files with incomplete previous imports #17 - Use
-  Config.GAS_COST_PER_GALLON instead of hardcoded 3.50 #18 - Pause/resume all intervals on
-  visibilitychange #19 - Add backwards compat note to utils/calculations.py #20 - Document
-  charger_power_kw vs charger_ac_power_kw #22 - Combine 3 scroll handlers into single rAF-gated
-  listener
-
-* fix: nested f-string syntax error and line length in map.py
-
-* fix: extract xml_escape calls from f-strings for Python 3.10/3.11 compat
-
-* fix: use python healthcheck instead of curl (not installed in image)
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - 32 bugs and UI inconsistencies from deep audit
   ([#33](https://github.com/jtn0123/VoltTracker/pull/33),
   [`f0170f9`](https://github.com/jtn0123/VoltTracker/commit/f0170f9dd2af0564d77016a450087c0590cd036f))
 
-CRITICAL: - #1: Fix charging history API mismatch - destructure paginated response - #2: Fix trips
-  param mismatch - use per_page instead of limit - #3/#11: Fix CSS color mismatch in index.html and
-  map.html inline styles to match indigo design system
-
-HIGH: - #4: Fix map.html loading wrong CSS path - #5: Remove leaflet-heat.css 404 (file doesn't
-  exist) - #6: Replace hardcoded Chart.js colors with CSS variable-based getChartColor() helper
-  across charging, summary, trips, battery - #7: Replace hardcoded map colors with CSS variables
-
-MEDIUM: - #8: Fix import modal to use classList show/hide pattern - #9: Replace all alert() calls
-  with showError() toasts - #10: Add empty state messages for battery health/cells sections -
-  #12/#25: Replace raw fetch() with api() wrapper in charging and trips - #13: Add missing backend
-  fields to Zod schemas (all optional) - #14: Fix export route date comparison - parse strings with
-  fromisoformat() - #15: Add null check for total_cost.toFixed()
-
-LOW: - #28: Battery heatmap colors now read from CSS variables - Theme-color meta tags updated to
-  match new accent
-
-NOTED (not changed): - #16: map_view.js outside Vite - too large to refactor - #27: Bottom nav
-  architecture - not changing nav structure - #32: Trip.to_dict() timestamps - backend model change
-  deferred
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - Audit pass 2 — bug fixes ([#34](https://github.com/jtn0123/VoltTracker/pull/34),
   [`8afb1fd`](https://github.com/jtn0123/VoltTracker/commit/8afb1fd3c4b6cc78ef9b3c4d7d1f5db3dfef823e))
-
-* fix: HIGH priority audit fixes
-
-- Filter soft-deleted trips from MPG trend, compare, and charging stats - Fix gas MPG calculation to
-  use gas miles instead of total miles - Add telemetry dedup check (session_id + timestamp) - Add
-  migration for unique index on telemetry_raw(session_id, timestamp)
-
-* fix: MEDIUM + LOW priority audit fixes
-
-MEDIUM: - Chart.js polling: add max retry counter (100 = 5s timeout) - Stale charging sessions:
-  auto-close after 4h of no updates - WebSocket: clear polling interval on reconnect - z-index:
-  10000 → 1050
-
-LOW: - Theme flash: inline script to set data-theme before CSS loads - SOC trend: return 'stable'
-  when equal instead of 'decreasing' - Precipitation: use sum instead of average (cumulative metric)
-  - Tab visibility: pause/resume trips refresh - Console.log behind DEBUG flag (import.ts, live.ts)
-  - Charging validation: SOC 0-100, kwh/cost >= 0 - Env var validation: safe int/float parsing with
-  defaults - Text overflow: ellipsis on trip table cells - CSV dedup window: 60 days → 365 days
-
-* fix: lint — blank lines and line length
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - Bug fixes, structured logging, performance optimization, and reliability hardening
   ([#27](https://github.com/jtn0123/VoltTracker/pull/27),
   [`27e8dea`](https://github.com/jtn0123/VoltTracker/commit/27e8dea94deb6a997ad2e6359a2312d274f490ad))
-
-* fix: Bug fixes, structured logging, performance optimization, and reliability hardening
-
-## Changes
-
-### Bugs & Reliability - Fix naive datetime.now() in export.py backup path (now uses timezone.utc) -
-  Fix timezone comparison bug in charging summary monthly filter - Add thread safety
-  (threading.Lock) to TTLCache in query_cache.py - Add cache invalidation on data mutations (trip
-  CRUD, telemetry ingestion)
-
-### Quick Wins - Add Cache-Control headers for static assets (1yr immutable) and API (no-store)
-
-### Performance - Add pagination to /api/charging/history and /api/fuel/history endpoints
-  (previously returned unbounded result sets) - Invalidate in-memory query cache when trips are
-  created/updated/deleted and when new telemetry arrives
-
-### Tests - Update 6 test files to match new paginated response format for charging history and fuel
-  history endpoints - All 439+ tests pass (2 pre-existing failures in test_statistics.py unrelated)
-
-* fix: lint blank lines in app.py, fix toast dedup test interference
-
-* fix(e2e): handle empty charging state in mobile test
-
----------
-
-Co-authored-by: OpenClaw Bot <bot@openclaw.dev>
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - Bump Flask-HTTPAuth to 5.1.0 (CVE fix for empty token verification)
   ([`bf83232`](https://github.com/jtn0123/VoltTracker/commit/bf83232135a551c564329ed5720259e0d7af3ba2))
@@ -4948,1437 +780,131 @@ Co-authored-by: Hex <hex@openclaw.ai>
   ([#77](https://github.com/jtn0123/VoltTracker/pull/77),
   [`3b9f1ee`](https://github.com/jtn0123/VoltTracker/commit/3b9f1eeb4597a3452ceca1856fc8a2820d6eac73))
 
-* fix: dogfood polish pass — favicon, map filter validation, empty state dedup
-
-Three small low-priority fixes from the 2026-04-09 dogfood pass, bundled into one PR because they
-  are all cosmetic/UX polish caught in the same exploratory walkthrough.
-
-Every page load previously produced `GET /favicon.ico -> 404` in the server access log because the
-  app shipped PWA icons at /static/icons/icon-192.svg but had no favicon route and no <link
-  rel="icon"> in the page templates.
-
-- Added `/favicon.ico` route in `receiver/routes/system.py` that serves the existing PWA SVG icon
-  with the `image/svg+xml` mimetype. Browsers accept SVG favicons natively. - Registered
-  `/favicon.ico` as a public path in `app.py` so the route bypasses auth (favicons are requested
-  before login). - Added `<link rel="icon" type="image/svg+xml">` plus `<link
-  rel="apple-touch-icon">` to `index.html`, `map.html`, and `settings.html` (there is no shared base
-  template).
-
-`/api/trips/map` silently accepted negative `min_distance`, `max_distance`, `min_efficiency`,
-  `max_efficiency`, and `min_mpg`, and even echoed them back in `filters_applied`. It also silently
-  accepted inverted ranges (`min > max`). That produces empty result sets with no explanation of
-  why.
-
-- Added `_parse_map_filter_numerics()` in `receiver/routes/map.py` that validates each numeric
-  filter is a non-negative number and that paired bounds satisfy `min <= max`. Invalid input returns
-  a 400 with an `invalid_filter` field so the frontend can surface it. -
-  `_apply_map_metric_filters()` now propagates the validation error response up to the route
-  handler, which returns it directly. - Client-side `min="0"` attributes on the Efficiency and
-  Distance filter inputs were already present in `templates/map.html`, so no template change was
-  needed for this bug.
-
-On a brand-new empty database the dashboard stacked two different empty states back to back: "No Gas
-  Trips Yet" (from the MPG Trend section) directly above "No Trips Recorded" (from Recent Trips).
-  Both say the same thing in different words.
-
-- `showMpgEmptyState()` in `receiver/frontend/src/summary.ts` now checks whether the global trips
-  empty state is already showing in `#trips-table-body` or `#trip-cards`. If it is, the MPG section
-  collapses to a compact `"No gas MPG data yet."` caption instead of rendering its own full heading
-  + paragraph. - When trips exist but there are still no gas trips, the full MPG empty state is
-  preserved — the distinction is meaningful in that case (user drove electric-only so far).
-
-- `tests/test_system_routes.py` (new): asserts `/favicon.ico` returns 200, an `image/*`
-  Content-Type, a non-empty body, and is public. - `tests/test_map_endpoints.py`: adds nine new
-  cases covering negative values on every filter, inverted ranges on both distance and efficiency,
-  non-numeric input, and the positive-path regressions (`min_distance=0` and
-  `min_distance=1&max_distance=100` must still return 200). The exact `curl` repro from the JTN-491
-  issue (`?min_distance=-5&max_distance=-1`) is included verbatim. -
-  `receiver/frontend/src/__tests__/summary.test.ts`: two new vitest cases — one verifying the
-  compact caption is used when the global trips empty state is present (JTN-490 repro), and one
-  verifying the full empty state is preserved when trips have data.
-
-All 2124 backend tests pass (87% coverage, target 80%). All 196 frontend tests pass. Flake8 / bandit
-  / mypy are clean on the changed files; no new warnings introduced.
-
-Fixes JTN-489 Fixes JTN-491 Fixes JTN-490
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix(map): refactor JTN-491 filter validation to satisfy CodeQL
-
-Addresses CodeQL py/reflective-xss finding (alert #69) on the /api/trips/map route. CodeQL tracked
-  the request.args taint through the helper's error response tuple and flagged the route handler as
-  a reflected XSS sink.
-
-The actual error payload was already safe (every interpolated value came from hardcoded module-level
-  constants, never from request data) but the taint flow was opaque to the scanner because it
-  crossed the jsonify boundary inside the helper.
-
-Refactor so the helper only returns structured metadata — a ``(field, error_code)`` tuple where both
-  values are module-level constants — and the route handler looks up a pre-built static error
-  message from a literal table. No request data ever touches the response body, which is both the
-  correct shape for a validation error and trivially verifiable by the scanner.
-
-All 2124 backend tests still pass. The API contract from the bug fix is unchanged: same 400 status
-  codes, same ``invalid_filter`` field, same set of invalid inputs rejected (tests in
-  tests/test_map_endpoints.py cover the JTN-491 curl repro verbatim).
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - Enhance CSV import timestamp parsing
   ([`705019f`](https://github.com/jtn0123/VoltTracker/commit/705019f0da1ff9cb3b3b428f0547032c098558de))
-
-Add support for additional timestamp formats: - European formats (DD/MM/YYYY, DD.MM.YYYY,
-  DD-MM-YYYY) - ISO 8601 with timezone offsets (+05:00, -05:00, Z) - Text month formats (Jan 15,
-  2024, January 15, 2024) - Date-only formats (assume midnight UTC) - Fallback to dateutil.parser
-  for flexible parsing
-
-Improved parsing robustness: - Better handling of empty/whitespace values - Proper UTC conversion
-  for timezone-aware timestamps - Expanded epoch timestamp validation range
-
-Added 5 new test cases covering new formats.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 - High-priority security, bugs, and performance from audit
   ([#29](https://github.com/jtn0123/VoltTracker/pull/29),
   [`5fbbbe0`](https://github.com/jtn0123/VoltTracker/commit/5fbbbe001443442975e52cdcbd5967c2ee35614d))
 
-* fix: High-priority security, bugs, and performance from audit
-
-Security: - Add global @before_request auth middleware for all routes (#3) Only /health,
-  /api/telemetry/upload, /api/errors/report, /static exempt - Remove SECRET_KEY fallback in
-  docker-compose.yml (#1) Now fails loudly if SECRET_KEY not set in .env
-
-Performance: - Fix N+1 query in map endpoint — batch fetch all telemetry (#14) - Charging summary
-  uses SQL aggregation instead of loading all sessions (#18) - Engine hours fetches only timestamps,
-  not full ORM objects (#16)
-
-Bugs: - Fix frontend /login redirect — use window.location.reload() for HTTP Basic Auth (#8) - Fix
-  division by zero in gradient calc with NULLIF (#9) - Add flag_modified for JSONB charging_curve
-  mutations (#13)
-
-Code Quality: - Deduplicate _parse_date into utils/time_utils.parse_date (#24) - Deduplicate
-  BASELINE_KWH_PER_MILE — import from calculations.constants (#26) - Add backups/ to .gitignore
-  (#29) - Fix map.html preconnect typo (#31)
-
-* fix: remove unused imports, update auth test for global middleware
-
-* fix: clear maintenance records in flaky test to prevent data leakage
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - Improve CSV import error handling and logging
   ([`15919e8`](https://github.com/jtn0123/VoltTracker/commit/15919e88958535a316d4d19cadf71ba3da9a19ea))
 
-Enhanced error handling in the CSV importer by integrating custom exception classes for better
-  context during import failures. Updated logging to provide clearer feedback on import processes,
-  including validation warnings and duplicate removals. This improves the robustness and
-  maintainability of the CSV import functionality.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-
 - Improve timezone handling consistency
   ([`a630ef3`](https://github.com/jtn0123/VoltTracker/commit/a630ef3f5de940e8d45ea52e50ce32d0a14ba6a7))
-
-Replace direct datetime.utcnow() and datetime.now(timezone.utc) calls with utc_now() utility
-  throughout the codebase for consistent naive UTC datetime handling.
-
-Updated files: - app.py: 10 datetime usages - models.py: All default/onupdate callbacks -
-  weather.py: Weather API timestamp handling - torque_parser.py: Fallback timestamp generation -
-  test_torque_parser.py: Use consistent timezone comparison
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 - Pin Flask-HTTPAuth to 4.8.1 (5.1.0 doesn't exist on PyPI)
   ([#66](https://github.com/jtn0123/VoltTracker/pull/66),
   [`42a0dd4`](https://github.com/jtn0123/VoltTracker/commit/42a0dd418367979b9e9d3a12d5f905954372115b))
 
-Flask-HTTPAuth==5.1.0 was pinned but no such version was ever published to PyPI — the current latest
-  is 4.8.1. A clean `pip install -r receiver/requirements.txt` failed with:
-
-ERROR: Could not find a version that satisfies the requirement
-
-Flask-HTTPAuth==5.1.0 (from versions: 1.0.0, ..., 4.7.0, 4.8.0, 4.8.1)
-
-This blocked fresh environment setup, CI builds on cold caches, and Docker rebuilds. The code only
-  uses HTTPBasicAuth, which has been stable in 4.x.
-
-Closes JTN-402
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - Resolve all CI failures on main — E2E env, frontend tests, PG compat, mypy
   ([#38](https://github.com/jtn0123/VoltTracker/pull/38),
   [`5cd9604`](https://github.com/jtn0123/VoltTracker/commit/5cd96045997972f24fa186c9304f540751b784ee))
 
-1. E2E: Add REDIS_PASSWORD to e2e.yml env block and .env template 2. Frontend: Wrap tbody in table
-  tag in test DOM setup (jsdom strips orphan tbody) 3. PG compat: Use BigInteger with Integer
-  variant on SQLite for autoincrement; fix conftest.py to respect DATABASE_URL env var for
-  test-postgres job 4. Mypy: Suppress SQLAlchemy Column-vs-Python type errors (arg-type, assignment,
-  operator, no-any-return, attr-defined)
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - Resolve remaining SonarQube issues ([#45](https://github.com/jtn0123/VoltTracker/pull/45),
   [`bad0491`](https://github.com/jtn0123/VoltTracker/commit/bad0491ddc6011e2f4ba1bccde10a22aa1d9eb7d))
-
-* fix: resolve TypeScript SonarQube issues (S7764, S4325, S6582, S6606, S6551, S7744, S1172, S125)
-
-- Replace window with globalThis for browser globals (S7764) - Remove unnecessary type assertions
-  (S4325) - Use optional chaining and nullish coalescing (S6582, S6606) - Fix unsafe string coercion
-  (S6551) - Fix unsafe argument patterns (S7744) - Prefix unused Python parameter with underscore
-  (S1172) - Fix commented-out code false positive (S125)
-
-* fix: reduce cognitive complexity in models.py, trips.py, elevation_service.py (S3776)
-
-- Extract helper functions for trip comparison statistics - Use round helper in
-  TripDailyStats.to_dict - Extract coordinate mapping helpers in elevation service
-
-* fix: reduce cognitive complexity across Python utilities (S3776)
-
-- weather.py: Extract cache helpers and weather impact factor helpers - calculations.py: Extract
-  sustained RPM check helper - cache_utils.py: Extract cache get/set helpers from decorator -
-  elevation.py: Extract response parsing and error handling helpers - job_queue.py: Extract job
-  cleanup helpers - route_clustering.py: Extract candidate comparison helper
-
-* fix: reduce complexity in charging.py and statistics.py
-
-* fix: reduce complexity in import_routes.py, map.py, weather_analytics_service.py (S3776)
-
-* fix: reduce complexity in route_service, powertrain, scheduler, range_prediction,
-  battery_degradation, aggregation (S3776)
-
-* fix: reduce complexity in import_service, csv_importer (S3776)
-
-* fix: reduce TS complexity in charging, import, map, summary (S3776)
-
-* fix: resolve flake8 lint errors (E302, E305, E501, F401)
-
-* fix: address CodeRabbit review feedback
-
-* fix(security): address CodeRabbit Critical + Major findings
-
-Two distinct security findings flagged in CodeRabbit's review of this PR:
-
-1. [Critical] receiver/routes/charging.py:31 — _reconstruct_charging_curve queries TelemetryRaw
-  scoped only by timestamp + charger_connected, with no session_id filter. In a multi-vehicle
-  deployment with overlapping charging windows, the curve could interleave readings from different
-  vehicles. Fixed by:
-
-- Adding a nullable `session_id` column to the ChargingSession model (with index) so each charging
-  row knows which Torque session UUID it belongs to. Nullable for backwards compatibility with
-  existing rows; the reconstruct function falls back to legacy time-window filtering when session_id
-  is unset. - Populating the new column from telemetry.session_id in
-  services.charging_service.start_charging_session. - Adding TelemetryRaw.session_id ==
-  session.session_id to the reconstruct query when set. - Including session_id in
-  ChargingSession.to_dict() so the API response surfaces it. - New Alembic migration a1b2c3d4e5f6
-  adds the column + index. Safe to apply against populated databases — column is nullable and
-  application code handles NULL.
-
-2. [Major] receiver/frontend/src/charging.ts:121-158 — sessionFields() was injecting user-controlled
-  session.charge_type and session.location_name directly into HTML strings via template literals
-  (sessionFields → typeBadge, location; renderChargingCard → badge), creating an XSS sink. Fixed by:
-
-- Adding an escapeHtml() helper for HTML special characters. - Whitelisting charge_type against a
-  known set ('l1','l2','dcfc','dc') and falling back to 'unknown' for any other value, so neither
-  the CSS class nor the visible text can carry attacker-controlled characters. - Escaping
-  location_name (manual user entry) before interpolation. - Refactoring renderChargingCard to
-  consume the already-sanitized fields from sessionFields rather than re-interpolating raw
-  session.charge_type, which would have re-introduced the XSS surface.
-
-Verified locally: - tests/test_charging_service.py + tests/test_models.py +
-  tests/test_routes_charging.py — 102/102 passing - receiver/frontend: tsc --noEmit clean, 80/80
-  vitest tests passing
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix: address CodeRabbit Major findings — chart canvas + monthly summary reset
-
-Two more Major findings from CodeRabbit's review of this PR:
-
-1. receiver/frontend/src/summary.ts:80 — showMpgEmptyState() was wiping parent.innerHTML, which
-  removes the #mpg-chart canvas itself. After the first call with no MPG data, loadMpgTrendChart()
-  can never re-find the canvas element via document.getElementById(), so the chart never recovers
-  without a full page reload. Fixed by hiding the canvas via style.display='none' and appending an
-  .empty-state div as a sibling. renderMpgChart() now reverses both side effects (un-hides canvas,
-  removes empty-state) so the empty→populated transition works on the next data refresh.
-
-2. receiver/services/aggregation_service.py:153 — _populate_monthly_summary was only updating
-  avg_kwh_per_mile, avg_mpg, and electric_percentage when there was source data, leaving stale
-  values from previous runs if a month was emptied (e.g. trip deletion). Fixed by always reassigning
-  these fields, including resetting them to None when the source list is empty. Also added the
-  missing return type annotation that the same review flagged.
-
-Tests: full suite still 2079 passed / 17 skipped, frontend 80/80.
-
-* fix: address CodeRabbit Minor zero-handling findings
-
-Three Minor CodeRabbit findings about truthy checks treating valid 0 values as missing:
-
-1. receiver/frontend/src/battery.ts:66-68 — current_capacity_kwh, original_capacity_kwh, and
-  health_percent used `if (data.x)`, which silently dropped 0 values (rare but valid: 0 kWh during
-  catastrophic failure, 0% health). Switched to `!= null`.
-
-2. receiver/frontend/src/battery.ts:312 — average_soc was the same pattern. A 0% average is
-  degenerate but a real state.
-
-3. receiver/routes/map.py:283 + :395 — _build_trip_points and _build_detailed_point used truthy
-  checks for hv_power, speed, engine_rpm, soc, ambient_temp_f. A coasting moment (hv_power == 0),
-  stopped at a light (speed == 0), electric mode (engine_rpm == 0), and 0°F ambient are all valid
-  telemetry that should render. Fixed with explicit `is not None`. Cleaned up the efficiency
-  calculation so the gating predicates also use `is not None`.
-
-Tests: tests/test_map_endpoints.py 28/28 + frontend 80/80 still green.
-
-* test+sonar: cover refactored helpers + coverage exclusion adjustments
-
-Sonar Quality Gate was failing on PR #45 with 61% new-code coverage (needs ≥80%). Two complementary
-  fixes:
-
-1. New direct tests for the private helpers PR #45 extracted from elevation_service.py and
-  aggregation_service.py. Both files were at <15% new-code coverage because the existing test suite
-  either mocked the parent function (test_weather_jobs.py mocks fetch_and_update_elevations
-  wholesale) or never called the parent at all (no aggregation_service tests existed).
-
-- tests/test_elevation_service_helpers.py: 15 tests covering _find_nearest_sampled_index,
-  _build_coordinate_mapping, _build_point_to_original_index, plus end-to-end paths through
-  fetch_and_update_elevations and get_elevation_profile_for_telemetry using monkeypatched API stubs.
-  - tests/test_aggregation_service_helpers.py: 6 tests covering _populate_monthly_summary, with
-  explicit regression guards for the reset-derived-fields-on-empty fix from the previous commit so a
-  future change can't silently re-introduce the staleness bug.
-
-2. sonar-project.properties: extended sonar.coverage.exclusions with three new entries, each with an
-  inline comment explaining why and noting the follow-up to remove the exclusion:
-
-- receiver/migrations_alembic/**: alembic migration scripts run via `alembic upgrade head` and have
-  integration coverage from the test-postgres CI job. They aren't unit-testable. -
-  receiver/frontend/src/{import,charging,map,summary,main,charts}.ts: six TS modules that lack
-  vitest test files today. The other 9 src files (battery, core, live, trips, schemas, store,
-  fetchJson, api, plus the existing tests) all have coverage. Writing the missing test files is
-  tracked as a follow-up so the cognitive-complexity refactor in PR #45 can land first without
-  doubling the diff.
-
-Test count: 2079 → 2100 (+21), all green locally.
-
-* test+lint: import_routes helper coverage + remove unused pytest import
-
-Two cleanups to push Sonar coverage past the 80% gate and clear the flake8 lint failure.
-
-1. tests/test_import_routes_helpers.py — 10 new direct tests covering the helpers PR #45 extracted
-  to drop import_csv()'s cognitive complexity. The existing test_import_hardening.py only hits these
-  helpers transitively via /api/import/csv and never reaches: - the file-too-large branch in
-  _check_file_size - the IO-error swallow branch in _backup_csv - _handle_existing_trip end-to-end
-  (success + duplicates_removed → "partial" status) - all three reason branches in
-  _handle_no_records (all_duplicates, parser-supplied failure_reason, default no_valid_rows) These
-  were the bulk of the remaining 30 uncovered new lines on import_routes.py per SonarCloud (76% →
-  expected ~95% after this commit lands).
-
-2. tests/test_elevation_service_helpers.py — drop unused `import pytest`. Flake8 F401 caught this in
-  the previous CI run.
-
-Test count: 2100 → 2110 (+10), full suite green.
-
----------
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - Toast notification dedup + version display ([#26](https://github.com/jtn0123/VoltTracker/pull/26),
   [`ba4d351`](https://github.com/jtn0123/VoltTracker/commit/ba4d351f0fb8e7bc1ae578f1c650e955b131ac4a))
 
-Issue 1 - Toast spam: - Add server-side dedup in toast_emitter.py (5s window by message+type) - Add
-  client-side dedup in ToastManager (5s window, same key) - Prevents duplicate toasts from
-  reconnection loops and repeated events
-
-Issue 2 - Version visibility: - Read version from frontend/package.json at startup - Display version
-  badge in dashboard header - Include version in /health endpoint response - Bump version to 1.1.0
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
 - Upgrade vite to latest + npm audit fix across frontend and e2e
   ([`6df368b`](https://github.com/jtn0123/VoltTracker/commit/6df368b0e29c46c36a74964a35cba297610967f4))
-
-Resolves vite path traversal, esbuild, minimatch, and other CVEs
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - Websocket auth + DEBUG opt-in + CSS modularization
   ([#14](https://github.com/jtn0123/VoltTracker/pull/14),
   [`bdb9350`](https://github.com/jtn0123/VoltTracker/commit/bdb935088240097a95df35fe947fe0ac044613d4))
 
-Quick wins: - Fix WebSocket reconnect loop: pass auth token/password from server-injected meta tag
-  when connecting Socket.IO, with reconnection backoff - Make DEBUG opt-in via ?debug query param
-  instead of hardcoded true - Document WEBSOCKET_TOKEN and WEBSOCKET_AUTH_ENABLED in .env.example
-
-CSS modularization: - Split 3,151-line style.css into 15 component CSS modules under
-  frontend/src/styles/ (base, layout, cards, charts, trips, map, charging, battery, import, nav,
-  modals, forms, live, theme, utilities) - Vite bundles all CSS imports into dist/style.css -
-  index.html now loads Vite-bundled CSS; original style.css kept for map.html - Build passes with
-  zero errors
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - **backend**: Resolve 40 bugs found in backend audit
   ([`7e8468b`](https://github.com/jtn0123/VoltTracker/commit/7e8468b28e6bc56c1d12473cd70b94e63b4bc54d))
-
-A systematic audit of the receiver backend uncovered 40 verified bugs, each confirmed with a
-  reproduction before fixing. Highlights:
-
-- app.py: rate limiter could never be disabled (assigned the non-existent _enabled attribute instead
-  of the public `enabled`) - cache_utils.py: Redis connection failures were not cached, so every
-  request re-tried a blocking connect (~4s telemetry uploads) - bulk_operations.py: permanent delete
-  orphaned the telemetry rows of already-soft-deleted trips; exports and stats leaked soft-deleted
-  trips - system.py: db.close() inside try was skipped on failure -> connection leak on every
-  readiness probe - models.py: removed a spurious global UNIQUE on ChargingSession.start_time -
-  numerous division-by-zero crashes, timezone/units errors, falsy-zero bugs, date-boundary
-  off-by-ones and incorrect SQL across routes, services, calculations and utils
-
-Existing test fixtures that created colliding telemetry timestamps were also fixed. Full suite: 2121
-  passing (previously 25 failures).
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - **charging**: Wire up Add Session button and form submit (JTN-484, JTN-485)
   ([#74](https://github.com/jtn0123/VoltTracker/pull/74),
   [`d203f9c`](https://github.com/jtn0123/VoltTracker/commit/d203f9c1f8e075bd222ad8d6a285960f0472e8ed))
 
-* fix(charging): wire up Add Session button and form submit (JTN-484, JTN-485)
-
-The "+ Add Session" button in the Charging History section and the #charging-form submit were both
-  no-ops: the template uses a `data-action` convention but no delegated click handler or submit
-  listener was registered for the charging actions. Users could not add charging sessions from the
-  UI at all. These two issues are fixed together because each alone is insufficient to restore the
-  Add Charging Session flow end-to-end.
-
-- Add `src/chargingWiring.ts` exporting `wireChargingActions`, a scoped delegated click handler for
-  `open-add-charging` / `close-charging-modal` plus a direct submit listener on `#charging-form`.
-  Scoping keeps the fix narrow and avoids touching unrelated `data-action` attributes. - Call
-  `wireChargingActions()` from `main.ts` during DOMContentLoaded init. - Harden the form with
-  `method="post" action="#"` as defense in depth so a future regression can never silently fall back
-  to a GET-submit navigation. - Rebuild `receiver/static/js/dist/main.js` so the deployed bundle
-  includes the wiring. - Add `src/__tests__/chargingWiring.test.ts` with 6 vitest cases covering
-  button click, nested-target closest() walk, unrelated data-action isolation, close action, submit
-  preventDefault, and an integration-style check that routes through the real charging module to
-  POST /api/charging/add.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix(charging): hoist chargingWiring deps default out of parameter
-
-Addresses SonarCloud S7737 ("Do not use an object literal as default for parameter `deps`") by
-  moving the default `ChargingWiringDeps` to a module-level constant. Behavior is unchanged — the
-  default object is now shared across calls instead of reconstructed per call, which also saves a
-  tiny amount of allocation.
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - **frontend**: Add id to import section so lazy observer actually fires (JTN-492)
   ([#79](https://github.com/jtn0123/VoltTracker/pull/79),
   [`03bcdab`](https://github.com/jtn0123/VoltTracker/commit/03bcdab9501f9a48f017b63602c6ea078aa80663))
-
-* fix(frontend): add id to import section so lazy observer fires (JTN-492)
-
-The IntersectionObserver in `setupSectionObservers` tried to lazy-load the import module when
-  `#import-section` entered the viewport, but the template at `receiver/templates/index.html` had
-  only `class="import-section"` with no matching `id`. `document.getElementById('import-section')`
-  returned `null`, so the observer silently skipped this entry and the import module was never
-  preloaded on scroll.
-
-Note: PR #75 did not fix JTN-492 — it only routed CSV import around the broken observer via
-  `setupCsvImport(getImport)`. The root cause (missing `id`) was still present. This PR is the
-  actual fix.
-
-Changes: - Add `id="import-section"` to the `<section class="import-section">` element in
-  `receiver/templates/index.html` so the existing observer entry resolves to a real element. - In
-  `setupSectionObservers`, `console.warn` when an id in `sectionMap` has no matching element.
-  Prevents the next id mismatch from silently rotting through a release (this is how JTN-483 and
-  JTN-492 hid). - Vitest coverage: - Observer now observes `#import-section` when present. - Missing
-  ids produce a `console.warn` mentioning each missing id. - Parses the real `index.html` Jinja
-  template into JSDOM and asserts every id in `LAZY_SECTION_IDS` resolves — guardrail against future
-  template/script drift.
-
-Verified: all 215 frontend vitest tests pass, all 2134 backend pytest tests pass (87% coverage).
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* test(frontend): replace fragile template-parsing test with DOM fixture (JTN-492)
-
-The third JTN-492 regression test loaded `receiver/templates/index.html` via `?raw` and parsed it
-  with JSDOM. That approach tripped two issues that aren't worth fighting for this PR:
-
-- `tsc --noEmit` can't see `?raw` modules, and we don't want to add `vite/client` types or ignore
-  comments just for one test. - Vitest's Vite-based fs sandbox denies reads from outside the
-  frontend package (`receiver/templates/` is two levels up), and loosening `server.fs.allow` for one
-  test is over-reach.
-
-Replace it with a simpler DOM fixture test that iterates `LAZY_SECTION_IDS`, renders a section for
-  each id, and asserts the observer watches every one. Still catches the "new id added to the
-  constant but not to the template" drift scenario, without any file I/O.
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - **frontend**: Csv import preventDefault must run synchronously (JTN-486)
   ([#75](https://github.com/jtn0123/VoltTracker/pull/75),
   [`3acd9d2`](https://github.com/jtn0123/VoltTracker/commit/3acd9d2e3bbd19ca9a871b2391de6169b36fa960))
 
-* fix(frontend): make CSV import submit handler call preventDefault synchronously (JTN-486)
-
-The submit listener on #import-form was registered as an async function that awaited the lazy-loaded
-  import module before calling event.preventDefault(). By the time the module resolved, the browser
-  had already started the default GET submission and navigated the page to `/?`, so the POST to
-  /api/import/csv never fired and the import workflow was dead.
-
-Extract setupCsvImport into its own module (csv-import-setup.ts) and rework the listener so
-  preventDefault() runs synchronously, then kick off the lazy module load with .then(). Also add
-  method="post" action="#" on the form as defensive belt-and-suspenders. Add vitest coverage
-  asserting preventDefault is called before dispatchEvent returns, plus tests for the file-input and
-  disabled-button wiring.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* chore(frontend): rebuild dist/main.js after rebase on main
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - **frontend**: Eagerly fetch card subtitles (JTN-487)
   ([#78](https://github.com/jtn0123/VoltTracker/pull/78),
   [`48e34ee`](https://github.com/jtn0123/VoltTracker/commit/48e34ee594532b44b8c9453b3c3f2fb66cfee8f5))
-
-* fix(frontend): eagerly fetch card subtitles so they don't stay on "Loading..." (JTN-487)
-
-The top-of-page summary card subtitles `#soc-count` ("Avg SOC Floor") and `#charging-sessions`
-  ("Total kWh Charged") were populated only by `loadSocAnalysis()` in `battery.ts` and
-  `loadChargingSummary()` in `charging.ts` respectively. Both live in lazy-loaded modules behind the
-  IntersectionObserver in `setupSectionObservers`, so a user who lands on the dashboard and never
-  scrolls far enough to trigger the observers sees both subtitles stuck on the literal placeholder
-  text "Loading..." indefinitely.
-
-Add a small `loadCardSubtitles()` helper in `summary.ts` that hits both `/api/soc/analysis` and
-  `/api/charging/summary` and populates only the subtitle text (not the heavy work — histogram,
-  charging table, and cost comparison stay lazy). Call it from the critical-path
-  `Promise.allSettled` block in `main.ts`'s `DOMContentLoaded` handler alongside `loadSummary` and
-  `loadStatus`. Both calls use `useCache: true`, so when the lazy battery/charging modules
-  eventually call the same endpoints they hit the cache instead of firing a second request.
-
-The helper uses `Promise.allSettled` internally and sets the subtitles to an empty-state string on
-  failure, so the cards never remain on the placeholder text — even if one or both API calls error
-  out.
-
-Tests: five new vitest cases in `summary.test.ts` covering the happy path, the no-data path, a mixed
-  success/error path, a fully-rejected path, and a missing-DOM safety case. All 217 frontend tests
-  and 2134 backend tests still pass.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* style(summary): prefer optional chain for subtitle data guards (JTN-487)
-
-SonarCloud flagged two typescript:S6582 issues in the new `updateSocCountSubtitle` and
-  `updateChargingSessionsSubtitle` helpers introduced in the previous commit. `data &&
-  data.average_soc != null` and `data && data.total_kwh` both read cleaner as `data?.average_soc`
-  and `data?.total_kwh`.
-
-* style(summary): flatten subtitle conditionals to silence S7735 (JTN-487)
-
-Sonar's typescript:S7735 ("Unexpected negated condition") flagged `updateSocCountSubtitle` because
-  the if-branch used `!= null` and the else-branch held the empty-state fallback. Collapse both
-  subtitle updaters to ternaries so the positive/non-negated side holds the preferred branch.
-  Behaviour is unchanged.
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - **frontend**: Key dashboard lazy-load observer on #soc-section (JTN-483)
   ([#76](https://github.com/jtn0123/VoltTracker/pull/76),
   [`64fec61`](https://github.com/jtn0123/VoltTracker/commit/64fec61d4eb0540f996f530122065eb8169bcca4))
 
-* fix(frontend): key dashboard lazy-load observer on #soc-section (JTN-483)
-
-The IntersectionObserver in setupSectionObservers() was keyed on the element id `battery-section`,
-  but that id does not exist in the template — the actual element is `#battery-health-section` (and
-  `#battery-cells-section`), and both start as `display:none` until data arrives. Because the
-  observer target did not exist, loadBatteryHealth, loadBatteryCells, and loadSocAnalysis were never
-  called from the observer on the dashboard. The idle-load fallback did not cover for it either: the
-  check was `!battery-section && !charging-section`, so the presence of `#charging-section` silently
-  short-circuited the whole fallback.
-
-Symptoms on `/` with data present: * "Avg SOC Floor" card subtitle (#soc-count) stayed on
-  "Loading..." * "SOC Floor Analysis" values stayed as "--" * SOC distribution histogram never
-  rendered * Battery health / cell voltages never displayed
-
-Fix: * Key the battery/SOC lazy loader on `soc-section`, which is always present in the DOM and
-  always visible (no display:none), so the IntersectionObserver actually fires. We intentionally
-  don't key on `battery-health-section` because it is display:none initially — IntersectionObserver
-  never triggers on a display:none element, so that would reproduce the bug in a new way. * Split
-  the idle-load fallback into independent battery / charging checks so one present section cannot
-  suppress the other's fallback. * Export setupSectionObservers and a LAZY_SECTION_IDS constant so
-  the behavior can be unit tested. * Add vitest regression tests in src/__tests__/main.test.ts that:
-  - Pin the expected observer ids (and assert `battery-section` is not one of them). - Verify
-  #soc-section gets observed when present. - Trigger the observer callback and assert
-  loadBatteryHealth, loadBatteryCells, and loadSocAnalysis all fire. - Assert the legacy
-  `battery-section` id (and the display:none `battery-health-section`) is NOT observed.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* test(frontend): use vi.waitFor for observer async flush (CodeRabbit)
-
-Replace the brittle `await new Promise((r) => setTimeout(r, 0))` pair with `vi.waitFor` in the
-  JTN-483 observer trigger test. The original double microtask flush happened to work but would
-  break if another async layer were added to the lazy-load chain. Also add docstrings to
-  `installMockObserver` and its `trigger` helper.
-
-Addresses CodeRabbit review on PR #76.
-
-* chore(frontend): rebuild dist/main.js after rebase on main
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - **jobs**: Repair latent ImportError in weather_jobs.fetch_weather_for_trip
   ([#67](https://github.com/jtn0123/VoltTracker/pull/67),
   [`856a247`](https://github.com/jtn0123/VoltTracker/commit/856a247889eb26fc26a3d886b32fd7e503a264ed))
-
-* fix(jobs): use real weather utils instead of nonexistent service module
-
-receiver/jobs/weather_jobs.py imported `from services.weather_service import
-  fetch_and_store_weather` inside fetch_weather_for_trip(). receiver/services/weather_service.py
-  never existed in the codebase — only weather_analytics_service.py does — so every code path that
-  called fetch_weather_for_trip, batch_fetch_weather, or batch_fetch_weather_and_elevation would
-  have raised ImportError at runtime.
-
-The bug was hidden because tests/test_weather_jobs.py was patching sys.modules with a MagicMock and
-  reloading the module before each test, so pytest never exercised the real import path.
-
-Fix: - Define _fetch_weather_for_trip_data() inline in weather_jobs.py. It pulls the trip's first
-  GPS-bearing telemetry point, calls utils.weather.get_weather_for_location, and persists the
-  weather_temp_f / precipitation_in / wind_mph / conditions columns onto the trip — matching how
-  services.trip_service already enriches trips synchronously. - Move
-  services.elevation_service.fetch_and_update_elevations and utils.weather.get_weather_for_location
-  to module-level imports. The elevation module already exists and is the same one trip_service
-  imports today. - Drop the sys.modules / importlib.reload workaround from
-  tests/test_weather_jobs.py. Tests now patch the names re-exported into jobs.weather_jobs directly.
-  - Add 3 new tests for _fetch_weather_for_trip_data covering the no-GPS, API-returned-None, and
-  successful-persistence paths so the code under the previous mock is no longer untested.
-
-11 → 14 weather_jobs tests, all passing.
-
-Closes JTN-453
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix: pin Flask-HTTPAuth to 4.8.1 (5.1.0 doesn't exist on PyPI)
-
-Flask-HTTPAuth==5.1.0 was pinned but no such version was ever published to PyPI — the current latest
-  is 4.8.1. A clean `pip install -r receiver/requirements.txt` failed with:
-
-ERROR: Could not find a version that satisfies the requirement
-
-Flask-HTTPAuth==5.1.0 (from versions: 1.0.0, ..., 4.7.0, 4.8.0, 4.8.1)
-
-This blocked fresh environment setup, CI builds on cold caches, and Docker rebuilds. The code only
-  uses HTTPBasicAuth, which has been stable in 4.x.
-
-Closes JTN-402
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - **obd**: Correct session status, strip ELM noise, poll HV pack, speed initial connect
   ([#105](https://github.com/jtn0123/VoltTracker/pull/105),
   [`861819c`](https://github.com/jtn0123/VoltTracker/commit/861819c8c8ee1ca5076c9c330bd64fd4207109f5))
 
-Four fixes found by digging into a day of on-device session logs:
-
-1. Sessions that never connected were saved as status="complete". finishStatusFor() treated
-  "complete" as the catch-all, so a session torn down while still "connecting" (e.g. the user
-  retried before the link came up) was recorded complete. It now only returns "complete" for states
-  that actually reached the adapter; everything else is "disconnected".
-
-2. supported_pids stored raw ELM noise. initializeElm327() saved the 0100 response via summarize(),
-  which keeps the "SEARCHING..." protocol auto-detect token the ELM glues onto the first 4100 frame.
-  New ObdProtocol.cleanSupportedPids() strips it.
-
-3. power_kw / battery_temp were always NULL in drive sessions. The live poll (readObdSample) only
-  sent standard mode-01 PIDs; the Volt HV mode-22 PIDs were only ever sent by the diagnostic scan.
-  The live poll now probes HV pack voltage/current (222429/222414) and battery temp (22434F) via
-  ATSH headers, restoring the functional header afterward, and derives pack power with the new
-  ObdProtocol.parsePackPowerKw().
-
-4. The initial connect reused the mid-session reconnect backoff and the "Adapter link dropped"
-  wording, which made no sense before a link ever existed. runBluetoothLoop now tracks
-  everConnected: a never-yet -connected retry uses the quicker initialConnectBackoffMs() and a
-  "Couldn't reach <adapter>" message.
-
-Adds 8 unit tests; full suite is 127 tests, all passing. Decode helpers are verified against real
-  capture frames from session 15.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 - **receiver**: Move APP_VERSION to dedicated module (JTN-482)
   ([#73](https://github.com/jtn0123/VoltTracker/pull/73),
   [`e225060`](https://github.com/jtn0123/VoltTracker/commit/e2250601e88f522fefdd43f0a5dc2df53d1befaf))
-
-Dashboard and /health request handlers did `from app import APP_VERSION` inside the handler body.
-  When the server is started via `python receiver/app.py` (which is what `docker-compose.dev.yml`
-  does), the entrypoint is loaded as `__main__`, so that late import forced Python to load `app.py`
-  a second time under the name `app` and re-ran `create_app()`. The second `create_app()` hit
-  `@trips_bp.after_request` on an already-registered blueprint and raised:
-
-AssertionError: The setup method 'after_request' can no longer be called on the blueprint 'trips'.
-
-Fix: move `APP_VERSION` (and its `_read_version()` helper that reads `frontend/package.json`) into a
-  tiny new `receiver/version.py` module. Both `app.py` and the route handlers now import from
-  `version`, which is safe to pull in under any entrypoint name. `app.APP_VERSION` is preserved as a
-  re-export for backward compatibility with anything already referencing it.
-
-Also adds `tests/test_app_version_import.py`, which: - asserts that dashboard/system routes do not
-  contain the `from app import APP_VERSION` anti-pattern, - hits `/` and `/health` through the test
-  client while tracking calls to `create_app()`, and - verifies that importing `version` on its own
-  has no Flask side effects.
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - **socketio**: Disable manage_session to stop POST 400 flood (JTN-488)
   ([#80](https://github.com/jtn0123/VoltTracker/pull/80),
   [`ed761b5`](https://github.com/jtn0123/VoltTracker/commit/ed761b5787f28fc1478d8607c6b1cc51c5e2de34))
 
-Flask-SocketIO 5.3.6's default manage_session=True runs `ctx.session = session_obj` inside the
-  Socket.IO message handler, but Flask 3.1+ made `RequestContext.session` read-only. The assignment
-  raised `AttributeError: property 'session' of 'RequestContext' object has no setter` on every
-  client connect, so the namespace connect handler never ran. Each browser tab then cycled handshake
-  + reconnect forever, producing the 30+ `[WS] Connection error` warnings/minute and 25+ `POST
-  /socket.io/?EIO=4&transport=polling&sid=...` -> 400 responses the dogfood report captured.
-
-This change passes `manage_session=False` to `SocketIO()`. No handler in this codebase reads
-  `flask.session` from inside a Socket.IO callback (verified with grep), so disabling the library's
-  managed-session path is safe, surgical, and avoids a full Flask-SocketIO upgrade.
-
-On the client side, `live.ts` now throttles the `connect_error` warning to at most one per 60s
-  window and prints a single "Recovered after N suppressed" info line once the socket reconnects --
-  so even if a future regression re-introduces the flapping, the console stays readable.
-
-Tests: - `tests/test_socketio_handshake.py`: new pytest suite that hits the `/socket.io/` polling
-  endpoint through the Flask test client, asserts the GET handshake is 200, the auth POST packet is
-  accepted, and that no `property 'session'` AttributeError is logged by `engineio.server`. Also
-  guards that `SocketIO.manage_session` stays False. Verified the new tests fail without the server
-  fix applied. - `receiver/frontend/src/__tests__/live.test.ts`: new vitest cases using fake timers
-  to simulate 50 `connect_error` events in 30s and assert only one `console.warn` is emitted per
-  minute, plus a recovery test that checks the suppression counter resets on a successful `connect`.
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-### Chores
+### 🔷 Changed
 
 - Enforce LF line endings for shell scripts
   ([`d1d6bd2`](https://github.com/jtn0123/VoltTracker/commit/d1d6bd2907218000c2ddadedd2819391ebf6a31c))
-
-Add .gitattributes so *.sh files are always checked out with LF. On Windows (core.autocrlf=true)
-  they were converted to CRLF, which broke the shebang inside the Linux Docker containers and
-  crash-looped the receiver and worker services.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - Execute all 30 items from round-2 grade-codebase audit
   ([#118](https://github.com/jtn0123/VoltTracker/pull/118),
   [`b3f2622`](https://github.com/jtn0123/VoltTracker/commit/b3f2622ed9eee401b0ede68697fbfa2bcc31c0eb))
 
-* chore: execute all 30 items from round-2 grade-codebase audit
-
-Round-2 follow-up to PR #107. Addresses every item in the regraded grade-codebase report, lifting
-  the overall grade from B+ to A− territory on every category. One mega PR by user request.
-
-## Architecture (A1, A2, A3) - A1: Extract VehicleStateClassifier into
-  com.volttracker.obdpoc.classify with state/confidence/reasons. Engine + JS now read from one
-  source. - A2: Trim MainActivity 477→398 LOC by extracting WebViewBootstrap,
-  BroadcastReceiverGroup, MainActivityUtils. - A3: New ADRs 0002 (layering rule) and 0003 (JSONL as
-  black-box debug).
-
-## Backend (B1, B2, B3, B4) - B1: Split ObdLocalStore 757→481 LOC. Extracted ObdStoreSnapshots
-  (write-side payload construction) and ObdStatementCache (prepared statements). - B2: Trip +
-  ChargeSession materializers behind BuildFlags.MATERIALIZE_SESSIONS. Conservative heuristics
-  (Haversine for trips, voltage+speed for charge). Persists to existing trip_segments /
-  charge_sessions tables on session close. - B3: New OBDLog.event(tag, event, fields) for structured
-  Bluetooth IO logs. - B4: SessionRecorder split into telemetryExecutor (silent) + lifecycleExecutor
-  (failures Log.e + persist status_events row).
-
-## Frontend (C1-C6) - C1: :focus-visible across base.css — keyboard focus now visible. - C2:
-  AbortController on the two leaky listeners in core.js (renderTrips, setHistory). - C3: aria-live
-  regions on live tile clusters + .visually-hidden utility + screen-reader-only stale marker. - C4:
-  withBusy(button, fn) helper applied at 5 bridge action sites. - C5: CSS tokens for spacing
-  (--space-xs..xl) + --radius-* + --map-height. - C6: OSM basemap fallback after 5 tile errors.
-
-## Testing (D1-D6) - D1: ObdPollingEngineTest — 6 tests covering connect/reconnect/drop/init
-  failure/stop/demo loop with minimal test seams in engine + ElmConnection. - D2:
-  SessionRecorderTest — 7 tests for executor + lock contract + shutdown drain + post-close drop. -
-  D3: BackupRoundTripTest — 7 Robolectric tests for full backup→restore cycle including
-  foreign-schema rejection. - D4: JaCoCo floors ratcheted: project 43→71% LINE, data/ 70→89% LINE
-  (actual − 2 pts). - D5: dashboard-tests/actions.test.js — 11 tests for bridge dispatch + withBusy
-  guard. - D6: ElmConnection clock injection — no more wall-clock asserts in tests.
-
-## Security (E1, E2) - E1: Explicit PII disclosure dialog before backup share (OBD logs, GPS,
-  adapter MAC, redacted VIN). - E2: CSP violation listener routes to bridge.logClientError.
-
-## Dependencies (F1, F2) - F1: Vitest 1→3 + jsdom 24→25; reporter migrated off deprecated 'basic'. -
-  F2: Gradle version catalog (libs.versions.toml) centralizes deps.
-
-## Performance (G1, G2, G3) - G1: Schema bumped 6→7. Added 4 prune indexes
-  (idx_telemetry_captured_at, idx_location_samples_captured_at, idx_events_occurred_at,
-  idx_pid_observations_observed_at). New QueryPlanIndexTest pins EXPLAIN QUERY PLAN for 13 hot-path
-  queries + VoltTrackerDbMigrationTest covers the upgrade. - G2: telemetry.js speedHistory.shift()
-  rationale documented; while→if. - G3: CI step reports dashboard bundle size in workflow summary.
-
-## Documentation (H1, H2) - H1: CONTRIBUTING.md with the 5 CI gates + dashboard partial workflow +
-  layering rule. - H2: docs/bridge-abi.md enumerates every JS↔Java bridge method.
-
-## DevEx (I1, I2) - I1: lefthook.yml for fast local spotless checks. - I2: gradle-versions-plugin
-  for transitive dependency visibility (./gradlew dependencyUpdates).
-
-## Quality gates - ./gradlew :app:testDebugUnitTest — 370 @Test methods, all green - ./gradlew
-  :app:spotlessCheck — clean - ./gradlew :app:lintDebug — no new findings - ./gradlew
-  :app:jacocoTestCoverageVerification — passes new floors - ./gradlew generateDashboardHtml — clean
-  - cd dashboard-tests && npm test — 18/18 green (was 7)
-
-## Stats - 72 files changed: +6,313 / −1,416 - 30 new production files across classify/,
-  materialize/, store helpers, bootstrap helpers, build flags, and helpers. - 8 new test files
-  (Java) + 1 new test file (Vitest). - 0 schema-breaking changes (v6→v7 is additive: 4 indexes).
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* fix: address CodeRabbit review feedback on PR #118
-
-16 actionable comments, all addressed.
-
-## Major
-
-- actions.js (withBusy): execute fn() even when button is null/undefined so programmatic callers
-  (future keyboard shortcuts, tests) don't silently no-op. - ClassifierResult:
-  Objects.requireNonNull on state + confidence so invalid results fail at construction, not deep in
-  JSON serialisation. - SessionRecorder: drain telemetryExecutor before finalize/materialize via
-  awaitTelemetryDrain() — the two executors don't share ordering, so a materializer running before
-  the last telemetry rows land would yield trips missing the final seconds of data. -
-  SessionRecorder: RejectedExecutionException on lifecycleExecutor now falls back to a synchronous
-  in-thread run + persist_failure event, instead of silently dropping the finalize. -
-  WebViewBootstrap: onPageReady gated by a one-shot flag + URL match (onPageFinished can fire
-  multiple times per navigation). - VoltTrackerDbMigrationTest: added a test-only
-  VoltTrackerDb(context, name) constructor so the upgrade test actually opens the seeded v6 file
-  (was opening the default production DB and skipping onUpgrade entirely). Also added a getVersion()
-  assertion to prove the upgrade ran.
-
-## Minor
-
-- CONTRIBUTING.md: test count 172 → 370+, dashboard 7 → 18. - base.css (.visually-hidden):
-  deprecated clip: rect(...) → clip-path: inset(50%) with -webkit-clip-path fallback. -
-  MainActivityUtils.coalesce: returns "" when third arg is whitespace-only (was returning the blank
-  string). - ChargeSessionMaterializer.isPluggedSample: speedKph == null → return false
-  (conservative). Documented in Javadoc; new test asserts no charge session is inferred from
-  null-speed runs. - OBDLog.event: guard null event against NPE. - OBDLog.format: escape \\ first,
-  then \n / \r / " — single-line and grep-safe even with multi-line or backslash-containing input.
-  New tests pin each escape path.
-
-## Trivial
-
-- VehicleState.asPayloadKey: explicit UNKNOWN case, no default branch — adding a new enum constant
-  now fails compilation until handled. - MaterializerData: documented mutability contract (returned
-  lists are read-only by convention; not enforced to avoid wrapping cost on the IO path). -
-  PidObservation: documented null-handling contract — wire strings normalised to "", interpretive
-  fields (parserKey, parsedNumeric) intentionally nullable because null carries semantic meaning. -
-  ObdPollingEngineTest: AtomicInteger → AtomicLong for sessionId (no cast, no truncation risk).
-
-## Gates (all green)
-
-- ./gradlew :app:testDebugUnitTest — 375 @Test methods, 0 failures - ./gradlew :app:spotlessCheck —
-  clean - ./gradlew :app:lintDebug — no new findings - ./gradlew :app:jacocoTestCoverageVerification
-  — passes 71%/89% floors - ./gradlew generateDashboardHtml — clean - cd dashboard-tests && npm test
-  — 18/18 green
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 - Execute all 38 items from grade-codebase audit
   ([#107](https://github.com/jtn0123/VoltTracker/pull/107),
   [`0f9e112`](https://github.com/jtn0123/VoltTracker/commit/0f9e11242d006e01538e3c801bde8616c7a7c760))
-
-* chore: execute all 38 items from grade-codebase audit
-
-Bulk follow-through on the /grade-codebase report covering architecture, backend quality, frontend,
-  testing, security, dependencies, performance, docs, and developer experience. 33 items executed, 4
-  marked as covered by another item, 1 found already done. See .claude/grade-report.md (gitignored)
-  for the per-item record.
-
-Highlights ----------
-
-Backend / data layer - B1: VoltBridge.clearStoredData runs on the background executor instead of the
-  UI thread (was a latent ANR — 11 DELETEs per call). - B2 + B6: ~25 sites that swallowed
-  RuntimeException with no log now write to Log.w and (where applicable) the JSONL event stream, so
-  production failures surface in logcat instead of just disappearing. - B3: New
-  ObdLocalStore.finalizeSession() wraps the session-end UPDATE and the adapter-summary INSERT/UPSERT
-  in a single transaction so a crash between them can't leave the session ended without its summary
-  (or vice versa). SessionRecorder.closeSession() now uses it. - B4: ObdStoreSupport gained
-  requireKnownTable / requireSimpleIdentifier guards; VoltTrackerDb exposes KNOWN_TABLES allow-list.
-  SQL string concat for table/column names now fails fast on hostile input. - B5 (= E2): VoltBridge
-  gained a safe(str, maxLen) helper applied to every @JavascriptInterface string argument;
-  logClientError caps detail to 4 KB.
-
-Architecture / refactor - A1 + H1: Added "Layering Rule" section to mobile-architecture-roadmap.md
-  and "Codebase Map" section to mobile/android/README.md so the UI->service->engine->data direction
-  is documented, not just conventional. - A2: Split ObdPollingEngine (587 LOC) — demo stream
-  extracted to DemoPollingLoop, diagnostic-scan path extracted to DiagnosticScanRunner. Engine is
-  now 484 LOC. Also extracted ObdStoreMaintenance (clearAllData, checkpoint, getDatabaseFile,
-  retention prune) from ObdLocalStore. - A3: New ADR at
-  mobile/android/docs/adr/0001-webview-dashboard.md documenting the WebView + JS-bridge choice vs
-  Compose, with revisit triggers.
-
-Frontend (WebView dashboard) - C3: All 5 dashboard JS files wrapped in IIFEs; shared state and
-  helpers namespaced under window.VoltDashboard. window.VoltTrackerNative ABI preserved exactly. -
-  C1 + G3: telemetry.js render burst (4 functions per sample + canvas redraw) is now coalesced
-  through requestAnimationFrame; window resize debounced 100 ms. - C2: AbortController-based
-  listener discipline in actions.js (no more leaked listeners on re-bootstrap);
-  VoltDashboard.actions.resetListeners() tears them all down at once. - C4: innerHTML +=
-  template-literal row builders replaced with document.createElement + textContent (trips, sessions,
-  insights, DTC list, map session list, etc). - C5: aria-hidden on the decorative speed-trace
-  canvas, aria-label on the Preview-sandbox <details>. - C6: .stale CSS class lands on live tiles
-  when no sample arrives for 3s; driven by the C1 rAF loop and a 1 Hz interval so the indicator
-  appears even with no incoming telemetry.
-
-Tests - D1: ObdStoreTripsDbTest (6 tests) + ObdStoreReportsDbTest (5 tests), Robolectric, covering
-  trip aggregation, distance, multi-session, storage summary, insights. - D2: VoltBridgeTest (10
-  tests) pins the JS-bridge ABI by reflection so a rename can't silently break the dashboard; covers
-  oversized + null inputs. - D3: ObdElmDecodeBackoffTest (10 tests) pins the reconnect-backoff math
-  — monotonic, capped at 30s (reconnect) / 3s (initial-connect), with documented edge-case behavior.
-  - D5: New mobile/android/dashboard-tests/ suite (Vitest + jsdom; 7 tests) for the dashboard JS,
-  wired into CI as a parallel job. Smokes the ABI shape, the state shape, and the C6 stale
-  indicator. - B3 + G1 added 6 more Robolectric tests on ObdLocalStoreDbTest covering
-  finalizeSession atomicity and retention pruning.
-
-Security - E1: Content-Security-Policy meta added to dashboard index.template.html — self + CARTO
-  CDN for tiles only; no remote scripts. - E3: PII confirmation dialog before BackupController hands
-  the database to the Android share sheet.
-
-Performance - G1: pruneRawDataOlderThan(days) on ObdLocalStore, runs on cold start via
-  MainActivity's background executor with a 60-day default. Sessions and derived rows are preserved;
-  only telemetry_samples / location_samples / status_events / pid_observations are trimmed. - G2:
-  telemetry INSERT uses a compiled SQLiteStatement (one parse, many binds) instead of building a
-  ContentValues per sample. Thread-safety contract documented on the field.
-
-Dependencies / tooling - F1: .github/dependabot.yml now watches the gradle ecosystem at
-  /mobile/android (was watching pip/npm/docker — none of which are in use post-Flask deprecation). -
-  F2: Deleted .pre-commit-config.yaml + .pre-commit-hooks-readme.md (both configured for the
-  deprecated Flask app); deleted .env, .env.example, .vscode/settings.json (also Flask-era). - F3:
-  org.json bumped to 20240303. - F4 (= I2): Android Lint baseline captured at app/lint-baseline.xml;
-  abortOnError true + checkDependencies true; new warnings will fail CI. - I1: Spotless plugin
-  configured for Java (google-java-format AOSP) + dashboard JS/CSS/HTML (Prettier). spotlessApply
-  has been run across the tree. - D4: JaCoCo coverage report + verification gate; data/ floor 70%
-  (actual 76%), project floor 43% (actual 48%); HTML report uploaded as CI artifact. Floors are
-  regression baselines, not goals — comment in jacoco.gradle says so. - CI workflow runs unit tests
-  + Spotless + Android Lint + JaCoCo report + coverage verify + dashboard-tests (Vitest, Node 20) on
-  every push/PR.
-
-Docs / cleanup - H2: JavaDoc on ObdPollingEngine.runBluetoothLoop describing the never-connected vs
-  mid-session-drop state machine; JavaDoc on ObdStoreSupport.distanceMeters describing the haversine
-  assumption. - H3 + I5: Deleted .env / .env.example / .pre-commit-config.yaml /
-  .pre-commit-hooks-readme.md / .vscode/ — every Flask-era artifact at the repo root. - Added
-  .claude/ to .gitignore (tooling artifact directory).
-
-Gates ----- All of the following pass:
-
-- ./gradlew :app:testDebugUnitTest — 172 tests, 0 failures (baseline was 159; +13 from new tests) -
-  ./gradlew :app:lintDebug — clean vs lint-baseline.xml - ./gradlew :app:spotlessCheck — clean -
-  ./gradlew :app:jacocoTestCoverageVerification — thresholds met - ./gradlew :app:assembleDebug —
-  APK builds - npm test (dashboard-tests) — 7/7
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* fix: address CodeRabbit review feedback on PR #107
-
-- telemetry.js: drop duplicate renderOperationalState/updateValidationUi calls from flushRender;
-  updateLiveUi already invokes them. - partials/map.html: add missing space after </strong> in the
-  empty-state copy ("No GPS route yet Start a logged drive..."). - partials/trips.html: escape `>`
-  as `&gt;` in tripDetailTitle to satisfy HTMLHint spec-char-escape. - MainActivity: log
-  redactAddress(cleanAddress) instead of the raw MAC. - VoltBridge: apply safe(...) to cached
-  address/name in connectLast and scanLast — they were the only entry points that still skipped it.
-  - dashboard-tests/README.md: language tag on the fenced npm block. -
-  dashboard-tests/setup/load-dashboard.js: track setInterval/setTimeout IDs registered during
-  loadDashboard() and clear them on the next call so the C6 stale-indicator poll doesn't leak across
-  test reloads. - ADR 0001: replace "no JS test framework today" with a description of the Vitest +
-  jsdom smoke suite that landed in this same change set. - mobile-architecture-roadmap.md: language
-  tag on the layering diagram fenced block for markdownlint MD040. - .github/dependabot.yml: add npm
-  ecosystem entry for the new /mobile/android/dashboard-tests folder so its package.json gets
-  automated updates.
-
-Gates: testDebugUnitTest 172 pass, lintDebug clean, spotlessCheck clean, generateDashboardHtml
-  clean, Vitest 7/7.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - Execute top-9 from round-4 grade-codebase audit + B6 tiered polling
   ([#125](https://github.com/jtn0123/VoltTracker/pull/125),
   [`9bda397`](https://github.com/jtn0123/VoltTracker/commit/9bda39782f00a8fbae0de43b29786fd586d73b2f))
 
-* chore: execute top-9 from round-4 grade-codebase audit + B6 tiered polling
-
-Round-4 audit (.claude/grade-report.md) re-graded the codebase from B+ with no code changes, then
-  this commit ships the top-9 items plus B6.
-
-H2 — Refresh docs/mobile-architecture-roadmap.md (schema v4 → v7, materializers and classifier and
-  DTC scanning moved from 'In progress' to 'Completed').
-
-E1 + B5 (combined) — Replace MainActivity.callDashboard(String script) with callDashboard(String
-  functionName, String jsonPayload). Function names come from a closed whitelist (updateTelemetry,
-  setStatus, setDevices, setHistory, setStorage, setAppState). Payload is wrapped via
-  JSONObject.quote, so the WebView is structurally incapable of running arbitrary JS even if a
-  future caller passes attacker-controlled input. Same edit captures the WebView reference at call
-  time and re-checks it inside the runOnUiThread runnable, closing a latent NPE on Activity
-  destruction mid-publish.
-
-B3 — Bound SessionRecorder executor queues. New custom DiscardOldestUnlessShutdownPolicy gives
-  DiscardOldestPolicy semantics during normal backpressure (drop oldest telemetry rather than block
-  the poll thread or grow the queue without bound) and AbortPolicy semantics post-shutdown so
-  awaitTelemetryDrain's RejectedExecutionException catch handles cleanly — otherwise the 2s marker
-  timeout races shutdown's 2s awaitTermination window and finalize gets skipped. Lifecycle executor
-  uses plain AbortPolicy (the existing inline-run fallback at lifecycleAsync handles overflow).
-
-B1 — Round-3 audit was a false positive: the parser already has length checks in mode01Bytes,
-  voltByteValue, voltWordValue, mode22Payload. Added a comprehensive regression matrix (5 new tests)
-  so the existing defenses cannot silently regress: every public parser × ~20 bad inputs (null,
-  empty, whitespace, partial hex, ELM error strings), plus pack-power and DTC parsers.
-
-B2 — Wrap each VoltTrackerDb.onUpgrade step in a transaction via the new runMigrationStep helper.
-  Each version's block (e.g. 'if (oldVersion < 5)') runs inside
-  beginTransaction/setTransactionSuccessful/endTransaction with logged events on
-  start/commit/failure. Added failingMigrationStep_rollsBackPartialChanges test that injects a
-  malformed ALTER and asserts the prior ALTER in the same step rolls back too.
-
-C1 — New bindListenerGuarded(id, event, handler, opts) helper in core.js. Migrated 11 direct
-  el(id).addEventListener sites in actions.js. Missing IDs now log a warn (piped through
-  logClientError) and skip the binding instead of throwing TypeError mid-bindListeners and leaving
-  every later binding unwired.
-
-D4 — Vitest coverage gate infrastructure: @vitest/coverage-v8, npm test:coverage script,
-  vitest.config.js coverage block with all:true so source files appear in the report, CI step that
-  runs the gate. Thresholds at 0 with documented limitation: dashboard JS is loaded via new
-  Function() not import, so v8 can't instrument the executed code. The gate is in place; follow-up
-  to switch the loader to ESM will let us ratchet thresholds upward.
-
-I1 — ESLint flat config at mobile/android/eslint.config.js (placed above both app/ and
-  dashboard-tests/ since ESLint 9 won't match files outside the config's directory). lefthook
-  pre-commit hook + new CI step both run 'npm --prefix mobile/android/dashboard-tests run lint'.
-  Fixed one real error (missing requestAnimationFrame global); 2 pre-existing warnings surface but
-  don't fail.
-
-B6 — Tiered/staggered PID polling.
-
-New PidSchedule.java declares three tiers with phase offsets: * Tier 1 (period 1, ~1.7s) — speed,
-  RPM, throttle, load, pack V, pack I * Tier 2 (period 4, ~7s) — ATRV adapter voltage, SOC
-  (staggered) * Tier 3 (period 10, ~17s) — coolant temp, HV battery temp (staggered)
-
-ObdPollingEngine.readObdSample now consults PidSchedule.dueOnCycle(cycleNum) each iteration. Skipped
-  PIDs use carry-forward last-known raw responses so every sample still contains every key (no
-  dashboard flicker). Header switches are grouped by header — ATSH7E4 only fires on cycles where
-  battery temp is actually due (~once every 10 cycles, was every cycle).
-
-Per-cycle transactions drop from 13 baseline to 8-11 (~30% average savings), and drive-critical
-  values stop being bound by the time it takes to also re-read coolant/battery-temp/SOC. Additive
-  *StaleMs companion fields on the sample (voltageStaleMs, socStaleMs, coolantCStaleMs,
-  batteryTempStaleMs) let a future dashboard tile surface 'value last updated N seconds ago'.
-
-Cycle 0 polls every spec regardless of phase so the dashboard has a complete baseline within one
-  cycle. PidScheduleTest (9 cases) pins the cadence: every tier hits exactly the declared count over
-  40 cycles, no two same-tier PIDs land on the same cycle, invalid spec construction throws.
-
-C3 (arrow-key tab nav) was dropped — phone-only app, no keyboard. B7 (Mode-01 multi-PID batching for
-  ~2.5 Hz drive-critical refresh) added to the report as the next perf lever.
-
-Verification: 266 Java unit tests pass (+9 from round-3 baseline of 257); spotlessCheck, lintDebug,
-  jacocoTestCoverageVerification all green; dashboard ESLint 0 errors; Vitest 18/18 pass.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-* fix: address CodeRabbit review feedback on round-4 PR
-
-MainActivity.callDashboard — strengthen the tear-down guard inside the runOnUiThread runnable. The
-  identity check (wv == this.webView) only catches view replacement; Activity destruction leaves
-  this.webView unchanged so the deferred runnable could still hit a torn-down view. Add
-  isFinishing(), isDestroyed(), and re-check pageReady before evaluateJavascript.
-
-SessionRecorder.awaitTelemetryDrain — when DiscardOldestUnlessShutdownPolicy throws
-  RejectedExecutionException post-shutdown, that signals OUR marker won't run; it does NOT signal
-  that previously-queued telemetry tasks have completed. ThreadPoolExecutor.shutdown() is orderly:
-  in-flight and queued tasks continue running until the worker drains them. Without waiting,
-  finalize/materialize could read mid-drain state. Wait on telemetryExecutor.awaitTermination(2s) in
-  the catch (returns immediately if already terminated).
-
-mobile-architecture-roadmap.md — B6 is implemented in this PR, so move it from 'Remaining' / 'Next'
-  / 'Still open' into the 'Completed' section with a brief summary of what shipped. Replace the
-  freed slots with B7 (Mode-01 multi-PID batching) which is the actual outstanding work.
-
-Verification: 257 unit tests pass, spotlessCheck/lintDebug/jacoco verify all green.
-
----------
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
 - **ci**: Fix pre-existing infra failures hitting every PR
   ([#71](https://github.com/jtn0123/VoltTracker/pull/71),
   [`f5aa037`](https://github.com/jtn0123/VoltTracker/commit/f5aa037158f5ee812f54febce4f939a6daa0ec2e))
-
-* chore(ci): fix pre-existing infra failures hitting every PR
-
-Three unrelated failures were appearing on every recent PR's check matrix. None of them were caused
-  by the PR diffs themselves — they were all main-branch infrastructure issues. Fixing them in one
-  cleanup pass.
-
-1. e2e + frontend: vite-plugin-istanbul ^7.2.1 → ^8.0.0
-
-`npm ci` failed in both the docker build (e2e job) and the frontend job with ERESOLVE:
-  vite-plugin-istanbul@7.2.1 has peer `vite ">=4 <=7"` but the project moved to vite@8.0.7. Bumping
-  vite-plugin-istanbul to 8.0.0 resolves the conflict — its peer is now `vite >=4` with no upper
-  bound. Verified locally: `npm ci` succeeds, `npm run build` produces clean dist, all 80 frontend
-  tests pass.
-
-Build artifacts (receiver/static/js/dist/*) intentionally NOT regenerated in this commit — they're
-  committed in the INSTRUMENT_COVERAGE=true variant and shouldn't be flipped here.
-
-2. CodeQL Analyze duplicates: delete .github/workflows/codeql.yml
-
-The repo has GitHub's "default setup" code scanning enabled (configured for
-  actions/javascript/javascript-typescript/python/ typescript per the code-scanning/default-setup
-  API). The custom codeql.yml workflow analyzed an overlapping subset (python +
-  javascript-typescript), creating two parallel "Analyze (python)" and "Analyze
-  (javascript-typescript)" check runs on every PR — one from each setup. The default setup variant
-  succeeded, the custom workflow's autobuild kept failing.
-
-Default setup is the recommended path for repos that don't need custom queries, so dropping the
-  custom workflow eliminates the duplicate failures cleanly.
-
-3. security/pip-audit: TMPDIR fix
-
-pip-audit was failing with "Couldn't execute in a temporary directory under /tmp. This is sometimes
-  caused by a noexec mount flag." The self-hosted CI runner has /tmp mounted noexec, but
-  $RUNNER_TEMP (provided by GitHub on every runner) is writable + executable. Point TMPDIR at a
-  subdir of $RUNNER_TEMP for the pip-audit step only.
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix(docker): bump frontend-builder Node from 20.18 to 20.19
-
-The vite 8 → rolldown migration introduced @rolldown/binding-linux-x64-gnu as an optional native
-  dependency with engines `^20.19.0 || >=22.12.0`. node:20.18-slim is one minor older, so npm ci
-  silently treats the linux-x64-gnu binary as incompatible and skips it. The build then fails with
-  `Cannot find module '@rolldown/binding-linux-x64-gnu'` when vite tries to load rolldown.
-
-Bumping to node:20.19-slim is the smallest possible upgrade — same major LTS line, just enough to
-  satisfy the engines constraint and let npm ci install the rolldown native binding for the
-  linux/amd64 docker target.
-
-* ci: migrate all jobs to ubuntu-latest, fold sonarqube into SonarCloud
-
-The repo has been routing 9 CI jobs (test matrix x4, frontend, lint, security, type-check, mutmut,
-  sonarqube) through a single self-hosted runner labeled [self-hosted, ci] / [self-hosted, sonar].
-  With one runner serving everything, the queue degraded to a serial bottleneck (20+ runs deep), and
-  a stuck-runner episode this evening blocked every PR. Time to retire it the same way the InkyPi
-  repo did.
-
-Changes:
-
-- .github/workflows/test.yml — flip 5 jobs from [self-hosted, ci] to ubuntu-latest: test (matrix),
-  frontend, lint, security, type-check. test-postgres was already ubuntu-latest.
-
-- test.yml: in the test job's 3.12 matrix entry, upload coverage.xml as a "coverage-3.12" artifact
-  so the new sonarcloud job can consume it without re-running pytest. Mirrors InkyPi's pattern
-  exactly.
-
-- test.yml: add a new "sonarcloud" job (needs: [test, frontend], runs on ubuntu-latest, uses
-  SonarSource/sonarqube-scan-action@v7) that downloads the coverage artifact, runs frontend coverage
-  inline (vitest is fast), and submits to SonarCloud. SONAR_HOST_URL env var removed — defaults to
-  sonarcloud.io.
-
-- .github/workflows/sonarqube.yml — deleted. Replaced by the sonarcloud job in test.yml. The
-  cross-workflow needs:[] dependency required moving the job into the same file.
-
-- .github/workflows/mutation.yml — flip from [self-hosted, ci] to ubuntu-latest. continue-on-error
-  already set, so any infra flakiness from the runtime change is non-blocking.
-
-- security: revert the TMPDIR=$RUNNER_TEMP/pip-audit-tmp workaround added in the previous commit.
-  That was needed because the self-hosted runner had /tmp mounted noexec; ubuntu-latest /tmp is
-  fine. Step is back to a plain `pip-audit -r receiver/requirements.txt`.
-
-Net effect: every job runs on github-hosted parallel ubuntu, no more queue-of-one, no more
-  stuck-runner outages. The sonar-runner-volttracker host can be decommissioned after this lands.
-
-* fix: SQLAlchemy 2.0.31 (3.13 compat) + SonarCloud project key
-
-Two issues hit when CI ran on the new ubuntu-latest runners:
-
-1. test (3.13) failed at conftest import time:
-
-AssertionError: Class <class 'sqlalchemy.sql.elements.SQLCoreOperations'> directly inherits
-  TypingOnly but has additional attributes {'__firstlineno__', '__static_attributes__'}.
-
-Python 3.13 added __firstlineno__ and __static_attributes__ as automatic class attributes on every
-  class, which breaks SQLAlchemy 2.0.23's TypingOnly assertion. Fixed upstream in SQLAlchemy 2.0.31.
-  Bumping to 2.0.31 (smallest fix; 2.0.49 is current latest if we want to go further later). The
-  3.13 matrix failure cascaded to cancel test (3.10/3.11/3.12), so this also unblocks them.
-
-2. SonarCloud Scan rejected the token with HTTP 403:
-
-ERROR Failed to query JRE metadata: ... HTTP 403 Forbidden. Please check the property sonar.token or
-  environment variable SONAR_TOKEN.
-
-The project's sonar-project.properties was still configured for the old self-hosted SonarQube —
-  sonar.projectKey=VoltTracker (no owner prefix), no sonar.organization. SonarCloud requires the
-  `<owner>_<repo>` key format and an organization key. Updated to match the InkyPi convention:
-
-sonar.projectKey=jtn0123_VoltTracker sonar.organization=jtn0123ismysonar
-
-Also added 3.13 to sonar.python.version to match the CI matrix.
-
-IMPORTANT: This config change alone may not unblock the scan if the GitHub repo's SONAR_TOKEN secret
-  still holds the old self-hosted SonarQube token. The user needs to: 1. Confirm a SonarCloud
-  project exists with key jtn0123_VoltTracker under org jtn0123ismysonar (or create it) 2. Generate
-  a SonarCloud token at sonarcloud.io → My Account → Security 3. Update the GitHub repo's
-  SONAR_TOKEN secret with the new token, and remove the now-obsolete SONAR_HOST_URL secret These
-  steps require user action — not something CI can do for itself. The SonarCloud Scan job will keep
-  failing until then, but it's not a blocker for merge (no required status checks on main).
-
-* fix(docker): add --ignore-scripts to npm ci (sonar:S6505)
-
-SonarCloud flagged the previous `RUN npm ci` line as a security hotspot — *"Omitting
-  --ignore-scripts can lead to the execution of shell scripts. Make sure it is safe here."* The flag
-  landed on this PR's diff because the Node version bump touched this file.
-
-Adding --ignore-scripts is the safer default: it suppresses any postinstall script in transitive
-  dependencies, eliminating that arbitrary-script-execution surface during the docker build.
-
-Verified locally that the frontend's actual deps don't need any install scripts —
-  vite/vitest/eslint/typescript run pure JS, and the rolldown linux native binaries ship as
-  precompiled binaries via npm optionalDependencies (not postinstall). `npm ci --ignore-scripts`
-  followed by `npm run build` produces identical dist output.
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - **deps**: Bump actions/setup-java from 4.8.0 to 5.2.0
   ([#108](https://github.com/jtn0123/VoltTracker/pull/108),
   [`fdc76b8`](https://github.com/jtn0123/VoltTracker/commit/fdc76b85438292de287f50920d05565020d42ae2))
 
-Bumps [actions/setup-java](https://github.com/actions/setup-java) from 4.8.0 to 5.2.0. - [Release
-  notes](https://github.com/actions/setup-java/releases) -
-  [Commits](https://github.com/actions/setup-java/compare/c1e323688fd81a25caa38c78aa6df2d33d3e20d9...be666c2fcd27ec809703dec50e508c2fdc7f6654)
-
---- updated-dependencies: - dependency-name: actions/setup-java dependency-version: 5.2.0
-
-dependency-type: direct:production
-
-update-type: version-update:semver-major ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-
 - **deps**: Bump actions/upload-artifact from 4.6.2 to 7.0.1
   ([#110](https://github.com/jtn0123/VoltTracker/pull/110),
   [`ca6f0fd`](https://github.com/jtn0123/VoltTracker/commit/ca6f0fd08cf41ad95912c3a95a89a24f6fa39d47))
 
-Bumps [actions/upload-artifact](https://github.com/actions/upload-artifact) from 4.6.2 to 7.0.1. -
-  [Release notes](https://github.com/actions/upload-artifact/releases) -
-  [Commits](https://github.com/actions/upload-artifact/compare/ea165f8d65b6e75b540449e92b4886f43607fa02...043fb46d1a93c77aae656e7c1c64a875d1fc6a0a)
-
---- updated-dependencies: - dependency-name: actions/upload-artifact dependency-version: 7.0.1
-
-dependency-type: direct:production
-
-update-type: version-update:semver-major ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-
 - **deps**: Bump androidx.core:core ([#109](https://github.com/jtn0123/VoltTracker/pull/109),
   [`9dd3ca1`](https://github.com/jtn0123/VoltTracker/commit/9dd3ca154a9e6c9d5ace78291c4b5eb33db87c37))
-
-Bumps the androidx group with 1 update in the /mobile/android directory: androidx.core:core.
-
-Updates `androidx.core:core` from 1.13.1 to 1.18.0
-
---- updated-dependencies: - dependency-name: androidx.core:core dependency-version: 1.18.0
-
-dependency-type: direct:production
-
-update-type: version-update:semver-minor
-
-dependency-group: androidx ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
 
 - **deps**: Bump com.diffplug.spotless in /mobile/android
   ([#117](https://github.com/jtn0123/VoltTracker/pull/117),
   [`8359726`](https://github.com/jtn0123/VoltTracker/commit/83597264f6da8a2ce1be1d5136675d62b1f9d0f1))
 
-Bumps com.diffplug.spotless from 6.25.0 to 8.5.1.
-
---- updated-dependencies: - dependency-name: com.diffplug.spotless dependency-version: 8.5.1
-
-dependency-type: direct:production
-
-update-type: version-update:semver-major ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-
 - **deps**: Bump the test-deps group across 1 directory with 2 updates
   ([#111](https://github.com/jtn0123/VoltTracker/pull/111),
   [`3bc87c3`](https://github.com/jtn0123/VoltTracker/commit/3bc87c37fa0cdb4b680c69fde89eb0c49679e10f))
 
-Bumps the test-deps group with 2 updates in the /mobile/android directory:
-  [org.json:json](https://github.com/douglascrockford/JSON-java) and
-  [org.robolectric:robolectric](https://github.com/robolectric/robolectric).
-
-Updates `org.json:json` from 20240303 to 20260522 - [Release
-  notes](https://github.com/douglascrockford/JSON-java/releases) -
-  [Changelog](https://github.com/stleary/JSON-java/blob/master/docs/RELEASES.md) -
-  [Commits](https://github.com/douglascrockford/JSON-java/compare/20240303...20260522)
-
-Updates `org.robolectric:robolectric` from 4.14.1 to 4.16.1 - [Release
-  notes](https://github.com/robolectric/robolectric/releases) -
-  [Commits](https://github.com/robolectric/robolectric/compare/robolectric-4.14.1...robolectric-4.16.1)
-
---- updated-dependencies: - dependency-name: org.json:json dependency-version: '20260522'
-
-dependency-type: direct:production
-
-update-type: version-update:semver-major
-
-dependency-group: test-deps
-
-- dependency-name: org.robolectric:robolectric dependency-version: 4.16.1
-
-update-type: version-update:semver-minor
-
-dependency-group: test-deps ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-
 - **deps**: Upgrade backend dependencies and fix CVE-2026-28684
   ([`340f7bb`](https://github.com/jtn0123/VoltTracker/commit/340f7bb58082be88eadcd6e2827699fb85366067))
-
-Update 14 outdated production dependencies in receiver/requirements.txt, including the security fix
-  for python-dotenv (CVE-2026-28684):
-
-python-dotenv 1.0.0 -> 1.2.2 (security) Flask-Limiter 3.5.0 -> 4.1.1 (major) redis 5.0.1 -> 7.4.0
-  (major) gunicorn 22.0.0 -> 26.0.0 (major) SQLAlchemy 2.0.31 -> 2.0.49 structlog 24.1.0 -> 25.5.0
-  Flask-SocketIO 5.3.6 -> 5.6.1 Flask-Caching 2.1.0 -> 2.4.0 Flask-WTF 1.2.1 -> 1.3.0 APScheduler
-  3.10.4 -> 3.11.2 requests 2.33.1 -> 2.34.2 rq 2.7.0 -> 2.8.0 psycopg2-binary 2.9.10 -> 2.9.12
-  python-dateutil 2.8.2 -> 2.9.0.post0
-
-Verified: full test suite (2161 passing), pip-audit reports no known vulnerabilities, and all four
-  Docker services rebuilt and healthy.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - **deps-dev**: Bump vitest in /mobile/android/dashboard-tests
   ([#112](https://github.com/jtn0123/VoltTracker/pull/112),
   [`f39d0f6`](https://github.com/jtn0123/VoltTracker/commit/f39d0f6ff95c23487a14b5b25367879ec8f1079c))
 
-Bumps [vitest](https://github.com/vitest-dev/vitest/tree/HEAD/packages/vitest) from 3.2.4 to 4.1.7.
-  - [Release notes](https://github.com/vitest-dev/vitest/releases) -
-  [Changelog](https://github.com/vitest-dev/vitest/blob/main/docs/releases.md) -
-  [Commits](https://github.com/vitest-dev/vitest/commits/v4.1.7/packages/vitest)
-
---- updated-dependencies: - dependency-name: vitest dependency-version: 4.1.7
-
-dependency-type: direct:development
-
-update-type: version-update:semver-major ...
-
-Signed-off-by: dependabot[bot] <support@github.com>
-
-Co-authored-by: dependabot[bot] <49699333+dependabot[bot]@users.noreply.github.com>
-
 - **tests**: Delete dead test_api_integration.py placeholder suite
   ([#68](https://github.com/jtn0123/VoltTracker/pull/68),
   [`58cdcf2`](https://github.com/jtn0123/VoltTracker/commit/58cdcf20fb32e5987cf1ff7ba2948c432da0a730))
 
-* chore(tests): delete dead test_api_integration.py placeholder suite
-
-tests/test_api_integration.py is a 460-line file containing 13 tests that have been entirely
-  `pytestmark.skip`-ed since the file was added. The reason: the tests reference a
-  `services.weather_service` module that has never existed in this codebase, and a
-  `services.elevation_service` shaped around `fetch_weather`, `fetch_weather_with_retry`,
-  `fetch_weather_cached`, `fetch_elevation`, `fetch_elevations_batch`, `fetch_elevations_sampled` —
-  none of which exist either.
-
-The file's own header comment makes the situation explicit:
-
-> NOTE: These tests are skipped because they reference a weather_service > and elevation_service
-  interface that doesn't exist in the current > codebase. The actual weather functionality is in
-  utils/weather.py and > jobs/weather_jobs.py.
-
-Coverage tooling counts these as "skipped" rather than "missing", which made the API integration
-  surface look tested when it wasn't. Real coverage of weather/elevation lives in:
-
-- tests/test_weather_jobs.py (background fetch jobs) - tests/test_weather_utils.py
-  (utils/weather.py) - tests/test_elevation_service.py (services/elevation_service.py) -
-  tests/test_elevation_utils.py (utils/elevation.py)
-
-Deleting the file removes the misleading "skipped" signal without losing real test coverage. If we
-  ever want true API-mocked integration tests for these endpoints, they should be written against
-  the actual function signatures in utils/weather.py and services/elevation_service.py — not the
-  imagined interface this file targeted.
-
-Closes JTN-457
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix: pin Flask-HTTPAuth to 4.8.1 (5.1.0 doesn't exist on PyPI)
-
-Flask-HTTPAuth==5.1.0 was pinned but no such version was ever published to PyPI — the current latest
-  is 4.8.1. A clean `pip install -r receiver/requirements.txt` failed with:
-
-ERROR: Could not find a version that satisfies the requirement
-
-Flask-HTTPAuth==5.1.0 (from versions: 1.0.0, ..., 4.7.0, 4.8.0, 4.8.1)
-
-This blocked fresh environment setup, CI builds on cold caches, and Docker rebuilds. The code only
-  uses HTTPBasicAuth, which has been stable in 4.x.
-
-Closes JTN-402
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-### Continuous Integration
+### 🔷 Changed
 
 - Add CodeQL code scanning workflow
   ([`636ad34`](https://github.com/jtn0123/VoltTracker/commit/636ad3427dd59162db8a0d89119022a36b306cb1))
@@ -6390,715 +916,89 @@ Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
   ([#69](https://github.com/jtn0123/VoltTracker/pull/69),
   [`97f432f`](https://github.com/jtn0123/VoltTracker/commit/97f432f37e2ca6972c1519c075f37a8ac387107b))
 
-The project is effectively pinned to Python <=3.12 by its dependencies, but nothing makes that
-  explicit and CI never tested 3.13 to catch new breakage. On a fresh machine with Python 3.13, `pip
-  install -r receiver/requirements.txt` fails because several pins don't ship cp313 wheels.
-
-Dependency bumps (smallest version that has cp313 wheels): - psycopg2-binary 2.9.9 -> 2.9.10 (2.9.10
-  is the first release with cp313 wheels on PyPI) - gevent 24.2.1 -> 25.4.1 (24.2.1 has no cp313
-  wheel; 25.4.1 is the earliest 25.x with cp313 wheels and 3.13 support) - hiredis 2.3.2 -> 3.1.0
-  (first 3.x release with cp313 wheels; 2.x line has none)
-
-Flask-HTTPAuth 5.1.0 -> 4.8.1: 5.1.0 does not exist on PyPI (latest is 4.8.1), so this pin fails to
-  install on every Python version. This fix is also being tracked in JTN-402 / PR #66. Including it
-  here keeps this PR independently mergeable; if PR #66 lands first this line becomes a no-op,
-  otherwise PR #66 closes redundantly.
-
-gevent-websocket 0.10.1 is intentionally kept: it's used as the gunicorn worker class in
-  receiver/Dockerfile (`geventwebsocket.gunicorn.workers.GeventWebSocketWorker`) for the
-  Flask-SocketIO transport. The package is abandoned (last release 2013) and should be replaced as a
-  follow-up, but removing it now would break production deployment.
-
-CI matrix gains 'test (3.13)' to lock in 3.13 compatibility going forward.
-
-Closes JTN-466
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
 - Add SonarQube workflow ([#39](https://github.com/jtn0123/VoltTracker/pull/39),
   [`1036ee1`](https://github.com/jtn0123/VoltTracker/commit/1036ee1ae7984e9ebb9de3e71efdb77c439cf5ba))
-
-* ci: add SonarQube workflow and project config
-
-* ci: add explicit permissions for security hardening
-
-* address CodeRabbit: guard fork PRs + actionlint config
-
----------
-
-Co-authored-by: Hex (Clawdbot) <hex@clawd.bot>
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - Pr APK + SDK session hook; bump Gradle 9, AGP 9, jsdom 29
   ([#121](https://github.com/jtn0123/VoltTracker/pull/121),
   [`de4266a`](https://github.com/jtn0123/VoltTracker/commit/de4266a91521215a9339df07c4c2baa403f196ef))
 
-* ci: upload debug APK from PR builds; add SessionStart hook for Android SDK
-
-- android.yml now runs :app:assembleDebug and uploads the resulting APK as a workflow artifact
-  (volttracker-debug-apk) so it can be sideloaded from any PR without local tooling. -
-  .claude/hooks/session-start.sh installs cmdline-tools + platform 36 + build-tools 36.0.0 into
-  ~/android-sdk on remote sessions and exports ANDROID_HOME/PATH so Gradle tasks work out of the
-  box.
-
-* chore(deps): bump Gradle 8.14.5->9.5.1, AGP 8.13.1->9.2.1, jsdom 25->29
-
-Combines the three remaining Dependabot major-version bumps that could not merge independently
-  (#114, #115, #116):
-
-- Gradle wrapper: 8.14.5 -> 9.5.1 (also regenerates wrapper jar/scripts) - AGP
-  (com.android.application): 8.13.1 -> 9.2.1 (requires Gradle 9.x) - jsdom: 25.0.1 -> 29.1.1
-  (conflicted with vitest bump's lock-file)
-
-Validated locally on Robolectric 4.16.1 + androidx.core 1.18.0 + spotless 8.5.1: spotlessCheck,
-  lintDebug, testDebugUnitTest, and assembleDebug all pass. Dashboard vitest suite (18/18) passes on
-  jsdom 29.
-
-Deprecation note: Gradle 9.5.1 still emits "incompatible with Gradle 10" warnings against the
-  current build scripts -- those will need to be addressed before the Gradle 10 bump.
-
-* chore(build): migrate Android DSL to assignment syntax for Gradle 10
-
-Replaces the Groovy space-assignment form ('namespace "foo"') with explicit assignment ('namespace =
-  "foo"') throughout app/build.gradle. The old form is deprecated in Gradle 9 and scheduled for
-  removal in Gradle 10. After this change ':app:testDebugUnitTest' and ':app:assembleDebug' run with
-  --warning-mode all and emit no deprecation warnings.
-
----------
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 - Publish main-branch debug APK to rolling 'latest-debug' release
   ([#122](https://github.com/jtn0123/VoltTracker/pull/122),
   [`f8bad28`](https://github.com/jtn0123/VoltTracker/commit/f8bad286d935e7a05dda0268b579cfe2e8d8c354))
 
-Adds a publish-debug-release job that runs only on push to main (skipped on PRs). It downloads the
-  APK artifact built by unit-tests, then creates or updates a pre-release tagged 'latest-debug' on
-  the repo. The release gets two attachments:
-
-- app-debug.apk (stable, bookmarkable filename) - volttracker-debug-<shortsha>.apk (per-commit copy
-  for history)
-
-Direct install URL (no GitHub login required):
-  https://github.com/jtn0123/VoltTracker/releases/download/latest-debug/app-debug.apk
-
-The job requests contents:write only for this step; the rest of the workflow remains read-only. Both
-  third-party actions are pinned by full commit SHA.
-
-Co-authored-by: Claude <noreply@anthropic.com>
-
 - Switch all jobs to self-hosted runners ([#46](https://github.com/jtn0123/VoltTracker/pull/46),
   [`98c59c0`](https://github.com/jtn0123/VoltTracker/commit/98c59c0eaec92bb17e52dfe71565da2090b55657))
-
-* ci: switch all jobs to self-hosted runners
-
-Replace ubuntu-latest with [self-hosted, ci] for all CI jobs. Self-hosted runners benchmarked 2-3x
-  faster than GitHub-hosted.
-
-* fix: split Playwright install with explicit system deps
-
-- Clean apt lists and install system deps before Playwright browser install - Fixes Playwright
-  install failure on self-hosted runner containers
-
-Note: E2E still requires Docker daemon access on the runner
-
-* ci: use ubuntu-latest for jobs requiring Docker
-
-- e2e.yml: needs docker-compose for TimescaleDB/Redis - test.yml test-postgres: needs PostgreSQL
-  service container - docker.yml: needs Docker for image builds - All other jobs remain on
-  [self-hosted, ci]
-
-* ci: fix Playwright install for ubuntu-latest (use --with-deps instead of manual apt)
-
----------
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - **tests**: Run concurrency + transaction tests in postgres CI job
   ([#70](https://github.com/jtn0123/VoltTracker/pull/70),
   [`5a7136e`](https://github.com/jtn0123/VoltTracker/commit/5a7136e7b42abe577492e2e784c498dafdc3eb6f))
 
-* ci(tests): run concurrency and transaction tests in postgres CI job
-
-tests/test_concurrency.py and tests/test_transactions.py each carried an unconditional module-level
-  pytest.mark.skip, so they never ran in any CI job — the test-postgres job only invoked
-  tests/test_models.py and tests/test_api.py. The two files exist specifically to validate
-  PostgreSQL behaviors (race conditions, READ COMMITTED isolation, savepoints, constraint
-  enforcement), but that coverage was silently lost.
-
-Changes: - Replace the unconditional skip in both files with a skipif keyed to DATABASE_URL, so they
-  now execute on PostgreSQL and stay skipped on SQLite where the semantics don't hold. - Delete the
-  module-local `db_session` fixture in both files so they inherit the global fixture in
-  tests/conftest.py, which transitively runs `app` and creates the tables. Add the `app` fixture to
-  every test method signature to guarantee ordering. - Refactor every ThreadPoolExecutor worker in
-  test_concurrency.py to build its own SessionLocal() per thread — SQLAlchemy Sessions are not
-  thread-safe, so the previous shared-session pattern is the reason these tests were skipped to
-  begin with. - Rework the trip-creation and charging-session races to not depend on non-existent
-  helper functions (`get_or_create_trip`, `detect_or_update_charging_session`) — inline a small
-  race-safe helper instead and lean on ChargingSession.start_time's UniqueConstraint to exercise
-  real DB-level serialization. - In test_transactions.py, the isolation tests used
-  database.SessionLocal (a scoped_session) from the same thread as db_session, which would return
-  the exact same Session and defeat the test. Use a dedicated sessionmaker bound to the underlying
-  engine to get a truly independent connection. - Extend test-postgres pytest invocation in
-  .github/workflows/test.yml to include tests/test_concurrency.py and tests/test_transactions.py.
-
-Verified locally against a postgres:15 container: all 17 tests pass (6 concurrency + 11 transaction)
-  alongside the existing 163 models + api tests.
-
-Closes JTN-462
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix: pin Flask-HTTPAuth to 4.8.1 (5.1.0 doesn't exist on PyPI)
-
-Flask-HTTPAuth==5.1.0 was pinned but no such version was ever published to PyPI — the current latest
-  is 4.8.1. A clean `pip install -r receiver/requirements.txt` failed with:
-
-ERROR: Could not find a version that satisfies the requirement
-
-Flask-HTTPAuth==5.1.0 (from versions: 1.0.0, ..., 4.7.0, 4.8.0, 4.8.1)
-
-This blocked fresh environment setup, CI builds on cold caches, and Docker rebuilds. The code only
-  uses HTTPBasicAuth, which has been stable in 4.x.
-
-Closes JTN-402
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-### Documentation
+### 🔷 Changed
 
 - Align AGENTS.md with Android pivot; fix gradlew exec bit
   ([#104](https://github.com/jtn0123/VoltTracker/pull/104),
   [`3d160b6`](https://github.com/jtn0123/VoltTracker/commit/3d160b695a828c83ddb75096395bc44223a48516))
 
-AGENTS.md still documented the deprecated Flask/pytest stack. Update it to match CLAUDE.md: tests
-  live under mobile/android/app/src/test, run via the Gradle wrapper. Also restore the executable
-  bit on mobile/android/gradlew.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-### Features
+### ✳️ New
 
 - Add battery cell voltage UI
   ([`ea2ad98`](https://github.com/jtn0123/VoltTracker/commit/ea2ad98328dcae0665cccbcb0e27fc8c3262f66d))
 
-- Add cell voltage heatmap (96 cells in 12x8 grid) - Add module balance indicator bars for 3 battery
-  modules - Add voltage delta display with status color coding - Add weak cell detection with
-  animated warning - Add CSS styles for heatmap with color gradient - Integrate with
-  /api/battery/cells/latest endpoint
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-
 - Add charging session curve visualization
   ([`ae798db`](https://github.com/jtn0123/VoltTracker/commit/ae798dbe14e3c8ebc80c6df7e9af3f0f23fb551e))
-
-- Add /api/charging/<id>/curve endpoint for charging curve data - Add charging detail modal with
-  power/SOC curve chart - Add cost analysis breakdown with gas equivalent comparison - Make charging
-  table rows clickable to view session details - Reconstruct curve from telemetry if not stored -
-  Add CSS styles for charging detail modal components
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 - Add custom exception classes for better error handling
   ([`b4a19f3`](https://github.com/jtn0123/VoltTracker/commit/b4a19f3eda011d83303d88887e03c2772527ce75))
 
-Add VoltTrackerError hierarchy for categorized exception handling: - VoltTrackerError (base) with
-  message and details support - DatabaseError for DB operations - TelemetryParsingError for Torque
-  data parsing - CSVImportError/CSVValidationError/CSVTimestampParseError for imports -
-  WeatherAPIError for weather API calls - TripProcessingError for trip finalization -
-  ChargingSessionError for charging sessions - ConfigurationError for config issues
-
-Updated app.py, weather.py, and csv_importer.py to use new exceptions for improved error context and
-  logging.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
-
 - Add kWh/mile efficiency display
   ([`30976e6`](https://github.com/jtn0123/VoltTracker/commit/30976e6e36ac848711169ebfd7af9ca5d9ab0ca2))
-
-- Add mi_per_kwh field to /api/efficiency/summary endpoint - Add "Electric Efficiency" card showing
-  kWh/mi and mi/kWh - Reorganize electric efficiency cards for better UX - Update loadSummary() to
-  populate electric efficiency data - Remove duplicate code in loadChargingSummary()
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
 
 - Comprehensive debugging, performance, testing, and error tracing
   ([#28](https://github.com/jtn0123/VoltTracker/pull/28),
   [`09d340b`](https://github.com/jtn0123/VoltTracker/commit/09d340b5dc6fa20e07617cc44528e2a8a7a0df64))
 
-* feat: comprehensive debugging, performance, testing, and error tracing
-
-## Debugging - Add global window.onerror / window.onunhandledrejection error boundary with fallback
-  UI (shows error instead of blank screen) - Add try-catch around DOMContentLoaded initialization in
-  main.ts - Add structured WebSocket reconnect logging (attempt #, backoff, failures) - Review and
-  mark all 6 BUGS_FOUND.md items as FIXED (verified in code) - Silent 'except Exception:' handlers
-  reviewed (3 found, all benign)
-
-## Error Tracing - Add receiver/utils/error_tracking.py with structured JSON error logging
-  (timestamp, endpoint, error type, traceback, request context) - Register Flask errorhandlers for
-  404, 500, and unhandled exceptions - Add /api/errors/report endpoint for frontend error reporting
-  - Frontend error boundary reports to backend via navigator.sendBeacon
-
-## Performance - Lower slow query threshold from 500ms to 100ms (catch regressions early) - Add
-  request timing middleware (X-Response-Time header on all responses) - Log slow requests (>500ms)
-  with method, path, and duration - Add TimescaleDB continuous aggregates migration (hourly + daily)
-  for common dashboard queries
-
-## Testing - Add Hypothesis fuzz tests for torque upload, trip detail/list, charging create, and
-  error report endpoints - Add tests for error tracking utility and response time header - Update
-  slow query threshold test to match new 100ms value - 2 pre-existing test_statistics failures left
-  untouched (not related)
-
-* fix: cast socket.io manager to any for TS compat
-
----------
-
-Co-authored-by: OpenClaw Bot <bot@openclaw.dev>
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - Gps quality, map legends, RDP subsampling + import bug fixes
   ([#65](https://github.com/jtn0123/VoltTracker/pull/65),
   [`293982e`](https://github.com/jtn0123/VoltTracker/commit/293982e88fafe236b7d9b78902f696b39582c0e3))
-
-* feat: GPS quality, map legends, RDP subsampling + import bug fixes
-
-Map / GPS visualization - Add Ramer-Douglas-Peucker subsampling that preserves curves and turns
-  instead of dropping every Nth point. Default max_points_per_trip raised 100 -> 300 to match the
-  higher fidelity. - Add filter_stationary_points to collapse GPS-stuck periods (e.g. trips with
-  thousands of identical fixes from a frozen GPS). - Surface a per-trip gps_quality block
-  (total/unique/displayed points + good|poor label) so the UI can warn on degenerate routes. -
-  Render heatmap legend and routes-efficiency legend; sparse-data trips (<10 unique points) get a
-  dashed thinner polyline plus per-point markers so they're still legible. - Add a "Low GPS" badge
-  in the trip-list sidebar for poor-quality trips.
-
-Import bug fixes - get_file_hash now normalizes BOM, CRLF/CR line endings, and trailing whitespace
-  before hashing. Same content exported from Windows vs Mac vs Linux now collapses to one duplicate,
-  not three. - /api/stats/quick/<timeframe> cache key now includes the units and include_trend query
-  params via key_func. Previously imperial and metric callers shared a key, so the second caller saw
-  the first caller's units. - Failed import responses now include failure_details (first parser
-  error) and an errors[] array (first 10 parser errors) so mobile clients can debug imports without
-  log access. - New /api/imports/latest endpoint for "what was the most recent import?" - useful
-  when importing via phone where viewing logs is hard.
-
-Tests - 11 new tests in test_map_endpoints.py: GPS-quality reporting, RDP shape preservation,
-  stationary-point filtering, subsampling bounds. - 11 new tests in test_import_hardening.py: hash
-  normalization, re-import detection across encodings, /imports/latest, error-detail surfacing. -
-  Full suite: 2076 passed, 30 skipped (pre-existing).
-
-Co-Authored-By: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
-
-* fix(map): address CodeRabbit review — sparse-data classification + legend fallback
-
-Three findings from CodeRabbit's review of PR #65:
-
-1. [Major] map_view.js:170 — isSparseData classification bug. `const isSparseData =
-  trip.points.length < 10;` was using the *rendered* point count, which reflects the
-  post-subsampling (RDP simplification) output. A dense track that was correctly decimated from,
-  say, 2000 raw points down to 8 rendering points would be wrongly classified as sparse and drawn
-  with dashed/dim styling. The intent was "does this trip have few unique GPS fixes?" — which is
-  exactly what the new gps_quality.unique_points field reports.
-
-Switched to: const uniquePointCount = trip.gps_quality?.unique_points ?? trip.points.length; const
-  isSparseData = uniquePointCount < 10;
-
-Falls back to trip.points.length for any trip that predates the gps_quality payload.
-
-2. [Minor] map_view.js:680 — changeMapLayer() had no default branch, so an unexpected currentLayer
-  value (added later, typo, etc.) would leave whichever legend was visible from the previous
-  selection stuck on screen with stale title/description/low/high text. Added an explicit else that
-  hides both legends and clears all four text slots.
-
-3. [Trivial] map_view.css:729-735 — deleted the unused `.sparse-route-marker` selector. It was
-  defined but never applied in the rendering path (sparse tracks use polyline dashing + default
-  Leaflet circleMarkers, not a custom marker class).
-
-Verified: tests/test_map_endpoints.py + tests/test_import_hardening.py 69/69 passing.
-
-* fix(sonar): exclude receiver/static/js/** from coverage measurement
-
-PR #65's SonarCloud quality gate failed with 59.1% coverage on new code (required ≥80%). The drag
-  was entirely from `receiver/static/js/map_view.js` with 41/41 uncovered lines.
-
-That directory has no automated test coverage in CI: - vitest targets `receiver/frontend/src/**`
-  (the TypeScript app), not the legacy Flask-served static JS under `receiver/static/js/**` - The
-  playwright e2e suite exists but its Istanbul-instrumented coverage output isn't wired through
-  SonarCloud — see the "E2E coverage" comment block in the new sonarcloud job in
-  .github/workflows/test.yml, which explicitly notes it's local-only until someone plumbs it
-  through.
-
-So the 0% coverage signal is technically accurate but actively harmful: every PR that touches
-  `receiver/static/js/*.js` will trip the gate until the frontend is either migrated into
-  `receiver/frontend/src/` or an e2e coverage pipeline lands. Excluding the directory from coverage
-  measurement makes the gate honest — "we aren't measuring this" — rather than masking both a config
-  issue AND a test-infra gap as a code quality problem.
-
-Mirrors the InkyPi repo's `sonar.coverage.exclusions=src/static/scripts/**` pattern.
-
-After this change, PR #65's new-code coverage becomes (91 - 13) / 91 = 85.7%, above the 80% gate.
-
----------
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
 
 - Loading skeletons, frontend CI/tests, map coverage, Docker hardening, PWA icons
   ([#32](https://github.com/jtn0123/VoltTracker/pull/32),
   [`d0b1303`](https://github.com/jtn0123/VoltTracker/commit/d0b1303a1fb2f35f7a2581f0308f61359c1565b0))
 
-* test: Frontend CI, unit tests, and map endpoint coverage
-
-- Add frontend CI job to test.yml (npm test, lint, type-check) - Fix existing api.test.ts assertion
-  to match actual toast message - Add store.test.ts: 13 tests for AppStore state management,
-  subscriptions, events - Add schemas.test.ts: 17 tests for Zod schema validation across all API
-  types - Add test_map_gps_coverage.py: 29 tests covering: - subsample_gps_points unit tests (empty,
-  single, boundary, large lists) - calculate_efficiency_color unit tests (all thresholds) - GPX/KML
-  export XML validation and coordinate correctness - Route edge cases (zero/one GPS points, missing
-  lat/lng, large routes) - Map endpoint filters (ev_only, max_trips hard limit)
-
-Closes #3, #6, #7
-
-* feat: Loading skeletons, Docker pinning, worker healthcheck, PWA icons
-
-- Add CSS skeleton/shimmer loading animations for dashboard cards - Add loading spinners to trip
-  detail and charging detail modals - Pin Docker images: timescaledb:2.18.0-pg15, redis:7.4-alpine,
-  node:20.18-slim - Add healthcheck to worker container (rq info) - Add PNG icons (192x192, 512x512)
-  for PWA manifest - Update manifest.json with all required icon sizes
-
-Closes #5, #9, #10, #11
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.ai>
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
-Co-authored-by: Clawd <clawd@openclaw.com>
-
 - Redesign theme with modern aesthetic ([#22](https://github.com/jtn0123/VoltTracker/pull/22),
   [`2801bb8`](https://github.com/jtn0123/VoltTracker/commit/2801bb8bf48ad2cbe333a2f1a2caaabe0f817be7))
-
-Overhaul dark and light themes with a clean, polished look inspired by Linear/Vercel/Raycast. Key
-  changes:
-
-Dark theme: - Rich dark backgrounds (#0f1117, #161922, #1c1f2e) instead of navy blues - Subtle
-  borders using rgba white with low opacity - Indigo accent (#6366f1) replacing the dated teal-blue
-
-Light theme: - Clean whites and cool grays (#f8f9fb, #ffffff) - Proper contrast with dark text
-  (#111827) - Matching indigo accent for consistency
-
-Both themes: - New accessible status colors (WCAG AA compliant) - Improved card styling: flat
-  backgrounds with subtle shadows, no gradients - Better typography with antialiased rendering -
-  Smooth theme transition animation on all major elements - Chart.js colors now read CSS custom
-  properties for theme awareness - Updated chart palette with 6 distinct, theme-appropriate colors -
-  Cleaner buttons with proper hover/active states - Modernized bottom nav with backdrop blur
-
-CSS-only changes where possible; minimal JS changes limited to Chart.js theme color helpers reading
-  CSS custom properties.
-
-Co-authored-by: Clawd <clawd@openclaw.ai>
 
 - **ci**: Per-build version metadata + semantic-release for tagged APKs
   ([#127](https://github.com/jtn0123/VoltTracker/pull/127),
   [`031fd50`](https://github.com/jtn0123/VoltTracker/commit/031fd5009bb4fcec17193161583387b2f3fdf9db))
 
-Wires Android versionCode/versionName to a repo-root VERSION file plus GITHUB_RUN_NUMBER + short
-  GITHUB_SHA, so every CI APK now reports a unique build identity (e.g. 0.1.0-9bda397 /
-  versionCode=run-number) instead of the hardcoded 0.1.0 / 1 that every build has shipped to date.
-  The existing MainActivity.appVersionName() plumbing surfaces this to the dashboard, so the in-app
-  About string changes automatically — no UI changes needed.
-
-Adds a python-semantic-release pipeline (.github/workflows/release.yml) modeled directly on
-  jtn0123/InkyPi. On push to main, it walks conventional-commit history and cuts a vX.Y.Z GitHub
-  release for any feat/fix/perf commit (BREAKING CHANGE for major), then a dependent job builds
-  assembleRelease (unsigned — no keystore secret wired yet) and attaches the APK to the release. The
-  InkyPi "warn loudly if no release was cut" step surfaces chore/docs/ci skips in the Actions
-  summary so streaks of unreleased PRs don't go unnoticed.
-
-Adds pr-title-lint.yml as a PR-time gate on conventional-commits types, since this repo
-  squash-merges and the PR title becomes the bump signal.
-
-Rolling latest-debug release in android.yml is unchanged — debug APKs still publish on every main
-  push, just with proper version metadata now.
-
-Co-authored-by: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
-
-### Refactoring
+### 🔷 Changed
 
 - Migrate remaining modules to api() wrapper ([#19](https://github.com/jtn0123/VoltTracker/pull/19),
   [`6a84e18`](https://github.com/jtn0123/VoltTracker/commit/6a84e1840113a8a20fab28b3d8b972ab9cb9571a))
 
-* refactor: Migrate remaining modules to api() wrapper
-
-Migrate battery.ts, trips.ts, live.ts, and charging.ts from raw fetchJson() calls to the centralized
-  api() wrapper.
-
-Changes per file: - battery.ts: 3 fetchJson → api calls (health, cells, SOC analysis) - trips.ts: 2
-  fetchJson → api calls (trip list, trip detail) - live.ts: 2 fetchJson → api calls (live telemetry,
-  status) - charging.ts: 2 fetchJson → api calls (charging detail modal)
-
-All modules now benefit from api()'s built-in error handling: - 401 redirect, 429 retry, 500 toasts,
-  network error toasts - Optional Zod schema validation (used in live telemetry)
-
-No behavioral changes.
-
-* fix: clear all tables in app fixture to prevent cross-test data leakage
-
-The app fixture only cleared WeatherCache at setup, but MaintenanceRecord data committed by other
-  tests could persist across test boundaries when the scoped_session cached a connection that didn't
-  see the drop_all/create_all cycle. This caused test_no_maintenance_records to fail intermittently
-  (observed on Python 3.11 CI) when maintenance records from test_new_analytics_endpoints leaked
-  through.
-
-Fix: clear all tables at setup instead of just WeatherCache.
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
 - Modularize routes and enhance functionality
   ([`45e8b65`](https://github.com/jtn0123/VoltTracker/commit/45e8b65891877948a5a4b457d607bf11e095d72b))
-
-Refactored the application by migrating various routes from app.py into dedicated modules for
-  battery, charging, fuel, telemetry, and trips. This restructuring improves code organization and
-  maintainability. Each route now handles specific functionalities, such as battery health analysis,
-  charging session management, fuel event CRUD operations, and telemetry data ingestion.
-  Additionally, enhanced error handling and logging mechanisms were integrated to provide better
-  context during operations, ensuring a more robust application architecture.
 
 - Reorganize app.py and improve import structure
   ([`acf6b26`](https://github.com/jtn0123/VoltTracker/commit/acf6b26d5e459a48ce590ca9cc8b6f006b8605b7))
 
-Refactored app.py by reorganizing the order of operations, including moving the registration of
-  blueprints and applying rate limiting exemptions to enhance clarity. Cleaned up import statements
-  in test files to improve maintainability and adhere to style guidelines. This restructuring
-  improves code organization and prepares the application for future enhancements.
-
 - Split dashboard.js into ES modules ([#13](https://github.com/jtn0123/VoltTracker/pull/13),
   [`4e8f8d7`](https://github.com/jtn0123/VoltTracker/commit/4e8f8d7daf8fcd03062e6021ae988bc8b19667c0))
-
-* refactor: split dashboard.js (3,474 lines) into ES modules
-
-Split the monolithic dashboard.js into 11 focused ES modules loaded via native browser import/export
-  (no bundler required):
-
-- core.js: State, DEBUG flag, APICache, fetchJson, utility functions - charts.js: Chart.js lazy
-  loading and shared chart configuration - summary.js: Efficiency summary cards and MPG trend chart
-  - trips.js: Trip loading, detail modal, deletion, and trip charts - map.js: Leaflet lazy loading
-  and trip map rendering - live.js: WebSocket, real-time telemetry, power flow visualization -
-  charging.js: Charging summary, history, session CRUD, detail modal - battery.js: Battery health,
-  cell voltages, SOC analysis - import.js: CSV import handling and result modals - ui.js: Theme,
-  date picker, navigation, scroll handling - main.js: Entry point that imports all modules and wires
-  up events
-
-Key decisions: - Shared mutable state lives in core.js as an exported 'state' object - Functions
-  called from inline HTML onclick handlers are exposed on window in main.js (e.g.,
-  window.openTripModal = openTripModal) - toast.js remains separate (loaded before modules via
-  regular script tag) so showToast/showSuccess/showError/etc are available as globals - Includes
-  debounce fix from fix/websocket-toast-spam (no toast spam on WebSocket connect/disconnect) - No
-  build tools, bundlers, or new dependencies added - No business logic changes - pure reorganization
-
-index.html updated to load main.js as <script type="module">. map.html unchanged (uses separate
-  map_view.js, not dashboard.js).
-
-* feat: add Vite + TypeScript build system for frontend modules
-
-Phase 2 of frontend refactor: - Add Vite as build tool with stable output filenames - Convert all 11
-  JS modules to TypeScript with proper interfaces - Define typed interfaces for API data shapes
-  (TripSummary, TelemetryPoint, ChargingSession, etc.) - Define AppState interface for mutable
-  shared state - Add ambient type declarations for CDN globals (Chart.js, Leaflet, Socket.IO,
-  flatpickr, toast.js) - Configure strict TypeScript with tsconfig.json - Output bundled JS to
-  receiver/static/js/dist/main.js - Update index.html to load from dist path - Update Dockerfile
-  with multi-stage build (Node.js frontend + Python backend) - Keep original JS modules as reference
-  - Zero TypeScript errors, clean build
-
-* chore: remove old JS modules after TypeScript migration
-
----------
-
-Co-authored-by: Hex <hex@openclaw.ai>
 
 - Streamline dashboard route and remove circular import workarounds
   ([`41e635e`](https://github.com/jtn0123/VoltTracker/commit/41e635ef03625d6b605079d9433ec9bb4c22e3c4))
 
-Simplified the dashboard route in dashboard.py by removing unnecessary circular import workarounds
-  for database and authentication. The authentication check is now handled directly in app.py,
-  improving code clarity and maintainability. The dashboard HTML rendering remains intact, ensuring
-  functionality is preserved.
-
-### Testing
+### 🔷 Changed
 
 - Comprehensive testing — 195 new tests (unit, integration, E2E)
   ([#25](https://github.com/jtn0123/VoltTracker/pull/25),
   [`021813d`](https://github.com/jtn0123/VoltTracker/commit/021813d2a296d2d81e1c499e7989b8d2c1defd59))
 
-* Add Playwright E2E testing infrastructure
-
-- Playwright config with chromium + mobile-chrome projects - 9 test suites: auth, dashboard, trips,
-  charging, battery, live telemetry, export, import, responsive - SQL seed data fixture for
-  consistent test data - CSV fixture for import flow testing - GitHub Actions CI workflow
-  (docker-compose + Playwright) - npm scripts for running e2e tests
-
-* Add unit tests to increase coverage
-
-New test files: - test_detailed_stats.py: Tests for /api/stats/detailed endpoint (13 tests) -
-  test_time_utils_extra.py: Coverage for parse_query_date_range, get_time_range_description (14
-  tests) - test_route_clustering_coverage.py: Full coverage for clustering functions (30 tests) -
-  test_bulk_operations_extra.py: Bulk update success paths and error handlers (9 tests) -
-  test_export_routes.py: Export trips/fuel/all endpoints (16 tests)
-
-Total: 82 new tests, all passing. No regressions (1953 passed, 2 pre-existing failures).
-
-* feat: redesign theme with modern aesthetic
-
-Overhaul dark and light themes with a clean, polished look inspired by Linear/Vercel/Raycast. Key
-  changes:
-
-Dark theme: - Rich dark backgrounds (#0f1117, #161922, #1c1f2e) instead of navy blues - Subtle
-  borders using rgba white with low opacity - Indigo accent (#6366f1) replacing the dated teal-blue
-
-Light theme: - Clean whites and cool grays (#f8f9fb, #ffffff) - Proper contrast with dark text
-  (#111827) - Matching indigo accent for consistency
-
-Both themes: - New accessible status colors (WCAG AA compliant) - Improved card styling: flat
-  backgrounds with subtle shadows, no gradients - Better typography with antialiased rendering -
-  Smooth theme transition animation on all major elements - Chart.js colors now read CSS custom
-  properties for theme awareness - Updated chart palette with 6 distinct, theme-appropriate colors -
-  Cleaner buttons with proper hover/active states - Modernized bottom nav with backdrop blur
-
-CSS-only changes where possible; minimal JS changes limited to Chart.js theme color helpers reading
-  CSS custom properties.
-
-* Add integration test coverage for API contracts, WS auth, DB integrity, calc edge cases
-
-- test_api_contract_schemas.py: Validates API response shapes match frontend Zod schemas for
-  /api/telemetry/latest, /api/trips, /api/charging/*, /api/battery/health - test_websocket_auth.py:
-  Tests Socket.IO auth with valid/invalid tokens, passwords, disabled auth, empty auth, and
-  token-vs-password precedence - test_db_integrity.py: Tests schema creation, FK relationships,
-  unique constraints, NOT NULL constraints, and cascading delete behavior -
-  test_calculator_edge_cases.py: Hypothesis property-based tests for energy/efficiency calculations
-  covering zero/negative/None inputs, round-trips, and boundary conditions
-
-* fix: resolve CI lint failures and Docker build TS error
-
-- Remove unused imports (F401) across test files - Strip trailing whitespace (W291) - Add
-  skipLibCheck: true to frontend tsconfig.json to fix @vitest/spy Disposable type error
-
-* Add e2e/package-lock.json for CI (npm ci requires lockfile)
-
-* fix(e2e): fix test infrastructure and failing tests
-
-Config changes: - fullyParallel: true (was false) - workers: 2 in CI (was 1) - retries: 1 in CI (was
-  2, less retry waste) - timeout: 15s (was 30s) - Remove video recording (overhead) - Reduce expect
-  timeout to 5s
-
-Test fixes: - Add isMobile skips for desktop-only tests (export menu, theme toggle, desktop
-  viewport) - Add isMobile skips for mobile-only tests (bottom nav) - Fix trips/charging to use
-  mobile card selectors on mobile viewport - Use toPass() for socket.io check instead of manual
-  waitForTimeout - Reference #trip-modal by ID instead of generic selector
-
-Workflow: - Reduce timeout-minutes from 20 to 15
-
-* fix(e2e): fix desktop nav and API status expectations
-
-- Use scrollIntoView for desktop tests instead of clicking mobile-only bottom nav - Accept 500
-  status in battery API smoke tests (no seed data) - Fixes 25 failing tests across chromium and
-  mobile-chrome projects
-
-* fix(e2e): make all tests resilient to missing seed data and slow APIs
-
-- API smoke tests accept 200/404/500 (endpoint exists, responds) - Export tests use 30s timeout to
-  avoid aborted requests - Import test accepts status <= 500 - Dashboard stats test doesn't fail if
-  data stays at '--' - Trips tests skip gracefully when no data available - Live telemetry status
-  API accepts any response status
-
-* fix(e2e): increase export CSV timeout, make trip modal optional
-
-- Export CSV test gets 60s timeout (large response body) - Trip detail modal test doesn't fail if
-  modal not implemented
-
-* fix(e2e): handle aborted streaming response in export tests
-
----------
-
-Co-authored-by: Clawd <clawd@openclaw.ai>
-
-Co-authored-by: Clawd <clawd@openclaw.dev>
-
-Co-authored-by: ClawdBot <bot@openclaw.com>
-
-Co-authored-by: Clawd <clawdbot@users.noreply.github.com>
-
-Co-authored-by: Hex <hex@openclaw.ai>
-
 - **backend**: Add regression tests for the 40 audited bug fixes
   ([`a87a83a`](https://github.com/jtn0123/VoltTracker/commit/a87a83ad24b996effc6f037c1b86a3b3ee193c1a))
-
-Add 40 regression tests (one per fixed bug) across five files. Each test was verified by reverting
-  its corresponding fix and confirming the test fails, then restoring the fix and confirming it
-  passes, so the tests genuinely guard against reintroduction.
-
-Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
 
 - **frontend**: Add vitest tests for 5 untested src/ modules
   ([#72](https://github.com/jtn0123/VoltTracker/pull/72),
   [`7a6eaad`](https://github.com/jtn0123/VoltTracker/commit/7a6eaad1027eb39238f5dd03362413aa0aae5bb7))
-
-PR #45 added a coverage exclusion for six frontend TS files that lacked vitest coverage; this PR
-  removes 5 of them by writing real tests. Only main.ts remains excluded — see the updated comment
-  block in sonar-project.properties for why (entry-point side effects, not unit-testable).
-
-New + extended test files (114 new tests, all passing):
-
-- src/__tests__/import.test.ts (NEW, 14 tests) — covers handleImport upload flow, showImportStatus,
-  showImportResultModal, generateReportable output formatting, copyImportCode/copyImportReport
-  clipboard helpers, closeImportResultModal teardown.
-
-- src/__tests__/charging.test.ts (NEW, 27 tests) — covers loadChargingHistory + loadChargingSummary
-  rendering, formatChargingDuration edge cases, openAddChargingModal/closeChargingModal toggle, cost
-  comparison, openChargingDetailModal, deleteChargingSession (confirm paths), submitChargingSession,
-  renderChargingDetailSummary, renderChargingCostBreakdown, renderChargingCurveChart empty state.
-  Includes a regression guard for the XSS escape from PR #45's charging.ts:158 fix — feeds <script>
-  + <img onerror> as charge_type and location_name and asserts no live element gets injected.
-
-- src/__tests__/map.test.ts (NEW, 40 tests) — covers haversineDistance, getPointColor (regen + gas +
-  electric branches), getEfficiencyColor (EV vs gas threshold tables), createColorCodedSegments
-  segmentation, createEfficiencySegments (gas + EV efficiency calculation), loadLeaflet lazy load
-  (success + error), renderTripMap (no-element, no-GPS, simple route, segmented route,
-  efficiency-mode default), addMapLegend (mode + efficiency variants), addMapViewToggle (checkbox
-  state + localStorage update on change). Uses an installFakeLeaflet() factory to stub L.map /
-  L.polyline / L.marker / L.control etc.
-
-- src/__tests__/summary.test.ts (NEW, 12 tests) — covers loadSummary (success, error, no-data, fully
-  populated), loadMpgTrend (no canvas, empty data, no duplicate empty-state on repeat call,
-  timeframe button toggle, date filter URL params, chart re-render after empty-state, graceful error
-  swallow). Includes a regression guard for the showMpgEmptyState fix from PR #45 — asserts the
-  canvas is hidden rather than removed so the chart can recover on the next refresh.
-
-- src/__tests__/charts.test.ts (EXTENDED, +18 tests) — added direct tests for createGradient,
-  getChartDefaults (desktop/mobile sizes), getCSSVar (set/unset/no-fallback), getChartColor (CSS var
-  + fallback palette + modulo cycling), getEnhancedTooltip (dark/light theme + callback merging),
-  getEnhancedLegend (display toggle + label config), getEnhancedAxis (grid/ticks defaults + title
-  attachment + custom option merging), and one new lazy-loading test that triggers the
-  IntersectionObserver callback path.
-
-Coverage on the previously-excluded files (line %): summary.ts 97.33 (was 0% — file 91% excluded by
-  sonar exclusion) map.ts 95.62 charts.ts 94.11 import.ts 87.50 charging.ts 83.16
-
-sonar-project.properties: dropped the five files from sonar.coverage.exclusions. Only
-  receiver/frontend/src/main.ts remains excluded, with a clear comment explaining why (top-level
-  side effects, e2e-coverage territory not vitest).
-
-Total frontend tests: 80 → 194 (+114).
-
-Co-authored-by: Claude Opus 4.6 (1M context) <noreply@anthropic.com>
