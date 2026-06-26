@@ -7,6 +7,10 @@
 // forum reports for the manufacturer-specific P1xxx ranges. Entries here
 // are intentionally limited to codes whose meaning is well-attested - a
 // wrong description is worse than no description.
+//
+// Lazy chunk — kept OFF the startup path. This ~3.8k-line table is fetched on
+// demand by core.ts `ensureDtcData()` (first DTC lookup/scan), never in the
+// eager bundle, so first paint stays light. See dashboard-script-contract.md.
 
 (function () {
   "use strict";

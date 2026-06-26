@@ -5,6 +5,10 @@
 // excludes Volt-specific or hybrid-only codes (those belong to the Volt causes
 // agent).
 //
+// Lazy chunk — kept OFF the startup path. Fetched on demand by core.ts
+// `ensureDtcData()` (first DTC lookup/scan), never in the eager bundle, so
+// first paint stays light. See dashboard-script-contract.md.
+//
 // Sources used (causes must appear in >= 2 independent sources):
 //   SAE J2012, obd-codes.com, repairpal.com, yourmechanic.com,
 //   engine-codes.com, autocodes.com, Bosch OBD-II handbook.

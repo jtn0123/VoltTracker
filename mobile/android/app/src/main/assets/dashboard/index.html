@@ -852,7 +852,13 @@
   ></div>
 
   <article id="mapCard" class="panel map-card">
-    <div id="mapFrame" class="map-frame" data-layer="eff">
+    <div
+      id="mapFrame"
+      class="map-frame"
+      data-layer="eff"
+      role="tabpanel"
+      aria-label="Map view"
+    >
       <div id="mapLeaflet" class="map-canvas"></div>
       <div
         id="mapTileError"
@@ -871,7 +877,9 @@
         <div class="map-layer-tabs" role="tablist" aria-label="Map layer">
           <button
             type="button"
+            id="mapTabRoutes"
             role="tab"
+            aria-controls="mapFrame"
             data-map-layer="routes"
             aria-selected="false"
           >
@@ -879,7 +887,9 @@
           </button>
           <button
             type="button"
+            id="mapTabHeat"
             role="tab"
+            aria-controls="mapFrame"
             data-map-layer="heat"
             aria-selected="false"
           >
@@ -887,7 +897,9 @@
           </button>
           <button
             type="button"
+            id="mapTabStops"
             role="tab"
+            aria-controls="mapFrame"
             data-map-layer="stops"
             aria-selected="false"
           >
@@ -895,7 +907,9 @@
           </button>
           <button
             type="button"
+            id="mapTabEff"
             role="tab"
+            aria-controls="mapFrame"
             data-map-layer="eff"
             class="is-active"
             aria-selected="true"
