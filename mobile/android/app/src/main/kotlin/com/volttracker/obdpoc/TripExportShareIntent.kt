@@ -53,6 +53,11 @@ object TripExportShareIntent {
     private const val TAG = "TripExportShareIntent"
     private const val SUBDIR = "trip-exports"
 
+    // Only purge export artifacts older than this. Filenames are already unique (timestamped /
+    // route-derived), so cleanup is just cache hygiene — wiping *every* file would let a second,
+    // near-simultaneous export delete the first's file before it is handed to the share chooser.
+    private const val STALE_EXPORT_TTL_MS = 60L * 60L * 1000L
+
     /**
      * Serializes [route] in [format] and writes it to the trip-export cache dir. Returns null when
      * the route has no usable points or the file couldn't be written. Exposed so the bridge can read
@@ -182,8 +187,9 @@ object TripExportShareIntent {
     }
 
     /**
-     * Creates `cacheDir/trip-exports/` and clears stale artifacts so the cache keeps only the export
-     * we're about to share. Returns null if the dir can't be created.
+     * Creates `cacheDir/trip-exports/` and purges artifacts older than [STALE_EXPORT_TTL_MS] for
+     * cache hygiene. Recent files are kept so a concurrent export's just-written file isn't deleted
+     * before it reaches the share chooser. Returns null if the dir can't be created.
      */
     private fun prepareOutDir(ctx: Context): File? {
         val outDir = File(ctx.cacheDir, SUBDIR)
@@ -191,8 +197,9 @@ object TripExportShareIntent {
             Log.e(TAG, "could not create trip-export dir: $outDir")
             return null
         }
+        val cutoff = System.currentTimeMillis() - STALE_EXPORT_TTL_MS
         outDir.listFiles()?.forEach { stale ->
-            if (stale.isFile && !stale.delete()) {
+            if (stale.isFile && stale.lastModified() < cutoff && !stale.delete()) {
                 Log.w(TAG, "could not delete stale trip export: $stale")
             }
         }

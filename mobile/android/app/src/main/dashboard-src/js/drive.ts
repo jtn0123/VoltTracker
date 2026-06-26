@@ -351,13 +351,16 @@ type ChartPoint = {
       return;
     }
 
-    const maxMph = Math.max(40, ...samples) * 1.12;
+    // Autoscale floor must match the unit of `samples` (km/h in metric, mph in imperial)
+    // so the trace scales consistently across unit systems. 64 km/h ≈ 40 mph.
+    const axisFloor = metric ? 64 : 40;
+    const maxAxis = Math.max(axisFloor, ...samples) * 1.12;
     const cap = Math.max(12, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
     const points: ChartPoint[] = samples.map((sample: number, index: number) => ({
       x: offset + index * stride,
-      y: padT + (1 - sample / maxMph) * (h - padT - padB)
+      y: padT + (1 - sample / maxAxis) * (h - padT - padB)
     }));
     const firstPoint = points[0];
     const latest = points[points.length - 1];

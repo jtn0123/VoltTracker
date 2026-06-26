@@ -105,6 +105,11 @@ class AppStatePayload(
             val keys = latestVehicle.keys()
             while (keys.hasNext()) {
                 val key = keys.next()
+                // Do not let a stored DB column clobber the typed fields computed above
+                // (the live classifier values are authoritative for the dashboard contract).
+                if (key in RESERVED_VEHICLE_KEYS) {
+                    continue
+                }
                 vehicle.put(key, latestVehicle.opt(key))
             }
         }
@@ -154,4 +159,9 @@ class AppStatePayload(
             .put("sampleGapCount", telemetry.optInt("sampleGapCount", 0))
             .put("lastSampleGapMs", telemetry.optLong("lastSampleGapMs", 0L))
             .put("maxSampleGapMs", telemetry.optLong("maxSampleGapMs", 0L))
+
+    private companion object {
+        /** Typed vehicle fields a stored DB row must not overwrite when its columns are copied. */
+        val RESERVED_VEHICLE_KEYS = setOf("state", "confidence", "reasons", "vinStored")
+    }
 }

@@ -439,7 +439,9 @@ object ObdStoreSessionReview {
                     payload.put(item)
                 }
             }
-        return payload
+        // Queried newest-first for the LIMIT; reverse to oldest-first so the frames
+        // list matches the timeline and speed trace shown alongside it.
+        return ObdStoreSupport.reverse(payload)
     }
 
     @Throws(JSONException::class)

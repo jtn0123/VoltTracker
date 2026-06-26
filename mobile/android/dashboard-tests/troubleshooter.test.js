@@ -260,9 +260,9 @@ describe('troubleshooter.ts — stuck-bond "Forget & re-pair" swap', () => {
 
   it('swaps the primary action to Forget & re-pair when the last 3 sessions all failed', async () => {
     await loadWithRecent([
-      { status: 'failed' },
-      { status: 'error' },
-      { status: 'disconnected' },
+      { outcome: 'failed' },
+      { outcome: 'aborted' },
+      { outcome: 'failed' },
     ]);
     const VD = window.VoltDashboard;
 
@@ -279,9 +279,9 @@ describe('troubleshooter.ts — stuck-bond "Forget & re-pair" swap', () => {
 
   it('keeps the normal "Try again" primary when not all 3 recent sessions failed', async () => {
     await loadWithRecent([
-      { status: 'failed' },
-      { status: 'success' },
-      { status: 'failed' },
+      { outcome: 'failed' },
+      { outcome: 'success' },
+      { outcome: 'failed' },
     ]);
     const VD = window.VoltDashboard;
 
@@ -295,9 +295,9 @@ describe('troubleshooter.ts — stuck-bond "Forget & re-pair" swap', () => {
     const openBluetoothSettings = vi.fn();
     await freshLoad(createVoltBridgeFixture({
       getRecentSessions: () => JSON.stringify([
-        { status: 'failed' },
-        { status: 'failed' },
-        { status: 'failed' },
+        { outcome: 'failed' },
+        { outcome: 'failed' },
+        { outcome: 'failed' },
       ]),
       openBluetoothSettings,
     }));

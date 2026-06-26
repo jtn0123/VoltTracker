@@ -57,7 +57,7 @@ import type { FocusTrap } from "./focus-trap";
   };
 
   type RecentSession = {
-    status?: unknown;
+    outcome?: unknown;
   };
 
   type PayloadHandler = (payload: unknown) => unknown;
@@ -422,10 +422,11 @@ import type { FocusTrap } from "./focus-trap";
       renderForRetry();
       return;
     }
-    const failedSessionStatuses = ["failed", "error", "disconnected"];
+    // Native serializes the session result as `outcome` (success/failed/aborted), not `status`.
+    const failedSessionOutcomes = ["failed", "aborted"];
     const allFailed = recent
       .slice(0, 3)
-      .every((s) => failedSessionStatuses.includes(String((s && s.status) || "").toLowerCase()));
+      .every((s) => failedSessionOutcomes.includes(String((s && s.outcome) || "").toLowerCase()));
     if (!allFailed) {
       renderForRetry();
       return;

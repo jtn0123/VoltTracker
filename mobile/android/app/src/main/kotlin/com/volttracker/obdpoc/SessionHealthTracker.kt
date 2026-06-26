@@ -47,7 +47,10 @@ class SessionHealthTracker(
                     )
                 }
             }
-            lastSampleAtMs = now
+            // Guard against out-of-order/backward-clock samples: advancing to a
+            // smaller `now` would inflate the next in-order gap and fire a spurious
+            // sample_gap event.
+            lastSampleAtMs = maxOf(lastSampleAtMs, now)
             if (!service.appInForeground) {
                 backgroundSampleCount += 1
             }

@@ -411,8 +411,10 @@ import { initialTelemetryState } from "./telemetry-state";
     if (seconds < 60) return `${seconds}s ago`;
     const minutes = Math.round(seconds / 60);
     if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 48) return `${hours}h ago`;
+    // Gate on the unrounded hour span so 23.5–23.99h stays "Nh ago" instead of rounding up
+    // across the 24h boundary into "1d ago"; round only for the displayed number.
+    const hours = minutes / 60;
+    if (hours < 24) return `${Math.round(hours)}h ago`;
     return `${Math.round(hours / 24)}d ago`;
   }
 

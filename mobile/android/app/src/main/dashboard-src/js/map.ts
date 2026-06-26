@@ -467,7 +467,9 @@ import type { MapSessionFilter } from "./map-session-list";
       ? (Number(route.distanceMeters || 0) / (duration / 1000)) * 3.6
       : 0;
     const avgSpeed = VD.units.speed(avgKph);
-    VD.setText("mapAvgMph", avgKph > 0 ? avgSpeed.value : "--");
+    // Gate on the rounded display value, not raw avgKph: a sub-0.5-unit average rounds to 0 and
+    // should read "--", not a bare "0".
+    VD.setText("mapAvgMph", avgSpeed.value > 0 ? avgSpeed.value : "--");
     VD.setText("mapAvgSpeedLabel", `Avg ${avgSpeed.unit}`);
     const empty = el("mapEmpty");
     if (empty) empty.hidden = hasMapContent;
@@ -1106,7 +1108,10 @@ import type { MapSessionFilter } from "./map-session-list";
     let effCount = 0;
     for (const point of points) {
       const eff = Number(point.eff);
-      if (Number.isFinite(eff)) {
+      // Exclude only clamp-saturated samples (enrichRouteEff ceils eff at exactly 6.5);
+      // averaging that pile would inflate the headline. Legitimate high-efficiency values
+      // just below the ceiling are kept.
+      if (Number.isFinite(eff) && eff < 6.5) {
         effSum += eff;
         effCount += 1;
       }
@@ -1340,7 +1345,7 @@ import type { MapSessionFilter } from "./map-session-list";
     VD.setText("tripDetailDuration", stats.durationMs > 0 ? VD.formatDuration(stats.durationMs) : "--");
     const avg = VD.units.speed(stats.avgKph);
     VD.setText("tripDetailAvgLabel", `Avg ${avg.unit}`);
-    VD.setText("tripDetailAvgSpeed", stats.avgKph > 0 ? `${avg.value} ${avg.unit}` : "--");
+    VD.setText("tripDetailAvgSpeed", avg.value > 0 ? `${avg.value} ${avg.unit}` : "--");
     VD.setText("tripDetailMaxSpeed", stats.maxKph > 0 ? VD.units.speedText(stats.maxKph) : "--");
     VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
     renderTripDetailCost(stats);

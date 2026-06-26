@@ -198,7 +198,10 @@ import { units } from "./prefs";
       const point = d[i];
       const routePoint = pts[i];
       if (!point || !routePoint) continue;
-      point.mph = Math.max(0, scrubWindowAvg(rawMph, i, 1) || rawMph[i] || 0);
+      // A windowed average of exactly 0 (genuinely stopped) must not be discarded by `||`;
+      // fall through to the raw sample only when the average is non-finite (no finite neighbors).
+      const mphAvg = scrubWindowAvg(rawMph, i, 1);
+      point.mph = Math.max(0, Number.isFinite(mphAvg) ? mphAvg : (rawMph[i] || 0));
       point.elevM = scrubHasElev ? scrubWindowAvg(rawElev, i, 3) || 0 : 0;
       point.soc = scrubHasSoc ? scrubSocAt(track, point.atMs) : null;
       // Don't coerce null -> 0; missing samples must remain null so the chart

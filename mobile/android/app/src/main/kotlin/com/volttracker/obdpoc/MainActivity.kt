@@ -198,6 +198,7 @@ open class MainActivity :
                 lastStorage.set(parsed)
                 callDashboard("setStorage", storage)
             },
+            scheduleDelayed = { delayMs, task -> mainHandler.postDelayed(task, delayMs) },
         )
     private val deviceListPublisher =
         DeviceListPublisher(

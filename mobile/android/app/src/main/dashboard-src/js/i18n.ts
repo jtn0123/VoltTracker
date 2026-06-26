@@ -122,6 +122,8 @@ function interpolate(template: string, params?: MessageParams): string {
  */
 export function t(key: MessageKey, params?: MessageParams): string {
   const override = activeBase === "en" ? undefined : overrides.get(activeBase);
-  const template = (override && override[key]) || EN[key] || key;
+  // Resolve by key presence, not truthiness, so an intentional empty-string override is honored
+  // (a `||` chain would wrongly fall through "" to the English string).
+  const template = (override && key in override ? override[key] : EN[key]) ?? key;
   return interpolate(template, params);
 }

@@ -42,6 +42,12 @@ class RollingAppLog {
     // Touched only under this object's monitor (write()/close() are @Synchronized).
     private var closed = false
 
+    // Cached birth-marker timestamp (epoch ms; 0 = unknown/not yet read). Avoids re-opening and
+    // reading the sidecar file on every write() via rotateIfStale() — that per-line syscall would
+    // defeat the long-lived-writer optimization above. Populated lazily from disk, set directly by
+    // writeBorn(), and invalidated on rotation. Touched only under this object's monitor.
+    private var cachedBornMs: Long = 0L
+
     // Cached timestamp formatter. SimpleDateFormat is not thread-safe, but it's only used from the
     // synchronized write() path, so a single cached instance is safe and avoids rebuilding it (and
     // re-parsing the pattern) on every line. Locale.US keeps the format stable across device locales.
@@ -165,7 +171,7 @@ class RollingAppLog {
         // touches mtime, so an active log would never rotate. If the marker is missing or
         // unreadable, treat the live file as fresh (and the write path will write a fresh marker
         // afterwards), since we'd rather skip a rotation than rotate spuriously.
-        val bornMs = readBornMs()
+        val bornMs = bornMs()
         if (bornMs <= 0L) {
             return
         }
@@ -192,6 +198,20 @@ class RollingAppLog {
         // a stale marker would make the next rotation fire too early (also acceptable) rather than
         // too late, so it's not catastrophic. Try once.
         bornFile.delete()
+        cachedBornMs = 0L
+    }
+
+    /** Birth-marker timestamp, reading the sidecar once and caching it for subsequent writes. */
+    private fun bornMs(): Long {
+        val cached = cachedBornMs
+        if (cached > 0L) {
+            return cached
+        }
+        val read = readBornMs()
+        if (read > 0L) {
+            cachedBornMs = read
+        }
+        return read
     }
 
     private fun readBornMs(): Long {
@@ -216,6 +236,7 @@ class RollingAppLog {
                 writer.write(whenMs.toString())
                 writer.newLine()
             }
+            cachedBornMs = whenMs
         } catch (ex: IOException) {
             // Best-effort: a missing marker on the next call just makes the age-check skip
             // (treat as fresh). We'll try again on the next write. Plain logcat only — going

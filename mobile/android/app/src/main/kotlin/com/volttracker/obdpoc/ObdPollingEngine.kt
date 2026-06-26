@@ -74,6 +74,7 @@ open class ObdPollingEngine(
         connectAttemptStartedAtMs = 0L
         firstSampleTimingLogged = false
         pidPolling.reset()
+        liveSampleReader.reset()
     }
 
     fun sampleCount(): Int = sampleCount

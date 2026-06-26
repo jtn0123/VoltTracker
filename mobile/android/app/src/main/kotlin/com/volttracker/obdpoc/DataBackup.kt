@@ -155,7 +155,17 @@ class DataBackup(
                     start++
                 }
             }
-            return String(bytes, start, bytes.size - start, StandardCharsets.UTF_8)
+            var text = String(bytes, start, bytes.size - start, StandardCharsets.UTF_8)
+            if (skipBytes > 0L) {
+                // The window also starts mid-line: drop the partial first line so a Bluetooth
+                // address / VIN / coordinate that straddles the cut cannot evade the redaction
+                // regexes (which require whole, anchored tokens). Mirrors DiagnosticsBundle.readTail.
+                // If there is no newline at all, the entire window is one partial line we can't
+                // safely redact, so drop it rather than leak a truncated token.
+                val newline = text.indexOf('\n')
+                text = if (newline >= 0) text.substring(newline + 1) else ""
+            }
+            return text
         }
     }
 
@@ -594,8 +604,13 @@ class DataBackup(
         fun isVoltTrackerBackup(file: File?): Boolean = RestoreValidator.isVoltTrackerBackup(file)
 
         @JvmStatic
-        fun hasMinimumPassphrase(passphrase: String?): Boolean =
-            (passphrase?.trim()?.length ?: 0) >= MIN_PASSPHRASE_LENGTH
+        fun hasMinimumPassphrase(passphrase: String?): Boolean {
+            // Count Unicode code points, not UTF-16 units, so the "8 characters" the UI promises is
+            // enforced as user-perceived characters (4 astral-plane emoji are 8 UTF-16 units but only
+            // 4 characters, and must not pass the gate).
+            val trimmed = passphrase?.trim() ?: return false
+            return trimmed.codePointCount(0, trimmed.length) >= MIN_PASSPHRASE_LENGTH
+        }
 
         private fun contentLength(
             context: Context,

@@ -481,7 +481,10 @@ object ObdStoreSupport {
                 if (!cursor.moveToFirst() || cursor.getLong(2) < 2) {
                     0L
                 } else {
-                    maxOf(0L, Math.round((cursor.getDouble(1) - cursor.getDouble(0)) / (cursor.getLong(2) - 1)))
+                    // Subtract the epoch-ms span as Long before the float divide; reading the
+                    // bounds as doubles can drop low-order milliseconds at ~1.7e12.
+                    val spanMs = cursor.getLong(1) - cursor.getLong(0)
+                    maxOf(0L, Math.round(spanMs.toDouble() / (cursor.getLong(2) - 1)))
                 }
             }
 

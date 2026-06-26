@@ -16,11 +16,17 @@ class SessionRecorder {
     private val summaryStore: SessionSummaryStore?
     private val snapshotSource: SystemSnapshotSource?
     private val worker: ObdPersistenceWorker
-    private var localStore: ObdLocalStore?
 
-    private var activeSessionId = 0L
+    // Read off-lock from the persist* hot path (persistStatus is reachable on the MAIN thread via
+    // ObdService's ACTION_CANCEL_RETRY broadcast) while written under `lock` on the poll thread.
+    // @Volatile gives the happens-before edge so a status/telemetry row can't bind to a stale
+    // session id / store — matching the service layer's cross-thread field convention.
+    @Volatile private var localStore: ObdLocalStore?
+
+    @Volatile private var activeSessionId = 0L
     private var activeStartedAtMs = 0L
-    private var activeMode = ""
+
+    @Volatile private var activeMode = ""
     private var activeAdapterName = ""
     private var activeAddress = ""
     private var currentHeader = ""

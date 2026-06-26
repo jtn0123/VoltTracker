@@ -35,6 +35,16 @@ class LiveSampleReader(
      */
     private var consecutiveSpeedSentinels = 0
 
+    /**
+     * Clears per-session state so a reader instance reused across stop/start cycles on the same
+     * service does not carry parse-failure suppression (which would permanently hide the
+     * `pid_parse_failed` diagnostic for a PID that failed once in an earlier session).
+     */
+    fun reset() {
+        parseFailureReported.clear()
+        consecutiveSpeedSentinels = 0
+    }
+
     interface SampleContext {
         fun incrementSampleCount(): Int
 
