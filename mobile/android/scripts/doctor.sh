@@ -97,6 +97,15 @@ if need_cmd node; then
   node_major="$(printf '%s\n' "$node_version" | sed -E 's/^v?([0-9]+).*/\1/')"
   if [ "$node_major" != "$expected_node_major" ]; then
     missing "Node ${expected_node_major}.x is required by .nvmrc and dashboard package engines"
+    if command -v nvm >/dev/null 2>&1; then
+      warn "run from repo root: nvm use"
+    elif command -v mise >/dev/null 2>&1; then
+      warn "run from repo root: mise install && mise shell node@${expected_node_major}"
+    elif command -v volta >/dev/null 2>&1; then
+      warn "run: volta install node@${expected_node_major}"
+    else
+      warn "install Node ${expected_node_major}.x, or set VOLTTRACKER_ALLOW_UNSUPPORTED_NODE=1 only for temporary local diagnostics"
+    fi
   fi
 fi
 if need_cmd npm; then
