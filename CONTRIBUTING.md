@@ -116,7 +116,7 @@ Impact: lets you drop noisy GPS spikes so the efficiency trend reflects real dri
 ```
 
 Keep the impact to a single sentence; the rest of the body is intentionally
-omitted from the changelog. See [`templates/README.md`](templates/README.md).
+omitted from the changelog. See [`docs/changelog-templates.md`](docs/changelog-templates.md).
 
 ## Project structure
 

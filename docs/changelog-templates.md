@@ -1,9 +1,15 @@
 # Changelog / release-notes templates
 
-These Jinja2 templates customize how **python-semantic-release** (PSR) renders
-`CHANGELOG.md` and each GitHub Release body. PSR auto-discovers this directory
-because `template_dir = "templates"` (the default) in
+The Jinja2 templates in the repo-root [`templates/`](../templates/) directory
+customize how **python-semantic-release** (PSR) renders `CHANGELOG.md` and each
+GitHub Release body. PSR auto-discovers `templates/` because
+`template_dir = "templates"` (the default) in
 `pyproject.toml → [tool.semantic_release.changelog]`.
+
+> ⚠️ This doc lives in `docs/`, NOT in `templates/`, on purpose: PSR renders
+> every top-level file in `template_dir` to the repo root, so a
+> `templates/README.md` is written over the project's root `README.md` on every
+> release (this happened in v0.22.1). Keep non-`.j2` docs out of `templates/`.
 
 They are a verbatim copy of PSR 9.21's bundled `angular/md` templates with a
 single file modified: **`.components/changes.md.j2`**. The goal is a compact,

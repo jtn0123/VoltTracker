@@ -40,7 +40,7 @@ allow_zero_version = true
 # "### Features" headings that dump the whole commit body, each release renders
 # compact emoji sections — ✳️ New (feat) / 🔺 Fix (fix) / 🔷 Changed (everything
 # else) — with one scannable line per change plus an optional italic impact note
-# pulled from an "Impact:" line in the commit body. See templates/README.md.
+# pulled from an "Impact:" line in the commit body. See docs/changelog-templates.md.
 #
 # mode = "init" regenerates the whole file from git history each release, so this
 # style is applied to past versions too on the next release.
