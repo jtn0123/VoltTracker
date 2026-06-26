@@ -77,6 +77,7 @@ function union(...sets) {
 // ---- Native contracts, derived live from the Kotlin source of truth ---
 const storageSource = readNativeSource('StorageSummaryJson.kt');
 const reportsSource = readNativeSource('data/ObdStoreReports.kt');
+const chargeSummarySource = readNativeSource('data/ObdStoreChargeSummary.kt');
 const appStateSource = readNativeSource('AppStatePayload.kt');
 const dtcSource = readNativeSource('data/DiagnosticCodeReport.kt');
 
@@ -90,11 +91,13 @@ const NATIVE_STORAGE = union(
 const NATIVE_RECENT_SESSION = putKeys(
   methodBody(storageSource, ['JSONArray recentSessionsJson(StorageSummaryRecord record)', 'fun recentSessionsJson(record: StorageSummaryRecord)']),
 );
+// Charge-summary emitters moved to ObdStoreChargeSummary.kt (chargeSummaryJson
+// was renamed summaryJson there); the .put(...) keys are unchanged.
 const NATIVE_CHARGE_SUMMARY = putKeys(
-  methodBody(reportsSource, ['JSONObject chargeSummaryJson(SQLiteDatabase db)', 'fun chargeSummaryJson(db: SQLiteDatabase)']),
+  methodBody(chargeSummarySource, ['JSONObject summaryJson(SQLiteDatabase db)', 'fun summaryJson(db: SQLiteDatabase)']),
 );
 const NATIVE_CHARGE_ROW = putKeys(
-  methodBody(reportsSource, ['JSONObject chargeSummaryRowJson(ChargeSummaryRow row)', 'fun chargeSummaryRowJson(row: ChargeSummaryRow)']),
+  methodBody(chargeSummarySource, ['JSONObject chargeSummaryRowJson(ChargeSummaryRow row)', 'fun chargeSummaryRowJson(row: ChargeSummaryRow)']),
 );
 const NATIVE_DTC = putKeys(methodBody(dtcSource, ['JSONObject toJson()', 'fun toJson(): JSONObject']));
 // appState.vehicle = vehicleJson()'s own keys plus the latestVehicle row it

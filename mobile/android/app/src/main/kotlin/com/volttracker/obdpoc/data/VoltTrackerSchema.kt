@@ -167,8 +167,8 @@ object VoltTrackerSchema {
      * Per-session cache for the whole-history inferred-charge scan (G2). One row per finalized
      * session, storing that session's contribution to the charge-summary projection as a JSON blob
      * (its within-session inferred-charge rows + its meaningful drive/SOC boundaries), so
-     * `ObdStoreReports.chargeSummaryRows` no longer rescans every session's telemetry and drive
-     * windows on each storage-summary refresh. Populated lazily by `ObdStoreReports` (keyed off
+     * `ObdStoreChargeSummary` no longer rescans every session's telemetry and drive
+     * windows on each storage-summary refresh. Populated lazily by `ObdStoreChargeSummary` (keyed off
      * `CHARGE_ROLLUP_CACHE_VERSION`), so a version bump rebuilds it; the active (not-yet-finalized)
      * session is computed live and absent here. The cross-session merge/sort that assembles the
      * final rows still runs on the reassembled lists, so the projection output is byte-identical.
