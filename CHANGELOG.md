@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.22.2 (2026-06-26)
+
+### 🔺 Fix
+
+- Bug-hunt batch — correctness/robustness fixes across app + dashboard
+  ([#267](https://github.com/jtn0123/VoltTracker/pull/267),
+  [`c1e03d6`](https://github.com/jtn0123/VoltTracker/commit/c1e03d602e03dd871eaed81b8e8b5ceadffe5a58))
+
+
 ## v0.22.1 (2026-06-22)
 
 ### 🔺 Fix
