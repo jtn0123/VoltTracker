@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import androidx.annotation.VisibleForTesting
 import com.volttracker.obdpoc.PidSchedule.Header
 import com.volttracker.obdpoc.PidSchedule.PidSpec
 import org.json.JSONException
@@ -54,6 +55,7 @@ class PidPollingState(
         fun nowMs(): Long
     }
 
+    @VisibleForTesting
     fun setClockForTesting(clock: Clock) {
         this.clock = clock
     }

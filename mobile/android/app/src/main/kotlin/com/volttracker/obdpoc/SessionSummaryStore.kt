@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import androidx.annotation.VisibleForTesting
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
@@ -180,6 +181,7 @@ class SessionSummaryStore(
 
         /** Test seam: drops the cached instance so the next [getInstance] re-reads disk. */
         @JvmStatic
+        @VisibleForTesting
         fun resetForTests() {
             synchronized(SessionSummaryStore::class.java) {
                 singleton = null

@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
 import android.util.Log
+import androidx.annotation.VisibleForTesting
 import com.volttracker.obdpoc.classify.VehicleState
 import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException
@@ -91,6 +92,7 @@ open class ObdPollingEngine(
         connection.close()
     }
 
+    @VisibleForTesting
     fun setConnectionForTest(replacement: ElmConnection) {
         connection = replacement
     }

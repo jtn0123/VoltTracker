@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import androidx.annotation.VisibleForTesting
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
@@ -90,6 +91,7 @@ open class ElmConnection
         }
 
         @Throws(IOException::class)
+        @VisibleForTesting
         internal fun openSocketForTest(
             pendingSocket: ElmSocket,
             connectTimeoutMs: Long,

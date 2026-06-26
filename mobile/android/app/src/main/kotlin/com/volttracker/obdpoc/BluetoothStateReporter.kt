@@ -10,6 +10,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.os.ParcelUuid
 import android.os.Parcelable
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
 import org.json.JSONException
 import org.json.JSONObject
@@ -335,9 +336,11 @@ class BluetoothStateReporter(
     }
 
     /** Test-only: visibility of streak state so tests can assert SDP-refresh logic. */
+    @VisibleForTesting
     fun connectingWithFailureStreakForTest(): Int = connectingWithFailureStreak
 
     /** Test-only: pump a status payload through the handler without going through the IntentFilter. */
+    @VisibleForTesting
     fun handleStatusForTest(
         state: String?,
         failureClass: String?,

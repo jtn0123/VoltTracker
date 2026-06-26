@@ -12,6 +12,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.RequiresApi
+import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.LocationManagerTracker
@@ -651,6 +652,7 @@ open class ObdService :
         }
     }
 
+    @VisibleForTesting
     fun drainCoalescedWidgetTelemetryCountForTest(): Long = coalescedWidgetTelemetryCount.getAndSet(0L)
 
     private fun maybeUpdateWidgetTelemetry(payload: JSONObject) {
