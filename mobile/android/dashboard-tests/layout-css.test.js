@@ -46,7 +46,18 @@ describe('dashboard layout css', () => {
     expect(navRule).toMatch(/grid-template-columns\s*:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
     expect(navRule).toMatch(/gap\s*:\s*4px/);
     expect(navButtonRule).toMatch(/min-width\s*:\s*0/);
-    expect(appRule).toMatch(/calc\(112px \+ env\(safe-area-inset-bottom\)\)/);
+    expect(appRule).toMatch(/calc\(var\(--nav-safe\) \+ 12px\)/);
+  });
+
+  it('defines touch + nav geometry tokens', () => {
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+    const buttonRule = baseCss.match(/(?:^|\n)\s*button\s*\{[^}]+\}/)?.[0] || '';
+
+    expect(baseCss).toMatch(/--touch-min:\s*44px/);
+    expect(baseCss).toMatch(/--touch-min-dense:\s*40px/);
+    expect(baseCss).toMatch(/--nav-h:\s*68px/);
+    expect(baseCss).toMatch(/--nav-safe:\s*calc\(/);
+    expect(buttonRule).toMatch(/min-height\s*:\s*var\(--touch-min\)/);
   });
 
   it('keeps tab content from overflowing the viewport horizontally', () => {

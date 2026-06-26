@@ -3,6 +3,13 @@
      which also flips color-scheme to `light` so form controls follow. */
   :root {
     color-scheme: dark;
+    /* Touch-target + floating-nav layout tokens. --nav-safe already folds in
+       env(safe-area-inset-bottom); never re-add env() where --nav-safe is used. */
+    --touch-min: 44px;
+    --touch-min-dense: 40px;
+    --nav-h: 68px;
+    --nav-gap: 10px;
+    --nav-safe: calc(var(--nav-h) + var(--nav-gap) + env(safe-area-inset-bottom));
     --bg: #07080c;
     --panel: #171820;
     --panel-2: #20222c;
@@ -233,7 +240,7 @@
   }
 
   button {
-    min-height: 42px;
+    min-height: var(--touch-min);
     border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--fill-strong);
@@ -273,8 +280,8 @@
     /* Top floor raised to 30px: this WebView reports no safe-area-inset-top, so the old 14px
        floor let the title row crowd the system status bar (clock/battery). env() still wins on
        devices that do report a larger inset. */
-    padding: 30px 12px 112px;
-    padding: max(30px, env(safe-area-inset-top)) 12px calc(112px + env(safe-area-inset-bottom));
+    padding: 30px 12px calc(var(--nav-safe) + 12px);
+    padding: max(30px, env(safe-area-inset-top)) 12px calc(var(--nav-safe) + 12px);
   }
 
   /* Fullscreen map (.map-card.is-fullscreen) lives inside .app and uses position: fixed;
@@ -891,7 +898,7 @@
 
   .pref-price input {
     width: 72px;
-    min-height: 40px;
+    min-height: var(--touch-min);
     padding: 6px 8px;
     border: 1px solid var(--line-strong);
     border-radius: 10px;
@@ -921,8 +928,8 @@
   }
 
   .tile-move {
-    width: 36px;
-    min-height: 36px;
+    width: var(--touch-min-dense);
+    min-height: var(--touch-min-dense);
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: transparent;
@@ -942,7 +949,7 @@
   }
 
   .tile-toggle {
-    min-height: 36px;
+    min-height: var(--touch-min-dense);
     padding: 4px 12px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
@@ -1062,7 +1069,7 @@
       --panel: #ffffff;
       --panel-2: #eceae4;
       --panel-3: #f8f7f3;
-      --line: rgba(15,18,28,0.16);
+      --line: rgba(15,18,28,0.09);
       --line-strong: rgba(15,18,28,0.28);
       --text: #1b1c22;
       --muted: #555661;
@@ -1115,7 +1122,7 @@
       --sheen-soft: rgba(255,255,255,0);
       --sheen-faint: rgba(255,255,255,0);
       --bg-top: #fbfaf7;
-      --bg-glow: rgba(232,90,31,0.1);
+      --bg-glow: rgba(232,90,31,0.06);
       --map-accent: #0b6dc2;
       --map-accent-rgb: 11, 109, 194;
       --on-map-accent: #ffffff;
@@ -1134,10 +1141,16 @@
       --mixed-soft: #5b34b5;
     }
 
+    .panel {
+      box-shadow:
+        0 1px 2px rgba(15,18,28,0.07),
+        0 1px 1px rgba(15,18,28,0.04);
+    }
+
     .top-main {
       background:
-        radial-gradient(220px 54px at 8px 2px, rgba(232, 90, 31, 0.08), transparent 68%),
-        linear-gradient(90deg, rgba(0, 0, 0, 0.02), rgba(0, 0, 0, 0));
+        radial-gradient(220px 54px at 8px 2px, rgba(232, 90, 31, 0.055), transparent 68%),
+        linear-gradient(90deg, rgba(0, 0, 0, 0.014), rgba(0, 0, 0, 0));
     }
 
     .primary-action.is-stop,
@@ -1170,5 +1183,13 @@
 
     .error-banner strong {
       color: var(--bad);
+    }
+  }
+
+  @media (min-width: 900px) {
+    .app {
+      width: min(1120px, 100%);
+      padding-left: 88px;
+      padding-bottom: 24px;
     }
   }

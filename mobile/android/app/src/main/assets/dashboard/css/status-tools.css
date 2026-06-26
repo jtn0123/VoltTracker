@@ -12,7 +12,7 @@
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: calc(96px + env(safe-area-inset-bottom));
+  bottom: calc(var(--nav-safe) + 18px);
   z-index: 900; /* above the bottom nav (40), below modal overlays (999+) */
   max-width: min(92vw, 480px);
   padding: 10px 16px;
@@ -26,6 +26,12 @@
   font-size: 13px;
   line-height: 1.4;
   text-align: center;
+}
+
+@media (min-width: 900px) {
+  .status-toast {
+    bottom: 24px;
+  }
 }
 
 /* ---- Topbar: status popover (opened from the state badge) ---- */
@@ -269,7 +275,7 @@
 }
 
 .connection-tools__btn {
-  min-height: 36px;
+  min-height: var(--touch-min);
   border-radius: 10px;
 }
 
@@ -314,7 +320,8 @@
 }
 
 .connection-tools__notify-mins select {
-  height: 38px;
+  min-height: var(--touch-min);
+  height: var(--touch-min);
   padding: 4px 8px;
 }
 

@@ -645,6 +645,7 @@ import { units } from "./prefs";
   function hideScrubber() {
     const node = el("scrubber");
     if (node) node.hidden = true;
+    document.body.classList.remove("map-scrubber-active");
     if (scrubMarker && scrubMap) {
       scrubMap.removeLayer(scrubMarker);
       scrubMarker = null;
@@ -663,6 +664,11 @@ import { units } from "./prefs";
       return;
     }
     node.hidden = false;
+    const mapView = el("view-map");
+    document.body.classList.toggle(
+      "map-scrubber-active",
+      !!mapView && mapView.classList.contains("is-active"),
+    );
 
     if (scrubMap) {
       if (!scrubMarker) {

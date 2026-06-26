@@ -47,7 +47,7 @@
   }
 
   .demo-stop {
-    min-height: 36px;
+    min-height: var(--touch-min-dense);
     border-color: rgba(255,107,95,0.34);
     color: var(--bad-soft);
     white-space: nowrap;
@@ -735,7 +735,7 @@
        margin-inline-end offsets the right padding so the label stays flush with
        the card's right edge. The card header is taller than this, so it doesn't
        grow the header. */
-    min-height: 34px;
+    min-height: var(--touch-min-dense);
     padding: 7px 9px;
     margin-inline-end: -9px;
     display: inline-flex;
@@ -1950,6 +1950,21 @@
     color: var(--ok-soft);
   }
 
+  /* The filter-grid active fill is still a hard-coded bright green (the stage-tabs
+     above were tokenized via --seg-accent-rgb; this grid was not). On light, that
+     bright green washes out, so retint the active state to a readable dark green. */
+  @media (prefers-color-scheme: light) {
+    .signal-filter-grid button.is-active {
+      border-color: rgba(4,120,87,0.55);
+      color: #04684b;
+      background: linear-gradient(180deg, rgba(4,120,87,0.16), rgba(4,120,87,0.06)), var(--fill-soft);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 4px 12px rgba(4,120,87,0.14);
+    }
+    .signal-filter-grid button.is-active span {
+      color: #04684b;
+    }
+  }
+
   .warning-item,
   .timeline-item,
   .enhanced-next-item,
@@ -2042,7 +2057,7 @@
   }
 
   .icon-link-btn {
-    min-height: 38px;
+    min-height: var(--touch-min-dense);
     padding: 0 12px;
     border: 1px solid var(--line-soft);
     border-radius: 8px;
@@ -2186,7 +2201,7 @@
   .dtc-search {
     display: inline-flex;
     align-items: center;
-    min-height: 36px;
+    min-height: var(--touch-min-dense);
     margin-top: 6px;
     padding: 7px 13px;
     border: 1px solid rgba(92,200,255,0.34);
@@ -2641,8 +2656,8 @@
   }
 
   .app-dialog-close {
-    width: 34px;
-    height: 34px;
+    width: var(--touch-min);
+    min-height: var(--touch-min);
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--fill-bold);
@@ -2673,7 +2688,7 @@
 
   .app-dialog-input {
     width: 100%;
-    min-height: 42px;
+    min-height: var(--touch-min);
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--panel-3);
@@ -2771,8 +2786,8 @@
   }
 
   .restore-progress-close {
-    width: 34px;
-    height: 34px;
+    width: var(--touch-min);
+    min-height: var(--touch-min);
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--fill-bold);
