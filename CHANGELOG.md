@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.23.1 (2026-06-29)
+
+### 🔺 Fix
+
+- **android**: Harden bridge failure paths
+  ([`afbe430`](https://github.com/jtn0123/VoltTracker/commit/afbe430ac94116453b98f614a70e95f95b26be56))
+
+
 ## v0.23.0 (2026-06-29)
 
 ### 🔺 Fix
