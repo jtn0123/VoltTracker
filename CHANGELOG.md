@@ -1,6 +1,88 @@
 # CHANGELOG
 
 
+## v0.23.0 (2026-06-29)
+
+### 🔺 Fix
+
+- **android**: Harden exports and validation gates
+  ([`25fbad3`](https://github.com/jtn0123/VoltTracker/commit/25fbad36beb3c5a7f73291ca7877b28a5a36ce21))
+
+- **dashboard**: Complete map-layer tablist semantics and document DTC lazy chunks
+  ([#261](https://github.com/jtn0123/VoltTracker/pull/261),
+  [`8dfe479`](https://github.com/jtn0123/VoltTracker/commit/8dfe4799fa717c4035e2bb29cd9910db52f9a202))
+
+- **release**: Stop the changelog template dir from overwriting the root README
+  ([#268](https://github.com/jtn0123/VoltTracker/pull/268),
+  [`538eedd`](https://github.com/jtn0123/VoltTracker/commit/538eeddc9d4db9fc94caa1b4d1761883db290d97))
+  - _the project README stops being clobbered on every release._
+
+### 🔷 Changed
+
+- **deps**: Bump actions/checkout from 6.0.3 to 7.0.0
+  ([#248](https://github.com/jtn0123/VoltTracker/pull/248),
+  [`9adf9fd`](https://github.com/jtn0123/VoltTracker/commit/9adf9fd56c8e701b5df46b672c16d21623437f79))
+
+- **deps**: Bump actions/setup-java from 5.2.0 to 5.3.0
+  ([#249](https://github.com/jtn0123/VoltTracker/pull/249),
+  [`9b41da6`](https://github.com/jtn0123/VoltTracker/commit/9b41da6db88c53c3447f81846e66b9c89dd63c5d))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#256](https://github.com/jtn0123/VoltTracker/pull/256),
+  [`8be917b`](https://github.com/jtn0123/VoltTracker/commit/8be917bddbf3ef5b5b8f389dbc4d1bfc80f52828))
+
+- **deps**: Bump softprops/action-gh-release from 3.0.0 to 3.0.1
+  ([#251](https://github.com/jtn0123/VoltTracker/pull/251),
+  [`775d71b`](https://github.com/jtn0123/VoltTracker/commit/775d71bda8b979e4e9c13ddeb90f287e19efb71a))
+
+- **deps-dev**: Bump @playwright/test in /mobile/android/dashboard-e2e
+  ([#253](https://github.com/jtn0123/VoltTracker/pull/253),
+  [`d0a1dd8`](https://github.com/jtn0123/VoltTracker/commit/d0a1dd8748aa6e5a90a4417b847a42ec6a6555dc))
+
+- **deps-dev**: Bump @vitest/coverage-istanbul
+  ([#254](https://github.com/jtn0123/VoltTracker/pull/254),
+  [`413cf1c`](https://github.com/jtn0123/VoltTracker/commit/413cf1ce27c415144d5c215003ff6209100d9f8e))
+
+- **deps-dev**: Bump vitest in /mobile/android/dashboard-tests
+  ([#252](https://github.com/jtn0123/VoltTracker/pull/252),
+  [`464fa3f`](https://github.com/jtn0123/VoltTracker/commit/464fa3f47fe0949d6105d598031f5af8eaa8436d))
+
+### 🔷 Changed
+
+- **tooling**: Add a privacy scanner and local performance-benchmark tooling
+  ([#246](https://github.com/jtn0123/VoltTracker/pull/246),
+  [`aa40fa5`](https://github.com/jtn0123/VoltTracker/commit/aa40fa5cf8ea134a81f8caf4984e8237cfb34a3f))
+  - _tracked files are now scanned for leaked vehicle/location/device data on every PR, and there's a documented way to benchmark startup on a real device._
+
+### ✳️ New
+
+- **android**: Log how far a session got on terminal OBD failures
+  ([#266](https://github.com/jtn0123/VoltTracker/pull/266),
+  [`f7d24b9`](https://github.com/jtn0123/VoltTracker/commit/f7d24b9d91e44cddefe170bfd6248861bf6406d1))
+
+- **dashboard**: Nav-safe spacing, 44px touch targets, tablet rail layout, light polish
+  ([#259](https://github.com/jtn0123/VoltTracker/pull/259),
+  [`1ce618b`](https://github.com/jtn0123/VoltTracker/commit/1ce618bee7cc801e6515391ded33aa4576981026))
+
+### 🔷 Changed
+
+- **android**: Annotate test-only seams with @VisibleForTesting
+  ([#262](https://github.com/jtn0123/VoltTracker/pull/262),
+  [`8a970ca`](https://github.com/jtn0123/VoltTracker/commit/8a970cae336047b55f62a71d629ee5650acab23d))
+
+- **android**: Extract charge-summary engine from ObdStoreReports
+  ([#263](https://github.com/jtn0123/VoltTracker/pull/263),
+  [`cc249d1`](https://github.com/jtn0123/VoltTracker/commit/cc249d1b1d9169d3216c06ed015ef7086c2c56db))
+
+- **android**: Extract Volt Mode-22 decoder from ObdProtocol
+  ([#264](https://github.com/jtn0123/VoltTracker/pull/264),
+  [`9d6b5b2`](https://github.com/jtn0123/VoltTracker/commit/9d6b5b2151a8b1e86aa6b86b7129096eef3d2781))
+
+- **android**: Split the Volt PID catalog data out of EnhancedPidProfiles
+  ([#265](https://github.com/jtn0123/VoltTracker/pull/265),
+  [`5a3869d`](https://github.com/jtn0123/VoltTracker/commit/5a3869d6b6ed0f1aab79d09592069c4571a15fc8))
+
+
 ## v0.22.2 (2026-06-26)
 
 ### 🔺 Fix
