@@ -242,6 +242,36 @@ describe('M5 — maintenance log', () => {
     expect(list.textContent).toContain('No maintenance logged yet');
   });
 
+  it('clears stale rows when the maintenance-log bridge read throws', async () => {
+    const logClientError = vi.fn();
+    let fail = false;
+    await loadWithMaintenance(
+      () => {
+        if (fail) throw new Error('maintenance table locked');
+        return JSON.stringify([
+          { id: 7, createdAtMs: 1_700_000_000_000, odometerKm: 1609.344, type: 'Oil change', note: 'Synthetic' },
+        ]);
+      },
+      { logClientError },
+    );
+
+    window.VoltDashboard.setStorage({});
+    let list = document.getElementById('maintenanceList');
+    expect(list.querySelectorAll('.real-insight-item')).toHaveLength(1);
+
+    fail = true;
+    expect(() => window.VoltDashboard.loadMaintenanceLog()).not.toThrow();
+
+    list = document.getElementById('maintenanceList');
+    expect(window.VoltDashboard.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not read the maintenance log.',
+    });
+    expect(logClientError).toHaveBeenCalledWith('maintenance_log_failed', 'Could not read the maintenance log.');
+    expect(list.textContent).not.toContain('Oil change');
+    expect(list.querySelector('.maint-empty')).toBeTruthy();
+  });
+
   it('renders real entries newest-first with date, odometer, and note', async () => {
     await loadWithMaintenance(() =>
       JSON.stringify([
@@ -321,6 +351,24 @@ describe('M5 — maintenance log', () => {
     expect(payload.date).toBeGreaterThan(0);
     // The form collapses after a successful save.
     expect(document.getElementById('maintenanceForm').hidden).toBe(true);
+  });
+
+  it('Add entry keeps the form open and reports inline when native save throws', async () => {
+    const logClientError = vi.fn();
+    const addMaintenanceEntry = vi.fn(() => {
+      throw new Error('database locked');
+    });
+    await loadWithMaintenance(() => '[]', { addMaintenanceEntry, logClientError });
+    window.VoltDashboard.setStorage({});
+
+    expect(() => fillMaintenanceForm({ type: 'Oil change' })).not.toThrow();
+
+    expect(document.getElementById('maintenanceForm').hidden).toBe(false);
+    expect(document.getElementById('maintFormError').textContent).toBe('Could not save maintenance entry.');
+    expect(logClientError).toHaveBeenCalledWith(
+      'maintenance_add_failed',
+      'Could not save maintenance entry. database locked',
+    );
   });
 
   it('Add entry omits the odometer and interval when blank', async () => {

@@ -46,10 +46,60 @@ type SignalActions = {
   const state = VD.state;
   const bridge = VD.bridge;
 
-  function startupMark(name: string) {
-    if (bridge && typeof bridge.startupMark === "function") {
-      bridge.startupMark(name);
+  function bridgeFailureMessage(method: string, err: unknown) {
+    const detail = err instanceof Error && err.message ? err.message : String(err || "");
+    return `bridge.${method} failed${detail ? `: ${detail}` : ""}`;
+  }
+
+  function reportBridgeActionFailure(method: string, err: unknown, statusDetail?: string) {
+    const message = bridgeFailureMessage(method, err);
+    console.warn(message);
+    let reported = false;
+    if (typeof VD.reportClientError === "function") {
+      try {
+        VD.reportClientError("bridge.call_failed", message);
+        reported = true;
+      } catch (_ignored) {}
     }
+    if (!reported && bridge && typeof bridge.logClientError === "function") {
+      try {
+        bridge.logClientError("bridge.call_failed", message);
+      } catch (_ignored) {}
+    }
+    if (statusDetail) VD.setStatus({ state: "blocked", detail: statusDetail });
+  }
+
+  function bridgeFunction(method: string): ((...args: unknown[]) => unknown) | null {
+    const target = bridge as unknown as Record<string, unknown> | null;
+    const fn = target && target[method];
+    return typeof fn === "function" ? fn.bind(bridge) as (...args: unknown[]) => unknown : null;
+  }
+
+  function callBridgeAction(method: string, args: unknown[] = [], statusDetail?: string) {
+    const fn = bridgeFunction(method);
+    if (!fn) return false;
+    try {
+      fn(...args);
+      return true;
+    } catch (err) {
+      reportBridgeActionFailure(method, err, statusDetail);
+      return false;
+    }
+  }
+
+  function readBridgeValue(method: string, args: unknown[] = [], statusDetail?: string): unknown {
+    const fn = bridgeFunction(method);
+    if (!fn) return undefined;
+    try {
+      return fn(...args);
+    } catch (err) {
+      reportBridgeActionFailure(method, err, statusDetail);
+      return undefined;
+    }
+  }
+
+  function startupMark(name: string) {
+    callBridgeAction("startupMark", [name]);
   }
 
   // AbortController for every listener bound below. resetListeners() aborts
@@ -262,14 +312,17 @@ type SignalActions = {
       return;
     }
     if (typeof bridge.refreshDevices === "function") {
-      bridge.refreshDevices();
+      callBridgeAction("refreshDevices", [], "Could not refresh adapter list.");
       return;
     }
     // callBridge tolerates a native build that predates a method (warns once,
     // returns undefined) instead of throwing mid-refresh.
-    const devices = VD.callBridge("listDevices");
+    const devices = readBridgeValue("listDevices", [], "Could not refresh adapter list.");
     if (devices !== undefined) VD.setDevices(devices);
-    if (typeof bridge.getDeviceHistory === "function") VD.setHistory(bridge.getDeviceHistory());
+    if (typeof bridge.getDeviceHistory === "function") {
+      const history = readBridgeValue("getDeviceHistory", [], "Could not refresh adapter history.");
+      if (history !== undefined) VD.setHistory(history);
+    }
   }
 
   function showBlockedAdapterFeedback(detail: string) {
@@ -305,7 +358,10 @@ type SignalActions = {
     const permissions = (state.appState && state.appState.permissions) || {};
     if (bridge && permissions.bluetoothPermission === false && typeof bridge.requestPermissions === "function") {
       if (allowPermissionResume) pendingPermissionConnect = { scan, requestedAtMs: Date.now() };
-      bridge.requestPermissions();
+      if (!callBridgeAction("requestPermissions", [], "Could not request Bluetooth permissions.")) {
+        pendingPermissionConnect = null;
+        return;
+      }
       showBlockedAdapterFeedback(
         'Bluetooth permission needed. Allow "Nearby devices" in the Android prompt' +
           (allowPermissionResume ? " and the connection will continue automatically." : ", then try again.")
@@ -390,8 +446,11 @@ type SignalActions = {
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
-      if (scan) bridge.scan(selected.address, selected.name);
-      else VD.callBridge("connect", selected.address, selected.name);
+      callBridgeAction(
+        scan ? "scan" : "connect",
+        [selected.address, selected.name],
+        scan ? "Could not start adapter scan." : "Could not start connection."
+      );
     });
   }
 
@@ -413,7 +472,11 @@ type SignalActions = {
     }
     const stage = String(state.signalProbeStage || "tires");
     setEnhancedProbeBadge("probing", "working");
-    withBusy(button, () => bridge.detailProbe(selected.address, selected.name, stage));
+    withBusy(button, () => {
+      if (!callBridgeAction("detailProbe", [selected.address, selected.name, stage], "Could not start detail probe.")) {
+        setEnhancedProbeBadge("blocked", "blocked");
+      }
+    });
   }
 
   function connectLastAdapter(button?: BusyButton | null) {
@@ -424,7 +487,7 @@ type SignalActions = {
     }
     showConnectionProgress(last, false);
     if (bridge && typeof bridge.connectLast === "function") {
-      withBusy(button, () => bridge.connectLast());
+      withBusy(button, () => callBridgeAction("connectLast", [], "Could not reconnect to the last adapter."));
     }
   }
 
@@ -433,8 +496,8 @@ type SignalActions = {
     // re-testing every branch. (tpmsScan/detailProbe both route to the same
     // detail-probe handler, but each is matched as its own case.)
     switch (action) {
-      case "permissions": bridge && VD.callBridge("requestPermissions"); return;
-      case "refresh": bridge && VD.callBridge("refreshDevices"); return;
+      case "permissions": bridge && callBridgeAction("requestPermissions", [], "Could not request Bluetooth permissions."); return;
+      case "refresh": refreshDevices(); return;
       case "refreshStorage": void refreshStorage(); return;
       case "clearStorage": void clearStorage(button); return;
       case "exportDebug": void exportDebugBundle(); return;
@@ -470,7 +533,7 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "All-trips export is available inside the Android app." });
       return;
     }
-    bridge.exportAllTripsCsv();
+    callBridgeAction("exportAllTripsCsv", [], "All-trips export failed.");
   }
 
   // Submit handler for the inline maintenance form (M1/C4). Intercepts the native submit so the
@@ -504,7 +567,7 @@ type SignalActions = {
     }).then((confirmed) => {
       if (!confirmed) return;
       if (!bridge || typeof bridge.deleteMaintenanceEntry !== "function") return;
-      bridge.deleteMaintenanceEntry(id);
+      callBridgeAction("deleteMaintenanceEntry", [id], "Could not remove maintenance entry.");
     });
   }
 
@@ -565,7 +628,7 @@ type SignalActions = {
     dtcTrap.activate();
     if (ack) ack.checked = false;
     if (confirm) confirm.disabled = true;
-    panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    if (typeof panel.scrollIntoView === "function") panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
     // Move focus into the alertdialog so keyboard/SR users land on the warning.
     if (typeof panel.focus === "function") panel.focus();
   }
@@ -596,8 +659,9 @@ type SignalActions = {
       return;
     }
     withBusy(button, () => {
-      bridge.clearVehicleDtcCodes();
-      closeClearDtcWarning();
+      if (callBridgeAction("clearVehicleDtcCodes", [], "Could not clear diagnostic codes.")) {
+        closeClearDtcWarning();
+      }
     });
   }
 
@@ -654,7 +718,7 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "Map cleanup is available inside the Android app." });
       return;
     }
-    bridge.markTripNotTrip(clean);
+    callBridgeAction("markTripNotTrip", [clean], "Could not hide this drive from Trips.");
   }
 
   function onMapSessionPointerDown(event: Event) {
@@ -709,7 +773,7 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "Drive export is available inside the Android app." });
       return;
     }
-    fn.call(bridge, routeKey);
+    callBridgeAction(wantCsv ? "exportTripCsv" : "exportTripGpx", [routeKey], "Drive export failed.");
   }
 
   // Delegated handler for the per-row "Rename / Name" button on a stored map route (M4). Reads the
@@ -732,7 +796,16 @@ type SignalActions = {
     const next = window.prompt("Name this drive (leave blank to clear):", current);
     // prompt returns null on Cancel — do nothing. An empty string clears the label.
     if (next === null) return;
-    bridge.setTripLabel(routeKey, next.trim());
+    callBridgeAction("setTripLabel", [routeKey, next.trim()], "Could not rename this drive.");
+  }
+
+  function paintFavoriteButton(button: HTMLElement, favorite: boolean) {
+    button.dataset.tripFavoriteState = favorite ? "1" : "0";
+    button.setAttribute("aria-pressed", favorite ? "true" : "false");
+    button.classList.toggle("is-favorite", favorite);
+    button.title = favorite ? "Remove this drive from favorites." : "Add this drive to favorites.";
+    button.setAttribute("aria-label", favorite ? "Unfavorite this drive" : "Favorite this drive");
+    button.textContent = favorite ? "★" : "☆";
   }
 
   // Delegated handler for the per-row favorite star on a stored map route (M4 favorites half).
@@ -757,13 +830,10 @@ type SignalActions = {
     // bridge call so the user gets instant feedback; the subsequent native list
     // re-render reconciles. Mirrors buildFavoriteButton()'s render contract so a
     // rapid second tap (which re-reads tripFavoriteState) flips correctly too.
-    button.dataset.tripFavoriteState = next ? "1" : "0";
-    button.setAttribute("aria-pressed", next ? "true" : "false");
-    button.classList.toggle("is-favorite", next);
-    button.title = next ? "Remove this drive from favorites." : "Add this drive to favorites.";
-    button.setAttribute("aria-label", next ? "Unfavorite this drive" : "Favorite this drive");
-    button.textContent = next ? "★" : "☆";
-    bridge.setTripFavorite(routeKey, next);
+    paintFavoriteButton(button, next);
+    if (!callBridgeAction("setTripFavorite", [routeKey, next], "Could not update drive favorite.")) {
+      paintFavoriteButton(button, !next);
+    }
   }
 
   // ---- M7 per-trip detail sheet --------------------------------------------
@@ -910,7 +980,7 @@ type SignalActions = {
     const code = link.dataset.dtcSearch;
     if (!code) return;
     if (bridge && typeof bridge.openExternalSearch === "function") {
-      bridge.openExternalSearch(code);
+      callBridgeAction("openExternalSearch", [code], "Could not open external search.");
     } else {
       const url = typeof VD.dtcSearchUrl === "function" ? VD.dtcSearchUrl(code) : null;
       if (url) window.open(url, "_blank", "noopener,noreferrer");
@@ -1006,8 +1076,13 @@ type SignalActions = {
       // Choose by method availability, not bare bridge presence: an older APK's
       // bridge object may lack demo(), and callBridge would then no-op while the
       // UI claims the demo is running. Fall back to the browser demo instead.
-      if (bridge && typeof bridge.demo === "function") VD.callBridge("demo");
-      else void runBrowserDemo();
+      if (bridge && typeof bridge.demo === "function") {
+        if (!callBridgeAction("demo", [], "Native demo could not start. Running browser demo instead.")) {
+          void runBrowserDemo();
+        }
+      } else {
+        void runBrowserDemo();
+      }
     });
   }
 
@@ -1093,19 +1168,19 @@ type SignalActions = {
 
   function stopDemo() {
     window.clearInterval(window.__voltDemoTimer ?? undefined);
-    if (bridge && state.demoActive) VD.callBridge("disconnect");
+    const stopped = !bridge || !state.demoActive || callBridgeAction("disconnect", [], "Could not stop the native connection.");
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
     refreshNativeDataAfterDemo();
     VD.updateLiveUi();
-    VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
+    if (stopped) VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
   function stopAll() {
     const wasDemo = state.demoActive;
     window.clearInterval(window.__voltDemoTimer ?? undefined);
-    if (bridge) VD.callBridge("disconnect");
+    const stopped = !bridge || callBridgeAction("disconnect", [], "Could not stop the native connection.");
     VD.clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     VD.setDemoActive(false);
@@ -1115,7 +1190,7 @@ type SignalActions = {
     // trips until the next native push. Mirror stopDemo()'s cleanup.
     if (wasDemo) refreshNativeDataAfterDemo();
     VD.updateLiveUi();
-    VD.setStatus({ state: "idle", detail: "Stopped." });
+    if (stopped) VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
   function runBrowserDemo(): Promise<void> {
@@ -1457,7 +1532,7 @@ type SignalActions = {
   startupMark("actions_initial_render_done");
   afterNextPaint(() => {
     startupMark("actions_first_frame");
-    if (bridge && typeof bridge.dashboardReady === "function") bridge.dashboardReady();
+    callBridgeAction("dashboardReady");
     startupMark("actions_dashboard_ready_called");
     VD.scrollAppToTop();
   });

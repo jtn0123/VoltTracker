@@ -119,7 +119,13 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
         VD.setStatus({ state: "ready", detail: "Backup cancelled." });
         return;
       }
-      withBusy(button, () => bridge.shareBackup());
+      try {
+        withBusy(button, () => bridge.shareBackup());
+      } catch (err) {
+        const detail = "Could not start backup share.";
+        VD.setStatus({ state: "blocked", detail });
+        logBridgeFailure(bridge, "share_backup_failed", detail, err);
+      }
     });
   }
 
@@ -138,7 +144,13 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
         VD.setStatus({ state: "ready", detail: "Encrypted backup cancelled." });
         return;
       }
-      withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
+      try {
+        withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
+      } catch (err) {
+        const detail = "Could not start encrypted backup share.";
+        VD.setStatus({ state: "blocked", detail });
+        logBridgeFailure(bridge, "share_encrypted_backup_failed", detail, err);
+      }
     });
   }
 

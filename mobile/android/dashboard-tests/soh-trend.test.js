@@ -95,4 +95,28 @@ describe('battery SOH trend', () => {
 
     expect(getBatterySohHistory).toHaveBeenCalledTimes(1);
   });
+
+  it('reports a blocked status when the SOH history bridge read throws', async () => {
+    const logClientError = vi.fn();
+    const getBatterySohHistory = vi.fn(() => {
+      throw new Error('soh read denied');
+    });
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getBatterySohHistory, logClientError }),
+    });
+    const VD = window.VoltDashboard;
+
+    expect(() => VD.renderRealV2Ui()).not.toThrow();
+    expect(() => VD.renderRealV2Ui()).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not read battery health history.',
+    });
+    expect(getBatterySohHistory).toHaveBeenCalledTimes(1);
+    expect(logClientError).toHaveBeenCalledWith(
+      'battery_soh_history_failed',
+      'Could not read battery health history.',
+    );
+  });
 });

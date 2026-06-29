@@ -1011,7 +1011,11 @@ import { initialTelemetryState } from "./telemetry-state";
   function startupMark(name: string) {
     const bridge = VD.bridge;
     if (bridge && typeof bridge.startupMark === "function") {
-      bridge.startupMark(name);
+      try {
+        bridge.startupMark(name);
+      } catch (err) {
+        reportClientError("bridge.call_failed", err instanceof Error ? err.message : String(err || ""));
+      }
     }
   }
 

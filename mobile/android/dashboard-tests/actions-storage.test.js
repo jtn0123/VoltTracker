@@ -185,6 +185,51 @@ describe('actions-storage.ts — confirm/prompt cancel paths', () => {
     await clickConfirm();
     expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('hunter2');
   });
+
+  it('shareBackup() reports a blocked status when the native share throws', async () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      shareBackup: vi.fn(() => {
+        throw new Error('share unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    actions.shareBackup(null);
+    await clickConfirm();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not start backup share.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'share_backup_failed',
+      'Could not start backup share. share unavailable',
+    );
+  });
+
+  it('shareEncryptedBackup() reports a blocked status when native encrypted share throws', async () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      shareEncryptedBackup: vi.fn(() => {
+        throw new Error('encrypted share unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    actions.shareEncryptedBackup(null);
+    enterAppDialogInput('hunter2');
+    await clickConfirm();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not start encrypted backup share.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'share_encrypted_backup_failed',
+      'Could not start encrypted backup share. encrypted share unavailable',
+    );
+  });
 });
 
 describe('actions-storage.ts — missing-bridge idle guards', () => {

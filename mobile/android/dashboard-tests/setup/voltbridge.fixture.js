@@ -50,6 +50,7 @@ export function createVoltBridgeFixture(overrides = {}) {
     exportTripGpx: stub('{"ok":true,"format":"gpx","fileName":"volt-trip.gpx","bytes":256,"pointCount":3}'),
     exportTripCsv: stub('{"ok":true,"format":"csv","fileName":"volt-trip.csv","bytes":128,"pointCount":3}'),
     exportAllTripsCsv: stub('{"ok":true,"format":"csv","fileName":"volt-all-trips.csv","bytes":512,"tripCount":2,"pointCount":6}'),
+    exportChargeSessionsCsv: stub('{"ok":true,"format":"csv","fileName":"volt-charges.csv","bytes":128,"chargeCount":1}'),
     deleteDetailedSignalLog: voidStub,
     markTripNotTrip: voidStub,
     setTripLabel: voidStub,

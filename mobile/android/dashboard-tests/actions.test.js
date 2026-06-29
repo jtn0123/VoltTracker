@@ -85,6 +85,7 @@ describe('actions.ts — bridge dispatch', () => {
       restoreBackup: vi.fn(),
       restoreEncryptedBackup: vi.fn(),
       requestPermissions: vi.fn(),
+      logClientError: vi.fn(),
     });
     await freshLoad(bridge);
     VD = window.VoltDashboard;
@@ -130,6 +131,20 @@ describe('actions.ts — bridge dispatch', () => {
     expect(startupBridge.listDevices).toHaveBeenCalledTimes(1);
     expect(startupBridge.getDeviceHistory).toHaveBeenCalledTimes(1);
     expect(document.getElementById('deviceSelect').options).toHaveLength(1);
+  });
+
+  it('tab navigation survives startupMark bridge failures', () => {
+    bridge.startupMark = vi.fn(() => {
+      throw new Error('startup trace denied');
+    });
+
+    expect(() => VD.setView('settings')).not.toThrow();
+
+    expect(document.body.dataset.activeView).toBe('settings');
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('startup trace denied'),
+    );
   });
 
   it('connectSelected(false) routes to bridge.connect with the selected adapter', () => {
@@ -466,6 +481,234 @@ describe('actions.ts — bridge dispatch', () => {
     enterAppDialogInput('secret-pass');
     await clickAppDialogConfirm();
     expect(bridge.restoreEncryptedBackup).toHaveBeenCalledWith('secret-pass');
+  });
+
+  it('reports blocked status instead of throwing when top-level bridge actions fail', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const cases = [
+      {
+        name: 'refreshDevices',
+        detail: /refresh adapter/i,
+        run() {
+          bridge.refreshDevices = vi.fn(() => { throw new Error('refresh denied'); });
+          VD.actions.refreshDevices();
+        },
+      },
+      {
+        name: 'requestPermissions',
+        detail: /request bluetooth permissions/i,
+        run() {
+          bridge.requestPermissions = vi.fn(() => { throw new Error('permission prompt denied'); });
+          VD.actions.handleAction('permissions', button);
+        },
+      },
+      {
+        name: 'connect',
+        detail: /start connection/i,
+        run() {
+          seedSelectedDevice(VD);
+          bridge.connect = vi.fn(() => { throw new Error('connect denied'); });
+          VD.actions.connectSelected(false, button);
+        },
+      },
+      {
+        name: 'scan',
+        detail: /adapter scan/i,
+        run() {
+          seedSelectedDevice(VD);
+          bridge.scan = vi.fn(() => { throw new Error('scan denied'); });
+          VD.actions.connectSelected(true, button);
+        },
+      },
+      {
+        name: 'detailProbe',
+        detail: /detail probe/i,
+        run() {
+          seedSelectedDevice(VD);
+          bridge.detailProbe = vi.fn(() => { throw new Error('probe denied'); });
+          VD.actions.detailProbeSelected(button);
+        },
+      },
+      {
+        name: 'connectLast',
+        detail: /last adapter/i,
+        run() {
+          bridge.getLastDevice = vi.fn(() => '{"address":"AA:BB:CC:DD:EE:FF","name":"TestOBD"}');
+          bridge.connectLast = vi.fn(() => { throw new Error('last denied'); });
+          VD.actions.handleAction('last', button);
+        },
+      },
+      {
+        name: 'exportAllTripsCsv',
+        detail: /all-trips export/i,
+        run() {
+          bridge.exportAllTripsCsv = vi.fn(() => { throw new Error('export denied'); });
+          VD.actions.handleAction('exportAllTripsCsv', button);
+        },
+      },
+    ];
+
+    for (const testCase of cases) {
+      expect(() => testCase.run(), testCase.name).not.toThrow();
+      expect(VD.state.status.state, testCase.name).toBe('blocked');
+      expect(VD.state.status.detail, testCase.name).toMatch(testCase.detail);
+      vi.advanceTimersByTime(600);
+    }
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.exportAllTripsCsv failed: export denied'),
+    );
+    warn.mockRestore();
+  });
+
+  it('still shows blocked status when dashboard error telemetry throws', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    VD.reportClientError = vi.fn(() => { throw new Error('telemetry denied'); });
+    bridge.refreshDevices = vi.fn(() => { throw new Error('refresh denied'); });
+
+    expect(() => VD.actions.handleAction('refresh', button)).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not refresh adapter list.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.refreshDevices failed: refresh denied'),
+    );
+    warn.mockRestore();
+  });
+
+  it('keeps destructive maintenance and DTC actions recoverable when native calls throw', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bridge.deleteMaintenanceEntry = vi.fn(() => { throw new Error('delete denied'); });
+    document.getElementById('maintenanceList').innerHTML =
+      '<button type="button" data-maint-delete="9">Remove</button>';
+
+    document.querySelector('#maintenanceList [data-maint-delete]').click();
+    await clickAppDialogConfirm();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not remove maintenance entry.',
+    });
+
+    bridge.clearVehicleDtcCodes = vi.fn(() => { throw new Error('clear denied'); });
+    VD.actions.handleAction('openClearDtc', button);
+    document.getElementById('dtcClearAckBox').checked = true;
+    expect(() => VD.actions.handleAction('confirmClearDtc', button)).not.toThrow();
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not clear diagnostic codes.',
+    });
+    expect(document.getElementById('dtcClearWarning').hidden).toBe(false);
+    warn.mockRestore();
+  });
+
+  it('reports map cleanup bridge failures from the context menu', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const list = document.getElementById('mapSessionList');
+    list.innerHTML = '<button type="button" data-map-session="drive-1">Drive row</button>';
+    bridge.markTripNotTrip = vi.fn(() => { throw new Error('mark denied'); });
+
+    expect(() => {
+      list.querySelector('[data-map-session]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    }).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not hide this drive from Trips.',
+    });
+    expect(bridge.markTripNotTrip).toHaveBeenCalledWith('drive-1');
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.markTripNotTrip failed: mark denied'),
+    );
+    warn.mockRestore();
+  });
+
+  it.each([
+    ['csv', 'exportTripCsv', 'csv denied'],
+    ['gpx', 'exportTripGpx', 'gpx denied'],
+  ])('reports %s trip export bridge failures', (format, method, message) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const list = document.getElementById('mapSessionList');
+    list.innerHTML = `<button type="button" data-trip-export="${format}" data-trip-export-key="drive-1">${format}</button>`;
+    bridge[method] = vi.fn(() => { throw new Error(message); });
+
+    expect(() => list.querySelector('[data-trip-export]').click()).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Drive export failed.',
+    });
+    expect(bridge[method]).toHaveBeenCalledWith('drive-1');
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining(`bridge.${method} failed: ${message}`),
+    );
+    warn.mockRestore();
+  });
+
+  it('reports trip rename bridge failures', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const list = document.getElementById('mapSessionList');
+    list.innerHTML = '<button type="button" data-trip-rename="drive-1" data-trip-rename-label="Old">Rename</button>';
+    bridge.setTripLabel = vi.fn(() => { throw new Error('label denied'); });
+    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('New name');
+
+    expect(() => list.querySelector('[data-trip-rename]').click()).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not rename this drive.',
+    });
+    expect(bridge.setTripLabel).toHaveBeenCalledWith('drive-1', 'New name');
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.setTripLabel failed: label denied'),
+    );
+    warn.mockRestore();
+  });
+
+  it('reverts optimistic trip favorite UI when the bridge call throws', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const list = document.getElementById('mapSessionList');
+    list.innerHTML = '<button type="button" data-trip-favorite="drive-1" data-trip-favorite-state="0">☆</button>';
+    bridge.setTripFavorite = vi.fn(() => { throw new Error('favorite denied'); });
+
+    expect(() => list.querySelector('[data-trip-favorite]').click()).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not update drive favorite.',
+    });
+    expect(bridge.setTripFavorite).toHaveBeenCalledWith('drive-1', true);
+    const favorite = list.querySelector('[data-trip-favorite]');
+    expect(favorite.dataset.tripFavoriteState).toBe('0');
+    expect(favorite.textContent).toBe('☆');
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.setTripFavorite failed: favorite denied'),
+    );
+    warn.mockRestore();
+  });
+
+  it('reports blocked status when native DTC search launch fails', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bridge.openExternalSearch = vi.fn(() => { throw new Error('no browser'); });
+    const button = document.createElement('button');
+    button.dataset.dtcSearch = 'P0A80';
+    document.body.append(button);
+
+    expect(() => button.click()).not.toThrow();
+
+    expect(VD.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not open external search.',
+    });
+    warn.mockRestore();
   });
 });
 

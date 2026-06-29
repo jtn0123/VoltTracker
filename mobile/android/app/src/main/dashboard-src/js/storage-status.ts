@@ -68,7 +68,19 @@ import { prefs, units } from "./prefs";
     const detail = err.message || fallbackDetail || "Could not read local storage.";
     VD.setStatus({ state: "blocked", detail });
     if (bridge && typeof bridge.logClientError === "function") {
-      bridge.logClientError(String(err.error || "native_read_failed"), detail);
+      try {
+        bridge.logClientError(String(err.error || "native_read_failed"), detail);
+      } catch (_ignored) {}
+    }
+  }
+
+  function reportBridgeWriteFailure(label: string, detail: string, err: unknown) {
+    const message = err instanceof Error && err.message ? err.message : String(err || "");
+    VD.setStatus({ state: "blocked", detail });
+    if (bridge && typeof bridge.logClientError === "function") {
+      try {
+        bridge.logClientError(label, message ? `${detail} ${message}` : detail);
+      } catch (_ignored) {}
     }
   }
 
@@ -836,16 +848,31 @@ import { prefs, units } from "./prefs";
       !sohReadInFlight &&
       (sohLastRaw === null || countChanged || now - sohLastFetchMs >= SOH_REFETCH_MS)
     ) {
-      if (typeof bridge.requestBatterySohHistory === "function" && bridge.requestBatterySohHistory()) {
+      try {
+        if (typeof bridge.requestBatterySohHistory === "function" && bridge.requestBatterySohHistory()) {
+          sohLastFetchMs = now;
+          sohLastCount = batteryCount;
+          sohReadInFlight = true;
+          return;
+        }
+        if (typeof bridge.getBatterySohHistory === "function") {
+          sohLastFetchMs = now;
+          sohLastCount = batteryCount;
+          applyBatterySohHistory(bridge.getBatterySohHistory());
+        }
+      } catch (_err) {
         sohLastFetchMs = now;
         sohLastCount = batteryCount;
-        sohReadInFlight = true;
-        return;
-      }
-      if (typeof bridge.getBatterySohHistory === "function") {
-        sohLastFetchMs = now;
-        sohLastCount = batteryCount;
-        applyBatterySohHistory(bridge.getBatterySohHistory());
+        if (sohLastRaw === null) sohLastRaw = "[]";
+        sohReadInFlight = false;
+        reportNativeReadError(
+          {
+            ok: false,
+            error: "battery_soh_history_failed",
+            message: "Could not read battery health history."
+          },
+          "Could not read battery health history."
+        );
       }
     }
     // Nothing fetched/changed since the last DOM build — skip the rebuild.
@@ -1127,7 +1154,22 @@ import { prefs, units } from "./prefs";
   // (absent outside the WebView) and tolerates a malformed payload by falling back to an empty log.
   function loadMaintenanceLog() {
     if (!bridge || typeof bridge.getMaintenanceLog !== "function") return;
-    const parsed = VD.parsePayload<VoltMaintenanceEntry[] | VoltNativeError>(bridge.getMaintenanceLog(), []);
+    let parsed: VoltMaintenanceEntry[] | VoltNativeError;
+    try {
+      parsed = VD.parsePayload<VoltMaintenanceEntry[] | VoltNativeError>(bridge.getMaintenanceLog(), []);
+    } catch (_err) {
+      state.maintenanceLog = [];
+      renderMaintenanceList();
+      reportNativeReadError(
+        {
+          ok: false,
+          error: "maintenance_log_failed",
+          message: "Could not read the maintenance log."
+        },
+        "Could not read the maintenance log."
+      );
+      return;
+    }
     if (isNativeError(parsed)) {
       state.maintenanceLog = [];
       renderMaintenanceList();
@@ -1250,7 +1292,19 @@ import { prefs, units } from "./prefs";
     if (odo.invalid || interval.invalid) return;
     const months = Math.round(Number(String((el("maintIntervalMonthsInput") as HTMLInputElement | null)?.value || "").trim()));
     if (Number.isFinite(months) && months > 0) payload.intervalMonths = months;
-    bridge.addMaintenanceEntry(JSON.stringify(payload));
+    try {
+      bridge.addMaintenanceEntry(JSON.stringify(payload));
+    } catch (err) {
+      const detail = "Could not save maintenance entry.";
+      setMaintFormError(detail);
+      if (bridge && typeof bridge.logClientError === "function") {
+        try {
+          const message = err instanceof Error && err.message ? err.message : String(err || "");
+          bridge.logClientError("maintenance_add_failed", message ? `${detail} ${message}` : detail);
+        } catch (_ignored) {}
+      }
+      return;
+    }
     closeMaintenanceForm();
   }
 
@@ -1344,7 +1398,11 @@ import { prefs, units } from "./prefs";
       return;
     }
     const price = prefs.get<number>("pricePerKwh", 0);
-    bridge.exportChargeSessionsCsv(price > 0 ? String(price) : "");
+    try {
+      bridge.exportChargeSessionsCsv(price > 0 ? String(price) : "");
+    } catch (err) {
+      reportBridgeWriteFailure("charge_export_failed", "Charge-history export failed.", err);
+    }
   }
 
   // Sums energy across the logged charge sessions and, when the user has set an

@@ -1,6 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
+import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 
 describe('dashboard charge session history', () => {
   beforeEach(async () => {
@@ -104,6 +105,31 @@ describe('dashboard charge session history', () => {
     expect(rows[0].dataset.charging).toBe('1');
     expect(rows[0].textContent).toContain('charging now');
     expect(document.getElementById('realChargeStatus').textContent).toBe('charging');
+  });
+
+  it('reports a blocked status when native charge-history export throws', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const logClientError = vi.fn();
+    const exportChargeSessionsCsv = vi.fn(() => {
+      throw new Error('charge export denied');
+    });
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ exportChargeSessionsCsv, logClientError }),
+    });
+
+    expect(() => window.VoltDashboard.exportChargeSessionsCsv()).not.toThrow();
+
+    expect(window.VoltDashboard.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Charge-history export failed.',
+    });
+    expect(logClientError).toHaveBeenCalledWith(
+      'charge_export_failed',
+      'Charge-history export failed. charge export denied',
+    );
   });
 
   // M3 — optional public/DC-fast rate. A public session is billed at the public
