@@ -725,7 +725,7 @@ open class MainActivity :
         service.action = ObdService.ACTION_DISCONNECT
         try {
             startService(service)
-        } catch (ex: IllegalStateException) {
+        } catch (ex: RuntimeException) {
             Log.w(TAG, "stopObdService could not reach the service", ex)
             publishStatus("ready", getString(R.string.status_stop_noted), false)
         }
@@ -773,7 +773,7 @@ open class MainActivity :
         service.action = if (foreground) ObdService.ACTION_APP_FOREGROUND else ObdService.ACTION_APP_BACKGROUND
         try {
             startService(service)
-        } catch (ignored: IllegalStateException) {
+        } catch (ignored: RuntimeException) {
             // Visibility is diagnostic only.
         }
     }

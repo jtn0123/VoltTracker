@@ -526,15 +526,23 @@ describe('actions.ts — withBusy guard (double-tap suppression)', () => {
     expect(bridge.connect).toHaveBeenCalledTimes(2);
   });
 
-  it('releases the button immediately when the wrapped call throws', () => {
-    // Make the bridge call throw so withBusy hits its catch branch and
-    // releases without waiting for the 600 ms timer.
+  it('logs bridge failures and releases the button after the cooldown', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     bridge.connect = vi.fn(() => { throw new Error('boom'); });
-    expect(() => VD.actions.connectSelected(false, button)).toThrow(/boom/);
-    // No timer advance — release fired synchronously from the catch.
+    bridge.logClientError = vi.fn();
+    expect(() => VD.actions.connectSelected(false, button)).not.toThrow();
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.connect failed: boom'),
+    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bridge.connect failed: boom'));
+    expect(button.disabled).toBe(true);
+    expect(button.dataset.busy).toBe('1');
+    vi.advanceTimersByTime(600);
     expect(button.disabled).toBe(false);
     expect(button.dataset.busy).toBe('0');
     expect(button.classList.contains('busy')).toBe(false);
+    warn.mockRestore();
   });
 });
 

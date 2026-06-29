@@ -40,6 +40,7 @@ const DIALOG_DOM = `
 function makeVd() {
   return {
     statuses: [],
+    reportClientError: vi.fn(),
     setStatus(payload) {
       this.statuses.push(payload);
     },
@@ -181,6 +182,46 @@ describe('actions-signals.ts — failed export result -> blocked', () => {
       detail: 'Evidence table locked.',
     });
   });
+
+  it('exportSignalLog() reports blocked status when the native export throws', () => {
+    const bridge = {
+      exportDetailedSignalLog: vi.fn(() => {
+        throw new Error('evidence row unavailable');
+      }),
+    };
+    const actions = createSignalActions({ VD, bridge });
+
+    expect(() => actions.exportSignalLog(5)).not.toThrow();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Signal log export failed.',
+    });
+    expect(VD.reportClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.exportDetailedSignalLog failed: evidence row unavailable'),
+    );
+  });
+
+  it('exportSignalLogs() reports blocked status when the native export throws', () => {
+    const bridge = {
+      exportDetailedSignalLogs: vi.fn(() => {
+        throw new Error('evidence table unavailable');
+      }),
+    };
+    const actions = createSignalActions({ VD, bridge });
+
+    expect(() => actions.exportSignalLogs()).not.toThrow();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Signal log export failed.',
+    });
+    expect(VD.reportClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.exportDetailedSignalLogs failed: evidence table unavailable'),
+    );
+  });
 });
 
 describe('actions-signals.ts — clipboard fallback (no browser download)', () => {
@@ -265,6 +306,23 @@ describe('actions-signals.ts — clipboard fallback (no browser download)', () =
       detail: 'Could not export detailed signal logs.',
     });
   });
+
+  it('a failed execCommand fallback yields the "could not export" blocked status', async () => {
+    restoreClipboard = setClipboard(null);
+    document.execCommand = vi.fn(() => false);
+    const bridge = { exportDetailedSignalLogs: vi.fn(() => '{"ok":true,"items":[{"id":2}]}') };
+    const actions = createSignalActions({ VD, bridge });
+
+    actions.exportSignalLogs();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(document.execCommand).toHaveBeenCalledWith('copy');
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not export detailed signal logs.',
+    });
+  });
 });
 
 describe('actions-signals.ts — deleteSignalLog confirm dialog', () => {
@@ -294,6 +352,27 @@ describe('actions-signals.ts — deleteSignalLog confirm dialog', () => {
     actions.deleteSignalLog(5);
     await clickConfirm();
     expect(bridge.deleteDetailedSignalLog).toHaveBeenCalledWith('5');
+  });
+
+  it('confirm reports blocked status when native delete throws', async () => {
+    const bridge = {
+      deleteDetailedSignalLog: vi.fn(() => {
+        throw new Error('delete unavailable');
+      }),
+    };
+    const actions = createSignalActions({ VD, bridge });
+
+    actions.deleteSignalLog(5);
+    await clickConfirm();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Signal log cleanup failed.',
+    });
+    expect(VD.reportClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('bridge.deleteDetailedSignalLog failed: delete unavailable'),
+    );
   });
 });
 
@@ -339,5 +418,30 @@ describe('actions-signals.ts — successful download path', () => {
       state: 'ready',
       detail: 'Detailed signal log exported.',
     });
+  });
+
+  it('cleans up a failed download attempt before falling back to clipboard', async () => {
+    clickSpy.mockImplementation(() => {
+      throw new Error('download blocked');
+    });
+    const writeText = vi.fn(() => Promise.resolve());
+    const restoreClipboard = setClipboard({ writeText });
+    const bridge = { exportDetailedSignalLog: vi.fn(() => '{"ok":true,"item":{"id":7}}') };
+    const actions = createSignalActions({ VD, bridge });
+    try {
+      actions.exportSignalLog(7);
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('"id"'));
+      expect(document.querySelector('a[download="volttracker-detailed-signal-7.json"]')).toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(window.URL.revokeObjectURL).toHaveBeenCalledWith('blob:volt-signal');
+      expect(VD.lastStatus()).toMatchObject({
+        state: 'ready',
+        detail: 'Detailed signal log copied.',
+      });
+    } finally {
+      restoreClipboard();
+    }
   });
 });

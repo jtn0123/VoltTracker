@@ -211,7 +211,21 @@ import { initialTelemetryState } from "./telemetry-state";
       }
       return undefined;
     }
-    return (fn as (...callArgs: unknown[]) => ReturnType<VoltBridge[K]>).apply(target, args);
+    try {
+      return (fn as (...callArgs: unknown[]) => ReturnType<VoltBridge[K]>).apply(target, args);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const message = "bridge." + String(name) + " failed: " + detail;
+      try {
+        console.warn(message);
+      } catch (ignored) {}
+      try {
+        if (target && typeof target.logClientError === "function") {
+          target.logClientError("bridge.call_failed", message);
+        }
+      } catch (ignored) {}
+      return undefined;
+    }
   }
 
   // How long the restore dialog lingers on a successful finish before auto-hiding,

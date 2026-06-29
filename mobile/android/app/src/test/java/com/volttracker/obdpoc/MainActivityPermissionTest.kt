@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.Manifest
 import android.bluetooth.BluetoothManager
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import org.junit.Assert.assertEquals
@@ -136,6 +137,38 @@ class MainActivityPermissionTest {
         assertEquals("ready", activity.lastState)
     }
 
+    @Test
+    fun stopObdServiceFallsBackWhenServiceDispatchIsDenied() {
+        val activity = harnessActivity()
+        activity.startServiceFailure = SecurityException("service dispatch denied")
+
+        activity.stopObdService()
+
+        assertEquals(1, activity.startServiceCalls)
+        assertEquals("ready", activity.lastState)
+        assertTrue(
+            "fallback should tell the user the stop request was noted, got: ${activity.lastDetail}",
+            activity.lastDetail?.contains("Stop request noted") == true,
+        )
+    }
+
+    @Test
+    fun appVisibilityReportIsBestEffortWhenServiceDispatchIsDenied() {
+        val activity = harnessActivity()
+        activity.startServiceFailure = SecurityException("service dispatch denied")
+        val method =
+            MainActivity::class.java.getDeclaredMethod(
+                "reportAppVisibility",
+                Boolean::class.javaPrimitiveType,
+            )
+        method.isAccessible = true
+
+        method.invoke(activity, true)
+        method.invoke(activity, false)
+
+        assertEquals(2, activity.startServiceCalls)
+    }
+
     private fun harnessActivity(): HarnessActivity {
         val activity = Robolectric.buildActivity(HarnessActivity::class.java).create().get()
         val manager = activity.getSystemService(BluetoothManager::class.java)
@@ -169,6 +202,8 @@ class MainActivityPermissionTest {
         var lastDetail: String? = null
         var canAskAgain = true
         var openedAppSettings = false
+        var startServiceFailure: RuntimeException? = null
+        var startServiceCalls = 0
 
         override fun onCreate(savedInstanceState: Bundle?) {
             permissionGate = PermissionGate(this) { requestedPermissions += it }
@@ -194,6 +229,12 @@ class MainActivityPermissionTest {
 
         override fun startActivity(intent: Intent?) {
             // Robolectric records the launch; nothing to render in unit tests.
+        }
+
+        override fun startService(service: Intent?): ComponentName? {
+            startServiceCalls += 1
+            startServiceFailure?.let { throw it }
+            return super.startService(service)
         }
     }
 

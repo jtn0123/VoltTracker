@@ -109,6 +109,40 @@ describe('storage summary lazy details', () => {
     expect(window.VoltDashboard.state.storage.batterySummary.snapshotCount).toBe(2);
   });
 
+  it('surfaces deferred storage-detail bridge failures and allows a later retry', async () => {
+    const bridge = createVoltBridgeFixture({
+      logClientError: vi.fn(),
+      getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),
+      getStorageDetails: vi.fn(() => {
+        throw new Error('details unavailable');
+      }),
+    });
+    await loadDashboard({ bridge });
+
+    window.VoltDashboard.setStorage({ sessionCount: 3, sampleCount: 7, recentSessions: [] });
+    await flushDeferredStorageReads();
+
+    expect(window.VoltDashboard.state.status).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not read local storage details.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'storage_details_failed',
+      'Could not read local storage details.',
+    );
+
+    bridge.getStorageDetails.mockImplementation(() =>
+      JSON.stringify({
+        storageDetails: true,
+        chargeSummary: { chargeSessionCount: 4, recentSessions: [] },
+      }),
+    );
+    window.VoltDashboard.setStorage({ sessionCount: 4, sampleCount: 9, recentSessions: [] });
+    await flushDeferredStorageReads();
+
+    expect(window.VoltDashboard.state.storage.chargeSummary.chargeSessionCount).toBe(4);
+  });
+
   it('demand-loads trip and insight rollups when their views open', async () => {
     const bridge = createVoltBridgeFixture({
       getStorageSummary: vi.fn(() => '{"sessionCount":1,"sampleCount":2,"recentSessions":[]}'),

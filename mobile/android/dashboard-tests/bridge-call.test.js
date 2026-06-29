@@ -58,6 +58,27 @@ describe('VD.callBridge', () => {
     );
     warn.mockRestore();
   });
+
+  it('logs and returns undefined when an available bridge method throws', () => {
+    const VD = window.VoltDashboard;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    bridge.connect = vi.fn(() => {
+      throw new Error('native connect failed');
+    });
+
+    let result;
+    expect(() => {
+      result = VD.callBridge('connect', 'AA:BB:CC:DD:EE:FF', 'OBDII');
+    }).not.toThrow();
+    expect(result).toBeUndefined();
+
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'bridge.call_failed',
+      expect.stringContaining('connect'),
+    );
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('bridge.connect failed'));
+    warn.mockRestore();
+  });
 });
 
 describe('lazy DTC chunk failure surfacing', () => {

@@ -112,6 +112,7 @@
     <string name="chooser_share_diagnostics">Share diagnostics</string>
     <string name="status_diagnostics_cancelled">Diagnostics share cancelled.</string>
     <string name="status_diagnostics_disclosure_failed">Could not show the diagnostics disclosure.</string>
+    <string name="status_diagnostics_share_failed">Could not share diagnostics.</string>
     <string name="status_test_connection_logging_active">Logging is already running — stop it before starting a test connection.</string>
     <string name="status_no_remembered_adapter_yet">No remembered adapter yet — pick one and Connect once first.</string>
     <string name="notification_adapter_ready_title">OBD adapter is responding</string>

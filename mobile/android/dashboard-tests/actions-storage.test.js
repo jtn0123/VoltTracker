@@ -254,6 +254,27 @@ describe('actions-storage.ts — missing-bridge idle guards', () => {
     actions.refreshStorage();
     expect(VD.storage).toBeUndefined();
   });
+
+  it('refreshStorage() reports a blocked status when the bridge summary read throws', () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      getStorageSummary: vi.fn(() => {
+        throw new Error('summary unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    expect(() => actions.refreshStorage()).not.toThrow();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not refresh storage summary.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'storage_summary_failed',
+      'Could not refresh storage summary. summary unavailable',
+    );
+  });
 });
 
 describe('actions-storage.ts — exportDebugBundle result branches', () => {
@@ -310,6 +331,45 @@ describe('actions-storage.ts — exportDebugBundle result branches', () => {
     } finally {
       restoreClipboard();
       restoreDownloads();
+    }
+  });
+
+  it('cleans up a failed download attempt before falling back to clipboard', async () => {
+    const originalCreate = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
+    const originalRevoke = Object.getOwnPropertyDescriptor(window.URL, 'revokeObjectURL');
+    const createObjectURL = vi.fn(() => 'blob:debug');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(window.URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const originalClick = HTMLAnchorElement.prototype.click;
+    HTMLAnchorElement.prototype.click = vi.fn(() => {
+      throw new Error('download blocked');
+    });
+    const writeText = vi.fn(() => Promise.resolve());
+    const restoreClipboard = setClipboard({ writeText });
+    const bridge = {
+      exportDebugBundle: vi.fn(() => '{"ok":true,"filename":"debug.json","content":"{\\"diagnostics\\":true}"}'),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    try {
+      actions.exportDebugBundle();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('{"diagnostics":true}');
+      expect(document.querySelector('a[download="debug.json"]')).toBeNull();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:debug');
+      expect(VD.lastStatus()).toMatchObject({
+        state: 'ready',
+        detail: 'Debug summary copied.',
+      });
+    } finally {
+      HTMLAnchorElement.prototype.click = originalClick;
+      restoreClipboard();
+      if (originalCreate) Object.defineProperty(window.URL, 'createObjectURL', originalCreate);
+      else delete window.URL.createObjectURL;
+      if (originalRevoke) Object.defineProperty(window.URL, 'revokeObjectURL', originalRevoke);
+      else delete window.URL.revokeObjectURL;
     }
   });
 
@@ -372,6 +432,27 @@ describe('actions-storage.ts — exportDebugBundle result branches', () => {
       detail: 'Debug export failed.',
     });
   });
+
+  it('blocked status is shown when the native debug export throws', () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      exportDebugBundle: vi.fn(() => {
+        throw new Error('debug export unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    expect(() => actions.exportDebugBundle()).not.toThrow();
+
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Debug export failed.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'debug_export_failed',
+      'Debug export failed. debug export unavailable',
+    );
+  });
 });
 
 describe('actions-storage.ts — happy confirm/restore paths (companions to the cancel specs)', () => {
@@ -390,12 +471,72 @@ describe('actions-storage.ts — happy confirm/restore paths (companions to the 
     expect(bridge.clearStoredData).toHaveBeenCalledTimes(1);
   });
 
+  it('clearStorage() reports blocked status when the confirmed native clear throws', async () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      clearStoredData: vi.fn(() => {
+        throw new Error('clear unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    actions.clearStorage(null);
+    await clickConfirm();
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not clear stored data.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'clear_storage_failed',
+      'Could not clear stored data. clear unavailable',
+    );
+  });
+
   it('restoreBackup() invokes the bridge directly with no pre-pick dialog', () => {
     const bridge = { restoreBackup: vi.fn() };
     const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
     actions.restoreBackup(null);
     expect(appDialog().hidden).toBe(true);
     expect(bridge.restoreBackup).toHaveBeenCalledTimes(1);
+  });
+
+  it('restoreBackup() reports blocked status when the native restore picker throws', () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      restoreBackup: vi.fn(() => {
+        throw new Error('restore unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    expect(() => actions.restoreBackup(null)).not.toThrow();
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not start restore.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'restore_backup_failed',
+      'Could not start restore. restore unavailable',
+    );
+  });
+
+  it('restoreEncryptedBackup() reports blocked status when the native restore picker throws', async () => {
+    const bridge = {
+      logClientError: vi.fn(),
+      restoreEncryptedBackup: vi.fn(() => {
+        throw new Error('encrypted restore unavailable');
+      }),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    actions.restoreEncryptedBackup(null);
+    enterAppDialogInput('hunter2');
+    await clickConfirm();
+    expect(VD.lastStatus()).toMatchObject({
+      state: 'blocked',
+      detail: 'Could not start encrypted restore.',
+    });
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'restore_encrypted_backup_failed',
+      'Could not start encrypted restore. encrypted restore unavailable',
+    );
   });
 
   it('refreshStorage() pushes the bridge summary into VD.setStorage', () => {

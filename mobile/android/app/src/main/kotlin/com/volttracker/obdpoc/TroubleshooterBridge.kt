@@ -114,8 +114,9 @@ class TroubleshooterBridge(
         service.action = ObdService.ACTION_CANCEL_RETRY
         try {
             activity.startService(service)
-        } catch (ignored: IllegalStateException) {
+        } catch (ex: RuntimeException) {
             // Service may have stopped between the JS click and the dispatch.
+            Log.w(MainActivity.TAG, "cancelRetry dispatch failed", ex)
         }
     }
 
@@ -205,15 +206,17 @@ class TroubleshooterBridge(
     fun diagnosticsDisclosureMessage(): String = activity.getString(R.string.diagnostics_disclosure_message)
 
     fun showDiagnosticsDisclosure(share: Intent) {
+        if (activity.isFinishing) {
+            Log.w(MainActivity.TAG, "diagnostics disclosure skipped; activity is finishing")
+            return
+        }
         try {
             AlertDialog
                 .Builder(activity)
                 .setTitle(R.string.dialog_diagnostics_title)
                 .setMessage(diagnosticsDisclosureMessage())
                 .setPositiveButton(R.string.dialog_share_anyway) { _, _ ->
-                    activity.startActivity(
-                        Intent.createChooser(share, activity.getString(R.string.chooser_share_diagnostics)),
-                    )
+                    launchDiagnosticsShare(share)
                 }.setNegativeButton(R.string.dialog_cancel) { _, _ ->
                     activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
                 }.setOnCancelListener {
@@ -222,6 +225,15 @@ class TroubleshooterBridge(
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "showDiagnosticsDisclosure failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_disclosure_failed), true)
+        }
+    }
+
+    private fun launchDiagnosticsShare(share: Intent) {
+        try {
+            activity.startActivity(Intent.createChooser(share, activity.getString(R.string.chooser_share_diagnostics)))
+        } catch (ex: RuntimeException) {
+            Log.w(MainActivity.TAG, "launchDiagnosticsShare failed", ex)
+            activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_share_failed), true)
         }
     }
 

@@ -93,22 +93,47 @@ import { prefs, units } from "./prefs";
     storageDetailsScheduled = true;
     const load = () => {
       storageDetailsScheduled = false;
-      if (typeof bridge.requestStorageDetails === "function" && bridge.requestStorageDetails()) {
-        storageDetailsInFlight = true;
-        return;
-      }
-      if (typeof bridge.getStorageDetails !== "function") return;
-      const payload =
-        typeof VD.callBridge === "function"
-          ? VD.callBridge("getStorageDetails")
-          : bridge.getStorageDetails();
-      if (payload != null) {
-        applyingStorageDetails = true;
-        try {
-          setStorage(payload);
-        } finally {
-          applyingStorageDetails = false;
+      try {
+        if (typeof bridge.requestStorageDetails === "function" && bridge.requestStorageDetails()) {
+          storageDetailsInFlight = true;
+          return;
         }
+        if (typeof bridge.getStorageDetails !== "function") return;
+        const payload =
+          typeof VD.callBridge === "function"
+            ? VD.callBridge("getStorageDetails")
+            : bridge.getStorageDetails();
+        if (payload == null) {
+          storageDetailsInFlight = false;
+          reportNativeReadError(
+            {
+              ok: false,
+              error: "storage_details_failed",
+              message: "Could not read local storage details."
+            },
+            "Could not read local storage details."
+          );
+          return;
+        }
+        if (payload != null) {
+          applyingStorageDetails = true;
+          try {
+            setStorage(payload);
+          } finally {
+            applyingStorageDetails = false;
+          }
+        }
+      } catch (_err) {
+        storageDetailsScheduled = false;
+        storageDetailsInFlight = false;
+        reportNativeReadError(
+          {
+            ok: false,
+            error: "storage_details_failed",
+            message: "Could not read local storage details."
+          },
+          "Could not read local storage details."
+        );
       }
     };
     if (typeof window.requestIdleCallback === "function") {

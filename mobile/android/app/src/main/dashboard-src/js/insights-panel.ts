@@ -52,18 +52,38 @@ import { prefs, units } from "./prefs";
     VD.renderMapIfLoaded();
   }
 
+  function handleTripsBridgeFailure() {
+    tripsReadInFlight = false;
+    VD.reportNativeReadError(
+      {
+        ok: false,
+        error: "trips_read_failed",
+        message: "Could not read logged trips."
+      },
+      "Could not read logged trips."
+    );
+    state.tripsLoaded = false;
+    state.tripsReadError = "Could not read logged trips.";
+    state.trips = [];
+    VD.renderMapIfLoaded();
+  }
+
   function loadTrips(force = false) {
     if (!force && state.tripsLoaded) return;
     if (!force && tripsReadInFlight) return;
-    if (bridge && typeof bridge.requestTrips === "function" && bridge.requestTrips()) {
-      tripsReadInFlight = true;
-      return;
-    }
-    if (bridge && typeof bridge.getTrips === "function") {
-      applyTripsPayload(bridge.getTrips());
-    } else {
-      tripsReadInFlight = false;
-      state.tripsLoaded = true;
+    try {
+      if (bridge && typeof bridge.requestTrips === "function" && bridge.requestTrips()) {
+        tripsReadInFlight = true;
+        return;
+      }
+      if (bridge && typeof bridge.getTrips === "function") {
+        applyTripsPayload(bridge.getTrips());
+      } else {
+        tripsReadInFlight = false;
+        state.tripsLoaded = true;
+      }
+    } catch (_err) {
+      handleTripsBridgeFailure();
     }
   }
 
@@ -89,6 +109,23 @@ import { prefs, units } from "./prefs";
     renderInsightScatter();
   }
 
+  function handleInsightsBridgeFailure() {
+    insightsReadInFlight = false;
+    VD.reportNativeReadError(
+      {
+        ok: false,
+        error: "insights_read_failed",
+        message: "Could not read vehicle insights."
+      },
+      "Could not read vehicle insights."
+    );
+    state.insightsLoaded = false;
+    state.insightsReadError = "Could not read vehicle insights.";
+    state.insights = {};
+    renderInsightStats();
+    renderInsightScatter();
+  }
+
   function loadInsights(force = false) {
     if (!force && state.insightsLoaded) {
       renderInsightStats();
@@ -96,17 +133,21 @@ import { prefs, units } from "./prefs";
       return;
     }
     if (!force && insightsReadInFlight) return;
-    if (bridge && typeof bridge.requestInsights === "function" && bridge.requestInsights()) {
-      insightsReadInFlight = true;
-      return;
-    }
-    if (bridge && typeof bridge.getInsights === "function") {
-      applyInsightsPayload(bridge.getInsights());
-    } else {
-      insightsReadInFlight = false;
-      state.insightsLoaded = true;
-      renderInsightStats();
-      renderInsightScatter();
+    try {
+      if (bridge && typeof bridge.requestInsights === "function" && bridge.requestInsights()) {
+        insightsReadInFlight = true;
+        return;
+      }
+      if (bridge && typeof bridge.getInsights === "function") {
+        applyInsightsPayload(bridge.getInsights());
+      } else {
+        insightsReadInFlight = false;
+        state.insightsLoaded = true;
+        renderInsightStats();
+        renderInsightScatter();
+      }
+    } catch (_err) {
+      handleInsightsBridgeFailure();
     }
   }
 

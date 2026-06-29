@@ -63,6 +63,32 @@ describe('panels.ts trips/insights error surfacing (C3)', () => {
     expect(VD.state.tripsReadError).toBe('Could not read logged trips.');
   });
 
+  it('routes a thrown getTrips bridge failure through setStatus(blocked) + logClientError', async () => {
+    const bridge = createVoltBridgeFixture({
+      logClientError: vi.fn(),
+      getTrips: vi.fn(() => {
+        throw new Error('trips unavailable');
+      }),
+    });
+    const VD = await freshLoad(bridge);
+
+    const setStatus = vi.spyOn(VD, 'setStatus');
+    expect(() => VD.loadTrips()).not.toThrow();
+
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'blocked',
+        detail: 'Could not read logged trips.',
+      })
+    );
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'trips_read_failed',
+      'Could not read logged trips.'
+    );
+    expect(VD.state.trips).toEqual([]);
+    expect(VD.state.tripsReadError).toBe('Could not read logged trips.');
+  });
+
   it('routes a native getInsights error through setStatus(blocked) + logClientError', async () => {
     const bridge = createVoltBridgeFixture({
       logClientError: vi.fn(),
@@ -89,6 +115,32 @@ describe('panels.ts trips/insights error surfacing (C3)', () => {
     expect(document.getElementById('insightsEmptyState').textContent).toContain('Insights could not load.');
     document.querySelector('[data-retry-insights]').click();
     expect(bridge.getInsights).toHaveBeenCalledTimes(callsBefore + 2);
+  });
+
+  it('routes a thrown getInsights bridge failure through setStatus(blocked) + logClientError', async () => {
+    const bridge = createVoltBridgeFixture({
+      logClientError: vi.fn(),
+      getInsights: vi.fn(() => {
+        throw new Error('insights unavailable');
+      }),
+    });
+    const VD = await freshLoad(bridge);
+
+    const setStatus = vi.spyOn(VD, 'setStatus');
+    expect(() => VD.loadInsights()).not.toThrow();
+
+    expect(setStatus).toHaveBeenCalledWith(
+      expect.objectContaining({
+        state: 'blocked',
+        detail: 'Could not read vehicle insights.',
+      })
+    );
+    expect(bridge.logClientError).toHaveBeenCalledWith(
+      'insights_read_failed',
+      'Could not read vehicle insights.'
+    );
+    expect(VD.state.insightsReadError).toBe('Could not read vehicle insights.');
+    expect(document.getElementById('insightsEmptyState').textContent).toContain('Insights could not load.');
   });
 
   it('does NOT raise a blocked status for a genuinely-empty successful read', async () => {

@@ -12,6 +12,14 @@ type StorageActionContext = {
   withBusy: BusyGuard;
 };
 
+function logBridgeFailure(bridge: VoltBridge | null, label: string, detail: string, err: unknown) {
+  if (!bridge || typeof bridge.logClientError !== "function") return;
+  const errorDetail = err instanceof Error && err.message ? err.message : String(err || "");
+  try {
+    bridge.logClientError(label, errorDetail ? `${detail} ${errorDetail}` : detail);
+  } catch (_ignored) {}
+}
+
 export function createStorageActions({ VD, bridge, withBusy }: StorageActionContext) {
   function writeClipboard(text: string) {
     const nav = window.navigator;
@@ -39,28 +47,40 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
   }
 
   function downloadTextFile(text: string, filename: string) {
+    let url: string | null = null;
+    let link: HTMLAnchorElement | null = null;
     try {
       if (typeof Blob !== "function" || !window.URL || typeof window.URL.createObjectURL !== "function") return false;
       const blob = new Blob([text], { type: "application/json" });
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
+      url = window.URL.createObjectURL(blob);
+      link = document.createElement("a");
       link.href = url;
       link.download = filename;
       link.rel = "noopener";
       document.body.append(link);
       link.click();
-      link.remove();
-      window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
       return true;
     } catch (_err) {
       return false;
+    } finally {
+      link?.remove();
+      if (url) {
+        const revokeUrl = url;
+        window.setTimeout(() => window.URL.revokeObjectURL(revokeUrl), 0);
+      }
     }
   }
 
   function refreshStorage() {
     if (!bridge) return;
-    if (typeof bridge.requestStorageSummary === "function" && bridge.requestStorageSummary()) return;
-    if (typeof bridge.getStorageSummary === "function") VD.setStorage(bridge.getStorageSummary());
+    try {
+      if (typeof bridge.requestStorageSummary === "function" && bridge.requestStorageSummary()) return;
+      if (typeof bridge.getStorageSummary === "function") VD.setStorage(bridge.getStorageSummary());
+    } catch (err) {
+      const detail = "Could not refresh storage summary.";
+      VD.setStatus({ state: "blocked", detail });
+      logBridgeFailure(bridge, "storage_summary_failed", detail, err);
+    }
   }
 
   function clearStorage(button?: BusyButton | null) {
@@ -71,9 +91,15 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       confirmLabel: "Clear data"
     }).then((confirmed) => {
       if (!confirmed) return;
-      withBusy(button, () => {
-        bridge.clearStoredData();
-      });
+      try {
+        withBusy(button, () => {
+          bridge.clearStoredData();
+        });
+      } catch (err) {
+        const detail = "Could not clear stored data.";
+        VD.setStatus({ state: "blocked", detail });
+        logBridgeFailure(bridge, "clear_storage_failed", detail, err);
+      }
     });
   }
 
@@ -121,7 +147,13 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       VD.setStatus({ state: "idle", detail: "Restore is only available inside the Android app." });
       return;
     }
-    withBusy(button, () => bridge.restoreBackup());
+    try {
+      withBusy(button, () => bridge.restoreBackup());
+    } catch (err) {
+      const detail = "Could not start restore.";
+      VD.setStatus({ state: "blocked", detail });
+      logBridgeFailure(bridge, "restore_backup_failed", detail, err);
+    }
   }
 
   function restoreEncryptedBackup(button?: BusyButton | null) {
@@ -139,7 +171,13 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
         VD.setStatus({ state: "ready", detail: "Encrypted restore cancelled." });
         return;
       }
-      withBusy(button, () => bridge.restoreEncryptedBackup(passphrase));
+      try {
+        withBusy(button, () => bridge.restoreEncryptedBackup(passphrase));
+      } catch (err) {
+        const detail = "Could not start encrypted restore.";
+        VD.setStatus({ state: "blocked", detail });
+        logBridgeFailure(bridge, "restore_encrypted_backup_failed", detail, err);
+      }
     });
   }
 
@@ -148,7 +186,15 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       VD.setStatus({ state: "idle", detail: "Debug export is only available inside the Android app." });
       return;
     }
-    const result = VD.parsePayload<VoltExportResult>(bridge.exportDebugBundle(), {});
+    let result: VoltExportResult;
+    try {
+      result = VD.parsePayload<VoltExportResult>(bridge.exportDebugBundle(), {});
+    } catch (err) {
+      const detail = "Debug export failed.";
+      VD.setStatus({ state: "blocked", detail });
+      logBridgeFailure(bridge, "debug_export_failed", detail, err);
+      return;
+    }
     if (result.ok) {
       const content = typeof result.content === "string" ? result.content : "";
       const filename =

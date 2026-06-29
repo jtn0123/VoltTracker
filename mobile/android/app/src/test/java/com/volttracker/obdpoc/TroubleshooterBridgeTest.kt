@@ -1,8 +1,11 @@
 package com.volttracker.obdpoc
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -10,12 +13,14 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
@@ -96,6 +101,16 @@ class TroubleshooterBridgeTest {
     }
 
     @Test
+    fun cancelRetry_neverThrows_whenServiceDispatchIsDenied() {
+        val activity = controller!!.get()
+        activity.startServiceFailure = SecurityException("foreground service dispatch denied")
+
+        bridge!!.cancelRetry()
+
+        assertEquals(1, activity.startServiceCalls)
+    }
+
+    @Test
     fun openBluetoothSettings_neverThrows_evenIfActivityResolveFails() {
         // Robolectric provides the Settings intent path so this should succeed without
         // throwing on either branch.
@@ -123,6 +138,38 @@ class TroubleshooterBridgeTest {
         assertTrue(
             "message should disclose redaction before sharing",
             bridge!!.diagnosticsDisclosureMessage().contains("redacted"),
+        )
+    }
+
+    @Test
+    fun diagnosticsDisclosureSkipsFinishingActivity() {
+        val activity = controller!!.get()
+        activity.finish()
+        ShadowAlertDialog.reset()
+
+        bridge!!.showDiagnosticsDisclosure(Intent(Intent.ACTION_SEND))
+
+        assertNull(
+            "finishing activities must not show a diagnostics disclosure dialog",
+            ShadowAlertDialog.getLatestAlertDialog(),
+        )
+    }
+
+    @Test
+    fun diagnosticsSharePositiveClickReportsChooserLaunchFailure() {
+        val activity = controller!!.get()
+        activity.startActivityFailure = ActivityNotFoundException("no chooser")
+        bridge!!.showDiagnosticsDisclosure(Intent(Intent.ACTION_SEND))
+
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertNotNull("diagnostics share should show a disclosure first", dialog)
+        dialog!!.getButton(AlertDialog.BUTTON_POSITIVE)!!.performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("blocked", activity.lastState)
+        assertTrue(
+            "detail should explain that diagnostics could not be shared, got: ${activity.lastDetail}",
+            activity.lastDetail?.contains("share diagnostics") == true,
         )
     }
 
@@ -202,9 +249,23 @@ class TroubleshooterBridgeTest {
     class HarnessActivity : MainActivity() {
         var lastState: String? = null
         var lastDetail: String? = null
+        var startActivityFailure: RuntimeException? = null
+        var startServiceFailure: RuntimeException? = null
+        var startServiceCalls = 0
 
         override fun onCreate(savedInstanceState: Bundle?) {
             deviceCatalog = DeviceCatalog(this, getSharedPreferences("troubleshooter-test", 0))
+        }
+
+        override fun startActivity(intent: Intent?) {
+            startActivityFailure?.let { throw it }
+            super.startActivity(intent)
+        }
+
+        override fun startService(service: Intent?): ComponentName? {
+            startServiceCalls += 1
+            startServiceFailure?.let { throw it }
+            return super.startService(service)
         }
 
         override fun publishStatus(
