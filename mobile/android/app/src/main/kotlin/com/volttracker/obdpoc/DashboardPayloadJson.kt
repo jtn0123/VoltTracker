@@ -49,6 +49,7 @@ object DashboardPayloadJson {
         rowsTotal: Long,
         percent: Int,
         etaSeconds: Long,
+        operation: String?,
     ): JSONObject {
         val payload = JSONObject()
         try {
@@ -57,6 +58,9 @@ object DashboardPayloadJson {
             payload.put("title", title)
             payload.put("detail", detail)
             payload.put("tone", tone)
+            if (!operation.isNullOrBlank()) {
+                payload.put("operation", operation)
+            }
             if (!phase.isNullOrBlank()) {
                 payload.put("phase", phase)
             }

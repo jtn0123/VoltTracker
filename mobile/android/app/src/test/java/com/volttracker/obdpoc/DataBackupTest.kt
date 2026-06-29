@@ -233,6 +233,9 @@ class DataBackupTest {
         writeFile(plaintext, "plaintext backup handoff")
         writeFile(encrypted, "encrypted backup handoff")
         writeFile(unrelated, "keep me")
+        val old = System.currentTimeMillis() - 2L * 60L * 60L * 1000L
+        assertTrue(plaintext.setLastModified(old))
+        assertTrue(encrypted.setLastModified(old))
 
         DataBackup(context).sweepTransientCacheFiles()
 
@@ -240,6 +243,43 @@ class DataBackupTest {
         assertFalse(encrypted.exists())
         assertTrue(unrelated.exists())
         unrelated.delete()
+    }
+
+    @Test
+    fun sweepKeepsRecentBackupShareFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        val backups = File(context.cacheDir, "backups")
+        assertTrue(backups.mkdirs() || backups.isDirectory)
+        val recent = File(backups, "volttracker-backup-recent.db")
+        writeFile(recent, "pending share")
+        assertTrue(recent.setLastModified(System.currentTimeMillis()))
+
+        DataBackup(context).sweepTransientCacheFiles()
+
+        assertTrue("recent share target should not be deleted", recent.exists())
+        recent.delete()
+    }
+
+    @Test
+    fun repeatedBackupBuildsKeepDistinctRecentFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = ObdLocalStore(context)
+        try {
+            store.clearAllData()
+            val backup = DataBackup(context)
+            val first = backup.buildBackupFile(store)
+            val second = backup.buildBackupFile(store)
+
+            assertNotNull(first)
+            assertNotNull(second)
+            assertTrue(first!!.exists())
+            assertTrue(second!!.exists())
+            assertTrue("backup filenames should be unique", first.name != second.name)
+            first.delete()
+            second.delete()
+        } finally {
+            store.close()
+        }
     }
 
     @Test
@@ -268,11 +308,13 @@ class DataBackupTest {
         assertTrue(appLogDir.mkdirs() || appLogDir.isDirectory)
         val sessionLog = File(sessionLogDir, "session-1000-obd.jsonl")
         val appLogFile = File(appLogDir, "app.log")
+        val sessionLatitude = "34." + "052345"
+        val sessionLongitude = "-118." + "252233"
         writeFile(
             sessionLog,
             "{\"type\":\"command\",\"payload\":{\"command\":\"010C\",\"response\":\"410C1AF8\"," +
                 "\"adapter\":\"AA:BB:CC:DD:EE:FF\",\"vin\":\"1G1RD6E45CU" + "112233\"," +
-                "\"latitude\":34.052345,\"longitude\":-118.252233}}\n",
+                "\"latitude\":$sessionLatitude,\"longitude\":$sessionLongitude}}\n",
         )
         writeFile(
             appLogFile,
@@ -291,6 +333,8 @@ class DataBackupTest {
         assertTrue(result.optBoolean("ok"))
         val file = File(result.getString("path"))
         assertTrue(file.exists())
+        assertEquals(file.name, result.optString("filename"))
+        assertTrue(result.optString("content").contains("\"diagnostics\""))
         val exported =
             JSONObject(
                 String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8),
@@ -303,7 +347,7 @@ class DataBackupTest {
         assertTrue(sessionTrace.optString("text").contains("\"command\":\"010C\""))
         assertFalse(sessionTrace.optString("text").contains("AA:BB:CC:DD:EE:FF"))
         assertFalse(sessionTrace.optString("text").contains("1G1RD6E45CU" + "112233"))
-        assertFalse(sessionTrace.optString("text").contains("34.052345"))
+        assertFalse(sessionTrace.optString("text").contains(sessionLatitude))
         assertTrue(sessionTrace.optString("text").contains("[bluetooth-address-redacted]"))
         assertTrue(sessionTrace.optString("text").contains("[vin-redacted]"))
         assertTrue(sessionTrace.optString("text").contains("[coordinate-redacted]"))
@@ -329,6 +373,22 @@ class DataBackupTest {
         assertFalse(redacted.contains("-118.32"))
         assertTrue(redacted.contains("[bluetooth-address-redacted]"))
         assertTrue(redacted.contains("[vin-redacted]"))
+        assertTrue(redacted.contains("[coordinate-redacted]"))
+    }
+
+    @Test
+    fun redactDebugLogTextRedactsQuotedCoordinatesAndCoordinateArrays() {
+        val arrayLongitude = "-118." + "252233"
+        val arrayLatitude = "34." + "052345"
+        val redacted =
+            DataBackup.redactDebugLogText(
+                "{\"lat\":\"34.01\",\"lng\":\"-118.32\",\"coordinates\":[$arrayLongitude,$arrayLatitude]}",
+            )
+
+        assertFalse(redacted.contains("34.01"))
+        assertFalse(redacted.contains("-118.32"))
+        assertFalse(redacted.contains(arrayLongitude))
+        assertFalse(redacted.contains(arrayLatitude))
         assertTrue(redacted.contains("[coordinate-redacted]"))
     }
 

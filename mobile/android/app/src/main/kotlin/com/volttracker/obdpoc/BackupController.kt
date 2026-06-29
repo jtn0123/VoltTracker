@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.data.DatabaseMerger
@@ -12,6 +13,7 @@ import java.io.File
 import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.ceil
 
 /** Drives the Activity-facing backup/restore user flows. */
@@ -21,6 +23,8 @@ class BackupController(
     private val executor: ExecutorService?,
 ) {
     private var pendingRestorePassphrase: String? = null
+    private var restorePickerInFlight = false
+    private val backupShareInFlight = AtomicBoolean(false)
     private val restoreLog = LogcatMirror(RollingAppLog(File(activity.filesDir, "app-log")))
 
     /**
@@ -30,6 +34,17 @@ class BackupController(
      */
     fun dispose() {
         restoreLog.close()
+    }
+
+    fun saveState(outState: Bundle) {
+        outState.putBoolean(KEY_RESTORE_PICKER_IN_FLIGHT, restorePickerInFlight)
+    }
+
+    fun restoreState(savedInstanceState: Bundle?) {
+        if (savedInstanceState == null) {
+            return
+        }
+        restorePickerInFlight = savedInstanceState.getBoolean(KEY_RESTORE_PICKER_IN_FLIGHT, false)
     }
 
     private enum class RestoreResult {
@@ -44,7 +59,14 @@ class BackupController(
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
             return
         }
-        showShareDisclosure { performBackupAndShare() }
+        if (!backupShareInFlight.compareAndSet(false, true)) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_backup_already_running), true)
+            return
+        }
+        showShareDisclosure(
+            onConfirmed = { performBackupAndShare() },
+            onFinishedWithoutConfirm = { backupShareInFlight.set(false) },
+        )
     }
 
     fun launchEncryptedShare(passphrase: String?) {
@@ -56,16 +78,27 @@ class BackupController(
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
             return
         }
-        showShareDisclosure { performBackupAndShare(true, passphrase) }
+        if (!backupShareInFlight.compareAndSet(false, true)) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_backup_already_running), true)
+            return
+        }
+        showShareDisclosure(
+            onConfirmed = { performBackupAndShare(true, passphrase) },
+            onFinishedWithoutConfirm = { backupShareInFlight.set(false) },
+        )
     }
 
     fun shareDisclosureMessage(): String =
         activity.getString(R.string.backup_disclosure_message, DataBackup.MIN_PASSPHRASE_LENGTH)
 
-    private fun showShareDisclosure(onConfirmed: Runnable) {
+    private fun showShareDisclosure(
+        onConfirmed: Runnable,
+        onFinishedWithoutConfirm: Runnable,
+    ) {
         if (activity.isFinishing) {
             // A dialog shown on a finishing Activity leaks the window; drop the request.
             Log.w(MainActivity.TAG, "share disclosure skipped; activity is finishing")
+            onFinishedWithoutConfirm.run()
             return
         }
         try {
@@ -75,12 +108,15 @@ class BackupController(
                 .setMessage(shareDisclosureMessage())
                 .setPositiveButton(R.string.dialog_share_anyway) { _, _ -> onConfirmed.run() }
                 .setNegativeButton(R.string.dialog_cancel) { _, _ ->
+                    onFinishedWithoutConfirm.run()
                     activity.publishStatus("ready", activity.getString(R.string.status_backup_cancelled), false)
                 }.setOnCancelListener {
+                    onFinishedWithoutConfirm.run()
                     activity.publishStatus("ready", activity.getString(R.string.status_backup_cancelled), false)
                 }.show()
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "share disclosure dialog failed to show", ex)
+            onFinishedWithoutConfirm.run()
             activity.publishStatus("blocked", activity.getString(R.string.status_backup_disclosure_failed), true)
         }
     }
@@ -95,6 +131,7 @@ class BackupController(
     ) {
         if (activity.isLoggingActive()) {
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
+            backupShareInFlight.set(false)
             return
         }
         activity.publishStatus(
@@ -120,90 +157,111 @@ class BackupController(
                     R.string.progress_preparing_backup_detail
                 },
             )
-        showRestoreProgress(title, detail)
-        runBackground(activity.getString(R.string.status_backup_worker_failed)) {
-            val progress = ProgressEmitter(title, detail)
-            // Set when DataBackup's pre-export quick_check reports problems. The backup still
-            // proceeds (a possibly damaged backup beats no backup), but the final success status
-            // must tell the user instead of burying the warning in logcat.
-            var integrityWarning = false
-            val listener =
-                DataBackup.ProgressListener { snapshot ->
-                    if (snapshot.warning) {
-                        integrityWarning = true
+        showRestoreProgress(title, detail, operation = OPERATION_BACKUP)
+        val started =
+            runBackground(activity.getString(R.string.status_backup_worker_failed)) {
+                val progress = ProgressEmitter(title, detail, OPERATION_BACKUP)
+                // Set when DataBackup's pre-export quick_check reports problems. The backup still
+                // proceeds (a possibly damaged backup beats no backup), but the final success status
+                // must tell the user instead of burying the warning in logcat.
+                var integrityWarning = false
+                val listener =
+                    DataBackup.ProgressListener { snapshot ->
+                        if (snapshot.warning) {
+                            integrityWarning = true
+                        }
+                        progress.onDataBackupProgress(snapshot)
                     }
-                    progress.onDataBackupProgress(snapshot)
-                }
-            val backup =
-                if (encrypted) {
-                    dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase, listener)
-                } else {
-                    dataBackup.buildBackupFile(activity.localStore, listener)
-                }
-            activity.runOnUiThread {
-                if (backup == null) {
-                    // DataBackup logs the throwing phase internally; tie that to this UI failure.
-                    Log.e(
-                        MainActivity.TAG,
-                        "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
-                    )
-                    showRestoreProgress(
-                        activity.getString(R.string.progress_backup_failed_title),
-                        activity.getString(R.string.status_backup_create_failed),
-                        busy = false,
-                        tone = "blocked",
-                    )
-                    activity.publishStatus("blocked", activity.getString(R.string.status_backup_create_failed), true)
-                    return@runOnUiThread
-                }
-                val warningSuffix =
-                    if (integrityWarning) {
-                        " " + activity.getString(R.string.status_backup_integrity_warning)
+                val backup =
+                    if (encrypted) {
+                        dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase, listener)
                     } else {
-                        ""
+                        dataBackup.buildBackupFile(activity.localStore, listener)
                     }
-                try {
-                    val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", backup)
-                    val share = Intent(Intent.ACTION_SEND)
-                    share.type = "application/octet-stream"
-                    share.putExtra(Intent.EXTRA_STREAM, uri)
-                    share.putExtra(Intent.EXTRA_SUBJECT, backup.name)
-                    share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    activity.startActivity(
-                        Intent.createChooser(share, activity.getString(R.string.chooser_backup)),
-                    )
-                    showRestoreProgress(
-                        activity.getString(R.string.progress_backup_ready_title),
-                        activity.getString(
-                            if (encrypted) {
-                                R.string.progress_encrypted_backup_ready_detail
-                            } else {
-                                R.string.progress_backup_ready_detail
-                            },
-                        ) + warningSuffix,
-                        busy = false,
-                        tone = "ok",
-                        phase = activity.getString(R.string.progress_phase_ready_to_share),
-                        percent = 100,
-                    )
-                    activity.publishStatus(
-                        "ready",
-                        activity.getString(
-                            if (encrypted) R.string.status_encrypted_backup_ready else R.string.status_backup_ready,
-                        ) + warningSuffix,
-                        false,
-                    )
-                } catch (ex: RuntimeException) {
-                    Log.e(MainActivity.TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
-                    showRestoreProgress(
-                        activity.getString(R.string.progress_backup_failed_title),
-                        activity.getString(R.string.status_share_sheet_failed),
-                        busy = false,
-                        tone = "blocked",
-                    )
-                    activity.publishStatus("blocked", activity.getString(R.string.status_share_sheet_failed), true)
+                activity.runOnUiThread {
+                    if (backup == null) {
+                        // DataBackup logs the throwing phase internally; tie that to this UI failure.
+                        Log.e(
+                            MainActivity.TAG,
+                            "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
+                        )
+                        showRestoreProgress(
+                            activity.getString(R.string.progress_backup_failed_title),
+                            activity.getString(R.string.status_backup_create_failed),
+                            busy = false,
+                            tone = "blocked",
+                            operation = OPERATION_BACKUP,
+                        )
+                        activity.publishStatus(
+                            "blocked",
+                            activity.getString(R.string.status_backup_create_failed),
+                            true,
+                        )
+                        backupShareInFlight.set(false)
+                        return@runOnUiThread
+                    }
+                    val warningSuffix =
+                        if (integrityWarning) {
+                            " " + activity.getString(R.string.status_backup_integrity_warning)
+                        } else {
+                            ""
+                        }
+                    try {
+                        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", backup)
+                        val share = Intent(Intent.ACTION_SEND)
+                        share.type = "application/octet-stream"
+                        share.putExtra(Intent.EXTRA_STREAM, uri)
+                        share.putExtra(Intent.EXTRA_SUBJECT, backup.name)
+                        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        activity.startActivity(
+                            Intent.createChooser(share, activity.getString(R.string.chooser_backup)),
+                        )
+                        showRestoreProgress(
+                            activity.getString(R.string.progress_backup_ready_title),
+                            activity.getString(
+                                if (encrypted) {
+                                    R.string.progress_encrypted_backup_ready_detail
+                                } else {
+                                    R.string.progress_backup_ready_detail
+                                },
+                            ) + warningSuffix,
+                            busy = false,
+                            tone = "ok",
+                            phase = activity.getString(R.string.progress_phase_ready_to_share),
+                            percent = 100,
+                            operation = OPERATION_BACKUP,
+                        )
+                        activity.publishStatus(
+                            "ready",
+                            activity.getString(
+                                if (encrypted) R.string.status_encrypted_backup_ready else R.string.status_backup_ready,
+                            ) + warningSuffix,
+                            false,
+                        )
+                        backupShareInFlight.set(false)
+                    } catch (ex: RuntimeException) {
+                        Log.e(MainActivity.TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
+                        showRestoreProgress(
+                            activity.getString(R.string.progress_backup_failed_title),
+                            activity.getString(R.string.status_share_sheet_failed),
+                            busy = false,
+                            tone = "blocked",
+                            operation = OPERATION_BACKUP,
+                        )
+                        activity.publishStatus("blocked", activity.getString(R.string.status_share_sheet_failed), true)
+                        backupShareInFlight.set(false)
+                    }
                 }
             }
+        if (!started) {
+            showRestoreProgress(
+                activity.getString(R.string.progress_backup_failed_title),
+                activity.getString(R.string.status_backup_worker_failed),
+                busy = false,
+                tone = "blocked",
+                operation = OPERATION_BACKUP,
+            )
+            backupShareInFlight.set(false)
         }
     }
 
@@ -214,9 +272,11 @@ class BackupController(
         if (resultCode == Activity.RESULT_OK && data?.data != null) {
             val passphrase = pendingRestorePassphrase
             pendingRestorePassphrase = null
+            restorePickerInFlight = false
             restoreFromUri(data.data, passphrase)
         } else {
             pendingRestorePassphrase = null
+            restorePickerInFlight = false
             activity.publishStatus("ready", activity.getString(R.string.status_restore_cancelled_no_file), false)
         }
     }
@@ -241,6 +301,10 @@ class BackupController(
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_restore), true)
             return
         }
+        if (restorePickerInFlight) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_restore_picker_already_open), true)
+            return
+        }
         try {
             val pick = Intent(Intent.ACTION_OPEN_DOCUMENT)
             pick.addCategory(Intent.CATEGORY_OPENABLE)
@@ -250,10 +314,12 @@ class BackupController(
                 arrayOf("application/octet-stream", "application/vnd.sqlite3", "application/x-sqlite3"),
             )
             pendingRestorePassphrase = passphrase
+            restorePickerInFlight = true
             activity.publishStatus("ready", activity.getString(R.string.status_choose_backup_file), false)
             activity.launchRestoreFilePicker(pick)
         } catch (ex: RuntimeException) {
             pendingRestorePassphrase = null
+            restorePickerInFlight = false
             activity.publishStatus("blocked", activity.getString(R.string.status_file_picker_failed), true)
         }
     }
@@ -266,6 +332,7 @@ class BackupController(
         showRestoreProgress(
             readingBackupTitle(encrypted),
             activity.getString(R.string.progress_reading_backup_detail),
+            operation = OPERATION_RESTORE,
         )
         logRestore("stage_start", mapOf("encrypted" to encrypted))
         activity.publishStatus(
@@ -286,6 +353,7 @@ class BackupController(
                                 R.string.progress_reading_backup_worker_detail
                             },
                         ),
+                        OPERATION_RESTORE,
                     )
                 val outcome =
                     dataBackup.stageRestoreFileWithStatus(
@@ -318,6 +386,7 @@ class BackupController(
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
                 tone = "blocked",
+                operation = OPERATION_RESTORE,
             )
         }
     }
@@ -356,6 +425,7 @@ class BackupController(
         showRestoreProgress(
             activity.getString(R.string.progress_restoring_title),
             activity.getString(R.string.progress_restoring_detail),
+            operation = OPERATION_RESTORE,
         )
         logRestore("replace_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", activity.getString(R.string.status_restoring), false)
@@ -364,6 +434,7 @@ class BackupController(
                     ProgressEmitter(
                         activity.getString(R.string.progress_restoring_title),
                         activity.getString(R.string.progress_replace_worker_detail),
+                        OPERATION_RESTORE,
                     )
                 val result = applyReplace(staged, progress)
                 activity.runOnUiThread {
@@ -375,6 +446,7 @@ class BackupController(
                             activity.getString(R.string.progress_restore_complete_detail),
                             busy = false,
                             tone = "ok",
+                            operation = OPERATION_RESTORE,
                         )
                         logRestore("replace_ok", emptyMap<String, Any?>())
                         activity.publishStatus(
@@ -393,6 +465,7 @@ class BackupController(
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
                 tone = "blocked",
+                operation = OPERATION_RESTORE,
             )
         }
     }
@@ -401,6 +474,7 @@ class BackupController(
         showRestoreProgress(
             activity.getString(R.string.progress_merging_title),
             activity.getString(R.string.progress_merging_detail),
+            operation = OPERATION_RESTORE,
         )
         logRestore("merge_start", emptyMap<String, Any?>())
         activity.publishStatus("ready", activity.getString(R.string.status_merging), false)
@@ -409,6 +483,7 @@ class BackupController(
                     ProgressEmitter(
                         activity.getString(R.string.progress_merging_title),
                         activity.getString(R.string.progress_merge_worker_detail),
+                        OPERATION_RESTORE,
                     )
                 val outcome = applyMerge(staged, progress)
                 activity.runOnUiThread {
@@ -421,6 +496,7 @@ class BackupController(
                             activity.getString(R.string.merge_reconnect_suffix, mergeMessage),
                             busy = false,
                             tone = "ok",
+                            operation = OPERATION_RESTORE,
                         )
                         logRestore("merge_ok", emptyMap<String, Any?>())
                         activity.publishStatus(
@@ -432,7 +508,13 @@ class BackupController(
                         publishRestoreFailure(outcome.result)
                     } else {
                         val message = outcome.message ?: activity.getString(R.string.status_merge_failed_generic)
-                        showRestoreProgress(restoreFailedTitle(), message, busy = false, tone = "blocked")
+                        showRestoreProgress(
+                            restoreFailedTitle(),
+                            message,
+                            busy = false,
+                            tone = "blocked",
+                            operation = OPERATION_RESTORE,
+                        )
                         logRestore("merge_failed", mapOf("message" to message))
                         activity.publishStatus(
                             "blocked",
@@ -448,13 +530,20 @@ class BackupController(
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
                 tone = "blocked",
+                operation = OPERATION_RESTORE,
             )
         }
     }
 
     private fun publishRestoreFailure(result: RestoreResult) {
         val message = restoreFailureMessage(result)
-        showRestoreProgress(restoreFailedTitle(), message, busy = false, tone = "blocked")
+        showRestoreProgress(
+            restoreFailedTitle(),
+            message,
+            busy = false,
+            tone = "blocked",
+            operation = OPERATION_RESTORE,
+        )
         logRestore("apply_failed", mapOf("result" to result.name))
         activity.publishStatus("blocked", message, true)
     }
@@ -464,7 +553,13 @@ class BackupController(
         if (outcome.status == DataBackup.RestoreStageStatus.NO_FILE) {
             hideRestoreProgress()
         } else {
-            showRestoreProgress(restoreFailedTitle(), message, busy = false, tone = "blocked")
+            showRestoreProgress(
+                restoreFailedTitle(),
+                message,
+                busy = false,
+                tone = "blocked",
+                operation = OPERATION_RESTORE,
+            )
         }
         logRestore(
             "stage_failed",
@@ -548,6 +643,7 @@ class BackupController(
         rowsTotal: Long = -1L,
         percent: Int = -1,
         etaSeconds: Long = -1L,
+        operation: String? = null,
     ) {
         val resolvedPercent =
             if (percent >= 0) {
@@ -570,11 +666,12 @@ class BackupController(
             rowsTotal,
             resolvedPercent,
             etaSeconds,
+            operation,
         )
     }
 
     private fun hideRestoreProgress() {
-        activity.publishRestoreProgress(false, false, null, null, "idle", null, -1L, -1L, -1L, -1L, -1, -1L)
+        activity.publishRestoreProgress(false, false, null, null, "idle", null, -1L, -1L, -1L, -1L, -1, -1L, null)
     }
 
     private fun logRestore(
@@ -613,6 +710,7 @@ class BackupController(
     private inner class ProgressEmitter(
         private val title: String,
         private val fallbackDetail: String,
+        private val operation: String,
     ) {
         private val startedAtMs = System.currentTimeMillis()
         private var lastPublishedAtMs = 0L
@@ -671,6 +769,7 @@ class BackupController(
                     rowsTotal = rowsTotal,
                     percent = percent,
                     etaSeconds = etaSeconds,
+                    operation = operation,
                 )
             }
         }
@@ -803,6 +902,9 @@ class BackupController(
 
     companion object {
         const val REQUEST_RESTORE = 4202
+        private const val KEY_RESTORE_PICKER_IN_FLIGHT = "volttracker.restore_picker_in_flight"
+        private const val OPERATION_BACKUP = "backup"
+        private const val OPERATION_RESTORE = "restore"
         private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
         private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
 

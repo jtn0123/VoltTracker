@@ -27,6 +27,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import java.lang.reflect.Modifier
 import java.util.concurrent.AbstractExecutorService
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 
 /**
@@ -184,6 +185,23 @@ class BackupControllerShareTest {
         assertEquals("Backup cancelled.", activity.lastDetail)
     }
 
+    @Test
+    fun secondBackupRequestIsBlockedWhileDisclosureIsOpen() {
+        seedOneSession()
+
+        activity.backupController!!.launchShare()
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Backup already in progress.", activity.lastDetail)
+
+        latestDialog().getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+    }
+
     // --- launchShare / performBackupAndShare ---------------------------------
 
     @Test
@@ -288,6 +306,26 @@ class BackupControllerShareTest {
             "final encrypted-share status should surface the quick_check warning, got: " + activity.lastDetail,
             activity.lastDetail!!.contains("integrity check reported problems"),
         )
+    }
+
+    @Test
+    fun rejectedBackupWorkerClearsBusyProgress() {
+        seedOneSession()
+        activity.backupController =
+            BackupController(activity, DataBackup(activity), RejectingExecutorService())
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not start the backup worker.", activity.lastDetail)
+        assertEquals("Backup failed", activity.lastProgressTitle)
+        assertEquals("Could not start the backup worker.", activity.lastProgressDetail)
+        assertEquals(false, activity.lastProgressBusy)
+        assertEquals("blocked", activity.lastProgressTone)
+        assertEquals("backup", activity.lastProgressOperation)
     }
 
     // --- launchEncryptedShare ------------------------------------------------
@@ -399,6 +437,24 @@ class BackupControllerShareTest {
         ): Boolean = true
     }
 
+    /** Executor that rejects immediately so runBackground() exercises its !started branch. */
+    private class RejectingExecutorService : AbstractExecutorService() {
+        override fun execute(command: Runnable): Unit = throw RejectedExecutionException("worker rejected")
+
+        override fun shutdown() = Unit
+
+        override fun shutdownNow(): List<Runnable> = emptyList()
+
+        override fun isShutdown(): Boolean = false
+
+        override fun isTerminated(): Boolean = false
+
+        override fun awaitTermination(
+            timeout: Long,
+            unit: TimeUnit,
+        ): Boolean = false
+    }
+
     /** Minimal MainActivity that wires a real store + inline executor and captures status/intents. */
     class HarnessActivity : MainActivity() {
         @JvmField var loggingActive = false
@@ -410,6 +466,16 @@ class BackupControllerShareTest {
         @JvmField var lastState: String? = null
 
         @JvmField var lastDetail: String? = null
+
+        @JvmField var lastProgressTitle: String? = null
+
+        @JvmField var lastProgressDetail: String? = null
+
+        @JvmField var lastProgressTone: String? = null
+
+        @JvmField var lastProgressBusy: Boolean? = null
+
+        @JvmField var lastProgressOperation: String? = null
 
         override fun onCreate(savedInstanceState: Bundle?) {
             localStore = ObdLocalStore(this)
@@ -445,6 +511,28 @@ class BackupControllerShareTest {
 
         override fun publishStorageSummary() {
             // No WebView in the harness.
+        }
+
+        override fun publishRestoreProgress(
+            visible: Boolean,
+            busy: Boolean,
+            title: String?,
+            detail: String?,
+            tone: String?,
+            phase: String?,
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+            percent: Int,
+            etaSeconds: Long,
+            operation: String?,
+        ) {
+            lastProgressTitle = title
+            lastProgressDetail = detail
+            lastProgressTone = tone
+            lastProgressBusy = busy
+            lastProgressOperation = operation
         }
     }
 }

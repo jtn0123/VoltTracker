@@ -341,13 +341,13 @@ internal class VoltBridgeDataExports(
     fun getMaintenanceLog(): String {
         val store = activity.localStore?.takeIf { it.isOpen }
         if (store == null) {
-            return "[]"
+            return errorPayload("storage_unavailable", "Maintenance log is not available yet.")
         }
         return try {
             BridgeJsonResult.array(store.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS)).serialize()
         } catch (ex: RuntimeException) {
             Log.w(MainActivity.TAG, "getMaintenanceLog failed", ex)
-            "[]"
+            errorPayload("maintenance_log_failed", "Could not read the maintenance log.")
         }
     }
 

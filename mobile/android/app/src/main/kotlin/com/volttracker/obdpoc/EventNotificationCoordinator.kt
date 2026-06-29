@@ -63,12 +63,11 @@ class EventNotificationCoordinator(
     fun maybeRunAutoDtcScan(engine: ObdPollingEngine?) {
         engine ?: return
         autoScan.onConnected {
-            val codes = AutoDtcScanRunner(engine).readGenericDtcCodes()
-            applyScanCodes(codes)
-            // Report whether the scan actually read codes so the controller only arms its per-drive
-            // throttle on a real Mode-03 reply: an empty result (adapter didn't answer / clean car)
-            // leaves the throttle disarmed so the next reconnect can retry instead of being blocked.
-            codes.isNotEmpty()
+            val scan = AutoDtcScanRunner(engine).readGenericDtcScan()
+            if (scan.completed) {
+                applyScanCodes(scan.codes)
+            }
+            scan.completed
         }
     }
 

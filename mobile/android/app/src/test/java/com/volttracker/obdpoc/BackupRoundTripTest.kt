@@ -505,8 +505,8 @@ class BackupRoundTripTest {
     }
 
     @Test
-    fun buildBackupClearsPreviousBackupButLeavesUnrelatedFiles() {
-        // buildBackupFile must drop only its own previous output (`volttracker-backup-*.db`).
+    fun buildBackupClearsOldBackupButLeavesUnrelatedFiles() {
+        // buildBackupFile must drop only its own old output (`volttracker-backup-*.db`).
         // Anything else dropped into the same dir by other code (or by a future feature) has to
         // survive — without this filter we'd silently wipe unrelated caches every backup.
         val backupsDir = File(context.cacheDir, "backups")
@@ -515,6 +515,7 @@ class BackupRoundTripTest {
         FileWriter(priorBackup).use { writer ->
             writer.write("stale-backup")
         }
+        assertTrue(priorBackup.setLastModified(System.currentTimeMillis() - 2L * 60L * 60L * 1000L))
         val unrelated = File(backupsDir, "leftover.db")
         FileWriter(unrelated).use { writer ->
             writer.write("not-a-backup")

@@ -281,6 +281,7 @@ class BackupControllerDialogTest {
             rowsTotal: Long,
             percent: Int,
             etaSeconds: Long,
+            operation: String?,
         ) {
             restoreProgress.add(
                 RestoreProgressEvent(
@@ -296,6 +297,7 @@ class BackupControllerDialogTest {
                     rowsTotal,
                     percent,
                     etaSeconds,
+                    operation,
                 ),
             )
         }
@@ -322,5 +324,6 @@ class BackupControllerDialogTest {
         val rowsTotal: Long,
         val percent: Int,
         val etaSeconds: Long,
+        val operation: String?,
     )
 }

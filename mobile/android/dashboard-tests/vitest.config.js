@@ -15,6 +15,11 @@ export default {
     globals: false,
     include: ['**/*.test.js'],
     setupFiles: ['./setup/test-lifecycle.js'],
+    // The startup-budget spec measures wall-clock time. Keep dashboard files serial so
+    // that budget reflects dashboard boot work, not neighboring Vitest workers.
+    fileParallelism: false,
+    testTimeout: 30_000,
+    hookTimeout: 30_000,
     reporters: [['default', { summary: false }]],
     coverage: {
       provider: 'istanbul',

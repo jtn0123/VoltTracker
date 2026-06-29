@@ -101,6 +101,24 @@ async function clickCancel() {
   await Promise.resolve();
 }
 
+function disableBrowserDownloads() {
+  const original = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
+  Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: undefined });
+  return () => {
+    if (original) Object.defineProperty(window.URL, 'createObjectURL', original);
+    else delete window.URL.createObjectURL;
+  };
+}
+
+function setClipboard(value) {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value });
+  return () => {
+    if (original) Object.defineProperty(navigator, 'clipboard', original);
+    else delete navigator.clipboard;
+  };
+}
+
 describe('actions-storage.ts — confirm/prompt cancel paths', () => {
   let VD;
 
@@ -246,23 +264,88 @@ describe('actions-storage.ts — exportDebugBundle result branches', () => {
     VD = makeVd();
   });
 
-  it('surfaces a ready status with the path on a successful export', () => {
-    const bridge = { exportDebugBundle: vi.fn(() => '{"ok":true,"path":"/data/app/debug"}') };
+  it('downloads returned debug content on a successful export', () => {
+    const originalCreate = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
+    const originalRevoke = Object.getOwnPropertyDescriptor(window.URL, 'revokeObjectURL');
+    const createObjectURL = vi.fn(() => 'blob:debug');
+    const revokeObjectURL = vi.fn();
+    Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+    Object.defineProperty(window.URL, 'revokeObjectURL', { configurable: true, value: revokeObjectURL });
+    const bridge = {
+      exportDebugBundle: vi.fn(() => '{"ok":true,"filename":"debug.json","content":"{\\"diagnostics\\":true}"}'),
+    };
     const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
-    actions.exportDebugBundle();
-    expect(VD.lastStatus()).toMatchObject({
-      state: 'ready',
-      detail: 'Debug summary exported: /data/app/debug.',
-    });
+    try {
+      actions.exportDebugBundle();
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(VD.lastStatus()).toMatchObject({
+        state: 'ready',
+        detail: 'Debug summary exported.',
+      });
+    } finally {
+      if (originalCreate) Object.defineProperty(window.URL, 'createObjectURL', originalCreate);
+      else delete window.URL.createObjectURL;
+      if (originalRevoke) Object.defineProperty(window.URL, 'revokeObjectURL', originalRevoke);
+      else delete window.URL.revokeObjectURL;
+    }
   });
 
-  it('falls back to "app files" when a successful export omits the path', () => {
+  it('copies returned debug content when browser downloads are unavailable', async () => {
+    const restoreDownloads = disableBrowserDownloads();
+    const writeText = vi.fn(() => Promise.resolve());
+    const restoreClipboard = setClipboard({ writeText });
+    const bridge = {
+      exportDebugBundle: vi.fn(() => '{"ok":true,"filename":"debug.json","content":"{\\"diagnostics\\":true}"}'),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    try {
+      actions.exportDebugBundle();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(writeText).toHaveBeenCalledWith('{"diagnostics":true}');
+      expect(VD.lastStatus()).toMatchObject({
+        state: 'ready',
+        detail: 'Debug summary copied.',
+      });
+    } finally {
+      restoreClipboard();
+      restoreDownloads();
+    }
+  });
+
+  it('blocks when the fallback clipboard copy command fails', async () => {
+    const restoreDownloads = disableBrowserDownloads();
+    const restoreClipboard = setClipboard(undefined);
+    const originalExecCommand = Object.getOwnPropertyDescriptor(document, 'execCommand');
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: vi.fn(() => false) });
+    const bridge = {
+      exportDebugBundle: vi.fn(() => '{"ok":true,"filename":"debug.json","content":"{\\"diagnostics\\":true}"}'),
+    };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+    try {
+      actions.exportDebugBundle();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(document.execCommand).toHaveBeenCalledWith('copy');
+      expect(VD.lastStatus()).toMatchObject({
+        state: 'blocked',
+        detail: 'Could not export the debug summary.',
+      });
+    } finally {
+      if (originalExecCommand) Object.defineProperty(document, 'execCommand', originalExecCommand);
+      else delete document.execCommand;
+      restoreClipboard();
+      restoreDownloads();
+    }
+  });
+
+  it('blocks when a successful native result omits downloadable content', () => {
     const bridge = { exportDebugBundle: vi.fn(() => '{"ok":true}') };
     const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
     actions.exportDebugBundle();
     expect(VD.lastStatus()).toMatchObject({
-      state: 'ready',
-      detail: 'Debug summary exported: app files.',
+      state: 'blocked',
+      detail: 'Debug export did not include downloadable content.',
     });
   });
 

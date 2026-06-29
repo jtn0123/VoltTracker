@@ -60,6 +60,8 @@ interface VoltNativeError {
 interface VoltExportResult {
   ok?: boolean;
   path?: string;
+  filename?: string;
+  content?: string;
   error?: string;
   message?: string;
   [key: string]: unknown;
@@ -582,6 +584,7 @@ interface VoltRestoreProgress {
   busy?: boolean;
   title?: string;
   detail?: string;
+  operation?: string;
   tone?: string;
   phase?: string;
   bytesDone?: number | string;

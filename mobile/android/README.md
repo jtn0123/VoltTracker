@@ -153,12 +153,14 @@ Use the pinned toolchain before running the full verification task:
 - JDK 21. CI uses Temurin 21.
 - Android SDK with platform 37 and build tools installed.
 - Node 22. The root `.nvmrc` and `.node-version` both pin this.
-- npm dependencies for the dashboard test/build workspace.
+- npm dependencies for the dashboard test/build and Playwright workspaces.
 
 From `mobile/android/`:
 
 ```sh
 npm --prefix dashboard-tests ci
+npm --prefix dashboard-e2e ci
+npm --prefix dashboard-e2e exec -- playwright install chromium
 ./gradlew verifyActiveApp
 ```
 

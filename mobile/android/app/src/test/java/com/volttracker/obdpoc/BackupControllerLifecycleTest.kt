@@ -3,11 +3,14 @@ package com.volttracker.obdpoc
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -82,6 +85,50 @@ class BackupControllerLifecycleTest {
     }
 
     @Test
+    fun restorePickerBlocksSecondLaunchWhilePickerIsOpen() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+
+            activity.backupController!!.launchEncryptedRestorePicker("old1")
+            activity.backupController!!.launchRestorePicker()
+
+            assertEquals("blocked", activity.lastState)
+            assertEquals("Backup file picker is already open.", activity.lastDetail)
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
+    fun encryptedRestorePassphraseIsNotSavedAcrossControllerRecreation() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            activity.backupController!!.launchEncryptedRestorePicker("old1")
+            val state = Bundle()
+            activity.backupController!!.saveState(state)
+            assertFalse(state.containsKey("volttracker.pending_restore_passphrase"))
+
+            activity.backupController =
+                BackupController(activity, DataBackup(activity), null).also {
+                    it.restoreState(state)
+                }
+            activity.backupController!!.onRestorePickerResult(
+                Activity.RESULT_OK,
+                Intent().setData(Uri.parse("content://volttracker.test/backup.vtdb")),
+            )
+
+            assertTrue(activity.progressTitles.contains("Reading backup"))
+            assertFalse(activity.progressTitles.contains("Reading encrypted backup"))
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
     fun stopObdServiceSurfacesRejectedServiceStart() {
         val controller =
             Robolectric.buildActivity(HarnessActivity::class.java).create()
@@ -112,6 +159,8 @@ class BackupControllerLifecycleTest {
 
         @JvmField var lastDetail: String? = null
 
+        @JvmField val progressTitles: MutableList<String?> = ArrayList()
+
         override fun onCreate(savedInstanceState: Bundle?) {
             backupController = BackupController(this, DataBackup(this), null)
         }
@@ -129,6 +178,24 @@ class BackupControllerLifecycleTest {
 
         override fun launchRestoreFilePicker(intent: Intent) {
             launchedRestoreIntent = intent
+        }
+
+        override fun publishRestoreProgress(
+            visible: Boolean,
+            busy: Boolean,
+            title: String?,
+            detail: String?,
+            tone: String?,
+            phase: String?,
+            bytesDone: Long,
+            bytesTotal: Long,
+            rowsDone: Long,
+            rowsTotal: Long,
+            percent: Int,
+            etaSeconds: Long,
+            operation: String?,
+        ) {
+            progressTitles.add(title)
         }
 
         override fun startService(service: Intent?): ComponentName? {

@@ -110,5 +110,5 @@ test('"Restore file" calls the native restore bridge', async ({ page }) => {
   });
 
   await page.locator('#view-settings [data-action="restore"]').click();
-  expect(await page.evaluate(() => window.__restoreCalls)).toBe(1);
+  await expect.poll(() => page.evaluate(() => window.__restoreCalls)).toBe(1);
 });

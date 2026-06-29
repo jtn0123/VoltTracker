@@ -86,25 +86,37 @@ class AutoScanControllerTest {
     }
 
     @Test
-    fun emptyScanDoesNotArmThrottleSoNextReconnectRetries() {
-        // A failed/empty Mode-03 read (clone adapter / transient bus error) must NOT arm the per-drive
-        // throttle — otherwise the next reconnect within the window silently never retries, and the
-        // user never gets the codes that drive the new-DTC notification. (Report item B2.)
+    fun completedEmptyScanArmsThrottleSoCleanCarsDoNotRescanEveryReconnect() {
+        // A clean Mode-03 read with no stored codes is still a completed scan. It must arm the
+        // per-drive throttle so a healthy car does not get probed again on every reconnect.
         eventPrefs.setAutoScanOnConnectEnabled(true)
         val throttle = 30L * 60L * 1000L
         val controller = AutoScanController(eventPrefs, throttleMs = throttle, nowMs = { now })
 
         controller.resetForConnect()
-        // The scan ran but read no codes -> reports false -> throttle stays disarmed.
-        assertTrue(controller.onConnected { false })
-        assertEquals("no timestamp persisted after an empty scan", 0L, eventPrefs.lastAutoScanAtMs())
+        assertTrue(controller.onConnected { true })
+        assertEquals("completed scan should stamp the throttle", now, eventPrefs.lastAutoScanAtMs())
 
-        // A reconnect five minutes later — still inside the throttle window — retries because the
-        // empty scan never stamped the throttle.
+        // A reconnect five minutes later is still inside the throttle window.
         now += 5L * 60L * 1000L
         controller.resetForConnect()
-        assertTrue("empty scan must not block the next reconnect", controller.onConnected { true })
-        assertEquals("a successful scan now stamps the throttle", now, eventPrefs.lastAutoScanAtMs())
+        assertFalse("completed clean scan should throttle the next reconnect", controller.onConnected { true })
+    }
+
+    @Test
+    fun failedScanDoesNotArmThrottleSoNextReconnectRetries() {
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        val throttle = 30L * 60L * 1000L
+        val controller = AutoScanController(eventPrefs, throttleMs = throttle, nowMs = { now })
+
+        controller.resetForConnect()
+        assertTrue(controller.onConnected { false })
+        assertEquals("failed scan should not stamp the throttle", 0L, eventPrefs.lastAutoScanAtMs())
+
+        now += 5L * 60L * 1000L
+        controller.resetForConnect()
+        assertTrue("failed scan must not block the next reconnect", controller.onConnected { true })
+        assertEquals("a completed retry now stamps the throttle", now, eventPrefs.lastAutoScanAtMs())
     }
 
     @Test

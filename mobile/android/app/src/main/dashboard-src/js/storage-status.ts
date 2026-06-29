@@ -1102,7 +1102,13 @@ import { prefs, units } from "./prefs";
   // (absent outside the WebView) and tolerates a malformed payload by falling back to an empty log.
   function loadMaintenanceLog() {
     if (!bridge || typeof bridge.getMaintenanceLog !== "function") return;
-    const parsed = VD.parsePayload<VoltMaintenanceEntry[]>(bridge.getMaintenanceLog(), []);
+    const parsed = VD.parsePayload<VoltMaintenanceEntry[] | VoltNativeError>(bridge.getMaintenanceLog(), []);
+    if (isNativeError(parsed)) {
+      state.maintenanceLog = [];
+      renderMaintenanceList();
+      reportNativeReadError(parsed, "Could not read the maintenance log.");
+      return;
+    }
     state.maintenanceLog = Array.isArray(parsed) ? parsed : [];
     renderMaintenanceList();
   }

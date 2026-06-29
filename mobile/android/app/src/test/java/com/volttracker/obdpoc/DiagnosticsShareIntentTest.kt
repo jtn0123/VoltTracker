@@ -289,6 +289,7 @@ class DiagnosticsShareIntentTest {
         assertTrue(diagDir.mkdirs())
         val stale = File(diagDir, "diagnostics-old.zip")
         writeFile(stale, "junk")
+        assertTrue(stale.setLastModified(System.currentTimeMillis() - 2L * 60L * 60L * 1000L))
         assertTrue(stale.exists())
 
         val obdLogDir = File(context.filesDir, "obd-logs")
@@ -299,6 +300,75 @@ class DiagnosticsShareIntentTest {
         assertNotNull(zip)
         assertFalse("stale zip from prior run should have been cleared", stale.exists())
         assertTrue("new zip should exist", zip!!.exists())
+    }
+
+    @Test
+    fun buildZipKeepsRecentDiagnosticsShareTargets() {
+        val diagDir = File(context.cacheDir, "diagnostics")
+        assertTrue(diagDir.mkdirs())
+        val recent = File(diagDir, "diagnostics-recent.zip")
+        writeFile(recent, "pending share")
+        assertTrue(recent.setLastModified(System.currentTimeMillis()))
+
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+        writeFile(File(obdLogDir, "session-1-obd.jsonl"), "{}\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+
+        assertNotNull(zip)
+        assertTrue("recent share target should not be deleted", recent.exists())
+    }
+
+    @Test
+    fun zipOnlyIncludesOwnedRollingAppLogs() {
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        writeFile(File(appLogDir, "app.log"), "live\n")
+        writeFile(File(appLogDir, "not-owned.log"), "secret\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val entries = listZip(zip!!)
+        assertTrue(entries.contains("app-log/app.log"))
+        assertFalse("unexpected app-log files must not be shared: $entries", entries.contains("app-log/not-owned.log"))
+    }
+
+    @Test
+    fun redactedZipEntryUsesBoundedTailForHugeLogs() {
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        val huge = File(appLogDir, "app.log")
+        huge.writeText("old-secret-should-drop\n" + "x".repeat(300 * 1024) + "\nadapter=AA:BB:CC:DD:EE:FF\n")
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val appLog = readZipText(zip!!, "app-log/app.log")
+        assertTrue(appLog.startsWith("[truncated to last"))
+        assertFalse(appLog.contains("old-secret-should-drop"))
+        assertFalse(appLog.contains("AA:BB:CC:DD:EE:FF"))
+        assertTrue(appLog.contains("[bluetooth-address-redacted]"))
+    }
+
+    @Test
+    fun redactedTailDropsPartialFirstLineBeforeSharing() {
+        val appLogDir = File(context.filesDir, "app-log")
+        assertTrue(appLogDir.mkdirs())
+        val secretLine = "adapter=AA:BB:CC:DD:EE:FF\n"
+        val cutoffInsideSecret = "adapter=AA:".length
+        val tailCapBytes = 256 * 1024
+        val trailingBytes = tailCapBytes + cutoffInsideSecret - secretLine.toByteArray(StandardCharsets.UTF_8).size
+        writeFile(File(appLogDir, "app.log"), secretLine + "z".repeat(trailingBytes))
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+        assertNotNull(zip)
+
+        val appLog = readZipText(zip!!, "app-log/app.log")
+        assertTrue(appLog.startsWith("[truncated to last"))
+        assertFalse(appLog.contains("AA:BB:CC:DD:EE:FF"))
+        assertFalse(appLog.contains("BB:CC:DD:EE:FF"))
     }
 
     // ---- helpers ------------------------------------------------------------

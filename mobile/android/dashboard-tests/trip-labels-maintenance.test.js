@@ -215,6 +215,33 @@ describe('M5 — maintenance log', () => {
     expect(list.querySelector('[data-maint-delete]')).toBeNull();
   });
 
+  it('clears stale rows when a maintenance-log refresh fails', async () => {
+    let nativePayload = JSON.stringify([
+      { id: 7, createdAtMs: 1_700_000_000_000, odometerKm: 1609.344, type: 'Oil change', note: 'Synthetic' },
+    ]);
+    await loadWithMaintenance(() => nativePayload);
+
+    window.VoltDashboard.setStorage({});
+
+    let list = document.getElementById('maintenanceList');
+    expect(list.querySelectorAll('.real-insight-item')).toHaveLength(1);
+    expect(list.textContent).toContain('Oil change');
+
+    nativePayload = JSON.stringify({
+      ok: false,
+      error: 'maintenance_log_failed',
+      message: 'Could not read the maintenance log.',
+    });
+    window.VoltDashboard.loadMaintenanceLog();
+
+    list = document.getElementById('maintenanceList');
+    expect(document.getElementById('statusCopy').textContent).toContain('Could not read the maintenance log.');
+    expect(list.textContent).not.toContain('Oil change');
+    expect(list.querySelector('[data-maint-delete]')).toBeNull();
+    expect(list.querySelector('.maint-empty')).toBeTruthy();
+    expect(list.textContent).toContain('No maintenance logged yet');
+  });
+
   it('renders real entries newest-first with date, odometer, and note', async () => {
     await loadWithMaintenance(() =>
       JSON.stringify([

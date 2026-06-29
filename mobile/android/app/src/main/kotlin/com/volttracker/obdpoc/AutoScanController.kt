@@ -35,9 +35,9 @@ class AutoScanController(
      * Invoked after a successful connect. Runs [startScan] when enabled, not already scanned this
      * connect, and outside the throttle window. Returns true iff it started a scan.
      *
-     * [startScan] reports whether it actually read codes (a real Mode-03 reply). The per-drive
-     * throttle timestamp is recorded ONLY when it did, so a failed/empty scan (clone adapter, a
-     * transient bus error -> empty list) does not arm the 30-min throttle and silently block the next
+     * [startScan] reports whether the scan completed (a real Mode-03 reply, even when the car has no
+     * stored codes). The per-drive throttle timestamp is recorded ONLY when it did, so a failed scan
+     * (clone adapter / transient bus error) does not arm the 30-min throttle and silently block the next
      * reconnect from retrying. The per-connect latch is still set up front so a replayed connect
      * cannot double-fire a scan within the same connect, regardless of outcome.
      */
@@ -51,8 +51,8 @@ class AutoScanController(
             return false
         }
         scanStartedThisConnect = true
-        val readCodes = startScan()
-        if (readCodes) {
+        val completed = startScan()
+        if (completed) {
             prefs.setLastAutoScanAtMs(now)
         }
         return true

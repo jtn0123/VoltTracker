@@ -374,17 +374,23 @@ class VoltBridgeDataExportsTest {
     }
 
     @Test
-    fun getMaintenanceLogReturnsEmptyArrayWhenStorageUnavailable() {
+    fun getMaintenanceLogReturnsErrorWhenStorageUnavailable() {
         activity.localStore = null
 
-        assertEquals("[]", dataExports.getMaintenanceLog())
+        val result = JSONObject(dataExports.getMaintenanceLog())
+
+        assertEquals(false, result.getBoolean("ok"))
+        assertEquals("storage_unavailable", result.getString("error"))
     }
 
     @Test
-    fun getMaintenanceLogReturnsEmptyArrayWhenStoreClosed() {
+    fun getMaintenanceLogReturnsErrorWhenStoreClosed() {
         activity.store.open = false
 
-        assertEquals("[]", dataExports.getMaintenanceLog())
+        val result = JSONObject(dataExports.getMaintenanceLog())
+
+        assertEquals(false, result.getBoolean("ok"))
+        assertEquals("storage_unavailable", result.getString("error"))
         assertEquals(Int.MIN_VALUE, activity.store.lastMaintenanceLogLimit)
     }
 

@@ -207,6 +207,34 @@ class EventNotificationCoordinatorTest {
         assertTrue(eventPrefs.lastScanDtcCodes().contains("P0420"))
     }
 
+    @Test
+    fun autoScanCleanNoCodesStillArmsThrottle() {
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        val coord = coordinator()
+        val engine = FakeDtcEngine(mode03Response = "43 00\r>")
+
+        coord.maybeRunAutoDtcScan(engine)
+
+        assertTrue("clean auto-scan still sent generic Mode 03", engine.commands.contains("03"))
+        assertTrue("clean scan posts no notification", notifier.posted.isEmpty())
+        assertTrue("clean scan establishes an empty baseline", eventPrefs.hasDtcBaseline())
+        assertTrue(eventPrefs.lastScanDtcCodes().isEmpty())
+        assertEquals(now, eventPrefs.lastAutoScanAtMs())
+
+        now += 5L * 60L * 1000L
+        coord.onSessionStart()
+        coord.maybeRunAutoDtcScan(engine)
+
+        assertEquals(
+            "throttle should block a reconnect after a clean completed scan",
+            1,
+            engine.commands.count {
+                it ==
+                    "03"
+            },
+        )
+    }
+
     // ---- reconnect / null-payload / clock-fallback (D5) --------------------------------
 
     @Test
@@ -358,7 +386,9 @@ class EventNotificationCoordinatorTest {
     }
 
     /** An engine whose Mode 03 read returns one stored DTC (a generic 43 01 P0420 reply). */
-    private class FakeDtcEngine : ObdPollingEngine(ObdService()) {
+    private class FakeDtcEngine(
+        private val mode03Response: String = "43 01 04 20 \r>",
+    ) : ObdPollingEngine(ObdService()) {
         val commands: MutableList<String?> = ArrayList()
 
         override fun sendRecoverableCommand(
@@ -367,7 +397,7 @@ class EventNotificationCoordinatorTest {
         ): String {
             commands.add(command)
             // Mode 03 positive response: 43 01 04 20 -> one DTC P0420.
-            return if (command == "03") "43 01 04 20 \r>" else "OK\r>"
+            return if (command == "03") mode03Response else "OK\r>"
         }
     }
 }

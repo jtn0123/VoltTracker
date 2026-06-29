@@ -408,6 +408,46 @@ describe('map.ts — route selection regressions', () => {
     expect(document.getElementById('mapDistance').textContent).not.toBe('--');
   });
 
+  it('clears pending async route fetches when native returns an error payload', async () => {
+    const now = Date.now();
+    const routeId = `4:${now}:route-error`;
+    const requestTripRoute = vi.fn(() => true);
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ requestTripRoute }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = { recentRoutes: [] };
+    VD.state.trips = [
+      {
+        id: routeId,
+        sessionId: 4,
+        hasRoute: true,
+        pointCount: 3,
+        startedAtMs: now,
+        endedAtMs: now + 700_000,
+        distanceMeters: 6000,
+        adapterName: 'OBDLink MX+',
+      },
+    ];
+    VD.state.selectedMapSessionId = routeId;
+
+    VD.renderMap();
+    expect(requestTripRoute).toHaveBeenCalledTimes(1);
+
+    window.VoltTrackerNative.setTripRoute(
+      JSON.stringify({
+        routeKey: routeId,
+        payload: { ok: false, error: 'native_request_failed', message: 'Could not read local data.' },
+      }),
+    );
+    VD.renderMap();
+
+    expect(requestTripRoute).toHaveBeenCalledTimes(1);
+  });
+
   it('surfaces basemap tile failures with a retry affordance', () => {
     const VD = window.VoltDashboard;
     const banner = document.getElementById('mapTileError');

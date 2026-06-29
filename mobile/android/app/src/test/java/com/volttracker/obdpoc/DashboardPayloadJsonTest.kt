@@ -52,6 +52,7 @@ class DashboardPayloadJsonTest {
                 50L,
                 250,
                 12L,
+                "restore",
             )
 
         assertTrue(payload.optBoolean("visible"))
@@ -59,6 +60,7 @@ class DashboardPayloadJsonTest {
         assertEquals("Restoring backup", payload.optString("title"))
         assertEquals("Halfway there.", payload.optString("detail"))
         assertEquals("busy", payload.optString("tone"))
+        assertEquals("restore", payload.optString("operation"))
         assertEquals("Copying rows", payload.optString("phase"))
         assertEquals(10L, payload.optLong("bytesDone"))
         assertEquals(20L, payload.optLong("bytesTotal"))
@@ -84,9 +86,11 @@ class DashboardPayloadJsonTest {
                 -1L,
                 -1,
                 -1L,
+                "  ",
             )
 
         assertFalse(payload.optBoolean("visible"))
+        assertFalse(payload.has("operation"))
         assertFalse(payload.has("phase"))
         assertFalse(payload.has("bytesDone"))
         assertFalse(payload.has("bytesTotal"))

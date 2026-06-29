@@ -175,6 +175,7 @@ interface DashboardStatePublisher {
         rowsTotal: Long = -1L,
         percent: Int = -1,
         etaSeconds: Long = -1L,
+        operation: String? = null,
     )
 }
 

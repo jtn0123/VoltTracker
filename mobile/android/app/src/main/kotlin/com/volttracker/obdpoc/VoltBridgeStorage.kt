@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.util.Log
 import org.json.JSONException
 import org.json.JSONObject
 import org.json.JSONTokener
@@ -39,9 +40,17 @@ internal class VoltBridgeStorage(
 
     fun requestTripRoute(routeKeyOrSessionId: String?): Boolean {
         val routeKey = bridgeSafe(routeKeyOrSessionId, BRIDGE_MAX_LABEL_LEN)
-        return request("setTripRoute") {
+        return request(
+            "setTripRoute",
+            errorPayload = { error, message ->
+                JSONObject()
+                    .put("routeKey", if (routeKey.isEmpty()) JSONObject.NULL else routeKey)
+                    .put("payload", MainActivityUtils.errorPayload(error, message))
+                    .toString()
+            },
+        ) {
             JSONObject()
-                .put("routeKey", routeKey ?: JSONObject.NULL)
+                .put("routeKey", if (routeKey.isEmpty()) JSONObject.NULL else routeKey)
                 .put("payload", parseJsonPayload(getTripRoute(routeKey)))
                 .toString()
         }
@@ -49,15 +58,25 @@ internal class VoltBridgeStorage(
 
     private fun request(
         callbackName: String,
+        errorPayload: (String, String) -> String = { error, message ->
+            BridgeJsonResult.error(error, message).serialize()
+        },
         readPayload: () -> String,
     ): Boolean =
         try {
             activity.runOnBackground(
                 Runnable {
+                    val payload =
+                        try {
+                            readPayload()
+                        } catch (ex: RuntimeException) {
+                            Log.w(MainActivity.TAG, "async bridge read failed for $callbackName", ex)
+                            errorPayload("native_request_failed", "Could not read local data.")
+                        }
                     try {
-                        activity.publishDashboardPayload(callbackName, readPayload())
+                        activity.publishDashboardPayload(callbackName, payload)
                     } catch (ex: RuntimeException) {
-                        // Keep the shared worker alive; callers will retry on the next render/refresh.
+                        Log.w(MainActivity.TAG, "async bridge publish failed for $callbackName", ex)
                     }
                 },
             )

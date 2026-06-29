@@ -13,6 +13,50 @@ type StorageActionContext = {
 };
 
 export function createStorageActions({ VD, bridge, withBusy }: StorageActionContext) {
+  function writeClipboard(text: string) {
+    const nav = window.navigator;
+    if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
+      return nav.clipboard.writeText(text);
+    }
+    if (typeof document.execCommand !== "function") {
+      return Promise.reject(new Error("Clipboard unavailable"));
+    }
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "true");
+    area.style.position = "fixed";
+    area.style.left = "-9999px";
+    document.body.append(area);
+    area.select();
+    try {
+      const copied = document.execCommand("copy");
+      return copied ? Promise.resolve() : Promise.reject(new Error("Copy command failed"));
+    } catch (err) {
+      return Promise.reject(err);
+    } finally {
+      area.remove();
+    }
+  }
+
+  function downloadTextFile(text: string, filename: string) {
+    try {
+      if (typeof Blob !== "function" || !window.URL || typeof window.URL.createObjectURL !== "function") return false;
+      const blob = new Blob([text], { type: "application/json" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.rel = "noopener";
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => window.URL.revokeObjectURL(url), 0);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
   function refreshStorage() {
     if (!bridge) return;
     if (typeof bridge.requestStorageSummary === "function" && bridge.requestStorageSummary()) return;
@@ -106,7 +150,22 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
     }
     const result = VD.parsePayload<VoltExportResult>(bridge.exportDebugBundle(), {});
     if (result.ok) {
-      VD.setStatus({ state: "ready", detail: `Debug summary exported: ${result.path || "app files"}.` });
+      const content = typeof result.content === "string" ? result.content : "";
+      const filename =
+        typeof result.filename === "string" && result.filename.trim()
+          ? result.filename.trim()
+          : "volttracker-debug-summary.json";
+      if (!content) {
+        VD.setStatus({ state: "blocked", detail: "Debug export did not include downloadable content." });
+        return;
+      }
+      if (downloadTextFile(content, filename)) {
+        VD.setStatus({ state: "ready", detail: "Debug summary exported." });
+        return;
+      }
+      writeClipboard(content)
+        .then(() => VD.setStatus({ state: "ready", detail: "Debug summary copied." }))
+        .catch(() => VD.setStatus({ state: "blocked", detail: "Could not export the debug summary." }));
     } else {
       VD.setStatus({ state: "blocked", detail: result.error || "Debug export failed." });
     }

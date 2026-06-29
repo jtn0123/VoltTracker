@@ -46,11 +46,11 @@ module.exports = defineConfig({
       use: { ...devices['Desktop Chrome'], viewport: { width: 412, height: 915 } },
     },
   ],
-  // Static-serve the dashboard assets. python3 is present on macOS and the CI ubuntu image.
+  // Static-serve the dashboard assets with the same pinned Node runtime as Playwright.
   webServer: {
-    command: `python3 -m http.server ${PORT} --bind 127.0.0.1 --directory "${DASHBOARD_DIR}"`,
+    command: `node ./static-server.cjs --port ${PORT} --host 127.0.0.1 --dir "${DASHBOARD_DIR}"`,
     url: `${BASE_URL}/index.html`,
-    reuseExistingServer: !process.env.CI,
+    reuseExistingServer: false,
     timeout: 30_000,
   },
   // Screenshots are font-sensitive across OSes; Playwright already suffixes baselines per platform.

@@ -19,6 +19,7 @@ tasks.named("dependencyUpdates").configure {
 
 def dashboardTestsDir = file("dashboard-tests")
 def dashboardE2eDir = file("dashboard-e2e")
+def dashboardE2eBrowsersDir = file("$buildDir/playwright-browsers")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
 // Repo root (this Gradle project lives at mobile/android/, so up two levels).
 def repoRootDir = rootProject.projectDir.parentFile.parentFile
@@ -253,7 +254,7 @@ tasks.register("buildDashboardJs", Exec) {
 
 tasks.register("dashboardTest", Exec) {
     description = "Runs dashboard Vitest coverage for the shipped WebView assets."
-    dependsOn("dashboardNpmCi")
+    dependsOn("dashboardNpmCi", "buildDashboardJs", ":app:generateDashboardHtml")
     workingDir = dashboardTestsDir
     commandLine "npm", "run", "test:coverage"
 }
@@ -282,11 +283,35 @@ tasks.register("dashboardE2eNpmCi", Exec) {
     outputs.dir(file("${dashboardE2eDir}/node_modules"))
 }
 
+tasks.register("dashboardE2eInstallBrowsers", Exec) {
+    description = "Installs the Chromium browser binary required by dashboard Playwright tests."
+    dependsOn("dashboardE2eNpmCi")
+    workingDir = dashboardE2eDir
+    environment "PLAYWRIGHT_BROWSERS_PATH", dashboardE2eBrowsersDir.absolutePath
+    commandLine "node", "node_modules/@playwright/test/cli.js", "install", "chromium"
+    inputs.file(file("${dashboardE2eDir}/package-lock.json"))
+    outputs.dir(dashboardE2eBrowsersDir)
+}
+
 tasks.register("dashboardE2e", Exec) {
     description = "Runs Playwright functional tests against the shipped dashboard."
-    dependsOn("dashboardE2eNpmCi", "buildDashboardJs")
+    dependsOn("dashboardE2eInstallBrowsers", "buildDashboardJs", ":app:generateDashboardHtml")
     workingDir = dashboardE2eDir
-    commandLine "npm", "test"
+    environment "PLAYWRIGHT_BROWSERS_PATH", dashboardE2eBrowsersDir.absolutePath
+    commandLine "node", "node_modules/@playwright/test/cli.js", "test", "--project=chromium"
+}
+
+tasks.named("dashboardTest") {
+    mustRunAfter(
+            ":app:assembleDebug",
+            ":app:testDebugUnitTest",
+            ":app:lintDebug",
+            ":app:detekt",
+            ":app:jacocoTestCoverageVerification")
+}
+
+tasks.named("dashboardE2e") {
+    mustRunAfter("dashboardTest")
 }
 
 tasks.register("verifyGeneratedDashboardClean") {
@@ -317,7 +342,6 @@ tasks.register("verifyGeneratedDashboardClean") {
                     "Generated dashboard HTML drifted. expected-index.html is generated from " +
                             "app/src/main/dashboard-src; current-index.html is the committed asset.\n",
                     "UTF-8")
-            outFile.setText(expected, "UTF-8")
             throw new GradleException(
                     "Generated dashboard HTML was stale. Re-run ./gradlew generateDashboardHtml " +
                             "and include app/src/main/assets/dashboard/index.html. Diff inputs written to " +
@@ -409,6 +433,7 @@ tasks.register("verifyNoMigrationSourceStragglers") {
 
 tasks.register("privacyScan", Exec) {
     description = "Fails when tracked files contain unallowlisted VIN, GPS route, or private device endpoint data."
+    dependsOn("buildDashboardJs", ":app:generateDashboardHtml")
     workingDir = repoRootDir
     commandLine "python3", "mobile/android/tools/privacy-scan.py"
     inputs.files(fileTree(repoRootDir) {

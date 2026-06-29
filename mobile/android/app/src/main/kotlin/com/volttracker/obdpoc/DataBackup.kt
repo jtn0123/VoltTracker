@@ -43,8 +43,9 @@ class DataBackup(
         appStateJson: String?,
         storageJson: String?,
     ): String {
-        val payload = JSONObject()
+        val result = JSONObject()
         try {
+            val payload = JSONObject()
             payload.put("createdAtMs", System.currentTimeMillis())
             payload.put("appState", MainActivityUtils.parseJson(appStateJson))
             payload.put("storage", MainActivityUtils.parseJson(storageJson))
@@ -55,19 +56,22 @@ class DataBackup(
             // swept on init.
             val dir = File(context.cacheDir, "exports")
             if (!dir.exists() && !dir.mkdirs()) {
-                payload.put("ok", false)
-                payload.put("error", "Could not create export directory.")
-                return payload.toString()
+                result.put("ok", false)
+                result.put("error", "Could not create export directory.")
+                return result.toString()
             }
             val file = File(dir, "volttracker-debug-summary-${System.currentTimeMillis()}.json")
-            payload.put("ok", true)
-            payload.put("path", file.absolutePath)
-            FileWriter(file).use { writer -> writer.write(payload.toString(2)) }
+            val content = payload.toString(2)
+            FileWriter(file).use { writer -> writer.write(content) }
+            result.put("ok", true)
+            result.put("path", file.absolutePath)
+            result.put("filename", file.name)
+            result.put("content", content)
         } catch (ex: Exception) {
             if (ex is JSONException || ex is IOException || ex is RuntimeException) {
                 try {
-                    payload.put("ok", false)
-                    payload.put("error", "${ex.javaClass.simpleName}: ${ex.message}")
+                    result.put("ok", false)
+                    result.put("error", "${ex.javaClass.simpleName}: ${ex.message}")
                 } catch (ignored: JSONException) {
                     // Local strings are safe.
                 }
@@ -75,7 +79,7 @@ class DataBackup(
                 throw ex
             }
         }
-        return payload.toString()
+        return result.toString()
     }
 
     private fun buildDiagnosticsSnapshot(): JSONObject {
@@ -209,8 +213,7 @@ class DataBackup(
                 return null
             }
             clearOldBackups(dir)
-            val stamp = SimpleDateFormat(BACKUP_TIMESTAMP_PATTERN, Locale.US).format(Date())
-            val dest = File(dir, "volttracker-backup-$stamp.db")
+            val dest = File(dir, backupFileName("db"))
             copyFile(
                 source,
                 dest,
@@ -250,8 +253,7 @@ class DataBackup(
                 return null
             }
             clearOldBackups(dir)
-            val stamp = SimpleDateFormat(BACKUP_TIMESTAMP_PATTERN, Locale.US).format(Date())
-            val dest = File(dir, "volttracker-backup-$stamp.vtdb")
+            val dest = File(dir, backupFileName("vtdb"))
             progress?.onProgress(
                 ProgressSnapshot(
                     "Encrypting backup",
@@ -541,11 +543,17 @@ class DataBackup(
         private val VIN_RE = Regex("\\b[A-HJ-NPR-Za-hj-npr-z0-9]{17}\\b")
         private val COORDINATE_FIELD_RE =
             Regex(
-                "(\"(?:latitude|longitude|lat|lng)\"\\s*:\\s*)-?\\d{1,3}(?:\\.\\d+)?",
+                "(\"(?:latitude|longitude|lat|lng)\"\\s*:\\s*)(?:\"-?\\d{1,3}(?:\\.\\d+)?\"|-?\\d{1,3}(?:\\.\\d+)?)",
+                RegexOption.IGNORE_CASE,
+            )
+        private val COORDINATE_ARRAY_FIELD_RE =
+            Regex(
+                "(\"(?:coordinates|coordinate|latLng|lngLat)\"\\s*:\\s*)\\[(?:\\s*\\[?\\s*-?\\d{1,3}(?:\\.\\d+)?\\s*,\\s*-?\\d{1,3}(?:\\.\\d+)?\\s*\\]?\\s*,?)+\\]",
                 RegexOption.IGNORE_CASE,
             )
 
         private const val IO_BUFFER_BYTES = 8192
+        private const val STALE_BACKUP_TTL_MS = 60L * 60L * 1000L
 
         @JvmStatic
         fun redactDebugLogText(text: String?): String {
@@ -557,11 +565,18 @@ class DataBackup(
                 .replace(VIN_RE, "[vin-redacted]")
                 .replace(COORDINATE_FIELD_RE) { match ->
                     match.groupValues[1] + "\"[coordinate-redacted]\""
+                }.replace(COORDINATE_ARRAY_FIELD_RE) { match ->
+                    match.groupValues[1] + "\"[coordinate-redacted]\""
                 }
         }
 
         @JvmStatic
         fun clearRegenerableRollupCache(file: File?) = RestoreValidator.clearRegenerableRollupCache(file)
+
+        private fun backupFileName(extension: String): String {
+            val stamp = SimpleDateFormat(BACKUP_TIMESTAMP_PATTERN, Locale.US).format(Date())
+            return "volttracker-backup-$stamp-${UUID.randomUUID()}.$extension"
+        }
 
         private fun clearOldBackups(dir: File) {
             cleanupTransientBackupFiles(dir)
@@ -569,9 +584,14 @@ class DataBackup(
 
         private fun cleanupTransientBackupFiles(dir: File?) {
             val existing = dir?.listFiles() ?: return
+            val cutoff = System.currentTimeMillis() - STALE_BACKUP_TTL_MS
             for (file in existing) {
                 val name = file.name
-                if (name.startsWith("volttracker-backup-") && (name.endsWith(".db") || name.endsWith(".vtdb"))) {
+                if (
+                    name.startsWith("volttracker-backup-") &&
+                    (name.endsWith(".db") || name.endsWith(".vtdb")) &&
+                    file.lastModified() < cutoff
+                ) {
                     file.delete()
                 }
             }

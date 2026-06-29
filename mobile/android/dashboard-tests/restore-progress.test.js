@@ -39,14 +39,30 @@ describe('restore progress overlay', () => {
     expect(overlay.dataset.progress).toBe('determinate');
     expect(document.body.dataset.restoreBusy).toBe('true');
     expect(document.getElementById('restoreProgressTitle').textContent).toBe('Reading backup');
+    expect(document.getElementById('restoreProgressKicker').textContent).toBe('Restore');
     expect(document.getElementById('restoreProgressPhase').textContent).toBe('Reading backup');
     expect(document.getElementById('restoreProgressPercent').textContent).toBe('25%');
     expect(document.getElementById('restoreProgressEta').textContent).toBe('ETA 2m');
     expect(document.getElementById('restoreProgressStats').textContent).toBe('1.0 MB of 4.0 MB');
     expect(document.getElementById('restoreProgressMeter').getAttribute('aria-valuenow')).toBe('25');
+    expect(document.getElementById('restoreProgressMeter').getAttribute('aria-label')).toBe('Restore progress');
     expect(document.getElementById('restoreProgressFill').style.width).toBe('25%');
     expect(document.getElementById('restoreProgressDetail').textContent).toContain('minute');
     expect(document.getElementById('restoreProgressClose').hidden).toBe(true);
+  });
+
+  it('uses explicit progress operation before localized title/detail text', () => {
+    window.VoltTrackerNative.setRestoreProgress({
+      visible: true,
+      busy: true,
+      operation: 'backup',
+      title: 'Reading backup',
+      detail: 'Restore copy changed by translation.',
+      tone: 'busy',
+    });
+
+    expect(document.getElementById('restoreProgressKicker').textContent).toBe('Backup');
+    expect(document.getElementById('restoreProgressMeter').getAttribute('aria-label')).toBe('Backup progress');
   });
 
   it('renders merge row progress without byte totals', () => {

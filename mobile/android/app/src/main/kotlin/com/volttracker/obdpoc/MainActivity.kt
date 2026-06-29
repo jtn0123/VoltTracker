@@ -289,7 +289,10 @@ open class MainActivity :
         // thread during onCreate. Sweep it on the background executor instead so cold start isn't
         // blocked on cache-dir traversals.
         backgroundExecutor.execute { backup.sweepTransientCacheFiles() }
-        backupController = BackupController(this, requireDataBackup(), backgroundExecutor)
+        backupController =
+            BackupController(this, requireDataBackup(), backgroundExecutor).also {
+                it.restoreState(savedInstanceState)
+            }
         permissionGate = PermissionGate(this, ::launchPermissionRequest)
         localStore =
             StartupTrace.measure("local_store_open_start", "local_store_open_end") {
@@ -420,6 +423,11 @@ open class MainActivity :
 
     @VisibleForTesting
     internal fun webViewForTest(): WebView? = webView
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        backupController?.saveState(outState)
+        super.onSaveInstanceState(outState)
+    }
 
     override fun onResume() {
         super.onResume()
@@ -576,6 +584,7 @@ open class MainActivity :
         rowsTotal: Long,
         percent: Int,
         etaSeconds: Long,
+        operation: String?,
     ) {
         val payload =
             DashboardPayloadJson.restoreProgress(
@@ -591,6 +600,7 @@ open class MainActivity :
                 rowsTotal,
                 percent,
                 etaSeconds,
+                operation,
             )
         callDashboard("setRestoreProgress", payload.toString())
     }
@@ -906,13 +916,6 @@ open class MainActivity :
         }
     }
 
-    private fun appVersionName(): String =
-        try {
-            packageManager.getPackageInfo(packageName, 0).versionName ?: ""
-        } catch (ex: PackageManager.NameNotFoundException) {
-            ""
-        }
-
     companion object {
         /** Shared logcat tag. Canonical home is [AppPrefs.LOG_TAG]; kept here as a compatibility alias. */
         const val TAG = AppPrefs.LOG_TAG
@@ -941,3 +944,10 @@ open class MainActivity :
         const val PREFS = AppPrefs.FILE
     }
 }
+
+private fun MainActivity.appVersionName(): String =
+    try {
+        packageManager.getPackageInfo(packageName, 0).versionName ?: ""
+    } catch (ex: PackageManager.NameNotFoundException) {
+        ""
+    }

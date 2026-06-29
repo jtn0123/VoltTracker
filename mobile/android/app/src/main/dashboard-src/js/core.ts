@@ -31,6 +31,7 @@ import { initialTelemetryState } from "./telemetry-state";
     busy?: boolean;
     title?: string;
     detail?: string;
+    operation?: string;
     tone?: string;
     phase?: string;
     bytesDone?: number | string;
@@ -342,6 +343,23 @@ import { initialTelemetryState } from "./telemetry-state";
     }
   }
 
+  function restoreProgressOperation(progress: RestoreProgressPayload): string {
+    const explicit = String(progress.operation || "").trim().toLowerCase();
+    if (explicit === "backup") return "Backup";
+    if (explicit === "restore") return "Restore";
+    const text = [progress.title, progress.detail, progress.phase].map((value) => String(value || "").toLowerCase()).join(" ");
+    if (
+      text.includes("restore") ||
+      text.includes("restored") ||
+      text.includes("reading backup") ||
+      text.includes("merging backup")
+    ) {
+      return "Restore";
+    }
+    if (text.includes("backup")) return "Backup";
+    return "Backup and restore";
+  }
+
   function setRestoreProgress(payload: unknown) {
     const progress = VD.parsePayload<RestoreProgressPayload>(payload, {});
     if (progress.visible === false) {
@@ -359,6 +377,10 @@ import { initialTelemetryState } from "./telemetry-state";
     setDataTone(node, asDataTone(tone));
     const percent = knownProgressPercent(progress, busy, tone);
     updateRestoreProgressMeter(node, percent);
+    const operation = restoreProgressOperation(progress);
+    VD.setText("restoreProgressKicker", operation);
+    const meter = el("restoreProgressMeter");
+    if (meter) meter.setAttribute("aria-label", `${operation} progress`);
     VD.setText("restoreProgressTitle", progress.title || (busy ? "Restoring backup" : "Restore status"));
     VD.setText(
       "restoreProgressPhase",

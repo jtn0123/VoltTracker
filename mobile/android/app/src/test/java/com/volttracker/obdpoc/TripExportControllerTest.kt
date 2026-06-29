@@ -374,6 +374,7 @@ class TripExportControllerTest {
             rowsTotal: Long,
             percent: Int,
             etaSeconds: Long,
+            operation: String?,
         ) = unused()
 
         override fun getStorageSummaryJson() = unused()

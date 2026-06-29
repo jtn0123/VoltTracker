@@ -133,6 +133,7 @@
     <!-- Backup and restore (BackupController) -->
     <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>
     <string name="status_backup_worker_failed">Could not start the backup worker.</string>
+    <string name="status_backup_already_running">Backup already in progress.</string>
     <!-- The character count is a fixed minimum (always > 1), so no plural form is needed. -->
     <string name="status_passphrase_minimum" tools:ignore="PluralsCandidate">Enter a backup passphrase with at least %1$d characters.</string>
     <string name="dialog_backup_disclosure_title">Share Volt Tracker backup</string>
@@ -162,6 +163,7 @@
     <string name="status_enter_passphrase_first">Enter the backup passphrase first.</string>
     <string name="status_choose_backup_file">Choose a Volt Tracker backup file.</string>
     <string name="status_file_picker_failed">Could not open the file picker.</string>
+    <string name="status_restore_picker_already_open">Backup file picker is already open.</string>
     <string name="progress_reading_backup_title">Reading backup</string>
     <string name="progress_reading_encrypted_backup_title">Reading encrypted backup</string>
     <string name="progress_reading_backup_detail">Large backup files can take a minute. Keep Volt Tracker open while the file is checked.</string>

@@ -12,7 +12,9 @@
   <section class="restore-progress-card" role="document">
     <header class="restore-progress-head">
       <div>
-        <span class="restore-progress-kicker">Backup and restore</span>
+        <span id="restoreProgressKicker" class="restore-progress-kicker"
+          >Backup and restore</span
+        >
         <h2 id="restoreProgressTitle" class="restore-progress-title">
           Preparing restore
         </h2>
@@ -33,7 +35,7 @@
       role="progressbar"
       aria-valuemin="0"
       aria-valuemax="100"
-      aria-label="Backup progress"
+      aria-label="Backup and restore progress"
     >
       <span id="restoreProgressFill"></span>
     </div>

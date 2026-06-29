@@ -743,6 +743,21 @@ class VoltBridgeDispatchTest {
         assertEquals("[{\"sohPct\":95}]", activity.dashboardCallbacks[6].second)
     }
 
+    @Test
+    fun asyncTripRouteReadFailurePublishesErrorEnvelopeWithRouteKey() {
+        activity.tripRouteThrows = true
+
+        assertTrue(bridge.requestTripRoute("route-fail"))
+
+        assertEquals(1, activity.dashboardCallbacks.size)
+        assertEquals("setTripRoute", activity.dashboardCallbacks[0].first)
+        val wrapped = JSONObject(activity.dashboardCallbacks[0].second!!)
+        assertEquals("route-fail", wrapped.getString("routeKey"))
+        val payload = wrapped.getJSONObject("payload")
+        assertEquals(false, payload.getBoolean("ok"))
+        assertEquals("native_request_failed", payload.getString("error"))
+    }
+
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
@@ -791,6 +806,7 @@ class VoltBridgeDispatchTest {
         var cancelAdapterReadyNotifyCalls = 0
 
         var tripRouteJson = "{}"
+        var tripRouteThrows = false
         var currentRouteJson = "{}"
         var sohHistoryJson = "[]"
         var storageDetailsPayload = "{\"storageDetails\":true}"
@@ -946,6 +962,9 @@ class VoltBridgeDispatchTest {
 
         override fun getTripRouteJson(routeKey: String?): String {
             lastTripRouteKey = routeKey
+            if (tripRouteThrows) {
+                throw IllegalStateException("route read failed")
+            }
             return tripRouteJson
         }
 

@@ -10,6 +10,7 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
+import java.util.UUID
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -34,6 +35,9 @@ object DiagnosticsShareIntent {
     private const val SESSION_LOG_DIR = "obd-logs"
     private const val APP_LOG_DIR = "app-log"
     private const val SUMMARY_NAME = "sessions-summary.jsonl"
+    private const val STALE_DIAGNOSTICS_TTL_MS = 60L * 60L * 1000L
+    private const val MAX_REDACTED_ENTRY_BYTES = 256 * 1024
+    private val APP_LOG_NAMES = setOf("app.log", "app.log.1")
 
     /**
      * Zips the diagnostics bundle and returns an [Intent.ACTION_SEND] intent ready for
@@ -95,7 +99,7 @@ object DiagnosticsShareIntent {
     @JvmStatic
     fun buildDigestFile(ctx: Context): File? {
         val outDir = prepareOutDir(ctx) ?: return null
-        val digestFile = File(outDir, "diagnostics-digest-${System.currentTimeMillis()}.txt")
+        val digestFile = File(outDir, "diagnostics-digest-${System.currentTimeMillis()}-${UUID.randomUUID()}.txt")
         return try {
             digestFile.writeText(DiagnosticsBundle.build(ctx.filesDir), Charsets.UTF_8)
             digestFile
@@ -109,8 +113,9 @@ object DiagnosticsShareIntent {
     }
 
     /**
-     * Creates the shared `cacheDir/diagnostics/` output dir and clears stale artifacts so the cache
-     * keeps only the one we're about to build. Returns `null` if the dir can't be created.
+     * Creates the shared `cacheDir/diagnostics/` output dir and clears old artifacts for cache
+     * hygiene. Recent files are kept so a second share cannot delete a first share target before the
+     * receiver opens it. Returns `null` if the dir can't be created.
      */
     private fun prepareOutDir(ctx: Context): File? {
         val outDir = File(ctx.cacheDir, SUBDIR)
@@ -118,8 +123,9 @@ object DiagnosticsShareIntent {
             Log.e(TAG, "could not create diagnostics dir: $outDir")
             return null
         }
+        val cutoff = System.currentTimeMillis() - STALE_DIAGNOSTICS_TTL_MS
         outDir.listFiles()?.forEach { stale ->
-            if (stale.isFile && !stale.delete()) {
+            if (stale.isFile && stale.lastModified() < cutoff && !stale.delete()) {
                 Log.w(TAG, "could not delete stale diagnostics file: $stale")
             }
         }
@@ -133,7 +139,7 @@ object DiagnosticsShareIntent {
     @JvmStatic
     fun buildZip(ctx: Context): File? {
         val outDir = prepareOutDir(ctx) ?: return null
-        val zipFile = File(outDir, "diagnostics-${System.currentTimeMillis()}.zip")
+        val zipFile = File(outDir, "diagnostics-${System.currentTimeMillis()}-${UUID.randomUUID()}.zip")
         val filesDir = ctx.filesDir
         try {
             ZipOutputStream(FileOutputStream(zipFile)).use { zipStream ->
@@ -204,7 +210,7 @@ object DiagnosticsShareIntent {
             return
         }
         appLogDir.listFiles()?.forEach { file ->
-            if (file.isFile) {
+            if (file.isFile && file.name in APP_LOG_NAMES) {
                 addFile(zipStream, file, "$APP_LOG_DIR/${file.name}", redactText = true)
             }
         }
@@ -233,7 +239,7 @@ object DiagnosticsShareIntent {
             }
         zipStream.putNextEntry(entry)
         if (redactText) {
-            val redacted = DataBackup.redactDebugLogText(source.readText(Charsets.UTF_8))
+            val redacted = DataBackup.redactDebugLogText(readTailText(source, MAX_REDACTED_ENTRY_BYTES))
             zipStream.write(redacted.toByteArray(Charsets.UTF_8))
         } else {
             BufferedInputStream(FileInputStream(source)).use { input ->
@@ -246,5 +252,35 @@ object DiagnosticsShareIntent {
             }
         }
         zipStream.closeEntry()
+    }
+
+    @Throws(IOException::class)
+    private fun readTailText(
+        source: File,
+        maxBytes: Int,
+    ): String {
+        val length = source.length()
+        val skipBytes = maxOf(0L, length - maxBytes.toLong())
+        if (skipBytes == 0L) {
+            return source.readText(Charsets.UTF_8)
+        }
+        FileInputStream(source).use { input ->
+            var remaining = skipBytes
+            while (remaining > 0L) {
+                val skipped = input.skip(remaining)
+                if (skipped <= 0L) break
+                remaining -= skipped
+            }
+            val bytes = input.readBytes()
+            var start = 0
+            while (start < bytes.size && (bytes[start].toInt() and 0xC0) == 0x80) {
+                start++
+            }
+            var text = String(bytes, start, bytes.size - start, Charsets.UTF_8)
+            val newline = text.indexOf('\n')
+            text = if (newline >= 0) text.substring(newline + 1) else ""
+            return "[truncated to last ${maxBytes / 1024} KiB]\n" +
+                text
+        }
     }
 }
