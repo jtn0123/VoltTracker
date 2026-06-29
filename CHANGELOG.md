@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.23.2 (2026-06-29)
+
+### 🔺 Fix
+
+- **android**: Harden dashboard bridge actions
+  ([`75232f0`](https://github.com/jtn0123/VoltTracker/commit/75232f0ad8af2dfc4498e678946bb81a7b6e11f7))
+
+
 ## v0.23.1 (2026-06-29)
 
 ### 🔺 Fix
