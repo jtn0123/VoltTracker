@@ -93,7 +93,16 @@ export function renderMapSessionListInto(
     list.replaceChildren(p);
     return;
   }
-  renderVisibleMapSessions(list, visible, formatters, MAP_SESSION_INITIAL_LIMIT);
+  // Seed from the persisted limit (see renderVisibleMapSessions) so a
+  // re-render — selection change, storage refresh, live GPS tick — doesn't
+  // collapse a user who tapped "Show more drives" back to the first page.
+  const expanded = Number(list.dataset.mapSessionLimit || 0);
+  renderVisibleMapSessions(
+    list,
+    visible,
+    formatters,
+    Math.max(MAP_SESSION_INITIAL_LIMIT, expanded),
+  );
 }
 
 function renderVisibleMapSessions(
@@ -102,6 +111,9 @@ function renderVisibleMapSessions(
   formatters: MapSessionListFormatters,
   requestedLimit: number,
 ) {
+  // Persist the REQUESTED limit (not the effective one, which a narrow filter
+  // would clamp down) so renderMapSessionListInto can restore pagination depth.
+  list.dataset.mapSessionLimit = String(requestedLimit);
   const selectedId = String(formatters.selectedSessionId || "");
   const selectedIndex = selectedId
     ? visible.findIndex((route) => String((sessionForRoute(route) || {}).id || "") === selectedId)

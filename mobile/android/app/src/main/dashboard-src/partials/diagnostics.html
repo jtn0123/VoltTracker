@@ -76,15 +76,24 @@
       role="group"
       aria-label="Demo scenario"
     >
-      <button type="button" data-scenario="typical" class="is-active">
+      <button
+        type="button"
+        data-scenario="typical"
+        class="is-active"
+        aria-pressed="true"
+      >
         <span>Typical</span>
       </button>
-      <button type="button" data-scenario="empty"><span>Empty</span></button>
-      <button type="button" data-scenario="power-user">
+      <button type="button" data-scenario="empty" aria-pressed="false">
+        <span>Empty</span>
+      </button>
+      <button type="button" data-scenario="power-user" aria-pressed="false">
         <span>Power user</span>
       </button>
-      <button type="button" data-scenario="fault"><span>Fault</span></button>
-      <button type="button" data-scenario="extreme">
+      <button type="button" data-scenario="fault" aria-pressed="false">
+        <span>Fault</span>
+      </button>
+      <button type="button" data-scenario="extreme" aria-pressed="false">
         <span>Extremes</span>
       </button>
     </div>
@@ -129,10 +138,19 @@
       role="group"
       aria-label="Filter live signals"
     >
-      <button type="button" data-live-signal-filter="all" class="is-active">
+      <button
+        type="button"
+        data-live-signal-filter="all"
+        class="is-active"
+        aria-pressed="true"
+      >
         <span>All</span>
       </button>
-      <button type="button" data-live-signal-filter="missing">
+      <button
+        type="button"
+        data-live-signal-filter="missing"
+        aria-pressed="false"
+      >
         <span>Not reporting</span>
       </button>
     </div>
@@ -166,16 +184,25 @@
         role="group"
         aria-label="Detail probe mode"
       >
-        <button type="button" data-signal-stage="passive">
+        <button type="button" data-signal-stage="passive" aria-pressed="false">
           <span>Passive</span>
         </button>
-        <button type="button" data-signal-stage="low-risk">
+        <button type="button" data-signal-stage="low-risk" aria-pressed="false">
           <span>Low-risk</span>
         </button>
-        <button type="button" data-signal-stage="tires" class="is-active">
+        <button
+          type="button"
+          data-signal-stage="tires"
+          class="is-active"
+          aria-pressed="true"
+        >
           <span>Tires</span>
         </button>
-        <button type="button" data-signal-stage="experimental">
+        <button
+          type="button"
+          data-signal-stage="experimental"
+          aria-pressed="false"
+        >
           <span>Experimental</span>
         </button>
       </div>
@@ -200,13 +227,19 @@
       role="group"
       aria-label="Filter detailed signals by status"
     >
-      <button type="button" data-signal-filter="all" class="is-active">
+      <button
+        type="button"
+        data-signal-filter="all"
+        class="is-active"
+        aria-pressed="true"
+      >
         <b id="enhancedAllCount">0</b><span>All</span>
       </button>
       <button
         type="button"
         data-signal-filter="confirmed"
         data-status="confirmed"
+        aria-pressed="false"
       >
         <b id="enhancedConfirmedCount">0</b><span>Working</span>
       </button>
@@ -214,6 +247,7 @@
         type="button"
         data-signal-filter="candidate"
         data-status="candidate"
+        aria-pressed="false"
       >
         <b id="enhancedCandidateCount">0</b><span>Candidate</span>
       </button>
@@ -221,6 +255,7 @@
         type="button"
         data-signal-filter="rejected"
         data-status="rejected"
+        aria-pressed="false"
       >
         <b id="enhancedRejectedCount">0</b><span>No hit</span>
       </button>
@@ -228,10 +263,16 @@
         type="button"
         data-signal-filter="deferred"
         data-status="deferred"
+        aria-pressed="false"
       >
         <b id="enhancedDeferredCount">0</b><span>Deferred</span>
       </button>
-      <button type="button" data-signal-filter="tpms" data-status="tpms">
+      <button
+        type="button"
+        data-signal-filter="tpms"
+        data-status="tpms"
+        aria-pressed="false"
+      >
         <b id="enhancedTiresTabCount">0</b><span>Tires</span>
       </button>
     </div>

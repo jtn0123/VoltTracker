@@ -46,6 +46,7 @@
      the popover opens from the topbar, so leave room for it plus a margin. */
   max-height: calc(100vh - 120px);
   overflow-y: auto;
+  overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   padding: 12px 14px 14px;
   border: 1px solid var(--line-strong);
@@ -150,15 +151,17 @@
 }
 
 .connection-status__line[data-state="success"] .connection-status__line-dot {
-  background: var(--ok, #7ee06a);
+  background: var(--ok);
 }
 
 .connection-status__line[data-state="failed"] .connection-status__line-dot {
-  background: var(--bad, #ff6b5f);
+  background: var(--bad);
 }
 
+/* Same ring as the global :focus-visible rule (base.css) — this override only
+   adds the rounded corners; the bespoke green ring it used to draw is gone. */
 .connection-status__line:focus-visible {
-  outline: 2px solid rgba(126, 224, 106, 0.7);
+  outline: 2px solid var(--accent, #4cc4ff);
   outline-offset: 2px;
   border-radius: 8px;
 }
@@ -176,7 +179,9 @@
 
 .connection-status__line small {
   font-size: 11px;
-  opacity: 0.7;
+  /* Tone token instead of opacity on the inherited --muted: stacked opacity
+     pushed this 11px text below readable contrast. */
+  color: var(--soft);
   line-height: 1;
 }
 
@@ -207,15 +212,15 @@
 }
 
 .connection-status__pill[data-tone="good"] {
-  border-color: rgba(126, 224, 106, 0.4);
-  color: var(--ev);
+  border-color: rgba(var(--ok-rgb), 0.4);
+  color: var(--ok);
 }
 .connection-status__pill[data-tone="good"] .connection-status__pill-dot {
   background: var(--ok);
 }
 
 .connection-status__pill[data-tone="warn"] {
-  border-color: rgba(255, 184, 74, 0.45);
+  border-color: rgba(var(--warn-rgb), 0.45);
   color: var(--warn);
 }
 .connection-status__pill[data-tone="warn"] .connection-status__pill-dot {
@@ -223,7 +228,7 @@
 }
 
 .connection-status__pill[data-tone="bad"] {
-  border-color: rgba(255, 107, 95, 0.45);
+  border-color: rgba(var(--bad-rgb), 0.45);
   color: var(--bad-text);
 }
 .connection-status__pill[data-tone="bad"] .connection-status__pill-dot {
@@ -249,16 +254,16 @@
   margin: 0;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 184, 74, 0.4);
-  background: rgba(255, 184, 74, 0.08);
+  border: 1px solid rgba(var(--warn-rgb), 0.4);
+  background: rgba(var(--warn-rgb), 0.08);
   color: var(--warn-soft);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .connection-tools__hint[data-tone="bad"] {
-  border-color: rgba(255, 107, 95, 0.45);
-  background: rgba(255, 107, 95, 0.1);
+  border-color: rgba(var(--bad-rgb), 0.45);
+  background: rgba(var(--bad-rgb), 0.1);
   color: var(--bad-text);
 }
 
@@ -309,6 +314,9 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  /* Checkbox rows are tap targets too — without a floor the label+checkbox
+     line is ~20px tall, half the dense touch minimum. */
+  min-height: var(--touch-min-dense);
   font-size: 12px;
 }
 

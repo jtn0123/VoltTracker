@@ -916,7 +916,7 @@ import { prefs, units } from "./prefs";
         x: xOf(gx),
         y: h - padB + 15,
         fill: axisColor,
-        "font-size": 9,
+        "font-size": 10.5,
         "font-family": "ui-monospace,monospace",
         "text-anchor": "middle"
       });
@@ -933,7 +933,7 @@ import { prefs, units } from "./prefs";
         x: padL - 6,
         y: yS(gy) + 3,
         fill: axisColor,
-        "font-size": 9,
+        "font-size": 10.5,
         "font-family": "ui-monospace,monospace",
         "text-anchor": "end"
       });
@@ -987,7 +987,7 @@ import { prefs, units } from "./prefs";
       x: w - padR,
       y: h - 4,
       fill: axisColor,
-      "font-size": 9,
+      "font-size": 10.5,
       "font-family": "ui-monospace,monospace",
       "text-anchor": "end"
     });
@@ -997,7 +997,7 @@ import { prefs, units } from "./prefs";
       x: 10,
       y: padT + (h - padT - padB) / 2,
       fill: axisColor,
-      "font-size": 9,
+      "font-size": 10.5,
       "font-family": "ui-monospace,monospace",
       "text-anchor": "middle",
       transform: `rotate(-90 10 ${(padT + (h - padT - padB) / 2).toFixed(1)})`

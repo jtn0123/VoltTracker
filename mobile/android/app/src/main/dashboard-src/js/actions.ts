@@ -519,7 +519,7 @@ type SignalActions = {
     // detail-probe handler, but each is matched as its own case.)
     switch (action) {
       case "permissions": bridge && callBridgeAction("requestPermissions", [], "Could not request Bluetooth permissions."); return;
-      case "refresh": refreshDevices(); return;
+      case "refresh": withBusy(button, () => refreshDevices()); return;
       case "refreshStorage": void refreshStorage(); return;
       case "clearStorage": void clearStorage(button); return;
       case "exportDebug": void exportDebugBundle(); return;
@@ -965,8 +965,13 @@ type SignalActions = {
     if (typeof VD.refreshMapSessionList === "function") VD.refreshMapSessionList();
   }
 
+  // Debounced (140ms, matching the chart resize debouncers): each keystroke
+  // used to synchronously rebuild up to 80 session rows (each a button plus a
+  // five-button export row), which is visible jank while typing on-device.
+  let mapSearchDebounce = 0;
   function onMapSessionSearchInput() {
-    refreshTripList();
+    window.clearTimeout(mapSearchDebounce);
+    mapSearchDebounce = window.setTimeout(refreshTripList, 140);
   }
 
   function onMapSortClick(event: Event) {
@@ -1267,7 +1272,12 @@ type SignalActions = {
         // active so native storage/app-state pushes cannot overwrite the sample.
         if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, "Demo preview is running.");
         const picker = el("demoScenarioPicker");
-        if (picker) picker.querySelectorAll("[data-scenario]").forEach((b) => b.classList.toggle("is-active", b === button));
+        if (picker) {
+          picker.querySelectorAll("[data-scenario]").forEach((b) => {
+            b.classList.toggle("is-active", b === button);
+            b.setAttribute("aria-pressed", String(b === button));
+          });
+        }
       }, opts);
     });
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
@@ -1384,11 +1394,17 @@ type SignalActions = {
       }
     }, opts);
     bindListenerGuarded("permissionBtn", "click", () => handleAction("permissions"), opts);
-    bindListenerGuarded("refreshBtn", "click", () => handleAction("refresh"), opts);
-    bindListenerGuarded("lastBtn", "click", () => handleAction("last"), opts);
+    // Pass the button through like the scan/connect bindings do: "Reconnect
+    // last" kicks off a real adapter connection and "Refresh" hits the bridge —
+    // without the element, withBusy can't disable them or paint the busy state,
+    // so a double-tap fired the action twice with zero feedback.
+    bindListenerGuarded("refreshBtn", "click", (event) => handleAction("refresh", event.currentTarget as BusyButton), opts);
+    bindListenerGuarded("lastBtn", "click", (event) => handleAction("last", event.currentTarget as BusyButton), opts);
     bindListenerGuarded("scanBtn", "click", (event) => handleAction("scan", event.currentTarget as BusyButton), opts);
     bindListenerGuarded("tpmsScanBtn", "click", (event) => handleAction("tpmsScan", event.currentTarget as BusyButton), opts);
-    bindListenerGuarded("exportSignalLogsBtn", "click", () => { void exportSignalLogs(); }, opts);
+    bindListenerGuarded("exportSignalLogsBtn", "click", (event) => {
+      withBusy(event.currentTarget as BusyButton, () => { void exportSignalLogs(); });
+    }, opts);
     bindListenerGuarded("connectBtn", "click", (event) => {
       const btn = el("connectBtn");
       const action = (btn && btn.dataset.primaryAction) || "connect";

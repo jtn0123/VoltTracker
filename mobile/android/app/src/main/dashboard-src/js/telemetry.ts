@@ -806,13 +806,16 @@ import { initialTelemetryState } from "./telemetry-state";
     const packA = finiteNum(t.packCurrentA);
     // Sign convention: discharge is positive (Volt mode-22 222414), so "+" means
     // current flowing OUT of the pack (driving), "-" means INTO it (regen / charging).
+    // Typographic minus (U+2212) to match fmtSocDelta and the power micro tag —
+    // the ASCII hyphen has a different advance width, so the same regen reading
+    // rendered two different sign glyphs on adjacent Drive tiles.
     setOptionalLiveText(
       "drivePackCurrent",
-      packA != null ? `${packA >= 0 ? "+" : ""}${packA.toFixed(1)} A` : "--"
+      packA != null ? `${packA >= 0 ? "+" : "−"}${Math.abs(packA).toFixed(1)} A` : "--"
     );
     setOptionalLiveText(
       "drivePackPower",
-      power != null ? `${power >= 0 ? "+" : ""}${power.toFixed(1)} kW` : "--"
+      power != null ? `${power >= 0 ? "+" : "−"}${Math.abs(power).toFixed(1)} kW` : "--"
     );
     const powerState = power == null ? "coast"
       : power < -0.5 ? "regen"
@@ -823,11 +826,14 @@ import { initialTelemetryState } from "./telemetry-state";
       powerDetail.textContent = powerState;
       setDataState(powerDetail, powerState);
     }
-    const pct = power != null ? Math.min(50, Math.abs(power / 80) * 50) : 0;
+    // Fraction of the half-track (0..1); the fill's CSS spans the right half
+    // and scaleX stretches it from the zero-line — a negative scale mirrors it
+    // left for regen. Transform-only so this per-sample update stays on the
+    // compositor (no layout), unlike the old left/width mutation.
+    const frac = power != null ? Math.min(1, Math.abs(power) / 80) : 0;
     const fill = el("powerFill");
     if (fill) {
-      fill.style.width = pct + "%";
-      fill.style.left = power != null && power < 0 ? (50 - pct) + "%" : "50%";
+      fill.style.transform = `scaleX(${power != null && power < 0 ? -frac : frac})`;
       fill.classList.toggle("is-regen", powerState === "regen");
     }
     const powerMeter = el("powerMeter");
@@ -1065,10 +1071,20 @@ import { initialTelemetryState } from "./telemetry-state";
     return "bad";
   }
 
+  // Memoized like renderCellGrid/renderLiveSignals: updateLiveUi calls this on
+  // every rAF flush and app-state broadcast, but the cell min/max move slowly —
+  // skip the style/text writes when nothing in the readout changed.
+  let lastCellBalanceSig = "";
   function renderCellBalance() {
     const card = el("cellBalanceCard");
     if (!card) return;
     const t = state.telemetry || {};
+    const sig = [
+      t.minCellVoltage, t.maxCellVoltage, t.cellBalanceMv,
+      t.minCellNumber, t.maxCellNumber, t.socVariationPct
+    ].join(":");
+    if (sig === lastCellBalanceSig) return;
+    lastCellBalanceSig = sig;
     const minV = Number(t.minCellVoltage);
     const maxV = Number(t.maxCellVoltage);
     const has = Number.isFinite(minV) && Number.isFinite(maxV);

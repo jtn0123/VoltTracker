@@ -168,7 +168,7 @@ function bindSendAiDigest(opts?: AddEventListenerOptions) {
 // until the (up to 30 min) deadline.
 function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
   const toggle = el("notifyWhenReadyToggle") as HTMLInputElement | null;
-  const mins = el("notifyWhenReadyMinutes") as HTMLInputElement | null;
+  const mins = el("notifyWhenReadyMinutes") as HTMLSelectElement | null;
   const status = el("notifyWhenReadyStatus");
   if (!toggle || !mins) return;
   const toggleInput = toggle;
@@ -195,7 +195,7 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
       status.textContent =
         "Checking every 30s for the next " +
         minutes +
-        " min - you'll get a notification when the adapter responds.";
+        " min — you'll get a notification when the adapter responds.";
     }
   }
   function applyToggleState() {

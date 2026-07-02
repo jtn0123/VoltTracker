@@ -40,6 +40,7 @@
   box-shadow: 0 -16px 38px var(--shadow);
   color: var(--text);
   overflow-y: auto;
+  overscroll-behavior: contain;
   display: flex;
   flex-direction: column;
   gap: 14px;

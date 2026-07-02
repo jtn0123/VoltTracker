@@ -1,4 +1,22 @@
 <section id="view-charge" class="view" data-view="charge">
+  <!-- Data-provenance badge mirroring Drive's (#driveSourceBadge): the Charge
+       KPIs and session list render demo values during a preview, so this tab
+       needs the same at-a-glance DEMO/LIVE/OFFLINE truth. Kept in sync by
+       drive.ts#renderDriveSourceBadge from the same deriveSource() state. -->
+  <div
+    id="chargeSourceBadge"
+    class="drive-source-badge"
+    data-source="empty"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <span class="drive-source-dot" aria-hidden="true"></span>
+    <span class="drive-source-text">
+      <strong id="chargeSourceLabel">No data yet</strong>
+      <small id="chargeSourceSub">Connect an adapter to start logging</small>
+    </span>
+  </div>
   <article id="chargeEmptyState" class="panel empty-state">
     <span class="kicker">Charging</span>
     <h2>No charging sessions yet.</h2>
@@ -327,10 +345,9 @@
         </button>
       </div>
     </header>
-    <div
-      id="chargeSessionsList"
-      class="charge-session-list"
-      aria-live="polite"
-    ></div>
+    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
+         live region would re-announce all 12 rows each time. The count in
+         #chargeSessionsTitle is the quiet signal that the history changed. -->
+    <div id="chargeSessionsList" class="charge-session-list"></div>
   </article>
 </section>

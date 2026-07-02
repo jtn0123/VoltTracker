@@ -460,8 +460,12 @@ import { prefs, units } from "./prefs";
     }
     moduleBlock.append(small);
 
+    // Likely-causes box + search link are appended to the ARTICLE (not the
+    // module column) so CSS can span them across the full card width — nested
+    // in the 1fr column they wrapped hard beside the code/severity column.
+    let causesWrap: HTMLDivElement | null = null;
     if (info && Array.isArray(info.causes) && info.causes.length) {
-      const causesWrap = document.createElement("div");
+      causesWrap = document.createElement("div");
       causesWrap.className = "dtc-causes";
       const header = document.createElement("span");
       header.className = "dtc-causes-head";
@@ -475,7 +479,6 @@ import { prefs, units } from "./prefs";
         list.append(li);
       });
       causesWrap.append(list);
-      moduleBlock.append(causesWrap);
     }
 
     const searchLink = document.createElement("a");
@@ -484,7 +487,6 @@ import { prefs, units } from "./prefs";
     searchLink.href = "#";
     searchLink.dataset.dtcSearch = code.dtc || "";
     searchLink.setAttribute("role", "button");
-    moduleBlock.append(searchLink);
 
     // Occurrence count, only when we actually have one. A stored/pending code
     // seen 0 times is contradictory, so suppress the badge rather than print
@@ -502,6 +504,8 @@ import { prefs, units } from "./prefs";
     } else {
       article.append(codeBlock, moduleBlock);
     }
+    if (causesWrap) article.append(causesWrap);
+    article.append(searchLink);
     return article;
   }
 
@@ -1352,12 +1356,25 @@ import { prefs, units } from "./prefs";
   // Per-session charge history for the Charge tab. The native chargeSummary now
   // ships a `recentSessions` array (newest first); the card stays hidden until
   // at least one real session exists so the empty tab keeps its first-run guide.
+  // Memoized like renderCellGrid/renderLiveSignals: native re-delivers storage
+  // on every broadcast, and rebuilding 12 unchanged rows each time is wasted DOM
+  // churn on the busiest render path.
+  let lastChargeSessionsSig = "";
   function renderChargeSessions(charge: VoltChargeSummary) {
     const card = el("chargeSessionsCard");
     const list = el("chargeSessionsList");
     const sessions = Array.isArray(charge.recentSessions) ? charge.recentSessions : [];
     if (card) card.hidden = sessions.length === 0;
     if (!list) return;
+    // The rates are render inputs too: buildChargeSessionRow prices each row
+    // via chargeRates()/rateForCharger(), so a $/kWh preference edit must bust
+    // the memo even when recentSessions is unchanged.
+    const rates = chargeRates();
+    const sig = rates.home + "|" + rates.public + "|" + sessions.length + "|" + sessions.slice(0, 12).map((s) => [
+      s.id, s.startedAtMs, s.endedAtMs, s.startSoc, s.endSoc, s.energyKwh, s.powerKw, s.chargerType
+    ].join(":")).join(";");
+    if (sig === lastChargeSessionsSig) return;
+    lastChargeSessionsSig = sig;
     if (!sessions.length) {
       list.replaceChildren();
       // renderChargeEnergy owns the energy card's hidden flag — it must run on
@@ -1367,10 +1384,12 @@ import { prefs, units } from "./prefs";
       return;
     }
     const shown = Math.min(sessions.length, 12);
+    // "12 of 14 charges", not "Latest 12 of 14 charges": the longer form wraps
+    // to two lines next to the header's Export CSV + Refresh actions.
     VD.setText(
       "chargeSessionsTitle",
       sessions.length > 12
-        ? `Latest ${shown} of ${sessions.length} charges`
+        ? `${shown} of ${sessions.length} charges`
         : `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`
     );
     list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
@@ -1646,7 +1665,7 @@ import { prefs, units } from "./prefs";
     const endedAtMs = chargeNum(session.endedAtMs);
     const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
     const parts: string[] = [];
-    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%${inProgress ? " now" : ""}`);
+    if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%`);
     if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
     if (inProgress) parts.push("charging now");
     else if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));

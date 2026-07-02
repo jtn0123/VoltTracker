@@ -36,19 +36,20 @@
     margin-top: 3px;
     max-height: 96px;
     overflow: auto;
+    overscroll-behavior: contain;
     word-break: break-word;
     font-family: ui-monospace, Menlo, Consolas, monospace;
   }
 
   .error-banner button {
     margin-left: auto;
-    min-height: 32px;
+    min-height: var(--touch-min-dense);
     flex: none;
   }
 
   .demo-stop {
     min-height: var(--touch-min-dense);
-    border-color: rgba(255,107,95,0.34);
+    border-color: rgba(var(--bad-rgb), 0.34);
     color: var(--bad-soft);
     white-space: nowrap;
   }
@@ -102,8 +103,8 @@
   }
 
   body[data-active-view="charge"] .empty-hints b {
-    border-color: rgba(184,230,59,0.34);
-    background: rgba(184,230,59,0.1);
+    border-color: rgba(var(--ev-rgb), 0.34);
+    background: rgba(var(--ev-rgb), 0.1);
     color: var(--ev-soft);
   }
 
@@ -114,8 +115,8 @@
   }
 
   body[data-active-view="insights"] .empty-hints b {
-    border-color: rgba(164,140,255,0.34);
-    background: rgba(164,140,255,0.1);
+    border-color: rgba(var(--mixed-rgb), 0.34);
+    background: rgba(var(--mixed-rgb), 0.1);
     color: var(--mixed-soft);
   }
 
@@ -190,15 +191,21 @@
     margin: 4px 0 8px;
   }
 
+  /* Tight radial halo behind the speed digits (single source — screens.css no
+     longer re-declares this) so it reads as a highlight, not a wide blob. */
   .speed-row::after {
     content: "";
     position: absolute;
     z-index: -1;
-    left: -26px;
-    width: 188px;
-    top: -4px;
-    bottom: 6px;
-    background: radial-gradient(82px 54px at 60px 54%, rgba(var(--volt-rgb), 0.34), transparent);
+    left: -8px;
+    width: 138px;
+    top: 4px;
+    bottom: 4px;
+    background: radial-gradient(
+      54px 38px at 60px 50%,
+      rgba(var(--volt-rgb), 0.32),
+      transparent 75%
+    );
     pointer-events: none;
   }
 
@@ -289,30 +296,37 @@
     transform: translateX(-1px);
   }
 
+  /* The fill spans the right half of the track and scales out from the center
+     zero-line: telemetry.ts drives `transform: scaleX(f)` (negative f mirrors
+     it left for regen). Transform-only so the every-sample update animates on
+     the compositor instead of re-laying-out the meter. */
   .power-fill {
     position: absolute;
     inset-block: 0;
     left: 50%;
-    width: 0;
+    width: 50%;
     border-radius: 999px;
     background: linear-gradient(90deg, var(--volt), var(--volt-deep));
     box-shadow: 0 0 16px rgba(var(--volt-rgb), 0.4);
-    transition: left var(--motion-medium) var(--motion-ease), width var(--motion-medium) var(--motion-ease);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform var(--motion-medium) var(--motion-ease);
   }
 
   .power-fill.is-regen {
-    background: linear-gradient(90deg, var(--ev), rgba(184,230,59,0.6));
-    box-shadow: 0 0 16px rgba(184,230,59,0.45);
+    background: linear-gradient(90deg, var(--ev), rgba(var(--ev-rgb), 0.6));
+    box-shadow: 0 0 16px rgba(var(--ev-rgb), 0.45);
   }
 
   .power-scale {
     display: flex;
     justify-content: space-between;
     margin-top: 6px;
+    /* Full-opacity --soft: the old extra opacity 0.7 multiplied the dimmest
+       text token below readable contrast at this 10px size. */
     color: var(--soft);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
-    opacity: 0.7;
   }
 
   .battery-strip {
@@ -442,11 +456,13 @@
     margin-bottom: 4px;
   }
 
-  /* HV-pack detail stats beneath the SOC ring on the Insights hero. */
+  /* HV-pack detail stats beneath the SOC ring on the Insights hero. An even
+     grid (2×2 at this column's ~230px width) instead of flex-wrap, which left
+     the fourth stat (Power) orphaned alone on its own row. */
   .pack-stat-row {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px 18px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+    gap: 10px 12px;
     margin-top: 13px;
   }
 
@@ -482,9 +498,9 @@
     align-items: center;
     gap: 12px;
     padding: 12px;
-    border: 1px solid rgba(184,230,59,0.18);
+    border: 1px solid rgba(var(--ev-rgb), 0.18);
     border-radius: 12px;
-    background: rgba(184,230,59,0.05);
+    background: rgba(var(--ev-rgb), 0.05);
   }
 
   .charge-session-row strong {
@@ -497,16 +513,18 @@
     display: block;
     margin-top: 3px;
     color: var(--muted);
-    font-size: 11px;
+    /* 12px, not 11px: this line carries the substantive per-charge data
+       (SOC delta · kW · duration) — keep it at glance size. */
+    font-size: 12px;
     line-height: 1.3;
   }
 
   .charge-session-row > b {
     flex: 0 0 auto;
     padding: 5px 10px;
-    border: 1px solid rgba(184,230,59,0.3);
+    border: 1px solid rgba(var(--ev-rgb), 0.3);
     border-radius: 999px;
-    background: rgba(184,230,59,0.1);
+    background: rgba(var(--ev-rgb), 0.1);
     color: var(--ev-soft);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 12px;
@@ -516,13 +534,13 @@
 
   /* In-progress (still plugged in) — brighter so it reads as live. */
   .charge-session-row[data-charging="1"] {
-    border-color: rgba(184,230,59,0.55);
-    background: rgba(184,230,59,0.12);
+    border-color: rgba(var(--ev-rgb), 0.55);
+    background: rgba(var(--ev-rgb), 0.12);
   }
 
   .charge-session-row[data-charging="1"] > b {
-    border-color: rgba(184,230,59,0.5);
-    background: rgba(184,230,59,0.2);
+    border-color: rgba(var(--ev-rgb), 0.5);
+    background: rgba(var(--ev-rgb), 0.2);
   }
 
   .real-overview-grid {
@@ -612,9 +630,11 @@
     height: calc((100% - 6px) * var(--v, 0) / 100);
     border-radius: 6px;
     background: var(--soc-fill);
+    /* Height 0.45s is a deliberate slow rise (charge filling a cell); the tone
+       change rides the standard medium token. */
     transition:
       height 0.45s var(--motion-ease, ease),
-      background 0.3s ease;
+      background-color var(--motion-medium) var(--motion-ease);
   }
 
   .ring[data-level="warn"] {
@@ -664,6 +684,13 @@
     gap: 12px;
   }
 
+  /* #diagState is an h2 for the heading outline (first heading under the
+     topbar h1) but keeps the compact card-title size of its h3 siblings. */
+  .status-head h2 {
+    font-size: var(--font-h3);
+    line-height: 1.15;
+  }
+
   /* ===== 6. Status meta & card headers ===== */
 
   .status-meta {
@@ -678,7 +705,7 @@
 
   .status-meta div {
     padding: 11px;
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--fill);
   }
 
@@ -815,7 +842,7 @@
 
   .history-export-btn {
     flex: 1 1 30%;
-    min-height: 36px;
+    min-height: var(--touch-min-dense);
     padding: 6px 10px;
     border: 1px solid var(--line-soft);
     border-radius: 8px;
@@ -841,8 +868,8 @@
   }
 
   .history-favorite-btn.is-favorite {
-    border-color: rgba(255,184,74,0.4);
-    background: rgba(255,184,74,0.12);
+    border-color: rgba(var(--warn-rgb), 0.4);
+    background: rgba(var(--warn-rgb), 0.12);
     color: var(--warn, #ffb84a);
   }
 
@@ -924,7 +951,7 @@
   .review-grid div {
     min-width: 0;
     padding: 11px;
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--fill);
   }
 
@@ -982,9 +1009,9 @@
   }
 
   .dtc-action-row .danger {
-    border-color: rgba(255,107,95,0.34);
+    border-color: rgba(var(--bad-rgb), 0.34);
     color: var(--bad-text);
-    background: rgba(255,107,95,0.08);
+    background: rgba(var(--bad-rgb), 0.08);
   }
 
   .dtc-action-row .scan {
@@ -1069,13 +1096,13 @@
 
   .dtc-lookup-sev[data-severity="high"],
   .dtc-lookup-sev[data-severity="severe"] {
-    background: rgba(255, 107, 95, 0.16);
+    background: rgba(var(--bad-rgb), 0.16);
     color: var(--bad-text);
   }
 
   .dtc-lookup-sev[data-severity="medium"],
   .dtc-lookup-sev[data-severity="moderate"] {
-    background: rgba(255, 184, 74, 0.16);
+    background: rgba(var(--warn-rgb), 0.16);
     color: var(--warn-soft);
   }
 
@@ -1188,10 +1215,10 @@
 
   .signal-console {
     padding: 12px 14px;
-    border-color: rgba(53,230,160,0.18);
+    border-color: rgba(var(--ok-rgb), 0.18);
     border-radius: 16px;
     background:
-      linear-gradient(180deg, rgba(53,230,160,0.055), transparent 42%),
+      linear-gradient(180deg, rgba(var(--ok-rgb), 0.055), transparent 42%),
       var(--surface-raised);
   }
 
@@ -1230,9 +1257,9 @@
     flex: 0 0 auto;
     min-height: 28px;
     padding: 0 11px;
-    border: 1px solid rgba(53,230,160,0.3);
+    border: 1px solid rgba(var(--ok-rgb), 0.3);
     border-radius: 999px;
-    background: rgba(53,230,160,0.1);
+    background: rgba(var(--ok-rgb), 0.1);
     color: var(--ok-soft);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
@@ -1247,29 +1274,29 @@
     height: 7px;
     border-radius: 50%;
     background: var(--ok);
-    box-shadow: 0 0 10px rgba(53,230,160,0.85);
+    box-shadow: 0 0 10px rgba(var(--ok-rgb), 0.85);
   }
 
   .signal-status-pill[data-state="blocked"] {
-    border-color: rgba(255,107,95,0.34);
-    background: rgba(255,107,95,0.12);
+    border-color: rgba(var(--bad-rgb), 0.34);
+    background: rgba(var(--bad-rgb), 0.12);
     color: var(--bad-soft);
   }
 
   .signal-status-pill[data-state="blocked"]::before {
     background: var(--bad);
-    box-shadow: 0 0 10px rgba(255,107,95,0.8);
+    box-shadow: 0 0 10px rgba(var(--bad-rgb), 0.8);
   }
 
   .signal-status-pill[data-state="idle"] {
-    border-color: rgba(255,184,74,0.32);
-    background: rgba(255,184,74,0.1);
+    border-color: rgba(var(--warn-rgb), 0.32);
+    background: rgba(var(--warn-rgb), 0.1);
     color: var(--warn-soft);
   }
 
   .signal-status-pill[data-state="idle"]::before {
     background: var(--warn);
-    box-shadow: 0 0 10px rgba(255,184,74,0.75);
+    box-shadow: 0 0 10px rgba(var(--warn-rgb), 0.75);
   }
 
   /* ===== 9b. Diagnostics recovery-first panel (A1/C3/E2/I2) ===== */
@@ -1363,7 +1390,7 @@
   }
   .diag-recovery[data-tone="ok"] .diag-recovery__dot {
     background: var(--ok);
-    box-shadow: 0 0 0 4px rgba(53, 230, 160, 0.16);
+    box-shadow: 0 0 0 4px rgba(var(--ok-rgb), 0.16);
   }
   .diag-recovery[data-tone="live"] {
     border-left-color: var(--volt);
@@ -1377,14 +1404,14 @@
   }
   .diag-recovery[data-tone="warn"] .diag-recovery__dot {
     background: var(--warn);
-    box-shadow: 0 0 0 4px rgba(255, 184, 74, 0.18);
+    box-shadow: 0 0 0 4px rgba(var(--warn-rgb), 0.18);
   }
   .diag-recovery[data-tone="bad"] {
     border-left-color: var(--bad);
   }
   .diag-recovery[data-tone="bad"] .diag-recovery__dot {
     background: var(--bad);
-    box-shadow: 0 0 0 4px rgba(255, 107, 95, 0.2);
+    box-shadow: 0 0 0 4px rgba(var(--bad-rgb), 0.2);
   }
   .diag-recovery[data-tone="demo"] {
     border-left-color: var(--accent, #6ec6ff);
@@ -1440,7 +1467,7 @@
     flex: 0 0 auto;
     border-radius: 50%;
     background: var(--ok, #35e6a0);
-    box-shadow: 0 0 8px rgba(53,230,160,0.6);
+    box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.6);
   }
 
   .live-signal-row[data-status="missing"] .live-signal-name {
@@ -1674,20 +1701,20 @@
   /* Battery cell-balance graphic: a track showing where the lowest and highest
      cell-group voltages sit, with the spread between them filled in. */
   .cell-balance-card .badge[data-tone="ok"] {
-    border-color: rgba(53,230,160,0.35);
-    background: rgba(53,230,160,0.12);
+    border-color: rgba(var(--ok-rgb), 0.35);
+    background: rgba(var(--ok-rgb), 0.12);
     color: var(--ok-soft);
   }
 
   .cell-balance-card .badge[data-tone="warn"] {
-    border-color: rgba(255,184,74,0.35);
-    background: rgba(255,184,74,0.12);
+    border-color: rgba(var(--warn-rgb), 0.35);
+    background: rgba(var(--warn-rgb), 0.12);
     color: var(--warn-soft);
   }
 
   .cell-balance-card .badge[data-tone="bad"] {
-    border-color: rgba(255,107,95,0.4);
-    background: rgba(255,107,95,0.14);
+    border-color: rgba(var(--bad-rgb), 0.4);
+    background: rgba(var(--bad-rgb), 0.14);
     color: var(--bad-soft);
   }
 
@@ -1707,19 +1734,19 @@
     border-radius: 999px;
     /* Default/neutral fill; the parent graphic's data-tone (set in JS from the
        mV spread) recolors it to convey balance health. */
-    background: linear-gradient(90deg, rgba(76, 196, 255, 0.5), rgba(53, 230, 160, 0.6));
+    background: linear-gradient(90deg, rgba(var(--map-accent-rgb), 0.5), rgba(var(--ok-rgb), 0.6));
   }
 
   .cell-balance-graphic[data-tone="ok"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(53, 230, 160, 0.4), rgba(53, 230, 160, 0.7));
+    background: linear-gradient(90deg, rgba(var(--ok-rgb), 0.4), rgba(var(--ok-rgb), 0.7));
   }
 
   .cell-balance-graphic[data-tone="warn"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(255, 184, 74, 0.4), rgba(255, 184, 74, 0.72));
+    background: linear-gradient(90deg, rgba(var(--warn-rgb), 0.4), rgba(var(--warn-rgb), 0.72));
   }
 
   .cell-balance-graphic[data-tone="bad"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(255, 107, 95, 0.42), rgba(255, 107, 95, 0.74));
+    background: linear-gradient(90deg, rgba(var(--bad-rgb), 0.42), rgba(var(--bad-rgb), 0.74));
   }
 
   .cell-balance-marker {
@@ -1858,7 +1885,7 @@
   /* Run-probe = the page's primary action, so it carries the tab's green fill. */
   .signal-probe-btn {
     flex: 1 1 auto;
-    border-color: rgba(53,230,160,0.45);
+    border-color: rgba(var(--ok-rgb), 0.45);
     color: var(--on-ok);
     background: linear-gradient(180deg, var(--ok-bright), var(--ok));
     font-weight: 800;
@@ -1901,7 +1928,7 @@
     min-height: 60px;
     padding: 8px 6px;
     border: 1px solid var(--line-soft);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--fill-ghost);
     color: var(--muted);
     text-align: center;
@@ -1944,14 +1971,14 @@
   }
 
   .signal-filter-grid button.is-active {
-    border-color: rgba(53,230,160,0.45);
+    border-color: rgba(var(--ok-rgb), 0.45);
     background:
-      linear-gradient(180deg, rgba(53,230,160,0.14), rgba(53,230,160,0.04)),
+      linear-gradient(180deg, rgba(var(--ok-rgb), 0.14), rgba(var(--ok-rgb), 0.04)),
       var(--fill-soft);
     color: var(--text);
     box-shadow:
       inset 0 1px 0 rgba(255,255,255,0.07),
-      0 6px 16px rgba(53,230,160,0.1);
+      0 6px 16px rgba(var(--ok-rgb), 0.1);
   }
 
   .signal-filter-grid button.is-active span {
@@ -1983,13 +2010,13 @@
     min-width: 0;
     padding: 10px;
     border: 1px solid var(--line-soft);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--inset);
   }
 
   .warning-item {
-    border-color: rgba(255,184,74,0.24);
-    background: rgba(255,184,74,0.08);
+    border-color: rgba(var(--warn-rgb), 0.24);
+    background: rgba(var(--warn-rgb), 0.08);
   }
 
   .enhanced-capability-item {
@@ -2030,21 +2057,21 @@
 
   .signal-chip[data-risk="low"],
   .signal-chip[data-risk="safe"] {
-    border-color: rgba(53,230,160,0.26);
+    border-color: rgba(var(--ok-rgb), 0.26);
     color: var(--ok-soft);
-    background: rgba(53,230,160,0.08);
+    background: rgba(var(--ok-rgb), 0.08);
   }
 
   .signal-chip[data-risk="medium"] {
-    border-color: rgba(255,184,74,0.26);
+    border-color: rgba(var(--warn-rgb), 0.26);
     color: var(--warn-soft);
-    background: rgba(255,184,74,0.08);
+    background: rgba(var(--warn-rgb), 0.08);
   }
 
   .signal-chip[data-risk="high"] {
-    border-color: rgba(255,107,95,0.28);
+    border-color: rgba(var(--bad-rgb), 0.28);
     color: var(--bad-soft);
-    background: rgba(255,107,95,0.08);
+    background: rgba(var(--bad-rgb), 0.08);
   }
 
   .enhanced-next-list {
@@ -2111,30 +2138,30 @@
   }
 
   .enhanced-capability-item[data-status="confirmed"] {
-    border-color: rgba(53,230,160,0.24);
-    background: rgba(53,230,160,0.055);
+    border-color: rgba(var(--ok-rgb), 0.24);
+    background: rgba(var(--ok-rgb), 0.055);
   }
 
   .enhanced-capability-item[data-status="confirmed"] > b {
-    border-color: rgba(53,230,160,0.24);
+    border-color: rgba(var(--ok-rgb), 0.24);
     color: var(--ok-soft);
-    background: rgba(53,230,160,0.08);
+    background: rgba(var(--ok-rgb), 0.08);
   }
 
   .enhanced-capability-item[data-status="rejected"] {
-    border-color: rgba(255,107,95,0.18);
+    border-color: rgba(var(--bad-rgb), 0.18);
   }
 
   .enhanced-capability-item[data-status="rejected"] > b {
-    border-color: rgba(255,107,95,0.2);
+    border-color: rgba(var(--bad-rgb), 0.2);
     color: var(--bad-soft);
-    background: rgba(255,107,95,0.08);
+    background: rgba(var(--bad-rgb), 0.08);
   }
 
   .enhanced-capability-item[data-status="candidate"] > b {
-    border-color: rgba(255,184,74,0.22);
+    border-color: rgba(var(--warn-rgb), 0.22);
     color: var(--warn-soft);
-    background: rgba(255,184,74,0.08);
+    background: rgba(var(--warn-rgb), 0.08);
   }
 
   .enhanced-capability-item[data-status="deferred"] {
@@ -2155,10 +2182,23 @@
     gap: 12px;
   }
 
+  /* Likely-causes + search link ride full-width rows under the code/module
+     columns (storage-status.ts appends them to the article): confined to the
+     module column they wrapped every cause over 3-4 lines. */
+  .dtc-item > .dtc-causes {
+    grid-column: 1 / -1;
+    margin-top: 0;
+  }
+
+  .dtc-item > .dtc-search {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
   .dtc-empty-state {
     padding: 12px;
     border: 1px dashed var(--line-strong);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--inset);
   }
 
@@ -2254,23 +2294,23 @@
   }
 
   .dtc-item[data-severity="critical"] {
-    border-left-color: rgba(255,107,95,0.6);
+    border-left-color: rgba(var(--bad-rgb), 0.6);
     border-left-width: 3px;
   }
 
   .dtc-item[data-severity="critical"] .dtc-causes {
-    border-left-color: rgba(255,107,95,0.55);
-    background: rgba(255,107,95,0.05);
+    border-left-color: rgba(var(--bad-rgb), 0.55);
+    background: rgba(var(--bad-rgb), 0.05);
   }
 
   .dtc-item[data-severity="warning"] {
-    border-left-color: rgba(255,184,74,0.5);
+    border-left-color: rgba(var(--warn-rgb), 0.5);
     border-left-width: 3px;
   }
 
   .dtc-item[data-severity="warning"] .dtc-causes {
-    border-left-color: rgba(255,184,74,0.45);
-    background: rgba(255,184,74,0.04);
+    border-left-color: rgba(var(--warn-rgb), 0.45);
+    background: rgba(var(--warn-rgb), 0.04);
   }
 
   .dtc-item[data-severity="info"] .dtc-causes {
@@ -2292,12 +2332,12 @@
   }
 
   .dtc-sev[data-severity="critical"] {
-    background: rgba(255,107,95,0.16);
+    background: rgba(var(--bad-rgb), 0.16);
     color: var(--bad-text);
   }
 
   .dtc-sev[data-severity="warning"] {
-    background: rgba(255,184,74,0.16);
+    background: rgba(var(--warn-rgb), 0.16);
     color: var(--warn-soft);
   }
 
@@ -2322,7 +2362,7 @@
   }
 
   .dtc-clearable[data-clearable="no"] {
-    background: rgba(255,184,74,0.16);
+    background: rgba(var(--warn-rgb), 0.16);
     color: var(--warn-soft);
   }
 
@@ -2354,9 +2394,9 @@
   .dtc-clear-warning {
     margin-top: 4px;
     padding: 12px;
-    border: 1px solid rgba(255,107,95,0.34);
-    border-radius: 13px;
-    background: rgba(255,107,95,0.07);
+    border: 1px solid rgba(var(--bad-rgb), 0.34);
+    border-radius: var(--radius-md);
+    background: rgba(var(--bad-rgb), 0.07);
     display: grid;
     gap: 9px;
   }
@@ -2375,9 +2415,9 @@
 
   .dtc-clear-prereq {
     padding: 8px 10px;
-    border: 1px dashed rgba(255,184,74,0.34);
+    border: 1px dashed rgba(var(--warn-rgb), 0.34);
     border-radius: 10px;
-    background: rgba(255,184,74,0.06);
+    background: rgba(var(--warn-rgb), 0.06);
     color: var(--warn-soft) !important;
   }
 
@@ -2385,9 +2425,9 @@
      styling but in the warning tone, since it tempers the clear's outcome. */
   .dtc-clear-permanent-note {
     padding: 8px 10px;
-    border: 1px solid rgba(255,184,74,0.34);
+    border: 1px solid rgba(var(--warn-rgb), 0.34);
     border-radius: 10px;
-    background: rgba(255,184,74,0.08);
+    background: rgba(var(--warn-rgb), 0.08);
     color: var(--warn-soft) !important;
     font-weight: 600;
   }
@@ -2418,8 +2458,8 @@
   }
 
   .dtc-clear-actions .danger {
-    border-color: rgba(255,107,95,0.5);
-    background: rgba(255,107,95,0.18);
+    border-color: rgba(var(--bad-rgb), 0.5);
+    background: rgba(var(--bad-rgb), 0.18);
     color: var(--bad-soft);
     font-weight: 700;
   }
@@ -2430,15 +2470,15 @@
   }
 
   .dtc-item[data-status="pending"] {
-    border-color: rgba(255,184,74,0.24);
+    border-color: rgba(var(--warn-rgb), 0.24);
   }
 
   .dtc-item[data-status="permanent"] {
-    border-color: rgba(255,107,95,0.3);
+    border-color: rgba(var(--bad-rgb), 0.3);
   }
 
   .dtc-item[data-status="freeze-frame"] {
-    border-color: rgba(164,140,255,0.28);
+    border-color: rgba(var(--mixed-rgb), 0.28);
   }
 
   .timeline-item {
@@ -2519,17 +2559,17 @@
   }
 
   .dtc-item[data-status="pending"] .dtc-code {
-    background: rgba(255,184,74,0.13);
+    background: rgba(var(--warn-rgb), 0.13);
     color: var(--warn);
   }
 
   .dtc-item[data-status="permanent"] .dtc-code {
-    background: rgba(255,107,95,0.14);
+    background: rgba(var(--bad-rgb), 0.14);
     color: var(--bad-soft);
   }
 
   .dtc-item[data-status="freeze-frame"] .dtc-code {
-    background: rgba(164,140,255,0.14);
+    background: rgba(var(--mixed-rgb), 0.14);
     color: var(--mixed);
   }
 
@@ -2642,6 +2682,7 @@
     width: min(100%, 420px);
     max-height: min(86vh, 620px);
     overflow: auto;
+    overscroll-behavior: contain;
     border: 1px solid var(--line-strong);
     border-radius: 8px;
     background: var(--surface-modal);
@@ -2721,10 +2762,12 @@
     font-weight: 700;
   }
 
+  /* Accent tokens (not the old hardcoded #2f7fbc blue) so the primary action
+     follows the light scheme and the high-contrast palette. */
   .app-dialog-primary {
-    border: 1px solid rgba(117, 190, 255, 0.55);
-    background: #2f7fbc;
-    color: var(--on-control);
+    border: 1px solid rgba(var(--map-accent-rgb), 0.55);
+    background: var(--map-accent);
+    color: var(--on-map-accent);
   }
 
   .app-dialog-primary:disabled {
@@ -2821,7 +2864,7 @@
     width: 0;
     height: 100%;
     border-radius: inherit;
-    background: linear-gradient(90deg, #7cd1ff, #78e0b8);
+    background: linear-gradient(90deg, var(--map-accent), var(--ok));
     transform-origin: left center;
     transition: width var(--motion-fast) var(--motion-ease);
   }
@@ -2840,14 +2883,14 @@
     width: 100%;
     animation: none;
     transform: translateX(0);
-    background: #78e0b8;
+    background: var(--ok);
   }
 
   .restore-progress[data-tone="blocked"] .restore-progress-meter span {
     width: 100%;
     animation: none;
     transform: translateX(0);
-    background: #ff9d7a;
+    background: var(--bad);
   }
 
   .restore-progress-meta {

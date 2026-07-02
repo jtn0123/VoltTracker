@@ -229,10 +229,10 @@
   @keyframes live-head-pulse {
     0%,
     100% {
-      filter: drop-shadow(0 0 1px rgba(76, 196, 255, 0.7));
+      filter: drop-shadow(0 0 1px rgba(var(--map-accent-rgb), 0.7));
     }
     50% {
-      filter: drop-shadow(0 0 6px rgba(76, 196, 255, 0.95));
+      filter: drop-shadow(0 0 6px rgba(var(--map-accent-rgb), 0.95));
     }
   }
 
@@ -333,7 +333,7 @@
   }
 
   .map-list .history-row.is-active {
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     border: 1px solid rgba(var(--volt-rgb), 0.28);
     background: rgba(var(--volt-rgb), 0.10);
   }
@@ -432,14 +432,14 @@
   }
 
   .maint-tag[data-tag="watch"] {
-    border-color: rgba(255,184,74,0.3);
-    background: rgba(255,184,74,0.1);
+    border-color: rgba(var(--warn-rgb), 0.3);
+    background: rgba(var(--warn-rgb), 0.1);
     color: var(--warn-soft);
   }
 
   .maint-tag[data-tag="pending"] {
-    border-color: rgba(164,140,255,0.3);
-    background: rgba(164,140,255,0.1);
+    border-color: rgba(var(--mixed-rgb), 0.3);
+    background: rgba(var(--mixed-rgb), 0.1);
     color: var(--mixed-soft);
   }
 
@@ -459,8 +459,8 @@
   }
 
   .maint-del:active {
-    border-color: rgba(255,107,95,0.4);
-    background: rgba(255,107,95,0.12);
+    border-color: rgba(var(--bad-rgb), 0.4);
+    background: rgba(var(--bad-rgb), 0.12);
     color: var(--bad-soft);
   }
 
@@ -499,14 +499,14 @@
   }
 
   .maintenance-due-hint[data-due="due-soon"] {
-    border-color: rgba(255,184,74,0.3);
-    background: rgba(255,184,74,0.1);
+    border-color: rgba(var(--warn-rgb), 0.3);
+    background: rgba(var(--warn-rgb), 0.1);
     color: var(--warn-soft);
   }
 
   .maintenance-due-hint[data-due="overdue"] {
-    border-color: rgba(255,107,95,0.4);
-    background: rgba(255,107,95,0.12);
+    border-color: rgba(var(--bad-rgb), 0.4);
+    background: rgba(var(--bad-rgb), 0.12);
     color: var(--bad-soft);
   }
 
@@ -647,8 +647,8 @@
   }
 
   .settings-command.danger {
-    border-color: rgba(255,107,95,0.38);
-    background: rgba(255,107,95,0.08);
+    border-color: rgba(var(--bad-rgb), 0.38);
+    background: rgba(var(--bad-rgb), 0.08);
     color: var(--bad-soft);
   }
 
@@ -666,7 +666,7 @@
     overflow: auto;
     margin: 12px 0 0;
     padding: 12px;
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--inset-deep);
     color: var(--muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -813,99 +813,99 @@
   }
 
   body[data-active-view="charge"] .bottom-nav button.is-active {
-    border-color: rgba(184,230,59,0.28);
+    border-color: rgba(var(--ev-rgb), 0.28);
     background:
-      linear-gradient(180deg, rgba(184,230,59,0.16), rgba(184,230,59,0.052)),
+      linear-gradient(180deg, rgba(var(--ev-rgb), 0.16), rgba(var(--ev-rgb), 0.052)),
       var(--fill-soft);
     color: var(--ev-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(184,230,59,0.1);
+      0 7px 18px rgba(var(--ev-rgb), 0.1);
   }
 
   body[data-active-view="charge"] .bottom-nav button.is-active i {
     background:
       radial-gradient(circle at 50% 25%, rgba(230,255,135,0.3), transparent 48%),
-      rgba(184,230,59,0.16);
+      rgba(var(--ev-rgb), 0.16);
     box-shadow:
-      inset 0 0 0 1px rgba(184,230,59,0.22),
-      0 7px 18px rgba(184,230,59,0.12);
+      inset 0 0 0 1px rgba(var(--ev-rgb), 0.22),
+      0 7px 18px rgba(var(--ev-rgb), 0.12);
   }
 
   body[data-active-view="charge"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(184,230,59,0.42));
+    filter: drop-shadow(0 0 7px rgba(var(--ev-rgb), 0.42));
   }
 
   body[data-active-view="insights"] .bottom-nav button.is-active {
-    border-color: rgba(164,140,255,0.3);
+    border-color: rgba(var(--mixed-rgb), 0.3);
     background:
-      linear-gradient(180deg, rgba(164,140,255,0.17), rgba(164,140,255,0.055)),
+      linear-gradient(180deg, rgba(var(--mixed-rgb), 0.17), rgba(var(--mixed-rgb), 0.055)),
       var(--fill-soft);
     color: var(--mixed-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(164,140,255,0.12);
+      0 7px 18px rgba(var(--mixed-rgb), 0.12);
   }
 
   body[data-active-view="insights"] .bottom-nav button.is-active i {
     background:
       radial-gradient(circle at 50% 25%, rgba(205,192,255,0.32), transparent 48%),
-      rgba(164,140,255,0.18);
+      rgba(var(--mixed-rgb), 0.18);
     box-shadow:
-      inset 0 0 0 1px rgba(164,140,255,0.24),
-      0 7px 18px rgba(164,140,255,0.13);
+      inset 0 0 0 1px rgba(var(--mixed-rgb), 0.24),
+      0 7px 18px rgba(var(--mixed-rgb), 0.13);
   }
 
   body[data-active-view="insights"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(164,140,255,0.45));
+    filter: drop-shadow(0 0 7px rgba(var(--mixed-rgb), 0.45));
   }
 
   body[data-active-view="settings"] .bottom-nav button.is-active {
-    border-color: rgba(255,184,74,0.3);
+    border-color: rgba(var(--warn-rgb), 0.3);
     background:
-      linear-gradient(180deg, rgba(255,184,74,0.16), rgba(255,184,74,0.055)),
+      linear-gradient(180deg, rgba(var(--warn-rgb), 0.16), rgba(var(--warn-rgb), 0.055)),
       var(--fill-soft);
     color: var(--warn-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(255,184,74,0.12);
+      0 7px 18px rgba(var(--warn-rgb), 0.12);
   }
 
   body[data-active-view="settings"] .bottom-nav button.is-active i {
     background:
       radial-gradient(circle at 50% 25%, rgba(255,219,142,0.32), transparent 48%),
-      rgba(255,184,74,0.18);
+      rgba(var(--warn-rgb), 0.18);
     box-shadow:
-      inset 0 0 0 1px rgba(255,184,74,0.24),
-      0 7px 18px rgba(255,184,74,0.13);
+      inset 0 0 0 1px rgba(var(--warn-rgb), 0.24),
+      0 7px 18px rgba(var(--warn-rgb), 0.13);
   }
 
   body[data-active-view="settings"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(255,184,74,0.43));
+    filter: drop-shadow(0 0 7px rgba(var(--warn-rgb), 0.43));
   }
 
   body[data-active-view="signals"] .bottom-nav button.is-active {
-    border-color: rgba(53,230,160,0.3);
+    border-color: rgba(var(--ok-rgb), 0.3);
     background:
-      linear-gradient(180deg, rgba(53,230,160,0.16), rgba(53,230,160,0.055)),
+      linear-gradient(180deg, rgba(var(--ok-rgb), 0.16), rgba(var(--ok-rgb), 0.055)),
       var(--fill-soft);
     color: var(--ok-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(53,230,160,0.11);
+      0 7px 18px rgba(var(--ok-rgb), 0.11);
   }
 
   body[data-active-view="signals"] .bottom-nav button.is-active i {
     background:
       radial-gradient(circle at 50% 25%, rgba(142,255,205,0.3), transparent 48%),
-      rgba(53,230,160,0.17);
+      rgba(var(--ok-rgb), 0.17);
     box-shadow:
-      inset 0 0 0 1px rgba(53,230,160,0.23),
-      0 7px 18px rgba(53,230,160,0.12);
+      inset 0 0 0 1px rgba(var(--ok-rgb), 0.23),
+      0 7px 18px rgba(var(--ok-rgb), 0.12);
   }
 
   body[data-active-view="signals"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(53,230,160,0.43));
+    filter: drop-shadow(0 0 7px rgba(var(--ok-rgb), 0.43));
   }
 
   .bottom-nav button:active {
@@ -1040,10 +1040,10 @@
   .eff-view-btn {
     appearance: none; border: none; background: transparent; color: var(--muted);
     font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px;
-    border-radius: 999px; cursor: pointer; min-height: 32px;
-    transition: background 0.15s ease, color 0.15s ease;
+    border-radius: 999px; cursor: pointer; min-height: var(--touch-min-dense);
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
   }
-  .eff-view-btn.is-active { background: var(--volt); color: #1a1205; }
+  .eff-view-btn.is-active { background: var(--volt); color: var(--on-volt); }
   .eff-view-btn:not(.is-active):hover { color: var(--text); }
   /* "Hide outliers" toggle under the chart. */
   .eff-outlier-row { display: flex; justify-content: flex-end; margin-top: 8px; }
@@ -1051,8 +1051,8 @@
     appearance: none; font: inherit; font-size: 12px; font-weight: 600;
     color: var(--muted); background: transparent; cursor: pointer;
     border: 1px solid var(--line-strong); border-radius: 999px;
-    padding: 6px 12px; min-height: 32px;
-    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+    padding: 6px 12px; min-height: var(--touch-min-dense);
+    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
   }
   .eff-outlier-toggle::before {
     content: "○ "; font-weight: 700;
@@ -1081,6 +1081,7 @@
     width: min(680px, calc(100vw - 24px));
     max-height: 78vh;
     overflow-y: auto;
+    overscroll-behavior: contain;
     z-index: 40;
     padding: 16px;
     box-shadow: 0 16px 48px var(--shadow);
@@ -1458,26 +1459,26 @@
     color: var(--text);
     cursor: pointer;
     scroll-snap-align: start;
-    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
+    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
   }
 
   .map-drive-chip:hover,
   .map-drive-chip:focus-visible {
-    border-color: rgba(76, 196, 255, 0.55);
+    border-color: rgba(var(--map-accent-rgb), 0.55);
   }
 
   .map-drive-chip.is-active {
     border-color: var(--map-accent);
     background:
-      linear-gradient(180deg, rgba(76,196,255,0.2), rgba(76,196,255,0.08)),
+      linear-gradient(180deg, rgba(var(--map-accent-rgb), 0.2), rgba(var(--map-accent-rgb), 0.08)),
       var(--surface-chip-strong);
-    box-shadow: 0 6px 14px rgba(76, 196, 255, 0.18);
+    box-shadow: 0 6px 14px rgba(var(--map-accent-rgb), 0.18);
   }
 
   .map-drive-chip.is-live {
-    border-color: rgba(76, 196, 255, 0.42);
+    border-color: rgba(var(--map-accent-rgb), 0.42);
     background:
-      linear-gradient(180deg, rgba(76,196,255,0.16), rgba(76,196,255,0.055)),
+      linear-gradient(180deg, rgba(var(--map-accent-rgb), 0.16), rgba(var(--map-accent-rgb), 0.055)),
       var(--surface-chip-strong);
   }
 
@@ -1685,7 +1686,7 @@
     background: var(--surface-chip);
     color: var(--text);
     scroll-snap-align: start;
-    transition: border-color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
+    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
   }
 
   .drive-now-chip .dl {
@@ -1732,17 +1733,17 @@
 
   .drive-now-chip[data-tone="ok"] .dl u {
     background: var(--ok);
-    box-shadow: 0 0 8px rgba(53, 230, 160, 0.55);
+    box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.55);
   }
 
   .drive-now-chip[data-tone="demo"] {
-    border-color: rgba(184, 230, 59, 0.45);
-    background: rgba(184, 230, 59, 0.1);
+    border-color: rgba(var(--ev-rgb), 0.45);
+    background: rgba(var(--ev-rgb), 0.1);
   }
 
   .drive-now-chip[data-tone="demo"] .dl u {
     background: var(--ev);
-    box-shadow: 0 0 8px rgba(184, 230, 59, 0.55);
+    box-shadow: 0 0 8px rgba(var(--ev-rgb), 0.55);
   }
 
   /* "Last drive" chip is a button that jumps to Map; keep it visually quieter
@@ -1845,7 +1846,7 @@
     text-transform: uppercase;
     color: var(--muted);
     background: var(--fill-soft);
-    transition: color var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+    transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
   }
 
   .live-micro .micro-tag[data-kind="power"][data-tone="drive"] {
@@ -1855,8 +1856,8 @@
   }
   .live-micro .micro-tag[data-kind="power"][data-tone="regen"] {
     color: var(--ev);
-    background: rgba(184, 230, 59, 0.12);
-    border-color: rgba(184, 230, 59, 0.4);
+    background: rgba(var(--ev-rgb), 0.12);
+    border-color: rgba(var(--ev-rgb), 0.4);
   }
   .live-micro .micro-tag[data-kind="power"][data-tone="coast"] {
     color: var(--soft);
@@ -1865,17 +1866,17 @@
 
   .live-micro .micro-tag[data-kind="soc"][data-tone="ok"] {
     color: var(--ok);
-    background: rgba(53, 230, 160, 0.12);
-    border-color: rgba(53, 230, 160, 0.4);
+    background: rgba(var(--ok-rgb), 0.12);
+    border-color: rgba(var(--ok-rgb), 0.4);
   }
   .live-micro .micro-tag[data-kind="soc"][data-tone="warn"] {
     color: var(--warn);
-    background: rgba(255, 184, 74, 0.12);
-    border-color: rgba(255, 184, 74, 0.4);
+    background: rgba(var(--warn-rgb), 0.12);
+    border-color: rgba(var(--warn-rgb), 0.4);
   }
   .live-micro .micro-tag[data-kind="soc"][data-tone="idle"] {
     color: var(--mixed);
-    background: rgba(164, 140, 255, 0.1);
+    background: rgba(var(--mixed-rgb), 0.1);
   }
 
   /* Power kW value colored by drive/regen/coast — matches the existing power
@@ -1895,19 +1896,8 @@
     color: var(--soft);
   }
 
-  /* Tighten the speed value's radial glow from a wide blob into a tight
-     halo, so it reads as a highlight rather than competing with the digit. */
-  .speed-row::after {
-    left: -8px;
-    width: 138px;
-    top: 4px;
-    bottom: 4px;
-    background: radial-gradient(
-      54px 38px at 60px 50%,
-      rgba(var(--volt-rgb), 0.32),
-      transparent 75%
-    );
-  }
+  /* The speed value's tight radial halo lives with the rest of .speed-row in
+     components.css (this file used to override the geometry; consolidated). */
 
   /* Speed-trace cap label sits in the SVG; this readout chip surfaces the
      max + current cap below the chart in a more legible chip. Falls back
@@ -1978,14 +1968,14 @@
 
   .live-power-bar.is-regen {
     background: var(--ev);
-    box-shadow: 0 0 10px rgba(184, 230, 59, 0.2);
+    box-shadow: 0 0 10px rgba(var(--ev-rgb), 0.2);
   }
 
   .live-soc-segment {
     height: 2px;
     border-radius: 999px;
     background: var(--mixed);
-    box-shadow: 0 0 10px rgba(164, 140, 255, 0.24);
+    box-shadow: 0 0 10px rgba(var(--mixed-rgb), 0.24);
     transform-origin: 0 50%;
   }
 
@@ -2010,10 +2000,6 @@
     border-left: 0;
     border-radius: 10px;
     background: var(--fill-soft);
-  }
-
-  .live-readout div + div {
-    border-left: 0;
   }
 
   [data-live-cell].is-empty {
@@ -2143,8 +2129,8 @@
   }
 
   .db-action-grid .db-safe-action {
-    border-color: rgba(53,230,160,0.3);
-    background: rgba(53,230,160,0.07);
+    border-color: rgba(var(--ok-rgb), 0.3);
+    background: rgba(var(--ok-rgb), 0.07);
     color: var(--ok-soft);
   }
 

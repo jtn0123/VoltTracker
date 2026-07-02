@@ -126,22 +126,43 @@ describe('dashboard layout css', () => {
     expect(dashboardHtml).not.toContain('id="disconnectBtn"');
   });
 
-  it('keeps volt-orange alpha tints on the --volt-rgb token, not raw literals', () => {
-    // The rgba(255,122,69,…) tints were tokenized to rgba(var(--volt-rgb), …)
-    // (2026-06-12). The single allowed literal is the token definition itself
-    // in base.css; any new raw literal is drift back to the hardcoded color.
+  it('keeps status-tone alpha tints on the --*-rgb tokens, not raw literals', () => {
+    // The rgba(255,122,69,…) volt tints were tokenized to rgba(var(--volt-rgb), …)
+    // (2026-06-12); the remaining tone triplets (ok/warn/bad/ev/mixed + the
+    // map accent) followed in the UI polish pass. The single allowed literal
+    // per tone is the token definition itself in base.css; any new raw
+    // literal is drift back to a hardcoded color.
     const cssFiles = ['base.css', 'components.css', 'screens.css', 'screens-map.css', 'status-tools.css', 'troubleshooter.css'];
-    const literal = /rgba\(\s*255\s*,\s*122\s*,\s*69\s*,/;
-
-    for (const name of cssFiles) {
-      const css = readFileSync(resolve(DASHBOARD_ASSETS, `css/${name}`), 'utf8');
-      const withoutTokenDef = css.replace(/--volt-rgb\s*:\s*255,\s*122,\s*69\s*;/, '');
-      expect(withoutTokenDef, `${name} reintroduced a raw volt-orange rgba literal`).not.toMatch(literal);
-    }
+    const tones = [
+      { token: '--volt-rgb', triplet: [255, 122, 69], hexToken: '--volt', hex: '#ff7a45' },
+      { token: '--ev-rgb', triplet: [184, 230, 59], hexToken: '--ev', hex: '#b8e63b' },
+      { token: '--ok-rgb', triplet: [53, 230, 160], hexToken: '--ok', hex: '#35e6a0' },
+      { token: '--warn-rgb', triplet: [255, 184, 74], hexToken: '--warn', hex: '#ffb84a' },
+      { token: '--bad-rgb', triplet: [255, 107, 95], hexToken: '--bad', hex: '#ff6b5f' },
+      { token: '--mixed-rgb', triplet: [164, 140, 255], hexToken: '--mixed', hex: '#a48cff' },
+      { token: '--map-accent-rgb', triplet: [76, 196, 255], hexToken: '--map-accent', hex: '#4cc4ff' },
+    ];
 
     const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
-    expect(baseCss).toMatch(/--volt-rgb\s*:\s*255,\s*122,\s*69\s*;/);
-    // The triplet must stay in sync with the default --volt hex (#ff7a45).
-    expect(baseCss).toMatch(/--volt\s*:\s*#ff7a45\s*;/);
+    for (const { token, triplet, hexToken, hex } of tones) {
+      const [r, g, b] = triplet;
+      const literal = new RegExp(`rgba\\(\\s*${r}\\s*,\\s*${g}\\s*,\\s*${b}\\s*,`);
+      const defPattern = new RegExp(`${token}\\s*:\\s*${r},\\s*${g},\\s*${b}\\s*;`);
+
+      for (const name of cssFiles) {
+        const css = readFileSync(resolve(DASHBOARD_ASSETS, `css/${name}`), 'utf8');
+        // Token definitions and rgba(var(--x-rgb, r, g, b), …) fallbacks are the
+        // allowed spellings of the triplet; anything else is a raw tint literal.
+        const withoutAllowed = css
+          .replace(new RegExp(`${token}\\s*:\\s*${r},\\s*${g},\\s*${b}\\s*;`, 'g'), '')
+          .replace(new RegExp(`var\\(${token},\\s*${r},\\s*${g},\\s*${b}\\)`, 'g'), '');
+        expect(withoutAllowed, `${name} reintroduced a raw ${token} rgba literal`).not.toMatch(literal);
+      }
+
+      // The default-scheme triplet must exist and stay in sync with its hex tone.
+      expect(baseCss, `base.css must define ${token}`).toMatch(defPattern);
+      expect(baseCss, `${hexToken} default hex changed without updating ${token}`)
+        .toMatch(new RegExp(`${hexToken}\\s*:\\s*${hex}\\s*;`));
+    }
   });
 });

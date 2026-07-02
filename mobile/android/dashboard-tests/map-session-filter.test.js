@@ -3,7 +3,7 @@
 //   2. The rendered controls above #mapSessionList, wired through map.ts +
 //      actions.ts, re-filtering the list on input/sort/favorites change.
 // Rows come from already-loaded routes; rendering stays XSS-safe.
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 import { filterAndSortRoutes } from '../app/src/main/dashboard-src/js/map-session-list.ts';
@@ -115,21 +115,37 @@ describe('M4 trip-list controls (rendered)', () => {
     expect(rowIds().sort()).toEqual(['a', 'b', 'c']);
   });
 
-  it('filters the list live as the search input changes', () => {
-    seed();
-    const search = document.getElementById('mapSessionSearch');
-    search.value = 'beach';
-    search.dispatchEvent(new window.Event('input', { bubbles: true }));
-    expect(rowIds()).toEqual(['c']);
-  });
+  // Search input re-renders through a 140ms debounce (actions.ts
+  // onMapSessionSearchInput) so per-keystroke typing doesn't rebuild the list
+  // synchronously — the fake timers flush that debounce.
+  describe('search (debounced)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
 
-  it('shows a "no match" message when the search filters everything out', () => {
-    seed();
-    const search = document.getElementById('mapSessionSearch');
-    search.value = 'zzzzz';
-    search.dispatchEvent(new window.Event('input', { bubbles: true }));
-    expect(rowIds()).toEqual([]);
-    expect(document.querySelector('#mapSessionList .status-copy').textContent).toContain('No drives match');
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function typeSearch(value) {
+      const search = document.getElementById('mapSessionSearch');
+      search.value = value;
+      search.dispatchEvent(new window.Event('input', { bubbles: true }));
+      vi.advanceTimersByTime(200);
+    }
+
+    it('filters the list live as the search input changes', () => {
+      seed();
+      typeSearch('beach');
+      expect(rowIds()).toEqual(['c']);
+    });
+
+    it('shows a "no match" message when the search filters everything out', () => {
+      seed();
+      typeSearch('zzzzz');
+      expect(rowIds()).toEqual([]);
+      expect(document.querySelector('#mapSessionList .status-copy').textContent).toContain('No drives match');
+    });
   });
 
   it('reorders by longest distance when the distance sort is chosen', () => {

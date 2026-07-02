@@ -15,12 +15,15 @@
     drive.ts#renderDriveSourceBadge from the same demo/connection/storage truth
     the rest of the Drive UI reads, so the badge can never contradict the gauges.
   -->
+  <!-- aria-atomic: the badge updates label + subtext together; announce them
+       as one status, not two fragments (same as #chargeSourceBadge). -->
   <div
     id="driveSourceBadge"
     class="drive-source-badge"
     data-source="empty"
     role="status"
     aria-live="polite"
+    aria-atomic="true"
   >
     <span class="drive-source-dot" aria-hidden="true"></span>
     <span class="drive-source-text">
@@ -278,7 +281,10 @@
     <div class="status-head">
       <div>
         <div class="kicker">OBD session</div>
-        <h3 id="diagState">Waiting for adapter</h3>
+        <!-- h2 (not h3): the first heading under the topbar h1, so the Drive
+             view's outline doesn't skip a level. Sized like an h3 via
+             .status-head h2 in components.css. -->
+        <h2 id="diagState">Waiting for adapter</h2>
       </div>
       <span class="badge"
         ><span class="dot"></span><span id="diagSamples">0 samples</span></span

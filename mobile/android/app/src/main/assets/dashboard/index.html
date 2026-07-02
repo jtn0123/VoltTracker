@@ -466,12 +466,15 @@
     drive.ts#renderDriveSourceBadge from the same demo/connection/storage truth
     the rest of the Drive UI reads, so the badge can never contradict the gauges.
   -->
+  <!-- aria-atomic: the badge updates label + subtext together; announce them
+       as one status, not two fragments (same as #chargeSourceBadge). -->
   <div
     id="driveSourceBadge"
     class="drive-source-badge"
     data-source="empty"
     role="status"
     aria-live="polite"
+    aria-atomic="true"
   >
     <span class="drive-source-dot" aria-hidden="true"></span>
     <span class="drive-source-text">
@@ -729,7 +732,10 @@
     <div class="status-head">
       <div>
         <div class="kicker">OBD session</div>
-        <h3 id="diagState">Waiting for adapter</h3>
+        <!-- h2 (not h3): the first heading under the topbar h1, so the Drive
+             view's outline doesn't skip a level. Sized like an h3 via
+             .status-head h2 in components.css. -->
+        <h2 id="diagState">Waiting for adapter</h2>
       </div>
       <span class="badge"
         ><span class="dot"></span><span id="diagSamples">0 samples</span></span
@@ -847,9 +853,12 @@
   </article>
 </section>
 <section id="view-map" class="view" data-view="map">
+  <!-- role="group": an aria-label on a bare div is dropped by most screen
+       readers; the role makes the "Pick a logged drive" name land. -->
   <div
     id="mapDriveChips"
     class="map-drive-chips"
+    role="group"
     aria-label="Pick a logged drive"
   ></div>
 
@@ -990,7 +999,9 @@
         <span class="kicker">Duration</span><strong id="mapDuration">--</strong>
       </div>
       <div>
-        <span class="kicker" id="mapAvgSpeedLabel">Avg mph</span
+        <!-- Unit-neutral shipped label (renderMap overwrites with "Avg mph"/
+             "Avg km/h"): a metric user shouldn't flash "Avg mph" on first paint. -->
+        <span class="kicker" id="mapAvgSpeedLabel">Avg speed</span
         ><strong id="mapAvgMph">--</strong>
       </div>
     </div>
@@ -1226,6 +1237,24 @@
   </section>
 </section>
 <section id="view-charge" class="view" data-view="charge">
+  <!-- Data-provenance badge mirroring Drive's (#driveSourceBadge): the Charge
+       KPIs and session list render demo values during a preview, so this tab
+       needs the same at-a-glance DEMO/LIVE/OFFLINE truth. Kept in sync by
+       drive.ts#renderDriveSourceBadge from the same deriveSource() state. -->
+  <div
+    id="chargeSourceBadge"
+    class="drive-source-badge"
+    data-source="empty"
+    role="status"
+    aria-live="polite"
+    aria-atomic="true"
+  >
+    <span class="drive-source-dot" aria-hidden="true"></span>
+    <span class="drive-source-text">
+      <strong id="chargeSourceLabel">No data yet</strong>
+      <small id="chargeSourceSub">Connect an adapter to start logging</small>
+    </span>
+  </div>
   <article id="chargeEmptyState" class="panel empty-state">
     <span class="kicker">Charging</span>
     <h2>No charging sessions yet.</h2>
@@ -1554,11 +1583,10 @@
         </button>
       </div>
     </header>
-    <div
-      id="chargeSessionsList"
-      class="charge-session-list"
-      aria-live="polite"
-    ></div>
+    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
+         live region would re-announce all 12 rows each time. The count in
+         #chargeSessionsTitle is the quiet signal that the history changed. -->
+    <div id="chargeSessionsList" class="charge-session-list"></div>
   </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
@@ -1901,6 +1929,8 @@
           class="eff-view-btn"
           data-eff-view="bars"
           role="tab"
+          aria-selected="false"
+          aria-controls="effScatter"
         >
           Bars
         </button>
@@ -1909,6 +1939,8 @@
           class="eff-view-btn"
           data-eff-view="scatter"
           role="tab"
+          aria-selected="true"
+          aria-controls="effScatter"
         >
           Scatter
         </button>
@@ -1917,11 +1949,18 @@
           class="eff-view-btn"
           data-eff-view="curve"
           role="tab"
+          aria-selected="false"
+          aria-controls="effScatter"
         >
           Curve
         </button>
       </div>
-      <div class="eff-scatter" id="effScatter"></div>
+      <div
+        class="eff-scatter"
+        id="effScatter"
+        role="tabpanel"
+        aria-label="Efficiency chart"
+      ></div>
       <!-- Optional 1.5×IQR-per-speed-bucket outlier filter; off by default,
            persisted via prefs key effHideOutliers (insights-panel.ts). -->
       <div class="eff-outlier-row">
@@ -2628,6 +2667,10 @@
         Off
       </button>
     </div>
+    <!-- Polite confirmation for the accessibility controls (prefs.ts): the
+         pressed-state flip alone isn't reliably announced by TalkBack, and
+         these are the settings a low-vision user is most likely to change. -->
+    <p id="prefA11yAnnounce" class="visually-hidden" role="status"></p>
   </article>
 
   <article class="panel pref-card">
@@ -2725,15 +2768,24 @@
       role="group"
       aria-label="Demo scenario"
     >
-      <button type="button" data-scenario="typical" class="is-active">
+      <button
+        type="button"
+        data-scenario="typical"
+        class="is-active"
+        aria-pressed="true"
+      >
         <span>Typical</span>
       </button>
-      <button type="button" data-scenario="empty"><span>Empty</span></button>
-      <button type="button" data-scenario="power-user">
+      <button type="button" data-scenario="empty" aria-pressed="false">
+        <span>Empty</span>
+      </button>
+      <button type="button" data-scenario="power-user" aria-pressed="false">
         <span>Power user</span>
       </button>
-      <button type="button" data-scenario="fault"><span>Fault</span></button>
-      <button type="button" data-scenario="extreme">
+      <button type="button" data-scenario="fault" aria-pressed="false">
+        <span>Fault</span>
+      </button>
+      <button type="button" data-scenario="extreme" aria-pressed="false">
         <span>Extremes</span>
       </button>
     </div>
@@ -2778,10 +2830,19 @@
       role="group"
       aria-label="Filter live signals"
     >
-      <button type="button" data-live-signal-filter="all" class="is-active">
+      <button
+        type="button"
+        data-live-signal-filter="all"
+        class="is-active"
+        aria-pressed="true"
+      >
         <span>All</span>
       </button>
-      <button type="button" data-live-signal-filter="missing">
+      <button
+        type="button"
+        data-live-signal-filter="missing"
+        aria-pressed="false"
+      >
         <span>Not reporting</span>
       </button>
     </div>
@@ -2815,16 +2876,25 @@
         role="group"
         aria-label="Detail probe mode"
       >
-        <button type="button" data-signal-stage="passive">
+        <button type="button" data-signal-stage="passive" aria-pressed="false">
           <span>Passive</span>
         </button>
-        <button type="button" data-signal-stage="low-risk">
+        <button type="button" data-signal-stage="low-risk" aria-pressed="false">
           <span>Low-risk</span>
         </button>
-        <button type="button" data-signal-stage="tires" class="is-active">
+        <button
+          type="button"
+          data-signal-stage="tires"
+          class="is-active"
+          aria-pressed="true"
+        >
           <span>Tires</span>
         </button>
-        <button type="button" data-signal-stage="experimental">
+        <button
+          type="button"
+          data-signal-stage="experimental"
+          aria-pressed="false"
+        >
           <span>Experimental</span>
         </button>
       </div>
@@ -2849,13 +2919,19 @@
       role="group"
       aria-label="Filter detailed signals by status"
     >
-      <button type="button" data-signal-filter="all" class="is-active">
+      <button
+        type="button"
+        data-signal-filter="all"
+        class="is-active"
+        aria-pressed="true"
+      >
         <b id="enhancedAllCount">0</b><span>All</span>
       </button>
       <button
         type="button"
         data-signal-filter="confirmed"
         data-status="confirmed"
+        aria-pressed="false"
       >
         <b id="enhancedConfirmedCount">0</b><span>Working</span>
       </button>
@@ -2863,6 +2939,7 @@
         type="button"
         data-signal-filter="candidate"
         data-status="candidate"
+        aria-pressed="false"
       >
         <b id="enhancedCandidateCount">0</b><span>Candidate</span>
       </button>
@@ -2870,6 +2947,7 @@
         type="button"
         data-signal-filter="rejected"
         data-status="rejected"
+        aria-pressed="false"
       >
         <b id="enhancedRejectedCount">0</b><span>No hit</span>
       </button>
@@ -2877,10 +2955,16 @@
         type="button"
         data-signal-filter="deferred"
         data-status="deferred"
+        aria-pressed="false"
       >
         <b id="enhancedDeferredCount">0</b><span>Deferred</span>
       </button>
-      <button type="button" data-signal-filter="tpms" data-status="tpms">
+      <button
+        type="button"
+        data-signal-filter="tpms"
+        data-status="tpms"
+        aria-pressed="false"
+      >
         <b id="enhancedTiresTabCount">0</b><span>Tires</span>
       </button>
     </div>

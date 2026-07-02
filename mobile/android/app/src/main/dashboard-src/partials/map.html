@@ -1,7 +1,10 @@
 <section id="view-map" class="view" data-view="map">
+  <!-- role="group": an aria-label on a bare div is dropped by most screen
+       readers; the role makes the "Pick a logged drive" name land. -->
   <div
     id="mapDriveChips"
     class="map-drive-chips"
+    role="group"
     aria-label="Pick a logged drive"
   ></div>
 
@@ -142,7 +145,9 @@
         <span class="kicker">Duration</span><strong id="mapDuration">--</strong>
       </div>
       <div>
-        <span class="kicker" id="mapAvgSpeedLabel">Avg mph</span
+        <!-- Unit-neutral shipped label (renderMap overwrites with "Avg mph"/
+             "Avg km/h"): a metric user shouldn't flash "Avg mph" on first paint. -->
+        <span class="kicker" id="mapAvgSpeedLabel">Avg speed</span
         ><strong id="mapAvgMph">--</strong>
       </div>
     </div>

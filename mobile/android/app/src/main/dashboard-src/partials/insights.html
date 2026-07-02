@@ -338,6 +338,8 @@
           class="eff-view-btn"
           data-eff-view="bars"
           role="tab"
+          aria-selected="false"
+          aria-controls="effScatter"
         >
           Bars
         </button>
@@ -346,6 +348,8 @@
           class="eff-view-btn"
           data-eff-view="scatter"
           role="tab"
+          aria-selected="true"
+          aria-controls="effScatter"
         >
           Scatter
         </button>
@@ -354,11 +358,18 @@
           class="eff-view-btn"
           data-eff-view="curve"
           role="tab"
+          aria-selected="false"
+          aria-controls="effScatter"
         >
           Curve
         </button>
       </div>
-      <div class="eff-scatter" id="effScatter"></div>
+      <div
+        class="eff-scatter"
+        id="effScatter"
+        role="tabpanel"
+        aria-label="Efficiency chart"
+      ></div>
       <!-- Optional 1.5×IQR-per-speed-bucket outlier filter; off by default,
            persisted via prefs key effHideOutliers (insights-panel.ts). -->
       <div class="eff-outlier-row">

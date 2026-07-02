@@ -90,7 +90,16 @@ import type { DataStateValue } from "./dataset-state";
       list.replaceChildren(VD.buildStatusCopy("No detailed signals match this filter yet."));
       return;
     }
-    list.replaceChildren(...visible.slice(0, 18).map(buildEnhancedCapabilityRow));
+    const nodes: Node[] = visible.slice(0, 18).map(buildEnhancedCapabilityRow);
+    // The list caps at 18 rows while the title/chips advertise the full count —
+    // say so instead of silently truncating, and point at the filter chips as
+    // the way to reach the rest.
+    if (visible.length > 18) {
+      nodes.push(VD.buildStatusCopy(
+        `Showing 18 of ${visible.length}. Use the status chips above to narrow the list.`
+      ));
+    }
+    list.replaceChildren(...nodes);
   }
 
   function setEnhancedBadge(label: string, tone?: DataStateValue) {
@@ -148,7 +157,9 @@ import type { DataStateValue } from "./dataset-state";
     const bar = el("enhancedFilterBar");
     if (!bar) return;
     bar.querySelectorAll<HTMLElement>("[data-signal-filter]").forEach((button) => {
-      button.classList.toggle("is-active", button.dataset.signalFilter === enhancedSignalFilter);
+      const on = button.dataset.signalFilter === enhancedSignalFilter;
+      button.classList.toggle("is-active", on);
+      button.setAttribute("aria-pressed", String(on));
     });
   }
 
@@ -201,7 +212,9 @@ import type { DataStateValue } from "./dataset-state";
     const bar = el("signalStageBar");
     if (bar) {
       bar.querySelectorAll<HTMLElement>("[data-signal-stage]").forEach((button) => {
-        button.classList.toggle("is-active", button.dataset.signalStage === stage);
+        const on = button.dataset.signalStage === stage;
+        button.classList.toggle("is-active", on);
+        button.setAttribute("aria-pressed", String(on));
       });
     }
     const count = rows.filter((row) => String(row.scanStage || sampleOf(row).scanStage || "") === stage).length;

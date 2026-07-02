@@ -271,15 +271,22 @@ type ChartPoint = {
   // removed mid-session — a stale gap shouldn't replay the reveal.
   let firstSampleRevealed = false;
 
+  // Renders the Drive badge and mirrors the same truth onto the Charge tab's
+  // #chargeSourceBadge — the Charge KPIs/session list show demo values during
+  // a preview too, so both live tabs carry the same provenance marker.
   function renderDriveSourceBadge() {
-    const badge = el("driveSourceBadge");
-    if (!badge) return;
     const src = deriveSource();
-    badge.dataset.source = src.kind;
-    const label = el("driveSourceLabel");
-    if (label) label.textContent = src.label;
-    const sub = el("driveSourceSub");
-    if (sub) sub.textContent = src.sub;
+    const apply = (badgeId: string, labelId: string, subId: string) => {
+      const badge = el(badgeId);
+      if (!badge) return;
+      badge.dataset.source = src.kind;
+      const label = el(labelId);
+      if (label) label.textContent = src.label;
+      const sub = el(subId);
+      if (sub) sub.textContent = src.sub;
+    };
+    apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
+    apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
 
     const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
     if (hero && !firstSampleRevealed && driveHasLiveSamples()) {
@@ -402,6 +409,11 @@ type ChartPoint = {
 
   // ----- power bars ---------------------------------------------------------
 
+  // Memoized: renderDriveLive runs on every app-state broadcast, and natives
+  // re-deliver the last sample verbatim — rebuilding ~60 bar spans when the
+  // history hasn't moved is pure DOM churn. Keyed on history length + last
+  // value + measured width so a genuinely new sample (or resize) still paints.
+  let lastPowerBarsSig = "";
   function drawLivePowerBars() {
     const host = el("powerBarsChart");
     if (!host) return;
@@ -411,6 +423,9 @@ type ChartPoint = {
     const padT = 14;
     const padB = 10;
     const samples = state.powerHistory || [];
+    const sig = samples.length + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    if (sig === lastPowerBarsSig) return;
+    lastPowerBarsSig = sig;
     if (!samples.length) {
       paintEmpty(host, "Waiting for power samples");
       return;
@@ -471,6 +486,8 @@ type ChartPoint = {
     return (v < 0 ? "−" : "+") + abs.toFixed(1);
   }
 
+  // Same broadcast-churn memo as drawLivePowerBars — the SOC trace is ~95 spans.
+  let lastSocTraceSig = "";
   function drawLiveSocTrace() {
     const host = el("socTraceChart");
     if (!host) return;
@@ -480,6 +497,9 @@ type ChartPoint = {
     const padT = 14;
     const padB = 12;
     const samples = state.socHistory || [];
+    const sig = samples.length + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    if (sig === lastSocTraceSig) return;
+    lastSocTraceSig = sig;
     // The live value chip lives in the panel header so the chart body can stay
     // dedicated to the trace or a single centered empty-state label.
     if (samples.length < 2) {

@@ -273,6 +273,15 @@
     }
   }
 
+  // Spoken confirmation for the accessibility controls: #prefA11yAnnounce is a
+  // visually-hidden role="status" node in preferences.html — writing to it gets
+  // TalkBack to announce the change, which the aria-pressed flip alone doesn't
+  // reliably do on the just-tapped element.
+  function announceA11yPref(message: string): void {
+    const node = document.getElementById("prefA11yAnnounce");
+    if (node) node.textContent = message;
+  }
+
   function syncAccessibilityControls(): void {
     const active = nearestFontScaleChoice(fontScale());
     document.querySelectorAll<HTMLElement>("[data-pref-font-scale]").forEach((btn) => {
@@ -625,6 +634,7 @@
         set("fontScale", clamped);
         applyAccessibilityAttrs();
         syncAccessibilityControls();
+        announceA11yPref(`Text size set to ${Math.round(clamped * 100)}%`);
         return;
       }
       // Accessibility high-contrast theme toggle (M9).
@@ -633,6 +643,7 @@
         set("highContrast", !highContrast());
         applyAccessibilityAttrs();
         syncAccessibilityControls();
+        announceA11yPref(highContrast() ? "High contrast on" : "High contrast off");
       }
     });
   }

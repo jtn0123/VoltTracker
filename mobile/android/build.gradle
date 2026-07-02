@@ -39,10 +39,21 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 def dashboardStartupBudgetBytes = 360_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
+def dashboardLazyCssBudgetBytes = 20_000L
 def dashboardDtcDataBudgetBytes = 380_000L
 def dashboardLazyPanelFiles = ["js/insights-panel.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
-def dashboardStartupAssets = files(new File(dashboardAssetDir, "js/app.js"), fileTree(dashboardAssetDir) { include "css/**/*.css" })
+// Lazy-injected stylesheets are NOT render-blocking links in index.template.html:
+// screens-map.css is injected by the lazy map chunk (map.ts#ensureMapStyles) and
+// troubleshooter.css by the lazy troubleshooter chunk, so neither costs the
+// Drive-first startup path. They get their own ceiling below instead of crowding
+// the startup number, mirroring the lazy JS split.
+def dashboardLazyCssFiles = ["css/screens-map.css", "css/troubleshooter.css"]
+def dashboardStartupAssets = files(new File(dashboardAssetDir, "js/app.js"), fileTree(dashboardAssetDir) {
+    include "css/**/*.css"
+    dashboardLazyCssFiles.each { exclude it }
+})
+def dashboardLazyCssAssets = files(dashboardLazyCssFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardLazySupportAssets = files(fileTree(dashboardAssetDir) {
     include "js/**/*.js"
     exclude "js/app.js"
@@ -354,11 +365,12 @@ tasks.register("verifyDashboardBundleSize") {
     description = "Fails when dashboard startup, lazy support, or DTC data exceeds its size budget."
     // Measures the BUILT bundle (app.js + lazy chunks), so it must build first.
     dependsOn("buildDashboardJs")
-    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardLazyPanelAssets, dashboardDtcDataAssets)
+    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardLazyPanelAssets, dashboardLazyCssAssets, dashboardDtcDataAssets)
     doLast {
         def startupBytes = sumBytes(dashboardStartupAssets)
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
         def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
+        def lazyCssBytes = sumBytes(dashboardLazyCssAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         if (startupBytes > dashboardStartupBudgetBytes) {
             throw new GradleException(
@@ -372,6 +384,10 @@ tasks.register("verifyDashboardBundleSize") {
             throw new GradleException(
                     "Dashboard lazy panel JS is ${lazyPanelBytes} bytes, over budget ${dashboardLazyPanelBudgetBytes} bytes")
         }
+        if (lazyCssBytes > dashboardLazyCssBudgetBytes) {
+            throw new GradleException(
+                    "Dashboard lazy CSS is ${lazyCssBytes} bytes, over budget ${dashboardLazyCssBudgetBytes} bytes")
+        }
         if (dtcBytes > dashboardDtcDataBudgetBytes) {
             throw new GradleException(
                     "DTC data bundle is ${dtcBytes} bytes, over budget ${dashboardDtcDataBudgetBytes} bytes")
@@ -380,6 +396,7 @@ tasks.register("verifyDashboardBundleSize") {
                 "Dashboard startup JS/CSS: ${startupBytes} bytes (budget ${dashboardStartupBudgetBytes}); " +
                         "lazy support JS: ${lazySupportBytes} bytes (budget ${dashboardLazySupportBudgetBytes}); " +
                         "lazy panel JS: ${lazyPanelBytes} bytes (budget ${dashboardLazyPanelBudgetBytes}); " +
+                        "lazy CSS: ${lazyCssBytes} bytes (budget ${dashboardLazyCssBudgetBytes}); " +
                         "DTC data: ${dtcBytes} bytes (budget ${dashboardDtcDataBudgetBytes})")
     }
 }
@@ -392,6 +409,7 @@ tasks.register("dashboardAssetReport") {
         def startupBytes = sumBytes(dashboardStartupAssets)
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
         def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
+        def lazyCssBytes = sumBytes(dashboardLazyCssAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         logger.lifecycle("")
         logger.lifecycle("Dashboard asset report")
@@ -404,6 +422,7 @@ tasks.register("dashboardAssetReport") {
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "startup budget set", startupBytes, dashboardStartupBudgetBytes - startupBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy support budget", lazySupportBytes, dashboardLazySupportBudgetBytes - lazySupportBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy panel budget", lazyPanelBytes, dashboardLazyPanelBudgetBytes - lazyPanelBytes))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy CSS budget", lazyCssBytes, dashboardLazyCssBudgetBytes - lazyCssBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "DTC data budget set", dtcBytes, dashboardDtcDataBudgetBytes - dtcBytes))
         logger.lifecycle("")
     }

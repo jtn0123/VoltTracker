@@ -33,6 +33,15 @@
     --bad: #ff6b5f;
     --mixed: #a48cff;
     --gas: #ff7141;
+    /* RGB triplets of the DEFAULT status tones above, for rgba(var(--x-rgb), a)
+       alpha tints. Like --volt-rgb they are deliberately static across schemes:
+       the alpha-tint rules always rendered these default-tone literals in both
+       schemes, so a single value preserves that rendering exactly. */
+    --ev-rgb: 184, 230, 59;
+    --ok-rgb: 53, 230, 160;
+    --warn-rgb: 255, 184, 74;
+    --bad-rgb: 255, 107, 95;
+    --mixed-rgb: 164, 140, 255;
     --on-volt: #190a04;
     /* White ink/ring on saturated control surfaces (chart dots, balance
        markers, route endpoints, primary-dialog text). Stays white in both
@@ -239,6 +248,12 @@
     font: inherit;
   }
 
+  /* Kill the Android WebView's default grey tap flash on every interactive
+     element — press feedback comes from each control's own :active styling. */
+  button, select, input, summary, a, [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+
   button {
     min-height: var(--touch-min);
     border: 1px solid var(--line);
@@ -253,7 +268,7 @@
     min-width: 0;
     height: 44px;
     border: 1px solid var(--line);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     padding: 0 12px;
     background: var(--panel-2);
     color: var(--text);
@@ -330,8 +345,8 @@
     border: 1px solid rgba(var(--volt-rgb), 0.34);
     border-radius: 10px;
     background:
-      radial-gradient(circle at 35% 20%, rgba(255, 184, 74, 0.4), transparent 38%),
-      linear-gradient(145deg, rgba(var(--volt-rgb), 0.25), rgba(184, 230, 59, 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--warn-rgb), 0.4), transparent 38%),
+      linear-gradient(145deg, rgba(var(--volt-rgb), 0.25), rgba(var(--ev-rgb), 0.08));
     color: #ffd0b8;
     box-shadow: 0 10px 24px rgba(var(--volt-rgb), 0.16);
   }
@@ -348,43 +363,43 @@
   }
 
   body[data-active-view="map"] .drive-title-mark {
-    border-color: rgba(76, 196, 255, 0.32);
+    border-color: rgba(var(--map-accent-rgb), 0.32);
     color: #9bdcff;
     background:
-      radial-gradient(circle at 35% 20%, rgba(76, 196, 255, 0.28), transparent 38%),
-      linear-gradient(145deg, rgba(76, 196, 255, 0.18), rgba(184, 230, 59, 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--map-accent-rgb), 0.28), transparent 38%),
+      linear-gradient(145deg, rgba(var(--map-accent-rgb), 0.18), rgba(var(--ev-rgb), 0.08));
   }
 
   body[data-active-view="charge"] .drive-title-mark {
-    border-color: rgba(184, 230, 59, 0.3);
+    border-color: rgba(var(--ev-rgb), 0.3);
     color: #d8ff75;
     background:
-      radial-gradient(circle at 35% 20%, rgba(184, 230, 59, 0.28), transparent 38%),
-      linear-gradient(145deg, rgba(184, 230, 59, 0.16), rgba(var(--volt-rgb), 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--ev-rgb), 0.28), transparent 38%),
+      linear-gradient(145deg, rgba(var(--ev-rgb), 0.16), rgba(var(--volt-rgb), 0.08));
   }
 
   body[data-active-view="insights"] .drive-title-mark {
-    border-color: rgba(164, 140, 255, 0.34);
+    border-color: rgba(var(--mixed-rgb), 0.34);
     color: #c7b9ff;
     background:
-      radial-gradient(circle at 35% 20%, rgba(164, 140, 255, 0.3), transparent 38%),
-      linear-gradient(145deg, rgba(164, 140, 255, 0.2), rgba(76, 196, 255, 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--mixed-rgb), 0.3), transparent 38%),
+      linear-gradient(145deg, rgba(var(--mixed-rgb), 0.2), rgba(var(--map-accent-rgb), 0.08));
   }
 
   body[data-active-view="settings"] .drive-title-mark {
-    border-color: rgba(255, 184, 74, 0.34);
-    color: #ffd37f;
+    border-color: rgba(var(--warn-rgb), 0.34);
+    color: var(--warn-soft);
     background:
-      radial-gradient(circle at 35% 20%, rgba(255, 184, 74, 0.32), transparent 38%),
-      linear-gradient(145deg, rgba(255, 184, 74, 0.2), rgba(var(--volt-rgb), 0.08));
+      radial-gradient(circle at 35% 20%, rgba(var(--warn-rgb), 0.32), transparent 38%),
+      linear-gradient(145deg, rgba(var(--warn-rgb), 0.2), rgba(var(--volt-rgb), 0.08));
   }
 
   body[data-active-view="signals"] .drive-title-mark {
-    border-color: rgba(53, 230, 160, 0.32);
-    color: #a9ffd7;
+    border-color: rgba(var(--ok-rgb), 0.32);
+    color: var(--ok-soft);
     background:
-      radial-gradient(circle at 35% 20%, rgba(53, 230, 160, 0.26), transparent 38%),
-      linear-gradient(145deg, rgba(53, 230, 160, 0.15), rgba(var(--volt-rgb), 0.1));
+      radial-gradient(circle at 35% 20%, rgba(var(--ok-rgb), 0.26), transparent 38%),
+      linear-gradient(145deg, rgba(var(--ok-rgb), 0.15), rgba(var(--volt-rgb), 0.1));
   }
 
   #screenKicker {
@@ -501,8 +516,10 @@
 
   button.badge {
     appearance: none;
-    -webkit-tap-highlight-color: transparent;
     cursor: pointer;
+    /* A real tap target (opens the status popover): meet the dense touch
+       minimum rather than the 34px visual-pill height of static badges. */
+    min-height: var(--touch-min-dense);
   }
   button.badge:focus-visible {
     outline: 2px solid var(--line-strong);
@@ -565,8 +582,8 @@
   }
 
   .primary-action.is-stop {
-    border-color: rgba(255,107,95,0.3);
-    background: rgba(255,107,95,0.12);
+    border-color: rgba(var(--bad-rgb), 0.3);
+    background: rgba(var(--bad-rgb), 0.12);
     color: var(--bad-soft);
   }
 
@@ -621,7 +638,7 @@
     min-height: 44px;
     padding: 9px 10px;
     border: 1px solid var(--line);
-    border-radius: 13px;
+    border-radius: var(--radius-md);
     background: var(--inset);
   }
 
@@ -636,17 +653,17 @@
 
   .validation-row[data-tone="ok"]::before {
     background: var(--ok);
-    box-shadow: 0 0 12px rgba(53,230,160,0.55);
+    box-shadow: 0 0 12px rgba(var(--ok-rgb), 0.55);
   }
 
   .validation-row[data-tone="warn"]::before {
     background: var(--warn);
-    box-shadow: 0 0 12px rgba(255,184,74,0.55);
+    box-shadow: 0 0 12px rgba(var(--warn-rgb), 0.55);
   }
 
   .validation-row[data-tone="bad"]::before {
     background: var(--bad);
-    box-shadow: 0 0 12px rgba(255,107,95,0.55);
+    box-shadow: 0 0 12px rgba(var(--bad-rgb), 0.55);
   }
 
   .validation-row span {
@@ -711,9 +728,9 @@
   .sandbox-tools {
     margin-top: 10px;
     padding: 11px;
-    border: 1px solid rgba(164,140,255,0.2);
+    border: 1px solid rgba(var(--mixed-rgb), 0.2);
     border-radius: 14px;
-    background: rgba(164,140,255,0.06);
+    background: rgba(var(--mixed-rgb), 0.06);
   }
 
   .sandbox-tools summary {
@@ -961,9 +978,9 @@
   }
 
   .tile-toggle[data-on="true"] {
-    border-color: rgba(184, 230, 59, 0.4);
+    border-color: rgba(var(--ev-rgb), 0.4);
     color: var(--ok);
-    background: rgba(184, 230, 59, 0.08);
+    background: rgba(var(--ev-rgb), 0.08);
   }
 
   .primary {
@@ -979,12 +996,12 @@
   }
 
   .demo {
-    border-color: rgba(164,140,255,0.32);
+    border-color: rgba(var(--mixed-rgb), 0.32);
     color: var(--mixed-soft);
   }
 
   .danger {
-    border-color: rgba(255,107,95,0.3);
+    border-color: rgba(var(--bad-rgb), 0.3);
     color: var(--bad-soft);
   }
 
@@ -1010,9 +1027,9 @@
     gap: 10px;
     margin-top: 10px;
     padding: 10px;
-    border: 1px solid rgba(164,140,255,0.28);
+    border: 1px solid rgba(var(--mixed-rgb), 0.28);
     border-radius: 14px;
-    background: rgba(164,140,255,0.11);
+    background: rgba(var(--mixed-rgb), 0.11);
   }
 
   .demo-banner strong {
@@ -1040,8 +1057,8 @@
     gap: 10px;
     padding: max(12px, env(safe-area-inset-top)) 14px 12px;
     background: rgba(46,16,15,0.97);
-    border-bottom: 1px solid rgba(255,107,95,0.45);
-    color: #ffc0bb;
+    border-bottom: 1px solid rgba(var(--bad-rgb), 0.45);
+    color: var(--bad-soft);
     font-size: 12px;
     line-height: 1.4;
   }
@@ -1049,7 +1066,7 @@
   .error-banner strong {
     display: block;
     font-size: 13px;
-    color: #ff8f86;
+    color: var(--bad-text);
   }
 
   /* ---------------------------------------------------------------------------

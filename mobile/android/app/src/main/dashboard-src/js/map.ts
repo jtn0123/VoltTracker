@@ -479,8 +479,7 @@ import type { MapSessionFilter } from "./map-session-list";
     drawMapRoute(points, hasRoute, layer, routeSession);
     if (hasRoute && typeof VD.renderScrubber === "function") VD.renderScrubber(route);
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();
-    renderMapDriveChips(routes);
-    renderMapSessionList(routes);
+    renderMapListsIfChanged(routes);
     updateFollowButton();
     // Hide the Recorded Sessions card when the chip strip already covers
     // every drive. It re-appears with its empty-state message when there are
@@ -756,6 +755,42 @@ import type { MapSessionFilter } from "./map-session-list";
     };
   }
 
+  // Rebuild the drive-chip strip and session list only when their inputs
+  // change. A live GPS tick calls renderMap ~1×/s, and previously both lists
+  // (dozens of buttons each) were torn down and rebuilt per tick even though
+  // the route SET hadn't changed — the live polyline is already updated
+  // incrementally by drawMapRoute. The signature folds in everything the two
+  // lists render: the route set (id / favorite / label / geometry+power
+  // hydration / eff enrichment), the live route's DISPLAYED distance (so the
+  // live chip still ticks up at display precision, not per GPS point), the
+  // selection, the search/sort/favorites filter, and a minute bucket so
+  // relative-time copy stays fresh. Direct renderMapSessionList calls (search
+  // input, favorite toggles) bypass this gate on purpose.
+  let lastMapListsSig = "";
+  function renderMapListsIfChanged(routes: MapRoute[]) {
+    const filter = readMapSessionFilter();
+    const sig = [
+      routes.map((r) => {
+        const s = sessionForRoute(r);
+        const hydration = routeIsLive(r)
+          ? "live:" + String(VD.units.distanceMeters(Number(r.distanceMeters || 0)).value)
+          : (r.points || []).length + ":" +
+            ((r as { powerTrack?: unknown[] }).powerTrack || []).length + ":" +
+            ((r as { _effDone?: boolean })._effDone ? 1 : 0);
+        return [s.id, s.favorite === true ? 1 : 0, s.label || "", hydration].join(",");
+      }).join(";"),
+      String(state.selectedMapSessionId || ""),
+      filter.query,
+      filter.sort,
+      filter.favoritesOnly ? 1 : 0,
+      Math.floor(Date.now() / 60000)
+    ].join("|");
+    if (sig === lastMapListsSig) return;
+    lastMapListsSig = sig;
+    renderMapDriveChips(routes);
+    renderMapSessionList(routes);
+  }
+
   // Horizontal drive-picker chips above the map. Each chip shows the drive's
   // start time, distance, and a color-coded average efficiency dot — same
   // pattern as the demo's drive picker. Click delegation flows through the
@@ -791,7 +826,7 @@ import type { MapSessionFilter } from "./map-session-list";
       if (live) {
         meta.append(document.createTextNode(" · "));
         const dot = document.createElement("u");
-        dot.style.background = "#4cc4ff";
+        dot.style.background = "var(--map-accent)";
         meta.append(dot, document.createTextNode(" live"));
       }
       const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));

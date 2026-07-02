@@ -135,7 +135,7 @@ function renderLowVoltageHint(status: LowVoltageStatus | null | undefined) {
     hint.textContent =
       "Battery voltage looks low (" +
       v.toFixed(2) +
-      " V). The OBD port may sleep - start the car before the next probe.";
+      " V). The OBD port may sleep — start the car before the next probe.";
     hint.hidden = false;
   } else if (v <= 12.7) {
     setDataTone(hint, "warn");

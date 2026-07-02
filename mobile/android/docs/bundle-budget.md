@@ -8,11 +8,15 @@ bloating, `verifyDashboardBundleSize` (in `build.gradle`, wired into `check` and
 
 Not all dashboard bytes are equal:
 
-- **Startup bundle** — `js/app.js` and all CSS. This is loaded up front and is
-  what affects startup time and responsiveness.
+- **Startup bundle** — `js/app.js` and the render-blocking CSS linked from
+  `index.template.html` (`base`, `components`, `screens`, `status-tools`). This
+  is loaded up front and is what affects startup time and responsiveness.
 - **Lazy support JS** — first-party feature chunks such as Map, Troubleshooter,
   demo data/streaming, and secondary action groups. These are loaded on demand
   and stay bounded separately from startup.
+- **Lazy CSS** — `css/screens-map.css` and `css/troubleshooter.css`, injected by
+  their lazy chunks (`map.ts#ensureMapStyles`, `troubleshooter.ts`) only when the
+  Map tab or the recovery modal is actually used, so they don't touch startup.
 - **Lazy panel JS** — deferred panel-sized UI chunks such as Insights. This
   bucket keeps a user-facing panel from inflating startup without hiding its
   own growth inside the support bucket.
@@ -31,10 +35,11 @@ unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + `css/**/*.css` | **360,000 B** | ~331 KB |
-| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~66 KB |
-| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~38 KB |
-| DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~337 KB |
+| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **360,000 B** | ~346 KB |
+| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~74 KB |
+| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~25 KB |
+| Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **20,000 B** | ~17 KB |
+| DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~267 KB |
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is
@@ -60,9 +65,9 @@ DTC family (`P04`, `U00`, etc.) before raising the byte budget.
 ## Bumping a budget
 
 Raise the relevant constant in `build.gradle` (`dashboardStartupBudgetBytes`,
-`dashboardLazySupportBudgetBytes`, or `dashboardDtcDataBudgetBytes`) and say why
-in the commit. Treat the startup budget as a ratchet you justify, not a number
-you quietly grow.
+`dashboardLazySupportBudgetBytes`, `dashboardLazyCssBudgetBytes`, or
+`dashboardDtcDataBudgetBytes`) and say why in the commit. Treat the startup
+budget as a ratchet you justify, not a number you quietly grow.
 
 Before raising the startup budget, verify that trip and insight rollups still
 load only on Map/Insights demand. They are intentionally outside app launch:
