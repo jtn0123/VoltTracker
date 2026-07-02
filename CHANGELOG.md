@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.23.3 (2026-07-02)
+
+### 🔺 Fix
+
+- **build**: Exclude generated dashboard JS from privacyScan inputs for Gradle 9.6
+  ([#269](https://github.com/jtn0123/VoltTracker/pull/269),
+  [`dc86c9a`](https://github.com/jtn0123/VoltTracker/commit/dc86c9a8e92639ce3b4e7d4f0b9c833f51aad68c))
+
+
 ## v0.23.2 (2026-06-29)
 
 ### 🔺 Fix
