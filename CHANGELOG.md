@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.25.1 (2026-07-02)
+
+### 🔺 Fix
+
+- **dashboard**: Ui/ux polish pass — a11y states, tone tokens, touch targets
+  ([#283](https://github.com/jtn0123/VoltTracker/pull/283),
+  [`1f08480`](https://github.com/jtn0123/VoltTracker/commit/1f0848079821548c5eb83d19d110f21d06a356fc))
+
+
 ## v0.25.0 (2026-07-02)
 
 ### ✳️ New
