@@ -481,6 +481,18 @@ object VoltTrackerSchema {
         )
     }
 
+    /**
+     * `cell_snapshots` lookups by parent snapshot: the latest-cell-snapshot projection runs on
+     * every storage-summary/details read, so both its EXISTS probe and the per-snapshot fetch
+     * must not scan the whole (per-probe-growing) table. Idempotent; also run as the v15 step.
+     */
+    fun createCellSnapshotIndexes(db: SQLiteDatabase) {
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS idx_cell_snapshots_battery" +
+                " ON ${VoltTrackerDb.TABLE_CELL_SNAPSHOTS}(battery_snapshot_id, cell_index)",
+        )
+    }
+
     fun createRoadmapIndexes(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE INDEX IF NOT EXISTS idx_vehicles_last_seen ON ${VoltTrackerDb.TABLE_VEHICLES}(last_seen_ms DESC)",

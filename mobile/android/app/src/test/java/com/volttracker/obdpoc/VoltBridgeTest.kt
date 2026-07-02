@@ -372,6 +372,7 @@ class VoltBridgeTest {
                 "exportTripCsv",
                 "exportAllTripsCsv",
                 "exportChargeSessionsCsv",
+                "shareTripCard",
                 "deleteDetailedSignalLog",
                 "markTripNotTrip",
                 "setTripLabel",

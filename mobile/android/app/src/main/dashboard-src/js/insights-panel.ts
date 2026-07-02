@@ -50,6 +50,8 @@ import { prefs, units } from "./prefs";
       state.trips = Array.isArray(parsed) ? parsed : [];
     }
     VD.renderMapIfLoaded();
+    renderDriveTrend();
+    renderTempEfficiency();
   }
 
   function handleTripsBridgeFailure() {
@@ -161,7 +163,145 @@ import { prefs, units } from "./prefs";
     VD.setText("insightTopSpeed", Number(insights.maxSpeedKph) > 0 ? units.speedText(Number(insights.maxSpeedKph)) : "--");
     VD.setText("insightLongest", Number(insights.longestTripMeters) > 0 ? VD.formatDistance(Number(insights.longestTripMeters)) : "--");
     VD.setText("insightGpsTrips", trips ? `${Number(insights.gpsTripCount || 0)}/${trips}` : "--");
+    // Lifetime "% of driving on electric" (speed-weighted over classified EV vs
+    // gas samples). Null until the classifier has seen real driving, so keep
+    // the placeholder rather than a misleading 0%.
+    const evPct = insights.electricDrivingPct == null ? NaN : Number(insights.electricDrivingPct);
+    VD.setText("insightElectricPct", Number.isFinite(evPct) ? `${Math.round(evPct)}%` : "--");
     renderSavingsVsGas();
+    renderDriveTrend();
+    renderTempEfficiency();
+  }
+
+  // ----- efficiency vs outside temperature (winter range loss) ---------------
+  // Buckets the logged trips into ambient-temperature bands (each trip carries
+  // its window-averaged outside-air reading) and compares real efficiency
+  // (distance over integrated HV energy) across bands — the honest answer to
+  // "why is my range down this winter?". Hidden until two bands each hold two
+  // or more drives with power data.
+  const TEMP_BANDS_C: Array<{ maxC: number; labelF: string; labelC: string }> = [
+    { maxC: 0, labelF: "<32°F", labelC: "<0°C" },
+    { maxC: 10, labelF: "32–50°F", labelC: "0–10°C" },
+    { maxC: 20, labelF: "50–68°F", labelC: "10–20°C" },
+    { maxC: 30, labelF: "68–86°F", labelC: "20–30°C" },
+    { maxC: Infinity, labelF: ">86°F", labelC: ">30°C" },
+  ];
+
+  function renderTempEfficiency() {
+    const card = el("tempEffCard");
+    if (!card) return;
+    const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
+    const bands = TEMP_BANDS_C.map((band) => ({ ...band, miles: 0, kwh: 0, trips: 0 }));
+    for (const trip of trips) {
+      const tempC = trip.avgOutsideTempC == null ? NaN : Number(trip.avgOutsideTempC);
+      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const meters = Number(trip.distanceMeters);
+      if (!Number.isFinite(tempC) || !Number.isFinite(energy) || energy <= 0 || !(meters > 0)) continue;
+      const band = bands.find((b) => tempC < b.maxC);
+      if (!band) continue;
+      band.miles += meters / 1609.344;
+      band.kwh += energy;
+      band.trips += 1;
+    }
+    // A band needs a couple of drives before its average means anything.
+    const populated = bands
+      .filter((band) => band.trips >= 2 && band.kwh > 0)
+      .map((band) => ({ ...band, eff: band.miles / band.kwh }));
+    if (populated.length < 2) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const metric = units.system() === "metric";
+    const labels = populated.map((band) => (metric ? band.labelC : band.labelF));
+    const values = populated.map((band) => (metric ? band.eff * KM_PER_MILE : band.eff));
+    const best = populated.reduce((a, b) => (b.eff > a.eff ? b : a));
+    const coldest = populated[0] as (typeof populated)[number];
+    const lossPct = best.eff > 0 ? Math.round((1 - coldest.eff / best.eff) * 100) : 0;
+    VD.setText(
+      "tempEffHead",
+      coldest !== best && lossPct >= 5
+        ? `${lossPct}% lower efficiency in ${metric ? coldest.labelC : coldest.labelF} weather`
+        : "Efficiency holds steady across temperatures so far.",
+    );
+    VD.setText("tempEffBest", units.efficiencyText(best.eff));
+    VD.setText("tempEffBestLabel", `Best (${metric ? best.labelC : best.labelF})`);
+    VD.setText("tempEffCold", units.efficiencyText(coldest.eff));
+    VD.setText("tempEffColdLabel", `Coldest (${metric ? coldest.labelC : coldest.labelF})`);
+    VD.setText("tempEffTrips", String(populated.reduce((acc, band) => acc + band.trips, 0)));
+    const chart = el("tempEffChart");
+    if (chart) {
+      const aria = `Efficiency by outside temperature; best band ${units.efficiencyText(best.eff)}`;
+      chart.replaceChildren(VD.buildMonthlyTrendSvg(labels, values, aria));
+    }
+  }
+
+  // ----- monthly driving trend (Insights tab) --------------------------------
+  // Buckets the logged trips by calendar month (distance always; energy when the
+  // drive logged HV power) and plots monthly distance, mirroring the monthly
+  // charging trend on the Battery tab. The stats row derives real efficiency
+  // (distance over integrated energy) and, with an electricity rate set, an
+  // estimated cost per mile/km. Hidden until two months of drives exist.
+  function renderDriveTrend() {
+    const card = el("driveTrendCard");
+    if (!card) return;
+    const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
+    type DriveBucket = { label: string; ms: number; meters: number };
+    const byKey = new Map<string, DriveBucket>();
+    let totalMeters = 0;
+    // Efficiency pairs distance and energy from the SAME trips, so drives
+    // without HV power data can't skew the mi/kWh figure.
+    let energyKwh = 0;
+    let energyMeters = 0;
+    for (const trip of trips) {
+      const ms = Number(trip.startedAtMs);
+      const meters = Number(trip.distanceMeters);
+      if (!Number.isFinite(ms) || ms <= 0 || !Number.isFinite(meters) || meters <= 0) continue;
+      const { key, label, firstMs } = VD.monthBucketKey(ms);
+      const bucket = byKey.get(key);
+      if (bucket) {
+        bucket.meters += meters;
+      } else {
+        byKey.set(key, { label, ms: firstMs, meters });
+      }
+      totalMeters += meters;
+      const tripEnergy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      if (Number.isFinite(tripEnergy) && tripEnergy > 0) {
+        energyKwh += tripEnergy;
+        energyMeters += meters;
+      }
+    }
+    const buckets = Array.from(byKey.values()).sort((a, b) => a.ms - b.ms);
+    if (buckets.length < 2) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const distText = (meters: number) => units.distanceText(meters / 1000);
+    const values = buckets.map((b) => Number(units.distanceMeters(b.meters).value));
+    const latest = buckets[buckets.length - 1] as DriveBucket;
+    VD.setText("driveTrendLatest", distText(latest.meters));
+    VD.setText("driveTrendAvg", distText(totalMeters / buckets.length));
+    const miles = energyMeters / 1609.344;
+    const miPerKwh = energyKwh > 0 && miles > 0 ? miles / energyKwh : NaN;
+    VD.setText("driveTrendEff", Number.isFinite(miPerKwh) ? units.efficiencyText(miPerKwh) : "--");
+    // Estimated electric cost per displayed-distance unit: real integrated kWh
+    // billed at the home rate. Approximate (public charging is billed at the
+    // home rate here), so it reads "est".
+    const price = prefs.get<number>("pricePerKwh", 0);
+    const unitDist = units.distanceUnit();
+    VD.setText("driveTrendCostLabel", `Est cost / ${unitDist}`);
+    let costText = "--";
+    if (price > 0 && Number.isFinite(miPerKwh)) {
+      const displayDist = Number(units.distanceMeters(energyMeters).value);
+      if (displayDist > 0) costText = `$${((energyKwh * price) / displayDist).toFixed(2)}`;
+    }
+    VD.setText("driveTrendCost", costText);
+    const chart = el("driveTrendChart");
+    if (chart) {
+      const aria = `Monthly driving distance trend, latest ${distText(latest.meters)}`;
+      chart.replaceChildren(VD.buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria));
+    }
   }
 
   // The EV cost / savings-vs-gas math (and the assumed Volt mi/kWh it leans on,
@@ -982,6 +1122,7 @@ import { prefs, units } from "./prefs";
     setInsights: applyInsightsPayload,
     forceLazyStorageRead: FORCE_LAZY_READ,
     renderInsightStats,
+    renderDriveTrend,
     renderInsightsEmptyState,
     renderInsightScatter,
     enrichRouteEff

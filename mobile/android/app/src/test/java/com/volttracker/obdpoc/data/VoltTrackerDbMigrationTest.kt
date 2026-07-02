@@ -632,6 +632,70 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV14_addsCellSnapshotIndex() {
+        // The v14→v15 migration only adds idx_cell_snapshots_battery (the latest-cell-map
+        // projection reads cell_snapshots by parent snapshot on every storage read). The step is
+        // non-destructive: an existing session row must survive untouched.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v14_v15.db"
+        context.deleteDatabase(name)
+
+        val v14Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 14) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    // A v14 database has the cell_snapshots table but no index on it.
+                    VoltTrackerSchema.createBaseTables(db)
+                    VoltTrackerSchema.createRoadmapTables(db)
+                    db.execSQL(
+                        "INSERT INTO " +
+                            VoltTrackerDb.TABLE_SESSIONS +
+                            " (mode, started_at_ms, status, created_at_ms)" +
+                            " VALUES ('obd', 1000, 'complete', 1000)",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v14Db = v14Helper.writableDatabase
+        assertFalse(
+            "v14 schema must not pre-contain the cell-snapshot index",
+            readIndexNames(v14Db).contains("idx_cell_snapshots_battery"),
+        )
+        v14Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        assertTrue(
+            "After v14->v15 upgrade, the cell-snapshot index must exist.",
+            readIndexNames(newDb).contains("idx_cell_snapshots_battery"),
+        )
+        // The pre-existing session row survives untouched.
+        newDb
+            .rawQuery(
+                "SELECT status FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE started_at_ms = 1000",
+                null,
+            ).use { cursor ->
+                assertTrue("pre-existing session row must survive", cursor.moveToFirst())
+                assertEquals("complete", cursor.getString(0))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -776,7 +840,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 14
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 15
 
         private val V7_INDEXES =
             arrayOf(

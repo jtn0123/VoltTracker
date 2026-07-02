@@ -146,6 +146,9 @@ class ObdStoreTrips(
         trip.put("sampleCount", usefulSamples)
         trip.put("pointCount", points.length())
         trip.put("hasRoute", points.length() >= 2)
+        trip.put("energyKwh", energyKwhForWindowBoxed(db, session.id, window) ?: JSONObject.NULL)
+        trip.put("evShare", evDrivingShareBoxed(db, session.id, window) ?: JSONObject.NULL)
+        trip.put("avgOutsideTempC", avgOutsideTempCBoxed(db, session.id, window) ?: JSONObject.NULL)
         trip.put("adapterName", session.adapterName)
         trip.put("status", session.status)
         if (session.endedAtMs <= 0) {
@@ -184,8 +187,10 @@ class ObdStoreTrips(
                         )
                     }
                 }
+            val activeTrips = ArrayList<JSONObject>()
             for (session in active) {
                 for (trip in tripJsons(db, session)) {
+                    activeTrips.add(trip)
                     val maxSpeed = if (trip.isNull("maxSpeedKph")) null else trip.optInt("maxSpeedKph")
                     agg.addTrip(
                         trip.optDouble("distanceMeters", 0.0),
@@ -216,6 +221,7 @@ class ObdStoreTrips(
                 ),
             )
             payload.put("locationSampleCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES))
+            payload.put("electricDrivingPct", lifetimeElectricDrivingPctBoxed(db, activeTrips) ?: JSONObject.NULL)
         } catch (ignored: JSONException) {
             // Local numeric/string values are safe.
         }
@@ -469,7 +475,9 @@ class ObdStoreTrips(
         // Bump to invalidate cached rollups + the trip-list cache (forces a one-time rebuild on
         // the next read). v5 keeps stationary GPS drift and manual hides out of trip/map totals.
         // v6 rebuilds pointCount/distanceMeters after route-geometry simplification landed.
-        private const val ROLLUP_CACHE_VERSION = 6
+        // v7 adds per-trip energyKwh (driving trend) and evShare (EV/gas split).
+        // v8 adds per-trip avgOutsideTempC (efficiency-vs-temperature insight).
+        private const val ROLLUP_CACHE_VERSION = 8
         private const val ACTIVE_TRIP_CACHE_TTL_MS = 2_000L
         private const val ACTIVE_TRIP_CACHE_MAX_ENTRIES = 64
 
@@ -488,6 +496,181 @@ class ObdStoreTrips(
                 ).use { cursor ->
                     if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else null
                 }
+
+        /**
+         * Net HV energy over the trip window in kWh (drive minus regen), trapezoidal over the
+         * logged pack power — the same integration [com.volttracker.obdpoc.materialize.TripMaterializer]
+         * uses for `trip_segments.energy_kwh`. Null when the window has no usable power samples
+         * (adapter without HV PIDs, GPS-only logging).
+         */
+        private fun energyKwhForWindowBoxed(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            window: DriveWindowDetector.DriveWindow,
+        ): Double? =
+            db
+                .rawQuery(
+                    "SELECT captured_at_ms, power_kw, pack_voltage, pack_current_a " +
+                        "FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                        "AND (power_kw IS NOT NULL OR (pack_voltage IS NOT NULL AND pack_current_a IS NOT NULL)) " +
+                        "ORDER BY captured_at_ms ASC",
+                    arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
+                ).use { cursor ->
+                    var prevPowerKw: Double? = null
+                    var prevAtMs = 0L
+                    var energyKwh = 0.0
+                    var integrated = 0
+                    while (cursor.moveToNext()) {
+                        val atMs = cursor.getLong(0)
+                        val powerKw =
+                            if (!cursor.isNull(1)) {
+                                cursor.getDouble(1)
+                            } else {
+                                cursor.getDouble(2) * cursor.getDouble(3) / 1000.0
+                            }
+                        val previousPowerKw = prevPowerKw
+                        if (previousPowerKw != null) {
+                            val hours = (atMs - prevAtMs) / 3_600_000.0
+                            if (hours > 0.0) {
+                                energyKwh += ((previousPowerKw + powerKw) / 2.0) * hours
+                                integrated += 1
+                            }
+                        }
+                        prevPowerKw = powerKw
+                        prevAtMs = atMs
+                    }
+                    if (integrated == 0) null else energyKwh
+                }
+
+        /**
+         * Share (0..1) of this trip's driving done on electric, weighted by speed (a per-sample
+         * distance proxy) over the classified `driving_ev` vs `driving_gas` samples. The polling
+         * cadence is constant within a session, so sample weighting is equivalent to time
+         * weighting here — cadence differences only matter ACROSS sessions, which the lifetime
+         * aggregate handles by distance-weighting per-trip shares instead. Null when the window
+         * has no classified moving samples.
+         */
+        private fun evDrivingShareBoxed(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            window: DriveWindowDetector.DriveWindow,
+        ): Double? =
+            evShareFromStateSums(
+                db,
+                "SELECT vehicle_state, SUM(speed_kph) FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                    "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                    "AND speed_kph > 0 AND vehicle_state IN ('driving_ev', 'driving_gas') " +
+                    "GROUP BY vehicle_state",
+                arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
+            )
+
+        /**
+         * Lifetime "% of driving on electric" (0..100): the distance-weighted average of each
+         * trip's evShare, read from the cached trip JSON plus any still-active trips. Weighting
+         * by trip distance (rather than summing raw samples across sessions) keeps sessions with
+         * faster OBD polling cadences from dominating the aggregate. Null until any classified
+         * trip exists.
+         */
+        private fun lifetimeElectricDrivingPctBoxed(
+            db: SQLiteDatabase,
+            activeTrips: List<JSONObject>,
+        ): Double? {
+            var evMeters = 0.0
+            var totalMeters = 0.0
+
+            fun accumulate(trip: JSONObject) {
+                if (trip.isNull("evShare")) {
+                    return
+                }
+                val meters = trip.optDouble("distanceMeters", 0.0)
+                if (meters <= 0.0) {
+                    return
+                }
+                evMeters += trip.optDouble("evShare", 0.0) * meters
+                totalMeters += meters
+            }
+            db
+                .rawQuery("SELECT trip_json FROM ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}", null)
+                .use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val trip =
+                            try {
+                                JSONObject(cursor.getString(0))
+                            } catch (ignored: JSONException) {
+                                continue
+                            }
+                        accumulate(trip)
+                    }
+                }
+            activeTrips.forEach(::accumulate)
+            return if (totalMeters > 0.0) evMeters / totalMeters * 100.0 else null
+        }
+
+        /**
+         * Average outside air temperature over the trip window in deg C, or null when no sample
+         * carried one. The ambient PID lives only in each telemetry row's JSON blob (no dedicated
+         * column), so this scans the window's json values with a cheap key-scoped extraction
+         * instead of a full JSONObject parse per row. Runs once per session at rollup-cache build.
+         */
+        private fun avgOutsideTempCBoxed(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            window: DriveWindowDetector.DriveWindow,
+        ): Double? =
+            db
+                .rawQuery(
+                    "SELECT json FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                        "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                        "AND json LIKE '%\"outsideTempC\":%'",
+                    arrayOf(sessionId.toString(), window.startedAtMs.toString(), window.endedAtMs.toString()),
+                ).use { cursor ->
+                    var sum = 0.0
+                    var count = 0
+                    while (cursor.moveToNext()) {
+                        val temp = extractJsonNumber(cursor.getString(0), "\"outsideTempC\":") ?: continue
+                        // The decoder already bounds the PID to a plausible OAT range; this guard
+                        // only drops corrupt blobs.
+                        if (temp < -60.0 || temp > 70.0) continue
+                        sum += temp
+                        count += 1
+                    }
+                    if (count > 0) sum / count else null
+                }
+
+        /** Reads the number right after [marker] in [json]; null for non-numeric values. */
+        private fun extractJsonNumber(
+            json: String?,
+            marker: String,
+        ): Double? {
+            if (json == null) {
+                return null
+            }
+            val start = json.indexOf(marker).takeIf { it >= 0 }?.plus(marker.length) ?: return null
+            var end = start
+            while (end < json.length && (json[end].isDigit() || json[end] in "+-.eE")) {
+                end += 1
+            }
+            return json.substring(start, end).toDoubleOrNull()
+        }
+
+        private fun evShareFromStateSums(
+            db: SQLiteDatabase,
+            sql: String,
+            args: Array<String>?,
+        ): Double? =
+            db.rawQuery(sql, args).use { cursor ->
+                var ev = 0.0
+                var gas = 0.0
+                while (cursor.moveToNext()) {
+                    when (cursor.getString(0)) {
+                        "driving_ev" -> ev = cursor.getDouble(1)
+                        "driving_gas" -> gas = cursor.getDouble(1)
+                    }
+                }
+                val total = ev + gas
+                if (total > 0.0) ev / total else null
+            }
 
         private fun avgMovingSpeedKph(
             db: SQLiteDatabase,

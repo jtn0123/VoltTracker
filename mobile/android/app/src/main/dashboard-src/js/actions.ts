@@ -489,6 +489,18 @@ type SignalActions = {
     });
   }
 
+  // 96-cell voltage probe (Battery tab). Runs the dedicated cells stage against the
+  // remembered adapter — no device picker on the Battery tab, so "last" is the right seam.
+  function cellProbeLast(button?: BusyButton | null) {
+    if (!bridge || typeof bridge.detailProbeLast !== "function") {
+      VD.setStatus({ state: "idle", detail: "The cell probe is only available inside the Android app." });
+      return;
+    }
+    withBusy(button, () => {
+      callBridgeAction("detailProbeLast", ["cells"], "Could not start the cell probe.");
+    });
+  }
+
   function connectLastAdapter(button?: BusyButton | null) {
     const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
     if (!last || !String(last.address || "").trim()) {
@@ -520,6 +532,7 @@ type SignalActions = {
       case "quickScan": connectSelected(true, button, true); return;
       case "tpmsScan": tpmsScanSelected(button); return;
       case "detailProbe": detailProbeSelected(button); return;
+      case "cellProbe": cellProbeLast(button); return;
       case "connect": connectSelected(false, button); return;
       case "demo": startDemo(); return;
       case "stopDemo": stopDemo(); return;
@@ -534,6 +547,7 @@ type SignalActions = {
       case "exportAllTripsCsv": exportAllTripsCsv(); return;
       case "exportChargeSessionsCsv": VD.exportChargeSessionsCsv(); return;
       case "closeTripDetail": closeTripDetail(); return;
+      case "shareTripCard": if (typeof VD.shareTripCard === "function") VD.shareTripCard(); return;
     }
   }
 

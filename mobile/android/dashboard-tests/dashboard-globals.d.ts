@@ -256,6 +256,12 @@ interface VoltTrip {
   label?: string;
   /** User favorite flag (M4 favorites half); absent/false when not favorited. */
   favorite?: boolean;
+  /** Net HV energy over the trip in kWh (drive minus regen); null when no power was logged. */
+  energyKwh?: number | null;
+  /** Share (0..1) of the trip's driving done on electric; null when unclassified. */
+  evShare?: number | null;
+  /** Window-averaged outside air temperature in deg C; null when never logged. */
+  avgOutsideTempC?: number | null;
   [key: string]: unknown;
 }
 
@@ -280,6 +286,8 @@ interface VoltInsights {
   maxSpeedKph?: number;
   longestTripMeters?: number;
   gpsTripCount?: number;
+  /** Lifetime "% of driving on electric" (0..100); null until classified driving exists. */
+  electricDrivingPct?: number | null;
   [key: string]: unknown;
 }
 
@@ -740,6 +748,9 @@ interface VoltRestoreProgress {
     /** Live time-to-full estimate on the Charge tab; reads live telemetry. */
     renderLiveCharge(): void;
     updateValidationUi(): void;
+    /** Applies a persisted 96-cell probe snapshot ({capturedAtMs, cells:[{index, voltage}]})
+     *  to the per-cell voltage map; empty/error payloads clear the stored map. */
+    applyCellSnapshot(payload: unknown): void;
     formatDistance(meters: unknown): string;
     formatDuration(ms: unknown): string;
     formatShortDuration(ms: unknown): string;
@@ -774,6 +785,10 @@ interface VoltRestoreProgress {
     /** True when the Insights screen has real content to show (logged trip /
      *  distance or a battery reading) — gates insightsEmptyState. */
     hasInsightContent(): boolean;
+    /** Calendar-month key + short label ("May ’26") for a timestamp (shared by the trend charts). */
+    monthBucketKey(ms: number): { key: string; label: string; firstMs: number };
+    /** Monthly bar chart shared by the charging (Battery tab) and driving (Insights) trends. */
+    buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string): SVGElement;
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;
@@ -786,6 +801,8 @@ interface VoltRestoreProgress {
     loadInsights(force?: boolean): void;
     forceLazyStorageRead?: boolean;
     renderInsightStats(): void;
+    /** Monthly driving distance/efficiency/cost trend on the Insights tab. */
+    renderDriveTrend(): void;
     renderInsightScatter(): void;
     enrichRouteEff(route: VoltRoute): void;
 
@@ -801,6 +818,8 @@ interface VoltRestoreProgress {
     /** Populate + show the per-trip detail sheet for a route key (M7). Returns true
      *  when the route was found (so the caller activates the focus trap). */
     openTripDetail?(routeKey: string): boolean;
+    /** Shares the open drive as a PNG summary card via the native share sheet. */
+    shareTripCard?(): boolean;
     /** Hide the per-trip detail sheet (M7). */
     closeTripDetail?(): void;
     setMapTileError(show: boolean, detail?: string): void;
@@ -889,6 +908,7 @@ interface VoltRestoreProgress {
     exportTripCsv(routeKeyOrSessionId: string): string;
     exportAllTripsCsv(): string;
     exportChargeSessionsCsv(pricePerKwh: string): string;
+    shareTripCard(cardJson: string): string;
     deleteDetailedSignalLog(id: string): void;
     markTripNotTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;

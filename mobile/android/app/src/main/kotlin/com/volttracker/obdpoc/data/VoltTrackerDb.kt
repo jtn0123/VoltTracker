@@ -41,6 +41,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         VoltTrackerSchema.createTripListCache(db)
         VoltTrackerSchema.createChargeSessionRollups(db)
         VoltTrackerSchema.createMaintenanceLog(db)
+        VoltTrackerSchema.createCellSnapshotIndexes(db)
     }
 
     override fun onUpgrade(
@@ -158,6 +159,19 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 VoltTrackerSchema.createChargeSessionRollups(target)
             }
         }
+        if (oldVersion < 15) {
+            runMigrationStep(db, oldVersion, 15, "cell-snapshot-index") { target ->
+                // Index only (CREATE INDEX IF NOT EXISTS — no data touched): the latest-cell-map
+                // projection reads cell_snapshots by parent snapshot on every storage read.
+                // cell_snapshots has existed since v4, but guard against a partial/legacy schema
+                // missing the table (same rationale as the v12 step) — recreate it idempotently
+                // so the CREATE INDEX can't abort the migration.
+                if (!hasTable(target, TABLE_CELL_SNAPSHOTS)) {
+                    VoltTrackerSchema.createRoadmapTables(target)
+                }
+                VoltTrackerSchema.createCellSnapshotIndexes(target)
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -166,7 +180,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 14
+        const val DATABASE_VERSION = 15
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"

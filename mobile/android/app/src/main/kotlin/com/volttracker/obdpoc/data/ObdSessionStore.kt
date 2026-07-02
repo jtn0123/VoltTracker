@@ -44,15 +44,11 @@ interface ObdSessionStore : Closeable {
         lastEventDetail: String?,
     )
 
+    /** [capturedAtMs] defaults to the sample's own `updatedAt` (or now) when null. */
     fun recordTelemetry(
         sessionId: Long,
         sample: JSONObject?,
-    ): Long
-
-    fun recordTelemetry(
-        sessionId: Long,
-        sample: JSONObject?,
-        capturedAtMs: Long,
+        capturedAtMs: Long? = null,
     ): Long
 
     fun recordPidObservation(

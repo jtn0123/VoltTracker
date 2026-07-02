@@ -167,15 +167,22 @@
         <h3 id="tripDetailTitle">Drive</h3>
         <p id="tripDetailSub" class="status-copy"></p>
       </div>
-      <button
-        type="button"
-        id="tripDetailClose"
-        class="link-btn trip-detail-close"
-        data-action="closeTripDetail"
-        aria-label="Close drive detail"
-      >
-        Close
-      </button>
+      <div class="map-sheet-actions">
+        <!-- Renders this drive's route outline + stats as a PNG and opens the
+             Android share sheet (map.ts#shareTripCard). -->
+        <button type="button" class="link-btn" data-action="shareTripCard">
+          Share card
+        </button>
+        <button
+          type="button"
+          id="tripDetailClose"
+          class="link-btn trip-detail-close"
+          data-action="closeTripDetail"
+          aria-label="Close drive detail"
+        >
+          Close
+        </button>
+      </div>
     </header>
     <div
       class="trip-detail-stats"
@@ -205,6 +212,17 @@
       <div>
         <span class="kicker">GPS points</span
         ><strong id="tripDetailPoints">--</strong>
+      </div>
+      <!-- EV-vs-gas split and integrated HV energy for THIS drive, from the
+           trip rollup (trip.evShare / trip.energyKwh). Hidden when the drive
+           logged no classified driving / no pack power. -->
+      <div id="tripDetailEvRow" hidden>
+        <span class="kicker">Electric share</span
+        ><strong id="tripDetailEvShare">--</strong>
+      </div>
+      <div id="tripDetailEnergyRow" hidden>
+        <span class="kicker">Energy used</span
+        ><strong id="tripDetailEnergy">--</strong>
       </div>
       <!-- Estimated electricity cost + savings vs gas for THIS drive (M3),
            using the same cost model as the lifetime Insights figure. Hidden
@@ -244,6 +262,20 @@
         Not enough power/efficiency samples on this drive to plot efficiency vs
         speed. It fills in when the OBD loop captured battery current.
       </p>
+    </article>
+    <!-- Elevation profile along the route (GPS altitude vs distance). Hidden
+         when the drive has too few altitude fixes to draw a meaningful
+         profile. Rendered by map.ts#renderTripDetailElevation. -->
+    <article
+      class="trip-detail-scatter-card"
+      id="tripDetailElevationCard"
+      hidden
+    >
+      <header>
+        <span class="kicker">Elevation — this drive</span>
+        <h4 id="tripDetailElevationHead">Climb and descent along the route.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailElevation"></div>
     </article>
   </div>
 

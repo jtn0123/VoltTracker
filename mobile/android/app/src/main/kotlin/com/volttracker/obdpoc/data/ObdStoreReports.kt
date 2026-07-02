@@ -928,6 +928,63 @@ class ObdStoreReports(
                 .put("cellSnapshotCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_CELL_SNAPSHOTS))
                 .put("latestTelemetry", latestTelemetryJson(db))
                 .put("latestBatterySnapshot", latestBatterySnapshotJson(db))
+                .put("latestCellSnapshot", latestCellSnapshotJson(db))
+
+        /**
+         * The latest full-pack cell-voltage snapshot (from a 96-cell probe pass) for the
+         * dashboard's per-cell voltage map: `{capturedAtMs, cellCount, cells: [{index, voltage},
+         * ...]}` with `index` 1-based. Empty object until a cell probe has completed at least once.
+         */
+        @JvmStatic
+        @Throws(JSONException::class)
+        fun latestCellSnapshotJson(db: SQLiteDatabase): JSONObject {
+            var snapshotId = -1L
+            var capturedAtMs = 0L
+            db
+                .rawQuery(
+                    "SELECT b._id, b.captured_at_ms FROM ${VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS} b " +
+                        "WHERE EXISTS (SELECT 1 FROM ${VoltTrackerDb.TABLE_CELL_SNAPSHOTS} c " +
+                        "WHERE c.battery_snapshot_id = b._id) " +
+                        "ORDER BY b.captured_at_ms DESC LIMIT 1",
+                    null,
+                ).use { cursor ->
+                    if (cursor.moveToFirst()) {
+                        snapshotId = cursor.getLong(0)
+                        capturedAtMs = cursor.getLong(1)
+                    }
+                }
+            if (snapshotId < 0) {
+                return JSONObject()
+            }
+            val cells = JSONArray()
+            db
+                .query(
+                    VoltTrackerDb.TABLE_CELL_SNAPSHOTS,
+                    arrayOf("cell_index", "voltage"),
+                    "battery_snapshot_id = ?",
+                    arrayOf(snapshotId.toString()),
+                    null,
+                    null,
+                    "cell_index ASC",
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        cells.put(
+                            JSONObject()
+                                .put("index", cursor.getInt(0))
+                                .put(
+                                    "voltage",
+                                    ObdStoreReportJson.boxedOrNull(
+                                        ObdStoreSupport.nullableDoubleBoxed(cursor, "voltage"),
+                                    ),
+                                ),
+                        )
+                    }
+                }
+            return JSONObject()
+                .put("capturedAtMs", capturedAtMs)
+                .put("cellCount", cells.length())
+                .put("cells", cells)
+        }
 
         @JvmStatic
         @Throws(JSONException::class)

@@ -42,6 +42,11 @@ class TripExportController(
         if (CHARGE_SESSIONS_FORMAT.equals(formatKey?.trim(), ignoreCase = true)) {
             return exportChargeSessionsAndShare(routeKey)
         }
+        // The drive-summary card share rides the same seam; the routeKey slot carries a small JSON
+        // payload (route key + the already-formatted stat strings the trip-detail sheet shows).
+        if (CARD_FORMAT.equals(formatKey?.trim(), ignoreCase = true)) {
+            return shareTripCard(routeKey)
+        }
         val format =
             TripExportShareIntent.Format.fromKey(formatKey)
                 ?: return error("invalid_format", "Choose GPX or CSV.")
@@ -137,6 +142,60 @@ class TripExportController(
             .put("sessionCount", rows.length())
             .put("withCost", rate != null)
             .toString()
+    }
+
+    /**
+     * Drive-summary card share: parses the dashboard's card payload (`{routeKey, title, subtitle,
+     * stats:[{label, value}, …]}` — stat strings arrive already formatted so units/cost math stays
+     * single-sourced in the WebView), renders the PNG with the route outline, records the export,
+     * and launches the share sheet. Reached via [exportAndShare] with the [CARD_FORMAT] sentinel.
+     */
+    private fun shareTripCard(cardArg: String?): String {
+        val card =
+            try {
+                JSONObject(cardArg ?: "")
+            } catch (ex: org.json.JSONException) {
+                return error("invalid_card", "Could not read the drive-card details.")
+            }
+        val routeKey = bridgeSafe(card.optString("routeKey", ""), BRIDGE_MAX_LABEL_LEN)
+        if (routeKey.isEmpty()) {
+            return error("invalid_id", "Choose a saved drive to share.")
+        }
+        val store =
+            host.localStore?.takeIf { it.isOpen }
+                ?: return error("storage_unavailable", "Local storage is not ready.")
+        val route = readRoute(store, routeKey) ?: return error("route_read_failed", "Could not read that drive.")
+        if (TripTrackFormatter.pointCount(route) <= 0) {
+            return error("empty_route", "That drive has no GPS points to share.")
+        }
+        val stats = ArrayList<TripShareCardRenderer.CardStat>()
+        val rawStats = card.optJSONArray("stats")
+        if (rawStats != null) {
+            for (i in 0 until minOf(rawStats.length(), TripShareCardRenderer.MAX_STATS)) {
+                val stat = rawStats.optJSONObject(i) ?: continue
+                val label = bridgeSafe(stat.optString("label", ""), CARD_TEXT_MAX)
+                val value = bridgeSafe(stat.optString("value", ""), CARD_TEXT_MAX)
+                if (label.isNotEmpty() && value.isNotEmpty()) {
+                    stats.add(TripShareCardRenderer.CardStat(label, value))
+                }
+            }
+        }
+        val bitmap =
+            TripShareCardRenderer.render(
+                route,
+                bridgeSafe(card.optString("title", ""), CARD_TEXT_MAX).ifEmpty { "Drive" },
+                bridgeSafe(card.optString("subtitle", ""), CARD_TEXT_MAX),
+                stats,
+            )
+        val export =
+            TripExportShareIntent.writeCardPng(context, bitmap)
+                ?: return error("export_failed", "Could not write the drive card image.")
+        recordExport(store, routeKey, export)
+        val shareIntent =
+            TripExportShareIntent.buildShareIntent(context, export)
+                ?: return error("share_failed", context.getString(R.string.status_trip_export_share_failed))
+        launchShare(shareIntent)
+        return success(export)
     }
 
     /**
@@ -272,6 +331,15 @@ class TripExportController(
          * rationale as [ALL_TRIPS_FORMAT]). The electricity rate rides through the routeKey slot.
          */
         const val CHARGE_SESSIONS_FORMAT = "csv_charges"
+
+        /**
+         * Sentinel "format" for the drive-summary card share; the routeKey slot carries the card
+         * payload JSON (same flat-host-surface rationale as [ALL_TRIPS_FORMAT]).
+         */
+        const val CARD_FORMAT = "card"
+
+        /** Per-string cap for card title/subtitle/stat text (they render onto the image only). */
+        const val CARD_TEXT_MAX = 64
 
         /** Bulk-export bound: most-recent N trips, so a huge history can't blow up memory/file size. */
         const val MAX_ALL_TRIPS = 500

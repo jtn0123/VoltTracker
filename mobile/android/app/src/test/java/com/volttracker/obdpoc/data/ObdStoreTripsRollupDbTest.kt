@@ -132,9 +132,9 @@ class ObdStoreTripsRollupDbTest {
                     arrayOf(session.toString()),
                 ).use { cursor ->
                     assertTrue(cursor.moveToFirst())
-                    // Refreshed to the current ROLLUP_CACHE_VERSION (bumped to 6 when route
-                    // geometry simplification changed cached pointCount/distanceMeters).
-                    assertEquals(6, cursor.getInt(0))
+                    // Refreshed to the current ROLLUP_CACHE_VERSION (bumped to 8 when per-trip
+                    // avgOutsideTempC joined energyKwh/evShare in the cached trip JSON).
+                    assertEquals(8, cursor.getInt(0))
                 }
         }
     }

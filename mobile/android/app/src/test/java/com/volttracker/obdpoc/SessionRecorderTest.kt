@@ -599,6 +599,7 @@ class SessionRecorderTest {
         override fun recordTelemetry(
             sessionId: Long,
             sample: JSONObject?,
+            capturedAtMs: Long?,
         ): Long {
             if (failTelemetryWrites) {
                 throw RuntimeException("simulated telemetry write failure")

@@ -148,7 +148,14 @@
         <span class="kicker">Battery cell balance</span>
         <h3 id="cellBalanceTitle">No live cell data yet</h3>
       </div>
-      <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
+      <div class="map-sheet-actions">
+        <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
+        <!-- Runs the dedicated 96-cell voltage probe (detailProbeLast("cells")) against
+             the remembered adapter; the result fills the per-cell map card below. -->
+        <button type="button" class="link-btn" data-action="cellProbe">
+          Read all 96 cells
+        </button>
+      </div>
     </header>
     <p id="cellBalanceEmpty" class="status-copy">
       Connect the adapter while the car is awake — the lowest and highest

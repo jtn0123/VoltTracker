@@ -88,6 +88,92 @@ describe('per-trip detail sheet (M7)', () => {
     expect(document.getElementById('tripDetailEnd').textContent).not.toBe('--');
   });
 
+  it('shows the EV split and energy rows when the trip rollup carries them', () => {
+    const data = driveStorage({});
+    data.trips[0].evShare = 0.716;
+    data.trips[0].energyKwh = 4.23;
+    VD.state.trips = data.trips;
+    VD.state.storage = data.storage;
+    VD.renderMap();
+    VD.openTripDetail(data.trips[0].id);
+
+    expect(document.getElementById('tripDetailEvRow').hidden).toBe(false);
+    expect(document.getElementById('tripDetailEvShare').textContent).toBe('72% electric');
+    expect(document.getElementById('tripDetailEnergyRow').hidden).toBe(false);
+    expect(document.getElementById('tripDetailEnergy').textContent).toBe('4.2 kWh');
+  });
+
+  it('hides the EV split and energy rows for drives without classified power data', () => {
+    const id = seed();
+    VD.openTripDetail(id);
+    expect(document.getElementById('tripDetailEvRow').hidden).toBe(true);
+    expect(document.getElementById('tripDetailEnergyRow').hidden).toBe(true);
+  });
+
+  it('draws the elevation profile with a climb/descent headline', () => {
+    const id = seed();
+    VD.openTripDetail(id);
+    const card = document.getElementById('tripDetailElevationCard');
+    expect(card.hidden).toBe(false);
+    const svg = document.querySelector('#tripDetailElevation svg');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('role')).toBe('img');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThanOrEqual(2);
+    // The seeded route descends 4 m per point across 8 points (28 m ≈ 92 ft)
+    // with no climb (imperial default units).
+    const head = document.getElementById('tripDetailElevationHead').textContent;
+    expect(head).toContain('0 ft climb');
+    expect(head).toContain('92 ft descent');
+  });
+
+  it('hides the elevation card when the route has no altitude fixes', () => {
+    const data = driveStorage({});
+    for (const point of data.storage.recentRoutes[0].points) delete point.altM;
+    VD.state.trips = data.trips;
+    VD.state.storage = data.storage;
+    VD.renderMap();
+    VD.openTripDetail(data.trips[0].id);
+    expect(document.getElementById('tripDetailElevationCard').hidden).toBe(true);
+  });
+
+  it('shares a drive card built from the stat strings the sheet shows', () => {
+    const data = driveStorage({ label: 'Commute home' });
+    data.trips[0].evShare = 0.72;
+    data.trips[0].energyKwh = 4.2;
+    VD.state.trips = data.trips;
+    VD.state.storage = data.storage;
+    VD.renderMap();
+    VD.openTripDetail(data.trips[0].id);
+
+    const calls = [];
+    VD.bridge.shareTripCard = (json) => {
+      calls.push(JSON.parse(json));
+      return '{"ok":true}';
+    };
+    expect(VD.shareTripCard()).toBe(true);
+    expect(calls).toHaveLength(1);
+    const payload = calls[0];
+    expect(payload.routeKey).toBe(data.trips[0].id);
+    expect(payload.title).toBe('Commute home');
+    // Absolute date, not the sheet's relative "Xd ago".
+    expect(payload.subtitle).not.toContain('ago');
+    const labels = payload.stats.map((s) => s.label);
+    expect(labels).toContain('Distance');
+    expect(labels).toContain('Electric');
+    // Values are the exact formatted strings from the sheet.
+    const electric = payload.stats.find((s) => s.label === 'Electric');
+    expect(electric.value).toBe('72% electric');
+    // Placeholder stats ("--") never reach the card.
+    for (const stat of payload.stats) expect(stat.value).not.toBe('--');
+  });
+
+  it('surfaces a native {ok:false} share result instead of reporting success', () => {
+    const id = seed();
+    VD.openTripDetail(id);
+    VD.bridge.shareTripCard = () => '{"ok":false,"error":"storage_unavailable"}';
+    expect(VD.shareTripCard()).toBe(false);
+  });
+
   it('plots an efficiency-vs-speed scatter scoped to that drive', () => {
     const id = seed();
     VD.openTripDetail(id);

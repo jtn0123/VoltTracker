@@ -1257,6 +1257,147 @@ import type { MapSessionFilter } from "./map-session-list";
     if (head) head.textContent = "Grade-coded efficiency at each speed on this drive.";
   }
 
+  // Elevation profile for ONE drive: GPS altitude vs cumulative route distance,
+  // drawn as a filled line with a climb/descent headline. Returns null when the
+  // drive carries too few altitude fixes (telemetry-fallback routes have none).
+  function buildTripElevationProfile(route: MapRoute): { svg: SVGElement; climbM: number; descentM: number } | null {
+    const points = Array.isArray(route.points) ? route.points : [];
+    const profile: Array<{ dist: number; alt: number }> = [];
+    let dist = 0;
+    let prev: (typeof points)[number] | null = null;
+    for (const point of points) {
+      if (!point) continue;
+      if (prev) dist += haversineMetersJs(prev.lat, prev.lng, point.lat, point.lng);
+      prev = point;
+      const alt = Number(point.altM);
+      if (Number.isFinite(alt)) profile.push({ dist, alt });
+    }
+    if (profile.length < 4) return null;
+    let altMin = Infinity;
+    let altMax = -Infinity;
+    let climbM = 0;
+    let descentM = 0;
+    for (let i = 0; i < profile.length; i += 1) {
+      const p = profile[i] as { dist: number; alt: number };
+      altMin = Math.min(altMin, p.alt);
+      altMax = Math.max(altMax, p.alt);
+      if (i > 0) {
+        const delta = p.alt - (profile[i - 1] as { alt: number }).alt;
+        // Ignore sub-meter jitter between fixes so GPS noise doesn't
+        // accumulate into a fictional climb total.
+        if (delta > 1) climbM += delta;
+        else if (delta < -1) descentM += -delta;
+      }
+    }
+    const totalDist = (profile[profile.length - 1] as { dist: number }).dist;
+    if (!(totalDist > 0)) return null;
+    // Pad a flat drive so the line doesn't sit on the frame edge.
+    if (altMax - altMin < 4) {
+      altMin -= 2;
+      altMax += 2;
+    }
+    const metric = VD.units.system() === "metric";
+    const altText = (m: number) => (metric ? `${Math.round(m)} m` : `${Math.round(m * 3.28084)} ft`);
+    const tokens = getComputedStyle(document.documentElement);
+    const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
+    const lineColor = token("--line", "rgba(255,255,255,0.1)");
+    const axisColor = token("--muted", "#aaaab4");
+    const traceColor = token("--map-accent", "#4cc4ff");
+    const ns = "http://www.w3.org/2000/svg";
+    const setSvgAttrs = VD.setSvgAttrs;
+    const w = 320;
+    const h = 140;
+    const padL = 40;
+    const padR = 10;
+    const padT = 10;
+    const padB = 22;
+    const plotW = w - padL - padR;
+    const plotH = h - padT - padB;
+    const xOf = (d: number) => padL + (d / totalDist) * plotW;
+    const yOf = (a: number) => padT + (1 - (a - altMin) / (altMax - altMin)) * plotH;
+    const svg = setSvgAttrs(document.createElementNS(ns, "svg"), {
+      viewBox: `0 0 ${w} ${h}`,
+      class: "trip-detail-elevation-svg",
+      role: "img",
+      "aria-label": `Elevation profile for this drive: ${altText(climbM)} of climb, ${altText(descentM)} of descent`,
+    });
+    for (const alt of [altMax, (altMin + altMax) / 2, altMin]) {
+      const y = yOf(alt);
+      svg.append(setSvgAttrs(document.createElementNS(ns, "line"), {
+        x1: padL, x2: w - padR, y1: y.toFixed(1), y2: y.toFixed(1), stroke: lineColor,
+      }));
+      const label = setSvgAttrs(document.createElementNS(ns, "text"), {
+        x: padL - 5, y: (y + 3).toFixed(1), fill: axisColor,
+        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+      });
+      label.textContent = altText(alt);
+      svg.append(label);
+    }
+    let d = "";
+    for (const p of profile) {
+      d += `${d ? "L" : "M"}${xOf(p.dist).toFixed(1)} ${yOf(p.alt).toFixed(1)} `;
+    }
+    const first = profile[0] as { dist: number };
+    const last = profile[profile.length - 1] as { dist: number };
+    const baseY = (padT + plotH).toFixed(1);
+    svg.append(setSvgAttrs(document.createElementNS(ns, "path"), {
+      d: `${d.trim()} L${xOf(last.dist).toFixed(1)} ${baseY} L${xOf(first.dist).toFixed(1)} ${baseY} Z`,
+      fill: traceColor,
+      "fill-opacity": 0.16,
+      stroke: "none",
+    }));
+    svg.append(setSvgAttrs(document.createElementNS(ns, "path"), {
+      d: d.trim(), fill: "none", stroke: traceColor, "stroke-width": 1.6,
+    }));
+    const distLabel = setSvgAttrs(document.createElementNS(ns, "text"), {
+      x: w - padR, y: h - 4, fill: axisColor,
+      "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+    });
+    distLabel.textContent = `distance (${VD.units.distanceUnit()}) ->`;
+    svg.append(distLabel);
+    return { svg, climbM, descentM };
+  }
+
+  function renderTripDetailElevation(route: MapRoute) {
+    const card = el("tripDetailElevationCard");
+    const chart = el("tripDetailElevation");
+    if (!card || !chart) return;
+    const built = buildTripElevationProfile(route);
+    if (!built) {
+      card.hidden = true;
+      chart.replaceChildren();
+      return;
+    }
+    card.hidden = false;
+    const metric = VD.units.system() === "metric";
+    const altText = (m: number) => (metric ? `${Math.round(m)} m` : `${Math.round(m * 3.28084)} ft`);
+    VD.setText("tripDetailElevationHead", `↗ ${altText(built.climbM)} climb · ↘ ${altText(built.descentM)} descent`);
+    chart.replaceChildren(built.svg);
+  }
+
+  // The trip-list row for a route key (state.trips is the source the list
+  // renders from), carrying the rollup-only fields the route projection
+  // doesn't: evShare and energyKwh.
+  function tripRowForKey(routeKey: string): VoltTrip | null {
+    const trips = Array.isArray(state.trips) ? (state.trips as VoltTrip[]) : [];
+    return trips.find((trip) => String(trip.id) === String(routeKey)) || null;
+  }
+
+  // EV-vs-gas split + integrated HV energy rows in the trip-detail sheet, from
+  // the trip rollup. Rows stay hidden when the drive logged no classified
+  // driving / no pack power (older drives, GPS-only logging).
+  function renderTripDetailEvSplit(routeKey: string): void {
+    const evRow = el("tripDetailEvRow");
+    const energyRow = el("tripDetailEnergyRow");
+    const trip = tripRowForKey(routeKey);
+    const evShare = trip && trip.evShare != null ? Number(trip.evShare) : NaN;
+    const energyKwh = trip && trip.energyKwh != null ? Number(trip.energyKwh) : NaN;
+    if (evRow) evRow.hidden = !Number.isFinite(evShare);
+    VD.setText("tripDetailEvShare", Number.isFinite(evShare) ? `${Math.round(evShare * 100)}% electric` : "--");
+    if (energyRow) energyRow.hidden = !Number.isFinite(energyKwh);
+    VD.setText("tripDetailEnergy", Number.isFinite(energyKwh) ? `${energyKwh.toFixed(1)} kWh` : "--");
+  }
+
   // Estimated electricity cost + savings-vs-gas for ONE drive, shown in the
   // trip-detail sheet. Reuses the SHARED cost model (cost-model.ts) so this
   // per-trip figure and the lifetime Insights figure (insights-panel.ts) use the
@@ -1327,6 +1468,60 @@ import type { MapSessionFilter } from "./map-session-list";
     }
   }
 
+  // Route key of the drive the detail sheet is showing; consumed by the
+  // "Share card" action so it doesn't need to be threaded through the DOM.
+  let tripDetailRouteKey = "";
+
+  // Builds the shareable drive-card payload from the stat strings the sheet is
+  // ALREADY showing (units/cost formatting stays single-sourced here in the
+  // WebView) and hands it to native, which renders the PNG + share sheet.
+  function shareTripCard(): boolean {
+    if (!bridge || typeof bridge.shareTripCard !== "function") {
+      VD.setStatus({ state: "idle", detail: "Card sharing is available inside the Android app." });
+      return false;
+    }
+    const routeKey = tripDetailRouteKey;
+    if (!routeKey) return false;
+    const textOf = (id: string) => {
+      const node = el(id);
+      const value = node ? String(node.textContent || "").trim() : "";
+      return value === "--" ? "" : value;
+    };
+    const stats: Array<{ label: string; value: string }> = [];
+    const push = (label: string, id: string) => {
+      const value = textOf(id);
+      if (value) stats.push({ label, value });
+    };
+    push("Distance", "tripDetailDistance");
+    push("Duration", "tripDetailDuration");
+    push("Avg speed", "tripDetailAvgSpeed");
+    push("Efficiency", "tripDetailEfficiency");
+    push("Electric", "tripDetailEvShare");
+    push("Energy", "tripDetailEnergy");
+    // Absolute date for the card (the sheet's relative "2d ago" would go stale
+    // the moment the image leaves the phone).
+    const route = routeForKey(routeKey);
+    const startedAtMs = route ? Number(sessionForRoute(route).startedAtMs) : NaN;
+    const subtitle =
+      Number.isFinite(startedAtMs) && startedAtMs > 0
+        ? new Date(startedAtMs).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+        : "";
+    const payload = { routeKey, title: textOf("tripDetailTitle") || "Drive", subtitle, stats };
+    try {
+      // The bridge reports failures synchronously via its {ok:false} envelope,
+      // not only via throws — surface those too instead of a silent no-op.
+      const result = VD.parsePayload<{ ok?: boolean }>(bridge.shareTripCard(JSON.stringify(payload)), {});
+      if (result && result.ok === false) {
+        VD.setStatus({ state: "blocked", detail: "Could not share the drive card." });
+        return false;
+      }
+    } catch (_err) {
+      VD.setStatus({ state: "blocked", detail: "Could not share the drive card." });
+      return false;
+    }
+    return true;
+  }
+
   // Open the trip-detail sheet for a route key, filling stats + the per-drive
   // scatter. Returns true when a route was found (so actions.ts can decide
   // whether to activate the focus trap).
@@ -1335,6 +1530,7 @@ import type { MapSessionFilter } from "./map-session-list";
     if (!sheet) return false;
     const route = routeForKey(routeKey);
     if (!route) return false;
+    tripDetailRouteKey = routeKey;
     const session = sessionForRoute(route);
     const stats = tripDriveStats(route);
     const label = typeof session.label === "string" ? session.label.trim() : "";
@@ -1352,7 +1548,9 @@ import type { MapSessionFilter } from "./map-session-list";
     VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
     VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
     VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");
+    renderTripDetailEvSplit(routeKey);
     renderTripDetailScatter(route);
+    renderTripDetailElevation(route);
     // Reveal the sheet here so the function is self-contained; actions.ts then
     // layers the focus trap on top (it re-sets hidden=false too, harmlessly).
     sheet.hidden = false;
@@ -1799,6 +1997,7 @@ import type { MapSessionFilter } from "./map-session-list";
     refreshMapSessionList,
     openTripDetail,
     closeTripDetail,
+    shareTripCard,
     selectedMapRoute,
     sessionForRoute,
     haversineMetersJs,

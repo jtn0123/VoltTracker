@@ -17,6 +17,12 @@ object EnhancedPidProfiles {
     const val STAGE_TIRES: String = "tires"
     const val STAGE_EXPERIMENTAL: String = "experimental"
 
+    /**
+     * Dedicated 96-cell voltage snapshot pass on the BECM (ATSH7E7). Not a catalog stage —
+     * [forStage] returns nothing for it; [CellVoltageProbeRunner] owns the command sequence.
+     */
+    const val STAGE_CELLS: String = "cells"
+
     @JvmField
     val ALL: List<EnhancedPidProfile> = EnhancedPidCatalog.build()
 
@@ -93,7 +99,8 @@ object EnhancedPidProfiles {
         if (cleanStage == STAGE_PASSIVE ||
             cleanStage == STAGE_LOW_RISK ||
             cleanStage == STAGE_TIRES ||
-            cleanStage == STAGE_EXPERIMENTAL
+            cleanStage == STAGE_EXPERIMENTAL ||
+            cleanStage == STAGE_CELLS
         ) {
             return cleanStage
         }

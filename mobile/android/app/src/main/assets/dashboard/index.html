@@ -1015,15 +1015,22 @@
         <h3 id="tripDetailTitle">Drive</h3>
         <p id="tripDetailSub" class="status-copy"></p>
       </div>
-      <button
-        type="button"
-        id="tripDetailClose"
-        class="link-btn trip-detail-close"
-        data-action="closeTripDetail"
-        aria-label="Close drive detail"
-      >
-        Close
-      </button>
+      <div class="map-sheet-actions">
+        <!-- Renders this drive's route outline + stats as a PNG and opens the
+             Android share sheet (map.ts#shareTripCard). -->
+        <button type="button" class="link-btn" data-action="shareTripCard">
+          Share card
+        </button>
+        <button
+          type="button"
+          id="tripDetailClose"
+          class="link-btn trip-detail-close"
+          data-action="closeTripDetail"
+          aria-label="Close drive detail"
+        >
+          Close
+        </button>
+      </div>
     </header>
     <div
       class="trip-detail-stats"
@@ -1053,6 +1060,17 @@
       <div>
         <span class="kicker">GPS points</span
         ><strong id="tripDetailPoints">--</strong>
+      </div>
+      <!-- EV-vs-gas split and integrated HV energy for THIS drive, from the
+           trip rollup (trip.evShare / trip.energyKwh). Hidden when the drive
+           logged no classified driving / no pack power. -->
+      <div id="tripDetailEvRow" hidden>
+        <span class="kicker">Electric share</span
+        ><strong id="tripDetailEvShare">--</strong>
+      </div>
+      <div id="tripDetailEnergyRow" hidden>
+        <span class="kicker">Energy used</span
+        ><strong id="tripDetailEnergy">--</strong>
       </div>
       <!-- Estimated electricity cost + savings vs gas for THIS drive (M3),
            using the same cost model as the lifetime Insights figure. Hidden
@@ -1092,6 +1110,20 @@
         Not enough power/efficiency samples on this drive to plot efficiency vs
         speed. It fills in when the OBD loop captured battery current.
       </p>
+    </article>
+    <!-- Elevation profile along the route (GPS altitude vs distance). Hidden
+         when the drive has too few altitude fixes to draw a meaningful
+         profile. Rendered by map.ts#renderTripDetailElevation. -->
+    <article
+      class="trip-detail-scatter-card"
+      id="tripDetailElevationCard"
+      hidden
+    >
+      <header>
+        <span class="kicker">Elevation — this drive</span>
+        <h4 id="tripDetailElevationHead">Climb and descent along the route.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailElevation"></div>
     </article>
   </div>
 
@@ -1343,7 +1375,14 @@
         <span class="kicker">Battery cell balance</span>
         <h3 id="cellBalanceTitle">No live cell data yet</h3>
       </div>
-      <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
+      <div class="map-sheet-actions">
+        <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
+        <!-- Runs the dedicated 96-cell voltage probe (detailProbeLast("cells")) against
+             the remembered adapter; the result fills the per-cell map card below. -->
+        <button type="button" class="link-btn" data-action="cellProbe">
+          Read all 96 cells
+        </button>
+      </div>
     </header>
     <p id="cellBalanceEmpty" class="status-copy">
       Connect the adapter while the car is awake — the lowest and highest
@@ -1770,6 +1809,72 @@
         </div>
         <div>
           <span>GPS trips</span><strong id="insightGpsTrips">--</strong>
+        </div>
+        <!-- Speed-weighted share of classified driving done on electric (EV vs
+             engine-on samples); "--" until the classifier has seen real driving. -->
+        <div>
+          <span>Electric driving</span
+          ><strong id="insightElectricPct">--</strong>
+        </div>
+      </div>
+    </article>
+
+    <!-- Monthly driving trend: distance per month from the logged trips, with
+         real efficiency (integrated HV energy) and estimated cost stats.
+         Mirrors the monthly charging trend on the Battery tab (shared SVG via
+         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
+         Rendered by insights-panel.ts#renderDriveTrend. -->
+    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Driving over time</span>
+          <h3 id="driveTrendTitle">Monthly distance</h3>
+        </div>
+        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
+          >--</strong
+        >
+      </header>
+      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
+      <div id="driveTrendStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker">Avg / month</span>
+          <strong id="driveTrendAvg">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Efficiency</span>
+          <strong id="driveTrendEff">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="driveTrendCostLabel">Est cost / mi</span>
+          <strong id="driveTrendCost">--</strong>
+        </div>
+      </div>
+    </article>
+
+    <!-- Efficiency vs outside temperature (winter range loss): real per-band
+         efficiency from trips that logged ambient temperature + HV energy.
+         Hidden until two temperature bands each hold two or more such drives.
+         Rendered by insights-panel.ts#renderTempEfficiency. -->
+    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Temperature vs efficiency</span>
+          <h3 id="tempEffHead">Range across the seasons</h3>
+        </div>
+      </header>
+      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
+      <div id="tempEffStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker" id="tempEffBestLabel">Best band</span>
+          <strong id="tempEffBest">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="tempEffColdLabel">Coldest band</span>
+          <strong id="tempEffCold">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Drives</span>
+          <strong id="tempEffTrips">--</strong>
         </div>
       </div>
     </article>

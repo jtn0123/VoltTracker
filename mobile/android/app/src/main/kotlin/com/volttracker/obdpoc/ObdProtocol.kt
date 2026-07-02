@@ -201,6 +201,20 @@ object ObdProtocol {
         response: String?,
     ): ParsedPidValue? = ObdVoltMode22Decoder.parse(cleanCommand, response)
 
+    /**
+     * Header-aware decode for the dedicated 96-cell probe on the BECM (ATSH7E7). Bypasses the
+     * command-string dispatch of [parseKnownValue], which would misroute the cell DIDs that
+     * collide with 7E4 meanings of the same command string (e.g. "2241A3").
+     */
+    @JvmStatic
+    fun parseCellVoltageProbe(
+        command: String?,
+        response: String?,
+    ): ParsedPidValue? {
+        val cleanCommand = command?.trim()?.uppercase(Locale.US) ?: ""
+        return ObdVoltMode22Decoder.parseCellVoltage(cleanCommand, response)
+    }
+
     @JvmStatic
     fun parseDiagnosticTroubleCodes(
         command: String?,

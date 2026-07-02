@@ -79,6 +79,44 @@ describe('cell voltage map', () => {
     expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(96);
   });
 
+  it('renders the map from a persisted probe snapshot without live telemetry', () => {
+    const VD = window.VoltDashboard;
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }));
+    VD.applyCellSnapshot({ capturedAtMs: Date.now() - 3600_000, cellCount: 96, cells });
+
+    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
+    expect(boxes).toHaveLength(96);
+    expect(boxes[0].style.backgroundColor).not.toBe('');
+    expect(document.getElementById('cellGridBadge').textContent).toBe('96 cells');
+    expect(document.getElementById('cellGridNote').textContent).toContain('cell probe');
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+  });
+
+  it('renders a partial probe (a few unanswered cells) with unknown boxes and an honest badge', () => {
+    const VD = window.VoltDashboard;
+    // Cells 5, 41, 77 missing — still >= the 90-cell confidence floor.
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }))
+      .filter((c) => c.index !== 5 && c.index !== 41 && c.index !== 77);
+    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: cells.length, cells });
+
+    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
+    expect(boxes).toHaveLength(96);
+    expect(boxes[4].classList.contains('is-unknown')).toBe(true);
+    expect(boxes[5].style.backgroundColor).not.toBe('');
+    expect(document.getElementById('cellGridBadge').textContent).toBe('93 of 96 cells');
+  });
+
+  it('clears the stored map when the snapshot payload is empty (storage wiped)', () => {
+    const VD = window.VoltDashboard;
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 }));
+    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: 96, cells });
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+
+    VD.applyCellSnapshot({});
+    expect(document.getElementById('cellGridCard').hidden).toBe(true);
+    expect(document.getElementById('cellGridBadge').textContent).toBe('awaiting probe');
+  });
+
   it('renders a full heatmap when per-cell voltages are present', () => {
     const VD = window.VoltDashboard;
     const cellVoltages = Array.from({ length: 96 }, (_v, i) => 3.9 + (i % 8) * 0.01);

@@ -994,6 +994,60 @@ class ObdLocalStoreDbTest {
         assertEquals(0, store.getBatterySohHistoryJson().length())
     }
 
+    @Test
+    fun cellSnapshotRoundTripsThroughTheStore() {
+        // 96 cells, cell 41 (index 40) unanswered.
+        val voltages: MutableList<Double?> = MutableList(96) { i -> 3.9 + (i % 8) * 0.01 }
+        voltages[40] = null
+
+        val snapshotId = store.recordCellSnapshot(voltages)
+        assertTrue(snapshotId > 0)
+
+        val snapshot = store.projections().batterySummary().getJSONObject("latestCellSnapshot")
+        assertEquals(95, snapshot.getInt("cellCount"))
+        assertTrue(snapshot.getLong("capturedAtMs") > 0)
+        val cells = snapshot.getJSONArray("cells")
+        assertEquals(95, cells.length())
+        // 1-based cell indexes, ascending; the missing cell 41 is simply absent.
+        assertEquals(1, cells.getJSONObject(0).getInt("index"))
+        assertEquals(3.9, cells.getJSONObject(0).getDouble("voltage"), 0.001)
+        assertEquals(40, cells.getJSONObject(39).getInt("index"))
+        assertEquals(42, cells.getJSONObject(40).getInt("index"))
+    }
+
+    @Test
+    fun latestCellSnapshotWinsOverOlderOnes() {
+        store.recordCellSnapshot(MutableList(96) { 3.8 })
+        // battery_snapshots.captured_at_ms uses wall time; make the second probe strictly newer.
+        Thread.sleep(2)
+        store.recordCellSnapshot(MutableList(96) { 4.1 })
+
+        val snapshot = store.projections().batterySummary().getJSONObject("latestCellSnapshot")
+        assertEquals(96, snapshot.getInt("cellCount"))
+        assertEquals(4.1, snapshot.getJSONArray("cells").getJSONObject(0).getDouble("voltage"), 0.001)
+    }
+
+    @Test
+    fun cellSnapshotIsEmptyBeforeAnyProbe() {
+        assertEquals(
+            0,
+            store
+                .projections()
+                .batterySummary()
+                .getJSONObject("latestCellSnapshot")
+                .length(),
+        )
+    }
+
+    @Test
+    fun cellProbeSnapshotsStayOutOfTheSohHistory() {
+        // A cell probe writes a parent battery_snapshots row without soh/capacity; the SOH
+        // trend must not pick it up as a data point.
+        store.recordCellSnapshot(MutableList(96) { 3.9 })
+
+        assertEquals(0, store.getBatterySohHistoryJson().length())
+    }
+
     companion object {
         private fun sample(
             speedKph: Int,

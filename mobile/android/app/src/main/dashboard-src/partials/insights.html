@@ -247,6 +247,72 @@
         <div>
           <span>GPS trips</span><strong id="insightGpsTrips">--</strong>
         </div>
+        <!-- Speed-weighted share of classified driving done on electric (EV vs
+             engine-on samples); "--" until the classifier has seen real driving. -->
+        <div>
+          <span>Electric driving</span
+          ><strong id="insightElectricPct">--</strong>
+        </div>
+      </div>
+    </article>
+
+    <!-- Monthly driving trend: distance per month from the logged trips, with
+         real efficiency (integrated HV energy) and estimated cost stats.
+         Mirrors the monthly charging trend on the Battery tab (shared SVG via
+         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
+         Rendered by insights-panel.ts#renderDriveTrend. -->
+    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Driving over time</span>
+          <h3 id="driveTrendTitle">Monthly distance</h3>
+        </div>
+        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
+          >--</strong
+        >
+      </header>
+      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
+      <div id="driveTrendStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker">Avg / month</span>
+          <strong id="driveTrendAvg">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Efficiency</span>
+          <strong id="driveTrendEff">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="driveTrendCostLabel">Est cost / mi</span>
+          <strong id="driveTrendCost">--</strong>
+        </div>
+      </div>
+    </article>
+
+    <!-- Efficiency vs outside temperature (winter range loss): real per-band
+         efficiency from trips that logged ambient temperature + HV energy.
+         Hidden until two temperature bands each hold two or more such drives.
+         Rendered by insights-panel.ts#renderTempEfficiency. -->
+    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Temperature vs efficiency</span>
+          <h3 id="tempEffHead">Range across the seasons</h3>
+        </div>
+      </header>
+      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
+      <div id="tempEffStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker" id="tempEffBestLabel">Best band</span>
+          <strong id="tempEffBest">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="tempEffColdLabel">Coldest band</span>
+          <strong id="tempEffCold">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Drives</span>
+          <strong id="tempEffTrips">--</strong>
+        </div>
       </div>
     </article>
 

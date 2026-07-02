@@ -1222,7 +1222,40 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   const CELL_GRID_COUNT = 96;
+  // A probe pass can miss a few cells (bus noise, one unanswered DID) and the map is
+  // still trustworthy; below this many known cells fall back to the min/max highlight.
+  const CELL_GRID_FULL_MIN = 90;
   let lastCellGridSig = "";
+
+  // Latest persisted full-pack probe result (bridge getCellSnapshot / setCellSnapshot push),
+  // used when the live telemetry sample doesn't carry a cellVoltages array — i.e. any time
+  // after the probe session ended, including app restarts.
+  let probeCellSlots: Array<number | null> | null = null;
+  let probeCellCapturedAtMs = 0;
+
+  /**
+   * Accepts the persisted cell-snapshot payload `{capturedAtMs, cellCount, cells:[{index, voltage}]}`
+   * (index 1-based) from the storage bridge and re-renders the cell map. An empty/error payload
+   * clears the stored map (storage was wiped).
+   */
+  function applyCellSnapshot(payload: unknown) {
+    const snap = VD.parsePayload<PayloadRecord>(payload, {});
+    const rawCells = Array.isArray(snap.cells) ? (snap.cells as unknown[]) : [];
+    const slots: Array<number | null> = new Array(CELL_GRID_COUNT).fill(null);
+    for (const item of rawCells) {
+      if (typeof item !== "object" || item === null) continue;
+      const idx = Number((item as PayloadRecord).index);
+      const v = Number((item as PayloadRecord).voltage);
+      if (Number.isFinite(idx) && idx >= 1 && idx <= CELL_GRID_COUNT && Number.isFinite(v)) {
+        slots[idx - 1] = v;
+      }
+    }
+    const hasAny = slots.some((v) => v !== null);
+    probeCellSlots = hasAny ? slots : null;
+    probeCellCapturedAtMs = hasAny ? Number(snap.capturedAtMs) || 0 : 0;
+    lastCellGridSig = "";
+    renderCellGrid();
+  }
 
   // Maps a cell voltage to a blue→red color across the observed pack range, so an
   // outlier cell stands out in the grid.
@@ -1248,36 +1281,64 @@ import { initialTelemetryState } from "./telemetry-state";
     const card = el("cellGridCard");
     const t = state.telemetry || {};
     const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
-    const cells: number[] = rawCells
-      .map((c) => (typeof c === "object" && c !== null ? Number((c as PayloadRecord).voltage) : Number(c)))
-      .filter((v) => Number.isFinite(v));
+    // Positional slots (null = cell didn't answer): live sample first, then the
+    // persisted probe snapshot so the map survives disconnects and app restarts.
+    let slots: Array<number | null> | null = null;
+    let fromProbeAtMs = 0;
+    if (rawCells.length) {
+      const live: Array<number | null> = new Array(CELL_GRID_COUNT).fill(null);
+      for (let i = 0; i < Math.min(rawCells.length, CELL_GRID_COUNT); i += 1) {
+        const c = rawCells[i];
+        const v = typeof c === "object" && c !== null ? Number((c as PayloadRecord).voltage) : Number(c);
+        if (Number.isFinite(v)) live[i] = v;
+      }
+      slots = live;
+    } else if (probeCellSlots) {
+      slots = probeCellSlots;
+      fromProbeAtMs = probeCellCapturedAtMs;
+    }
+    const known: number[] = slots ? (slots.filter((v) => v !== null) as number[]) : [];
     const minCell = Number(t.minCellNumber);
     const maxCell = Number(t.maxCellNumber);
     const minV = Number(t.minCellVoltage);
     const maxV = Number(t.maxCellVoltage);
-    const full = cells.length >= CELL_GRID_COUNT;
+    const full = known.length >= CELL_GRID_FULL_MIN;
     const sig = full
-      ? `full:${cells.slice(0, CELL_GRID_COUNT).map((v) => v.toFixed(3)).join(",")}`
+      ? `full:${(slots as Array<number | null>).map((v) => (v === null ? "" : v.toFixed(3))).join(",")}:${fromProbeAtMs}`
       : `hi:${minCell}:${maxCell}:${minV}:${maxV}`;
     if (sig === lastCellGridSig) return;
     lastCellGridSig = sig;
 
     const frag = document.createDocumentFragment();
-    if (full) {
+    if (full && slots) {
       if (card) card.hidden = false;
-      const lo = Math.min(...cells);
-      const hi = Math.max(...cells);
+      grid.hidden = false;
+      const lo = Math.min(...known);
+      const hi = Math.max(...known);
       for (let i = 0; i < CELL_GRID_COUNT; i += 1) {
-        const v = cells[i];
+        const v = slots[i];
         const box = document.createElement("span");
         box.className = "cell-grid-box";
-        box.style.backgroundColor = cellGridColor(v, lo, hi);
-        box.title = `Cell ${i + 1}: ${v.toFixed(3)} V`;
+        if (v === null) {
+          box.classList.add("is-unknown");
+          box.title = `Cell ${i + 1}: no data`;
+        } else {
+          box.style.backgroundColor = cellGridColor(v, lo, hi);
+          box.title = `Cell ${i + 1}: ${v.toFixed(3)} V`;
+        }
         frag.appendChild(box);
       }
-      VD.setText("cellGridBadge", `${CELL_GRID_COUNT} cells`);
+      VD.setText(
+        "cellGridBadge",
+        known.length >= CELL_GRID_COUNT ? `${CELL_GRID_COUNT} cells` : `${known.length} of ${CELL_GRID_COUNT} cells`,
+      );
       VD.setText("cellGridTitle", "Per-cell voltage map");
-      VD.setText("cellGridNote", "Per-cell voltages from the latest cell probe.");
+      VD.setText(
+        "cellGridNote",
+        fromProbeAtMs > 0
+          ? `Per-cell voltages from the cell probe ${formatWhen(fromProbeAtMs)}.`
+          : "Per-cell voltages from the latest cell probe.",
+      );
     } else {
       const knownMin = Number.isFinite(minCell);
       const knownMax = Number.isFinite(maxCell);
@@ -1480,6 +1541,7 @@ import { initialTelemetryState } from "./telemetry-state";
     applyStaleIndicator,
     updateLiveUi,
     updateDiagnostics,
+    applyCellSnapshot,
     renderLiveCharge,
     updateValidationUi,
     setValidationRow,

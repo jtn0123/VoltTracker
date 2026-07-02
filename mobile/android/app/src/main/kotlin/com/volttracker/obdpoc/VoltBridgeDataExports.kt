@@ -127,6 +127,17 @@ internal class VoltBridgeDataExports(
     fun exportChargeSessionsCsv(pricePerKwh: String?): String =
         activity.exportTripFromBridge(bridgeSafe(pricePerKwh, BRIDGE_MAX_LABEL_LEN), "csv_charges")
 
+    /**
+     * Shareable drive-summary card: renders the drive's route outline + the already-formatted stat
+     * strings from the trip-detail sheet as a PNG and launches the share sheet. Rides the existing
+     * trip-export host seam with the `card` sentinel format; [cardJson] (`{routeKey, title,
+     * subtitle, stats:[{label, value}, …]}`) travels through the routeKey slot with the wider
+     * detail-length cap, and the controller re-clamps every field it draws. Returns the host's JSON
+     * result verbatim.
+     */
+    fun shareTripCard(cardJson: String?): String =
+        activity.exportTripFromBridge(bridgeSafe(cardJson, BRIDGE_MAX_DETAIL_LEN), "card")
+
     fun deleteDetailedSignalLog(id: String?) {
         val rowId = parseBridgePositiveId(id)
         if (rowId <= 0L) {

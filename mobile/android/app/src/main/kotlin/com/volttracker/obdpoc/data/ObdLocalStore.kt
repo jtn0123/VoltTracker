@@ -102,12 +102,7 @@ open class ObdLocalStore(
     open override fun recordTelemetry(
         sessionId: Long,
         sample: JSONObject?,
-    ): Long = writer.recordTelemetry(sessionId, sample)
-
-    open override fun recordTelemetry(
-        sessionId: Long,
-        sample: JSONObject?,
-        capturedAtMs: Long,
+        capturedAtMs: Long?,
     ): Long = writer.recordTelemetry(sessionId, sample, capturedAtMs)
 
     open override fun recordPidObservation(
@@ -430,6 +425,13 @@ open class ObdLocalStore(
 
     /** Battery-health snapshots (oldest-first) for the dashboard's pack-health trend chart. */
     open fun getBatterySohHistoryJson(): JSONArray = reports.batterySohHistoryJson(1000)
+
+    /**
+     * Persists one full-pack cell-voltage probe result (surfaced to the dashboard via the
+     * `batterySummary.latestCellSnapshot` storage-details block); returns the parent snapshot
+     * id or -1.
+     */
+    open fun recordCellSnapshot(voltages: List<Double?>): Long = writer.recordCellSnapshot(voltages)
 
     /**
      * Sets (or clears, when [label] is blank) the user label for the trip identified by [routeKey].

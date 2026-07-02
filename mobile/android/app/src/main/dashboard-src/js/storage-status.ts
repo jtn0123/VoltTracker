@@ -901,6 +901,24 @@ import { prefs, units } from "./prefs";
     if (chart) chart.replaceChildren(buildSohSvg(points));
   }
 
+  // Latest full-pack cell snapshot (96-cell probe), carried on the storage-details
+  // payload as batterySummary.latestCellSnapshot. Handed to telemetry.ts
+  // (VD.applyCellSnapshot), which owns the cell-map render; memoized so the map
+  // isn't rebuilt on every app-state broadcast.
+  let cellSnapLastSig: string | null = null;
+
+  function refreshCellSnapshot() {
+    if (typeof VD.applyCellSnapshot !== "function") return;
+    const battery: Record<string, unknown> = (state.storage || {}).batterySummary || {};
+    const snapshot = battery.latestCellSnapshot as Record<string, unknown> | undefined;
+    // Details not loaded yet — keep whatever the map already shows.
+    if (!snapshot) return;
+    const sig = `${snapshot.capturedAtMs || 0}:${snapshot.cellCount || 0}`;
+    if (sig === cellSnapLastSig) return;
+    cellSnapLastSig = sig;
+    VD.applyCellSnapshot(snapshot);
+  }
+
   // Single source of truth for the charge-status badge: each key maps to BOTH
   // its visible label and its data-state color token, so the badge text and the
   // pill color are derived together and can never drift apart. Labels keep the
@@ -950,6 +968,7 @@ import { prefs, units } from "./prefs";
     setDataState(el("realChargeStatusBadge"), chargeStatus.state);
     renderChargeSessions(charge);
     renderBatterySohTrend();
+    refreshCellSnapshot();
 
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
@@ -1493,7 +1512,9 @@ import { prefs, units } from "./prefs";
     return Array.from(byKey.values()).sort((a, b) => a.ms - b.ms);
   }
 
-  function buildChargeTrendSvg(buckets: MonthBucket[], values: number[], unitSuffix: string): SVGElement {
+  // Monthly bar chart shared by the charging trend (Battery tab) and the driving
+  // trend (Insights tab, via VD.buildMonthlyTrendSvg) so the two can't drift.
+  function buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string): SVGElement {
     const ns = "http://www.w3.org/2000/svg";
     const w = 320;
     const h = 132;
@@ -1517,9 +1538,7 @@ import { prefs, units } from "./prefs";
       viewBox: `0 0 ${w} ${h}`,
       class: "charge-cost-trend-svg",
       role: "img",
-      "aria-label": `Monthly charging ${unitSuffix === "$" ? "cost" : "energy"} trend, latest ${
-        unitSuffix === "$" ? "$" + values[values.length - 1].toFixed(2) : values[values.length - 1].toFixed(1) + " kWh"
-      }`,
+      "aria-label": ariaLabel,
     });
     // Baseline.
     svg.appendChild(make("line", {
@@ -1545,7 +1564,7 @@ import { prefs, units } from "./prefs";
         "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
       });
       // Show every label when few buckets; thin to every other when crowded.
-      label.textContent = n <= 6 || i % 2 === 0 ? buckets[i].label : "";
+      label.textContent = n <= 6 || i % 2 === 0 ? labels[i] as string : "";
       svg.appendChild(label);
     });
     return svg;
@@ -1582,7 +1601,13 @@ import { prefs, units } from "./prefs";
     VD.setText("chargeCostTrendAvg", fmt(avg));
     VD.setText("chargeCostTrendMonths", String(buckets.length));
     VD.setText("chargeCostTrendTotal", fmt(total));
-    if (chart) chart.replaceChildren(buildChargeTrendSvg(buckets, values, showCost ? "$" : "kWh"));
+    if (chart) {
+      const latest = values[values.length - 1] as number;
+      const aria = `Monthly charging ${showCost ? "cost" : "energy"} trend, latest ${
+        showCost ? "$" + latest.toFixed(2) : latest.toFixed(1) + " kWh"
+      }`;
+      chart.replaceChildren(buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria));
+    }
   }
 
   function chargeNum(value: unknown) {
@@ -1754,6 +1779,8 @@ import { prefs, units } from "./prefs";
       applyBatterySohHistory(payload);
       renderBatterySohTrend();
     },
+    monthBucketKey,
+    buildMonthlyTrendSvg,
     loadMaintenanceLog,
     renderMaintenanceList,
     addMaintenanceEntry,

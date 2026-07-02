@@ -240,6 +240,10 @@ class VoltBridge(
     @JavascriptInterface
     fun exportChargeSessionsCsv(pricePerKwh: String?): String = dataExports.exportChargeSessionsCsv(pricePerKwh)
 
+    /** Shareable drive-summary card (PNG): route outline + the trip-detail sheet's stat strings. */
+    @JavascriptInterface
+    fun shareTripCard(cardJson: String?): String = dataExports.shareTripCard(cardJson)
+
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
         dataExports.deleteDetailedSignalLog(id)

@@ -377,9 +377,31 @@ internal object ObdVoltMode22Decoder {
             }
         }
         if (isCellVoltageProbe(cleanCommand)) {
-            return cellVoltageValue(response, cleanCommand, cellVoltageProbeName(cleanCommand))
+            return parseCellVoltage(cleanCommand, response)
         }
         return null
+    }
+
+    /**
+     * Header-aware decode for the dedicated 96-cell probe: the generic [parse] dispatch is keyed by
+     * command string only, so on the BECM (ATSH7E7) a cell DID like 0x41A3 (cell 35) would be
+     * swallowed by the 7E4 meaning of the same string ("2241A3" = pack capacity). The cell probe
+     * runner calls this directly to skip the command table.
+     *
+     * No field anchor exists yet for the per-cell DIDs, so accept either known encoding. The
+     * scales' plausible word ranges are disjoint (a 1.5-4.5 V cell needs word 19661-58982 at
+     * 5/65535 but 2400-7200 at 1/1600), so trying both is unambiguous.
+     */
+    internal fun parseCellVoltage(
+        cleanCommand: String,
+        response: String?,
+    ): ParsedPidValue? {
+        if (!isCellVoltageProbe(cleanCommand)) {
+            return null
+        }
+        val name = cellVoltageProbeName(cleanCommand)
+        return cellVoltageValue(response, cleanCommand, name)
+            ?: cellVoltageValue(response, cleanCommand, name, VOLT_CELL_VOLTAGE_SCALE)
     }
 
     private fun voltByteValue(
@@ -492,6 +514,10 @@ internal object ObdVoltMode22Decoder {
 
     private fun cellVoltageProbeName(command: String): String {
         val did = mode22Did(command) ?: return "cell voltage"
+        // The two tail ranges are ALTERNATE encodings of the same physical cells 32-96 — a car
+        // answers exactly one of them (CellVoltageProbeRunner picks the layout by whether the
+        // Bolt-contiguous 0x41A0 responds), so e.g. 0x41A0 and 0x4200 both meaning "cell 32" is
+        // intentional, not a collision.
         val cellIndex =
             if (did in 0x4181..0x41E0) {
                 did - 0x4180

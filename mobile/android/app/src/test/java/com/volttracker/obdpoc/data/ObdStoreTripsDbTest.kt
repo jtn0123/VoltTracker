@@ -111,6 +111,55 @@ class ObdStoreTripsDbTest {
     }
 
     @Test
+    fun tripCarriesIntegratedEnergyAndEvShare() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        // 20 kW steady over 2 s of EV driving, then 40 kW over 2 s on gas:
+        // trapezoid = 20*(2/3600) + 40*(2/3600) = 0.01111 + 0.02222 kWh.
+        store.recordTelemetry(id, poweredSample(40, 34.0500, -118.2500, 1000L, 20.0, "driving_ev"))
+        store.recordTelemetry(id, poweredSample(40, 34.0600, -118.2500, 3000L, 20.0, "driving_ev"))
+        store.recordTelemetry(id, poweredSample(40, 34.0700, -118.2500, 5000L, 40.0, "driving_gas"))
+        store.recordTelemetry(id, poweredSample(40, 34.0800, -118.2500, 7000L, 40.0, "driving_gas"))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 8000L, "")
+
+        val trips = store.getTripsJson(40)
+        assertEquals(1, trips.length())
+        val trip = trips.getJSONObject(0)
+        // Trapezoids: 20*(2/3600) + 30*(2/3600) + 40*(2/3600) = 0.05 kWh.
+        assertEquals(0.05, trip.getDouble("energyKwh"), 0.001)
+        // Speed-weighted EV share: equal speeds, 2 EV vs 2 gas samples → 0.5.
+        assertEquals(0.5, trip.getDouble("evShare"), 0.001)
+        assertEquals(50.0, store.getInsightsJson().getDouble("electricDrivingPct"), 0.001)
+    }
+
+    @Test
+    fun tripWithoutPowerOrClassificationReportsNulls() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, gpsSample(40, 34.0500, -118.2500, 1000L))
+        store.recordTelemetry(id, gpsSample(55, 34.0600, -118.2500, 2000L))
+        store.recordTelemetry(id, gpsSample(60, 34.0700, -118.2500, 3000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+
+        val trip = store.getTripsJson(40).getJSONObject(0)
+        assertTrue("no power samples -> energyKwh null", trip.isNull("energyKwh"))
+        assertTrue("no classified driving -> evShare null", trip.isNull("evShare"))
+        assertTrue("no ambient samples -> avgOutsideTempC null", trip.isNull("avgOutsideTempC"))
+        assertTrue(store.getInsightsJson().isNull("electricDrivingPct"))
+    }
+
+    @Test
+    fun tripAveragesTheLoggedOutsideTemperature() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        // Ambient rides only in the sample JSON blob (no telemetry column).
+        store.recordTelemetry(id, gpsSample(40, 34.0500, -118.2500, 1000L).put("outsideTempC", -4.0))
+        store.recordTelemetry(id, gpsSample(50, 34.0600, -118.2500, 2000L).put("outsideTempC", -2.0))
+        store.recordTelemetry(id, gpsSample(60, 34.0700, -118.2500, 3000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+
+        val trip = store.getTripsJson(40).getJSONObject(0)
+        assertEquals(-3.0, trip.getDouble("avgOutsideTempC"), 0.001)
+    }
+
+    @Test
     fun zeroMovementSessionIsNotReportedAsATrip() {
         val id = store.startSession("obd", "00:11", "Adapter")
         // All samples at the exact same coordinate — distance must be 0.
@@ -760,6 +809,20 @@ class ObdStoreTripsDbTest {
             sample.put("longitude", lng)
             sample.put("accuracyM", 5.0)
             sample.put("updatedAt", atMs)
+            return sample
+        }
+
+        private fun poweredSample(
+            speedKph: Int,
+            lat: Double,
+            lng: Double,
+            atMs: Long,
+            powerKw: Double,
+            vehicleState: String,
+        ): JSONObject {
+            val sample = gpsSample(speedKph, lat, lng, atMs)
+            sample.put("powerKw", powerKw)
+            sample.put("vehicleState", vehicleState)
             return sample
         }
 

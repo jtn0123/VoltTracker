@@ -36,6 +36,7 @@ open class ObdPollingEngine(
     private val demoLoop: DemoPollingLoop
     private val scanRunner: DiagnosticScanRunner
     private val tpmsDiscoveryRunner: TpmsDiscoveryRunner
+    private val cellVoltageProbeRunner: CellVoltageProbeRunner
     private val clearDtcRunner: ClearDtcRunner
     private val sessionHealth: SessionHealthTracker
     private val pidPolling: PidPollingState
@@ -61,6 +62,7 @@ open class ObdPollingEngine(
         demoLoop = DemoPollingLoop(service, this, sleeper)
         scanRunner = DiagnosticScanRunner(service, this)
         tpmsDiscoveryRunner = TpmsDiscoveryRunner(service, this)
+        cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
     }
 
@@ -257,7 +259,13 @@ open class ObdPollingEngine(
             return
         }
         if (!detailProbeStage.isNullOrBlank()) {
-            tpmsDiscoveryRunner.run(address, detailProbeStage)
+            // The cells stage is a dedicated 96-cell snapshot pass; every other stage is a
+            // catalog-driven discovery sweep through the generic detail-probe runner.
+            if (detailProbeStage == EnhancedPidProfiles.STAGE_CELLS) {
+                cellVoltageProbeRunner.run()
+            } else {
+                tpmsDiscoveryRunner.run(address, detailProbeStage)
+            }
             return
         }
         retry.resetAttemptBudget()

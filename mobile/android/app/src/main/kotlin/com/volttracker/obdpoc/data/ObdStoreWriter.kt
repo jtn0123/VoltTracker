@@ -160,16 +160,12 @@ class ObdStoreWriter(
     fun recordTelemetry(
         sessionId: Long,
         sample: JSONObject?,
+        capturedAtMsOverride: Long? = null,
     ): Long {
-        val capturedAtMs = sample?.optLong("updatedAt", System.currentTimeMillis()) ?: System.currentTimeMillis()
-        return recordTelemetry(sessionId, sample, capturedAtMs)
-    }
-
-    fun recordTelemetry(
-        sessionId: Long,
-        sample: JSONObject?,
-        capturedAtMs: Long,
-    ): Long {
+        val capturedAtMs =
+            capturedAtMsOverride
+                ?: sample?.optLong("updatedAt", System.currentTimeMillis())
+                ?: System.currentTimeMillis()
         val safeSample = sample ?: JSONObject()
         if (!ObdStoreSupport.isUsefulTelemetry(safeSample)) {
             return -1L
@@ -214,6 +210,53 @@ class ObdStoreWriter(
         values.put("created_at_ms", System.currentTimeMillis())
         values.put("json", sample.toString())
         db.insertOrThrow(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, values)
+    }
+
+    /**
+     * Persists one full-pack cell-voltage probe result (M-cells): a `battery_snapshots` parent row
+     * (session-less; the probe runs in its own short scan session) plus one `cell_snapshots` child
+     * per answering cell. [voltages] is indexed 0-based; cell_index is stored 1-based to match the
+     * live min/max cell-number PIDs. Returns the parent snapshot id, or -1 when no cell answered.
+     */
+    fun recordCellSnapshot(voltages: List<Double?>): Long {
+        val answered = voltages.count { it != null }
+        if (answered == 0) {
+            return -1L
+        }
+        val capturedAtMs = System.currentTimeMillis()
+        val present = voltages.filterNotNull()
+        val minV = present.min()
+        val maxV = present.max()
+        val db = helper.writableDatabase
+        var snapshotId = -1L
+        db.transaction {
+            val parent = ContentValues()
+            parent.put("captured_at_ms", capturedAtMs)
+            parent.put("created_at_ms", capturedAtMs)
+            val json = JSONObject()
+            try {
+                json.put("source", "cell-probe")
+                json.put("cellCount", answered)
+                json.put("minCellVoltage", minV)
+                json.put("maxCellVoltage", maxV)
+                json.put("cellBalanceMv", (maxV - minV) * 1000.0)
+            } catch (ignored: JSONException) {
+                // Local values are safe.
+            }
+            parent.put("json", json.toString())
+            snapshotId = db.insertOrThrow(VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS, null, parent)
+            for ((index, voltage) in voltages.withIndex()) {
+                if (voltage == null) {
+                    continue
+                }
+                val child = ContentValues()
+                child.put("battery_snapshot_id", snapshotId)
+                child.put("cell_index", index + 1)
+                child.put("voltage", voltage)
+                db.insertOrThrow(VoltTrackerDb.TABLE_CELL_SNAPSHOTS, null, child)
+            }
+        }
+        return snapshotId
     }
 
     private fun putOptionalDouble(

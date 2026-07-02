@@ -32,11 +32,15 @@ object TripExportShareIntent {
     ) {
         GPX("gpx", ".gpx", TripTrackFormatter.GPX_MIME),
         CSV("csv", ".csv", TripTrackFormatter.CSV_MIME),
+
+        /** Shareable drive-summary card image; reached only via the card sentinel, never [fromKey]. */
+        CARD("card", ".png", "image/png"),
         ;
 
         companion object {
-            /** Maps a bridge format token onto a [Format], or null when it is unrecognized. */
-            fun fromKey(raw: String?): Format? = entries.firstOrNull { it.key.equals(raw?.trim(), ignoreCase = true) }
+            /** Maps a bridge format token onto a text [Format], or null when it is unrecognized. */
+            fun fromKey(raw: String?): Format? =
+                entries.firstOrNull { it != CARD && it.key.equals(raw?.trim(), ignoreCase = true) }
         }
     }
 
@@ -77,6 +81,8 @@ object TripExportShareIntent {
             when (format) {
                 Format.GPX -> TripTrackFormatter.toGpx(route)
                 Format.CSV -> TripTrackFormatter.toCsv(route)
+                // Unreachable: Format.fromKey never yields CARD; the card path writes via writeCardPng.
+                Format.CARD -> return null
             }
         val file = File(outDir, TripTrackFormatter.fileBaseName(route) + format.extension)
         return try {
@@ -150,6 +156,33 @@ object TripExportShareIntent {
             Log.e(TAG, "charge-sessions export write failed", ex)
             if (file.exists() && !file.delete()) {
                 Log.w(TAG, "could not delete partial charge-sessions export: $file")
+            }
+            null
+        }
+    }
+
+    /**
+     * Compresses the rendered drive-summary [card] as a PNG in the trip-export cache dir. Shares the
+     * cache-dir + FileProvider path with the text exports, so [buildShareIntent] handles it too.
+     */
+    fun writeCardPng(
+        ctx: Context,
+        card: android.graphics.Bitmap,
+    ): TripExportFile? {
+        val outDir = prepareOutDir(ctx) ?: return null
+        val file = File(outDir, stampedFileName("volt-drive-card") + Format.CARD.extension)
+        return try {
+            file.outputStream().use { stream ->
+                // compress() reports encoder failure via its return value, not an exception.
+                if (!card.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, stream)) {
+                    throw IOException("PNG encode failed")
+                }
+            }
+            TripExportFile(file, Format.CARD, 0)
+        } catch (ex: IOException) {
+            Log.e(TAG, "drive-card write failed", ex)
+            if (file.exists() && !file.delete()) {
+                Log.w(TAG, "could not delete partial drive card: $file")
             }
             null
         }

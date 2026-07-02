@@ -126,6 +126,58 @@ class TripExportControllerTest {
         assertTrue(result.optString("fileName").endsWith(".csv"))
     }
 
+    // ---- drive-summary card (card sentinel) ---------------------------------------------
+
+    @Test
+    fun cardWithValidPayloadSharesAPng() {
+        host.store = FakeStore(context).apply { route = sampleRoute() }
+        val payload =
+            JSONObject()
+                .put("routeKey", "7:10000:30000")
+                .put("title", "Commute home")
+                .put("subtitle", "Jun 30, 2026")
+                .put(
+                    "stats",
+                    JSONArray()
+                        .put(JSONObject().put("label", "Distance").put("value", "11 mi"))
+                        .put(JSONObject().put("label", "Electric").put("value", "72% electric")),
+                )
+
+        val result = parse(controller.exportAndShare(payload.toString(), "card"))
+
+        assertTrue("a valid card payload succeeds: $result", result.optBoolean("ok"))
+        assertEquals("card", result.optString("format"))
+        assertTrue(result.optString("fileName").endsWith(".png"))
+        assertTrue("a real PNG is written", result.optLong("bytes") > 0L)
+        assertTrue("a successful card launches the share chooser", host.shareLaunched)
+        assertEquals("the card export is recorded", 1, host.store!!.recordExportCalls)
+    }
+
+    @Test
+    fun cardWithEmptyRouteReturnsEmptyRoute() {
+        host.store = FakeStore(context).apply { route = emptyRoute() }
+        val payload = JSONObject().put("routeKey", "7").put("title", "Drive")
+        val result = parse(controller.exportAndShare(payload.toString(), "card"))
+        assertEquals("empty_route", result.optString("error"))
+        assertFalse("an empty route never launches a share", host.shareLaunched)
+    }
+
+    @Test
+    fun cardWithMalformedJsonReturnsInvalidCard() {
+        host.store = FakeStore(context).apply { route = sampleRoute() }
+        val result = parse(controller.exportAndShare("not json", "card"))
+        assertEquals("invalid_card", result.optString("error"))
+        assertFalse(host.shareLaunched)
+    }
+
+    @Test
+    fun cardWithoutRouteKeyReturnsInvalidId() {
+        host.store = FakeStore(context).apply { route = sampleRoute() }
+        val result = parse(controller.exportAndShare(JSONObject().put("title", "x").toString(), "card"))
+        assertEquals("invalid_id", result.optString("error"))
+        assertFalse(host.shareLaunched)
+    }
+
     @Test
     fun recordExportThrowingDoesNotSinkTheShare() {
         host.store =
