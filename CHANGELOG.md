@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.25.0 (2026-07-02)
+
+### ✳️ New
+
+- Battery cell map, driving trends, EV share, trip detail depth, share card, temperature insight
+  ([#282](https://github.com/jtn0123/VoltTracker/pull/282),
+  [`58d4513`](https://github.com/jtn0123/VoltTracker/commit/58d451392cde0583034e06ff6876c6a0a80a9945))
+
+
 ## v0.24.0 (2026-07-02)
 
 ### 🔷 Changed
