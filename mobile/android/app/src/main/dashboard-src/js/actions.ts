@@ -427,19 +427,25 @@ type SignalActions = {
     VD.setStatus(status);
   }
 
-  function connectSelected(scan: boolean, button?: BusyButton | null) {
+  function connectSelected(scan: boolean, button?: BusyButton | null, quick = false) {
     const selected = VD.getSelectedDevice();
     if (!selected) {
       explainMissingAdapter(scan, true);
       return;
     }
     if (!bridge) return;
-    // Scan is a native-only capability: an older APK's bridge may lack scan(),
-    // in which case we must NOT silently fall through to a plain connect after
-    // showConnectionProgress() already painted "Starting scan...". Tell the user
-    // instead of issuing a connect they didn't ask for.
-    if (scan && typeof bridge.scan !== "function") {
-      VD.setStatus({ state: "idle", detail: "Scan is only available inside the Android app." });
+    // Scan is a native-only capability: an older APK's bridge may lack scan() (or
+    // the newer quickScan()), in which case we must NOT silently fall through to a
+    // plain connect after showConnectionProgress() already painted "Starting
+    // scan...". Tell the user instead of issuing a connect they didn't ask for.
+    const scanMethod = quick ? "quickScan" : "scan";
+    if (scan && typeof bridge[scanMethod] !== "function") {
+      VD.setStatus({
+        state: "idle",
+        detail: quick
+          ? "Quick scan needs a newer version of the Android app."
+          : "Scan is only available inside the Android app."
+      });
       return;
     }
     showConnectionProgress(selected, scan);
@@ -447,9 +453,13 @@ type SignalActions = {
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
       callBridgeAction(
-        scan ? "scan" : "connect",
+        scan ? scanMethod : "connect",
         [selected.address, selected.name],
-        scan ? "Could not start adapter scan." : "Could not start connection."
+        scan
+          ? quick
+            ? "Could not start quick scan."
+            : "Could not start adapter scan."
+          : "Could not start connection."
       );
     });
   }
@@ -507,6 +517,7 @@ type SignalActions = {
       case "restoreEncrypted": void restoreEncryptedBackup(button); return;
       case "last": connectLastAdapter(button); return;
       case "scan": connectSelected(true, button); return;
+      case "quickScan": connectSelected(true, button, true); return;
       case "tpmsScan": tpmsScanSelected(button); return;
       case "detailProbe": detailProbeSelected(button); return;
       case "connect": connectSelected(false, button); return;

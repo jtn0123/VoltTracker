@@ -270,7 +270,8 @@ open class ObdService :
             ACTION_SCAN -> {
                 val address = intent.getStringExtra(EXTRA_ADDRESS)
                 activeName = adapterNameFrom(intent)
-                startObdSession(address, true)
+                // The scan depth profile (full/quick) rides the shared detail-stage extra.
+                startObdSession(address, true, intent.getStringExtra(EXTRA_DETAIL_STAGE))
                 return START_STICKY
             }
             ACTION_TPMS_SCAN -> {
@@ -342,6 +343,7 @@ open class ObdService :
     private fun startObdSession(
         address: String?,
         scanMode: Boolean,
+        scanProfile: String? = null,
     ) {
         startSession(
             SessionStartRequest(
@@ -355,7 +357,11 @@ open class ObdService :
                 refreshCompetingApps = true,
                 startLocationTracking = true,
             ) {
-                engine.runBluetoothLoop(address, scanMode)
+                if (scanMode) {
+                    engine.runScanLoop(address, scanProfile)
+                } else {
+                    engine.runBluetoothLoop(address, scanMode)
+                }
             },
         )
     }

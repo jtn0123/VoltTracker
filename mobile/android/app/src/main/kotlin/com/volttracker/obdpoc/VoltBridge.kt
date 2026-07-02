@@ -62,6 +62,12 @@ class VoltBridge(
     ) = connections.scan(address, name)
 
     @JavascriptInterface
+    fun quickScan(
+        address: String?,
+        name: String?,
+    ) = connections.scan(address, name, DiagnosticScanProfile.QUICK.wireName)
+
+    @JavascriptInterface
     fun tpmsScan(
         address: String?,
         name: String?,
@@ -192,6 +198,11 @@ class VoltBridge(
     @JavascriptInterface
     fun scanLast() {
         connections.scanLast()
+    }
+
+    @JavascriptInterface
+    fun quickScanLast() {
+        connections.scanLast(DiagnosticScanProfile.QUICK.wireName)
     }
 
     @JavascriptInterface

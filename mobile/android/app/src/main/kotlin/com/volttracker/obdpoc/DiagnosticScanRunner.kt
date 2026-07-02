@@ -25,11 +25,19 @@ class DiagnosticScanRunner(
     private val dtcCodes = LinkedHashSet<String>()
 
     @Throws(IOException::class)
-    fun run() {
+    fun run() = run(DiagnosticScanProfile.FULL)
+
+    @Throws(IOException::class)
+    fun run(profile: DiagnosticScanProfile) {
+        val full = profile == DiagnosticScanProfile.FULL
         dtcCodes.clear()
         service.broadcastStatus(
             "scanning",
-            "Running protocol, DTC, freeze-frame, VIN, and live-data probes...",
+            if (full) {
+                "Running protocol, DTC, freeze-frame, VIN, and live-data probes..."
+            } else {
+                "Running a quick trouble-code scan (protocol, VIN, and stored codes)..."
+            },
             false,
         )
         service.updateNotification("Scanning ${service.activeName}")
@@ -63,11 +71,75 @@ class DiagnosticScanRunner(
         probeCommand("ATSP0", 1800, raw)
         probeCommand("0100", 9000, raw)
 
-        publishProgress("Reading DTCs, freeze frames, and live-data probes...")
-        ObdElmDecode.appendProbeLine(raw, "standard-diagnostics", "generic DTC and freeze-frame probes")
+        publishProgress(
+            if (full) {
+                "Reading DTCs, freeze frames, and live-data probes..."
+            } else {
+                "Reading stored diagnostic trouble codes..."
+            },
+        )
+        ObdElmDecode.appendProbeLine(
+            raw,
+            "standard-diagnostics",
+            if (full) "generic DTC and freeze-frame probes" else "generic DTC probes",
+        )
         collectDtcCodes("03", probeCommand("03", 3500, raw))
         collectDtcCodes("07", probeCommand("07", 3500, raw))
         collectDtcCodes("0A", probeCommand("0A", 3500, raw))
+
+        // FULL-only deep sweep: freeze frames, live data, and the slow Volt HV / charger /
+        // transmission / brake / TPMS discovery headers. A QUICK scan stops after the generic
+        // DTC reads above so a stored-code check returns in seconds.
+        if (full) {
+            runDeepProbes(raw)
+        }
+        probeCommand("ATSH7DF", 1800, raw)
+
+        if (vinResponse != null) {
+            val vin = ObdProtocol.parseVin(vinResponse)
+            val store = service.localStore
+            if (vin != null && store != null) {
+                try {
+                    store.upsertVehicleFromVin(vin)
+                } catch (ex: RuntimeException) {
+                    service.recorder?.logError("vin_persist_failed", ex)
+                }
+            }
+        }
+
+        val sample = JSONObject()
+        try {
+            sample.put("source", "scan")
+            sample.put("connected", true)
+            sample.put("adapter", service.activeName)
+            sample.put("updatedAt", System.currentTimeMillis())
+            engine.appendLocation(sample)
+            sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
+            sample.put("scanProfile", profile.wireName)
+            sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
+        } catch (_: JSONException) {
+            // Local values are safe.
+        }
+        service.broadcastTelemetry(sample)
+        service.broadcastStatus(
+            "scan-complete",
+            if (full) {
+                "Diagnostic scan complete. You can disconnect and bring the phone back for the log."
+            } else {
+                "Quick scan complete. Run a full scan for battery, module, and TPMS detail."
+            },
+            false,
+        )
+        service.updateNotification("Scan complete for ${service.activeName}")
+    }
+
+    /**
+     * The FULL-depth probe stages skipped by a QUICK scan: Mode-02 freeze frames, the live-data
+     * probe set, and every Volt-specific HV / charger / powertrain / transmission / brake / TPMS
+     * discovery header.
+     */
+    @Throws(IOException::class)
+    private fun runDeepProbes(raw: StringBuilder) {
         probeCommand("0200", 3500, raw)
         probeCommand("0202", 3500, raw)
         probeCommand("0204", 3200, raw)
@@ -128,39 +200,6 @@ class DiagnosticScanRunner(
                 probeCommand(probe, 4200, raw)
             }
         }
-        probeCommand("ATSH7DF", 1800, raw)
-
-        if (vinResponse != null) {
-            val vin = ObdProtocol.parseVin(vinResponse)
-            val store = service.localStore
-            if (vin != null && store != null) {
-                try {
-                    store.upsertVehicleFromVin(vin)
-                } catch (ex: RuntimeException) {
-                    service.recorder?.logError("vin_persist_failed", ex)
-                }
-            }
-        }
-
-        val sample = JSONObject()
-        try {
-            sample.put("source", "scan")
-            sample.put("connected", true)
-            sample.put("adapter", service.activeName)
-            sample.put("updatedAt", System.currentTimeMillis())
-            engine.appendLocation(sample)
-            sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
-            sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
-        } catch (_: JSONException) {
-            // Local values are safe.
-        }
-        service.broadcastTelemetry(sample)
-        service.broadcastStatus(
-            "scan-complete",
-            "Diagnostic scan complete. You can disconnect and bring the phone back for the log.",
-            false,
-        )
-        service.updateNotification("Scan complete for ${service.activeName}")
     }
 
     @Throws(IOException::class)

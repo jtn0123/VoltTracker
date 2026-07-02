@@ -73,6 +73,14 @@ class VoltBridgeTest {
     }
 
     @Test
+    fun quickScanMethodSignatureIsTwoStrings() {
+        val method =
+            VoltBridge::class.java.getMethod("quickScan", String::class.java, String::class.java)
+        assertEquals(Void.TYPE, method.returnType)
+        assertNotNull(method.getAnnotation(JavascriptInterface::class.java))
+    }
+
+    @Test
     fun tpmsScanMethodSignatureIsTwoStrings() {
         val method =
             VoltBridge::class.java.getMethod("tpmsScan", String::class.java, String::class.java)
@@ -185,6 +193,7 @@ class VoltBridgeTest {
             "clearStoredData",
             "connectLast",
             "scanLast",
+            "quickScanLast",
             "tpmsScanLast",
             "demo",
             "disconnect",
@@ -313,6 +322,7 @@ class VoltBridgeTest {
                 "refreshDevices",
                 "connect",
                 "scan",
+                "quickScan",
                 "tpmsScan",
                 "detailProbe",
                 "getLastDevice",
@@ -353,6 +363,7 @@ class VoltBridgeTest {
                 "rememberDevice",
                 "connectLast",
                 "scanLast",
+                "quickScanLast",
                 "tpmsScanLast",
                 "detailProbeLast",
                 "exportDetailedSignalLog",

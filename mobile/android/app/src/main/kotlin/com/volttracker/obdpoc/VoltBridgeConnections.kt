@@ -13,8 +13,9 @@ internal class VoltBridgeConnections(
     fun scan(
         address: String?,
         name: String?,
+        profile: String? = null,
     ) {
-        startSelectedDeviceAction(address, name, ObdService.ACTION_SCAN, MSG_PICK_VALID_ADAPTER)
+        startSelectedDeviceAction(address, name, ObdService.ACTION_SCAN, MSG_PICK_VALID_ADAPTER, profile)
     }
 
     fun detailProbe(
@@ -54,11 +55,12 @@ internal class VoltBridgeConnections(
         )
     }
 
-    fun scanLast() {
+    fun scanLast(profile: String? = null) {
         startLastDeviceAction(
             ObdService.ACTION_SCAN,
             MSG_NO_REMEMBERED_ADAPTER,
             requireValidAddress = true,
+            stage = profile,
         )
     }
 
@@ -109,16 +111,22 @@ internal class VoltBridgeConnections(
         name: String?,
         action: String,
         invalidMessage: String,
+        detail: String? = null,
     ) {
         val cleanAddress = bridgeSafe(address, BRIDGE_MAX_ADDRESS_LEN)
         val cleanName = bridgeSafe(name, BRIDGE_MAX_NAME_LEN)
+        val cleanDetail = detail?.let { bridgeSafe(it, BRIDGE_MAX_STAGE_LEN) }
         activity.runOnUiThread {
             activity.rememberDevice(cleanAddress, cleanName)
             if (!validBridgeBluetoothAddress(cleanAddress)) {
                 activity.publishStatus("blocked", invalidMessage, true)
                 return@runOnUiThread
             }
-            activity.startObdService(action, cleanAddress, cleanName)
+            if (cleanDetail != null) {
+                activity.startObdService(action, cleanAddress, cleanName, cleanDetail)
+            } else {
+                activity.startObdService(action, cleanAddress, cleanName)
+            }
         }
     }
 

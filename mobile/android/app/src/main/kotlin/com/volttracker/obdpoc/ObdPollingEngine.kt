@@ -105,6 +105,18 @@ open class ObdPollingEngine(
         runBluetoothLoop(address, scanMode, false)
     }
 
+    /**
+     * Scan-session entry point that carries the [DiagnosticScanProfile] wire name (full/quick) on
+     * the detail-stage channel, which [runConnectedSession] hands to the scan runner.
+     */
+    @SuppressLint("MissingPermission")
+    fun runScanLoop(
+        address: String?,
+        scanProfile: String?,
+    ) {
+        runBluetoothLoop(address, true, false, false, scanProfile ?: "")
+    }
+
     @SuppressLint("MissingPermission")
     fun runBluetoothLoop(
         address: String?,
@@ -236,7 +248,8 @@ open class ObdPollingEngine(
             return
         }
         if (scanMode) {
-            scanRunner.run()
+            // The scan session carries its depth profile on the detail-stage extra (full vs quick).
+            scanRunner.run(DiagnosticScanProfile.fromWire(detailProbeStage))
             return
         }
         if (tpmsScanMode) {

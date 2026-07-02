@@ -23,6 +23,10 @@ class DiagnosticScanRunnerTest {
             "scan should surface Volt module progress",
             service.statusDetails.contains("Reading Volt battery and charger modules..."),
         )
+        assertTrue(
+            "full scan progress should mention freeze frames and live data",
+            service.statusDetails.contains("Reading DTCs, freeze frames, and live-data probes..."),
+        )
         assertEquals("scan-complete", service.lastStatusState())
         assertEquals("Scan complete for Test adapter", service.lastNotification())
 
@@ -50,6 +54,45 @@ class DiagnosticScanRunnerTest {
         assertTrue(raw.contains("volt-discovery: ATSH7E6 brake-module probes"))
         assertTrue(raw.contains("volt-discovery: ATSH7E7 BECM cell-interface layout probes"))
         assertTrue("known-rejected TPMS probes must stay out of broad scans", !raw.contains("tpms-discovery:"))
+        assertEquals("full", telemetry.getString("scanProfile"))
+    }
+
+    @Test
+    fun quickProfileReadsCodesButSkipsDeepModuleProbes() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+
+        DiagnosticScanRunner(service, engine).run(DiagnosticScanProfile.QUICK)
+
+        // Quick scan still does protocol detection, VIN, and the generic DTC reads...
+        assertTrue("quick scan still reads VIN", engine.commands.contains("0902"))
+        assertTrue("quick scan still reads stored codes", engine.commands.contains("03"))
+        assertTrue(engine.commands.contains("07"))
+        assertTrue(engine.commands.contains("0A"))
+        assertEquals("ATSH7DF", engine.commands[engine.commands.size - 1])
+
+        // ...but skips the slow Volt module + freeze-frame + live-data sweep.
+        assertTrue("quick scan must skip HV/charger module", !engine.commands.contains("ATSH7E4"))
+        assertTrue("quick scan must skip pack-voltage module", !engine.commands.contains("ATSH7E1"))
+        assertTrue("quick scan must skip brake module", !engine.commands.contains("ATSH7E6"))
+        assertTrue("quick scan must skip BECM layout module", !engine.commands.contains("ATSH7E7"))
+        assertTrue("quick scan must skip freeze frames", !engine.commands.contains("0200"))
+
+        val telemetry = service.lastTelemetry()!!
+        assertEquals("quick", telemetry.getString("scanProfile"))
+        assertEquals("scan-complete", service.lastStatusState())
+        assertTrue(
+            "quick scan must not advertise Volt module progress",
+            !service.statusDetails.contains("Reading Volt battery and charger modules..."),
+        )
+        assertTrue(
+            "quick scan progress must not claim to read freeze frames or live data",
+            !service.statusDetails.contains("Reading DTCs, freeze frames, and live-data probes..."),
+        )
+        assertTrue(
+            "quick scan should surface stored-code progress",
+            service.statusDetails.contains("Reading stored diagnostic trouble codes..."),
+        )
     }
 
     private class FakeService : ObdService() {

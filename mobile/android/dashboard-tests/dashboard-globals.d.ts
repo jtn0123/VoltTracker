@@ -880,6 +880,7 @@ interface VoltRestoreProgress {
     refreshDevices(): void;
     connect(address: string, name: string): void;
     scan(address: string, name: string): void;
+    quickScan(address: string, name: string): void;
     tpmsScan(address: string, name: string): void;
     detailProbe(address: string, name: string, stage: string): void;
     exportDetailedSignalLog(id: string): string;
@@ -911,6 +912,7 @@ interface VoltRestoreProgress {
     setMaintenanceDueNotify(enabled: boolean): void;
     connectLast(): void;
     scanLast(): void;
+    quickScanLast(): void;
     tpmsScanLast(): void;
     detailProbeLast(stage: string): void;
     demo(): void;

@@ -179,6 +179,35 @@ describe('actions.ts — bridge dispatch', () => {
     expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
   });
 
+  it('connectSelected(true, button, true) routes to bridge.quickScan, not scan or connect', () => {
+    bridge.quickScan = vi.fn();
+    const device = seedSelectedDevice(VD);
+    VD.actions.connectSelected(true, button, true);
+    expect(bridge.quickScan).toHaveBeenCalledTimes(1);
+    expect(bridge.quickScan).toHaveBeenCalledWith(device.address, device.name);
+    expect(bridge.scan).not.toHaveBeenCalled();
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({
+      state: 'scanning',
+      detail: `Starting scan with ${device.name}...`,
+    });
+    expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
+  });
+
+  it('quick scan on an older APK bridge without quickScan() explains instead of connecting', () => {
+    // Simulate an older native build whose bridge predates quickScan(): the JS
+    // must not silently fall through to a plain connect after painting progress.
+    bridge.quickScan = undefined;
+    seedSelectedDevice(VD);
+    VD.actions.connectSelected(true, button, true);
+    expect(bridge.connect).not.toHaveBeenCalled();
+    expect(bridge.scan).not.toHaveBeenCalled();
+    expect(VD.state.status).toMatchObject({
+      state: 'idle',
+      detail: 'Quick scan needs a newer version of the Android app.',
+    });
+  });
+
   it('tpmsScanSelected() routes to staged bridge.detailProbe with the selected adapter', () => {
     const device = seedSelectedDevice(VD);
     VD.actions.tpmsScanSelected(button);
