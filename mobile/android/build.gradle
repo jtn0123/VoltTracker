@@ -446,6 +446,11 @@ tasks.register("privacyScan", Exec) {
         exclude "**/build/**"
         exclude "**/node_modules/**"
         exclude "mobile/android/dashboard-tests/coverage/**"
+        // Generated, gitignored outputs of :buildDashboardJs. The scanner walks git-tracked
+        // files itself, so it never reads these; declaring them as inputs only creates an
+        // undeclared producer/consumer link that Gradle 9.6+ fails the build over.
+        exclude "mobile/android/app/src/main/assets/dashboard/js/**"
+        exclude "mobile/android/app/src/main/assets/dashboard/lib/leaflet/**"
     })
     inputs.file(file("tools/privacy-scan.py"))
     inputs.file(file("tools/privacy-scan-allowlist.txt"))
