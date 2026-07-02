@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.24.0 (2026-07-02)
+
+### 🔷 Changed
+
+- **deps**: Bump actions/cache from 5.0.5 to 6.1.0
+  ([#273](https://github.com/jtn0123/VoltTracker/pull/273),
+  [`0a3fc3f`](https://github.com/jtn0123/VoltTracker/commit/0a3fc3f844b5e8470add4bc6ec7bc249be514bfc))
+
+- **deps**: Bump actions/checkout from 6.0.3 to 7.0.0
+  ([#275](https://github.com/jtn0123/VoltTracker/pull/275),
+  [`e419727`](https://github.com/jtn0123/VoltTracker/commit/e4197275ff7e6470fcca743d453d313195c913da))
+
+- **deps**: Bump actions/setup-java from 5.2.0 to 5.4.0
+  ([#271](https://github.com/jtn0123/VoltTracker/pull/271),
+  [`46a8299`](https://github.com/jtn0123/VoltTracker/commit/46a8299dbe4671a184a27d2bd53933cea3c8e4c7))
+
+- **deps**: Bump actions/setup-python from 6.2.0 to 6.3.0
+  ([#276](https://github.com/jtn0123/VoltTracker/pull/276),
+  [`2c94fab`](https://github.com/jtn0123/VoltTracker/commit/2c94fabd27ebee949d9d2748d7673e5e503946b2))
+
+- **deps**: Bump gradle-wrapper from 9.6.0 to 9.6.1 in /mobile/android
+  ([#278](https://github.com/jtn0123/VoltTracker/pull/278),
+  [`3573724`](https://github.com/jtn0123/VoltTracker/commit/3573724b648c1cf0428f3d54f659ea948ae60536))
+
+- **deps**: Bump gradle/actions/wrapper-validation from 4.4.4 to 6.2.0
+  ([#272](https://github.com/jtn0123/VoltTracker/pull/272),
+  [`48f38fd`](https://github.com/jtn0123/VoltTracker/commit/48f38fdd92ae7d51cd6ce0f8fc13e811b5d78113))
+
+- **deps-dev**: Bump eslint from 10.5.0 to 10.6.0 in /mobile/android/dashboard-tests
+  ([#274](https://github.com/jtn0123/VoltTracker/pull/274),
+  [`c88ba7e`](https://github.com/jtn0123/VoltTracker/commit/c88ba7e26a2fcc9caf713cd60ae5f3cb61f054be))
+
+- **deps-dev**: Bump typescript-eslint from 8.61.0 to 8.62.0 in /mobile/android/dashboard-tests
+  ([#277](https://github.com/jtn0123/VoltTracker/pull/277),
+  [`28a41e7`](https://github.com/jtn0123/VoltTracker/commit/28a41e708887bf09ea68f97d2a5fce06bed3a211))
+
+### ✳️ New
+
+- **diagnostics**: Add a quick car-code scan profile
+  ([#270](https://github.com/jtn0123/VoltTracker/pull/270),
+  [`6324569`](https://github.com/jtn0123/VoltTracker/commit/6324569f599d36acbe8da13b304feaa62e65566c))
+  - _a stored-code check no longer requires sitting through the full multi-module sweep._
+
+
 ## v0.23.3 (2026-07-02)
 
 ### 🔺 Fix
