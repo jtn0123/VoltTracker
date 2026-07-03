@@ -797,7 +797,10 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     VD.setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
     const power = finiteNum(t.powerKw);
-    VD.setText("powerValue", power != null ? `${power.toFixed(1)} kW` : "--");
+    // Typographic minus (U+2212) for negatives so the hero POWER readout matches
+    // the signed pack-current/pack-power tiles below it — the ASCII hyphen has a
+    // narrower advance width, so the same regen reading rendered two glyphs.
+    VD.setText("powerValue", power != null ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--");
     // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
     // adapter hasn't responded yet these fall back to "--" exactly like the rest of
     // the live readout.
@@ -1095,12 +1098,17 @@ import { initialTelemetryState } from "./telemetry-state";
     const deltaEl = el("cellBalanceDelta");
     if (!has) {
       VD.setText("cellBalanceTitle", "No live cell data yet");
+      // Hide the spread badge entirely in the empty state — a "-- mV" pill next
+      // to the "Read all 96 cells" action just crowds the header with a
+      // placeholder that carries no information until cell data arrives.
       if (deltaEl) {
+        deltaEl.hidden = true;
         deltaEl.textContent = "-- mV";
         deltaEl.dataset.tone = "none";
       }
       return;
     }
+    if (deltaEl) deltaEl.hidden = false;
     const mv = Number.isFinite(Number(t.cellBalanceMv))
       ? Number(t.cellBalanceMv)
       : Math.round((maxV - minV) * 1000);

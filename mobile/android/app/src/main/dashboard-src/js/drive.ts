@@ -245,7 +245,7 @@ type ChartPoint = {
     const live = driveHasLiveSamples();
 
     if (state.demoActive) {
-      return { kind: "demo", label: "Demo preview", sub: "Sample data — isolated from real history" };
+      return { kind: "demo", label: "Sample data", sub: "Isolated from your real history" };
     }
     if (connecting && !connected) {
       return { kind: "live", label: "Live car data", sub: "Connecting to your OBD adapter" };
@@ -287,6 +287,14 @@ type ChartPoint = {
     };
     apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
     apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
+
+    // During a demo the Drive tab already leads with the live "Demo preview"
+    // now-chip (renderDriveNowChips), so a second stacked demo banner directly
+    // under it reads as a duplicate — hide the Drive badge and let the chip
+    // carry the state. Charge has no now-chip, so its badge stays as the only
+    // provenance marker there.
+    const driveBadge = el("driveSourceBadge");
+    if (driveBadge) driveBadge.hidden = src.kind === "demo";
 
     const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
     if (hero && !firstSampleRevealed && driveHasLiveSamples()) {

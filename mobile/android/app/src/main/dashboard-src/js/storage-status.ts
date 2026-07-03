@@ -656,7 +656,7 @@ import { prefs, units } from "./prefs";
         detail: maxSpeed ? "Computed from accepted OBD speed samples for the latest session." : "Speed stays blank until accepted OBD speed samples are stored."
       },
       {
-        title: gps ? `${gps} GPS samples stored` : "No GPS route stored",
+        title: gps ? `${gps} GPS sample${gps === 1 ? "" : "s"} stored` : "No GPS route stored",
         detail: gps ? "Route plotting has enough location samples to start review work." : "Check location permission and background behavior on the next drive."
       },
       {
@@ -947,12 +947,12 @@ import { prefs, units } from "./prefs";
     toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
-    VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS samples in latest route` : "waiting for route samples");
+    VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS sample${route.pointCount === 1 ? "" : "s"} in latest route` : "waiting for route samples");
     VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
-    VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power.toFixed(1)} kW` : "--"));
-    VD.setText("overviewBatterySub", Number.isFinite(power) && power ? `${power.toFixed(1)} kW latest power` : "SOC/power once observed");
+    VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--"));
+    VD.setText("overviewBatterySub", Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW latest power` : "SOC/power once observed");
     VD.setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
 
     VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
@@ -1564,10 +1564,15 @@ import { prefs, units } from "./prefs";
       x1: String(padL), x2: String(w - padR), y1: String(padT + plotH), y2: String(padT + plotH), stroke: lineColor,
     }));
     const n = values.length;
-    const slot = plotW / n;
+    // Cap the per-bar slot so a 1–2 month history doesn't stretch a couple of
+    // bars across the whole plot (which reads as broken/sparse); center the bar
+    // group in that case. With many months the natural slot is already below the
+    // cap, so the full-width layout is unchanged.
+    const slot = Math.min(plotW / n, 56);
+    const originX = padL + (plotW - slot * n) / 2;
     const barW = Math.max(4, Math.min(34, slot * 0.6));
     values.forEach((v, i) => {
-      const cx = padL + slot * (i + 0.5);
+      const cx = originX + slot * (i + 0.5);
       const barH = (v / maxV) * plotH;
       svg.appendChild(make("rect", {
         x: (cx - barW / 2).toFixed(1),

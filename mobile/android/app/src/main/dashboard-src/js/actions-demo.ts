@@ -65,6 +65,13 @@ export function runBrowserDemoStream(
     const throttlePct = Math.round(18 + 14 * Math.sin(t / 2.7));
     const voltage = 13.8;
     const soc = Math.max(13.4, 77.8 - t * 0.01);
+    // HV cell-group balance for the Battery-tab cell card: a healthy pack with
+    // a gentle 10–20 mV wobble around ~3.9 V. Cell 47 rides the low side to
+    // match the "Cell 47 trending low" demo insight.
+    const cellAvgV = 3.85 + (soc - 50) * 0.003;
+    const cellSpreadMv = Math.round(14 + 6 * Math.sin(t / 9));
+    const minCellVoltage = Number((cellAvgV - cellSpreadMv / 2000).toFixed(3));
+    const maxCellVoltage = Number((cellAvgV + cellSpreadMv / 2000).toFixed(3));
     VD.updateTelemetry({
       source: "demo",
       connected: true,
@@ -83,6 +90,12 @@ export function runBrowserDemoStream(
       // batteryTemp via units.tempText which converts °C→°F when needed, so a
       // Fahrenheit-shaped value here would show as ~162 °F pack temp.
       batteryTemp: 24 + Math.sin(t / 8),
+      minCellVoltage,
+      maxCellVoltage,
+      cellBalanceMv: cellSpreadMv,
+      minCellNumber: 47,
+      maxCellNumber: 12,
+      socVariationPct: 0.4,
       powerKw: powerKw,
       latitude: lat,
       longitude: lng,

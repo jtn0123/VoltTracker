@@ -1514,12 +1514,23 @@
 
   /* ===== 11. Battery-tab cards (cell balance / cell map / SOH) ===== */
 
-  /* Shared layout for the three Battery-tab cards (cell balance, cell map, SOH). */
+  /* Shared layout for the three Battery-tab cards (cell balance, cell map, SOH).
+     These inherit .panel, which carries no padding of its own, so give them the
+     standard card padding — without it the header, chart, and stats sit flush
+     against the card border. */
   .cell-balance-card,
   .cell-grid-card,
   .soh-trend-card,
   .live-charge-card {
     margin-top: 12px;
+    padding: var(--card-pad);
+  }
+
+  /* Monthly trend cards (Charge monthly energy, Insights monthly distance /
+     temperature) — same story: .panel adds no padding, so their content bled to
+     the border until this. */
+  .charge-cost-trend-card {
+    padding: var(--card-pad);
   }
 
   .cell-balance-head,

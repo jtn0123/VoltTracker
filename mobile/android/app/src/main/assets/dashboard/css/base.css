@@ -264,6 +264,60 @@
     padding: 0 11px;
   }
 
+  /* ── Interaction feedback ──────────────────────────────────────────────
+     One press/hover vocabulary for every control. The base rules above ship
+     the resting look untouched (so screenshot baselines are unaffected — the
+     feedback only appears on hover/press); these rules add the motion.
+     `translateY(1px) scale(0.98)` is the app's established press gesture
+     (it shipped on the bottom nav); generalized here so every tappable
+     surface confirms a tap the same way. Components that declare their own
+     `transition` keep it (their rule wins); those that don't inherit this
+     one, so a state change animates instead of snapping. Honors
+     prefers-reduced-motion via the global reset above. */
+  button,
+  select,
+  summary,
+  [role="button"] {
+    transition:
+      background-color var(--motion-fast) var(--motion-ease),
+      border-color var(--motion-fast) var(--motion-ease),
+      color var(--motion-fast) var(--motion-ease),
+      box-shadow var(--motion-fast) var(--motion-ease),
+      transform var(--motion-fast) var(--motion-ease);
+  }
+
+  /* Press feedback. `:not(:disabled)` keeps inert controls still; the more
+     specific per-component press rules (e.g. `.bottom-nav button:active`)
+     still win where they exist, so their tuned amounts are preserved. */
+  button:not(:disabled):not([aria-disabled="true"]):active,
+  summary:active,
+  [role="button"]:not([aria-disabled="true"]):active {
+    transform: translateY(1px) scale(0.98);
+  }
+
+  /* A disabled control should not offer a pointer or press affordance. Covers
+     custom [role="button"] controls too, matching the press/hover rules above
+     which already exclude the disabled state. */
+  button:disabled,
+  button[aria-disabled="true"],
+  [role="button"][aria-disabled="true"] {
+    cursor: default;
+  }
+
+  /* Hover lift for pointer devices only (desktop/emulator) — the media query
+     keeps it entirely off touch, where hover would stick after a tap. A
+     brightness lift is tone-agnostic: a plain grey button and an orange
+     primary both read as "raised" on hover without overriding either one's
+     background or border tint. Components with a bespoke :hover keep it; this
+     just adds a consistent floor everywhere else. */
+  @media (hover: hover) and (pointer: fine) {
+    button:not(:disabled):not([aria-disabled="true"]):hover,
+    summary:hover,
+    [role="button"]:not([aria-disabled="true"]):hover {
+      filter: brightness(1.07);
+    }
+  }
+
   select, input {
     min-width: 0;
     height: 44px;
@@ -272,6 +326,10 @@
     padding: 0 12px;
     background: var(--panel-2);
     color: var(--text);
+    transition:
+      border-color var(--motion-fast) var(--motion-ease),
+      background-color var(--motion-fast) var(--motion-ease),
+      box-shadow var(--motion-fast) var(--motion-ease);
   }
 
   .app {
