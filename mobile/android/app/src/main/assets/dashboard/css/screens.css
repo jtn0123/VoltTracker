@@ -1571,45 +1571,60 @@
   /* Persistent data-provenance badge (A2/A4/E4/H3): a slim, calm row that names
      the data source (demo / live / offline / empty) with a colored dot, so the
      four states can never be confused. data-source drives the accent. */
+  /* Compact one-line chip (was a full-width two-line card): dot + label + sub
+     share a row, and the chip hugs its content so it reads as a small tag above
+     the gauges rather than a second header block. */
   .drive-source-badge {
     display: flex;
     align-items: center;
-    gap: 10px;
-    margin-bottom: 8px;
-    padding: 9px 12px;
+    justify-self: start;
+    max-width: 100%;
+    gap: 8px;
+    padding: 5px 12px 5px 10px;
     border: 1px solid var(--line);
     border-left: 3px solid var(--muted);
-    border-radius: 12px;
+    border-radius: 10px;
     background: var(--surface-chip);
   }
 
   .drive-source-dot {
     flex: none;
-    width: 9px;
-    height: 9px;
+    width: 8px;
+    height: 8px;
     border-radius: 50%;
     background: var(--muted);
   }
 
   .drive-source-text {
     display: flex;
-    flex-direction: column;
+    align-items: baseline;
+    gap: 7px;
     min-width: 0;
-    line-height: 1.25;
+    line-height: 1.3;
   }
 
   .drive-source-badge strong {
-    font-size: 12.5px;
+    flex: none;
+    font-size: 12px;
     font-weight: 750;
     letter-spacing: 0.01em;
+    white-space: nowrap;
   }
 
   .drive-source-badge small {
     color: var(--soft);
     font-size: 11px;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+
+  /* Same separator idiom as the topbar last-connected line. */
+  .drive-source-badge small::before {
+    content: "·";
+    margin-right: 6px;
+    opacity: 0.6;
   }
 
   .drive-source-badge[data-source="live"] {

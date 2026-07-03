@@ -10,6 +10,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // REQUIRED_DOM via the loader's extraDom option.
 const DRIVE_EXTRA_DOM = `
   <div id="driveNowChips"></div>
+  <button id="topDemoInfo" hidden><strong>Demo / Testing</strong><small id="topDemoMeta">sample data</small></button>
   <div id="liveTraceChart"><canvas id="liveTraceCanvas"></canvas><div class="scrub-cursor live-trace-cursor"></div></div>
   <div id="powerBarsChart"></div>
   <div id="socTraceChart"></div>
@@ -45,14 +46,29 @@ describe('drive.ts', () => {
     expect(host.children.length).toBe(0);
   });
 
-  it('renders a "Demo preview" chip when state.demoActive is true', () => {
+  it('moves the Demo / Testing marker to the topbar line and keeps the chip strip empty', () => {
     const VD = window.VoltDashboard;
     VD.state.demoActive = true;
     VD.state.telemetry = { sampleCount: 12, soc: 78, sessionMs: 30_000 };
     VD.renderDriveNowChips();
+    // The purple "demo" pill sits right next to the header line, so a strip
+    // chip would repeat the same state a third time — the strip stays empty.
     const host = document.getElementById('driveNowChips');
-    expect(host.innerHTML).toContain('Demo preview');
-    expect(host.querySelector('[data-tone="demo"]')).not.toBeNull();
+    expect(host.children.length).toBe(0);
+    const line = document.getElementById('topDemoInfo');
+    expect(line.hidden).toBe(false);
+    expect(line.textContent).toContain('Demo / Testing');
+    expect(document.getElementById('topDemoMeta').textContent).toBe('12 samples · 78% SOC');
+  });
+
+  it('hides the topbar Demo / Testing line again when the demo stops', () => {
+    const VD = window.VoltDashboard;
+    VD.state.demoActive = true;
+    VD.renderDriveNowChips();
+    expect(document.getElementById('topDemoInfo').hidden).toBe(false);
+    VD.state.demoActive = false;
+    VD.renderDriveNowChips();
+    expect(document.getElementById('topDemoInfo').hidden).toBe(true);
   });
 
   it('does not show "Recording" when status is idle even if adapter/session state is stale', () => {

@@ -355,7 +355,7 @@ import { initialTelemetryState } from "./telemetry-state";
     primary.setAttribute("aria-busy", connecting || scanning ? "true" : "false");
     if (state.demoActive) {
       primary.dataset.primaryAction = "stopDemo";
-      primary.setAttribute("aria-label", "Stop demo preview");
+      primary.setAttribute("aria-label", "Stop Demo / Testing");
       primary.textContent = "Stop demo";
     } else if (connecting) {
       primary.dataset.primaryAction = "stop";
@@ -371,7 +371,7 @@ import { initialTelemetryState } from "./telemetry-state";
       primary.textContent = "Disconnect";
     } else if (!bridge) {
       primary.dataset.primaryAction = "demo";
-      primary.setAttribute("aria-label", "Start demo preview");
+      primary.setAttribute("aria-label", "Start Demo / Testing");
       primary.textContent = "Start demo";
     } else if (remembered) {
       primary.dataset.primaryAction = "last";

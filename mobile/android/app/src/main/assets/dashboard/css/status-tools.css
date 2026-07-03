@@ -117,21 +117,13 @@
 
 /* ---- Topbar: last-connected badge + adapter-health pill ---- */
 
-.connection-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-top: 6px;
-}
-
-/* Slim one-line "last connected" affordance under the title: a small dot + adapter name + when,
-   on a single row, no boxed card. Replaces the old stacked .connection-status__badge so the
-   header reads as one quiet line rather than a second status block. */
+/* Slim "last connected" affordance inline in the title row (topbar .top-status,
+   left of the state badge): a small dot + adapter name + when. Quiet text, no
+   boxed card, ellipsizes first when the row gets tight. */
 .connection-status__line {
   display: inline-flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 6px;
   padding: 2px 2px;
   border: 0;
   background: transparent;
@@ -140,9 +132,11 @@
   text-align: left;
   cursor: pointer;
   min-height: 0;
+  min-width: 0;
 }
 
 .connection-status__line-dot {
+  flex: none;
   align-self: center;
   width: 7px;
   height: 7px;
@@ -167,11 +161,15 @@
 }
 
 .connection-status__line strong {
-  font-size: 12.5px;
-  font-weight: 650;
+  font-size: 12px;
+  font-weight: 600;
   line-height: 1.1;
-  color: var(--text);
-  max-width: 200px;
+  /* Muted, not --text: this line shares the row with the h1 now and must not
+     compete with it — the popover has the full-contrast details. */
+  color: var(--muted);
+  /* Sharing the title row: the adapter name is the flexible part — it
+     ellipsizes before the title or the state badge give up any room. */
+  max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -183,6 +181,38 @@
      pushed this 11px text below readable contrast. */
   color: var(--soft);
   line-height: 1;
+  white-space: nowrap;
+}
+
+/* Demo / Testing header line (#topDemoInfo): same quiet anatomy as the
+   last-connected line, tinted to the demo purple so the running state reads
+   at a glance next to the "demo" pill. The live meta (samples · SOC) shrinks
+   and ellipsizes first when the title row gets tight. */
+.top-demo-info .connection-status__line-dot {
+  background: var(--mixed);
+  box-shadow: 0 0 8px rgba(var(--mixed-rgb), 0.55);
+}
+
+.top-demo-info strong {
+  /* The feature name never truncates — the live meta after it is the
+     expendable part when the title row gets tight. */
+  flex: none;
+  max-width: none;
+  color: var(--mixed-soft);
+}
+
+.top-demo-info small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Very narrow phones: keep the adapter name / demo label, drop the meta — the
+   full details are one tap away in the status popover. */
+@media (max-width: 389px) {
+  .connection-status__line small {
+    display: none;
+  }
 }
 
 .connection-status__line small::before {

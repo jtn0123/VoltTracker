@@ -370,8 +370,8 @@
     <span class="kicker">App data</span>
     <h2>No drive, charging, or insight history captured on this phone yet</h2>
     <p>
-      Open Settings to connect an adapter, scan car codes, or start the demo
-      preview. Drive stays focused on live telemetry once data is flowing.
+      Open Settings to connect an adapter — or try Demo / Testing to explore
+      every screen with realistic sample data, no car needed.
     </p>
     <ol class="empty-hints" aria-label="How to start logging">
       <li>
@@ -392,12 +392,17 @@
         >
       </li>
     </ol>
-    <button
-      type="button"
-      class="primary primary-action"
-      data-nav-jump="settings"
-    >
-      Open Settings to connect
-    </button>
+    <div class="empty-state-actions">
+      <button
+        type="button"
+        class="primary primary-action"
+        data-nav-jump="settings"
+      >
+        Open Settings to connect
+      </button>
+      <button type="button" class="demo primary-action" data-action="demo">
+        Try Demo / Testing
+      </button>
+    </div>
   </article>
 </section>

@@ -382,43 +382,63 @@
       </div>
     </div>
     <!--
-      Status badge: color always encodes connection state (never the tab accent)
-      and tapping it opens the status popover below — connection-status.ts owns
-      both the toggle and the popover contents.
+      Right-side status cluster: the quiet last-connected line and the state
+      badge share the title row so the header stays a single slim strip.
+      Both are tap targets for the same status popover — connection-status.ts
+      owns the toggle, the popover contents, and hiding the last-connected
+      line until there is a real session row to show. The badge's color always
+      encodes connection state (never the tab accent).
     -->
-    <button
-      id="stateBadge"
-      type="button"
-      class="badge"
-      data-state="idle"
-      aria-haspopup="dialog"
-      aria-expanded="false"
-      aria-controls="statusPopover"
-    >
-      <span class="visually-hidden">Connection status: </span
-      ><span class="dot"></span><span id="stateText">idle</span>
-    </button>
-  </div>
-  <!--
-    Topbar-only surface for last-connected and adapter health.
-    Hidden until connection-status.js has a session row or live-voltage signal to show.
-  -->
-  <div class="connection-status" aria-label="Adapter status summary">
-    <button
-      id="lastConnectedBadge"
-      type="button"
-      class="connection-status__line"
-      data-state="unknown"
-      hidden
-      aria-haspopup="dialog"
-      aria-expanded="false"
-      aria-controls="statusPopover"
-      aria-label="Last connection. Tap for status details"
-    >
-      <span class="connection-status__line-dot" aria-hidden="true"></span>
-      <strong id="lastConnectedLabel">--</strong>
-      <small id="lastConnectedAt">--</small>
-    </button>
+    <div class="top-status">
+      <!--
+        Demo / Testing header line: while a demo runs, this replaces the
+        last-connected line (drive.ts#renderTopDemoInfo shows it and keeps the
+        live sample/SOC meta fresh; connection-status.ts hides the adapter
+        line). One header slot, one truth — the old separate Drive now-chip
+        duplicated the purple "demo" pill right below it.
+      -->
+      <button
+        id="topDemoInfo"
+        type="button"
+        class="connection-status__line top-demo-info"
+        hidden
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+        aria-label="Demo / Testing is running. Tap for status details"
+      >
+        <span class="connection-status__line-dot" aria-hidden="true"></span>
+        <strong>Demo / Testing</strong>
+        <small id="topDemoMeta">sample data</small>
+      </button>
+      <button
+        id="lastConnectedBadge"
+        type="button"
+        class="connection-status__line"
+        data-state="unknown"
+        hidden
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+        aria-label="Last connection. Tap for status details"
+      >
+        <span class="connection-status__line-dot" aria-hidden="true"></span>
+        <strong id="lastConnectedLabel">--</strong>
+        <small id="lastConnectedAt">--</small>
+      </button>
+      <button
+        id="stateBadge"
+        type="button"
+        class="badge"
+        data-state="idle"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+      >
+        <span class="visually-hidden">Connection status: </span
+        ><span class="dot"></span><span id="stateText">idle</span>
+      </button>
+    </div>
   </div>
   <!--
     Status popover: tap target is the state badge (and the last-connected line).
@@ -821,8 +841,8 @@
     <span class="kicker">App data</span>
     <h2>No drive, charging, or insight history captured on this phone yet</h2>
     <p>
-      Open Settings to connect an adapter, scan car codes, or start the demo
-      preview. Drive stays focused on live telemetry once data is flowing.
+      Open Settings to connect an adapter — or try Demo / Testing to explore
+      every screen with realistic sample data, no car needed.
     </p>
     <ol class="empty-hints" aria-label="How to start logging">
       <li>
@@ -843,13 +863,18 @@
         >
       </li>
     </ol>
-    <button
-      type="button"
-      class="primary primary-action"
-      data-nav-jump="settings"
-    >
-      Open Settings to connect
-    </button>
+    <div class="empty-state-actions">
+      <button
+        type="button"
+        class="primary primary-action"
+        data-nav-jump="settings"
+      >
+        Open Settings to connect
+      </button>
+      <button type="button" class="demo primary-action" data-action="demo">
+        Try Demo / Testing
+      </button>
+    </div>
   </article>
 </section>
 <section id="view-map" class="view" data-view="map">
@@ -1285,9 +1310,14 @@
         >
       </li>
     </ol>
-    <button type="button" class="link-btn" data-nav-jump="settings">
-      Set up the adapter in Settings
-    </button>
+    <div class="empty-state-actions">
+      <button type="button" class="link-btn" data-nav-jump="settings">
+        Set up the adapter in Settings
+      </button>
+      <button type="button" class="demo link-btn" data-action="demo">
+        Preview with Demo / Testing
+      </button>
+    </div>
   </article>
   <!-- aria-live sits on the individual value clusters below (each KPI number and
        the status badge), each aria-atomic="true", instead of a card-wide
@@ -2163,14 +2193,27 @@
         <span>Extra signals</span>
         <small>Tires, battery internals</small>
       </button>
+      <!-- Demo / Testing entry point: previously the feature was only
+           reachable via the Diagnostics sandbox (and, in browser preview,
+           the morphing Connect button), so on-device users had no path to
+           it from Settings even though empty-state copy pointed here. -->
+      <button
+        id="demoSettingsBtn"
+        type="button"
+        data-action="demo"
+        class="demo settings-command"
+      >
+        <span>Demo / Testing</span>
+        <small>Explore with sample data</small>
+      </button>
     </div>
     <p id="statusCopy" class="status-copy" data-demo-hidden="true">
       Local data is available offline. Connect when you want live OBD logging.
     </p>
     <div id="demoBanner" class="demo-banner" hidden>
       <span>
-        <strong>Demo preview is running</strong>
-        <small>Stop the demo any time to return to live data.</small>
+        <strong>Demo / Testing is running</strong>
+        <small>Sample data only — your real history is untouched.</small>
       </span>
       <button id="demoStopBtn" type="button" class="demo-stop">
         Stop demo
@@ -2764,20 +2807,21 @@
     </button>
   </article>
 
-  <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
-    <summary aria-label="Toggle the demo preview sandbox controls">
-      Preview sandbox
+  <details class="sandbox-tools" aria-label="Demo / Testing controls">
+    <summary aria-label="Toggle the Demo / Testing controls">
+      Demo / Testing
     </summary>
     <p class="status-copy">
-      Demo preview is isolated here for UI debugging. Keep it off during real
-      car tests.
+      Stream realistic sample data through every screen — no car or adapter
+      needed. Demo data stays fully isolated from your real history and stops
+      the moment you turn it off.
     </p>
-    <div class="signal-section-label">Demo scenario</div>
+    <div class="signal-section-label">Scenario</div>
     <div
       id="demoScenarioPicker"
-      class="signal-stage-tabs"
+      class="signal-stage-tabs demo-scenario-tabs"
       role="group"
-      aria-label="Demo scenario"
+      aria-label="Demo / Testing scenario"
     >
       <button
         type="button"
@@ -2785,22 +2829,22 @@
         class="is-active"
         aria-pressed="true"
       >
-        <span>Typical</span>
+        <span>Typical</span><small>Everyday commute history</small>
       </button>
       <button type="button" data-scenario="empty" aria-pressed="false">
-        <span>Empty</span>
+        <span>Empty</span><small>Fresh-install blank slate</small>
       </button>
       <button type="button" data-scenario="power-user" aria-pressed="false">
-        <span>Power user</span>
+        <span>Power user</span><small>Months of dense history</small>
       </button>
       <button type="button" data-scenario="fault" aria-pressed="false">
-        <span>Fault</span>
+        <span>Fault</span><small>Trouble codes + a failed link</small>
       </button>
       <button type="button" data-scenario="extreme" aria-pressed="false">
-        <span>Extremes</span>
+        <span>Extremes</span><small>Boundary + stress values</small>
       </button>
     </div>
-    <!-- Single morphing demo toggle: "Start demo preview" <-> "Stop demo preview"
+    <!-- Single morphing demo toggle: "Start Demo / Testing" <-> "Stop Demo / Testing"
          (driven by setDemoActive in core.js). Replaces the old Start + Stop pair
          so only one of the two ever shows. -->
     <button
@@ -2809,7 +2853,7 @@
       data-demo-toggle
       data-action="demo"
     >
-      Start demo preview
+      Start Demo / Testing
     </button>
     <div class="button-grid">
       <button type="button" data-action="previewDtcCodes">

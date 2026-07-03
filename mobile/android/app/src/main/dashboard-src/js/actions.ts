@@ -308,7 +308,7 @@ type SignalActions = {
 
   function refreshDevices() {
     if (!bridge) {
-      VD.setStatus({ state: "ready", detail: "Browser preview ready. Start demo to view sample telemetry." });
+      VD.setStatus({ state: "ready", detail: "Browser preview ready. Start Demo / Testing to view sample telemetry." });
       return;
     }
     if (typeof bridge.refreshDevices === "function") {
@@ -1091,6 +1091,11 @@ type SignalActions = {
     out.appendChild(web);
   }
 
+  // Shared by startDemo() and the scenario-picker handler so the status detail
+  // can't drift between the two demo entry paths (it should also stay aligned
+  // with #topDemoInfo's aria-label in topbar.html).
+  const DEMO_RUNNING_DETAIL = "Demo / Testing is running.";
+
   function startDemo() {
     VD.ensureDemoData((error) => {
       if (error) {
@@ -1104,7 +1109,7 @@ type SignalActions = {
       if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
       else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
       seedDemoScenario();
-      VD.setDemoActive(true, "Demo preview is running.");
+      VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
       // Choose by method availability, not bare bridge presence: an older APK's
       // bridge object may lack demo(), and callBridge would then no-op while the
       // UI claims the demo is running. Fall back to the browser demo instead.
@@ -1272,7 +1277,7 @@ type SignalActions = {
         }
         // Tapping a scenario is an explicit preview action; keep demo isolation
         // active so native storage/app-state pushes cannot overwrite the sample.
-        if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, "Demo preview is running.");
+        if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
         const picker = el("demoScenarioPicker");
         if (picker) {
           picker.querySelectorAll("[data-scenario]").forEach((b) => {

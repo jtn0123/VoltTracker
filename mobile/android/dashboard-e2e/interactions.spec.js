@@ -69,11 +69,14 @@ test('Start/Stop demo toggles demo state and calls the bridge', async ({ page })
     });
   });
 
-  await page.locator('[data-action="demo"]').first().click();
+  // Target the sandbox's morphing toggle specifically — other tabs now carry
+  // their own Demo / Testing entry points, so a bare [data-action="demo"]
+  // first() can resolve to a button on a hidden view.
+  await page.locator('[data-demo-toggle]').click();
   await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(true);
   expect(await page.evaluate(() => window.__demoCalls)).toBeGreaterThanOrEqual(1);
 
-  await page.locator('[data-action="stopDemo"]').first().click();
+  await page.locator('[data-demo-toggle]').click();
   await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(false);
 });
 

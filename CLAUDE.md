@@ -43,3 +43,26 @@ generated files:
 - After editing a TypeScript source file, rebuild the bundle: `npm --prefix dashboard-tests run build`
   (or just `./gradlew :app:assembleDebug`, which runs it). After editing a partial/template,
   run `./gradlew generateDashboardHtml`.
+
+### Demo / Testing mode — use it to validate UI changes
+
+The dashboard ships a built-in **Demo / Testing** mode that streams realistic
+sample telemetry through every real component (no car, adapter, or Android
+device needed). **When validating a dashboard UI change, prefer driving it with
+Demo / Testing** instead of hand-seeding DOM state — it exercises the real
+render paths and produces realistic screenshots.
+
+- In-app entry points: Settings → "Demo / Testing" command, Diagnostics →
+  "Demo / Testing" panel (scenario picker + start/stop toggle), and the
+  Drive/Charge empty-state buttons. Demo data is fully isolated from real
+  history; a purple "demo" status pill + banners show while it runs.
+- Scenarios: `typical`, `empty`, `power-user`, `fault`, `extreme`
+  (seed data lives in `dashboard-src/js/demo-data.ts`; the live stream in
+  `actions-demo.ts`).
+- Headless validation recipe: serve `app/src/main/assets/dashboard/` over HTTP
+  (`node dashboard-e2e/static-server.cjs --port 8099 --dir <that dir>` — the CSP
+  blocks file:// scripts in some browsers), install the mock bridge from
+  `dashboard-e2e/harness.js` via `addInitScript`, then either click
+  `[data-demo-toggle]` or call `window.VoltDashboard.loadDemoScenario('<name>')`.
+  The Playwright e2e suite's `openDashboard()` + `loadDemoScenario()` helpers
+  (`dashboard-e2e/harness.js`) do all of this for you.

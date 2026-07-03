@@ -115,19 +115,6 @@ type ChartPoint = {
       (state.socHistory || []).length
     );
 
-    if (state.demoActive) {
-      // Show live demo metrics so the chip feels alive — same shape as a real
-      // recording chip but with a "demo" tone and a Demo label.
-      const meta: string[] = [];
-      const demoSamples = samples || Number(t.sampleCount || 0);
-      if (demoSamples) meta.push(demoSamples.toLocaleString() + " samples");
-      const demoRuntime = runtimeMs || Number(t.sessionMs || 0);
-      if (demoRuntime) meta.push(fmtDuration(demoRuntime));
-      const soc = Number(t.soc);
-      if (Number.isFinite(soc)) meta.push(Math.round(soc) + "% SOC");
-      if (!meta.length) meta.push("preview data");
-      return { tone: "demo", label: "Demo preview", meta: meta };
-    }
     if (stateName === "connecting" || stateName === "initializing") {
       return { tone: "live", label: "Connecting…", meta: ["adapter handshake"] };
     }
@@ -195,14 +182,43 @@ type ChartPoint = {
     return root;
   }
 
+  // Demo / Testing header line (topbar .top-status): the single demo marker.
+  // While a demo runs, the purple state pill already says "demo" right next to
+  // this line, so the strip chip that used to repeat it on Drive is gone — the
+  // label + live sample/SOC meta live here instead, on every tab.
+  function renderTopDemoInfo() {
+    const line = el("topDemoInfo") as HTMLButtonElement | null;
+    if (!line) return;
+    if (!state.demoActive) {
+      line.hidden = true;
+      return;
+    }
+    const t = state.telemetry || {};
+    const session = (state.appState || {}).session || {};
+    const meta: string[] = [];
+    const samples = Number(session.sampleCount || t.sampleCount || 0);
+    if (samples) meta.push(samples.toLocaleString() + " samples");
+    const soc = Number(t.soc);
+    if (Number.isFinite(soc)) meta.push(Math.round(soc) + "% SOC");
+    VD.setText("topDemoMeta", meta.length ? meta.join(" · ") : "sample data");
+    line.hidden = false;
+  }
+
   function renderDriveNowChips() {
+    renderTopDemoInfo();
     const host = el("driveNowChips");
     if (!host) return;
+    // During a demo the topbar carries the Demo / Testing line + purple pill —
+    // a strip chip here would repeat the same state a third time.
+    if (state.demoActive) {
+      host.replaceChildren();
+      return;
+    }
     const chips: DriveChip[] = [];
     // The Drive page is for the live drive. Idle / "ready · remembered" is already shown by the
     // top-bar pill + slim last-connected line, and past drives live on Trips/Map — so the now-chips
     // strip only surfaces the live chip while something is actually happening (Recording /
-    // Connecting / Demo). When idle it stays empty.
+    // Connecting). When idle it stays empty.
     const live = deriveLiveChip();
     if (live && live.tone !== "idle" && live.tone !== "ok") chips.push(live);
 
@@ -241,7 +257,7 @@ type ChartPoint = {
     const live = driveHasLiveSamples();
 
     if (state.demoActive) {
-      return { kind: "demo", label: "Sample data", sub: "Isolated from your real history" };
+      return { kind: "demo", label: "Demo data", sub: "Isolated from your real history" };
     }
     if (connecting && !connected) {
       return { kind: "live", label: "Live car data", sub: "Connecting to your OBD adapter" };
@@ -284,13 +300,15 @@ type ChartPoint = {
     apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
     apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
 
-    // During a demo the Drive tab already leads with the live "Demo preview"
-    // now-chip (renderDriveNowChips), so a second stacked demo banner directly
-    // under it reads as a duplicate — hide the Drive badge and let the chip
-    // carry the state. Charge has no now-chip, so its badge stays as the only
-    // provenance marker there.
+    // During a demo the topbar carries the Demo / Testing line + the purple
+    // pill on EVERY tab (renderTopDemoInfo), so a demo banner under the header
+    // reads as a duplicate on Drive and Charge alike — hide both badges and
+    // let the header carry the state. For live/offline/empty they stay the
+    // per-tab provenance markers.
     const driveBadge = el("driveSourceBadge");
     if (driveBadge) driveBadge.hidden = src.kind === "demo";
+    const chargeBadge = el("chargeSourceBadge");
+    if (chargeBadge) chargeBadge.hidden = src.kind === "demo";
 
     const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
     if (hero && !firstSampleRevealed && driveHasLiveSamples()) {

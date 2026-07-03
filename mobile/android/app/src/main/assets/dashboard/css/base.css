@@ -375,49 +375,55 @@
   .topbar {
     /* Positioned so the status popover (absolute) anchors under the badge. */
     position: relative;
-    display: grid;
-    gap: 6px;
     margin-bottom: 8px;
   }
 
+  /* Single slim strip: icon + title left, last-connected line + state badge
+     right. The old two-row layout (tinted gradient band, then a separate
+     adapter line) burned ~30px of chrome on every tab. */
   .top-main {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    min-height: 36px;
-    padding: 4px 8px 4px 0;
-    border-radius: 14px;
-    background:
-      radial-gradient(220px 54px at 8px 2px, rgba(var(--volt-rgb), 0.12), transparent 68%),
-      linear-gradient(90deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
+    gap: 10px;
+    min-height: 40px;
   }
 
   .screen-heading {
     display: flex;
     align-items: center;
+    /* Rigid: view titles are short fixed strings — when the row gets tight
+       the adapter name in .top-status ellipsizes, never the title. */
+    flex: 0 0 auto;
+    gap: 8px;
+  }
+
+  .top-status {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
     min-width: 0;
-    gap: 9px;
+    flex: 1 1 auto;
   }
 
   .drive-title-mark {
     display: grid;
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid rgba(var(--volt-rgb), 0.34);
-    border-radius: 10px;
+    border-radius: 8px;
     background:
       radial-gradient(circle at 35% 20%, rgba(var(--warn-rgb), 0.4), transparent 38%),
       linear-gradient(145deg, rgba(var(--volt-rgb), 0.25), rgba(var(--ev-rgb), 0.08));
     color: #ffd0b8;
-    box-shadow: 0 10px 24px rgba(var(--volt-rgb), 0.16);
   }
 
   .drive-title-mark svg {
-    width: 17px;
-    height: 17px;
+    width: 14px;
+    height: 14px;
     fill: currentColor;
   }
 
@@ -472,7 +478,8 @@
 
   .topbar h1 {
     margin-top: 0;
-    font-size: 19px;
+    font-size: 17px;
+    white-space: nowrap;
   }
 
   .kicker {
@@ -807,8 +814,9 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  /* Scenario picker: flex-wrap (≈3 per row) so an odd count doesn't orphan the
-     last chip the way a fixed 2-col grid would. */
+  /* Scenario picker: flex-wrap (≈2 per row — each chip carries a name + a
+     one-line description) so an odd count doesn't orphan the last chip the
+     way a fixed 2-col grid would. */
   .sandbox-tools #demoScenarioPicker {
     display: flex;
     flex-wrap: wrap;
@@ -816,10 +824,28 @@
   }
 
   .sandbox-tools #demoScenarioPicker button {
-    flex: 1 1 30%;
+    flex: 1 1 44%;
+    display: grid;
+    gap: 2px;
+    align-content: center;
+    min-height: 48px;
+    padding: 6px 10px;
+    text-align: left;
   }
 
-  /* Single morphing demo toggle (Start demo preview <-> Stop demo preview). */
+  /* Plain-language scenario description under the mono name. */
+  .sandbox-tools #demoScenarioPicker button small {
+    pointer-events: none;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 10.5px;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    color: var(--soft);
+    line-height: 1.25;
+  }
+
+  /* Single morphing demo toggle (Start Demo / Testing <-> Stop Demo / Testing). */
   .demo-toggle-btn {
     width: 100%;
     min-height: 46px;
@@ -1228,12 +1254,6 @@
         0 1px 1px rgba(15,18,28,0.04);
     }
 
-    .top-main {
-      background:
-        radial-gradient(220px 54px at 8px 2px, rgba(232, 90, 31, 0.055), transparent 68%),
-        linear-gradient(90deg, rgba(0, 0, 0, 0.014), rgba(0, 0, 0, 0));
-    }
-
     .primary-action.is-stop,
     .danger {
       border-color: rgba(180,35,24,0.35);
@@ -1248,7 +1268,6 @@
     .drive-title-mark,
     body[data-active-view="trips"] .drive-title-mark {
       color: var(--volt-deep);
-      box-shadow: 0 10px 24px rgba(232, 90, 31, 0.14);
     }
     body[data-active-view="map"] .drive-title-mark { color: #0a5e86; }
     body[data-active-view="charge"] .drive-title-mark { color: var(--ev); }

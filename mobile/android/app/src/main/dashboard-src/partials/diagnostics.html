@@ -61,20 +61,21 @@
     </button>
   </article>
 
-  <details class="sandbox-tools" aria-label="Demo preview sandbox controls">
-    <summary aria-label="Toggle the demo preview sandbox controls">
-      Preview sandbox
+  <details class="sandbox-tools" aria-label="Demo / Testing controls">
+    <summary aria-label="Toggle the Demo / Testing controls">
+      Demo / Testing
     </summary>
     <p class="status-copy">
-      Demo preview is isolated here for UI debugging. Keep it off during real
-      car tests.
+      Stream realistic sample data through every screen — no car or adapter
+      needed. Demo data stays fully isolated from your real history and stops
+      the moment you turn it off.
     </p>
-    <div class="signal-section-label">Demo scenario</div>
+    <div class="signal-section-label">Scenario</div>
     <div
       id="demoScenarioPicker"
-      class="signal-stage-tabs"
+      class="signal-stage-tabs demo-scenario-tabs"
       role="group"
-      aria-label="Demo scenario"
+      aria-label="Demo / Testing scenario"
     >
       <button
         type="button"
@@ -82,22 +83,22 @@
         class="is-active"
         aria-pressed="true"
       >
-        <span>Typical</span>
+        <span>Typical</span><small>Everyday commute history</small>
       </button>
       <button type="button" data-scenario="empty" aria-pressed="false">
-        <span>Empty</span>
+        <span>Empty</span><small>Fresh-install blank slate</small>
       </button>
       <button type="button" data-scenario="power-user" aria-pressed="false">
-        <span>Power user</span>
+        <span>Power user</span><small>Months of dense history</small>
       </button>
       <button type="button" data-scenario="fault" aria-pressed="false">
-        <span>Fault</span>
+        <span>Fault</span><small>Trouble codes + a failed link</small>
       </button>
       <button type="button" data-scenario="extreme" aria-pressed="false">
-        <span>Extremes</span>
+        <span>Extremes</span><small>Boundary + stress values</small>
       </button>
     </div>
-    <!-- Single morphing demo toggle: "Start demo preview" <-> "Stop demo preview"
+    <!-- Single morphing demo toggle: "Start Demo / Testing" <-> "Stop Demo / Testing"
          (driven by setDemoActive in core.js). Replaces the old Start + Stop pair
          so only one of the two ever shows. -->
     <button
@@ -106,7 +107,7 @@
       data-demo-toggle
       data-action="demo"
     >
-      Start demo preview
+      Start Demo / Testing
     </button>
     <div class="button-grid">
       <button type="button" data-action="previewDtcCodes">

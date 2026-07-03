@@ -102,6 +102,21 @@
     margin-top: 14px;
   }
 
+  /* Paired CTAs (connect + Demo / Testing) share one row and split the width;
+     the wrapper owns the top gap so the per-button margin doesn't double it. */
+  .empty-state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+  }
+
+  .empty-state-actions .primary-action,
+  .empty-state-actions .link-btn {
+    flex: 1 1 45%;
+    margin-top: 0;
+  }
+
   body[data-active-view="charge"] .empty-hints b {
     border-color: rgba(var(--ev-rgb), 0.34);
     background: rgba(var(--ev-rgb), 0.1);

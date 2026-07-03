@@ -12,43 +12,63 @@
       </div>
     </div>
     <!--
-      Status badge: color always encodes connection state (never the tab accent)
-      and tapping it opens the status popover below — connection-status.ts owns
-      both the toggle and the popover contents.
+      Right-side status cluster: the quiet last-connected line and the state
+      badge share the title row so the header stays a single slim strip.
+      Both are tap targets for the same status popover — connection-status.ts
+      owns the toggle, the popover contents, and hiding the last-connected
+      line until there is a real session row to show. The badge's color always
+      encodes connection state (never the tab accent).
     -->
-    <button
-      id="stateBadge"
-      type="button"
-      class="badge"
-      data-state="idle"
-      aria-haspopup="dialog"
-      aria-expanded="false"
-      aria-controls="statusPopover"
-    >
-      <span class="visually-hidden">Connection status: </span
-      ><span class="dot"></span><span id="stateText">idle</span>
-    </button>
-  </div>
-  <!--
-    Topbar-only surface for last-connected and adapter health.
-    Hidden until connection-status.js has a session row or live-voltage signal to show.
-  -->
-  <div class="connection-status" aria-label="Adapter status summary">
-    <button
-      id="lastConnectedBadge"
-      type="button"
-      class="connection-status__line"
-      data-state="unknown"
-      hidden
-      aria-haspopup="dialog"
-      aria-expanded="false"
-      aria-controls="statusPopover"
-      aria-label="Last connection. Tap for status details"
-    >
-      <span class="connection-status__line-dot" aria-hidden="true"></span>
-      <strong id="lastConnectedLabel">--</strong>
-      <small id="lastConnectedAt">--</small>
-    </button>
+    <div class="top-status">
+      <!--
+        Demo / Testing header line: while a demo runs, this replaces the
+        last-connected line (drive.ts#renderTopDemoInfo shows it and keeps the
+        live sample/SOC meta fresh; connection-status.ts hides the adapter
+        line). One header slot, one truth — the old separate Drive now-chip
+        duplicated the purple "demo" pill right below it.
+      -->
+      <button
+        id="topDemoInfo"
+        type="button"
+        class="connection-status__line top-demo-info"
+        hidden
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+        aria-label="Demo / Testing is running. Tap for status details"
+      >
+        <span class="connection-status__line-dot" aria-hidden="true"></span>
+        <strong>Demo / Testing</strong>
+        <small id="topDemoMeta">sample data</small>
+      </button>
+      <button
+        id="lastConnectedBadge"
+        type="button"
+        class="connection-status__line"
+        data-state="unknown"
+        hidden
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+        aria-label="Last connection. Tap for status details"
+      >
+        <span class="connection-status__line-dot" aria-hidden="true"></span>
+        <strong id="lastConnectedLabel">--</strong>
+        <small id="lastConnectedAt">--</small>
+      </button>
+      <button
+        id="stateBadge"
+        type="button"
+        class="badge"
+        data-state="idle"
+        aria-haspopup="dialog"
+        aria-expanded="false"
+        aria-controls="statusPopover"
+      >
+        <span class="visually-hidden">Connection status: </span
+        ><span class="dot"></span><span id="stateText">idle</span>
+      </button>
+    </div>
   </div>
   <!--
     Status popover: tap target is the state badge (and the last-connected line).

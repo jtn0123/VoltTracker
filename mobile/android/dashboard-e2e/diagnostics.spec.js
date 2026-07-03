@@ -25,7 +25,7 @@ test('Export logs downloads a JSON file and reports success', async ({ page }) =
   await expect(page.locator('#statusCopy')).toHaveText('Detailed signal logs exported.');
 });
 
-test('Start demo preview visibly starts the sandbox from Diagnostics', async ({ page }) => {
+test('Start Demo / Testing visibly starts the sandbox from Diagnostics', async ({ page }) => {
   await page.locator('details.sandbox-tools').evaluate((node) => {
     node.open = true;
   });
@@ -33,7 +33,7 @@ test('Start demo preview visibly starts the sandbox from Diagnostics', async ({ 
 
   await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(true);
   await expect(page.locator('#stateText')).toHaveText('demo');
-  await expect(page.locator('[data-demo-toggle]')).toHaveText('Stop demo preview');
+  await expect(page.locator('[data-demo-toggle]')).toHaveText('Stop Demo / Testing');
   await expect(page.locator('#statusCopy')).toContainText(/demo/i);
 });
 

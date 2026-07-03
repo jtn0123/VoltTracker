@@ -99,6 +99,13 @@ function renderLastConnected() {
   const label = el("lastConnectedLabel");
   const at = el("lastConnectedAt");
   if (!badge || !label || !at) return;
+  // While Demo / Testing runs, its header line (#topDemoInfo, drive.ts) takes
+  // this slot — the last real adapter is stale context during a demo. The
+  // stop-demo status broadcast re-runs this render and restores the line.
+  if (dashboardState().demoActive) {
+    badge.hidden = true;
+    return;
+  }
   const s = lastRealSession();
   if (!s) {
     badge.hidden = true;
@@ -221,9 +228,9 @@ function deriveRecoveryView(): RecoveryView {
   }
   if (demo) {
     return {
-      tone: "demo", state: "demo", kicker: "Demo preview",
-      title: "Demo preview is running",
-      next: "Preview data is isolated from your real OBD history. Stop the demo when you want live data.",
+      tone: "demo", state: "demo", kicker: "Demo / Testing",
+      title: "Demo / Testing is running",
+      next: "Sample data is isolated from your real OBD history. Stop it any time to return to live data.",
       pill: "demo", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
     };
   }
@@ -286,7 +293,7 @@ function deriveRecoveryView(): RecoveryView {
   return {
     tone: "idle", state: "idle", kicker: "Get started",
     title: "No adapter connected yet",
-    next: "Connect an OBD adapter in Settings to start live logging — or run the demo preview below to explore the app.",
+    next: "Connect an OBD adapter in Settings to start live logging — or run Demo / Testing below to explore the app with sample data.",
     pill: "idle", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
   };
 }
@@ -481,8 +488,14 @@ function renderStatusPopover() {
   renderRows(el("statusPopoverTrip"), tripRows(status));
 }
 
+// Every control that toggles the status popover: the state pill, the
+// last-connected line, and the Demo / Testing line. Shared by the
+// aria-expanded sync, the outside-click check, and the click bindings so a
+// future opener only needs adding here.
+const STATUS_POPOVER_OPENER_IDS = ["stateBadge", "lastConnectedBadge", "topDemoInfo"];
+
 function setBadgeExpanded(expanded: boolean) {
-  ["stateBadge", "lastConnectedBadge"].forEach((id) => {
+  STATUS_POPOVER_OPENER_IDS.forEach((id) => {
     const badge = el(id);
     if (badge) badge.setAttribute("aria-expanded", expanded ? "true" : "false");
   });
@@ -523,9 +536,8 @@ function openStatusPopover() {
     (event) => {
       const target = event.target as Node | null;
       if (!target || popover.contains(target)) return;
-      const badge = el("stateBadge");
-      const line = el("lastConnectedBadge");
-      if ((badge && badge.contains(target)) || (line && line.contains(target))) return;
+      const openers = STATUS_POPOVER_OPENER_IDS.map((id) => el(id));
+      if (openers.some((opener) => opener && opener.contains(target))) return;
       closeStatusPopover();
     },
     { signal: controller.signal }
@@ -545,10 +557,10 @@ function toggleStatusPopover() {
 }
 
 function bindStatusPopover() {
-  const badge = el("stateBadge");
-  if (badge) badge.addEventListener("click", toggleStatusPopover);
-  const line = el("lastConnectedBadge");
-  if (line) line.addEventListener("click", toggleStatusPopover);
+  STATUS_POPOVER_OPENER_IDS.forEach((id) => {
+    const opener = el(id);
+    if (opener) opener.addEventListener("click", toggleStatusPopover);
+  });
 }
 
 // Re-render on every status broadcast - session summaries can change when

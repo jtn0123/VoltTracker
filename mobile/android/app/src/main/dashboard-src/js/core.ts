@@ -1171,13 +1171,13 @@ import { initialTelemetryState } from "./telemetry-state";
     if (banner) banner.hidden = !next;
     const bannerStop = el("demoStopBtn");
     if (bannerStop) bannerStop.hidden = !next;
-    // Single morphing demo toggle: "Start demo preview" <-> "Stop demo preview".
+    // Single morphing demo toggle: "Start Demo / Testing" <-> "Stop Demo / Testing".
     // Rewriting data-action in place keeps the existing [data-action] click
     // delegation routing to startDemo / stopDemo with no extra binding, so the
     // sandbox never shows a Start and a Stop button at the same time.
     queryAll("[data-demo-toggle]").forEach((button) => {
       button.dataset.action = next ? "stopDemo" : "demo";
-      button.textContent = next ? "Stop demo preview" : "Start demo preview";
+      button.textContent = next ? "Stop Demo / Testing" : "Start Demo / Testing";
       button.classList.toggle("demo", !next);
       button.classList.toggle("demo-stop", next);
     });

@@ -1913,7 +1913,7 @@ import type { MapSessionFilter } from "./map-session-list";
     state.appState = Object.assign({}, state.appState, { vehicle: sampleVehicle });
     state.demoScenario = "typical";
     captureDemoPreview();
-    VD.setDemoActive(true, "Demo preview sample drive loaded.");
+    VD.setDemoActive(true, "Demo / Testing sample drive loaded.");
     renderDemoSurfaces();
   }
 

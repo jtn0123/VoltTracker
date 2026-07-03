@@ -63,14 +63,27 @@
         <span>Extra signals</span>
         <small>Tires, battery internals</small>
       </button>
+      <!-- Demo / Testing entry point: previously the feature was only
+           reachable via the Diagnostics sandbox (and, in browser preview,
+           the morphing Connect button), so on-device users had no path to
+           it from Settings even though empty-state copy pointed here. -->
+      <button
+        id="demoSettingsBtn"
+        type="button"
+        data-action="demo"
+        class="demo settings-command"
+      >
+        <span>Demo / Testing</span>
+        <small>Explore with sample data</small>
+      </button>
     </div>
     <p id="statusCopy" class="status-copy" data-demo-hidden="true">
       Local data is available offline. Connect when you want live OBD logging.
     </p>
     <div id="demoBanner" class="demo-banner" hidden>
       <span>
-        <strong>Demo preview is running</strong>
-        <small>Stop the demo any time to return to live data.</small>
+        <strong>Demo / Testing is running</strong>
+        <small>Sample data only — your real history is untouched.</small>
       </span>
       <button id="demoStopBtn" type="button" class="demo-stop">
         Stop demo
