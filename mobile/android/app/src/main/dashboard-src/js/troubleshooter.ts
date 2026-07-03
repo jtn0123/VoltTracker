@@ -464,7 +464,7 @@ import type { FocusTrap } from "./focus-trap";
       }
     } else if (isFailure) {
       // Generic / UNKNOWN — keep existing detail line, don't add a hint.
-      titleNode.textContent = "Couldn't reach the adapter";
+      titleNode.textContent = "Can't reach the adapter";
       if (hintNode) {
         hintNode.textContent = "";
         hintNode.hidden = true;

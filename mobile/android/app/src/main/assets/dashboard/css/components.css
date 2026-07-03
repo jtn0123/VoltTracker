@@ -55,7 +55,7 @@
   }
 
   .empty-state {
-    padding: 16px;
+    padding: var(--card-pad-lg);
   }
 
   /* Numbered first-run guidance for sparse/empty tabs. Shown only while the
@@ -129,7 +129,7 @@
   }
 
   .live-card {
-    padding: 18px;
+    padding: var(--card-pad-lg);
     position: relative;
     overflow: hidden;
   }
@@ -330,7 +330,7 @@
   }
 
   .battery-strip {
-    padding: 14px;
+    padding: var(--card-pad);
   }
 
   .battery-head {
@@ -586,7 +586,7 @@
     grid-template-columns: 112px 1fr;
     gap: 14px;
     align-items: center;
-    padding: 16px;
+    padding: var(--card-pad-lg);
   }
 
   /* Battery gauge (replaces the old SOC donut): an EV-appropriate cell that
@@ -660,7 +660,11 @@
     z-index: 1;
     font-size: 26px;
     font-variant-numeric: tabular-nums;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+    /* Doubled shadow: the single soft shadow left white ink at ~1.6:1 on the
+       bright charge fill in light mode. */
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.65),
+      0 0 8px rgba(0, 0, 0, 0.45);
   }
 
   .status-meta span {
@@ -713,13 +717,13 @@
     display: block;
     margin-top: 5px;
     font-size: 20px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Wrap rather than truncate: "OBD adapter" clipped to "OBD ada…" on
+       360px phones and adapter names are the one value worth reading whole. */
+    overflow-wrap: break-word;
   }
 
   .trace-card {
-    padding: 14px;
+    padding: var(--card-pad);
   }
 
   canvas {
@@ -981,7 +985,7 @@
   }
 
   .diagnostic-report-card {
-    padding: 14px;
+    padding: var(--card-pad);
     border-color: rgba(var(--volt-rgb), 0.2);
   }
 
@@ -1237,7 +1241,7 @@
 
   .signal-console-head h2 {
     margin-top: 3px;
-    font-size: 20px;
+    font-size: 18px;
     line-height: 1.1;
   }
 
@@ -1553,6 +1557,14 @@
     gap: 10px;
   }
 
+  /* Cell-balance values are wide ("3.942 V · #12") — three-up on a narrow
+     phone wrapped them mid-value. Two-up trades a row for whole readings. */
+  @media (max-width: 380px) {
+    .cell-balance-stats {
+      grid-template-columns: repeat(2, 1fr);
+    }
+  }
+
   .live-charge-stats {
     margin-top: 12px;
   }
@@ -1589,6 +1601,7 @@
 
   .live-charge-target-field input {
     width: 3.2em;
+    min-height: var(--touch-min-dense);
     padding: 2px 4px;
     border: 1px solid var(--line);
     border-radius: 6px;
@@ -1635,6 +1648,9 @@
   .soh-trend-latest {
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 20px;
+    /* "--" breaks after the first hyphen when squeezed, rendering as two
+       stacked dashes; same guard for real values ("92%"). */
+    white-space: nowrap;
   }
 
   .soh-trend-chart {
@@ -2116,8 +2132,8 @@
 
   .icon-link-btn.danger {
     color: var(--bad-soft);
-    border-color: rgba(255,112,112,0.18);
-    background: rgba(255,112,112,0.06);
+    border-color: rgba(var(--bad-rgb), 0.18);
+    background: rgba(var(--bad-rgb), 0.06);
   }
 
   .enhanced-capability-item > b {
@@ -2263,9 +2279,9 @@
     min-height: var(--touch-min-dense);
     margin-top: 6px;
     padding: 7px 13px;
-    border: 1px solid rgba(92,200,255,0.34);
+    border: 1px solid rgba(var(--map-accent-rgb), 0.34);
     border-radius: 999px;
-    background: rgba(92,200,255,0.08);
+    background: rgba(var(--map-accent-rgb), 0.08);
     color: var(--accent-soft);
     font-size: 11px;
     font-weight: 700;
@@ -2325,8 +2341,8 @@
   }
 
   .dtc-item[data-severity="info"] .dtc-causes {
-    border-left-color: rgba(92,200,255,0.4);
-    background: rgba(92,200,255,0.04);
+    border-left-color: rgba(var(--map-accent-rgb), 0.4);
+    background: rgba(var(--map-accent-rgb), 0.04);
   }
 
   /* Per-code severity pill (next to the status label) + drivability line. */
@@ -2353,7 +2369,7 @@
   }
 
   .dtc-sev[data-severity="info"] {
-    background: rgba(92,200,255,0.14);
+    background: rgba(var(--map-accent-rgb), 0.14);
     color: var(--map-accent, var(--soft));
   }
 
@@ -2394,7 +2410,7 @@
   }
 
   .dtc-search:active {
-    background: rgba(92,200,255,0.18);
+    background: rgba(var(--map-accent-rgb), 0.18);
   }
 
   .dtc-search:focus-visible {
@@ -2695,7 +2711,7 @@
     overflow: auto;
     overscroll-behavior: contain;
     border: 1px solid var(--line-strong);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--surface-modal);
     color: var(--text);
     box-shadow: 0 22px 70px var(--shadow);
@@ -2817,7 +2833,7 @@
     position: relative;
     width: min(100%, 480px);
     border: 1px solid var(--line-strong);
-    border-radius: 8px;
+    border-radius: var(--radius-md);
     background: var(--surface-modal);
     color: var(--text);
     box-shadow: 0 26px 80px var(--shadow);

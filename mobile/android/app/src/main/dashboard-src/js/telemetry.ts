@@ -52,7 +52,11 @@ import { initialTelemetryState } from "./telemetry-state";
     const m = Number(meters || 0);
     if (!Number.isFinite(m) || m <= 0) return "--";
     const d = units.distanceMeters(m);
-    return `${d.value} ${d.unit}`;
+    // Group thousands ("12,345 mi") to match the odometer readout. Only rewrite
+    // all-digit values: short distances come back as "4.3" (toFixed) and must
+    // keep their trailing decimal.
+    const text = /^\d{4,}$/.test(d.value) ? Number(d.value).toLocaleString() : d.value;
+    return `${text} ${d.unit}`;
   }
 
   // Status detail lands in #statusCopy, which lives on the Settings tab — taps
@@ -356,11 +360,11 @@ import { initialTelemetryState } from "./telemetry-state";
     } else if (connecting) {
       primary.dataset.primaryAction = "stop";
       primary.setAttribute("aria-label", "Connecting to OBD adapter. Tap to stop.");
-      primary.textContent = "Connecting...";
+      primary.textContent = "Connecting…";
     } else if (scanning) {
       primary.dataset.primaryAction = "stop";
       primary.setAttribute("aria-label", "Scanning with OBD adapter. Tap to stop.");
-      primary.textContent = "Scanning...";
+      primary.textContent = "Scanning…";
     } else if (connected) {
       primary.dataset.primaryAction = "stop";
       primary.setAttribute("aria-label", "Disconnect OBD adapter");
@@ -710,7 +714,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
     const altUnit = metric ? "mph" : "km/h";
     VD.setText("speedValue", primary ? primary.value : null);
-    VD.setText("speedUnitMain", (primary ? primary.unit : altUnit).toUpperCase());
+    VD.setText("speedUnitMain", primary ? primary.unit : altUnit);
     VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
@@ -736,7 +740,7 @@ import { initialTelemetryState } from "./telemetry-state";
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(
       "voltageValue",
-      t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(1)} V`
+      t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(2)} V`
     );
     setOptionalLiveText("coolantValue", t.coolantC != null ? units.tempText(Number(t.coolantC)) : "--");
     setOptionalLiveText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
@@ -782,7 +786,7 @@ import { initialTelemetryState } from "./telemetry-state";
     liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
     liveNum("moreTorque", t.engineTorqueNm, (n) => `${Math.round(n)} Nm`);
 
-    VD.setText("rawFrames", t.raw || "Waiting for telemetry...");
+    VD.setText("rawFrames", t.raw || "Waiting for telemetry…");
     const soc = finiteNum(t.soc);
     const batteryTemp = finiteNum(t.batteryTemp);
     VD.setText("driveSocValue", soc != null ? `${Math.round(soc)}%` : "--");
@@ -872,7 +876,10 @@ import { initialTelemetryState } from "./telemetry-state";
     // the source of truth; fall back to the telemetry-level mirror only if a
     // bridge call hasn't delivered the app-state payload yet.
     const vehicleState = vehicle.state || t.vehicleState || "unknown";
-    VD.setText("diagState", status.detail || (t.updatedAt ? "Live OBD data received." : "Waiting for adapter"));
+    // Status details are toast-style sentences ("Demo scenario: typical.");
+    // as a card title the trailing period clashes with every other headline.
+    const diagTitle = String(status.detail || (t.updatedAt ? "Live OBD data received" : "Waiting for adapter")).replace(/\.\s*$/, "");
+    VD.setText("diagState", diagTitle);
     VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
     VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
     // Surface the classifier's confidence inline and its reason codes (the "why"
@@ -964,6 +971,18 @@ import { initialTelemetryState } from "./telemetry-state";
     return `${Math.round(ms / 3_600_000)}h ago`;
   }
 
+  // Derived signal values (pack power = V×A/1000, unit-converted temps) arrive as
+  // raw floats and would otherwise paint with full double precision
+  // ("-1.4462624380… kW"). Clamp numeric values to a readable precision:
+  // 3 decimals under 10 (cell voltages need millivolt resolution), 2 above.
+  // Number(toFixed) drops trailing zeros so integers stay "13.8", not "13.80".
+  function formatSignalValue(raw: unknown): string {
+    const n = Number(raw);
+    if (!Number.isFinite(n) || (typeof raw === "string" && raw.trim() === "")) return String(raw);
+    if (Number.isInteger(n)) return String(n);
+    return String(Number(n.toFixed(Math.abs(n) < 10 ? 3 : 2)));
+  }
+
   // Signature of the last renderLiveSignals() paint. A parked/flat car pushes the
   // same telemetry every rAF, and renderLiveSignals() otherwise rebuilds ~45 rows
   // each frame; this dirty-check (mirroring renderCellGrid's lastCellGridSig)
@@ -1025,8 +1044,12 @@ import { initialTelemetryState } from "./telemetry-state";
 
         const value = document.createElement("strong");
         value.className = "live-signal-value";
+        // Degree units hug the number ("85°C", matching units.tempText); all
+        // other units get the usual space ("3.4 kW").
         value.textContent = has
-          ? (spec.text ? String(raw) : `${String(raw)}${spec.unit ? " " + spec.unit : ""}`)
+          ? (spec.text
+              ? String(raw)
+              : `${formatSignalValue(raw)}${spec.unit ? (spec.unit.startsWith("°") ? "" : " ") + spec.unit : ""}`)
           : "no data";
 
         const age = document.createElement("small");

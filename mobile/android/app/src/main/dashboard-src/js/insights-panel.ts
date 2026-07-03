@@ -1018,7 +1018,7 @@ import { prefs, units } from "./prefs";
         head.append(
           "Most efficient around ",
           speed,
-          " - about " + units.efficiencyText(best.e) + "."
+          " — about " + units.efficiencyText(best.e) + "."
         );
       } else {
         head.textContent = "Log a few more drives to see your most efficient speed.";

@@ -124,8 +124,14 @@
     --radius-md: 12px;
     --radius-lg: 18px;
     --radius-xl: 20px;
+    /* Standalone text inputs (.pref-price, .maint-field, .map-list-search)
+       share one corner radius so form fields read as a family. */
+    --radius-input: 10px;
     --card-pad: 14px;
     --card-pad-tight: 12px;
+    /* Roomier padding for hero-tier cards (live speed cluster, pack ring,
+       empty states, trip-detail sheet) so they all breathe by the same amount. */
+    --card-pad-lg: 16px;
     /* Accessibility text-scale multiplier (M9). Default 1; the Preferences
        "Accessibility" font-scale control (prefs.ts) overrides it on :root in the
        1.0–1.5 range and persists it. The heading tokens below multiply through
@@ -663,9 +669,9 @@
   .state-grid span {
     display: block;
     color: var(--soft);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.13em;
+    font-size: 10px;
+    font-weight: 760;
+    letter-spacing: 0.12em;
     text-transform: uppercase;
   }
 
@@ -679,7 +685,7 @@
   }
 
   .validation-card {
-    padding: 15px;
+    padding: var(--card-pad);
   }
 
   .validation-list {
@@ -976,7 +982,7 @@
     min-height: var(--touch-min);
     padding: 6px 8px;
     border: 1px solid var(--line-strong);
-    border-radius: 10px;
+    border-radius: var(--radius-input);
     background: var(--fill-soft);
     color: var(--text);
     font-size: 15px;

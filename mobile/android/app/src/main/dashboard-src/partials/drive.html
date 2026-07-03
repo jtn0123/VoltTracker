@@ -35,7 +35,7 @@
   <section class="hero">
     <!-- Speed+power cluster. aria-live sits on the small per-reading clusters
          below (speed row / power block), each aria-atomic="true", so a screen
-         reader announces one coherent reading ("45 MPH 72 km/h") instead of a
+         reader announces one coherent reading ("45 mph 72 km/h") instead of a
          stutter of fragments — the old card-wide aria-live="polite"
          aria-atomic="false" re-announced each changed text node separately. -->
     <article class="panel live-card">
@@ -60,7 +60,7 @@
       >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
-          <span id="speedUnitMain" class="speed-unit-main">MPH</span>
+          <span id="speedUnitMain" class="speed-unit-main">mph</span>
           <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
             >-- km/h</span
           >
@@ -347,28 +347,28 @@
     <article class="panel metric">
       <header><span>GPS distance</span><span>real</span></header>
       <strong id="overviewDistance">--</strong>
-      <small id="overviewDistanceSub">waiting for route samples</small>
+      <small id="overviewDistanceSub">Waiting for route samples</small>
     </article>
     <article class="panel metric">
       <header><span>Max speed</span><span>session</span></header>
       <strong id="overviewMaxSpeed">--</strong>
-      <small>from accepted OBD speed</small>
+      <small>From accepted OBD speed</small>
     </article>
     <article class="panel metric">
       <header><span>Battery</span><span>latest</span></header>
       <strong id="overviewBattery">--</strong>
-      <small id="overviewBatterySub">SOC/power once observed</small>
+      <small id="overviewBatterySub">SOC and power once observed</small>
     </article>
     <article class="panel metric">
       <header><span>Charge</span><span>hints</span></header>
       <strong id="overviewChargeHints">0</strong>
-      <small>possible plugged-in transitions</small>
+      <small>Possible plugged-in transitions</small>
     </article>
   </section>
 
   <article id="appEmptyState" class="panel empty-state">
     <span class="kicker">App data</span>
-    <h3>No trip, charging, or insight history captured on this phone yet.</h3>
+    <h2>No drive, charging, or insight history captured on this phone yet</h2>
     <p>
       Open Settings to connect an adapter, scan car codes, or start the demo
       preview. Drive stays focused on live telemetry once data is flowing.

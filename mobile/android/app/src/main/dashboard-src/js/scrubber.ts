@@ -319,7 +319,14 @@ import { units } from "./prefs";
       lo = 0;
       hi = 1;
     }
-    if (hi - lo < 1) hi = lo + 1;
+    // Pad flat data SYMMETRICALLY: padding only the top pinned a constant
+    // trace (e.g. steady SOC) to the bottom edge of its track, where it read
+    // as "no data". Centered, a flat line is visibly a flat line.
+    if (hi - lo < 1) {
+      const mid = (hi + lo) / 2;
+      lo = mid - 0.5;
+      hi = mid + 0.5;
+    }
     return { lo: lo, hi: hi };
   }
 
@@ -477,7 +484,10 @@ import { units } from "./prefs";
         : effText;
     node.replaceChildren(
       scrubChip("Distance", `${dist.value} ${dist.unit}`),
-      scrubChip("Speed", `${speedVal} ${units.speedUnit()}`, { color: SCRUB_SPEED }),
+      // Unit lives in the label (like the efficiency chip below): "44 mph" was
+      // one character too wide for the six-across readout cell and clipped to
+      // "44 …" — the bare number always fits.
+      scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED }),
       scrubChip("Elevation", elevText, {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),

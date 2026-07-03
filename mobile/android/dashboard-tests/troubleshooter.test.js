@@ -232,7 +232,7 @@ describe('troubleshooter.ts — failure-class banner copy', () => {
 
   it('falls back to the generic failure title for an unknown failure class', () => {
     pushStatus({ state: 'failed', failureClass: 'TOTALLY_UNKNOWN', detail: 'mystery' });
-    expect(bannerTitle()).toBe("Couldn't reach the adapter");
+    expect(bannerTitle()).toBe("Can't reach the adapter");
     expect(bannerHint().hidden).toBe(true);
   });
 
@@ -498,7 +498,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     expect(bridge.startTestConnection).toHaveBeenCalledTimes(1);
     expect(button.disabled).toBe(true);
     expect(button.getAttribute('aria-busy')).toBe('true');
-    expect(button.textContent).toBe('Probing...');
+    expect(button.textContent).toBe('Probing…');
 
     // Re-enables roughly when the Android-side probe (25 s) stops itself.
     vi.advanceTimersByTime(25_500);
@@ -532,7 +532,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
     expect(bridge.shareDiagnosticsDigest).toHaveBeenCalledTimes(1);
     expect(btn.disabled).toBe(true);
     expect(btn.getAttribute('aria-busy')).toBe('true');
-    expect(btn.textContent).toBe('Preparing...');
+    expect(btn.textContent).toBe('Preparing…');
 
     vi.advanceTimersByTime(1500);
     expect(btn.disabled).toBe(false);

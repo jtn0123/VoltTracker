@@ -1,7 +1,7 @@
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state">
     <span class="kicker">Insights</span>
-    <h2>Not enough data yet.</h2>
+    <h2>Not enough data yet</h2>
     <p>
       Pack health, lifetime totals, and estimated savings vs gas appear here
       once you've logged a few drives with the adapter connected.
@@ -38,7 +38,7 @@
     </div>
     <div>
       <span class="kicker">HV pack</span>
-      <h2 id="realPackTitle">Waiting for battery readings.</h2>
+      <h2 id="realPackTitle">Waiting for battery readings</h2>
       <p id="realPackCopy" class="status-copy">
         Battery charge, power, and pack health appear here once the adapter has
         logged a few readings.
@@ -60,7 +60,7 @@
       </div>
       <span class="badge"
         ><span class="dot"></span
-        ><span><span id="insightTripCount">--</span> trips</span></span
+        ><span><span id="insightTripCount">--</span> drives</span></span
       >
     </div>
     <div class="map-sheet-stats">
@@ -179,7 +179,7 @@
         <p id="dtcClearDesc">
           This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
           light and stored DTC memory. Emissions readiness monitors will reset
-          and may take 100+ miles of mixed driving before re-setting - some
+          and may take 100+ miles of mixed driving before re-setting — some
           inspection stations will fail the car until then.
         </p>
         <p class="dtc-clear-prereq">
@@ -207,7 +207,7 @@
             id="dtcClearConfirmBtn"
             disabled
           >
-            Send Mode 04
+            Clear codes now
           </button>
         </div>
       </div>
@@ -242,10 +242,10 @@
       </header>
       <div class="state-grid" aria-label="Additional lifetime totals">
         <div>
-          <span>Longest trip</span><strong id="insightLongest">--</strong>
+          <span>Longest drive</span><strong id="insightLongest">--</strong>
         </div>
         <div>
-          <span>GPS trips</span><strong id="insightGpsTrips">--</strong>
+          <span>GPS drives</span><strong id="insightGpsTrips">--</strong>
         </div>
         <!-- Speed-weighted share of classified driving done on electric (EV vs
              engine-on samples); "--" until the classifier has seen real driving. -->
@@ -282,7 +282,7 @@
           <strong id="driveTrendEff">--</strong>
         </div>
         <div>
-          <span class="kicker" id="driveTrendCostLabel">Est cost / mi</span>
+          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
           <strong id="driveTrendCost">--</strong>
         </div>
       </div>

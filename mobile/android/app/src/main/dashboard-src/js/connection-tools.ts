@@ -118,7 +118,7 @@ function bindTestConnection(opts?: AddEventListenerOptions) {
   btn.addEventListener("click", () => {
     if (isBusy(btn)) return;
     const original = btn.textContent;
-    setButtonBusy(btn, true, "Probing...");
+    setButtonBusy(btn, true, "Probing…");
     safeCall("startTestConnection");
     // Match the Android-side TEST_CONNECTION_DURATION_MS (25s) so the UI
     // re-enables roughly when the service stops itself.
@@ -137,7 +137,7 @@ function bindSendDiagnostics(opts?: AddEventListenerOptions) {
     btn.addEventListener("click", () => {
       if (isBusy(btn)) return;
       const original = btn.textContent;
-      setButtonBusy(btn, true, "Preparing...");
+      setButtonBusy(btn, true, "Preparing…");
       safeCall("shareDiagnostics");
       diagnosticsTimers.push(window.setTimeout(() => {
         setButtonBusy(btn, false, original);
@@ -155,7 +155,7 @@ function bindSendAiDigest(opts?: AddEventListenerOptions) {
   btn.addEventListener("click", () => {
     if (isBusy(btn)) return;
     const original = btn.textContent;
-    setButtonBusy(btn, true, "Preparing...");
+    setButtonBusy(btn, true, "Preparing…");
     safeCall("shareDiagnosticsDigest");
     diagnosticsTimers.push(window.setTimeout(() => {
       setButtonBusy(btn, false, original);

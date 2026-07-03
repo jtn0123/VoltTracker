@@ -1512,7 +1512,7 @@ import type { MapSessionFilter } from "./map-session-list";
   // WebView) and hands it to native, which renders the PNG + share sheet.
   function shareTripCard(): boolean {
     if (!bridge || typeof bridge.shareTripCard !== "function") {
-      VD.setStatus({ state: "idle", detail: "Card sharing is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Card sharing is only available inside the Android app." });
       return false;
     }
     const routeKey = tripDetailRouteKey;
@@ -1834,9 +1834,9 @@ import type { MapSessionFilter } from "./map-session-list";
       emptyTelemetryCount: 12,
       recentPidFrames: [
         { command: "010D", name: "Vehicle speed", valueText: "34 mph", parsed: true },
-        { command: "0105", name: "Coolant temp", valueText: "85 °C", parsed: true },
-        { command: "221154", name: "Engine oil temperature", valueText: "96 °C", parsed: true },
-        { command: "225B", name: "Hybrid battery SOC", valueText: "77 %", parsed: true },
+        { command: "0105", name: "Coolant temp", valueText: "85°C", parsed: true },
+        { command: "221154", name: "Engine oil temperature", valueText: "96°C", parsed: true },
+        { command: "225B", name: "Hybrid battery SOC", valueText: "77%", parsed: true },
         { command: "22415B", name: "Unparsed response", rawResponse: "7F 22 31", parsed: false }
       ]
     };

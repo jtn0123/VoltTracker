@@ -261,7 +261,9 @@ describe('scrubber.ts', () => {
     VD.renderScrubber(withGappyRoute());
 
     expect(readoutValue('Distance')).toMatch(/ mi$/);
-    expect(readoutValue('Speed')).toMatch(/ mph$/);
+    // The speed chip's label carries the unit ("Speed mph") and the value is
+    // the bare number — "104 mph" overflowed the six-across readout cell.
+    expect(readoutValue('Speed mph')).toMatch(/^\d+$/);
     expect(readoutValue('Elevation')).toMatch(/ ft$/);
     // The mi/kWh chip's label already carries the unit, so its value never
     // repeats " mi/kWh" (that redundancy overflowed the compact readout cell).

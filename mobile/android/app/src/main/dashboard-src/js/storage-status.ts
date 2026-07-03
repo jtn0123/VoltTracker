@@ -985,7 +985,7 @@ import { prefs, units } from "./prefs";
         ring.dataset.level = soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
       }
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
-      VD.setText("realPackTitle", "Latest battery reading captured.");
+      VD.setText("realPackTitle", "Latest battery reading captured");
       VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · accuracy improves as more drives are logged.`);
     } else {
       if (ring) {
@@ -994,7 +994,7 @@ import { prefs, units } from "./prefs";
         delete ring.dataset.level;
       }
       if (ringValue) ringValue.textContent = "--";
-      VD.setText("realPackTitle", "Waiting for battery readings.");
+      VD.setText("realPackTitle", "Waiting for battery readings");
       VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
     renderPackStats(latest);
@@ -1210,7 +1210,7 @@ import { prefs, units } from "./prefs";
   // the user's preference.
   function openMaintenanceForm() {
     if (!bridge || typeof bridge.addMaintenanceEntry !== "function") {
-      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is only available inside the Android app." });
       return;
     }
     const form = el("maintenanceForm");
@@ -1284,7 +1284,7 @@ import { prefs, units } from "./prefs";
   // and the two interval fields are optional. Distances are converted from the display unit to km.
   function submitMaintenanceForm() {
     if (!bridge || typeof bridge.addMaintenanceEntry !== "function") {
-      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is only available inside the Android app." });
       return;
     }
     clearMaintFormErrors();
@@ -1432,7 +1432,7 @@ import { prefs, units } from "./prefs";
   // non-positive / unparseable rate as "no cost column". Degrades to a status hint without the bridge.
   function exportChargeSessionsCsv() {
     if (!bridge || typeof bridge.exportChargeSessionsCsv !== "function") {
-      VD.setStatus({ state: "idle", detail: "Charge-history export is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Charge-history export is only available inside the Android app." });
       return;
     }
     const price = prefs.get<number>("pricePerKwh", 0);

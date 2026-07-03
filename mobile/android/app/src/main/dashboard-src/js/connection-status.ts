@@ -8,7 +8,7 @@ import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
 import { resolveDeviceLocale, t } from "./i18n";
 import { units } from "./prefs";
-import { formatDuration, gpsText } from "./telemetry";
+import { formatDuration, formatWhen, gpsText } from "./telemetry";
 
 // Pick up the device locale once at module load so the demo-migrated copy below
 // resolves to a registered translation when one matches navigator.language. The
@@ -72,17 +72,11 @@ function parseSessions(n: number): RecentSession[] {
   return result;
 }
 
+// One relative-time vocabulary app-wide ("12m ago" / "2d ago"): defer to
+// telemetry's formatWhen; only the missing-value token differs (tile "--").
 function formatRelative(ms: number | undefined) {
   if (!ms) return "--";
-  const now = Date.now();
-  const delta = now - ms;
-  if (delta < 60_000) return "just now";
-  if (delta < 3_600_000) return Math.floor(delta / 60_000) + " min ago";
-  if (delta < 86_400_000) return Math.floor(delta / 3_600_000) + "h ago";
-  const days = Math.floor(delta / 86_400_000);
-  if (days === 1) return "yesterday";
-  if (days < 7) return days + " days ago";
-  return new Date(ms).toLocaleDateString();
+  return formatWhen(ms);
 }
 
 // A demo run is not a real adapter connection. New demo sessions are no longer written to the
@@ -203,7 +197,7 @@ function deriveRecoveryView(): RecoveryView {
       : btReady
         ? "Ready"
         : demo
-          ? "—"
+          ? "--"
           : "Not ready";
   const voltage = typeof status.lastVoltage === "number" ? status.lastVoltage : null;
   const blockedState = stateName === "blocked" || stateName === "error" || stateName === "failed";

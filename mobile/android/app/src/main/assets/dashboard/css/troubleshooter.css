@@ -153,7 +153,7 @@
   width: 24px;
   height: 24px;
   border-radius: var(--radius-md);
-  background: rgba(255, 156, 145, 0.16);
+  background: rgba(var(--bad-rgb), 0.16);
   color: var(--bad-text);
   font-weight: 600;
   font-size: 12px;
@@ -250,6 +250,7 @@
   background: var(--bad-fill);
   color: var(--bad-soft);
   border-radius: var(--radius-sm);
+  min-height: var(--touch-min-dense);
   padding: 6px 10px;
   font-size: 12px;
   font-weight: 600;
@@ -259,10 +260,14 @@
 
 .troubleshooter-force-stop:hover,
 .troubleshooter-force-stop:focus-visible {
-  background: rgba(255, 156, 145, 0.22);
+  background: rgba(var(--bad-rgb), 0.22);
 }
 
 @media (prefers-color-scheme: light) {
+  .troubleshooter-step-number {
+    background: rgba(180, 35, 24, 0.12);
+  }
+
   .troubleshooter-force-stop:hover,
   .troubleshooter-force-stop:focus-visible {
     background: rgba(180, 35, 24, 0.16);
@@ -320,7 +325,7 @@
   border: none;
   background: var(--volt);
   color: var(--on-volt);
-  font-weight: 600;
+  font-weight: 800;
   font-size: 14px;
   cursor: pointer;
 }

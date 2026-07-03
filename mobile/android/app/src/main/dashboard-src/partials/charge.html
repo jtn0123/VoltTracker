@@ -19,7 +19,7 @@
   </div>
   <article id="chargeEmptyState" class="panel empty-state">
     <span class="kicker">Charging</span>
-    <h2>No charging sessions yet.</h2>
+    <h2>No charging sessions yet</h2>
     <p>
       Plug in your Volt with the adapter connected and charging sessions will
       show up here automatically.
@@ -84,7 +84,9 @@
       <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span><span>charging</span></header>
+      <header>
+        <span>Status</span><span aria-hidden="true">charging</span>
+      </header>
       <!-- Color-coded like the other status badges; storage-status.ts keeps
            data-state in sync with the text (waiting/needs-review/recorded/charging). -->
       <span
@@ -307,7 +309,7 @@
     <div id="chargeCostTrendChart" class="charge-cost-trend-chart"></div>
     <div id="chargeCostTrendStats" class="charge-cost-trend-stats">
       <div>
-        <span class="kicker" id="chargeCostTrendSpanLabel">Per month</span>
+        <span class="kicker" id="chargeCostTrendSpanLabel">Avg / month</span>
         <strong id="chargeCostTrendAvg">--</strong>
       </div>
       <div>

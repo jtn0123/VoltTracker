@@ -18,6 +18,7 @@
 import { el } from "./core";
 import { setDataTone } from "./dataset-state";
 import type { DataToneValue } from "./dataset-state";
+import { formatDuration } from "./telemetry";
 import { units } from "./prefs";
 
 const VD = window.VoltDashboard;
@@ -88,14 +89,9 @@ type ChartPoint = {
 
   // ----- session chip strip -------------------------------------------------
 
-  function fmtDuration(ms: number) {
-    const s = Math.max(0, Math.round(Number(ms) / 1000));
-    if (s < 60) return s + "s";
-    const m = Math.floor(s / 60);
-    if (m < 60) return m + "m " + String(s % 60).padStart(2, "0") + "s";
-    const h = Math.floor(m / 60);
-    return h + "h " + String(m % 60).padStart(2, "0") + "m";
-  }
+  // Shared with every other elapsed-span readout (telemetry.formatDuration) so
+  // the session chips can't drift from the rest of the dashboard.
+  const fmtDuration = formatDuration;
 
   function deriveLiveChip(): DriveChip {
     const app = state.appState || {};
@@ -587,12 +583,12 @@ type ChartPoint = {
       return;
     }
     if (!Number.isFinite(start)) {
-      tag.textContent = current.toFixed(1) + "%";
+      tag.textContent = Math.round(current) + "%";
       setDataTone(tag, "idle");
       return;
     }
     const delta = current - start;
-    tag.textContent = current.toFixed(1) + "% · Δ " + fmtSocDelta(delta) + "%";
+    tag.textContent = Math.round(current) + "% · Δ " + fmtSocDelta(delta) + "%";
     // Tone: meaningful drop = warn, gain (regen / charging) = ok, drift = idle.
     setDataTone(tag, delta <= -0.5 ? "warn" : delta >= 0.5 ? "ok" : "idle");
   }

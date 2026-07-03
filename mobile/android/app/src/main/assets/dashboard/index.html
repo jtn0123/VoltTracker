@@ -486,7 +486,7 @@
   <section class="hero">
     <!-- Speed+power cluster. aria-live sits on the small per-reading clusters
          below (speed row / power block), each aria-atomic="true", so a screen
-         reader announces one coherent reading ("45 MPH 72 km/h") instead of a
+         reader announces one coherent reading ("45 mph 72 km/h") instead of a
          stutter of fragments — the old card-wide aria-live="polite"
          aria-atomic="false" re-announced each changed text node separately. -->
     <article class="panel live-card">
@@ -511,7 +511,7 @@
       >
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
-          <span id="speedUnitMain" class="speed-unit-main">MPH</span>
+          <span id="speedUnitMain" class="speed-unit-main">mph</span>
           <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
             >-- km/h</span
           >
@@ -798,28 +798,28 @@
     <article class="panel metric">
       <header><span>GPS distance</span><span>real</span></header>
       <strong id="overviewDistance">--</strong>
-      <small id="overviewDistanceSub">waiting for route samples</small>
+      <small id="overviewDistanceSub">Waiting for route samples</small>
     </article>
     <article class="panel metric">
       <header><span>Max speed</span><span>session</span></header>
       <strong id="overviewMaxSpeed">--</strong>
-      <small>from accepted OBD speed</small>
+      <small>From accepted OBD speed</small>
     </article>
     <article class="panel metric">
       <header><span>Battery</span><span>latest</span></header>
       <strong id="overviewBattery">--</strong>
-      <small id="overviewBatterySub">SOC/power once observed</small>
+      <small id="overviewBatterySub">SOC and power once observed</small>
     </article>
     <article class="panel metric">
       <header><span>Charge</span><span>hints</span></header>
       <strong id="overviewChargeHints">0</strong>
-      <small>possible plugged-in transitions</small>
+      <small>Possible plugged-in transitions</small>
     </article>
   </section>
 
   <article id="appEmptyState" class="panel empty-state">
     <span class="kicker">App data</span>
-    <h3>No trip, charging, or insight history captured on this phone yet.</h3>
+    <h2>No drive, charging, or insight history captured on this phone yet</h2>
     <p>
       Open Settings to connect an adapter, scan car codes, or start the demo
       preview. Drive stays focused on live telemetry once data is flowing.
@@ -927,7 +927,7 @@
             aria-label="Efficiency"
             title="Efficiency"
           >
-            <span>Effic.</span>
+            <span>Eff</span>
           </button>
         </div>
         <div class="map-top-right">
@@ -1168,7 +1168,7 @@
   <section class="map-layout">
     <article class="panel list-card">
       <header>
-        <span class="kicker">Recorded sessions</span>
+        <span class="kicker">Recorded drives</span>
         <div class="map-sheet-actions">
           <button
             type="button"
@@ -1257,7 +1257,7 @@
   </div>
   <article id="chargeEmptyState" class="panel empty-state">
     <span class="kicker">Charging</span>
-    <h2>No charging sessions yet.</h2>
+    <h2>No charging sessions yet</h2>
     <p>
       Plug in your Volt with the adapter connected and charging sessions will
       show up here automatically.
@@ -1322,7 +1322,9 @@
       <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span><span>charging</span></header>
+      <header>
+        <span>Status</span><span aria-hidden="true">charging</span>
+      </header>
       <!-- Color-coded like the other status badges; storage-status.ts keeps
            data-state in sync with the text (waiting/needs-review/recorded/charging). -->
       <span
@@ -1545,7 +1547,7 @@
     <div id="chargeCostTrendChart" class="charge-cost-trend-chart"></div>
     <div id="chargeCostTrendStats" class="charge-cost-trend-stats">
       <div>
-        <span class="kicker" id="chargeCostTrendSpanLabel">Per month</span>
+        <span class="kicker" id="chargeCostTrendSpanLabel">Avg / month</span>
         <strong id="chargeCostTrendAvg">--</strong>
       </div>
       <div>
@@ -1592,7 +1594,7 @@
 <section id="view-insights" class="view" data-view="insights">
   <article id="insightsEmptyState" class="panel empty-state">
     <span class="kicker">Insights</span>
-    <h2>Not enough data yet.</h2>
+    <h2>Not enough data yet</h2>
     <p>
       Pack health, lifetime totals, and estimated savings vs gas appear here
       once you've logged a few drives with the adapter connected.
@@ -1629,7 +1631,7 @@
     </div>
     <div>
       <span class="kicker">HV pack</span>
-      <h2 id="realPackTitle">Waiting for battery readings.</h2>
+      <h2 id="realPackTitle">Waiting for battery readings</h2>
       <p id="realPackCopy" class="status-copy">
         Battery charge, power, and pack health appear here once the adapter has
         logged a few readings.
@@ -1651,7 +1653,7 @@
       </div>
       <span class="badge"
         ><span class="dot"></span
-        ><span><span id="insightTripCount">--</span> trips</span></span
+        ><span><span id="insightTripCount">--</span> drives</span></span
       >
     </div>
     <div class="map-sheet-stats">
@@ -1770,7 +1772,7 @@
         <p id="dtcClearDesc">
           This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
           light and stored DTC memory. Emissions readiness monitors will reset
-          and may take 100+ miles of mixed driving before re-setting - some
+          and may take 100+ miles of mixed driving before re-setting — some
           inspection stations will fail the car until then.
         </p>
         <p class="dtc-clear-prereq">
@@ -1798,7 +1800,7 @@
             id="dtcClearConfirmBtn"
             disabled
           >
-            Send Mode 04
+            Clear codes now
           </button>
         </div>
       </div>
@@ -1833,10 +1835,10 @@
       </header>
       <div class="state-grid" aria-label="Additional lifetime totals">
         <div>
-          <span>Longest trip</span><strong id="insightLongest">--</strong>
+          <span>Longest drive</span><strong id="insightLongest">--</strong>
         </div>
         <div>
-          <span>GPS trips</span><strong id="insightGpsTrips">--</strong>
+          <span>GPS drives</span><strong id="insightGpsTrips">--</strong>
         </div>
         <!-- Speed-weighted share of classified driving done on electric (EV vs
              engine-on samples); "--" until the classifier has seen real driving. -->
@@ -1873,7 +1875,7 @@
           <strong id="driveTrendEff">--</strong>
         </div>
         <div>
-          <span class="kicker" id="driveTrendCostLabel">Est cost / mi</span>
+          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
           <strong id="driveTrendCost">--</strong>
         </div>
       </div>
@@ -2184,55 +2186,10 @@
     <div id="historyList"></div>
   </article>
 
-  <article class="panel list-card settings-data-card settings-secondary">
-    <header>
-      <div>
-        <span class="kicker">Backup &amp; restore</span>
-        <h3>Data management</h3>
-      </div>
-      <button type="button" class="link-btn" data-action="refreshStorage">
-        Refresh
-      </button>
-    </header>
-    <p class="status-copy">
-      Encrypted backup is safest. Restoring a file lets you merge it into the
-      current phone data or replace everything on this phone.
-    </p>
-    <div
-      class="db-action-grid"
-      role="group"
-      aria-label="Backup and restore actions"
-    >
-      <button
-        type="button"
-        data-action="backupEncrypted"
-        class="settings-command db-safe-action"
-      >
-        <span>Back up encrypted</span>
-        <small>Safest export</small>
-      </button>
-      <button
-        type="button"
-        data-action="restoreEncrypted"
-        class="settings-command db-safe-action"
-      >
-        <span>Restore encrypted</span>
-        <small>Needs passphrase</small>
-      </button>
-      <button type="button" data-action="backup" class="settings-command">
-        <span>Export plaintext</span>
-        <small>Readable database</small>
-      </button>
-      <button type="button" data-action="restore" class="settings-command">
-        <span>Restore file</span>
-        <small>Merge or replace</small>
-      </button>
-    </div>
-  </article>
-
-  <p id="appVersionFooter" class="status-copy app-version-footer">
-    Volt Tracker
-  </p>
+  <!-- Backup & restore + the version footer moved to the end of the
+       Preferences section (partials/preferences.html) so connection setup and
+       connection tools sit together and the footer lands at the true bottom
+       of the Settings tab. -->
 </section>
 <!--
   Proactive adapter tools: test connection, send diagnostics, low-voltage hint,
@@ -2376,7 +2333,7 @@
             type="checkbox"
             data-action="notify-new-dtc"
           />
-          <span>Notify on a new diagnostic code</span>
+          <span>Notify when a new car code is found</span>
         </label>
       </div>
       <div class="connection-tools__notify-row">
@@ -2386,7 +2343,7 @@
             type="checkbox"
             data-action="notify-low-soc"
           />
-          <span>Notify on low battery</span>
+          <span>Notify when the battery is low</span>
         </label>
         <label class="connection-tools__notify-mins">
           <span class="kicker">Below</span>
@@ -2405,7 +2362,7 @@
             type="checkbox"
             data-action="notify-high-temp"
           />
-          <span>Notify on high pack temperature</span>
+          <span>Notify when pack temperature is high</span>
         </label>
         <label class="connection-tools__notify-mins">
           <span class="kicker">Above</span>
@@ -2531,7 +2488,7 @@
         <strong>Public charging rate</strong>
         <small
           >Optional — DC-fast / public sessions use this; home sessions use the
-          rate above. Leave blank to use one rate everywhere.</small
+          rate above. Leave blank to use one rate everywhere</small
         >
       </div>
       <label class="pref-price">
@@ -2565,7 +2522,7 @@
           placeholder="30"
           aria-label="Comparison gas vehicle fuel economy in miles per gallon"
         />
-        <span>mpg</span>
+        <span>MPG</span>
       </label>
     </div>
     <div class="pref-row">
@@ -2689,6 +2646,60 @@
       aria-label="Drive tile layout"
     ></div>
   </article>
+
+  <!-- Moved from partials/settings.html: backup/restore is a low-frequency
+       data tool, so it sits at the end of the Settings tab instead of between
+       the connect card and the connection tools. -->
+  <article class="panel list-card settings-data-card settings-secondary">
+    <header>
+      <div>
+        <span class="kicker">Backup &amp; restore</span>
+        <h3>Data management</h3>
+      </div>
+      <button type="button" class="link-btn" data-action="refreshStorage">
+        Refresh
+      </button>
+    </header>
+    <p class="status-copy">
+      Encrypted backup is safest. When you restore a file you can choose to
+      merge it into your current data (duplicate trips are skipped) or replace
+      everything on this phone.
+    </p>
+    <div
+      class="db-action-grid"
+      role="group"
+      aria-label="Backup and restore actions"
+    >
+      <button
+        type="button"
+        data-action="backupEncrypted"
+        class="settings-command db-safe-action"
+      >
+        <span>Back up encrypted</span>
+        <small>Safest export</small>
+      </button>
+      <button
+        type="button"
+        data-action="restoreEncrypted"
+        class="settings-command db-safe-action"
+      >
+        <span>Restore encrypted</span>
+        <small>Needs passphrase</small>
+      </button>
+      <button type="button" data-action="backup" class="settings-command">
+        <span>Export plaintext</span>
+        <small>Readable database</small>
+      </button>
+      <button type="button" data-action="restore" class="settings-command">
+        <span>Restore file</span>
+        <small>Merge or replace</small>
+      </button>
+    </div>
+  </article>
+
+  <p id="appVersionFooter" class="status-copy app-version-footer">
+    Volt Tracker
+  </p>
 </section>
 <!--
   Diagnostics tab — its own top-level view (promoted out of the former in-Settings
@@ -2996,7 +3007,7 @@
           <h3 id="reviewTitle">No real session yet</h3>
         </div>
         <button type="button" class="link-btn" data-action="exportDebug">
-          Export
+          Export debug
         </button>
       </header>
       <div class="review-grid">
@@ -3135,7 +3146,7 @@
 
     <article class="panel raw">
       <div class="kicker">Raw ELM327 frames</div>
-      <pre id="rawFrames">Waiting for telemetry...</pre>
+      <pre id="rawFrames">Waiting for telemetry…</pre>
     </article>
   </details>
 </section>

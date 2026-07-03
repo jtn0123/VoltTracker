@@ -49,8 +49,8 @@ test('settings exposes connection actions without expanding a disclosure', async
   await expect(page.locator('#permissionBtn')).toBeVisible();
   await expect(page.locator('#scanBtn')).toBeVisible();
   await expect(page.locator('#lastBtn')).toBeVisible();
-  await expect(page.locator('#view-settings [data-action="restore"]')).toBeVisible();
-  await expect(page.locator('#view-settings [data-action="restoreEncrypted"]')).toBeVisible();
+  await expect(page.locator('#view-preferences [data-action="restore"]')).toBeVisible();
+  await expect(page.locator('#view-preferences [data-action="restoreEncrypted"]')).toBeVisible();
   await expect(page.locator('#disconnectBtn')).toHaveCount(0);
 });
 
@@ -109,6 +109,6 @@ test('"Restore file" calls the native restore bridge', async ({ page }) => {
     };
   });
 
-  await page.locator('#view-settings [data-action="restore"]').click();
+  await page.locator('#view-preferences [data-action="restore"]').click();
   await expect.poll(() => page.evaluate(() => window.__restoreCalls)).toBe(1);
 });

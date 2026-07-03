@@ -159,7 +159,7 @@ describe('actions.ts — bridge dispatch', () => {
       lastAddress: device.address,
       lastName: device.name,
     });
-    expect(document.getElementById('connectBtn').textContent).toBe('Connecting...');
+    expect(document.getElementById('connectBtn').textContent).toBe('Connecting…');
     expect(document.getElementById('connectBtn').dataset.primaryAction).toBe('stop');
     // Native connect/scan remembers the adapter once; JS must not pre-remember or
     // history counts inflate on a single click.
@@ -176,7 +176,7 @@ describe('actions.ts — bridge dispatch', () => {
       state: 'scanning',
       detail: `Starting scan with ${device.name}...`,
     });
-    expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
+    expect(document.getElementById('connectBtn').textContent).toBe('Scanning…');
   });
 
   it('connectSelected(true, button, true) routes to bridge.quickScan, not scan or connect', () => {
@@ -191,7 +191,7 @@ describe('actions.ts — bridge dispatch', () => {
       state: 'scanning',
       detail: `Starting scan with ${device.name}...`,
     });
-    expect(document.getElementById('connectBtn').textContent).toBe('Scanning...');
+    expect(document.getElementById('connectBtn').textContent).toBe('Scanning…');
   });
 
   it('quick scan on an older APK bridge without quickScan() explains instead of connecting', () => {
@@ -366,7 +366,7 @@ describe('actions.ts — bridge dispatch', () => {
       state: 'connecting',
       detail: 'Connecting to TestOBD...',
     });
-    expect(document.getElementById('connectBtn').textContent).toBe('Connecting...');
+    expect(document.getElementById('connectBtn').textContent).toBe('Connecting…');
   });
 
   it('the primary connection button becomes the disconnect action while active', () => {

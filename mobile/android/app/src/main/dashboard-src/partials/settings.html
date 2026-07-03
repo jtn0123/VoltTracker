@@ -86,53 +86,8 @@
     <div id="historyList"></div>
   </article>
 
-  <article class="panel list-card settings-data-card settings-secondary">
-    <header>
-      <div>
-        <span class="kicker">Backup &amp; restore</span>
-        <h3>Data management</h3>
-      </div>
-      <button type="button" class="link-btn" data-action="refreshStorage">
-        Refresh
-      </button>
-    </header>
-    <p class="status-copy">
-      Encrypted backup is safest. Restoring a file lets you merge it into the
-      current phone data or replace everything on this phone.
-    </p>
-    <div
-      class="db-action-grid"
-      role="group"
-      aria-label="Backup and restore actions"
-    >
-      <button
-        type="button"
-        data-action="backupEncrypted"
-        class="settings-command db-safe-action"
-      >
-        <span>Back up encrypted</span>
-        <small>Safest export</small>
-      </button>
-      <button
-        type="button"
-        data-action="restoreEncrypted"
-        class="settings-command db-safe-action"
-      >
-        <span>Restore encrypted</span>
-        <small>Needs passphrase</small>
-      </button>
-      <button type="button" data-action="backup" class="settings-command">
-        <span>Export plaintext</span>
-        <small>Readable database</small>
-      </button>
-      <button type="button" data-action="restore" class="settings-command">
-        <span>Restore file</span>
-        <small>Merge or replace</small>
-      </button>
-    </div>
-  </article>
-
-  <p id="appVersionFooter" class="status-copy app-version-footer">
-    Volt Tracker
-  </p>
+  <!-- Backup & restore + the version footer moved to the end of the
+       Preferences section (partials/preferences.html) so connection setup and
+       connection tools sit together and the footer lands at the true bottom
+       of the Settings tab. -->
 </section>

@@ -63,7 +63,7 @@
         <strong>Public charging rate</strong>
         <small
           >Optional — DC-fast / public sessions use this; home sessions use the
-          rate above. Leave blank to use one rate everywhere.</small
+          rate above. Leave blank to use one rate everywhere</small
         >
       </div>
       <label class="pref-price">
@@ -97,7 +97,7 @@
           placeholder="30"
           aria-label="Comparison gas vehicle fuel economy in miles per gallon"
         />
-        <span>mpg</span>
+        <span>MPG</span>
       </label>
     </div>
     <div class="pref-row">
@@ -221,4 +221,58 @@
       aria-label="Drive tile layout"
     ></div>
   </article>
+
+  <!-- Moved from partials/settings.html: backup/restore is a low-frequency
+       data tool, so it sits at the end of the Settings tab instead of between
+       the connect card and the connection tools. -->
+  <article class="panel list-card settings-data-card settings-secondary">
+    <header>
+      <div>
+        <span class="kicker">Backup &amp; restore</span>
+        <h3>Data management</h3>
+      </div>
+      <button type="button" class="link-btn" data-action="refreshStorage">
+        Refresh
+      </button>
+    </header>
+    <p class="status-copy">
+      Encrypted backup is safest. When you restore a file you can choose to
+      merge it into your current data (duplicate trips are skipped) or replace
+      everything on this phone.
+    </p>
+    <div
+      class="db-action-grid"
+      role="group"
+      aria-label="Backup and restore actions"
+    >
+      <button
+        type="button"
+        data-action="backupEncrypted"
+        class="settings-command db-safe-action"
+      >
+        <span>Back up encrypted</span>
+        <small>Safest export</small>
+      </button>
+      <button
+        type="button"
+        data-action="restoreEncrypted"
+        class="settings-command db-safe-action"
+      >
+        <span>Restore encrypted</span>
+        <small>Needs passphrase</small>
+      </button>
+      <button type="button" data-action="backup" class="settings-command">
+        <span>Export plaintext</span>
+        <small>Readable database</small>
+      </button>
+      <button type="button" data-action="restore" class="settings-command">
+        <span>Restore file</span>
+        <small>Merge or replace</small>
+      </button>
+    </div>
+  </article>
+
+  <p id="appVersionFooter" class="status-copy app-version-footer">
+    Volt Tracker
+  </p>
 </section>

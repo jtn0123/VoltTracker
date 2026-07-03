@@ -381,11 +381,8 @@
 
   /* On the narrowest phones the two KPI columns get cramped, so stack to a
      single column (mirrors how .state-grid drops a column at narrow widths). */
-  @media (max-width: 360px) {
-    .charge-grid {
-      grid-template-columns: 1fr;
-    }
-  }
+  /* Charge KPIs stay two-up on narrow phones: four stacked full-width
+     cards for four small numbers doubled the scroll for no legibility win. */
 
   .session-badge {
     display: inline-flex;
@@ -531,7 +528,7 @@
   .maint-field input {
     padding: 8px 10px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: var(--radius-input);
     /* Use the standard input surface token (matches the global `select, input`
        rule) rather than --bg — the page background made the field read as the
        page itself, not an input, especially in the light scheme. */
@@ -657,7 +654,7 @@
   }
 
   .raw {
-    padding: 14px;
+    padding: var(--card-pad);
   }
 
   pre {
@@ -1029,7 +1026,7 @@
 
   .eff-scatter-card { padding: 14px 16px; }
   .eff-scatter-card header { margin-bottom: 6px; }
-  .eff-scatter-card header h3 { margin: 4px 0 0; font-size: 16px; letter-spacing: -0.01em; }
+  .eff-scatter-card header h3 { margin: 4px 0 0; font-size: 15px; letter-spacing: -0.01em; }
   .eff-scatter { margin-top: 6px; cursor: default; }
   .eff-scatter svg { display: block; width: 100%; }
   /* Segmented control to switch the chart style (bars / scatter / curve). */
@@ -1083,7 +1080,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     z-index: 40;
-    padding: 16px;
+    padding: var(--card-pad-lg);
     box-shadow: 0 16px 48px var(--shadow);
   }
 
@@ -1250,7 +1247,7 @@
   }
 
   #insightStatsCard .state-grid div {
-    min-width: 116px;
+    min-width: 104px;
     padding: 8px 12px;
   }
 
@@ -1843,7 +1840,6 @@
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     letter-spacing: 0.05em;
-    text-transform: uppercase;
     color: var(--muted);
     background: var(--fill-soft);
     transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);

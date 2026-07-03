@@ -555,7 +555,7 @@ type SignalActions = {
   // CSV and opens the share sheet. Degrades to a status hint when the bridge is absent (web preview).
   function exportAllTripsCsv() {
     if (!bridge || typeof bridge.exportAllTripsCsv !== "function") {
-      VD.setStatus({ state: "idle", detail: "All-trips export is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "All-trips export is only available inside the Android app." });
       return;
     }
     callBridgeAction("exportAllTripsCsv", [], "All-trips export failed.");
@@ -579,7 +579,7 @@ type SignalActions = {
     const id = String(button.dataset.maintDelete || "").trim();
     if (!id) return;
     if (!bridge || typeof bridge.deleteMaintenanceEntry !== "function") {
-      VD.setStatus({ state: "idle", detail: "Maintenance logging is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Maintenance logging is only available inside the Android app." });
       return;
     }
     // Removal is a no-undo data loss; route through the shared confirm dialog
@@ -692,7 +692,7 @@ type SignalActions = {
 
   function previewDtcCodes(): Promise<void> | undefined {
     if (!Array.isArray(VD.dtcSampleCodes) && typeof VD.ensureDtcData === "function") {
-      VD.setStatus({ state: "ready", detail: "Loading DTC examples..." });
+      VD.setStatus({ state: "ready", detail: "Loading DTC examples…" });
       return VD.ensureDtcData()
         .then(previewDtcCodes)
         .catch(() => VD.setStatus({ state: "blocked", detail: "DTC examples could not be loaded." }));
@@ -740,7 +740,7 @@ type SignalActions = {
     const clean = String(routeKey || "").trim();
     if (!clean || clean === "__live_current__") return;
     if (!bridge || typeof bridge.markTripNotTrip !== "function") {
-      VD.setStatus({ state: "idle", detail: "Map cleanup is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Map cleanup is only available inside the Android app." });
       return;
     }
     callBridgeAction("markTripNotTrip", [clean], "Could not hide this drive from Trips.");
@@ -795,7 +795,7 @@ type SignalActions = {
     if (!routeKey) return;
     const fn = wantCsv ? bridge?.exportTripCsv : bridge?.exportTripGpx;
     if (!bridge || typeof fn !== "function") {
-      VD.setStatus({ state: "idle", detail: "Drive export is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Drive export is only available inside the Android app." });
       return;
     }
     callBridgeAction(wantCsv ? "exportTripCsv" : "exportTripGpx", [routeKey], "Drive export failed.");
@@ -814,7 +814,7 @@ type SignalActions = {
     const routeKey = String(button.dataset.tripRename || "").trim();
     if (!routeKey) return;
     if (!bridge || typeof bridge.setTripLabel !== "function") {
-      VD.setStatus({ state: "idle", detail: "Trip rename is available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Trip rename is only available inside the Android app." });
       return;
     }
     const current = String(button.dataset.tripRenameLabel || "");
@@ -847,7 +847,7 @@ type SignalActions = {
     const routeKey = String(button.dataset.tripFavorite || "").trim();
     if (!routeKey) return;
     if (!bridge || typeof bridge.setTripFavorite !== "function") {
-      VD.setStatus({ state: "idle", detail: "Trip favorites are available inside the Android app." });
+      VD.setStatus({ state: "idle", detail: "Trip favorites are only available inside the Android app." });
       return;
     }
     const next = button.dataset.tripFavoriteState !== "1";
@@ -1083,7 +1083,9 @@ type SignalActions = {
 
     const web = document.createElement("button");
     web.type = "button";
-    web.className = "link-btn dtc-lookup-web";
+    // Same pill treatment as the .dtc-search chip in the codes list — the
+    // bare link-btn styling read as plain text with no affordance.
+    web.className = "dtc-search dtc-lookup-web";
     web.dataset.dtcSearch = code;
     web.textContent = "Search the web for " + code;
     out.appendChild(web);
