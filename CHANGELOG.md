@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.25.2 (2026-07-03)
+
+### 🔺 Fix
+
+- Polish dashboard demo-mode UI copy and signed-value glyphs
+  ([#284](https://github.com/jtn0123/VoltTracker/pull/284),
+  [`c4f4194`](https://github.com/jtn0123/VoltTracker/commit/c4f41946c29475fc3b5a93ee0a5d110b2b2430c5))
+
+
 ## v0.25.1 (2026-07-02)
 
 ### 🔺 Fix
