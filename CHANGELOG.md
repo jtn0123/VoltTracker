@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.26.0 (2026-07-03)
+
+### ✳️ New
+
+- Compact dashboard header and polish Demo / Testing mode
+  ([#286](https://github.com/jtn0123/VoltTracker/pull/286),
+  [`6b359ce`](https://github.com/jtn0123/VoltTracker/commit/6b359ce69b4ca012781759012ccb4b05f6e9e5c3))
+
+
 ## v0.25.3 (2026-07-03)
 
 ### 🔺 Fix
