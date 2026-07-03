@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.25.3 (2026-07-03)
+
+### 🔺 Fix
+
+- Polish dashboard copy, formatting, and theme consistency
+  ([#285](https://github.com/jtn0123/VoltTracker/pull/285),
+  [`08e62cd`](https://github.com/jtn0123/VoltTracker/commit/08e62cda6f060f3f79813b5e5702d027d9dbe934))
+
+
 ## v0.25.2 (2026-07-03)
 
 ### 🔺 Fix
