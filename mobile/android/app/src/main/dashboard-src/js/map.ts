@@ -317,8 +317,14 @@ import type { MapSessionFilter } from "./map-session-list";
     if (typeof L === "undefined") return null;
     const container = el("mapLeaflet");
     if (!container) return null;
-    const map: LeafletMapInstance = L.map(container, { zoomControl: false, attributionControl: true })
-      .setView([39.5, -98.35], 4);
+    const map: LeafletMapInstance = L.map(container, { zoomControl: false, attributionControl: true });
+    map.setView([39.5, -98.35], 4);
+    // Keep the OSM/CARTO credit but drop Leaflet's default "Leaflet" prefix
+    // (with flag glyph) — the stock chrome rendered at body size over the
+    // legend. The pill styling lives in screens-map.css.
+    if (map.attributionControl && typeof map.attributionControl.setPrefix === "function") {
+      map.attributionControl.setPrefix("");
+    }
     mapInstance = map;
     syncRemoteTiles();
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(map);
@@ -396,6 +402,16 @@ import type { MapSessionFilter } from "./map-session-list";
     return true;
   }
 
+  // "Morning drive" / "Evening drive" from the trip's start hour — the human
+  // label a person would use, instead of the adapter's model number.
+  function daypartDriveLabel(startedAtMs: unknown): string {
+    const ms = Number(startedAtMs);
+    if (!Number.isFinite(ms) || ms <= 0) return "Logged drive";
+    const hour = new Date(ms).getHours();
+    const daypart = hour < 5 ? "Night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Night";
+    return `${daypart} drive`;
+  }
+
   function renderMap() {
     const storage = state.storage || {};
     const routes = mapRoutes(storage);
@@ -409,7 +425,9 @@ import type { MapSessionFilter } from "./map-session-list";
 
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
-    VD.setText("mapStopsCount", stops.length ? String(Math.min(MAX_DRAWN_STOPS, stops.length)) : "0");
+    VD.setText("mapStopsCount", stops.length ? String(Math.min(MAX_DRAWN_STOPS, stops.length)) : "");
+    const stopsCountEl = el("mapStopsCount");
+    if (stopsCountEl) stopsCountEl.hidden = !stops.length;
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
       const button = node as HTMLElement;
       const active = button.dataset.mapLayer === layer;
@@ -427,12 +445,17 @@ import type { MapSessionFilter } from "./map-session-list";
 
     VD.setText("mapPointBadge", `${points.length} pts`);
     const routeSession = sessionForRoute(route);
-    // Title is the human label; the stats row carries the raw distance, so we
-    // don't repeat "X mi" here.
+    // Trip identity is the DRIVE, not the hardware: "Morning drive", never
+    // "OBDLink MX+". The adapter model moves to the kicker line; GPS point
+    // counts stay in the trip-detail sheet where engineers look for them.
     VD.setText(
       "mapTitle",
       hasMapContent
-        ? routeSession.adapterName || (isLiveRoute ? CURRENT_DRIVE_LABEL : routeSession.mode) || "Logged drive"
+        ? (isLiveRoute
+          // The live pseudo-session carries its human label ("Current demo" /
+          // "Current drive") in adapterName — for live routes it IS the label.
+          ? routeSession.adapterName || CURRENT_DRIVE_LABEL
+          : daypartDriveLabel(routeSession.startedAtMs))
         : "No route recorded yet"
     );
     VD.setText(
@@ -440,7 +463,7 @@ import type { MapSessionFilter } from "./map-session-list";
       // Use the same absolute, skim-able format as the drive-picker chips (fmtChipDate) so a
       // single drive doesn't read "Today 2:51 AM" in its chip but "6h ago" in the kicker at once.
       hasMapContent
-        ? `${isLiveRoute ? "Current GPS" : "GPS map"} · ${fmtChipDate(routeSession.startedAtMs)}`
+        ? [fmtChipDate(routeSession.startedAtMs), routeSession.adapterName].filter(Boolean).join(" · ")
         : "GPS map"
     );
     VD.setText("mapDistance", hasMapContent ? VD.formatDistance(route.distanceMeters || 0) : "--");

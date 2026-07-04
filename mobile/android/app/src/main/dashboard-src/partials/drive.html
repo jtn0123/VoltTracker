@@ -32,13 +32,57 @@
     </span>
   </div>
 
+  <!-- First-run onboarding leads the page: when there's no history at all the
+       guidance must be the first thing a new user sees, not a screenful of
+       dead gauges with the "how to start" card below the fold. Hidden by
+       storage-status.ts#toggleHidden("appEmptyState") once any rows exist. -->
+  <article id="appEmptyState" class="panel empty-state">
+    <span class="kicker">App data</span>
+    <h2>No drive, charging, or insight history captured on this phone yet</h2>
+    <p>
+      Open Settings to connect an adapter — or try Demo / Testing to explore
+      every screen with realistic sample data, no car needed.
+    </p>
+    <ol class="empty-hints" aria-label="How to start logging">
+      <li>
+        <b aria-hidden="true">1</b
+        ><span>Grant Bluetooth and location permissions when prompted.</span>
+      </li>
+      <li>
+        <b aria-hidden="true">2</b
+        ><span
+          >Connect your OBD adapter — or tap Scan to test the link first.</span
+        >
+      </li>
+      <li>
+        <b aria-hidden="true">3</b
+        ><span
+          >Drive: speed, power, and battery stream in live and save
+          automatically.</span
+        >
+      </li>
+    </ol>
+    <div class="empty-state-actions">
+      <button
+        type="button"
+        class="primary primary-action"
+        data-nav-jump="settings"
+      >
+        Open Settings to connect
+      </button>
+      <button type="button" class="demo primary-action" data-action="demo">
+        Try Demo / Testing
+      </button>
+    </div>
+  </article>
+
   <section class="hero">
     <!-- Speed+power cluster. aria-live sits on the small per-reading clusters
          below (speed row / power block), each aria-atomic="true", so a screen
          reader announces one coherent reading ("45 mph 72 km/h") instead of a
          stutter of fragments — the old card-wide aria-live="polite"
          aria-atomic="false" re-announced each changed text node separately. -->
-    <article class="panel live-card">
+    <article id="liveHeroCard" class="panel live-card" data-power-state="coast">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
         <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
@@ -93,15 +137,19 @@
           class="power-meter"
           role="meter"
           aria-label="Power in kilowatts (negative is regen)"
-          aria-valuemin="-80"
-          aria-valuemax="80"
+          aria-valuemin="-40"
+          aria-valuemax="40"
           id="powerMeter"
         >
           <span class="power-zero"></span>
           <span id="powerFill" class="power-fill"></span>
         </div>
+        <!-- Bounds are session-sticky and adaptive (telemetry.ts): ±40 kW
+             covers normal driving; the track ratchets to ±80/±120 only when a
+             sample exceeds it, so the bar keeps its resolution. -->
         <div class="power-scale">
-          <span>-80</span><span>0</span><span>+80</span>
+          <span id="powerScaleMin">-40</span><span>0</span
+          ><span id="powerScaleMax">+40</span>
         </div>
       </div>
     </article>
@@ -275,6 +323,29 @@
     </div>
   </div>
 
+  <section class="real-overview-grid">
+    <article class="panel metric">
+      <header><span>GPS distance</span><span>real</span></header>
+      <strong id="overviewDistance">--</strong>
+      <small id="overviewDistanceSub">Waiting for route samples</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Max speed</span><span>session</span></header>
+      <strong id="overviewMaxSpeed">--</strong>
+      <small>From accepted OBD speed</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Battery</span><span>latest</span></header>
+      <strong id="overviewBattery">--</strong>
+      <small id="overviewBatterySub">SOC and power once observed</small>
+    </article>
+    <article class="panel metric">
+      <header><span>Charge</span><span>hints</span></header>
+      <strong id="overviewChargeHints">0</strong>
+      <small>Times charging likely started</small>
+    </article>
+  </section>
+
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
@@ -302,7 +373,7 @@
     <summary class="card-head">
       <div>
         <span class="kicker">Health</span>
-        <h3>Live validation</h3>
+        <h3>Data health</h3>
       </div>
       <span class="badge"
         ><span class="dot"></span
@@ -342,67 +413,4 @@
       </div>
     </div>
   </details>
-
-  <section class="real-overview-grid">
-    <article class="panel metric">
-      <header><span>GPS distance</span><span>real</span></header>
-      <strong id="overviewDistance">--</strong>
-      <small id="overviewDistanceSub">Waiting for route samples</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Max speed</span><span>session</span></header>
-      <strong id="overviewMaxSpeed">--</strong>
-      <small>From accepted OBD speed</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Battery</span><span>latest</span></header>
-      <strong id="overviewBattery">--</strong>
-      <small id="overviewBatterySub">SOC and power once observed</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Charge</span><span>hints</span></header>
-      <strong id="overviewChargeHints">0</strong>
-      <small>Possible plugged-in transitions</small>
-    </article>
-  </section>
-
-  <article id="appEmptyState" class="panel empty-state">
-    <span class="kicker">App data</span>
-    <h2>No drive, charging, or insight history captured on this phone yet</h2>
-    <p>
-      Open Settings to connect an adapter — or try Demo / Testing to explore
-      every screen with realistic sample data, no car needed.
-    </p>
-    <ol class="empty-hints" aria-label="How to start logging">
-      <li>
-        <b>1</b
-        ><span>Grant Bluetooth and location permissions when prompted.</span>
-      </li>
-      <li>
-        <b>2</b
-        ><span
-          >Connect your OBD adapter — or tap Scan to test the link first.</span
-        >
-      </li>
-      <li>
-        <b>3</b
-        ><span
-          >Drive: speed, power, and battery stream in live and save
-          automatically.</span
-        >
-      </li>
-    </ol>
-    <div class="empty-state-actions">
-      <button
-        type="button"
-        class="primary primary-action"
-        data-nav-jump="settings"
-      >
-        Open Settings to connect
-      </button>
-      <button type="button" class="demo primary-action" data-action="demo">
-        Try Demo / Testing
-      </button>
-    </div>
-  </article>
 </section>

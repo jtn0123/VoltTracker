@@ -38,6 +38,15 @@ async function nonBlankPixelCount(page, canvasSelector) {
 test.beforeEach(async ({ page }) => {
   await openDashboard(page);
   await setView(page, 'drive');
+  // First-run consolidation (drive.ts is-prelive): with no history and no live
+  // samples the chart hosts are collapsed with the rest of the dead tiles.
+  // These specs exercise the charts, so seed minimal live evidence and
+  // re-render — the layout under test is the "data exists" one.
+  await page.evaluate(() => {
+    const VD = window.VoltDashboard;
+    VD.state.powerHistory = [{ t: Date.now(), kw: 0 }];
+    if (typeof VD.renderDriveLive === 'function') VD.renderDriveLive();
+  });
 });
 
 test('the Drive chart hosts have real, non-zero layout width', async ({ page }) => {

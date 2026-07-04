@@ -35,7 +35,7 @@ unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **360,000 B** | ~346 KB |
+| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **364,000 B** | ~353 KB |
 | Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~74 KB |
 | Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~25 KB |
 | Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **20,000 B** | ~17 KB |
@@ -43,7 +43,10 @@ unchecked.
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is
-loaded by `ensureMapModule()` only when the Map tab needs it.
+loaded by `ensureMapModule()` only when the Map tab needs it. `fonts/**` (the
+Space Grotesk display face, ~22 KB woff2) is likewise outside the buckets: it is
+`font-display: swap`, so it never blocks first paint — text renders in the system
+stack and upgrades when the face is parsed.
 
 Use `./gradlew dashboardAssetReport` to print eager JS, lazy JS, CSS, Leaflet
 assets, generated HTML, and the current budget headroom.

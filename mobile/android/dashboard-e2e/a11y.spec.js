@@ -48,6 +48,10 @@ test.describe('a11y — colour contrast (axe-core)', () => {
   test.use({ bypassCSP: true });
   for (const scenario of ['typical', 'fault']) {
     test(`scenario: ${scenario}`, async ({ page }) => {
+      // Audit the settled state: the tab-switch enter animation fades opacity,
+      // and axe sampling mid-fade blends foreground/background into false
+      // contrast failures. reduced-motion collapses it via the global CSS reset.
+      await page.emulateMedia({ reducedMotion: 'reduce' });
       await openDashboard(page);
       await loadDemoScenario(page, scenario);
       await page.addScriptTag({ path: AXE });
@@ -71,7 +75,9 @@ test.describe('a11y — colour contrast (axe-core)', () => {
 test.describe('a11y — destructive DTC dialog keyboard behavior', () => {
   test('clear-codes warning traps and restores focus', async ({ page }) => {
     await openDashboard(page);
-    await setView(page, 'insights');
+    // X3: the DTC scanner (and its clear-codes dialog) lives on the
+    // Diagnostics tab now, with the rest of vehicle health.
+    await setView(page, 'diagnostics');
 
     await page.locator('#dtcClearOpenBtn').click();
     const dialog = page.locator('#dtcClearWarning');

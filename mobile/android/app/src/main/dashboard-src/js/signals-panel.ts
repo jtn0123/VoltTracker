@@ -256,12 +256,14 @@ import type { DataStateValue } from "./dataset-state";
     if (risk) chips.append(buildSignalChip(risk === "safe" ? "safe" : `${risk} risk`, "risk", risk));
 
     const small = document.createElement("small");
+    // Raw response bytes stay OUT of the visible summary — they read as hex
+    // noise in a list a user scans; the export flow carries the full frame.
     small.textContent = [
       stage ? `${stage} probe` : null,
       capability.header || "no header",
       capability.command || capability.pid || "no command",
       capability._hasEvidence && capability.lastSeenMs ? VD.formatWhen(capability.lastSeenMs) : "not tried",
-      sample.rawResponse || capability.notes || capability.source || ""
+      capability.notes || capability.source || ""
     ].filter(Boolean).join(" · ");
     center.append(strong, chips, small);
     const status = document.createElement("b");

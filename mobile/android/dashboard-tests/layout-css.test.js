@@ -46,7 +46,9 @@ describe('dashboard layout css', () => {
     expect(navRule).toMatch(/grid-template-columns\s*:\s*repeat\(6,\s*minmax\(0,\s*1fr\)\)/);
     expect(navRule).toMatch(/gap\s*:\s*4px/);
     expect(navButtonRule).toMatch(/min-width\s*:\s*0/);
-    expect(appRule).toMatch(/calc\(var\(--nav-safe\) \+ 12px\)/);
+    // 28px of page-end breathing (round-3 rhythm pass) on top of the nav-safe
+    // clearance — the guard is that --nav-safe is reserved at all.
+    expect(appRule).toMatch(/calc\(var\(--nav-safe\) \+ 28px\)/);
   });
 
   it('defines touch + nav geometry tokens', () => {

@@ -107,15 +107,21 @@ test.describe('light mode — functional theme coverage', () => {
     expect(scheme).toContain('light');
   });
 
-  test('drive-tab card renders a light surface, not the old dark panel', async ({ page }) => {
+  test('drive-tab hero never renders the old dark panel surface', async ({ page }) => {
     const card = page.locator('#view-drive .live-card');
     await expect(card).toBeVisible();
 
+    // X1: the hero card is deliberately chromeless (transparent background)
+    // in both themes so the speed/power cluster rides the page surface — the
+    // sibling test above already pins that surface to a light --bg. What must
+    // never come back is an opaque dark card: transparent passes, and any
+    // opaque-ish surface has to be light.
     const cardBg = await card.evaluate((el) => getComputedStyle(el).backgroundColor);
     expect(cardBg).not.toContain(OLD_DARK_PANEL);
     const parsed = parseRgb(cardBg);
-    expect(parsed.a).toBeGreaterThan(0.5); // still an opaque-ish card surface
-    expect(relativeLuminance(parsed)).toBeGreaterThan(0.8); // white-ish card
+    if (parsed && parsed.a > 0.5) {
+      expect(relativeLuminance(parsed)).toBeGreaterThan(0.8); // white-ish card
+    }
   });
 
   test('bottom nav uses the light glass chrome', async ({ page }) => {

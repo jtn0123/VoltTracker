@@ -58,7 +58,10 @@ describe('drive.ts', () => {
     const line = document.getElementById('topDemoInfo');
     expect(line.hidden).toBe(false);
     expect(line.textContent).toContain('Demo / Testing');
-    expect(document.getElementById('topDemoMeta').textContent).toBe('12 samples · 78% SOC');
+    // Header meta is SOC-only now: two fragments overflowed the topbar into
+    // "60 samples · …" on phone widths, and the sample count lives in the
+    // session footnote on Drive.
+    expect(document.getElementById('topDemoMeta').textContent).toBe('78% SOC');
   });
 
   it('hides the topbar Demo / Testing line again when the demo stops', () => {

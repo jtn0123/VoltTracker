@@ -538,6 +538,16 @@ type SignalActions = {
       case "stopDemo": stopDemo(); return;
       case "stop": stopAll(); return;
       case "openClearDtc": openClearDtcWarning(); return;
+      case "openDebugLogs": {
+        // Open + scroll to the collapsed session-review block instead of
+        // re-selecting the tab (the old data-nav-jump just scrolled to top).
+        const review = el("sessionReviewDetails") as HTMLDetailsElement | null;
+        if (review) {
+          review.open = true;
+          review.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
       case "cancelClearDtc": closeClearDtcWarning(); return;
       case "confirmClearDtc": confirmClearDtc(button); return;
       case "previewDtcCodes": void previewDtcCodes(); return;
@@ -1417,7 +1427,6 @@ type SignalActions = {
       const action = (btn && btn.dataset.primaryAction) || "connect";
       handleAction(action, event.currentTarget as BusyButton);
     }, opts);
-    bindListenerGuarded("demoStopBtn", "click", stopDemo, opts);
     bindPageDragScroll(VD, opts);
   }
 

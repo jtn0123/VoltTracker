@@ -32,6 +32,10 @@ export const EN = {
   "trip.waitingForFirstSamples": "Waiting for the first samples…",
   // Count-bearing example proving `{placeholder}` interpolation end-to-end.
   "status.logging.samples": "{count} samples",
+  // drive.ts chart empty states (migrated in the X5 copy pass).
+  "drive.trace.waitingForSamples": "waiting for samples",
+  "drive.power.waitingForSamples": "Waiting for power samples",
+  "drive.soc.waitingForSamples": "Waiting for SOC samples",
 } as const;
 
 /** Every translatable key. Derived from `EN` so call sites are compile-checked. */

@@ -20,6 +20,7 @@ import { setDataTone } from "./dataset-state";
 import type { DataToneValue } from "./dataset-state";
 import { formatDuration } from "./telemetry";
 import { units } from "./prefs";
+import { t } from "./i18n";
 
 const VD = window.VoltDashboard;
 const state = VD.state;
@@ -98,12 +99,12 @@ type ChartPoint = {
     const session = app.session || {};
     const status = state.status || {};
     const adapter = app.adapter || {};
-    const t = state.telemetry || {};
+    const tm = state.telemetry || {};
     const statusName = String(status.state || "").toLowerCase();
     const sessionName = String(session.state || "").toLowerCase();
     const stateName = statusName || sessionName;
-    const samples = Number(session.sampleCount || t.sampleCount || 0);
-    const runtimeMs = Number(t.sessionMs || session.runtimeMs || 0);
+    const samples = Number(session.sampleCount || tm.sampleCount || 0);
+    const runtimeMs = Number(tm.sessionMs || session.runtimeMs || 0);
     const distance = Number(state.sessionDistanceM || 0);
     const hasLiveEvidence = Boolean(
       samples ||
@@ -193,13 +194,16 @@ type ChartPoint = {
       line.hidden = true;
       return;
     }
-    const t = state.telemetry || {};
+    const tm = state.telemetry || {};
     const session = (state.appState || {}).session || {};
     const meta: string[] = [];
-    const samples = Number(session.sampleCount || t.sampleCount || 0);
-    if (samples) meta.push(samples.toLocaleString() + " samples");
-    const soc = Number(t.soc);
-    if (Number.isFinite(soc)) meta.push(Math.round(soc) + "% SOC");
+    // SOC only — the sample count lives in the session footnote, and two meta
+    // fragments overflow the header into "60 samples · …" on phone widths.
+    // Number(null) is 0 and 0% is a lie the hero contradicts; only a present,
+    // finite reading earns a header chip.
+    const soc = tm.soc == null ? NaN : Number(tm.soc);
+    if (Number.isFinite(soc) && soc > 0) meta.push(Math.round(soc) + "% SOC");
+    else if (Number(session.sampleCount || tm.sampleCount || 0)) meta.push("live sample data");
     VD.setText("topDemoMeta", meta.length ? meta.join(" · ") : "sample data");
     line.hidden = false;
   }
@@ -231,9 +235,9 @@ type ChartPoint = {
   // history buffer). Mirrors telemetry.ts#hasLiveSamples without importing it
   // (telemetry.ts already imports drive renders, so the reverse would cycle).
   function driveHasLiveSamples() {
-    const t = state.telemetry || {};
+    const tm = state.telemetry || {};
     const session = (state.appState && state.appState.session) || {};
-    const sampleCount = Number(session.sampleCount || t.sampleCount || 0);
+    const sampleCount = Number(session.sampleCount || tm.sampleCount || 0);
     return (
       Number(state.lastSampleAt || 0) > 0 ||
       sampleCount > 0 ||
@@ -310,6 +314,18 @@ type ChartPoint = {
     const chargeBadge = el("chargeSourceBadge");
     if (chargeBadge) chargeBadge.hidden = src.kind === "demo";
 
+    // First-run consolidation: with no history at all ("empty"), the Drive tab
+    // collapses to badge + onboarding card + hero skeleton. The session/health/
+    // overview cards would each vocalize their own "--"/"waiting" placeholder
+    // for data that cannot exist yet — one page-level state replaces them
+    // (see .view.is-prelive rules in screens.css).
+    const driveView = document.querySelector('.view[data-view="drive"]');
+    if (driveView) {
+      // Live samples lift the collapse even when the source still derives as
+      // "empty" (e.g. telemetry arriving before the adapter flags connected).
+      driveView.classList.toggle("is-prelive", src.kind === "empty" && !driveHasLiveSamples());
+    }
+
     const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
     if (hero && !firstSampleRevealed && driveHasLiveSamples()) {
       firstSampleRevealed = true;
@@ -341,7 +357,7 @@ type ChartPoint = {
     const latestSample = samples[samples.length - 1];
     host.dataset.traceLabel = samples.length >= 2
       ? `${Math.round(latestSample || 0)} ${units.speedUnit()}`
-      : "waiting for samples";
+      : t("drive.trace.waitingForSamples");
     if (!ctx) return;
 
     // Theme-aware colors: a <canvas> can't read CSS vars, so resolve the relevant
@@ -349,13 +365,16 @@ type ChartPoint = {
     // is picked up). Mirrors the insights-panel.ts / map.ts scatter pattern. The
     // gradient/glow/wash are rgba fades derived from the resolved --volt / --text
     // channels so they track the theme instead of being dark-only literals.
-    const tokens = getComputedStyle(document.documentElement);
+    // Resolve on the hero card (falling back to :root) so the trace inherits
+    // the X1 state-reactive --hero-accent — the stroke tints orange/green/
+    // neutral together with the power readout below it.
+    const tokens = getComputedStyle(el("liveHeroCard") || document.documentElement);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255, 255, 255, 0.06)"); // gridlines
     const mutedColor = token("--muted", "#5d5e69"); // empty-state label
-    const voltColor = token("--volt", "#ff7a45"); // trace stroke
-    const dotColor = token("--volt-soft", "#ffd0b8"); // now-cursor dot
+    const voltColor = token("--hero-accent", token("--volt", "#ff7a45")); // trace stroke
+    const dotColor = token("--hero-accent-soft", token("--volt-soft", "#ffd0b8")); // now-cursor dot
     const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // gradient + glow base
     const textRgb = rgbChannels(token("--text", "#ffffff"), "255, 255, 255"); // bg wash base
 
@@ -376,7 +395,7 @@ type ChartPoint = {
       ctx.fillStyle = mutedColor;
       ctx.font = "11px ui-monospace, monospace";
       ctx.textAlign = "center";
-      ctx.fillText("waiting for samples", w / 2, h / 2);
+      ctx.fillText(t("drive.trace.waitingForSamples"), w / 2, h / 2);
       return;
     }
 
@@ -449,7 +468,7 @@ type ChartPoint = {
     if (sig === lastPowerBarsSig) return;
     lastPowerBarsSig = sig;
     if (!samples.length) {
-      paintEmpty(host, "Waiting for power samples");
+      paintEmpty(host, t("drive.power.waitingForSamples"));
       return;
     }
     const ZERO_PCT = 0.55; // zero line a touch below center so regen has room.
@@ -525,7 +544,7 @@ type ChartPoint = {
     // The live value chip lives in the panel header so the chart body can stay
     // dedicated to the trace or a single centered empty-state label.
     if (samples.length < 2) {
-      paintEmpty(host, "Waiting for SOC samples");
+      paintEmpty(host, t("drive.soc.waitingForSamples"));
       return;
     }
     // The SOC chart's biggest failure mode is auto-zoom on a 0.2% drift —
@@ -592,8 +611,8 @@ type ChartPoint = {
   function renderSocMicroHeader() {
     const tag = el("socMicroTag");
     if (!tag) return;
-    const t = state.telemetry || {};
-    const current = t.soc == null || t.soc === "" ? NaN : Number(t.soc);
+    const tm = state.telemetry || {};
+    const current = tm.soc == null || tm.soc === "" ? NaN : Number(tm.soc);
     const start = Number(state.sessionStartSoc);
     if (!Number.isFinite(current)) {
       tag.textContent = "%";
@@ -618,8 +637,8 @@ type ChartPoint = {
   function renderPowerMicroHeader() {
     const tag = el("powerMicroTag");
     if (!tag) return;
-    const t = state.telemetry || {};
-    const v = t.powerKw == null || t.powerKw === "" ? NaN : Number(t.powerKw);
+    const tm = state.telemetry || {};
+    const v = tm.powerKw == null || tm.powerKw === "" ? NaN : Number(tm.powerKw);
     if (!Number.isFinite(v)) {
       tag.textContent = "kW";
       setDataTone(tag, "idle");

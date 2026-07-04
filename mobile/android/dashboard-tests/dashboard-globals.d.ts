@@ -541,6 +541,7 @@ interface LeafletLatLngBounds {
  *  so it stays assignable wherever the trip mini-maps expect LeafletMap. */
 interface LeafletMapInstance extends LeafletMap {
   setView(center: LatLngTuple, zoom: number): this;
+  attributionControl?: { setPrefix(prefix: string): void };
   on(event: string, handler: (event: { latlng?: LeafletLatLng }) => void): this;
   removeLayer(layer: LeafletLayer): this;
   getBounds(): LeafletLatLngBounds;
@@ -702,6 +703,7 @@ interface VoltRestoreProgress {
     scrollAppBy(deltaY: number): void;
     canScrollApp(): boolean;
     setView(view: string): void;
+    formatRowCount(count: unknown): string;
     updateViewHeading(): void;
     setDemoActive(active: boolean, detail?: string): void;
     clearDemoTelemetry(): void;
@@ -788,7 +790,7 @@ interface VoltRestoreProgress {
     /** Calendar-month key + short label ("May ’26") for a timestamp (shared by the trend charts). */
     monthBucketKey(ms: number): { key: string; label: string; firstMs: number };
     /** Monthly bar chart shared by the charging (Battery tab) and driving (Insights) trends. */
-    buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string): SVGElement;
+    buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string, host?: Element | null): SVGElement;
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;

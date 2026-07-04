@@ -232,7 +232,7 @@ import { prefs, units } from "./prefs";
     const chart = el("tempEffChart");
     if (chart) {
       const aria = `Efficiency by outside temperature; best band ${units.efficiencyText(best.eff)}`;
-      chart.replaceChildren(VD.buildMonthlyTrendSvg(labels, values, aria));
+      chart.replaceChildren(VD.buildMonthlyTrendSvg(labels, values, aria, chart));
     }
   }
 
@@ -300,7 +300,7 @@ import { prefs, units } from "./prefs";
     const chart = el("driveTrendChart");
     if (chart) {
       const aria = `Monthly driving distance trend, latest ${distText(latest.meters)}`;
-      chart.replaceChildren(VD.buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria));
+      chart.replaceChildren(VD.buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart));
     }
   }
 
@@ -864,12 +864,15 @@ import { prefs, units } from "./prefs";
     // literals — this keeps the scatter (gridlines, axis labels, grade-coded
     // dots, trend line) legible in BOTH the dark and light themes instead of
     // hardcoding dark-only colors. Fallbacks mirror the dark token defaults.
-    const tokens = getComputedStyle(document.documentElement);
+    // Resolve on the chart host so --view-accent cascades in — the chart
+    // speaks its own tab's color (purple on Insights) instead of borrowing
+    // Drive orange. Blue stays as the secondary series color for dots.
+    const tokens = getComputedStyle(chart);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)"); // gridlines
     const axisColor = token("--muted", "#aaaab4"); // axis tick labels
-    const trendColor = token("--volt", "#ff7a45"); // best-fit trend path
+    const trendColor = token("--view-accent", token("--volt", "#ff7a45")); // best-fit trend path
     const evColor = token("--ev", "#b8e63b"); // bars/curve accent + headline
     const dotColor = token("--map-accent", "#4cc4ff"); // grade-normalized scatter dots
     const w = Math.max(300, chart.clientWidth || 360);
@@ -879,10 +882,11 @@ import { prefs, units } from "./prefs";
     const padT = 14;
     const padB = 28;
     // The x-axis grows with the data (a Volt reaches ~100 mph) so fast samples
-    // never render outside the viewBox; 75 mph stays the floor so sparse city
-    // drives keep a familiar scale. Rounded up to the next 5 mph.
+    // never render outside the viewBox. The floor is the data max rounded up
+    // to the next 15 mph (min 45) — the old fixed 75 left city-driving
+    // datasets plotted in the left 40% of the frame.
     const fastest = plotPool.reduce((m, p) => Math.max(m, p.mph), 0);
-    const axisMaxMph = Math.max(75, Math.ceil(fastest / 5) * 5);
+    const axisMaxMph = Math.max(45, Math.ceil(Math.max(fastest, 1) / 15) * 15);
     const xOf = (mph: number) => padL + (mph / axisMaxMph) * (w - padL - padR);
     // Y-axis grows to the data (kept in [5,7]) instead of a fixed 0–7, so the
     // plot no longer leaves a dead empty band above the points now that the
@@ -983,7 +987,7 @@ import { prefs, units } from "./prefs";
       appendTrendLine(svg, buckets, xOf, yS, trendColor);
     }
     const best = peak ? { e: peak.med, mph: peak.mid } : { e: 0, mph: 0 };
-    appendText(`speed (${speedUnitLabel}) ->`, {
+    appendText(`speed (${speedUnitLabel}) \u2192`, {
       x: w - padR,
       y: h - 4,
       fill: axisColor,

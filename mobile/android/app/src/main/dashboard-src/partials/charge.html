@@ -62,51 +62,6 @@
        changed text node — including the static "Sessions"/"Plug-ins" labels — as a
        separate fragment, so a screen reader stuttered through the whole grid on any
        single update. Mirrors the Drive hero fix (drive.html). -->
-  <section class="charge-grid" aria-label="Charging summary">
-    <article class="panel charge-kpi">
-      <header><span>Sessions</span><span aria-hidden="true">real</span></header>
-      <strong id="realChargeSessions" aria-live="polite" aria-atomic="true"
-        >0</strong
-      >
-      <small>Charging sessions recorded</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header>
-        <span>Plug-ins</span><span aria-hidden="true">detected</span>
-      </header>
-      <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
-        >0</strong
-      >
-      <small>Times the car looked plugged in</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header>
-        <span>Max power</span><span aria-hidden="true">observed</span>
-      </header>
-      <strong id="realChargePower" aria-live="polite" aria-atomic="true"
-        >--</strong
-      >
-      <small>Peak charging power seen</small>
-    </article>
-    <article class="panel charge-kpi">
-      <header>
-        <span>Status</span><span aria-hidden="true">charging</span>
-      </header>
-      <!-- Color-coded like the other status badges; storage-status.ts keeps
-           data-state in sync with the text (waiting/needs-review/recorded/charging). -->
-      <span
-        id="realChargeStatusBadge"
-        class="badge"
-        data-state="waiting"
-        aria-live="polite"
-        aria-atomic="true"
-        ><span class="dot"></span
-        ><span id="realChargeStatus">needs data</span></span
-      >
-      <small>Charge detection status</small>
-    </article>
-  </section>
-
   <!-- Live time-to-full while charging. Hidden unless the car is actively
        charging (live charger power > 0 and a known SOC); telemetry.ts#renderLiveCharge
        computes the estimate and toggles this card. -->
@@ -164,6 +119,45 @@
     </p>
   </article>
 
+  <section class="charge-grid" aria-label="Charging summary">
+    <article class="panel charge-kpi">
+      <header><span>Sessions</span></header>
+      <strong id="realChargeSessions" aria-live="polite" aria-atomic="true"
+        >0</strong
+      >
+      <small>Charging sessions recorded</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Plug-ins</span></header>
+      <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
+        >0</strong
+      >
+      <small>Times the car looked plugged in</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Max power</span></header>
+      <strong id="realChargePower" aria-live="polite" aria-atomic="true"
+        >--</strong
+      >
+      <small>Peak charging power seen</small>
+    </article>
+    <article class="panel charge-kpi">
+      <header><span>Status</span></header>
+      <!-- Color-coded like the other status badges; storage-status.ts keeps
+           data-state in sync with the text (waiting/needs-review/recorded/charging). -->
+      <span
+        id="realChargeStatusBadge"
+        class="badge"
+        data-state="waiting"
+        aria-live="polite"
+        aria-atomic="true"
+        ><span class="dot"></span
+        ><span id="realChargeStatus">needs data</span></span
+      >
+      <small>Detection</small>
+    </article>
+  </section>
+
   <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
        (the headline cell-health number), and which cells. Rendered live from
        telemetry by telemetry.js#renderCellBalance. -->
@@ -183,9 +177,7 @@
       </div>
     </header>
     <p id="cellBalanceEmpty" class="status-copy">
-      Connect the adapter while the car is awake — the lowest and highest
-      cell-group voltages, their spread, and which cells they are will graph
-      here.
+      No cell readings yet — connect while the car is awake.
     </p>
     <div id="cellBalanceGraphic" class="cell-balance-graphic" hidden>
       <div class="cell-balance-track" aria-hidden="true">
@@ -252,9 +244,7 @@
       <strong id="sohTrendLatest" class="soh-trend-latest">--</strong>
     </header>
     <p id="sohTrendEmpty" class="status-copy">
-      State-of-health is logged whenever the car reports pack capacity (a rare
-      PID, usually when the battery is warm or charging). The trend plots here
-      as readings accumulate over weeks.
+      No health readings yet — they accumulate over weeks of charging.
     </p>
     <div id="sohTrendChart" class="soh-trend-chart" hidden></div>
     <div id="sohTrendStats" class="soh-trend-stats" hidden>

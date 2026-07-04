@@ -27,7 +27,9 @@ test('renders a real Leaflet route map for a logged drive', async ({ page }) => 
   await expect(page.locator('#mapEmpty')).toBeHidden();
   await expect(page.locator('#mapPointBadge')).toContainText('pts');
   await expect(page.locator('#mapDistance')).not.toHaveText('--');
-  await expect(page.locator('#mapStopsCount')).toBeVisible();
+  // Zero-count badges hide (a "0" bubble advertised nothing); this fixture
+  // has no charging stops, so the count stays hidden while the tab remains.
+  await expect(page.locator('#mapStopsCount')).toBeHidden();
   // The map canvas is mounted and sized (the route summary above proves the route data flowed
   // through). We don't assert on Leaflet's internal tiles — they're network/size/timing dependent
   // and not the regression we care about here.

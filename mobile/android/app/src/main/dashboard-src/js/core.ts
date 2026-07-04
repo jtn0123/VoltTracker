@@ -1037,7 +1037,24 @@ import { initialTelemetryState } from "./telemetry-state";
     return cachedNavNodes || (cachedNavNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
   }
 
+  // "5738 rows" overflowed the Settings state chip into "5738 r…" — compact
+  // thousands ("5.7k rows") keep the figure readable at chip width. Zero rows
+  // reads as the chip's old idle label.
+  function formatRowCount(count: unknown): string {
+    const n = Number(count) || 0;
+    if (!n) return "ready";
+    const label =
+      n >= 10000 ? `${Math.round(n / 1000)}k`
+      : n >= 1000 ? `${(n / 1000).toFixed(1)}k`
+      : String(n);
+    return `${label} rows`;
+  }
+
   function setView(view: string) {
+    // An unknown view name (stale deep link, removed tab like the old "trips")
+    // would deactivate every section and leave a blank screen with no way
+    // back — fall back to Drive instead of rendering nothing.
+    if (!viewNodes().some((node) => node.dataset.view === view)) view = "drive";
     startupMark("tab:" + view + ":start");
     state.view = view;
     document.body.dataset.activeView = view;
@@ -1169,8 +1186,6 @@ import { initialTelemetryState } from "./telemetry-state";
     // .demo-only / .non-demo-only show/hide swap and its mockup cards have been removed.)
     const banner = el("demoBanner");
     if (banner) banner.hidden = !next;
-    const bannerStop = el("demoStopBtn");
-    if (bannerStop) bannerStop.hidden = !next;
     // Single morphing demo toggle: "Start Demo / Testing" <-> "Stop Demo / Testing".
     // Rewriting data-action in place keeps the existing [data-action] click
     // delegation routing to startDemo / stopDemo with no extra binding, so the
@@ -1304,6 +1319,7 @@ import { initialTelemetryState } from "./telemetry-state";
     scrollAppBy,
     canScrollApp,
     setView,
+    formatRowCount,
     handleAndroidBack,
     updateViewHeading,
     setDemoActive,

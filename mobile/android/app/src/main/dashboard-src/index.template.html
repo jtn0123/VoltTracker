@@ -17,6 +17,16 @@
       content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
+    <!-- Display face (base.css @font-face). Preloaded so the first paint of the
+         hero numerals lands in Space Grotesk instead of swapping a beat later;
+         crossorigin is required for font preloads even same-origin. -->
+    <link
+      rel="preload"
+      href="fonts/SpaceGroteskVar.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <!-- Leaflet JS/CSS are loaded by core.ts/map.ts only when the Map tab is opened. -->
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
@@ -111,7 +121,14 @@
               stroke-width="2"
               stroke-linecap="round"
               stroke-linejoin="round"
-            /></svg></i
+            /></svg
+          ><!-- X3: saved car-code count; hidden at 0. Set by
+               storage-status.ts#renderDiagnosticCodes. --><b
+            id="navDiagBadge"
+            class="nav-badge"
+            hidden
+            aria-hidden="true"
+          ></b></i
         ><span>Diag</span>
       </button>
       <button type="button" data-nav="settings" aria-label="Settings">

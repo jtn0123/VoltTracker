@@ -319,17 +319,26 @@
   cursor: not-allowed;
 }
 
+/* Fieldset semantics kept for a11y; the native notched-border look is
+   stripped so section headers speak the app's one kicker language instead of
+   a 1990s form dialect (same treatment .pref-fieldset already gets). */
 .connection-tools__notify {
-  border: 1px solid var(--line-soft);
-  border-radius: 10px;
-  padding: 8px 10px;
-  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  border-radius: 0;
+  padding: 12px 0 4px;
+  margin: 4px 0 0;
   display: grid;
-  gap: 6px;
+  gap: 8px;
 }
 
 .connection-tools__notify legend {
-  padding: 0 6px;
+  padding: 0;
+  /* float pulls the legend into normal flow so it renders as an in-flow
+     kicker row instead of notching the (now removed) border. */
+  float: left;
+  width: 100%;
+  margin-bottom: 6px;
 }
 
 .connection-tools__notify-row {

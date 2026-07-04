@@ -109,6 +109,7 @@
   .map-card {
     padding: 0;
     overflow: hidden;
+    border: 0;
   }
 
   .map-card.is-fullscreen {
@@ -194,16 +195,16 @@
 
   /* ===== 3. Map tab chrome (layer pills, route-flow, Leaflet controls, legend) ===== */
 
-  /* Map is the blue-themed tab, so its active layer pill + drive picker carry
-     the map's blue accent instead of the global orange. */
+  /* One selection grammar: soft tint + hairline (solid = primary only). */
   .map-layer-tabs button.is-active {
-    background: var(--map-accent);
-    color: var(--on-map-accent);
+    border: 1px solid rgba(var(--tab-accent-rgb), 0.45);
+    background: rgba(var(--tab-accent-rgb), 0.16);
+    color: var(--tab-accent-soft);
   }
 
   .map-layer-tabs button.is-active b {
-    background: rgba(4, 34, 46, 0.2);
-    color: var(--on-map-accent);
+    background: rgba(var(--tab-accent-rgb), 0.25);
+    color: var(--tab-accent-soft);
   }
 
   /* Direction-of-travel: round dashes that flow start -> end along the route
@@ -338,28 +339,8 @@
     background: rgba(var(--volt-rgb), 0.10);
   }
 
-  /* ===== 5. Energy & charge rows ===== */
-
-  .energy-rows {
-    display: grid;
-    gap: 9px;
-    margin-top: 12px;
-  }
-
-  .energy-rows div {
-    display: grid;
-    grid-template-columns: minmax(72px, 0.7fr) minmax(72px, 1fr) minmax(72px, max-content);
-    gap: 8px;
-    align-items: center;
-    color: var(--muted);
-    font-size: 13px;
-  }
-
-  .energy-rows span,
-  .energy-rows i,
-  .energy-rows b {
-    min-width: 0;
-  }
+/* (Section 5 "Energy & charge rows" removed: dead styles — no markup or
+     TS references remained.) */
 
   .energy-rows b {
     text-align: right;
@@ -387,13 +368,13 @@
   .session-badge {
     display: inline-flex;
     align-items: center;
-    min-height: 30px;
+    min-height: 26px;
     padding: 0 9px;
     border-radius: 999px;
-    background: rgba(var(--volt-rgb), 0.12);
+    background: rgba(var(--volt-rgb), 0.1);
     color: var(--volt);
-    font-size: 12px;
-    font-weight: 850;
+    font-size: 11px;
+    font-weight: 700;
   }
 
   /* ===== 6. Maintenance list & tags ===== */
@@ -487,7 +468,6 @@
   .maintenance-due-hint {
     margin: 10px 0 0;
     padding: 8px 12px;
-    border: 1px solid var(--line);
     border-radius: 10px;
     background: var(--fill);
     color: var(--warn-soft);
@@ -513,7 +493,6 @@
     gap: 10px;
     margin: 12px 0 0;
     padding: 12px;
-    border: 1px solid var(--line);
     border-radius: 12px;
     background: var(--fill);
   }
@@ -718,8 +697,8 @@
     border-radius: 16px;
     background: transparent;
     color: var(--muted);
-    font-size: 9px;
-    font-weight: 780;
+    font-size: 10px;
+    font-weight: 640;
     letter-spacing: 0.01em;
     line-height: 1;
     padding: 6px 2px 5px;
@@ -761,148 +740,58 @@
     white-space: nowrap;
   }
 
+  /* X2: reads --tab-accent (base.css) — replaced five hand-copied per-view
+     blocks and fixed Diag, whose override targeted the removed "signals". */
   .bottom-nav button.is-active {
-    border-color: rgba(var(--volt-rgb), 0.28);
+    border-color: rgba(var(--tab-accent-rgb), 0.28);
     background:
-      linear-gradient(180deg, rgba(var(--volt-rgb), 0.17), rgba(var(--volt-rgb), 0.06)),
+      linear-gradient(180deg, rgba(var(--tab-accent-rgb), 0.17), rgba(var(--tab-accent-rgb), 0.06)),
       var(--fill-soft);
-    color: var(--volt-soft);
+    color: var(--tab-accent-soft);
     box-shadow:
       inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--volt-rgb), 0.12);
+      0 7px 18px rgba(var(--tab-accent-rgb), 0.12);
   }
 
   .bottom-nav button.is-active i {
     background:
-      radial-gradient(circle at 50% 25%, rgba(255,210,125,0.34), transparent 48%),
-      rgba(var(--volt-rgb), 0.2);
+      radial-gradient(circle at 50% 25%, rgba(var(--tab-accent-rgb), 0.28), transparent 48%),
+      rgba(var(--tab-accent-rgb), 0.2);
     box-shadow:
-      inset 0 0 0 1px rgba(var(--volt-rgb), 0.24),
-      0 7px 18px rgba(var(--volt-rgb), 0.14);
+      inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.24),
+      0 7px 18px rgba(var(--tab-accent-rgb), 0.14);
   }
 
   .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--volt-rgb), 0.5));
+    filter: drop-shadow(0 0 7px rgba(var(--tab-accent-rgb), 0.5));
   }
 
-  body[data-active-view="map"] .bottom-nav button.is-active {
-    border-color: rgba(var(--map-accent-rgb),0.28);
-    background:
-      linear-gradient(180deg, rgba(var(--map-accent-rgb),0.16), rgba(var(--map-accent-rgb),0.055)),
-      var(--fill-soft);
-    color: var(--accent-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--map-accent-rgb),0.12);
+  /* Saved-codes count on the Diag icon; red when a current/permanent
+     fault escalates it. */
+  .nav-badge[data-severity="fault"] {
+    background: var(--bad);
+    color: #fff;
   }
 
-  body[data-active-view="map"] .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(142,228,255,0.32), transparent 48%),
-      rgba(var(--map-accent-rgb),0.18);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--map-accent-rgb),0.24),
-      0 7px 18px rgba(var(--map-accent-rgb),0.13);
+  .nav-badge {
+    position: absolute;
+    top: -3px;
+    right: -7px;
+    min-width: 15px;
+    height: 15px;
+    padding: 0 4px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--warn);
+    color: var(--on-volt);
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0;
   }
 
-  body[data-active-view="map"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--map-accent-rgb),0.46));
-  }
-
-  body[data-active-view="charge"] .bottom-nav button.is-active {
-    border-color: rgba(var(--ev-rgb), 0.28);
-    background:
-      linear-gradient(180deg, rgba(var(--ev-rgb), 0.16), rgba(var(--ev-rgb), 0.052)),
-      var(--fill-soft);
-    color: var(--ev-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--ev-rgb), 0.1);
-  }
-
-  body[data-active-view="charge"] .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(230,255,135,0.3), transparent 48%),
-      rgba(var(--ev-rgb), 0.16);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--ev-rgb), 0.22),
-      0 7px 18px rgba(var(--ev-rgb), 0.12);
-  }
-
-  body[data-active-view="charge"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--ev-rgb), 0.42));
-  }
-
-  body[data-active-view="insights"] .bottom-nav button.is-active {
-    border-color: rgba(var(--mixed-rgb), 0.3);
-    background:
-      linear-gradient(180deg, rgba(var(--mixed-rgb), 0.17), rgba(var(--mixed-rgb), 0.055)),
-      var(--fill-soft);
-    color: var(--mixed-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--mixed-rgb), 0.12);
-  }
-
-  body[data-active-view="insights"] .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(205,192,255,0.32), transparent 48%),
-      rgba(var(--mixed-rgb), 0.18);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--mixed-rgb), 0.24),
-      0 7px 18px rgba(var(--mixed-rgb), 0.13);
-  }
-
-  body[data-active-view="insights"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--mixed-rgb), 0.45));
-  }
-
-  body[data-active-view="settings"] .bottom-nav button.is-active {
-    border-color: rgba(var(--warn-rgb), 0.3);
-    background:
-      linear-gradient(180deg, rgba(var(--warn-rgb), 0.16), rgba(var(--warn-rgb), 0.055)),
-      var(--fill-soft);
-    color: var(--warn-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--warn-rgb), 0.12);
-  }
-
-  body[data-active-view="settings"] .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(255,219,142,0.32), transparent 48%),
-      rgba(var(--warn-rgb), 0.18);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--warn-rgb), 0.24),
-      0 7px 18px rgba(var(--warn-rgb), 0.13);
-  }
-
-  body[data-active-view="settings"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--warn-rgb), 0.43));
-  }
-
-  body[data-active-view="signals"] .bottom-nav button.is-active {
-    border-color: rgba(var(--ok-rgb), 0.3);
-    background:
-      linear-gradient(180deg, rgba(var(--ok-rgb), 0.16), rgba(var(--ok-rgb), 0.055)),
-      var(--fill-soft);
-    color: var(--ok-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--ok-rgb), 0.11);
-  }
-
-  body[data-active-view="signals"] .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(142,255,205,0.3), transparent 48%),
-      rgba(var(--ok-rgb), 0.17);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--ok-rgb), 0.23),
-      0 7px 18px rgba(var(--ok-rgb), 0.12);
-  }
-
-  body[data-active-view="signals"] .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--ok-rgb), 0.43));
+  .bottom-nav button i {
+    position: relative;
   }
 
   .bottom-nav button:active {
@@ -1002,7 +891,7 @@
     .bottom-nav button {
       min-height: 50px;
       border-radius: 14px;
-      font-size: 8.5px;
+      font-size: 10px;
       letter-spacing: 0;
       padding-inline: 1px;
     }
@@ -1040,7 +929,10 @@
     border-radius: 999px; cursor: pointer; min-height: var(--touch-min-dense);
     transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
   }
-  .eff-view-btn.is-active { background: var(--volt); color: var(--on-volt); }
+  .eff-view-btn.is-active {
+    background: var(--tab-accent);
+    color: var(--on-tab-accent);
+  }
   .eff-view-btn:not(.is-active):hover { color: var(--text); }
   /* "Hide outliers" toggle under the chart. */
   .eff-outlier-row { display: flex; justify-content: flex-end; margin-top: 8px; }
@@ -1823,7 +1715,6 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 10px;
-    margin-bottom: 6px;
   }
 
   @media (max-width: 390px) {
@@ -1847,14 +1738,14 @@
      renderPowerMicroHeader / renderSocMicroHeader and drives the color so the
      value reads as a fresh "right now" callout, not just a unit label. */
   .live-micro .micro-tag {
-    padding: 3px 8px;
+    padding: 2px 7px;
     border-radius: 999px;
     border: 1px solid transparent;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
     color: var(--muted);
     background: var(--fill-soft);
     transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
@@ -1885,10 +1776,7 @@
     background: rgba(var(--warn-rgb), 0.12);
     border-color: rgba(var(--warn-rgb), 0.4);
   }
-  .live-micro .micro-tag[data-kind="soc"][data-tone="idle"] {
-    color: var(--mixed);
-    background: rgba(var(--mixed-rgb), 0.1);
-  }
+  /* soc idle: no override — one neutral idle chip for both charts. */
 
   /* Power kW value colored by drive/regen/coast — matches the existing power
      meter fill so the value reads at a glance without having to read the
@@ -1897,11 +1785,9 @@
     color: var(--text);
     transition: color var(--motion-fast) var(--motion-ease);
   }
-  .power-block:has(.power-state[data-state="drive"]) .power-label strong {
-    color: var(--volt);
-  }
+  .power-block:has(.power-state[data-state="drive"]) .power-label strong,
   .power-block:has(.power-state[data-state="regen"]) .power-label strong {
-    color: var(--ev);
+    color: var(--hero-accent);
   }
   .power-block:has(.power-state[data-state="coast"]) .power-label strong {
     color: var(--soft);
@@ -2005,12 +1891,13 @@
   }
 
   /* Slight bump on the live-readout cells so values breathe — the 4px 0
-     baseline was too cramped on mid-density phones. */
+     baseline was too cramped on mid-density phones. No sibling hairlines here
+     (unlike the base .scrub-readout): auto-fit wraps the six cells at narrow
+     widths and cells can hide via [data-live-cell].is-empty, so any div + div
+     divider lands on row-start cells. The 4px gap is the separator. */
   .live-readout div {
-    padding: 9px 6px;
+    padding: 8px 2px;
     border-left: 0;
-    border-radius: 10px;
-    background: var(--fill-soft);
   }
 
   [data-live-cell].is-empty {
@@ -2028,12 +1915,30 @@
   .battery-pack-readout.is-empty {
     display: none;
   }
+
+  /* First-run ("empty" source, drive.ts#renderDriveSourceBadge): one
+     page-level empty state replaces a screenful of dead placeholder tiles. */
+  .view.is-prelive .live-microcharts,
+  .view.is-prelive .status-card,
+  .view.is-prelive .validation-collapse,
+  .view.is-prelive .real-overview-grid {
+    display: none;
+  }
+
+  /* X4 footnote tier: reference info loses the card chrome. */
+  .view[data-view="drive"] .status-card,
+  .view[data-view="drive"] .validation-collapse {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding-block: 6px;
+  }
   .live-readout .kicker {
     font-size: 9px;
     letter-spacing: 0.05em;
   }
   .live-readout strong {
-    font-size: 13.5px;
+    font-size: 17px;
   }
 
   /* ===== 13. Validation card ===== */
@@ -2140,9 +2045,9 @@
   }
 
   .db-action-grid .db-safe-action {
-    border-color: rgba(var(--ok-rgb), 0.3);
-    background: rgba(var(--ok-rgb), 0.07);
-    color: var(--ok-soft);
+    border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.3);
+    background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.07);
+    color: var(--view-accent, var(--ok-soft));
   }
 
   .db-action-grid .db-safe-action small {
@@ -2189,20 +2094,22 @@
       box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
     }
 
+    /* Same --tab-accent tokens as the dark nav (the old hardcoded oranges
+       left an orange pill under a blue Map glyph). */
     .bottom-nav button.is-active {
-      border-color: rgba(184,65,13,0.3);
+      border-color: rgba(var(--tab-accent-rgb), 0.3);
       background:
-        linear-gradient(180deg, rgba(232,90,31,0.14), rgba(232,90,31,0.05)),
+        linear-gradient(180deg, rgba(var(--tab-accent-rgb), 0.14), rgba(var(--tab-accent-rgb), 0.05)),
         rgba(255,255,255,0.5);
       box-shadow:
         inset 0 0 0 1px rgba(0,0,0,0.04),
-        0 7px 18px rgba(232,90,31,0.14);
+        0 7px 18px rgba(var(--tab-accent-rgb), 0.14);
     }
 
     .bottom-nav button.is-active i {
       background:
-        radial-gradient(circle at 50% 25%, rgba(232,90,31,0.18), transparent 48%),
-        rgba(232,90,31,0.12);
-      box-shadow: inset 0 0 0 1px rgba(184,65,13,0.22);
+        radial-gradient(circle at 50% 25%, rgba(var(--tab-accent-rgb), 0.18), transparent 48%),
+        rgba(var(--tab-accent-rgb), 0.12);
+      box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.22);
     }
   }

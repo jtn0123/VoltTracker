@@ -36,7 +36,11 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // and secondary action groups) are still bounded, but they no longer crowd the
 // startup number. DTC lookup tables remain a separate lazy reference-data bucket.
 // See docs/bundle-budget.md.
-def dashboardStartupBudgetBytes = 360_000L
+// 360k → 364k (design pass 4): funds the @font-face + display-voice rules and
+// the motion vocabulary (view-enter, accent crossfades). The Space Grotesk
+// woff2 itself is font-display:swap and NOT render-blocking, so it stays out
+// of this bucket by design.
+def dashboardStartupBudgetBytes = 364_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyCssBudgetBytes = 20_000L

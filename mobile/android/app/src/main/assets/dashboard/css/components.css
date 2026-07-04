@@ -140,13 +140,42 @@
     /* minmax(0, …) so no single live card's min-content can widen the whole stack
        beyond the viewport (same guard as .view). */
     grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-md);
+    gap: var(--space-lg);
   }
 
   .live-card {
     padding: var(--card-pad-lg);
     position: relative;
     overflow: hidden;
+    /* X1 hero tier: chromeless — the cluster bleeds into the page. */
+    background: transparent;
+    border-color: transparent;
+    box-shadow: none;
+    /* State-reactive accent (telemetry.ts sets data-power-state): the whole
+       hero tints as one — orange drive, green regen, neutral otherwise. */
+    --hero-accent: var(--soft);
+    --hero-accent-rgb: 170, 170, 180;
+    --hero-accent-soft: var(--soft);
+  }
+
+  /* Coast is LIVE (car moving, ~0 kW): warm desaturated tint. Gray is
+     reserved for idle/no-data. */
+  .live-card[data-power-state="coast"] {
+    --hero-accent: #c08a66;
+    --hero-accent-rgb: 192, 138, 102;
+    --hero-accent-soft: #e8c4a8;
+  }
+
+  .live-card[data-power-state="drive"] {
+    --hero-accent: var(--volt);
+    --hero-accent-rgb: var(--volt-rgb);
+    --hero-accent-soft: var(--volt-soft);
+  }
+
+  .live-card[data-power-state="regen"] {
+    --hero-accent: var(--ev);
+    --hero-accent-rgb: var(--ev-rgb);
+    --hero-accent-soft: var(--ev);
   }
 
   .live-head {
@@ -160,12 +189,12 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 9px;
-    border: 1px solid var(--line-strong);
+    padding: 4px 0;
+    border: 0;
     border-radius: 999px;
-    background: var(--inset-strong);
+    background: transparent;
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-weight: 600;
     font-size: 11px;
     white-space: nowrap;
   }
@@ -201,28 +230,15 @@
     z-index: 1;
     display: flex;
     align-items: flex-end;
-    justify-content: space-between;
+    /* Units hug the digits (flex-start) instead of floating at the far card
+       edge — number and unit read as one value, not two stray fragments. */
+    justify-content: flex-start;
     gap: 14px;
-    margin: 4px 0 8px;
+    margin: 10px 0 16px;
   }
 
-  /* Tight radial halo behind the speed digits (single source — screens.css no
-     longer re-declares this) so it reads as a highlight, not a wide blob. */
-  .speed-row::after {
-    content: "";
-    position: absolute;
-    z-index: -1;
-    left: -8px;
-    width: 138px;
-    top: 4px;
-    bottom: 4px;
-    background: radial-gradient(
-      54px 38px at 60px 50%,
-      rgba(var(--volt-rgb), 0.32),
-      transparent 75%
-    );
-    pointer-events: none;
-  }
+  /* The fixed-position digit halo was removed — at 1-2 digits it read as a
+     stray smudge beside the number. */
 
   .speed-value {
     flex: 0 1 auto;
@@ -236,7 +252,7 @@
   .speed-units {
     display: flex;
     flex-direction: column;
-    align-items: flex-end;
+    align-items: flex-start;
     gap: 4px;
     flex-shrink: 0;
     padding-bottom: 12px;
@@ -244,10 +260,9 @@
 
   .speed-unit-main {
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    font-weight: 750;
-    letter-spacing: 0.14em;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
   }
 
   .speed-unit-sub {
@@ -258,7 +273,7 @@
   }
 
   .power-block {
-    margin-top: 14px;
+    margin-top: 20px;
   }
 
   .power-head {
@@ -276,23 +291,28 @@
   }
 
   .power-label strong {
-    font-size: 20px;
+    font-size: 26px;
     font-weight: 800;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
+    color: var(--hero-accent);
+    transition: color var(--motion-medium) var(--motion-ease);
   }
 
   .power-state {
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
+    font-weight: 640;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
+    /* Crossfade with the hero accent on drive/regen/coast flips. */
+    transition: color var(--motion-medium) var(--motion-ease);
   }
 
-  .power-state[data-state="drive"] { color: var(--volt); }
-  .power-state[data-state="regen"] { color: var(--ev); }
+  .power-state[data-state="drive"],
+  .power-state[data-state="regen"] {
+    color: var(--hero-accent);
+  }
 
   .power-meter {
     position: relative;
@@ -321,17 +341,19 @@
     left: 50%;
     width: 50%;
     border-radius: 999px;
-    background: linear-gradient(90deg, var(--volt), var(--volt-deep));
-    box-shadow: 0 0 16px rgba(var(--volt-rgb), 0.4);
+    background:
+      linear-gradient(90deg, var(--hero-accent), rgba(var(--hero-accent-rgb), 0.6));
+    box-shadow: 0 0 16px rgba(var(--hero-accent-rgb), 0.4);
     transform: scaleX(0);
     transform-origin: left center;
-    transition: transform var(--motion-medium) var(--motion-ease);
+    /* box-shadow rides the accent glow so a drive→regen flip crossfades the
+       halo with the fill instead of snapping it. */
+    transition:
+      transform var(--motion-medium) var(--motion-ease),
+      box-shadow var(--motion-medium) var(--motion-ease);
   }
 
-  .power-fill.is-regen {
-    background: linear-gradient(90deg, var(--ev), rgba(var(--ev-rgb), 0.6));
-    box-shadow: 0 0 16px rgba(var(--ev-rgb), 0.45);
-  }
+  /* .is-regen needs no override — the hero accent already goes green. */
 
   .power-scale {
     display: flex;
@@ -363,10 +385,10 @@
   }
 
   .battery-soc strong {
-    font-size: 30px;
+    font-size: 40px;
     font-weight: 800;
     line-height: 1;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
     font-variant-numeric: tabular-nums;
   }
 
@@ -445,9 +467,10 @@
   .charge-kpi strong {
     display: block;
     margin-top: 7px;
-    font-size: 29px;
+    font-size: 32px;
+    font-weight: 760;
     line-height: 1;
-    letter-spacing: 0;
+    letter-spacing: -0.02em;
   }
 
   .mini.is-wide {
@@ -458,6 +481,8 @@
   .metric small,
   .charge-kpi small {
     color: var(--muted);
+    font-size: 0.78em;
+    line-height: 1.35;
   }
 
   /* The Status KPI renders a badge where the other charge KPIs render a bare
@@ -484,10 +509,9 @@
   .pack-stat-row span {
     display: block;
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.1em;
+    font-weight: 640;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -507,15 +531,16 @@
     margin-top: 12px;
   }
 
+  /* Charge's signature: each session reads as an energy bar — a green fill
+     that decays across the row instead of a bordered box. */
   .charge-session-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
     padding: 12px;
-    border: 1px solid rgba(var(--ev-rgb), 0.18);
     border-radius: 12px;
-    background: rgba(var(--ev-rgb), 0.05);
+    background: linear-gradient(90deg, rgba(var(--ev-rgb), 0.14), rgba(var(--ev-rgb), 0.02) 72%);
   }
 
   .charge-session-row strong {
@@ -536,14 +561,13 @@
 
   .charge-session-row > b {
     flex: 0 0 auto;
-    padding: 5px 10px;
-    border: 1px solid rgba(var(--ev-rgb), 0.3);
+    padding: 4px 10px;
     border-radius: 999px;
-    background: rgba(var(--ev-rgb), 0.1);
+    background: rgba(var(--ev-rgb), 0.14);
     color: var(--ev-soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    font-weight: 800;
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
 
@@ -554,8 +578,7 @@
   }
 
   .charge-session-row[data-charging="1"] > b {
-    border-color: rgba(var(--ev-rgb), 0.5);
-    background: rgba(var(--ev-rgb), 0.2);
+    background: rgba(var(--ev-rgb), 0.24);
   }
 
   .real-overview-grid {
@@ -573,18 +596,23 @@
     justify-content: space-between;
     gap: 8px;
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    letter-spacing: 0.12em;
+    font-size: 10px;
+    font-weight: 640;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
   }
 
   .meter {
-    height: 5px;
-    margin-top: 12px;
+    height: 3px;
+    margin-top: 10px;
     border-radius: 999px;
-    background: var(--fill-bold);
+    background: var(--fill-active);
     overflow: hidden;
+  }
+
+  /* The hero SOC strip stays a primary glance element, not a progress line. */
+  .meter.battery-meter {
+    height: 5px;
   }
 
   .meter span {
@@ -598,7 +626,7 @@
 
   .ratio-card {
     display: grid;
-    grid-template-columns: 112px 1fr;
+    grid-template-columns: 128px 1fr;
     gap: 14px;
     align-items: center;
     padding: var(--card-pad-lg);
@@ -611,8 +639,8 @@
   .ring {
     position: relative;
     flex: none;
-    width: 72px;
-    height: 116px;
+    width: 96px;
+    height: 156px;
     margin-top: 8px; /* room for the terminal nub */
     display: grid;
     place-items: center;
@@ -628,8 +656,8 @@
     position: absolute;
     top: -9px;
     left: 50%;
-    width: 28px;
-    height: 7px;
+    width: 36px;
+    height: 8px;
     transform: translateX(-50%);
     border-radius: 4px 4px 0 0;
     background: var(--line-strong);
@@ -673,22 +701,24 @@
   .ring strong {
     position: relative;
     z-index: 1;
-    font-size: 26px;
+    font-size: 34px;
     font-variant-numeric: tabular-nums;
     /* Doubled shadow: the single soft shadow left white ink at ~1.6:1 on the
        bright charge fill in light mode. */
     text-shadow:
       0 1px 2px rgba(0, 0, 0, 0.65),
       0 0 8px rgba(0, 0, 0, 0.45);
+    /* Shadow is tuned for WHITE ink — pin it in both themes (light-mode
+       --text under a dark glow smears). */
+    color: #fff;
   }
 
   .status-meta span {
     display: block;
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.12em;
+    font-weight: 640;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
@@ -703,10 +733,11 @@
     gap: 12px;
   }
 
-  /* #diagState is an h2 for the heading outline (first heading under the
-     topbar h1) but keeps the compact card-title size of its h3 siblings. */
+  /* h2 for the outline, footnote scale for the eye. */
   .status-head h2 {
-    font-size: var(--font-h3);
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--muted);
     line-height: 1.15;
   }
 
@@ -722,16 +753,17 @@
     margin-top: 13px;
   }
 
+  /* Footnote tier: no chip boxes, no display-scale values. */
   .status-meta div {
-    padding: 11px;
-    border-radius: var(--radius-md);
-    background: var(--fill);
+    padding: 2px 0;
   }
 
   .status-meta strong {
     display: block;
-    margin-top: 5px;
-    font-size: 20px;
+    margin-top: 2px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
     /* Wrap rather than truncate: "OBD adapter" clipped to "OBD ada…" on
        360px phones and adapter names are the one value worth reading whole. */
     overflow-wrap: break-word;
@@ -753,7 +785,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 10px;
+    margin-bottom: 14px;
   }
 
   /* Map sheet header actions (M6 "Export all" + "Refresh"): keep both link-buttons together on the
@@ -774,6 +806,13 @@
 
   .map-sheet-actions .link-btn:last-child {
     margin-inline-end: -9px;
+  }
+
+  /* Inside flowing copy the 40px button otherwise inflates line pitch to
+     ~60px (Insights savings note); scoped so card-header layouts are
+     untouched. */
+  .status-copy .link-btn {
+    margin-block: -8px;
   }
 
   .link-btn {
@@ -950,10 +989,9 @@
   .trip-route-state {
     padding: 2px 8px;
     border-radius: 999px;
-    border: 1px solid rgba(var(--volt-rgb), 0.26);
-    background: rgba(var(--volt-rgb), 0.08);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    background: rgba(var(--volt-rgb), 0.1);
     font-size: 10px;
+    font-weight: 600;
     line-height: 1.45;
     color: var(--soft);
     text-transform: uppercase;
@@ -1035,22 +1073,33 @@
 
   .dtc-action-row .scan {
     border-color: transparent;
-    background: var(--volt);
-    color: var(--on-volt);
+    background: var(--view-accent, var(--volt));
+    color: var(--on-view-accent, var(--on-volt));
     font-weight: 800;
-    box-shadow: 0 12px 28px rgba(var(--volt-rgb), 0.18);
+    box-shadow: 0 12px 28px rgba(var(--view-accent-rgb, var(--volt-rgb)), 0.18);
   }
 
-  /* Quick scan: a lighter, outlined sibling of the primary scan button. */
+  /* Quick scan: a quiet ghost sibling — one primary per action row. */
   .dtc-action-row .scan-quick {
-    border-color: rgba(var(--volt-rgb), 0.5);
-    background: rgba(var(--volt-rgb), 0.08);
-    color: var(--volt-soft);
+    border-color: var(--line-strong);
+    background: transparent;
+    color: var(--muted);
     font-weight: 700;
   }
 
   .dtc-action-row button:not(.scan):not(.scan-quick):not(.danger) {
     color: var(--muted);
+  }
+
+  .dtc-secondary-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin: -4px 0 10px;
+  }
+
+  .dtc-secondary-row .danger-link {
+    color: var(--bad-soft);
   }
 
   /* ===== 8. In-app DTC lookup (intro card) ===== */
@@ -1191,9 +1240,7 @@
   .dtc-status-grid div {
     min-width: 0;
     padding: 10px;
-    border: 1px solid var(--line-soft);
     border-radius: var(--radius-md);
-    background: var(--fill);
   }
 
   .dtc-status-grid div:first-child {
@@ -1324,10 +1371,12 @@
      next-best-action, adapter readiness, and ONE primary button — so a
      non-expert can recover before the signal/debug consoles below. Tone-driven
      left accent + status dot mirror the data-tone severity vocabulary. */
+  /* Diag's signature: a status monolith — thick tone stripe, display-scale
+     headline. */
   .diag-recovery {
     display: grid;
     gap: 12px;
-    border-left: 3px solid var(--line-strong);
+    border-left: 6px solid var(--line-strong);
   }
 
   .diag-recovery__head {
@@ -1338,9 +1387,9 @@
 
   .diag-recovery__dot {
     flex: none;
-    width: 10px;
-    height: 10px;
-    margin-top: 6px;
+    width: 12px;
+    height: 12px;
+    margin-top: 9px;
     border-radius: 50%;
     background: var(--muted);
     box-shadow: 0 0 0 4px var(--fill-soft);
@@ -1353,10 +1402,10 @@
 
   .diag-recovery__headline h2 {
     margin: 2px 0 0;
-    font-size: 18px;
+    font-size: 24px;
     font-weight: 800;
+    letter-spacing: -0.02em;
     line-height: 1.2;
-    letter-spacing: -0.01em;
   }
 
   .diag-recovery__pill {
@@ -1432,12 +1481,18 @@
     background: var(--bad);
     box-shadow: 0 0 0 4px rgba(var(--bad-rgb), 0.2);
   }
+  /* Demo speaks one color app-wide: purple. */
   .diag-recovery[data-tone="demo"] {
-    border-left-color: var(--accent, #6ec6ff);
+    border-left-color: var(--mixed);
   }
   .diag-recovery[data-tone="demo"] .diag-recovery__dot {
-    background: var(--accent, #6ec6ff);
-    box-shadow: 0 0 0 4px rgba(110, 198, 255, 0.18);
+    background: var(--mixed);
+    box-shadow: 0 0 0 4px rgba(var(--mixed-rgb), 0.18);
+  }
+  .diag-recovery[data-tone="demo"] .signal-status-pill {
+    border-color: rgba(var(--mixed-rgb), 0.4);
+    background: rgba(var(--mixed-rgb), 0.12);
+    color: var(--mixed-soft, var(--mixed));
   }
 
   /* ===== 10. Live-signals diagnostic list ===== */
@@ -1543,6 +1598,13 @@
   .live-charge-card {
     margin-top: 12px;
     padding: var(--card-pad);
+  }
+
+  /* Motion: charging starting is a state change worth staging — the live
+     time-to-full hero settles in when the [hidden] attr clears rather than
+     popping. Same enter vocabulary as the view switch. */
+  .live-charge-card:not([hidden]) {
+    animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
   }
 
   /* Monthly trend cards (Charge monthly energy, Insights monthly distance /
@@ -1661,8 +1723,9 @@
 
   /* Battery state-of-health trend chart (SVG line over time). */
   .soh-trend-latest {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 20px;
+    font-size: 24px;
+    font-weight: 760;
+    letter-spacing: -0.02em;
     /* "--" breaks after the first hyphen when squeezed, rendering as two
        stacked dashes; same guard for real values ("92%"). */
     white-space: nowrap;
@@ -1719,9 +1782,11 @@
      axis tones are resolved from tokens in JS so the chart stays legible in both
      themes (the SVG fill attr can't read a CSS var directly). */
   .charge-cost-trend-latest {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 20px;
-    color: var(--volt);
+    font-size: 24px;
+    font-weight: 760;
+    letter-spacing: -0.02em;
+    white-space: nowrap;
+    color: var(--view-accent, var(--volt));
   }
 
   .charge-cost-trend-chart {
@@ -2133,22 +2198,24 @@
     gap: 6px;
   }
 
+  /* Repeated per evidence row — link-level quiet, not boxed buttons. */
   .icon-link-btn {
     min-height: var(--touch-min-dense);
-    padding: 0 12px;
-    border: 1px solid var(--line-soft);
+    padding: 0 8px;
+    border: 0;
     border-radius: 8px;
     color: var(--muted);
-    background: var(--fill-soft);
-    font-size: 11px;
-    font-weight: 760;
-    text-transform: uppercase;
+    background: transparent;
+    font-size: 11.5px;
+    font-weight: 700;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    text-decoration-color: var(--line-strong);
   }
 
   .icon-link-btn.danger {
     color: var(--bad-soft);
-    border-color: rgba(var(--bad-rgb), 0.18);
-    background: rgba(var(--bad-rgb), 0.06);
+    background: transparent;
   }
 
   .enhanced-capability-item > b {

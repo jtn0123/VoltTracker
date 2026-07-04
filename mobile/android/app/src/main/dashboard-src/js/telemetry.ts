@@ -63,6 +63,13 @@ import { initialTelemetryState } from "./telemetry-state";
   // on other tabs ("Scan car codes" on Insights, blocked-adapter explanations)
   // would otherwise appear to do nothing. Mirror new detail strings in a small
   // aria-live toast whenever the user can't see #statusCopy.
+  // X1 adaptive power track: normal driving lives within ±40 kW, so a fixed
+  // ±80 wasted half the bar's resolution. The bound starts at 40 and ratchets
+  // up (80 → 120, the Volt's propulsion ceiling) the first time a sample
+  // exceeds it; it never shrinks mid-run so the fill doesn't jitter between
+  // tiers on a spirited on-ramp.
+  let powerScaleKw = 40;
+
   let statusToastTimer: ReturnType<typeof setTimeout> | null = null;
   let lastToastDetail = "";
   let toastBaselineSeen = false;
@@ -342,7 +349,7 @@ import { initialTelemetryState } from "./telemetry-state";
       Number.isFinite(Number(state.telemetry.longitude));
     VD.setText("gpsState", gps.state || (hasFix ? "locked" : "waiting"));
     VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
-    VD.setText("dbState", dbRowCount(storage) ? `${dbRowCount(storage)} rows` : "ready");
+    VD.setText("dbState", VD.formatRowCount(dbRowCount(storage)));
     const appInfo = app.app || {};
     VD.setText("appVersionFooter", appInfo.version ? `Volt Tracker v${appInfo.version}` : "Volt Tracker");
 
@@ -735,7 +742,10 @@ import { initialTelemetryState } from "./telemetry-state";
         speedMeter.setAttribute("aria-label", "Vehicle speed");
       }
     }
-    setOptionalLiveText("rpmValue", t.rpm);
+    // A Volt in EV mode reports rpm 0 for the whole drive — a permanent "0"
+    // tile is dead weight, so treat engine-off as not-reporting and let the
+    // cell collapse (is-empty) until the range extender actually spins.
+    setOptionalLiveText("rpmValue", Number(t.rpm) === 0 ? "--" : t.rpm);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(
@@ -833,11 +843,28 @@ import { initialTelemetryState } from "./telemetry-state";
       powerDetail.textContent = powerState;
       setDataState(powerDetail, powerState);
     }
+    // State-reactive hero (X1): the whole speed+power cluster tints from one
+    // accent — orange under drive power, green in regen, neutral coasting —
+    // via the --hero-accent custom property keyed off this attribute
+    // (components.css). The speed-trace canvas reads the same property.
+    const heroCard = el("liveHeroCard");
+    // "idle" (no reading) keeps the neutral gray hero; "coast" is a live state
+    // and gets its own warm tint in CSS — gray must always mean "no data",
+    // never "no torque".
+    if (heroCard) heroCard.dataset.powerState = power == null ? "idle" : powerState;
+    // Ratchet the adaptive track bound before computing the fill fraction.
+    if (power != null) {
+      while (Math.abs(power) > powerScaleKw && powerScaleKw < 120) {
+        powerScaleKw = powerScaleKw === 40 ? 80 : 120;
+      }
+    }
+    VD.setText("powerScaleMin", `-${powerScaleKw}`);
+    VD.setText("powerScaleMax", `+${powerScaleKw}`);
     // Fraction of the half-track (0..1); the fill's CSS spans the right half
     // and scaleX stretches it from the zero-line — a negative scale mirrors it
     // left for regen. Transform-only so this per-sample update stays on the
     // compositor (no layout), unlike the old left/width mutation.
-    const frac = power != null ? Math.min(1, Math.abs(power) / 80) : 0;
+    const frac = power != null ? Math.min(1, Math.abs(power) / powerScaleKw) : 0;
     const fill = el("powerFill");
     if (fill) {
       fill.style.transform = `scaleX(${power != null && power < 0 ? -frac : frac})`;
@@ -845,6 +872,8 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     const powerMeter = el("powerMeter");
     if (powerMeter) {
+      powerMeter.setAttribute("aria-valuemin", String(-powerScaleKw));
+      powerMeter.setAttribute("aria-valuemax", String(powerScaleKw));
       if (power != null) {
         powerMeter.setAttribute("aria-valuenow", String(Math.round(power)));
         powerMeter.setAttribute("aria-valuetext", `${Math.round(power)} kilowatts`);
@@ -881,7 +910,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const diagTitle = String(status.detail || (t.updatedAt ? "Live OBD data received" : "Waiting for adapter")).replace(/\.\s*$/, "");
     VD.setText("diagState", diagTitle);
     VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
-    VD.setText("diagAdapter", t.adapter || status.adapter || "OBD adapter");
+    VD.setText("diagAdapter", t.adapter || status.adapter || "--");
     // Surface the classifier's confidence inline and its reason codes (the "why"
     // behind driving/charging/parked) as a tooltip — both already reach JS via the
     // app-state payload (vehicle.confidence / vehicle.reasons).
@@ -897,6 +926,16 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     VD.setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
     VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+    // Footnote tier: a placeholder printed at value weight ("unknown", "--")
+    // is noise, not information — hide the cell until it has a real reading.
+    ["diagAdapter", "diagVehicleState", "diagSession", "diagSupported"].forEach((id) => {
+      const node = el(id);
+      if (!node) return;
+      const cell = node.closest("div");
+      if (!cell) return;
+      const text = (node.textContent || "").trim().toLowerCase();
+      (cell as HTMLElement).hidden = !text || text === "--" || text === "unknown";
+    });
     renderLiveSignals();
   }
 

@@ -1,3 +1,16 @@
+  /* Display face: Space Grotesk (OFL — fonts/OFL.txt), the one non-system
+     voice, reserved for headings and hero-tier numerals via --font-display.
+     Variable wght 300–700, latin subset, ~22 KB, shipped from app assets so
+     it never touches the network. Tabular figures come from the existing
+     font-variant-numeric rules (the face carries a tnum feature). */
+  @font-face {
+    font-family: "Space Grotesk";
+    font-style: normal;
+    font-weight: 300 700;
+    font-display: swap;
+    src: url("../fonts/SpaceGroteskVar.woff2") format("woff2");
+  }
+
   /* Dark is the default (and primary, in-car) scheme; a light token palette
      lives in the `prefers-color-scheme: light` block at the end of this file,
      which also flips color-scheme to `light` so form controls follow. */
@@ -10,11 +23,11 @@
     --nav-h: 68px;
     --nav-gap: 10px;
     --nav-safe: calc(var(--nav-h) + var(--nav-gap) + env(safe-area-inset-bottom));
-    --bg: #07080c;
+    --bg: #050609;
     --panel: #171820;
     --panel-2: #20222c;
     --panel-3: #101117;
-    --line: rgba(255,255,255,0.1);
+    --line: rgba(255,255,255,0.06);
     --line-strong: rgba(255,255,255,0.16);
     --text: #f5f3ec;
     --muted: #aaaab4;
@@ -59,7 +72,7 @@
        must stay pixel-identical); the light block flips each role. The
        Chrome 66 WebView has no color-mix(), so alpha pairs are spelled out. */
     /* Opaque-ish surfaces */
-    --surface-raised: rgba(20,20,27,0.92);   /* card body under gradients */
+    --surface-raised: rgba(27,28,37,0.96);   /* card body under gradients */
     --surface-veil: rgba(20,20,27,0.55);     /* translucent sub-card */
     --surface-float: rgba(20,21,29,0.97);    /* toast / popover / map popup */
     --surface-modal: #15171f;                /* sheets + dialogs */
@@ -79,16 +92,16 @@
     --shadow-soft: rgba(0,0,0,0.34);
     /* Neutral fills: lighten-on-dark, darken-on-light */
     --fill-ghost: rgba(255,255,255,0.025);
-    --fill-soft: rgba(255,255,255,0.035);
-    --fill: rgba(255,255,255,0.045);
-    --fill-strong: rgba(255,255,255,0.055);
-    --fill-bold: rgba(255,255,255,0.07);
-    --fill-active: rgba(255,255,255,0.1);
+    --fill-soft: rgba(255,255,255,0.05);
+    --fill: rgba(255,255,255,0.06);
+    --fill-strong: rgba(255,255,255,0.08);
+    --fill-bold: rgba(255,255,255,0.1);
+    --fill-active: rgba(255,255,255,0.14);
     /* Hairlines + recessed wells */
-    --line-soft: rgba(255,255,255,0.07);
+    --line-soft: rgba(255,255,255,0.04);
     --line-marker: rgba(255,255,255,0.28);   /* meter zero-line, neutral dots */
-    --inset: rgba(0,0,0,0.14);
-    --inset-strong: rgba(0,0,0,0.2);
+    --inset: rgba(0,0,0,0.22);
+    --inset-strong: rgba(0,0,0,0.3);
     --inset-deep: rgba(0,0,0,0.34);
     /* Card-top gloss gradients (disabled in light) */
     --sheen: rgba(255,255,255,0.065);
@@ -122,7 +135,7 @@
     --space-xl: 32px;
     --radius-sm: 6px;
     --radius-md: 12px;
-    --radius-lg: 18px;
+    --radius-lg: 20px;
     --radius-xl: 20px;
     /* Standalone text inputs (.pref-price, .maint-field, .map-list-search)
        share one corner radius so form fields read as a family. */
@@ -131,7 +144,7 @@
     --card-pad-tight: 12px;
     /* Roomier padding for hero-tier cards (live speed cluster, pack ring,
        empty states, trip-detail sheet) so they all breathe by the same amount. */
-    --card-pad-lg: 16px;
+    --card-pad-lg: 20px;
     /* Accessibility text-scale multiplier (M9). Default 1; the Preferences
        "Accessibility" font-scale control (prefs.ts) overrides it on :root in the
        1.0–1.5 range and persists it. The heading tokens below multiply through
@@ -141,7 +154,10 @@
     --font-h1: calc(30px * var(--font-scale));
     --font-h2: calc(22px * var(--font-scale));
     --font-h3: calc(17px * var(--font-scale));
-    --map-height: 520px;
+    /* Brand voice for headings + hero numerals; falls back to the body stack
+       until the woff2 is parsed (font-display: swap). */
+    --font-display: "Space Grotesk", Inter, Roboto, system-ui, sans-serif;
+    --map-height: min(62vh, 600px);
     /* Motion design tokens — one vocabulary for every transition/animation.
        fast = hover/press/tone feedback; medium = meter fills and fades.
        The named long durations are intentional, attention-getting loops. */
@@ -151,6 +167,11 @@
     --motion-ease-inout: ease-in-out;
     --motion-pulse: 1.6s; /* drive-chip "live" dot pulse */
     --motion-sweep: 1.2s; /* restore-progress indeterminate sweep */
+    /* enter = one-shot entrances (view switch, hero cards appearing). The
+       decelerate curve starts fast and settles, so content feels placed
+       rather than floated in. */
+    --motion-enter: 300ms;
+    --motion-ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
   }
 
   /* High-contrast / colorblind-safe theme (M9). Set as data-contrast="high" on
@@ -236,6 +257,27 @@
     -webkit-font-smoothing: antialiased;
   }
 
+  /* Display voice: Space Grotesk carries the brand moments — headings and
+     the hero-tier numerals — while labels, body runs, and raw OBD mono stay
+     on their existing stacks. One rule so the voice is one decision; any
+     later explicit font-family (the mono readouts) still wins the cascade. */
+  h1,
+  h2,
+  h3,
+  .speed-value,
+  .connection-head strong,
+  .power-label strong,
+  .battery-soc strong,
+  .mini strong,
+  .metric strong,
+  .charge-kpi strong,
+  .ring strong,
+  .charge-energy-head strong,
+  .soh-trend-latest,
+  .charge-cost-trend-latest {
+    font-family: var(--font-display);
+  }
+
   /* Accessibility font-scale (M9): grow the root so headings + any relative-unit
      text scale with the user's chosen multiplier. */
   html {
@@ -258,6 +300,13 @@
      element — press feedback comes from each control's own :active styling. */
   button, select, input, summary, a, [role="button"] {
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Tint native checkboxes/radios with the view accent (UA blue is
+     off-palette). */
+  input[type="checkbox"],
+  input[type="radio"] {
+    accent-color: var(--view-accent, var(--volt));
   }
 
   button {
@@ -359,8 +408,8 @@
     /* Top floor raised to 30px: this WebView reports no safe-area-inset-top, so the old 14px
        floor let the title row crowd the system status bar (clock/battery). env() still wins on
        devices that do report a larger inset. */
-    padding: 30px 12px calc(var(--nav-safe) + 12px);
-    padding: max(30px, env(safe-area-inset-top)) 12px calc(var(--nav-safe) + 12px);
+    padding: 30px 12px calc(var(--nav-safe) + 28px);
+    padding: max(30px, env(safe-area-inset-top)) 12px calc(var(--nav-safe) + 28px);
   }
 
   /* Fullscreen map (.map-card.is-fullscreen) lives inside .app and uses position: fixed;
@@ -375,7 +424,7 @@
   .topbar {
     /* Positioned so the status popover (absolute) anchors under the badge. */
     position: relative;
-    margin-bottom: 8px;
+    margin-bottom: 22px;
   }
 
   /* Single slim strip: icon + title left, last-connected line + state badge
@@ -405,6 +454,89 @@
     gap: 8px;
     min-width: 0;
     flex: 1 1 auto;
+  }
+
+  /* X2: one accent per tab — active-state consumers read these tokens. */
+  :root {
+    --tab-accent: var(--volt);
+    --tab-accent-rgb: var(--volt-rgb);
+    --tab-accent-soft: var(--volt-soft);
+    --on-tab-accent: var(--on-volt);
+  }
+
+  body[data-active-view="map"] {
+    --tab-accent: var(--map-accent);
+    --tab-accent-rgb: var(--map-accent-rgb);
+    --tab-accent-soft: var(--accent-soft);
+    --on-tab-accent: var(--on-map-accent);
+  }
+
+  body[data-active-view="charge"] {
+    --tab-accent: var(--ev);
+    --tab-accent-rgb: var(--ev-rgb);
+    --tab-accent-soft: var(--ev-soft);
+    --on-tab-accent: var(--on-volt);
+  }
+
+  body[data-active-view="insights"] {
+    --tab-accent: var(--mixed);
+    --tab-accent-rgb: var(--mixed-rgb);
+    --tab-accent-soft: var(--mixed-soft);
+    --on-tab-accent: var(--on-volt);
+  }
+
+  body[data-active-view="diagnostics"] {
+    --tab-accent: var(--ok);
+    --tab-accent-rgb: var(--ok-rgb);
+    --tab-accent-soft: var(--ok-soft);
+    --on-tab-accent: var(--on-volt);
+  }
+
+  body[data-active-view="settings"] {
+    --tab-accent: var(--warn);
+    --tab-accent-rgb: var(--warn-rgb);
+    --tab-accent-soft: var(--warn-soft);
+    --on-tab-accent: var(--on-volt);
+  }
+
+  /* Same mapping scoped per view SECTION: in-page content (charts,
+     primaries, toggles) reads --view-accent so it keeps its own tab's color
+     even while another tab is active. Fallback keeps shared chrome orange. */
+  #view-drive {
+    --view-accent: var(--volt);
+    --view-accent-rgb: var(--volt-rgb);
+    --on-view-accent: var(--on-volt);
+  }
+
+  #view-map {
+    --view-accent: var(--map-accent);
+    --view-accent-rgb: var(--map-accent-rgb);
+    --on-view-accent: var(--on-map-accent);
+  }
+
+  #view-charge {
+    --view-accent: var(--ev);
+    --view-accent-rgb: var(--ev-rgb);
+    --on-view-accent: var(--on-volt);
+  }
+
+  #view-insights {
+    --view-accent: var(--mixed);
+    --view-accent-rgb: var(--mixed-rgb);
+    --on-view-accent: var(--on-volt);
+  }
+
+  #view-diagnostics,
+  #view-connection-tools {
+    --view-accent: var(--ok);
+    --view-accent-rgb: var(--ok-rgb);
+    --on-view-accent: var(--on-volt);
+  }
+
+  #view-settings {
+    --view-accent: var(--warn);
+    --view-accent-rgb: var(--warn-rgb);
+    --on-view-accent: var(--on-volt);
   }
 
   .drive-title-mark {
@@ -482,12 +614,13 @@
     white-space: nowrap;
   }
 
+  /* One quiet sans label voice app-wide (mono is reserved for tabular
+     numerals). */
   .kicker {
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 11px;
-    font-weight: 760;
-    letter-spacing: 0.16em;
+    font-weight: 640;
+    letter-spacing: 0.07em;
     text-transform: uppercase;
   }
 
@@ -522,27 +655,29 @@
   /* Chip/badge family (pill-shaped): .badge (status+dot), .session-badge
      (accent count), .rate-chip (live freshness), .micro-tag, .trip-route-state,
      .power-state. Extend one of these rather than adding a variant. */
+  /* Static badges are dot + text — the capsule chrome lives only on the
+     interactive topbar pill (button.badge below). */
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    min-height: 34px;
-    padding: 0 12px;
-    border: 1px solid var(--line);
+    min-height: 24px;
+    padding: 0 2px;
+    border: 0;
     border-radius: 999px;
-    background: var(--fill);
+    background: transparent;
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
+    font-size: 12px;
+    font-weight: 600;
     white-space: nowrap;
   }
 
   .dot {
-    width: 8px;
-    height: 8px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: var(--soft);
-    box-shadow: 0 0 14px currentColor;
+    box-shadow: 0 0 10px currentColor;
   }
 
   .badge[data-state="connected"] .dot,
@@ -588,22 +723,24 @@
   button.badge {
     appearance: none;
     cursor: pointer;
-    /* A real tap target (opens the status popover): meet the dense touch
-       minimum rather than the 34px visual-pill height of static badges. */
+    /* The one true capsule: a real tap target that opens the status popover. */
     min-height: var(--touch-min-dense);
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    background: var(--fill);
   }
   button.badge:focus-visible {
     outline: 2px solid var(--line-strong);
     outline-offset: 2px;
   }
 
+  /* Matte plane: fill contrast + shadow carry the surface; the hairline is
+     now faint (--line dropped to 0.06) and the gloss gradient is gone. */
   .panel {
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
-    background:
-      linear-gradient(180deg, var(--sheen), transparent 45%),
-      var(--surface-raised);
-    box-shadow: 0 18px 48px var(--shadow-soft);
+    background: var(--surface-raised);
+    box-shadow: 0 14px 40px var(--shadow-soft);
   }
 
   .view {
@@ -618,6 +755,17 @@
 
   .view.is-active {
     display: grid;
+    /* Motion: each tab enters with a short settle (fade + 10px rise) instead
+       of a hard cut. display:none → grid retriggers it on every switch; the
+       reduced-motion reset above collapses it to instant. */
+    animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
+  }
+
+  @keyframes view-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
   }
 
   .connect-card {
@@ -631,13 +779,15 @@
     gap: 10px;
   }
 
+  /* Settings' anchor: the connection headline owns the tab. */
   .connection-head strong {
     display: block;
     margin-top: 4px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 17px;
+    font-size: 24px;
+    letter-spacing: -0.02em;
   }
 
   .connection-head small {
@@ -661,34 +811,38 @@
   .state-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 10px;
+    gap: 10px 14px;
+    margin-top: 12px;
   }
 
+  /* Bare label-over-value columns; hairline dividers group them without
+     reintroducing boxes. */
   .state-grid div {
     min-width: 0;
-    padding: 9px 8px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--inset);
+    padding: 2px 0;
+  }
+
+  .state-grid div + div {
+    padding-left: 12px;
+    border-left: 1px solid var(--line-soft);
   }
 
   .state-grid span {
     display: block;
     color: var(--soft);
     font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.12em;
+    font-weight: 640;
+    letter-spacing: 0.06em;
     text-transform: uppercase;
   }
 
   .state-grid strong {
     display: block;
-    margin-top: 5px;
+    margin-top: 3px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 13px;
+    font-size: 15px;
   }
 
   .validation-card {
@@ -708,7 +862,6 @@
     gap: 10px;
     min-height: 44px;
     padding: 9px 10px;
-    border: 1px solid var(--line);
     border-radius: var(--radius-md);
     background: var(--inset);
   }
@@ -1068,21 +1221,21 @@
   }
 
   .tile-toggle[data-on="true"] {
-    border-color: rgba(var(--ev-rgb), 0.4);
-    color: var(--ok);
-    background: rgba(var(--ev-rgb), 0.08);
+    border-color: rgba(var(--view-accent-rgb, var(--ev-rgb)), 0.4);
+    color: var(--view-accent, var(--ok));
+    background: rgba(var(--view-accent-rgb, var(--ev-rgb)), 0.08);
   }
 
   .primary {
     border-color: transparent;
-    background: var(--volt);
-    color: var(--on-volt);
+    background: var(--view-accent, var(--volt));
+    color: var(--on-view-accent, var(--on-volt));
     font-weight: 850;
   }
 
   .scan {
-    border-color: rgba(var(--volt-rgb), 0.32);
-    color: var(--volt);
+    border-color: rgba(var(--view-accent-rgb, var(--volt-rgb)), 0.32);
+    color: var(--view-accent, var(--volt));
   }
 
   .demo {
@@ -1099,7 +1252,7 @@
     margin-top: 10px;
     color: var(--muted);
     font-size: 13px;
-    line-height: 1.4;
+    line-height: 1.5;
   }
 
   body.demo-active [data-demo-hidden="true"] {
@@ -1232,6 +1385,14 @@
       --bg-glow: rgba(232,90,31,0.06);
       --map-accent: #0b6dc2;
       --map-accent-rgb: 11, 109, 194;
+      /* RGB companions for the light tones (rgba() tints otherwise keep
+         the dark theme's neon hues). */
+      --volt-rgb: 184, 65, 13;
+      --ev-rgb: 77, 124, 15;
+      --ok-rgb: 4, 120, 87;
+      --warn-rgb: 148, 99, 0;
+      --bad-rgb: 180, 35, 24;
+      --mixed-rgb: 101, 57, 192;
       --on-map-accent: #ffffff;
       --accent-soft: #0a5e86;
       --volt-soft: #9c3a10;

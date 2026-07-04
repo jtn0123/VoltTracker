@@ -89,150 +89,7 @@
     </div>
   </div>
 
-  <article class="panel setting-row" id="vehicleCard">
-    <div class="card-head">
-      <div>
-        <span class="kicker">Vehicle</span>
-        <h3 id="vehicleName">No vehicle identified yet</h3>
-        <p id="vehicleSummary" class="status-copy">
-          Your vehicle's details fill in automatically once the VIN and odometer
-          are read.
-        </p>
-      </div>
-    </div>
-    <div class="review-grid">
-      <div><span>Model year</span><strong id="vehicleYear">--</strong></div>
-      <div><span>Odometer</span><strong id="vehicleOdometer">--</strong></div>
-      <div>
-        <span>Logged distance</span
-        ><strong id="vehicleLoggedDistance">--</strong>
-      </div>
-      <div style="grid-column: 1 / -1">
-        <span>VIN</span><strong id="vehicleVin">--</strong>
-      </div>
-    </div>
-  </article>
-
   <section class="map-layout">
-    <article class="panel diagnostic-report-card">
-      <header class="diagnostic-report-head">
-        <div>
-          <span class="kicker">Check engine</span>
-          <h3 id="dtcTitle">No car-code scan yet</h3>
-        </div>
-        <span id="dtcReportBadge" class="session-badge">ready</span>
-      </header>
-      <div class="dtc-action-row">
-        <button type="button" data-action="scan" class="scan">
-          Scan car codes
-        </button>
-        <button type="button" data-action="quickScan" class="scan-quick">
-          Quick scan
-        </button>
-        <button
-          type="button"
-          data-action="openClearDtc"
-          class="danger"
-          id="dtcClearOpenBtn"
-        >
-          Clear codes
-        </button>
-        <button type="button" data-nav-jump="diagnostics">Debug logs</button>
-      </div>
-
-      <!-- In-app DTC lookup over the shipped Volt code database (no need to leave
-           the app for a web search). Results rendered by actions.ts. -->
-      <div class="dtc-lookup">
-        <label class="dtc-lookup-field">
-          <span class="kicker">Look up a code</span>
-          <input
-            id="dtcSearchInput"
-            type="search"
-            inputmode="text"
-            autocomplete="off"
-            autocapitalize="characters"
-            spellcheck="false"
-            placeholder="e.g. P0420"
-            aria-label="Search diagnostic trouble codes"
-          />
-        </label>
-        <div
-          id="dtcSearchResult"
-          class="dtc-lookup-result"
-          role="status"
-          aria-live="polite"
-          hidden
-        ></div>
-      </div>
-
-      <div
-        id="dtcClearWarning"
-        class="dtc-clear-warning"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="dtcClearTitle"
-        aria-describedby="dtcClearDesc"
-        tabindex="-1"
-        hidden
-      >
-        <strong id="dtcClearTitle">Clear vehicle trouble codes?</strong>
-        <p id="dtcClearDesc">
-          This sends OBD-II Mode 04 to the vehicle, erasing the check-engine
-          light and stored DTC memory. Emissions readiness monitors will reset
-          and may take 100+ miles of mixed driving before re-setting — some
-          inspection stations will fail the car until then.
-        </p>
-        <p class="dtc-clear-prereq">
-          Run with the ignition on and engine off, parked, transmission in Park,
-          all accessories off.
-        </p>
-        <!-- Permanent-code caveat (M10). Hidden unless the latest scan stored
-             one or more permanent (Mode 0A) codes; actions.ts fills the count
-             and unhides it when openClearDtcWarning runs. -->
-        <p
-          id="dtcClearPermanentNote"
-          class="dtc-clear-permanent-note"
-          hidden
-        ></p>
-        <label class="dtc-clear-ack">
-          <input type="checkbox" id="dtcClearAckBox" />
-          <span>I understand readiness monitors will reset.</span>
-        </label>
-        <div class="dtc-clear-actions">
-          <button type="button" data-action="cancelClearDtc">Cancel</button>
-          <button
-            type="button"
-            data-action="confirmClearDtc"
-            class="danger"
-            id="dtcClearConfirmBtn"
-            disabled
-          >
-            Clear codes now
-          </button>
-        </div>
-      </div>
-      <div class="dtc-status-grid">
-        <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
-        <div>
-          <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
-        </div>
-        <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
-        <div>
-          <span>Permanent</span><strong id="dtcPermanentCount">0</strong>
-        </div>
-        <div>
-          <span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong>
-        </div>
-        <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
-      </div>
-      <div id="dtcList" class="dtc-list">
-        <p class="status-copy">
-          Current, pending, permanent, and freeze-frame results will appear here
-          after a scan.
-        </p>
-      </div>
-    </article>
-
     <article class="panel" id="insightStatsCard">
       <header>
         <span class="kicker">More lifetime stats</span>
@@ -504,4 +361,30 @@
       <div id="maintenanceList" class="maintenance-list"></div>
     </article>
   </section>
+
+  <!-- X3: identity/reference info sits after the trends the tab is named
+       for — Insights leads with charts and lifetime stats. -->
+  <article class="panel setting-row" id="vehicleCard">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Vehicle</span>
+        <h3 id="vehicleName">No vehicle identified yet</h3>
+        <p id="vehicleSummary" class="status-copy">
+          Your vehicle's details fill in automatically once the VIN and odometer
+          are read.
+        </p>
+      </div>
+    </div>
+    <div class="review-grid">
+      <div><span>Model year</span><strong id="vehicleYear">--</strong></div>
+      <div><span>Odometer</span><strong id="vehicleOdometer">--</strong></div>
+      <div>
+        <span>Logged distance</span
+        ><strong id="vehicleLoggedDistance">--</strong>
+      </div>
+      <div style="grid-column: 1 / -1">
+        <span>VIN</span><strong id="vehicleVin">--</strong>
+      </div>
+    </div>
+  </article>
 </section>

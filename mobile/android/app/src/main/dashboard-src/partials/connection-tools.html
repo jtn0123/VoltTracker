@@ -32,10 +32,12 @@
 
     <div class="connection-tools__actions">
       <!-- One-shot probe against the last-known adapter; results surface via status. -->
+      <!-- Quiet secondary: Connect (in the card above) is the tab's primary
+           action — a filled "Test connection" out-shouted it. -->
       <button
         type="button"
         id="testConnectionBtn"
-        class="connection-tools__btn primary"
+        class="connection-tools__btn"
         data-action="test-connection"
       >
         Test connection

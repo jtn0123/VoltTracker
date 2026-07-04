@@ -39,11 +39,28 @@ function demoRawFrames(sample: {
   ].join("\n");
 }
 
+// A compressed "day with the car" cycle: 60 s of driving (30 EV + 30 gas),
+// then 30 s parked on a Level-2 charger. The charge window is what feeds the
+// Charge tab's live time-to-full hero in demo mode — without it the most
+// prominent Charge component could never be previewed. Mirrors
+// DemoPollingLoop.kt's native cycle; keep the two in step.
+const DEMO_DRIVE_PHASE_S = 60;
+const DEMO_CYCLE_S = 90;
+const DEMO_CHARGER_KW = 7.2;
+// Exaggerated vs the real ~0.014%/s a 7.2 kW charger manages, so the SOC
+// visibly climbs within the 30 s demo charge window. The drive-phase drain is
+// matched so each cycle is SOC-neutral (0.06 * 60 == 0.12 * 30): the sawtooth
+// repeats forever instead of drifting into a cap and plateauing there.
+const DEMO_CHARGE_SOC_PER_S = 0.12;
+const DEMO_DRIVE_SOC_PER_S = 0.06;
+const DEMO_SOC_START = 77.8;
+
 export function runBrowserDemoStream(
   VD: VoltDashboard,
   state: DashboardState,
 ) {
   let t = 0;
+  let driveT = 0;
   VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
   // Begin from an empty live route so a re-started browser demo doesn't append onto the
   // previous run's track (stopDemo/stopAll clear it, but a bare start would not).
@@ -52,19 +69,38 @@ export function runBrowserDemoStream(
   window.clearInterval(window.__voltDemoTimer ?? undefined);
   const emitSample = () => {
     t += 1;
-    const gas = Math.floor(t / 30) % 2 === 1;
+    const phase = t % DEMO_CYCLE_S;
+    const charging = phase >= DEMO_DRIVE_PHASE_S;
+    // The route clock only advances while driving, so the map marker parks
+    // during the charge window instead of orbiting an unplugged charger.
+    if (!charging) driveT += 1;
+    const gas = !charging && Math.floor(driveT / 30) % 2 === 1;
     state.mode = gas ? "gas" : "ev";
-    const powerKw = gas ? 30 + Math.sin(t / 3) * 9 : 9 + Math.sin(t / 2.2) * 22;
-    const routeDrift = Math.sin(t / 40);
+    const powerKw = charging ? 0
+      : gas ? 30 + Math.sin(driveT / 3) * 9
+      : 9 + Math.sin(driveT / 2.2) * 22;
+    // 0 while driving (not omitted: samples merge into state.telemetry, so a
+    // stale charger reading from the last charge window would otherwise pin
+    // the live charge card open forever).
+    const chargerPowerKw = charging
+      ? Number((DEMO_CHARGER_KW + 0.3 * Math.sin(t / 5)).toFixed(1))
+      : 0;
+    const routeDrift = Math.sin(driveT / 40);
     const lat = 34.11872 + routeDrift * 0.004;
     const lng = -118.30064 - Math.abs(routeDrift) * 0.012;
-    const speedKph = Math.round(54 + 23 * Math.sin(t / 3.4));
-    const rpm = gas ? Math.round(1260 + 420 * Math.sin(t / 2.1)) : 0;
+    const speedKph = charging ? 0 : Math.round(54 + 23 * Math.sin(driveT / 3.4));
+    const rpm = gas ? Math.round(1260 + 420 * Math.sin(driveT / 2.1)) : 0;
     const coolantC = Math.round(82 + 4 * Math.sin(t / 8));
-    const loadPct = Math.round(34 + 18 * Math.sin(t / 4.4));
-    const throttlePct = Math.round(18 + 14 * Math.sin(t / 2.7));
-    const voltage = 13.8;
-    const soc = Math.max(13.4, 77.8 - t * 0.01);
+    const loadPct = charging ? 4 : Math.round(34 + 18 * Math.sin(driveT / 4.4));
+    const throttlePct = charging ? 0 : Math.round(18 + 14 * Math.sin(driveT / 2.7));
+    const voltage = charging ? 14.2 : 13.8;
+    // Continuous periodic sawtooth (74.2..77.8), derived from the cycle phase
+    // rather than accumulated — always below the 100% default target, so the
+    // charge hero stays visible for the whole window. Mirrors demoSoc() in
+    // DemoPollingLoop.kt.
+    const soc = DEMO_SOC_START -
+      DEMO_DRIVE_SOC_PER_S * Math.min(phase, DEMO_DRIVE_PHASE_S) +
+      DEMO_CHARGE_SOC_PER_S * Math.max(0, phase - DEMO_DRIVE_PHASE_S);
     // HV cell-group balance for the Battery-tab cell card: a healthy pack with
     // a gentle 10–20 mV wobble around ~3.9 V. Cell 47 rides the low side to
     // match the "Cell 47 trending low" demo insight.
@@ -78,7 +114,10 @@ export function runBrowserDemoStream(
       sampleCount: t,
       sessionMs: t * 1000,
       supportedPids: "browser demo",
-      vehicleState: powerKw < -0.5 ? "regen" : (gas ? "driving (gas)" : "driving"),
+      vehicleState: charging ? "charging"
+        : powerKw < -0.5 ? "regen"
+        : gas ? "driving (gas)"
+        : "driving",
       speedKph,
       rpm,
       coolantC,
@@ -97,6 +136,7 @@ export function runBrowserDemoStream(
       maxCellNumber: 12,
       socVariationPct: 0.4,
       powerKw: powerKw,
+      chargerPowerKw,
       latitude: lat,
       longitude: lng,
       updatedAt: Date.now(),

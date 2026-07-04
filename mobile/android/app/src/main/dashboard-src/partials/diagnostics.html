@@ -61,6 +61,130 @@
     </button>
   </article>
 
+  <!-- X3: the car-code (DTC) scanner lives here with the rest of vehicle
+       health — it was buried mid-Insights between lifetime stats and charts,
+       while this tab is where a "check engine" user actually looks. The
+       markup and every element id moved verbatim; renderers in
+       storage-status.ts address ids, not views. -->
+  <article class="panel diagnostic-report-card">
+    <header class="diagnostic-report-head">
+      <div>
+        <span class="kicker">Check engine</span>
+        <h3 id="dtcTitle">No car-code scan yet</h3>
+      </div>
+      <span id="dtcReportBadge" class="session-badge">ready</span>
+    </header>
+    <div class="dtc-action-row">
+      <button type="button" data-action="scan" class="scan">
+        Scan car codes
+      </button>
+      <button type="button" data-action="quickScan" class="scan-quick">
+        Quick scan
+      </button>
+    </div>
+    <!-- Destructive + engineering actions demoted to text level: clearing
+         codes is confirm-gated and rare, and debug logs live with the
+         session-review tooling this link opens (not another boxed button
+         competing with Scan). -->
+    <div class="dtc-secondary-row">
+      <button
+        type="button"
+        data-action="openClearDtc"
+        class="link-btn danger-link"
+        id="dtcClearOpenBtn"
+      >
+        Clear codes…
+      </button>
+      <button type="button" class="link-btn" data-action="openDebugLogs">
+        Debug logs
+      </button>
+    </div>
+
+    <!-- In-app DTC lookup over the shipped Volt code database (no need to leave
+           the app for a web search). Results rendered by actions.ts. -->
+    <div class="dtc-lookup">
+      <label class="dtc-lookup-field">
+        <span class="kicker">Look up a code</span>
+        <input
+          id="dtcSearchInput"
+          type="search"
+          inputmode="text"
+          autocomplete="off"
+          autocapitalize="characters"
+          spellcheck="false"
+          placeholder="e.g. P0420"
+          aria-label="Search diagnostic trouble codes"
+        />
+      </label>
+      <div
+        id="dtcSearchResult"
+        class="dtc-lookup-result"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></div>
+    </div>
+
+    <div
+      id="dtcClearWarning"
+      class="dtc-clear-warning"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="dtcClearTitle"
+      aria-describedby="dtcClearDesc"
+      tabindex="-1"
+      hidden
+    >
+      <strong id="dtcClearTitle">Clear vehicle trouble codes?</strong>
+      <p id="dtcClearDesc">
+        This sends OBD-II Mode 04 to the vehicle, erasing the check-engine light
+        and stored DTC memory. Emissions readiness monitors will reset and may
+        take 100+ miles of mixed driving before re-setting — some inspection
+        stations will fail the car until then.
+      </p>
+      <p class="dtc-clear-prereq">
+        Run with the ignition on and engine off, parked, transmission in Park,
+        all accessories off.
+      </p>
+      <!-- Permanent-code caveat (M10). Hidden unless the latest scan stored
+             one or more permanent (Mode 0A) codes; actions.ts fills the count
+             and unhides it when openClearDtcWarning runs. -->
+      <p id="dtcClearPermanentNote" class="dtc-clear-permanent-note" hidden></p>
+      <label class="dtc-clear-ack">
+        <input type="checkbox" id="dtcClearAckBox" />
+        <span>I understand readiness monitors will reset.</span>
+      </label>
+      <div class="dtc-clear-actions">
+        <button type="button" data-action="cancelClearDtc">Cancel</button>
+        <button
+          type="button"
+          data-action="confirmClearDtc"
+          class="danger"
+          id="dtcClearConfirmBtn"
+          disabled
+        >
+          Clear codes now
+        </button>
+      </div>
+    </div>
+    <div class="dtc-status-grid">
+      <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
+      <div>
+        <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
+      </div>
+      <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
+      <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
+      <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>
+      <div><span>Last seen</span><strong id="dtcLastSeen">--</strong></div>
+    </div>
+    <div id="dtcList" class="dtc-list">
+      <p class="status-copy">
+        Current, pending, permanent, and freeze-frame results will appear here
+        after a scan.
+      </p>
+    </div>
+  </article>
+
   <details class="sandbox-tools" aria-label="Demo / Testing controls">
     <summary aria-label="Toggle the Demo / Testing controls">
       Demo / Testing
@@ -288,7 +412,7 @@
   </article>
 
   <!-- Heavy debug cards collapsed by default so the tab opens compact. -->
-  <details class="diag-advanced">
+  <details class="diag-advanced" id="sessionReviewDetails">
     <summary>
       <span class="diag-advanced-label">
         <span class="kicker">Session review &amp; debug logs</span>

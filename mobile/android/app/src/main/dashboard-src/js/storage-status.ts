@@ -243,7 +243,7 @@ import { prefs, units } from "./prefs";
     const rawTelemetry = storage.rawTelemetryCount == null ? NaN : Number(storage.rawTelemetryCount);
     VD.setText("dbRawTelemetryCount", Number.isFinite(rawTelemetry) ? rawTelemetry : samples);
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
-    VD.setText("dbState", VD.dbRowCount(storage) ? `${VD.dbRowCount(storage)} rows` : "ready");
+    VD.setText("dbState", VD.formatRowCount(VD.dbRowCount(storage)));
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
     VD.setText("dbSummaryTitle", sessions ? (last ? `${samples} samples · ${VD.formatWhen(last)}` : `${samples} samples`) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
@@ -306,6 +306,20 @@ import { prefs, units } from "./prefs";
     VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
     VD.setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
     VD.setText("dtcTotalCount", totalCodes);
+    // X3: mirror the count onto the Diag nav badge so saved codes are visible
+    // from every tab (hidden at zero).
+    const navBadge = document.getElementById("navDiagBadge");
+    if (navBadge) {
+      navBadge.textContent = String(totalCodes);
+      navBadge.hidden = !totalCodes;
+      // Mirror hidden into aria-hidden so the count is exposed to assistive
+      // tech exactly when it is visible.
+      navBadge.setAttribute("aria-hidden", totalCodes ? "false" : "true");
+      // Severity: a current or permanent fault escalates the badge from the
+      // amber "look at this" tone to the red fault tone.
+      const urgent = Number(statusCounts.current || 0) + Number(statusCounts.permanent || 0) > 0;
+      navBadge.dataset.severity = urgent ? "fault" : "info";
+    }
     VD.setText("dtcStoredCount", storedOrCurrent);
     VD.setText("dtcPendingCount", Number(statusCounts.pending || 0));
     VD.setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
@@ -483,7 +497,7 @@ import { prefs, units } from "./prefs";
 
     const searchLink = document.createElement("a");
     searchLink.className = "dtc-search";
-    searchLink.textContent = info && info.known ? "More on Google" : "Look up on Google";
+    searchLink.textContent = "Search the web";
     searchLink.href = "#";
     searchLink.dataset.dtcSearch = code.dtc || "";
     searchLink.setAttribute("role", "button");
@@ -985,8 +999,14 @@ import { prefs, units } from "./prefs";
         ring.dataset.level = soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
       }
       if (ringValue) ringValue.textContent = `${Math.round(soc)}%`;
-      VD.setText("realPackTitle", "Latest battery reading captured");
-      VD.setText("realPackCopy", `${Number.isFinite(power) ? power.toFixed(1) + " kW · " : ""}${latest.vehicleState || "vehicle state unknown"} · accuracy improves as more drives are logged.`);
+      // Human verdict, not a log line: lead with the pack level, add the
+      // vehicle state only when the car actually reported one, and never
+      // print pipeline caveats in the tab's first card.
+      const socRound = Math.round(soc);
+      VD.setText("realPackTitle", `Pack at ${socRound}%${socRound <= 15 ? " — low" : socRound <= 30 ? " — getting low" : ""}`);
+      const stateText = latest.vehicleState && latest.vehicleState !== "unknown" ? String(latest.vehicleState) : "";
+      const powerText = Number.isFinite(power) ? (power < -0.05 ? `Regenerating ${Math.abs(power).toFixed(1)} kW` : power > 0.05 ? `Drawing ${power.toFixed(1)} kW` : "") : "";
+      VD.setText("realPackCopy", [stateText, powerText].filter(Boolean).join(" · ") || "From the latest logged reading.");
     } else {
       if (ring) {
         ring.style.setProperty("--v", "0");
@@ -1533,7 +1553,7 @@ import { prefs, units } from "./prefs";
 
   // Monthly bar chart shared by the charging trend (Battery tab) and the driving
   // trend (Insights tab, via VD.buildMonthlyTrendSvg) so the two can't drift.
-  function buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string): SVGElement {
+  function buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string, host?: Element | null): SVGElement {
     const ns = "http://www.w3.org/2000/svg";
     const w = 320;
     const h = 132;
@@ -1546,9 +1566,12 @@ import { prefs, units } from "./prefs";
     const maxV = Math.max(...values, 0) || 1;
     // Theme-aware colors: CSS variables don't cascade into SVG fill/stroke, so
     // resolve the tokens once (mirrors the insights scatter approach).
-    const tokens = getComputedStyle(document.documentElement);
+    // Resolve on the chart's host so --view-accent cascades in: the same
+    // builder renders green bars on Charge and purple on Insights instead of
+    // painting Drive orange onto every tab.
+    const tokens = getComputedStyle(host || document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const barColor = token("--volt", "#ff7a45");
+    const barColor = token("--view-accent", token("--volt", "#ff7a45"));
     const axisColor = token("--muted", "#aaaab4");
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
     const make = (tag: string, attrs: Record<string, string | number>) =>
@@ -1630,7 +1653,7 @@ import { prefs, units } from "./prefs";
       const aria = `Monthly charging ${showCost ? "cost" : "energy"} trend, latest ${
         showCost ? "$" + latest.toFixed(2) : latest.toFixed(1) + " kWh"
       }`;
-      chart.replaceChildren(buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria));
+      chart.replaceChildren(buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart));
     }
   }
 
