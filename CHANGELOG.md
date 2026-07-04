@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.27.0 (2026-07-04)
+
+### ✳️ New
+
+- Dashboard UX polish pass + code-audit findings docs
+  ([#287](https://github.com/jtn0123/VoltTracker/pull/287),
+  [`41905be`](https://github.com/jtn0123/VoltTracker/commit/41905beefe909a94954f73c324927258527af7bf))
+
+
 ## v0.26.0 (2026-07-03)
 
 ### ✳️ New
