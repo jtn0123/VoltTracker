@@ -40,6 +40,31 @@ describe('battery SOH trend', () => {
     expect(document.querySelector('#sohTrendChart .soh-line')).not.toBeNull();
   });
 
+  it('drops capacity-only rows (null soh) and shows -- for a missing capacity', async () => {
+    const t0 = Date.now() - 20 * DAY;
+    // Native emits JSON null for soh_pct on capacity-only rows and for
+    // capacity_ah on soh-only rows. Number(null) === 0 would otherwise plant a
+    // spurious 0% SOH point and a "0.0 Ah" capacity readout for a healthy pack.
+    const history = [
+      { capturedAtMs: t0, sohPct: 94, capacityAh: 43.5 },
+      { capturedAtMs: t0 + 5 * DAY, sohPct: null, capacityAh: 43.0 }, // capacity-only -> dropped
+      { capturedAtMs: t0 + 10 * DAY, sohPct: 93, capacityAh: null }, // latest soh, no capacity
+    ];
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getBatterySohHistory: () => JSON.stringify(history) }),
+    });
+    const VD = window.VoltDashboard;
+
+    VD.renderRealV2Ui();
+
+    expect(document.getElementById('sohTrendChart').hidden).toBe(false);
+    // The null-soh row is excluded: two real readings, latest 93.0% (no fake 0.0%).
+    expect(document.getElementById('sohTrendCount').textContent).toBe('2');
+    expect(document.getElementById('sohTrendLatest').textContent).toBe('93.0%');
+    // The latest reading has no capacity, so the readout falls back to -- not "0.0 Ah".
+    expect(document.getElementById('sohTrendCapacity').textContent).toBe('--');
+  });
+
   it('requests SOH history asynchronously when the native bridge supports it', async () => {
     const t0 = Date.now() - 10 * DAY;
     const history = [

@@ -158,6 +158,35 @@ class WidgetUpdaterTest {
         assertFalse(after.connected)
     }
 
+    @Test
+    fun statusUpdateNeverAdvancesFreshnessPastLastTelemetrySample() {
+        // Telemetry establishes a real last-sample time (the freshness/stale reference).
+        updater.onTelemetry(JSONObject().put("soc", 60.0).put("vehicleState", "charging").put("connected", true))
+        val sampleAt = store.read().lastSampleAtMs
+        sleepAtLeast1Ms()
+
+        // Link drops mid-charge: the status update flips the connection flag, but freshness must stay
+        // pinned to the last real telemetry sample. Bumping it here would reset a frozen SOC to "just
+        // now" and stop it ever aging out to stale (Rank 8).
+        updater.onStatus("idle")
+        val afterDisconnect = store.read()
+        assertFalse("an idle status marks the link down", afterDisconnect.connected)
+        assertEquals(
+            "a status transition must not advance the freshness timestamp",
+            sampleAt,
+            afterDisconnect.lastSampleAtMs,
+        )
+
+        // A subsequent stream of "connected" pings must likewise leave freshness untouched.
+        sleepAtLeast1Ms()
+        updater.onStatus("connected")
+        assertEquals(
+            "repeated status pings must not keep resetting freshness",
+            sampleAt,
+            store.read().lastSampleAtMs,
+        )
+    }
+
     private fun sleepAtLeast1Ms() {
         val start = System.currentTimeMillis()
         do {

@@ -471,10 +471,11 @@ import { units } from "./prefs";
     const metricUnits = units.system() === "metric";
     const dist = units.distanceMiles(s.distMi);
     const speedVal = Math.round(metricUnits ? s.mph / 0.621371 : s.mph);
+    const elevUnit = metricUnits ? "m" : "ft";
+    // Value is the bare number; the unit lives in the label (like Speed) so a
+    // large elevation like "1220 ft" isn't clipped by the nowrap readout cell.
     const elevText = scrubHasElev
-      ? metricUnits
-        ? `${Math.round(s.elevFt * 0.3048)} m`
-        : `${Math.round(s.elevFt)} ft`
+      ? String(metricUnits ? Math.round(s.elevFt * 0.3048) : Math.round(s.elevFt))
       : "--";
     const effDisplay =
       scrubHasEff && effValue !== null && Number.isFinite(effValue)
@@ -483,12 +484,14 @@ import { units } from "./prefs";
           : effValue.toFixed(1)
         : effText;
     node.replaceChildren(
-      scrubChip("Distance", `${dist.value} ${dist.unit}`),
+      // Unit lives in the label (like Speed/Efficiency): baking it into the value
+      // ("128.4 mi") clipped to "128.…" in the nowrap readout cell, losing the unit.
+      scrubChip(`Distance ${dist.unit}`, String(dist.value)),
       // Unit lives in the label (like the efficiency chip below): "44 mph" was
       // one character too wide for the six-across readout cell and clipped to
       // "44 …" — the bare number always fits.
       scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED }),
-      scrubChip("Elevation", elevText, {
+      scrubChip(scrubHasElev ? `Elevation ${elevUnit}` : "Elevation", elevText, {
         color: scrubHasElev ? SCRUB_ELEV : null
       }),
       scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
@@ -599,6 +602,9 @@ import { units } from "./prefs";
     scrubCursors.forEach((c) => {
       c.style.left = scrubFrac * 100 + "%";
     });
+    // Keep the slider's assistive-tech position in sync with the cursor.
+    const chart = el("scrubChart");
+    if (chart) chart.setAttribute("aria-valuenow", String(Math.round(scrubFrac * 100)));
     fillScrubReadout(s);
     if (scrubMap && scrubMarker) {
       scrubMarker.setLatLng([s.lat, s.lng]);
@@ -640,6 +646,32 @@ import { units } from "./prefs";
     elc.addEventListener("pointermove", (ev) => {
       if (ev.buttons) move(ev);
     });
+    // Keyboard + screen-reader access: expose the main chart as a slider so
+    // arrow keys step the scrub fraction (pointer users drag; both funnel
+    // through setScrubCursor). Stack tracks stay plain draggable strips.
+    if (elc.id === "scrubChart") {
+      elc.setAttribute("role", "slider");
+      elc.setAttribute("tabindex", "0");
+      elc.setAttribute("aria-label", "Scrub through this drive");
+      elc.setAttribute("aria-valuemin", "0");
+      elc.setAttribute("aria-valuemax", "100");
+      elc.setAttribute("aria-valuenow", String(Math.round(scrubFrac * 100)));
+      elc.addEventListener("keydown", (ev: KeyboardEvent) => {
+        // Step as an integer percent of the track, divided by 100. A `? 0.1 :`
+        // ternary would minify to `?.1:` — a false hit on the Android-9 "no
+        // optional chaining" bundle guard (script-order.test.js). Integer
+        // branches (`?10:2`) sidestep it and esbuild can't fold them into `?.`.
+        const step = (ev.shiftKey ? 10 : 2) / 100;
+        let next = scrubFrac;
+        if (ev.key === "ArrowLeft" || ev.key === "ArrowDown") next = scrubFrac - step;
+        else if (ev.key === "ArrowRight" || ev.key === "ArrowUp") next = scrubFrac + step;
+        else if (ev.key === "Home") next = 0;
+        else if (ev.key === "End") next = 1;
+        else return;
+        ev.preventDefault();
+        setScrubCursor(next);
+      });
+    }
   }
 
   // Re-attach drag handlers to every expanded stack track. renderScrubCharts()
@@ -653,6 +685,9 @@ import { units } from "./prefs";
   }
 
   function hideScrubber() {
+    // Stop any in-progress playback first, or its rAF loop keeps running against
+    // cleared scrubData and the Play button stays stuck on "■ Stop".
+    if (typeof stopScrubPlay === "function") stopScrubPlay();
     const node = el("scrubber");
     if (node) node.hidden = true;
     document.body.classList.remove("map-scrubber-active");

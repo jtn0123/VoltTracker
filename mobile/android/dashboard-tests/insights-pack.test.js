@@ -306,3 +306,66 @@ describe('efficiency-vs-speed chart view switcher + grade-normalization', () => 
     expect(dotCount()).toBe(6);
   });
 });
+
+describe('efficiency-vs-speed scatter — pool hygiene (null eff + drive count)', () => {
+  beforeEach(async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    try {
+      window.localStorage.removeItem('vt.pref.effChartView');
+      window.localStorage.removeItem('vt.pref.effHideOutliers');
+    } catch (_err) {
+      /* localStorage always present in jsdom */
+    }
+    await loadDashboard({ extras: ['insights-panel.js'] });
+  });
+
+  // Pre-enriched (_effDone) highway points so a test can seed per-point `eff`,
+  // including the null that enrichRouteEff assigns to all-regen/idle windows.
+  // Flat altM => grade 0, so effFlat == the raw eff for the plotted samples.
+  function highwayRoute(effs) {
+    const base = 1_700_000_000_000;
+    return {
+      _effDone: true,
+      points: effs.map((eff, i) => ({
+        lat: 34.05 + i * 0.001,
+        lng: -118.25,
+        atMs: base + i * 5000,
+        speedMps: 80 / 2.2369363, // ~80 mph, highway bucket
+        altM: 100,
+        eff,
+      })),
+    };
+  }
+
+  it('drops null-eff samples instead of plotting them as a false 0.8 mi/kWh dot', () => {
+    window.VoltDashboard.prefs.set('effChartView', 'scatter');
+    // Six real highway samples plus two all-regen/idle windows (eff === null).
+    // Pre-fix Number(null) === 0 slipped through and whmi = 1000/0 = Infinity
+    // clamped to a false 0.8 mi/kWh dot at ~80 mph; post-fix only the six plot.
+    window.VoltDashboard.setStorage({
+      recentRoutes: [highwayRoute([3.0, 3.0, null, 3.0, 3.0, null, 3.0, 3.0])],
+    });
+    window.VoltDashboard.renderInsightScatter();
+    expect(document.querySelectorAll('#effScatter svg circle').length).toBe(6);
+  });
+
+  it('counts "Drives" as routes that contributed a plotted sample, not every recentRoute', () => {
+    window.VoltDashboard.prefs.set('effChartView', 'scatter');
+    const contributing = highwayRoute([3.0, 3.0, 3.0, 3.0, 3.0, 3.0]); // 6 plotted samples
+    const allRegen = highwayRoute([null, null, null, null]); // 0 (null eff)
+    const crawling = highwayRoute([3.0, 3.0, 3.0, 3.0]); // 0 (sub-10 mph)
+    crawling.points.forEach((p) => {
+      p.speedMps = 2; // ~4.5 mph, below the 10 mph floor
+    });
+    window.VoltDashboard.setStorage({ recentRoutes: [contributing, allRegen, crawling] });
+    window.VoltDashboard.renderInsightScatter();
+
+    // Three recentRoutes, but only one drew samples into the pool the averages use.
+    const drivesStat = document.querySelector('#effScatterStats div');
+    expect(drivesStat.querySelector('.kicker').textContent).toBe('Drives');
+    expect(drivesStat.querySelector('strong').textContent).toBe('1');
+  });
+});

@@ -65,7 +65,7 @@ function reportBridgeFailure(VD: VoltDashboard, method: string, err: unknown) {
   VD.reportClientError("bridge.call_failed", `bridge.${method} failed${detail ? `: ${detail}` : ""}`);
 }
 
-function deliverExport(VD: VoltDashboard, payload: unknown, filename: string, exportedDetail: string, copiedDetail: string) {
+function deliverExport(VD: VoltDashboard, payload: unknown, filename: string, exportedDetail: string, copiedDetail: string, failureDetail: string) {
   const text = jsonText(payload);
   if (downloadTextFile(text, filename)) {
     VD.setStatus({ state: "ready", detail: exportedDetail });
@@ -73,7 +73,7 @@ function deliverExport(VD: VoltDashboard, payload: unknown, filename: string, ex
   }
   writeClipboard(text)
     .then(() => VD.setStatus({ state: "ready", detail: copiedDetail }))
-    .catch(() => VD.setStatus({ state: "blocked", detail: "Could not export detailed signal logs." }));
+    .catch(() => VD.setStatus({ state: "blocked", detail: failureDetail }));
 }
 
 export function createSignalActions({ VD, bridge }: SignalActionContext) {
@@ -100,7 +100,8 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
       parsed,
       `volttracker-detailed-signal-${String(id || "log")}.json`,
       "Detailed signal log exported.",
-      "Detailed signal log copied."
+      "Detailed signal log copied.",
+      "Could not export the detailed signal log."
     );
   }
 
@@ -127,7 +128,8 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
       parsed,
       "volttracker-detailed-signal-logs.json",
       "Detailed signal logs exported.",
-      "Detailed signal logs copied."
+      "Detailed signal logs copied.",
+      "Could not export detailed signal logs."
     );
   }
 

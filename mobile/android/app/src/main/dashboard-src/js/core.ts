@@ -395,7 +395,15 @@ import { initialTelemetryState } from "./telemetry-state";
     VD.setText("restoreProgressKicker", operation);
     const meter = el("restoreProgressMeter");
     if (meter) meter.setAttribute("aria-label", `${operation} progress`);
-    VD.setText("restoreProgressTitle", progress.title || (busy ? "Restoring backup" : "Restore status"));
+    VD.setText(
+      "restoreProgressTitle",
+      progress.title ||
+        (busy
+          ? operation === "Backup"
+            ? "Backing up data"
+            : "Restoring backup"
+          : "Restore status")
+    );
     VD.setText(
       "restoreProgressPhase",
       progress.phase || (busy ? "Working" : tone === "ok" ? "Complete" : "Review needed")
@@ -1048,7 +1056,7 @@ import { initialTelemetryState } from "./telemetry-state";
       n >= 10000 ? `${Math.round(n / 1000)}k`
       : n >= 1000 ? `${(n / 1000).toFixed(1)}k`
       : String(n);
-    return `${label} rows`;
+    return `${label} ${n === 1 ? "row" : "rows"}`;
   }
 
   function setView(view: string) {

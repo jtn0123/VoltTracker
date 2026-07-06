@@ -507,10 +507,16 @@ type SignalActions = {
       showBlockedAdapterFeedback("Connect once or pick a paired adapter before using Last.");
       return;
     }
-    showConnectionProgress(last, false);
-    if (bridge && typeof bridge.connectLast === "function") {
-      withBusy(button, () => callBridgeAction("connectLast", [], "Could not reconnect to the last adapter."));
+    // Check the method BEFORE painting "Connecting…": on a bridge that lacks
+    // connectLast (older APK / browser preview), painting first would leave the
+    // UI stuck on "Connecting…" with nothing to reset it. connectSelected checks
+    // availability up front for the same reason.
+    if (!bridge || typeof bridge.connectLast !== "function") {
+      VD.setStatus({ state: "idle", detail: "Reconnecting to the last adapter is only available inside the Android app." });
+      return;
     }
+    showConnectionProgress(last, false);
+    withBusy(button, () => callBridgeAction("connectLast", [], "Could not reconnect to the last adapter."));
   }
 
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
@@ -700,6 +706,15 @@ type SignalActions = {
     });
   }
 
+  // Snapshot of the real cached DTC storage taken before a Preview overwrites it,
+  // so Clear can restore the real codes/counts/badge instead of blanking them
+  // until the next native push. Null when no preview is currently shadowing real data.
+  let dtcPreviewSnapshot: {
+    latestDiagnosticCodes: VoltStorageSummary["latestDiagnosticCodes"];
+    diagnosticCodeCount: VoltStorageSummary["diagnosticCodeCount"];
+    diagnosticCodeStatusCounts: VoltStorageSummary["diagnosticCodeStatusCounts"];
+  } | null = null;
+
   function previewDtcCodes(): Promise<void> | undefined {
     if (!Array.isArray(VD.dtcSampleCodes) && typeof VD.ensureDtcData === "function") {
       VD.setStatus({ state: "ready", detail: "Loading DTC examples…" });
@@ -709,6 +724,16 @@ type SignalActions = {
     }
     const samples = Array.isArray(VD.dtcSampleCodes) ? VD.dtcSampleCodes : [];
     const storage = state.storage || (state.storage = {});
+    // Snapshot the real DTC cache once so Clear can put it back — Preview must not
+    // destroy real cached codes on a real device. Skip re-snapshotting while a
+    // preview is already active, or it would capture the sample data instead.
+    if (!dtcPreviewSnapshot) {
+      dtcPreviewSnapshot = {
+        latestDiagnosticCodes: storage.latestDiagnosticCodes,
+        diagnosticCodeCount: storage.diagnosticCodeCount,
+        diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
+      };
+    }
     storage.latestDiagnosticCodes = samples.map((s) => ({ ...s }));
     storage.diagnosticCodeCount = samples.length;
     storage.diagnosticCodeStatusCounts = samples.reduce((acc: Record<string, number>, s) => {
@@ -723,9 +748,19 @@ type SignalActions = {
 
   function clearPreviewDtcCodes() {
     const storage = state.storage || (state.storage = {});
-    storage.latestDiagnosticCodes = [];
-    storage.diagnosticCodeCount = 0;
-    storage.diagnosticCodeStatusCounts = {};
+    if (dtcPreviewSnapshot) {
+      // Restore the real cached DTCs that Preview shadowed, rather than blanking
+      // them until the next native push. A snapshot of an empty cache restores to
+      // the same empty shape.
+      storage.latestDiagnosticCodes = dtcPreviewSnapshot.latestDiagnosticCodes ?? [];
+      storage.diagnosticCodeCount = dtcPreviewSnapshot.diagnosticCodeCount ?? 0;
+      storage.diagnosticCodeStatusCounts = dtcPreviewSnapshot.diagnosticCodeStatusCounts ?? {};
+      dtcPreviewSnapshot = null;
+    } else {
+      storage.latestDiagnosticCodes = [];
+      storage.diagnosticCodeCount = 0;
+      storage.diagnosticCodeStatusCounts = {};
+    }
     if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
     VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
   }
@@ -1280,24 +1315,46 @@ type SignalActions = {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
         const scenario = button.dataset.scenario;
+        // Tapping a scenario is an explicit preview action; keep demo isolation
+        // active so native storage/app-state pushes cannot overwrite the sample.
+        // Flip demoActive on ONLY AFTER loadDemoScenario has captured the preview
+        // snapshot (captureDemoPreview populates demoPreviewStorage). Doing it
+        // before the async map-module load resolved left a window where
+        // demoActive was true but demoPreviewStorage was still null, so the demo
+        // isolation guard (state.demoActive && state.demoPreviewStorage) let a
+        // native setStorage push write real data over the demo view.
+        const activateDemo = () => {
+          if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
+        };
+        // Only mark the tapped scenario button selected once the demo has actually
+        // activated — otherwise a rejected ensureMapModule() (swallowed below) would
+        // leave the picker showing a scenario as active that never loaded.
+        const markScenarioActive = () => {
+          const picker = el("demoScenarioPicker");
+          if (picker) {
+            picker.querySelectorAll("[data-scenario]").forEach((b) => {
+              b.classList.toggle("is-active", b === button);
+              b.setAttribute("aria-pressed", String(b === button));
+            });
+          }
+        };
         if (typeof VD.loadDemoScenario === "function") {
           VD.loadDemoScenario(scenario);
+          activateDemo();
+          markScenarioActive();
         } else if (typeof VD.ensureMapModule === "function") {
           void VD.ensureMapModule()
             .then(() => {
               if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+              activateDemo();
+              markScenarioActive();
             })
-            .catch(() => {});
-        }
-        // Tapping a scenario is an explicit preview action; keep demo isolation
-        // active so native storage/app-state pushes cannot overwrite the sample.
-        if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
-        const picker = el("demoScenarioPicker");
-        if (picker) {
-          picker.querySelectorAll("[data-scenario]").forEach((b) => {
-            b.classList.toggle("is-active", b === button);
-            b.setAttribute("aria-pressed", String(b === button));
-          });
+            .catch(() => {
+              VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
+            });
+        } else {
+          activateDemo();
+          markScenarioActive();
         }
       }, opts);
     });
@@ -1406,7 +1463,12 @@ type SignalActions = {
       const target = event.target as Element | null;
       const signalExport = target && target.closest("[data-signal-export]");
       if (signalExport) {
-        void exportSignalLog((signalExport as HTMLElement).dataset.signalExport);
+        // Guard against a double-tap firing two identical .json downloads, the
+        // same way the bulk export button does. withBusy keys the in-flight flag
+        // on the row button so a second tap within the cooldown is swallowed.
+        withBusy(signalExport as BusyButton, () => {
+          void exportSignalLog((signalExport as HTMLElement).dataset.signalExport);
+        });
         return;
       }
       const signalDelete = target && target.closest("[data-signal-delete]");

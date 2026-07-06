@@ -13,7 +13,7 @@
   left: 50%;
   transform: translateX(-50%);
   bottom: calc(var(--nav-safe) + 18px);
-  z-index: 900; /* above the bottom nav (40), below modal overlays (999+) */
+  z-index: 210; /* above bottom nav (40)/popover (60), below app-dialog (220) + restore (230) */
   max-width: min(92vw, 480px);
   padding: 10px 16px;
   border: 1px solid var(--line-strong);
@@ -275,7 +275,7 @@
   padding: 12px 14px;
 }
 
-.connection-tools__head h3 {
+.connection-tools__head h2 {
   margin: 2px 0 0;
   font-size: 15px;
 }

@@ -528,6 +528,17 @@ class SessionRecorderTest {
         assertEquals(SessionSummary.OUTCOME_SUCCESS, recent[0].outcome)
     }
 
+    @Test
+    fun outcomeForTreatsCodesClearedAsSuccess() {
+        // A DTC-clear session broadcasts "codes-cleared" with no telemetry samples; a successful
+        // clear must record as SUCCESS, not fall through to ABORTED.
+        assertEquals(SessionSummary.OUTCOME_SUCCESS, SessionRecorder.outcomeFor("codes-cleared", 0))
+        // The neighbouring success/failure states are unchanged.
+        assertEquals(SessionSummary.OUTCOME_SUCCESS, SessionRecorder.outcomeFor("scan-complete", 0))
+        assertEquals(SessionSummary.OUTCOME_FAILED, SessionRecorder.outcomeFor("error", 0))
+        assertEquals(SessionSummary.OUTCOME_ABORTED, SessionRecorder.outcomeFor("idle", 0))
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     private fun newRecorderWithSummary(

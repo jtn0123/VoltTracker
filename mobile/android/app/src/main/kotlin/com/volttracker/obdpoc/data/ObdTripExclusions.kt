@@ -64,11 +64,17 @@ object ObdTripExclusions {
         routeKey: String?,
     ): Boolean {
         val canonical = canonicalRouteKey(routeKey) ?: return false
+        // The canonical key is "sessionId:start:end", and markTripNotTrip records the trip_hidden
+        // event under that same session_id, so scope the lookup by session_id (like hiddenRouteKeys
+        // does). The bare `kind = ? AND detail = ?` predicate matched no index — it full-scanned
+        // status_events on every route open — whereas session_id is the leading column of
+        // idx_events_session_time, so this narrows to the session's few rows.
+        val sessionId = canonical.substringBefore(":")
         db
             .rawQuery(
                 "SELECT 1 FROM ${VoltTrackerDb.TABLE_EVENTS} " +
-                    "WHERE kind = ? AND detail = ? LIMIT 1",
-                arrayOf(EVENT_KIND, canonical),
+                    "WHERE session_id = ? AND kind = ? AND detail = ? LIMIT 1",
+                arrayOf(sessionId, EVENT_KIND, canonical),
             ).use { cursor ->
                 return cursor.moveToFirst()
             }

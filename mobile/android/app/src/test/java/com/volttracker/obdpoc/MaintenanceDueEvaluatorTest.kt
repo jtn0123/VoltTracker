@@ -60,8 +60,8 @@ class MaintenanceDueEvaluatorTest {
         assertEquals(1, due.size)
         val result = due.first()
         assertEquals(MaintenanceDueEvaluator.Interval.KM, result.tripped)
-        assertEquals("7:km", result.signature)
-        assertEquals("1000 km", result.overdueByText)
+        assertEquals("7:overdue", result.signature)
+        assertEquals(1_000.0, result.overdueMagnitude, 0.5)
     }
 
     @Test
@@ -75,9 +75,9 @@ class MaintenanceDueEvaluatorTest {
         assertEquals(1, due.size)
         val result = due.first()
         assertEquals(MaintenanceDueEvaluator.Interval.MONTHS, result.tripped)
-        assertEquals("3:months", result.signature)
+        assertEquals("3:overdue", result.signature)
         // Due at created + 6 months; overdue by ~1 month ≈ 30 days.
-        assertTrue("overdue text should report days", result.overdueByText.endsWith(" days"))
+        assertTrue("overdue magnitude should be a positive day count", result.overdueMagnitude > 25.0)
     }
 
     @Test
@@ -89,7 +89,7 @@ class MaintenanceDueEvaluatorTest {
                 entries,
                 odometerKm = 23_000.0,
                 nowMs = now,
-                alreadyNotified = setOf("7:km"),
+                alreadyNotified = setOf("7:overdue"),
             )
 
         assertTrue("a crossing already in the notified set must not refire", due.isEmpty())
@@ -138,7 +138,59 @@ class MaintenanceDueEvaluatorTest {
 
         assertEquals(1, due.size)
         assertEquals(MaintenanceDueEvaluator.Interval.KM, due.first().tripped)
-        assertEquals("9:km", due.first().signature)
+        assertEquals("9:overdue", due.first().signature)
+    }
+
+    @Test
+    fun stableOverdueSignatureSurvivesTheDominantIntervalFlipping() {
+        // An entry overdue on BOTH intervals. First app-open: km dominates by magnitude. Later, the
+        // days-overdue grows past the km magnitude so months would dominate. The crossing signature
+        // must stay "<id>:overdue" across both so a still-overdue entry never re-nags when the
+        // dominant interval flips (the once-per-crossing dedup bug).
+        val kmDominates =
+            evaluator.evaluate(
+                listOf(
+                    entry(
+                        id = 5L,
+                        odometerKm = 10_000.0,
+                        createdAtMs = now - (2 * avgDaysPerMonth * msPerDay).toLong(),
+                        intervalKm = 12_000.0,
+                        intervalMonths = 1,
+                    ),
+                ),
+                odometerKm = 22_100.0,
+                nowMs = now,
+                alreadyNotified = emptySet(),
+            )
+        assertEquals(MaintenanceDueEvaluator.Interval.KM, kmDominates.first().tripped)
+        assertEquals("5:overdue", kmDominates.first().signature)
+
+        // Same entry, but now hugely overdue on months (days-overdue dwarfs the km magnitude).
+        val monthsDominates =
+            evaluator.evaluate(
+                listOf(
+                    entry(
+                        id = 5L,
+                        odometerKm = 10_000.0,
+                        createdAtMs = now - (120 * avgDaysPerMonth * msPerDay).toLong(),
+                        intervalKm = 12_000.0,
+                        intervalMonths = 1,
+                    ),
+                ),
+                odometerKm = 22_100.0,
+                nowMs = now,
+                alreadyNotified = emptySet(),
+            )
+        assertEquals(MaintenanceDueEvaluator.Interval.MONTHS, monthsDominates.first().tripped)
+        // Even though the dominant interval flipped km -> months, the signature is unchanged, so the
+        // already-notified set from the first crossing suppresses this one.
+        assertEquals("5:overdue", monthsDominates.first().signature)
+        assertTrue(
+            "the flipped-interval crossing must be suppressed by the prior signature",
+            evaluator
+                .evaluate(monthsDominates.map { it.entry }, 22_100.0, now, setOf("5:overdue"))
+                .isEmpty(),
+        )
     }
 
     @Test

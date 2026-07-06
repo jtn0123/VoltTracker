@@ -371,11 +371,11 @@ object ObdProtocol {
         return voltage.valueNumeric * current.valueNumeric / 1000.0
     }
 
-    // 0C, 1F and 42 are the 2-byte batched Mode-01 PIDs and A6 is the 4-byte odometer; undercounting a
-    // trailing multi-byte PID would let the completeness gate accept a frame truncated by a byte (the
-    // multi-byte decoders then null).
+    // 0C, 1F, 42 and 32 are the 2-byte batched Mode-01 PIDs and A6 is the 4-byte odometer; undercounting
+    // a trailing multi-byte PID would let the completeness gate accept a frame truncated by a byte (the
+    // multi-byte decoders then null). 32 is EVAP vapor pressure, decoded as a signed 2-byte word.
     private fun mode01PayloadBytes(pid: String): Int =
-        if (pid == "0C" || pid == "1F" || pid == "42") {
+        if (pid == "0C" || pid == "1F" || pid == "42" || pid == "32") {
             2
         } else if (pid == "A6") {
             4
@@ -531,6 +531,7 @@ object ObdProtocol {
             return null
         }
         var totalBytes = -1
+        var lengthHeaders = 0
         var sawSegment = false
         val data = StringBuilder()
         for (rawLine in response.split(Regex("[\\r\\n]+"))) {
@@ -544,19 +545,27 @@ object ObdProtocol {
                 data.append(segment.groupValues[2].replace(NON_HEX, ""))
                 continue
             }
-            // The ISO-TP total-length header (e.g. "014") precedes the segment lines. Detect it only
-            // before any segment is seen: a preface line such as "SEARCHING..." is not a 3-hex token
-            // so ELM_LENGTH_LINE skips it, while a stray 3-hex data line appearing AFTER segments
-            // started can't be misread as the length (sawSegment is already true).
-            if (!sawSegment && ELM_LENGTH_LINE.matches(line)) {
-                totalBytes = line.toInt(16)
+            // Count every ISO-TP total-length header (e.g. "014"). A preface line such as
+            // "SEARCHING..." is not a 3-hex token so ELM_LENGTH_LINE skips it, and segment DATA
+            // lines carry an "N:" prefix and matched above — so a bare 3-hex line here is a length
+            // header. A broadcast Mode 03 answered by two emissions ECUs concatenates two segmented
+            // messages, each with its own length header; we track the count so a second header (or
+            // its segments) can't be dropped by the first header's length.
+            if (ELM_LENGTH_LINE.matches(line)) {
+                if (lengthHeaders == 0) {
+                    totalBytes = line.toInt(16)
+                }
+                lengthHeaders += 1
             }
         }
         if (!sawSegment) {
             return null
         }
         var hex = data.toString()
-        if (totalBytes in 0..(hex.length / 2)) {
+        // Only length-truncate a single message. When multiple messages are concatenated (>1 length
+        // header) the first header's byte count would cut off the trailing modules' DTCs, so keep the
+        // full reassembled hex — the DTC parser walks each embedded reply marker and skips 0000 padding.
+        if (lengthHeaders == 1 && totalBytes in 0..(hex.length / 2)) {
             hex = hex.substring(0, totalBytes * 2)
         }
         return hex

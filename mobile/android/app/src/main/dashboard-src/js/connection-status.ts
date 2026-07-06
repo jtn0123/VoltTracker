@@ -262,7 +262,11 @@ function deriveRecoveryView(): RecoveryView {
     return {
       tone: "ok", state: "live", kicker: "Healthy",
       title: "Live data is flowing",
-      next: `${samples.toLocaleString()} samples logged this session. The consoles below show live signal detail.`,
+      // Keep the live sample count OUT of this string: #diagRecoveryNext is an
+      // aria-live="polite" region and view.next feeds the render signature, so
+      // embedding the ~1 Hz count re-announced the whole panel every second to a
+      // screen reader while driving. The running count is shown on the samples tile.
+      next: "The consoles below show live signal detail.",
       pill: "live", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
     };
   }
@@ -283,11 +287,18 @@ function deriveRecoveryView(): RecoveryView {
     };
   }
   if (remembered) {
+    // A remembered-but-idle adapter is still idle: keep state/pill "idle" so the
+    // recovery panel agrees with the topbar badge (which paints the raw "idle"
+    // state amber) instead of contradicting it with a green "ready".
+    const rememberedName =
+      adapterName && adapterName !== "None selected"
+        ? adapterName
+        : String(lastDevice.address || adapter.address || "") || "Your last adapter";
     return {
-      tone: "ok", state: "ready", kicker: "Ready",
+      tone: "ok", state: "idle", kicker: "Ready",
       title: "Ready to reconnect",
-      next: `${adapterName} is remembered. Reconnect when you want live OBD logging.`,
-      pill: "ready", bt, source, actionLabel: "Reconnect in Settings", actionTarget: "settings"
+      next: `${rememberedName} is remembered. Reconnect when you want live OBD logging.`,
+      pill: "idle", bt, source, actionLabel: "Reconnect in Settings", actionTarget: "settings"
     };
   }
   return {
@@ -418,7 +429,7 @@ function connectionRows(status: VoltStatus): StatusRow[] {
   const sessionState = String(status.state || session.state || "idle");
   const logging = ACTIVE_TRIP_STATES.includes(sessionState.toLowerCase())
     ? (samples
-        ? t("status.logging.samples", { count: samples.toLocaleString() })
+        ? t(samples === 1 ? "status.logging.sample" : "status.logging.samples", { count: samples.toLocaleString() })
         : t("status.logging.waitingForData"))
     : t("status.logging.notLogging");
   const last = lastRealSession();

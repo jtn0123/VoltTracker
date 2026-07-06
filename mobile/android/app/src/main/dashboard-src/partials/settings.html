@@ -23,7 +23,7 @@
         Connect
       </button>
     </div>
-    <div class="state-grid" aria-label="Live app state">
+    <div class="state-grid" role="group" aria-label="Live app state">
       <div><span>Logging</span><strong id="loggingState">idle</strong></div>
       <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
       <div><span>DB</span><strong id="dbState">ready</strong></div>
@@ -54,12 +54,7 @@
         <span>Scan</span>
         <small>Codes + live PIDs</small>
       </button>
-      <button
-        id="tpmsScanBtn"
-        type="button"
-        data-action="tpmsScan"
-        class="settings-command"
-      >
+      <button id="tpmsScanBtn" type="button" class="settings-command">
         <span>Extra signals</span>
         <small>Tires, battery internals</small>
       </button>

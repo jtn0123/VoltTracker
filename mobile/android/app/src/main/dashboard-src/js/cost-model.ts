@@ -65,7 +65,10 @@ export function computeSavingsVsGas(inputs: SavingsInputs): SavingsResult {
  *  "-$" only when negative, two decimals. Shared so the per-trip and lifetime
  *  rows read identically. */
 export function formatSignedMoney(value: number): string {
-  return (value < 0 ? "-$" : "$") + Math.abs(value).toFixed(2);
+  // Snap near-zero to positive: a value like -0.004 rounds to "0.00", so the raw
+  // `value < 0` sign test yielded a nonsensical "-$0.00". Only commit to "-$" once
+  // the magnitude actually rounds to a nonzero cent.
+  return (value < -0.005 ? "-$" : "$") + Math.abs(value).toFixed(2);
 }
 
 // ----- per-charge-session rate selection (M3) -----------------------------

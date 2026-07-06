@@ -105,6 +105,24 @@ describe('drive.ts', () => {
     expect(document.getElementById('driveNowChips').children.length).toBe(0);
   });
 
+  it('shows a real "live" placeholder when Recording has evidence but no counted metrics yet', () => {
+    const VD = window.VoltDashboard;
+    // hasLiveEvidence is true off lastSampleAt while sampleCount/runtime/distance
+    // are all still 0 — meta would be empty, and setText coerces "" to "--", so
+    // "Recording" must not read "--".
+    VD.state.appState = {
+      adapter: { connected: true, name: 'OBDLink MX+' },
+      session: { state: 'connected', sampleCount: 0 },
+    };
+    VD.state.lastSampleAt = Date.now();
+    VD.renderDriveNowChips();
+    const rec = document.getElementById('driveRecording');
+    expect(rec.hidden).toBe(false);
+    expect(rec.textContent).toContain('Recording');
+    expect(document.getElementById('driveRecordingMeta').textContent).toBe('live');
+    expect(rec.textContent).not.toContain('--');
+  });
+
   it('uses waiting copy for an active session before the first sample arrives', () => {
     const VD = window.VoltDashboard;
     VD.state.status = { state: 'connected' };

@@ -47,7 +47,11 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // 370k → 372k (design pass 6): funds the "minimal" flatten pass (veiled/flat
 // cards, bare-column stat rows, neutralized diagnostics tints, flat nav) plus
 // the live-signals "reporting" filter default (small telemetry.ts/core.ts JS).
-def dashboardStartupBudgetBytes = 372_000L
+// 372k → 373.5k (bug-hunt passes 1-2): irreducible growth from ~30 correctness
+// fixes across the eager app.js bundle (null-guards, memo keys, demo isolation,
+// numeric-pref commit refactor) plus a global light-scheme high-contrast a11y
+// token block in base.css (cannot be lazy-loaded). ~945 B headroom retained.
+def dashboardStartupBudgetBytes = 373_500L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyCssBudgetBytes = 20_000L

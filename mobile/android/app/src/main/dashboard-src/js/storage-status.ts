@@ -315,10 +315,17 @@ import { prefs, units } from "./prefs";
       // Mirror hidden into aria-hidden so the count is exposed to assistive
       // tech exactly when it is visible.
       navBadge.setAttribute("aria-hidden", totalCodes ? "false" : "true");
-      // Severity: a current or permanent fault escalates the badge from the
-      // amber "look at this" tone to the red fault tone.
-      const urgent = Number(statusCounts.current || 0) + Number(statusCounts.permanent || 0) > 0;
-      navBadge.dataset.severity = urgent ? "fault" : "info";
+      // Severity: escalate the badge to the red fault tone only when a code is
+      // genuinely urgent — a currently-active fault, or a code whose card-level
+      // severity actually resolves to "critical". A permanent-but-warning code
+      // (e.g. an unknown P-code) must NOT paint the badge red while its card
+      // reads "generally safe to drive".
+      const hasCurrent = Number(statusCounts.current || 0) > 0;
+      const hasCritical = codes.some((code) => {
+        const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(String(code.dtc || "")) : null;
+        return dtcSeverity(code.dtc, info ? info.severity : null) === "critical";
+      });
+      navBadge.dataset.severity = hasCurrent || hasCritical ? "fault" : "info";
     }
     VD.setText("dtcStoredCount", storedOrCurrent);
     VD.setText("dtcPendingCount", Number(statusCounts.pending || 0));
@@ -413,6 +420,15 @@ import { prefs, units } from "./prefs";
     return String(status || "").trim().toLowerCase() === "permanent";
   }
 
+  // Module label to show when the code carries no reported moduleName. SAE
+  // reserves a "1" or "3" in the second character for manufacturer-specific
+  // codes (e.g. P1xxx / P3xxx), so calling those "generic OBD-II" is wrong —
+  // fall back to "manufacturer-specific" for them and "generic OBD-II" otherwise.
+  function moduleFallback(dtc: unknown): string {
+    const second = String(dtc || "").trim().toUpperCase().charAt(1);
+    return second === "1" || second === "3" ? "manufacturer-specific" : "generic OBD-II";
+  }
+
   function buildDtcItem(code: VoltDtcRow, isExample: boolean) {
     const article = document.createElement("article");
     article.className = "dtc-item";
@@ -442,9 +458,16 @@ import { prefs, units } from "./prefs";
     clearTag.className = "dtc-clearable";
     clearTag.dataset.clearable = permanent ? "no" : "yes";
     clearTag.textContent = permanent ? "permanent — won't clear" : "clearable";
-    const codeSmall = document.createElement("small");
-    codeSmall.textContent = code.statusLabel || code.status || "stored";
-    codeBlock.append(codeB, sevBadge, clearTag, codeSmall);
+    // The clear tag already announces "permanent — won't clear" for permanent
+    // codes, so repeating the status here would print "permanent" twice; drop
+    // the status small in that case.
+    if (permanent) {
+      codeBlock.append(codeB, sevBadge, clearTag);
+    } else {
+      const codeSmall = document.createElement("small");
+      codeSmall.textContent = code.statusLabel || code.status || "stored";
+      codeBlock.append(codeB, sevBadge, clearTag, codeSmall);
+    }
 
     const moduleBlock = document.createElement("span");
     moduleBlock.className = "dtc-module-block";
@@ -452,7 +475,9 @@ import { prefs, units } from "./prefs";
     if (info && info.description) {
       headline.textContent = info.description;
     } else if (info && info.category) {
-      headline.textContent = info.category;
+      // No specific description — only the broad SAE family. Qualify it so an
+      // area guess doesn't read as a definitive diagnosis.
+      headline.textContent = `Unrecognized code — likely area: ${info.category}`;
     } else {
       headline.textContent = code.moduleName || "Unknown code - tap to look up";
     }
@@ -467,9 +492,9 @@ import { prefs, units } from "./prefs";
     const small = document.createElement("small");
     const headerLabel = code.header ? `header ${code.header} · ` : "";
     if (info && info.description) {
-      small.textContent = `${code.moduleName || "generic OBD-II"} · ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)}`;
+      small.textContent = `${code.moduleName || moduleFallback(code.dtc)} · ${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} · last ${VD.formatWhen(code.lastSeenMs)}`;
     } else {
-      const moduleLabel = info && info.category ? (code.moduleName || "generic OBD-II") + " · " : "";
+      const moduleLabel = info && info.category ? (code.moduleName || moduleFallback(code.dtc)) + " · " : "";
       small.textContent = `${moduleLabel}${headerLabel}first ${VD.formatWhen(code.firstSeenMs)} · last ${VD.formatWhen(code.lastSeenMs)}`;
     }
     moduleBlock.append(small);
@@ -773,7 +798,15 @@ import { prefs, units } from "./prefs";
     const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
     sohPoints = Array.isArray(parsed)
       ? parsed
-          .map((r) => ({ at: Number(r.capturedAtMs), soh: Number(r.sohPct), cap: Number(r.capacityAh) }))
+          // Native emits JSON null for soh_pct / capacity_ah on rows that only
+          // carry the other field; Number(null) === 0 would slip a spurious 0%
+          // SOH (or "0.0 Ah") past the guards, so map those nulls to NaN and let
+          // the isFinite filter / capacity readout drop them.
+          .map((r) => ({
+            at: Number(r.capturedAtMs),
+            soh: r.sohPct == null ? NaN : Number(r.sohPct),
+            cap: r.capacityAh == null ? NaN : Number(r.capacityAh),
+          }))
           .filter((p) => Number.isFinite(p.at) && Number.isFinite(p.soh))
       : [];
     sohDirty = true;
@@ -782,7 +815,7 @@ import { prefs, units } from "./prefs";
   function sohSpanLabel(fromMs: number, toMs: number): string {
     const days = Math.max(0, Math.round((toMs - fromMs) / 86_400_000));
     if (days < 1) return "today";
-    if (days < 14) return `${days} days`;
+    if (days < 14) return `${days} day${days === 1 ? "" : "s"}`;
     if (days < 60) return `${Math.round(days / 7)} weeks`;
     return `${Math.round(days / 30)} months`;
   }
@@ -1390,7 +1423,11 @@ import { prefs, units } from "./prefs";
     // via chargeRates()/rateForCharger(), so a $/kWh preference edit must bust
     // the memo even when recentSessions is unchanged.
     const rates = chargeRates();
-    const sig = rates.home + "|" + rates.public + "|" + sessions.length + "|" + sessions.slice(0, 12).map((s) => [
+    // chargeSessionCount drives the "X of Y charges" title but isn't one of the
+    // newest-12 row fields, so a backfilled older charge (count 12→13, rows
+    // unchanged) must still bust the memo or the title stays stale at "12 recent
+    // charges" instead of "12 of 13 charges".
+    const sig = rates.home + "|" + rates.public + "|" + sessions.length + "|" + (charge.chargeSessionCount || sessions.length) + "|" + sessions.slice(0, 12).map((s) => [
       s.id, s.startedAtMs, s.endedAtMs, s.startSoc, s.endSoc, s.energyKwh, s.powerKw, s.chargerType
     ].join(":")).join(";");
     if (sig === lastChargeSessionsSig) return;
@@ -1404,12 +1441,16 @@ import { prefs, units } from "./prefs";
       return;
     }
     const shown = Math.min(sessions.length, 12);
-    // "12 of 14 charges", not "Latest 12 of 14 charges": the longer form wraps
-    // to two lines next to the header's Export CSV + Refresh actions.
+    // Native caps recentSessions at 12, so compare against the true lifetime
+    // total (chargeSessionCount) rather than sessions.length — otherwise the
+    // "X of Y" truncation form could never fire. "12 of 14 charges", not
+    // "Latest 12 of 14 charges": the longer form wraps to two lines next to the
+    // header's Export CSV + Refresh actions.
+    const totalCharges = Number(charge.chargeSessionCount || sessions.length);
     VD.setText(
       "chargeSessionsTitle",
-      sessions.length > 12
-        ? `${shown} of ${sessions.length} charges`
+      totalCharges > sessions.length
+        ? `${shown} of ${totalCharges} charges`
         : `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`
     );
     list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
@@ -1486,7 +1527,16 @@ import { prefs, units } from "./prefs";
     }
     card.hidden = false;
     VD.setText("chargeEnergyTotal", `${total.toFixed(1)} kWh`);
-    VD.setText("chargeEnergySub", `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`);
+    // This total only sums the ≤12 recent sessions native returns, not the full
+    // lifetime. When more charges exist than we hold, say "last N" so the copy
+    // doesn't imply a lifetime figure that contradicts the true session count.
+    const totalCharges = Number(((state.storage || {}).chargeSummary || {}).chargeSessionCount || 0);
+    VD.setText(
+      "chargeEnergySub",
+      totalCharges > sessions.length
+        ? `across last ${sessions.length} charge${sessions.length === 1 ? "" : "s"}`
+        : `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`
+    );
     // Bill each session at the rate its charger type selects (home vs public),
     // rather than a single flat rate on the lifetime kWh, so a mix of cheap
     // overnight + pricey DC-fast charges estimates honestly.
@@ -1610,8 +1660,10 @@ import { prefs, units } from "./prefs";
         x: cx.toFixed(1), y: (h - padB + 16).toFixed(1), fill: axisColor,
         "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
       });
-      // Show every label when few buckets; thin to every other when crowded.
-      label.textContent = n <= 6 || i % 2 === 0 ? labels[i] as string : "";
+      // Show every label when few buckets; thin to every other when crowded,
+      // but always keep the most-recent (last) label so it's never dropped when
+      // n is even and i=n-1 lands on an odd index.
+      label.textContent = n <= 6 || i % 2 === 0 || i === n - 1 ? labels[i] as string : "";
       svg.appendChild(label);
     });
     return svg;
@@ -1640,6 +1692,10 @@ import { prefs, units } from "./prefs";
     // public); fall back to energy when no home rate is set.
     const values = buckets.map((b) => (showCost ? b.costUsd : b.energyKwh));
     const total = values.reduce((acc, v) => acc + v, 0);
+    // "Avg / month" is per ACTIVE charging month by design: bucketChargesByMonth
+    // emits only months that logged energy, so a calendar month with no charging
+    // is not in the denominator (and the bars are drawn gapless). Intentional — a
+    // month you didn't plug in shouldn't dilute the per-charge-month average.
     const avg = total / values.length;
     const fmt = (v: number) => (showCost ? formatMoney(v) : `${v.toFixed(1)} kWh`);
     VD.setText("chargeCostTrendTitle", showCost ? "Monthly charging cost" : "Monthly charging energy");

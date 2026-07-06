@@ -123,14 +123,15 @@ open class EventNotifier(
             is EventNotificationDecider.Event.NewDtc -> describeNewDtc(event)
             is EventNotificationDecider.Event.MaintenanceDue ->
                 NotificationSpec(
-                    // Per-service id (base + label hash) so several overdue items posted in one
-                    // app-open coexist instead of replacing one another, the way distinct event kinds do.
-                    NOTIFICATION_ID_MAINTENANCE + maintenanceIdOffset(event.serviceType),
+                    // Per-entry id (base + entry-id/label hash) so several overdue items posted in one
+                    // app-open coexist instead of replacing one another, the way distinct event kinds
+                    // do — including two distinct rows that share a service-type label.
+                    NOTIFICATION_ID_MAINTENANCE + maintenanceIdOffset(event.entryId, event.serviceType),
                     context.getString(R.string.notification_maintenance_due_title),
                     context.getString(
                         R.string.notification_maintenance_due_text,
                         event.serviceType,
-                        event.overdueByText,
+                        maintenanceOverdueText(event.tripped, event.overdueMagnitude),
                     ),
                 )
             is EventNotificationDecider.Event.LowSoc ->
@@ -191,11 +192,20 @@ open class EventNotifier(
         const val NOTIFICATION_ID_HIGH_TEMP = 4304
         const val NOTIFICATION_ID_TARGET_SOC = 4305
 
-        // Base id for maintenance-overdue alerts (M2); each service adds a small bounded offset
-        // (see maintenanceIdOffset) so multiple overdue items posted at once coexist. The
-        // [0, MAINTENANCE_ID_RANGE) band is reserved and stays clear of the ids above.
-        const val NOTIFICATION_ID_MAINTENANCE = 4400
-        private const val MAINTENANCE_ID_RANGE = 64
+        // Base id for maintenance-overdue alerts (M2); each entry adds an entry-derived offset in
+        // [0, MAINTENANCE_ID_RANGE) (see maintenanceIdOffset) so multiple overdue items posted at
+        // once coexist. The band [NOTIFICATION_ID_MAINTENANCE, +MAINTENANCE_ID_RANGE) sits well above
+        // every other notification id (foreground 4207, event alerts 43xx, adapter-ready 4711) so a
+        // maintenance alert can never collide with them.
+        const val NOTIFICATION_ID_MAINTENANCE = 100_000
+
+        // Widened from 64: two overdue entries co-batched on one app-open must not land on the same
+        // id. If they did, manager.notify would REPLACE (not stack) the second over the first, yet
+        // MaintenanceDueNotifier.checkOnAppOpen persists BOTH crossing signatures — so the replaced
+        // alert gets filtered out on the next open and is lost for good. A large slot count makes an
+        // entry-id hash collision within one batch astronomically unlikely, while the SAME entry still
+        // maps to the SAME id (replaces, as intended).
+        private const val MAINTENANCE_ID_RANGE = 1_000_000
 
         // Below this, format1 rounds the energy to "0.0", so the charge-complete copy switches to
         // the no-energy variant rather than claiming "Added 0.0 kWh".
@@ -224,11 +234,35 @@ open class EventNotifier(
 
         private fun format1(value: Double): String = String.format(Locale.getDefault(), "%.1f", value)
 
-        // A stable, non-negative id offset within [0, MAINTENANCE_ID_RANGE) for a maintenance service
-        // label, so two overdue services post under different ids (coexist) while re-posting the same
-        // service keeps the same id (replaces, not stacks). A rare hash collision merely replaces the
-        // older alert — acceptable, since the crossing-signature de-dup already fires each once.
-        private fun maintenanceIdOffset(serviceType: String): Int =
-            (serviceType.hashCode() % MAINTENANCE_ID_RANGE + MAINTENANCE_ID_RANGE) % MAINTENANCE_ID_RANGE
+        // Rounded, thousands-grouped whole number in the device locale (e.g. "1,000" / "1.000") —
+        // the maintenance-overdue amount would otherwise read as a bare "1000".
+        private fun formatGrouped(value: Double): String = String.format(Locale.getDefault(), "%,.0f", value)
+
+        // The short amount-overdue string shown in the maintenance notification. The distance
+        // interval is kept in km with a thousands separator: the user's km<->miles unit preference
+        // lives in the WebView's localStorage and is not mirrored to native, so this app-open
+        // notification has no unit preference to honour and stays in the source km unit rather than
+        // guessing. Days need no unit conversion.
+        private fun maintenanceOverdueText(
+            tripped: MaintenanceDueEvaluator.Interval,
+            magnitude: Double,
+        ): String =
+            when (tripped) {
+                MaintenanceDueEvaluator.Interval.KM -> "${formatGrouped(magnitude)} km"
+                MaintenanceDueEvaluator.Interval.MONTHS -> "${formatGrouped(magnitude)} days"
+            }
+
+        // A stable, non-negative id offset within [0, MAINTENANCE_ID_RANGE) derived from the entry id
+        // (plus its service label), so two distinct overdue rows — even ones sharing a service-type
+        // label — post under different ids (coexist), while re-posting the SAME entry keeps the same
+        // id (replaces, not stacks). A rare hash collision merely replaces the older alert —
+        // acceptable, since the crossing-signature de-dup already fires each once.
+        private fun maintenanceIdOffset(
+            entryId: Long,
+            serviceType: String,
+        ): Int {
+            val hash = "$entryId $serviceType".hashCode()
+            return (hash % MAINTENANCE_ID_RANGE + MAINTENANCE_ID_RANGE) % MAINTENANCE_ID_RANGE
+        }
     }
 }

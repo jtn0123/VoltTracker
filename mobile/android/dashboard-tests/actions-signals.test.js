@@ -303,7 +303,7 @@ describe('actions-signals.ts — clipboard fallback (no browser download)', () =
 
     expect(VD.lastStatus()).toMatchObject({
       state: 'blocked',
-      detail: 'Could not export detailed signal logs.',
+      detail: 'Could not export the detailed signal log.',
     });
   });
 

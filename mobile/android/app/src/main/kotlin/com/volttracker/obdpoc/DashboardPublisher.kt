@@ -50,10 +50,16 @@ class DashboardPublisher(
         if (!pageReady) {
             return
         }
-        val script =
-            "window.VoltTrackerNative.$functionName(" +
-                JSONObject.quote(jsonPayload ?: "{}") +
-                ");"
+        // JSONObject.quote leaves U+2028 (line separator) and U+2029 (paragraph separator) raw, but
+        // both are line terminators inside a JS string literal on pre-ES2019 WebViews, so a raw one
+        // makes evaluateJavascript throw a SyntaxError and silently drop the update. Escape them to
+        // their \u2028 / \u2029 forms so the payload stays a single valid JS string literal.
+        val quotedPayload =
+            JSONObject
+                .quote(jsonPayload ?: "{}")
+                .replace("\u2028", "\\u2028")
+                .replace("\u2029", "\\u2029")
+        val script = "window.VoltTrackerNative.$functionName($quotedPayload);"
         uiExecutor.execute {
             if (!isAlive.isAlive() || !pageReady) {
                 return@execute

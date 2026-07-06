@@ -15,10 +15,13 @@ import kotlin.math.roundToLong
  * [EventNotificationPrefs]); the evaluator only returns the entries whose overdue crossing is NOT in
  * that set, and reports the signature to persist so the same crossing never re-nags.
  *
- * A "crossing signature" pins a *specific* overdue crossing: the entry id plus which interval
- * tripped (`km` or `months`). An entry overdue on both distance and time yields one signature for
- * the worse-by-magnitude trip, so re-logging the service (a new entry id) re-arms a fresh crossing
- * while a still-overdue old entry stays quiet across app-opens.
+ * A "crossing signature" pins an entry's overdue crossing by entry id alone (`<id>:overdue`),
+ * independent of WHICH interval (km or months) is currently the worse-by-magnitude one. That
+ * independence matters: an entry overdue on both distance and time can see the dominant interval
+ * flip from km to months as the days-overdue grows and overtakes the km magnitude, and a
+ * signature that encoded the interval would change under the same continuous overdue state and
+ * re-nag. Re-logging the service (a new entry id) still re-arms a fresh crossing, while a
+ * still-overdue old entry stays quiet across app-opens.
  */
 class MaintenanceDueEvaluator {
     /**
@@ -38,14 +41,17 @@ class MaintenanceDueEvaluator {
 
     /**
      * A newly-overdue maintenance item that should fire a notification. [signature] is the crossing
-     * signature the caller persists so this crossing fires exactly once; [overdueByText] is a short,
-     * human-readable amount-overdue ("1,000 km", "12 days") for the notification copy.
+     * signature the caller persists so this crossing fires exactly once. [tripped] names the interval
+     * that is furthest past due and [overdueMagnitude] is the raw amount-overdue in that interval's
+     * unit — kilometres for [Interval.KM], days for [Interval.MONTHS]. The human-readable copy (and
+     * any km->miles unit conversion) is formatted downstream in [EventNotifier] so it can honour the
+     * user's unit preference and locale grouping, rather than baking a fixed "km" string here.
      */
     data class DueResult(
         val entry: Entry,
         val signature: String,
         val tripped: Interval,
-        val overdueByText: String,
+        val overdueMagnitude: Double,
     )
 
     /** Which configured interval pushed the entry overdue. */
@@ -65,7 +71,13 @@ class MaintenanceDueEvaluator {
         val out = ArrayList<DueResult>()
         for (entry in entries) {
             val result = evaluateEntry(entry, odometerKm, nowMs) ?: continue
-            if (result.signature in alreadyNotified) {
+            // Legacy compatibility: builds before the "<id>:overdue" unification persisted the crossing
+            // as the interval-encoded "<id>:km" / "<id>:months". Treat either legacy form for this entry
+            // as already-notified so a still-overdue item doesn't re-nag once after the upgrade.
+            if (result.signature in alreadyNotified ||
+                "${entry.id}:km" in alreadyNotified ||
+                "${entry.id}:months" in alreadyNotified
+            ) {
                 continue
             }
             out.add(result)
@@ -137,13 +149,9 @@ class MaintenanceDueEvaluator {
         fun toResult(entry: Entry): DueResult =
             DueResult(
                 entry = entry,
-                signature = signatureFor(entry.id, interval),
+                signature = signatureFor(entry.id),
                 tripped = interval,
-                overdueByText =
-                    when (interval) {
-                        Interval.KM -> "${magnitude.roundToLong()} km"
-                        Interval.MONTHS -> "${magnitude.roundToLong()} days"
-                    },
+                overdueMagnitude = magnitude,
             )
     }
 
@@ -153,14 +161,11 @@ class MaintenanceDueEvaluator {
         private const val AVG_DAYS_PER_MONTH = 30.4375
         private const val MS_PER_DAY = 86_400_000L
 
-        /** Builds the crossing signature the caller persists: entry id + which interval tripped. */
-        fun signatureFor(
-            entryId: Long,
-            interval: Interval,
-        ): String =
-            when (interval) {
-                Interval.KM -> "$entryId:km"
-                Interval.MONTHS -> "$entryId:months"
-            }
+        /**
+         * Builds the crossing signature the caller persists: the entry id alone. Deliberately does
+         * NOT encode which interval tripped, so a continuously-overdue entry keeps one stable
+         * signature even when the dominant interval flips (km <-> months) and never re-nags.
+         */
+        fun signatureFor(entryId: Long): String = "$entryId:overdue"
     }
 }

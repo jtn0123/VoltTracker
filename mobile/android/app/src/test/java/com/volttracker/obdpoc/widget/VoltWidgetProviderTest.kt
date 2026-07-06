@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.TextView
 import com.volttracker.obdpoc.R
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -41,6 +42,7 @@ class VoltWidgetProviderTest {
             soc = textOf(rendered, R.id.widget_soc),
             status = textOf(rendered, R.id.widget_status),
             updated = textOf(rendered, R.id.widget_updated),
+            contentDescription = rendered.contentDescription?.toString() ?: "",
         )
     }
 
@@ -160,9 +162,51 @@ class VoltWidgetProviderTest {
         )
     }
 
+    @Test
+    fun contentDescriptionForEmptyStateOmitsEmDashAndTrailingClause() {
+        val description = bind(WidgetSnapshot.EMPTY).contentDescription
+
+        assertFalse(
+            "the unknown-SOC content description must not speak the em-dash placeholder",
+            description.contains("—"),
+        )
+        assertEquals(
+            "no dangling trailing clause/whitespace when there is no freshness line",
+            description,
+            description.trim(),
+        )
+        assertTrue(
+            "the empty-state description leads with the widget title",
+            description.startsWith(context.getString(R.string.widget_title)),
+        )
+        assertTrue(
+            "the empty-state description conveys the no-data status",
+            description.contains(context.getString(R.string.widget_status_no_data)),
+        )
+    }
+
+    @Test
+    fun contentDescriptionForAConnectedChargeSpeaksSocStatusAndFreshness() {
+        val snapshot =
+            WidgetSnapshot(
+                socPct = 73,
+                charging = true,
+                connected = true,
+                vehicleState = "charging",
+                updatedAtMs = nowMs,
+                lastSampleAtMs = nowMs,
+            )
+        val description = bind(snapshot).contentDescription
+
+        assertTrue("the known-SOC description speaks the percent", description.contains("73%"))
+        assertTrue(description.contains(context.getString(R.string.widget_status_charging)))
+        assertTrue(description.contains(context.getString(R.string.widget_updated_just_now)))
+    }
+
     private data class RenderedWidget(
         val soc: String,
         val status: String,
         val updated: String,
+        val contentDescription: String,
     )
 }

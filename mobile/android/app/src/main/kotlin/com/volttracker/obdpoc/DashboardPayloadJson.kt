@@ -25,7 +25,11 @@ object DashboardPayloadJson {
             payload.put("detail", detail)
             payload.put("blocked", blocked)
             payload.put("bluetoothReady", bluetoothReady)
-            payload.put("lastAddress", lastAddress)
+            // Redact the Bluetooth MAC to its last 5 chars (as AppStatePayload.adapterJson already
+            // does) before it reaches the WebView. The dashboard only renders it and checks
+            // remembered-presence, both of which the redacted value satisfies; the full MAC is PII the
+            // WebView never needs.
+            payload.put("lastAddress", MainActivityUtils.redactAddress(lastAddress))
             payload.put("lastName", lastName)
         } catch (ignored: JSONException) {
             // JSONObject.put of strings/primitives does not throw for these inputs; ignore

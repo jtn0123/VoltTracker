@@ -245,9 +245,10 @@ function buildMapSessionRow(
   const small = document.createElement("small");
   const distance = formatters.formatDistance(Number(route.distanceMeters || 0));
   const points = Number(route.pointCount || 0);
+  const pointsLabel = `${points} ${points === 1 ? "pt" : "pts"}`;
   small.textContent = live
-    ? `${formatters.formatChipDate(session.startedAtMs)} · ${distance} · ${points} pts`
-    : `${formatters.formatWhen(session.startedAtMs)} · ${distance} · ${points} pts`;
+    ? `${formatters.formatChipDate(session.startedAtMs)} · ${distance} · ${pointsLabel}`
+    : `${formatters.formatWhen(session.startedAtMs)} · ${distance} · ${pointsLabel}`;
   center.append(small);
 
   const right = document.createElement("b");

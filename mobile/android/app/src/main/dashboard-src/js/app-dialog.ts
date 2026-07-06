@@ -10,6 +10,10 @@ type AppDialogOptions = {
 
 type AppPromptOptions = AppDialogOptions & {
   inputLabel?: string;
+  // Autocomplete token for the prompt input. "current-password" (the default) fits
+  // the restore flow; the choose-a-new-passphrase (encrypt) flow passes "new-password"
+  // so a password manager offers to save the freshly chosen passphrase.
+  autocomplete?: string;
 };
 
 type AppDialogNodes = {
@@ -55,9 +59,19 @@ function nodes(): AppDialogNodes | null {
   return { root, title, message, inputWrap, inputLabel, input, confirm, cancel, close };
 }
 
+// Every top-level body child except the dialog itself (and any ancestor/
+// descendant of it). Inerting only .app + .bottom-nav left sibling top-level
+// nodes — the error banner (role=alert), status toast, restore-progress —
+// reachable behind the modal. Mirrors troubleshooter.ts's modalBackgroundNodes.
 function backgroundNodes(): HTMLElement[] {
-  return [document.querySelector(".app"), document.querySelector(".bottom-nav")]
-    .filter((item): item is HTMLElement => item instanceof HTMLElement);
+  const dialog = node("appDialog");
+  if (!dialog) return [];
+  return Array.from(document.body.children).filter((child): child is HTMLElement =>
+    child instanceof HTMLElement &&
+    child !== dialog &&
+    !dialog.contains(child) &&
+    !child.contains(dialog)
+  );
 }
 
 function closeDialog(result: boolean | string | null): boolean | string | null {
@@ -100,6 +114,9 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
   n.inputWrap.hidden = options.mode !== "prompt";
   n.inputLabel.textContent = options.inputLabel || "Passphrase";
   n.input.value = "";
+  // Per-use autocomplete: restore reuses the default "current-password"; the encrypt
+  // flow passes "new-password" so the manager offers to save the chosen passphrase.
+  n.input.autocomplete = (options.autocomplete || "current-password") as AutoFill;
   n.confirm.disabled = options.mode === "prompt";
 
   return new Promise((resolve) => {

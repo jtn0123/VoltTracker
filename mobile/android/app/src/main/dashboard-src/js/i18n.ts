@@ -31,6 +31,9 @@ export const EN = {
   "trip.empty.noTripYet": "No trip yet — connect to start logging.",
   "trip.waitingForFirstSamples": "Waiting for the first samples…",
   // Count-bearing example proving `{placeholder}` interpolation end-to-end.
+  // Singular + plural variants: the caller (connection-status.ts) must pick
+  // "status.logging.sample" when count === 1 so it never reads "1 samples".
+  "status.logging.sample": "{count} sample",
   "status.logging.samples": "{count} samples",
   // drive.ts chart empty states (migrated in the X5 copy pass).
   "drive.trace.waitingForSamples": "waiting for samples",

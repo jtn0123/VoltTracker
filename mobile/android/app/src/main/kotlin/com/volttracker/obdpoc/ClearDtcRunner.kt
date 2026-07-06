@@ -35,7 +35,10 @@ class ClearDtcRunner(
         )
 
         val nrc = extractNegativeResponseCode(compact)
-        if (nrc.isNotEmpty()) {
+        // NRC 0x78 (responsePending) is NOT terminal: the ECU is telling us it needs more time and a
+        // positive "44" typically follows in the same reply. Fall through to the positive-response
+        // check so a "7F 04 78 … 44" sequence is correctly reported as cleared, not failed.
+        if (nrc.isNotEmpty() && nrc != NRC_RESPONSE_PENDING) {
             val detail = describeFailure(nrc)
             service.broadcastStatus("error", detail, true)
             service.updateNotification("Clear-codes failed on ${service.activeName}")
@@ -55,10 +58,14 @@ class ClearDtcRunner(
             return
         }
 
-        val detail = describeFailure("")
+        // No positive 44 arrived. Carry the NRC through (notably 0x78 responsePending, which
+        // reached here because it was treated as non-terminal above but no reply ever followed) so
+        // the message distinguishes "ECU asked for more time but never confirmed" from a bare
+        // no-reply failure.
+        val detail = describeFailure(nrc)
         service.broadcastStatus("error", detail, true)
         service.updateNotification("Clear-codes failed on ${service.activeName}")
-        broadcastResult(false, "", compact)
+        broadcastResult(false, nrc, compact)
     }
 
     private fun broadcastResult(
@@ -82,6 +89,10 @@ class ClearDtcRunner(
     }
 
     companion object {
+        // ISO 14229 NRC 0x78 (requestCorrectlyReceived-ResponsePending): the ECU acknowledges the
+        // request but needs more time; a real positive reply follows. Treated as non-terminal.
+        private const val NRC_RESPONSE_PENDING = "78"
+
         private fun describeFailure(nrc: String): String =
             when (nrc) {
                 "22" ->
@@ -91,6 +102,9 @@ class ClearDtcRunner(
                 "12" -> "Vehicle rejected Mode 04 sub-function."
                 "13" -> "Vehicle rejected Mode 04: invalid message length."
                 "33" -> "Vehicle rejected Mode 04: security access denied."
+                NRC_RESPONSE_PENDING ->
+                    "Vehicle is still processing the clear request (response pending) and never " +
+                        "confirmed. Wait a moment and try again."
                 "7F",
                 "",
                 ->
@@ -118,11 +132,31 @@ class ClearDtcRunner(
         @JvmStatic
         fun extractNegativeResponseCode(compact: String?): String {
             val normalized = (compact ?: "").replace(Regex("[^0-9A-F]"), "")
-            val idx = normalized.indexOf("7F04")
-            if (idx < 0 || idx + 6 > normalized.length) {
-                return ""
+            // Scan EVERY "7F04" negative-response frame, not just the first: a pending 0x78 frame is
+            // often followed by the real reply, so a lone 78 must not mask a later terminal rejection
+            // (e.g. "7F 04 78 … 7F 04 22"). Return the last non-78 NRC when present; otherwise 78 if
+            // only pending frames appeared, or "" when there was no negative-response frame at all.
+            var lastTerminal = ""
+            var sawPending = false
+            var searchFrom = 0
+            while (true) {
+                val idx = normalized.indexOf("7F04", searchFrom)
+                if (idx < 0 || idx + 6 > normalized.length) {
+                    break
+                }
+                val code = normalized.substring(idx + 4, idx + 6)
+                if (code == NRC_RESPONSE_PENDING) {
+                    sawPending = true
+                } else {
+                    lastTerminal = code
+                }
+                searchFrom = idx + 6
             }
-            return normalized.substring(idx + 4, idx + 6)
+            return when {
+                lastTerminal.isNotEmpty() -> lastTerminal
+                sawPending -> NRC_RESPONSE_PENDING
+                else -> ""
+            }
         }
 
         @JvmStatic

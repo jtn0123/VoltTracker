@@ -198,8 +198,16 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
         " min — you'll get a notification when the adapter responds.";
     }
   }
+  // Set true when a toggle change lands during the busy window so we re-apply the
+  // FINAL checkbox state once the window clears — the last user intent wins rather
+  // than being silently dropped (which would leave the checkbox and the native probe
+  // schedule out of sync).
+  let pendingReapply = false;
   function applyToggleState() {
-    if (busy) return;
+    if (busy) {
+      pendingReapply = true;
+      return;
+    }
     setNotifyBusy(true);
     minsInput.disabled = !toggleInput.checked;
     if (!toggleInput.checked) {
@@ -208,11 +216,16 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
         status.textContent =
           "Probes the last-used adapter every 30s and posts a notification when it responds.";
       }
-      setTimeout(() => setNotifyBusy(false), 600);
-      return;
+    } else {
+      scheduleNotify();
     }
-    scheduleNotify();
-    setTimeout(() => setNotifyBusy(false), 600);
+    setTimeout(() => {
+      setNotifyBusy(false);
+      if (pendingReapply) {
+        pendingReapply = false;
+        applyToggleState();
+      }
+    }, 600);
   }
   toggleInput.addEventListener("change", applyToggleState, opts);
   minsInput.addEventListener("change", () => {

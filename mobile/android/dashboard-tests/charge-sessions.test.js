@@ -67,6 +67,21 @@ describe('dashboard charge session history', () => {
     expect(rows[1].querySelector('b').textContent).toBe('--');
   });
 
+  it('refreshes the title when the lifetime charge count grows but the newest rows are unchanged', () => {
+    const rows = [
+      { id: 2, startedAtMs: Date.now() - 3_600_000, endedAtMs: Date.now() - 600_000, chargerType: 'level2', startSoc: 40, endSoc: 90, powerKw: 7.2, energyKwh: 9.6 },
+      { id: 1, startedAtMs: Date.now() - 90_000_000, endedAtMs: Date.now() - 86_000_000, chargerType: 'level2', startSoc: 30, endSoc: 80, powerKw: 7.0, energyKwh: 9.0 },
+    ];
+    window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 2, recentSessions: rows } });
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('2 recent charges');
+
+    // A backfilled older charge bumps the lifetime count while native re-ships the
+    // same newest rows. chargeSessionCount is part of the memo signature now, so
+    // the title switches to the "X of Y" truncation form instead of staying stale.
+    window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 3, recentSessions: rows } });
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('2 of 3 charges');
+  });
+
   it('hides and clears the energy card when the charge sessions go away', () => {
     // Populate: a session with logged energy reveals the energy card.
     window.VoltDashboard.setStorage({

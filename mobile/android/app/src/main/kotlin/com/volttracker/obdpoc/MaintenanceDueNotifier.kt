@@ -45,7 +45,14 @@ class MaintenanceDueNotifier(
             return 0
         }
         for (result in due) {
-            notify(EventNotificationDecider.Event.MaintenanceDue(result.entry.type, result.overdueByText))
+            notify(
+                EventNotificationDecider.Event.MaintenanceDue(
+                    result.entry.id,
+                    result.entry.type,
+                    result.tripped,
+                    result.overdueMagnitude,
+                ),
+            )
         }
         // Union the freshly-fired signatures into the persisted set so each crossing stays quiet on
         // the next app-open. Pruning to live entry ids is unnecessary: a deleted/re-logged entry gets

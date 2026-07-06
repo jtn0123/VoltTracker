@@ -95,7 +95,8 @@ class MaintenanceDueNotifierTest {
         assertEquals(1, h.posted.size)
         val event = h.posted.first() as EventNotificationDecider.Event.MaintenanceDue
         assertEquals("Oil change", event.serviceType)
-        assertEquals(setOf("7:km"), h.persisted)
+        assertEquals(7L, event.entryId)
+        assertEquals(setOf("7:overdue"), h.persisted)
     }
 
     @Test
@@ -104,7 +105,7 @@ class MaintenanceDueNotifierTest {
             Harness(
                 log = logOf(row(7L, "Oil change", odometerKm = 10_000.0, intervalKm = 12_000.0)),
                 odometerKm = 23_000.0,
-                notified = setOf("7:km"),
+                notified = setOf("7:overdue"),
                 nowMs = now,
             )
 
@@ -122,13 +123,13 @@ class MaintenanceDueNotifierTest {
             Harness(
                 log = logOf(row(7L, "Oil change", odometerKm = 10_000.0, intervalKm = 12_000.0)),
                 odometerKm = 23_000.0,
-                notified = setOf("99:months"),
+                notified = setOf("99:overdue"),
                 nowMs = now,
             )
 
         h.notifier().checkOnAppOpen()
 
-        assertEquals(setOf("99:months", "7:km"), h.persisted)
+        assertEquals(setOf("99:overdue", "7:overdue"), h.persisted)
     }
 
     @Test

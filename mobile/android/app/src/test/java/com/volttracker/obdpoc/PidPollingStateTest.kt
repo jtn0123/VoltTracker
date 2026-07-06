@@ -121,6 +121,21 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun carryForwardBudgetIncludesIdleCycleIoHeadroom() {
+        // A long-period 7E4 PID (here 2243AF precise SOC, 24-cycle lane) is re-read periodCycles
+        // cycles later; each idle cycle costs the post-cycle IDLE_POLL_INTERVAL_MS sleep PLUS that
+        // cycle's I/O. Budgeting only the bare sleep aged the value out a beat before its next read
+        // (cell-balance / SOC panels blanking at idle), so the per-cycle budget must now leave I/O
+        // headroom beyond periodCycles * IDLE_POLL_INTERVAL_MS.
+        val periodCycles = 24
+        val budget = PidPollingState.carryForwardMaxAgeMsFor("2243AF")
+        assertTrue(
+            "carry-forward must exceed the bare idle-sleep budget, got $budget",
+            budget > periodCycles * ObdPollingEngine.IDLE_POLL_INTERVAL_MS,
+        )
+    }
+
+    @Test
     fun resetClearsCarryForwardTracking() {
         var nowMs = 1_000L
         state.setClockForTesting { nowMs }
@@ -260,6 +275,39 @@ class PidPollingStateTest {
             engine.commandLog.contains("010D0C49"),
         )
         assertTrue("disabled batching falls back to per-PID reads", engine.commandLog.contains("010D"))
+    }
+
+    @Test
+    fun reEnablingBatchAfterReconnectClearsStaleMissStreak() {
+        // The mode-01 batch probe re-runs on every (re)connect via setMode01BatchSupported(true), but
+        // reset() (which zeroes the miss streak) only fires on a fresh session — not on an in-session
+        // reconnect. So a stale miss from before the drop must be cleared here, or the first
+        // post-reconnect miss would disable batching on a single strike.
+        state.setMode01BatchSupported(true)
+        val hotLane = specs("010D", "010C", "0149")
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["010C"] = "41 0C 0F A0\r>"
+        engine.responses["0149"] = "41 49 7F\r>"
+        engine.responses["010D0C49"] = "41 0D 28\r>" // incomplete -> one miss
+
+        // Pre-reconnect: one incomplete batch leaves a stale streak of 1 (below the disable threshold).
+        state.runScheduledPolls(hotLane, StringBuilder())
+
+        // A reconnect re-probes batch capability; this must clear the stale streak.
+        state.setMode01BatchSupported(true)
+
+        // One more miss must NOT disable batching (it would if the stale count of 1 had survived).
+        state.runScheduledPolls(hotLane, StringBuilder())
+
+        // A complete reply now must still engage batching, proving it was never disabled.
+        engine.commandLog.clear()
+        engine.responses["010D0C49"] = "41 0D 28 41 0C 0F A0 41 49 7F\r>"
+        state.runScheduledPolls(hotLane, StringBuilder())
+        assertTrue(
+            "batching must survive a single post-reconnect miss, got ${engine.commandLog}",
+            engine.commandLog.contains("010D0C49"),
+        )
+        assertFalse("a batched cycle must not also read speed per-PID", engine.commandLog.contains("010D"))
     }
 
     @Test

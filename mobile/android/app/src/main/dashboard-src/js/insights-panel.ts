@@ -16,7 +16,7 @@ import {
   formatSignedMoney,
   savingsPrefsReady
 } from "./cost-model";
-import { haversineMetersJs } from "./map-route-utils";
+import { haversineMetersJs, numOrNaN } from "./map-route-utils";
 import { prefs, units } from "./prefs";
 
 (function () {
@@ -157,7 +157,7 @@ import { prefs, units } from "./prefs";
     const insights = state.insights || {};
     const trips = Number(insights.tripCount || 0);
     renderInsightsEmptyState();
-    VD.setText("insightTripCount", trips || "--");
+    VD.setText("insightTripCount", trips ? `${trips} ${trips === 1 ? "drive" : "drives"}` : "--");
     VD.setText("insightTotalDistance", trips ? VD.formatDistance(Number(insights.totalDistanceMeters || 0)) : "--");
     VD.setText("insightDriveTime", Number(insights.totalDriveMs) > 0 ? VD.formatDuration(Number(insights.totalDriveMs)) : "--");
     VD.setText("insightTopSpeed", Number(insights.maxSpeedKph) > 0 ? units.speedText(Number(insights.maxSpeedKph)) : "--");
@@ -796,10 +796,21 @@ import { prefs, units } from "./prefs";
         ? state.storage.recentRoutes
         : [];
     const pool: EffPoint[] = [];
+    // "Drives" reports routes that actually contributed a plotted sample, not
+    // every recentRoute: City/Highway averages pool only routes that clear
+    // enrichRouteEff (>=2 points AND >=2 in-range power samples), so counting
+    // routes.length beside them overstated the drive count.
+    let contributingRoutes = 0;
     routes.forEach((route) => {
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
+      const poolBefore = pool.length;
       for (let i = 0; i < pts.length; i += 1) {
+        // enrichRouteEff sets eff = null for all-regen/idle windows (no positive
+        // drive sample in range) even when the point has real highway speed.
+        // Number(null) === 0 slips past the isFinite guard, then whmi = 1000/0 =
+        // Infinity clamps to a false 0.8 mi/kWh dot — drop nulls before coercing.
+        if (pts[i].eff == null) continue;
         const eff = Number(pts[i].eff);
         if (!Number.isFinite(eff)) continue;
         // enrichRouteEff clamps efficiency to a 6.5 ceiling; those saturated
@@ -808,26 +819,29 @@ import { prefs, units } from "./prefs";
         // the plot shows the real drive-efficiency spread, not a clamp artifact.
         if (eff >= 6.45) continue;
         const mph = pointMph(pts, i);
-        if (mph < 10) continue;
+        // A NaN speed (pointMph can't resolve one) must be rejected, not kept:
+        // `NaN < 10` is false, so the bare guard let it through and NaN then
+        // poisoned fastest/axisMaxMph/xOf and blanked the whole scatter.
+        if (!Number.isFinite(mph) || mph < 10) continue;
+        // Grade over the SAME ±8-sample window the efficiency average spans (see
+        // enrichRouteEff), not a single pts[i-1]→pts[i] segment: one segment's
+        // GPS-altitude noise (a couple of metres over ~8 m of run) swings the raw
+        // slope to the ±0.13 clamp and over-corrects on rolling terrain. Averaging
+        // the altitude delta across the window's cumulative horizontal distance
+        // matches the correction to the value it corrects.
         let grade = 0;
-        if (
-          i > 0 &&
-          Number.isFinite(Number(pts[i - 1].altM)) &&
-          Number.isFinite(Number(pts[i].altM))
-        ) {
-          const horiz = Math.max(
-            8,
-            haversineMetersJs(
-              pts[i - 1].lat,
-              pts[i - 1].lng,
-              pts[i].lat,
-              pts[i].lng
-            )
-          );
-          grade = Math.max(
-            -0.13,
-            Math.min(0.13, (Number(pts[i].altM) - Number(pts[i - 1].altM)) / horiz)
-          );
+        const gStart = Math.max(0, i - 8);
+        const gEnd = Math.min(pts.length - 1, i + 8);
+        const altStart = numOrNaN(pts[gStart].altM);
+        const altEnd = numOrNaN(pts[gEnd].altM);
+        if (gEnd > gStart && Number.isFinite(altStart) && Number.isFinite(altEnd)) {
+          let horiz = 0;
+          for (let j = gStart + 1; j <= gEnd; j += 1) {
+            const seg = haversineMetersJs(pts[j - 1].lat, pts[j - 1].lng, pts[j].lat, pts[j].lng);
+            if (Number.isFinite(seg)) horiz += seg;
+          }
+          horiz = Math.max(8, horiz);
+          grade = Math.max(-0.13, Math.min(0.13, (altEnd - altStart) / horiz));
         }
         // Grade-normalize: remove the gravity term from the observed Wh/mi so the
         // plotted value is a flat-equivalent efficiency. enrichRouteEff clamps eff
@@ -838,6 +852,7 @@ import { prefs, units } from "./prefs";
         const effFlat = Math.max(0.8, Math.min(7, 1000 / flatWhmi));
         pool.push({ mph, eff, effFlat, grade });
       }
+      if (pool.length > poolBefore) contributingRoutes += 1;
     });
     // Card visibility tracks the raw pool so toggling outlier removal can't hide
     // the whole card; everything downstream plots the (optionally) filtered pool.
@@ -1029,16 +1044,18 @@ import { prefs, units } from "./prefs";
       }
     }
     if (statsEl) {
-      // Grade-normalized averages (effFlat). "Drives" counts logged routes — far
-      // more honest than the old per-sample "Samples", where one long trip dumped
-      // hundreds of correlated points. Downhill avg is gone: grade is normalized
-      // out, so a city/highway split is what's left to compare.
+      // Grade-normalized averages (effFlat). "Drives" counts the routes that
+      // actually contributed a plotted sample (contributingRoutes) — far more
+      // honest than the old per-sample "Samples", where one long trip dumped
+      // hundreds of correlated points, and than routes.length, which counted
+      // routes the averages never drew from. Downhill avg is gone: grade is
+      // normalized out, so a city/highway split is what's left to compare.
       const city = plotPool.filter((p) => p.mph < 35).map((p) => p.effFlat);
       const hwy = plotPool.filter((p) => p.mph > 55).map((p) => p.effFlat);
       const avgText = (a: number[]) =>
         a.length ? units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
       statsEl.replaceChildren(
-        insightStat("Drives", String(routes.length)),
+        insightStat("Drives", String(contributingRoutes)),
         insightStat("City avg", avgText(city)),
         insightStat("Highway avg", avgText(hwy))
       );

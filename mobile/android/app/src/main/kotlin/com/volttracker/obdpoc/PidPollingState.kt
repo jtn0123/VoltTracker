@@ -86,6 +86,13 @@ class PidPollingState(
 
     fun setMode01BatchSupported(supported: Boolean) {
         mode01BatchSupported = supported
+        if (supported) {
+            // Re-enabling batching (the mode-01 batch probe fires on every (re)connect, not just via
+            // reset()) must also clear any stale miss streak carried over from a prior connection —
+            // otherwise a leftover count of MAX_CONSECUTIVE_BATCH_MISSES - 1 would disable batching on
+            // the very first post-reconnect miss instead of tolerating one transient BT hiccup.
+            consecutiveBatchMisses = 0
+        }
     }
 
     fun lastRaw(command: String): String? {
@@ -322,7 +329,16 @@ class PidPollingState(
 
     companion object {
         const val CARRY_FORWARD_MAX_AGE_MS: Long = 30_000L
-        private const val CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE: Long = 2_500L
+
+        // Headroom added on top of the post-cycle idle sleep to account for a cycle's own PID/header
+        // round-trips. A period-N PID is re-read N cycles later, and each idle cycle costs the
+        // IDLE_POLL_INTERVAL_MS post-cycle sleep PLUS that cycle's I/O — budgeting only the bare sleep
+        // (the old 2_500L) evicted long-period 7E4 values (cell balance, precise SOC) a beat before
+        // their next scheduled read, blanking those panels at idle. One command timeout of slack keeps
+        // an on-schedule value alive to its next poll while a truly-stale one still ages out.
+        private const val IDLE_CYCLE_IO_HEADROOM_MS: Long = 1_500L
+        private const val CARRY_FORWARD_MS_PER_SCHEDULE_CYCLE: Long =
+            ObdPollingEngine.IDLE_POLL_INTERVAL_MS + IDLE_CYCLE_IO_HEADROOM_MS
 
         /**
          * Consecutive bus-alive NO-DATA replies before the negative-PID cache stops scheduling a PID

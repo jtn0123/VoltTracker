@@ -260,11 +260,14 @@ describe('scrubber.ts', () => {
     giveChartWidth();
     VD.renderScrubber(withGappyRoute());
 
-    expect(readoutValue('Distance')).toMatch(/ mi$/);
+    // The distance chip's label carries the unit ("Distance mi") and the value
+    // is the bare number — "128.4 mi" clipped to "128.…" in the nowrap cell.
+    expect(readoutValue('Distance mi')).toMatch(/^[\d.]+$/);
     // The speed chip's label carries the unit ("Speed mph") and the value is
     // the bare number — "104 mph" overflowed the six-across readout cell.
     expect(readoutValue('Speed mph')).toMatch(/^\d+$/);
-    expect(readoutValue('Elevation')).toMatch(/ ft$/);
+    // Elevation likewise: unit in the label ("Elevation ft"), bare number value.
+    expect(readoutValue('Elevation ft')).toMatch(/^-?\d+$/);
     // The mi/kWh chip's label already carries the unit, so its value never
     // repeats " mi/kWh" (that redundancy overflowed the compact readout cell).
     expect(readoutValue('mi/kWh')).not.toMatch(/mi\/kWh/);
@@ -295,9 +298,9 @@ describe('scrubber.ts', () => {
     // a spurious 0.
     const gapPoint = route.points[1];
     VD.scrubAtLatLng(gapPoint.lat, gapPoint.lng);
-    const elev = readoutValue('Elevation');
+    const elev = readoutValue('Elevation ft');
     expect(elev).not.toBe('--');
-    expect(Number(elev.replace(/\s*ft$/, ''))).toBeGreaterThan(0);
+    expect(Number(elev)).toBeGreaterThan(0);
   });
 
   // ----- null-eff samples must stay missing, never coerce to 0 ---------------

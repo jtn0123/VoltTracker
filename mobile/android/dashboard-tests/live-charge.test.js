@@ -165,20 +165,41 @@ describe('charge target SOC (M2)', () => {
     expect(input.value).toBe('90');
   });
 
-  it('clamps a typed target to [50, 100] and pushes it to the native bridge', () => {
+  it('clamps a typed target to [50, 100] on commit and pushes it to the native bridge', () => {
     const pushed = [];
     window.VoltTrackerAndroid = { setChargeTargetSoc: (v) => pushed.push(v) };
     const input = document.getElementById('liveChargeTargetInput');
-    // A typed-in over-range value clamps to 100 and reflects back.
+
+    // A leading digit below the 50 floor (en route to a valid 60/70/…) must NOT
+    // be snapped to 50 mid-keystroke — the min-clamp waits for the field to
+    // settle, so "6" stays "6" while typing and nothing is persisted yet.
+    input.value = '6';
+    input.dispatchEvent(new window.Event('input'));
+    expect(input.value).toBe('6');
+    expect(window.VoltDashboard.prefs.get('chargeTargetSoc', 0)).not.toBe(50);
+    // Finishing the entry and committing (blur/Enter/spinner → 'change') stores
+    // and pushes only the settled value.
+    input.value = '60';
+    input.dispatchEvent(new window.Event('change'));
+    expect(input.value).toBe('60');
+    expect(window.VoltDashboard.prefs.get('chargeTargetSoc', 0)).toBe(60);
+
+    // An over-maximum entry is capped live on input ("140" → "100")…
     input.value = '140';
     input.dispatchEvent(new window.Event('input'));
     expect(input.value).toBe('100');
+    input.dispatchEvent(new window.Event('change'));
     expect(window.VoltDashboard.prefs.get('chargeTargetSoc', 0)).toBe(100);
-    // An under-range value clamps to the 50 floor.
+
+    // …and an under-range value snaps to the 50 floor on commit, not per keystroke.
     input.value = '10';
     input.dispatchEvent(new window.Event('input'));
+    expect(input.value).toBe('10');
+    input.dispatchEvent(new window.Event('change'));
     expect(input.value).toBe('50');
-    // The clamped values were mirrored to the native side.
+
+    // Only the settled values were mirrored to the native side.
+    expect(pushed).toContain(60);
     expect(pushed).toContain(100);
     expect(pushed).toContain(50);
   });

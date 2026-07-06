@@ -170,7 +170,9 @@
   function distanceKm(km: number): { value: string; unit: string } {
     const metric = unitSystem() === "metric";
     const v = metric ? km : km * KM_TO_MI;
-    return { value: v < 10 ? v.toFixed(1) : String(Math.round(v)), unit: metric ? "km" : "mi" };
+    // Sub-0.1 trips need two decimals: toFixed(1) rounds a real 0.03 mi trip to
+    // "0.0", reading as zero distance. Finer branch keeps small trips nonzero.
+    return { value: v < 0.1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : String(Math.round(v)), unit: metric ? "km" : "mi" };
   }
 
   function temp(celsius: number): { value: number; unit: string } {
@@ -465,12 +467,12 @@
     return hint;
   }
 
-  // Wires a clamped numeric preference input: hydrate from the store, persist on
-  // every keystroke (clamped to [min, max]), reflect the clamped value back only
-  // when it actually differs (so typing a valid "0.14" isn't disrupted) and never
-  // advertise a value the store didn't keep, and debounce the dashboard-wide
-  // re-render so typing doesn't re-render four times. Shared by the electricity
-  // rate, gas MPG, and gas price fields.
+  // Wires a clamped numeric preference input: hydrate from the store, persist the
+  // settled value on commit (blur / Enter / spinner step, clamped to [min, max]),
+  // reflect the clamped value back only when it actually differs (so typing a
+  // valid "0.14" isn't disrupted) and never advertise a value the store didn't
+  // keep, and debounce the dashboard-wide re-render so a commit doesn't re-render
+  // four times. Shared by the electricity rate, gas MPG, and gas price fields.
   //
   // When an in-range entry is silently clamped (e.g. "140" → 100), surface a
   // transient inline hint in a polite live region and mark the field aria-invalid;
@@ -519,9 +521,27 @@
       hintTimer = window.setTimeout(clearHint, 4000);
     };
     input.addEventListener("input", () => {
+      // Per keystroke, only cap an over-MAXIMUM entry ("140" → "100") so an
+      // obviously-too-big value can't grow further as it's typed. The MIN clamp
+      // is deliberately NOT applied here: a leading digit below the floor (e.g.
+      // "6" en route to "60" for the 50-100% charge target, or "2" toward "25"
+      // MPG) would otherwise be rewritten to the minimum on the first keypress,
+      // making those values impossible to type. Persisting (set) and the bridge
+      // push (onCommit) also wait for the field to settle (commitEdit) so
+      // intermediate keystrokes never stick.
+      const parsed = parseFloat(input.value);
+      if (Number.isFinite(parsed) && parsed > max) {
+        input.value = String(max);
+        showClampHint();
+      }
+    });
+    // Commit on settle (blur / Enter / spinner step): apply the full [min, max]
+    // clamp, reflect the corrected value, flag a silent rewrite, persist it, and
+    // push it across the bridge. Only the settled value is stored/pushed, so
+    // typing "120" no longer commits "12" then "120" mid-entry.
+    const commitEdit = () => {
       const parsed = parseFloat(input.value);
       const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
-      set(prefKey, clamped);
       const reflect = Number.isFinite(parsed)
         ? clamped !== parsed
         : input.value.trim() !== "";
@@ -530,6 +550,7 @@
       // case worth flagging; a blank/NaN field (falling back to the default) is not.
       if (Number.isFinite(parsed) && clamped !== parsed) showClampHint();
       else clearHint();
+      set(prefKey, clamped);
       if (options && options.onCommit) {
         try {
           options.onCommit(clamped);
@@ -539,7 +560,8 @@
       }
       window.clearTimeout(rerenderTimer);
       rerenderTimer = window.setTimeout(rerenderForUnits, 400);
-    });
+    };
+    input.addEventListener("change", commitEdit);
     // Keep this field in sync when the SAME pref is changed elsewhere — e.g. the
     // charge-target lives in BOTH the Preferences panel and the live-charge card
     // (C3), and editing one must reflect in the other. Skip the input the user is

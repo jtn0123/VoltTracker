@@ -100,14 +100,21 @@ class EventNotificationDecider(
         ) : Event
 
         /**
-         * A tracked maintenance item just went overdue (M2). [serviceType] is the user's label for
-         * the service and [overdueByText] is the short amount-overdue string ("1,000 km" / "12 days").
+         * A tracked maintenance item just went overdue (M2). [entryId] is the maintenance-log row id
+         * (distinct per entry even when two rows share a [serviceType] label), [serviceType] is the
+         * user's label for the service, [tripped] names the interval furthest past due, and
+         * [overdueMagnitude] is the raw amount overdue in that interval's unit (km for
+         * [MaintenanceDueEvaluator.Interval.KM], days for [MaintenanceDueEvaluator.Interval.MONTHS]).
+         * [EventNotifier] formats the amount (unit + locale grouping) and derives the per-entry
+         * notification id from [entryId] so two distinct overdue rows never collide onto one alert.
          * Decided on app-open by [MaintenanceDueEvaluator] (not the per-sample core); rides the
          * maintenance-due toggle and only this [Event] kind reaches [EventNotifier].
          */
         data class MaintenanceDue(
+            val entryId: Long,
             val serviceType: String,
-            val overdueByText: String,
+            val tripped: MaintenanceDueEvaluator.Interval,
+            val overdueMagnitude: Double,
         ) : Event
     }
 
@@ -241,6 +248,13 @@ class EventNotificationDecider(
         }
         lastChargingSocPct = soc
         maxChargingSocPct = maxOf(maxChargingSocPct ?: soc, soc)
+        // Require the same minimum-samples confidence as the charge-complete alert before pinging:
+        // a single transient charging sample already at/above target must not fire a target-reached
+        // alert that no ChargeComplete (which guards phantom charges) would back up. The SOC
+        // bookkeeping above still runs on the early samples so the peak-SOC tracking stays accurate.
+        if (chargeSamples < MIN_CHARGE_SAMPLES) {
+            return null
+        }
         val target = settings.targetSocPct
         if (!settings.chargeCompleteEnabled || target >= DEFAULT_TARGET_SOC_PCT) {
             return null

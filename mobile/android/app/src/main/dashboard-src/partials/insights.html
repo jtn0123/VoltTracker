@@ -8,20 +8,20 @@
     </p>
     <ol class="empty-hints" aria-label="How insights build up">
       <li>
-        <b>1</b
+        <b aria-hidden="true">1</b
         ><span
           >Connect the adapter and log a few drives — even short ones.</span
         >
       </li>
       <li>
-        <b>2</b
+        <b aria-hidden="true">2</b
         ><span
           >Pack health, efficiency, and lifetime totals build up
           automatically.</span
         >
       </li>
       <li>
-        <b>3</b
+        <b aria-hidden="true">3</b
         ><span
           >Run a car-code scan anytime to check for stored diagnostics.</span
         >
@@ -59,8 +59,7 @@
         <h2>From your logged drives</h2>
       </div>
       <span class="badge"
-        ><span class="dot"></span
-        ><span><span id="insightTripCount">--</span> drives</span></span
+        ><span class="dot"></span><span id="insightTripCount">--</span></span
       >
     </div>
     <div class="map-sheet-stats">
@@ -97,7 +96,11 @@
           Refresh
         </button>
       </header>
-      <div class="state-grid" aria-label="Additional lifetime totals">
+      <div
+        class="state-grid"
+        role="group"
+        aria-label="Additional lifetime totals"
+      >
         <div>
           <span>Longest drive</span><strong id="insightLongest">--</strong>
         </div>

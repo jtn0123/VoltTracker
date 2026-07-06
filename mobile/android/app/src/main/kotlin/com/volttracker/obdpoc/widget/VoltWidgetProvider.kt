@@ -52,10 +52,36 @@ class VoltWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_updated, freshness)
             views.setContentDescription(
                 R.id.widget_root,
-                context.getString(R.string.widget_content_description, display.socText, status, freshness),
+                contentDescription(context, snapshot, display, status, freshness),
             )
             views.setOnClickPendingIntent(R.id.widget_root, openAppIntent(context))
             return views
+        }
+
+        /**
+         * Builds the spoken (TalkBack) content description. Two accessibility guards over naively
+         * formatting the raw display fields:
+         * - Unknown SOC: the visible "—" placeholder reads poorly aloud, so the unknown state is
+         *   described by its status line (already a full phrase, e.g. "Open the app to connect")
+         *   instead of "— state of charge".
+         * - Empty freshness: the no-data state has no "updated …" line, so it is not appended and the
+         *   result carries no dangling trailing clause.
+         */
+        private fun contentDescription(
+            context: Context,
+            snapshot: WidgetSnapshot,
+            display: WidgetStateFormatter.WidgetDisplay,
+            status: String,
+            freshness: String,
+        ): String {
+            val description =
+                if (snapshot.hasSoc()) {
+                    context.getString(R.string.widget_content_description, display.socText, status, freshness)
+                } else {
+                    val title = context.getString(R.string.widget_title)
+                    if (freshness.isEmpty()) "$title: $status" else "$title: $status. $freshness"
+                }
+            return description.trim()
         }
 
         private fun statusText(

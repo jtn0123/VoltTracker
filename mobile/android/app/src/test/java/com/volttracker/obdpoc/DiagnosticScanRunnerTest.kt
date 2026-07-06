@@ -95,6 +95,26 @@ class DiagnosticScanRunnerTest {
         )
     }
 
+    @Test
+    fun onlyModeThreeStoredCodesFeedTheNotificationBaseline() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+        // Distinct codes per mode: stored (03) P0133, pending (07) U0073, permanent (0A) P25A2.
+        engine.responses["03"] = "43 01 01 33 00 00\r>"
+        engine.responses["07"] = "47 01 C0 73 00 00\r>"
+        engine.responses["0A"] = "4A 01 25 A2 00 00\r>"
+
+        DiagnosticScanRunner(service, engine).run(DiagnosticScanProfile.QUICK)
+
+        val dtcCodes = service.lastTelemetry()!!.getJSONArray("dtcCodes")
+        val codes = (0 until dtcCodes.length()).map { dtcCodes.getString(it) }.toSet()
+        // Only the Mode 03 stored code seeds the notification-facing set — matching AutoDtcScanRunner's
+        // Mode-03-only baseline. The pending (07) and permanent (0A) codes are still probed (persisted
+        // per-command elsewhere) but must NOT enter this diff set, or a permanent-only code would
+        // oscillate against the auto-scan baseline and re-fire a false NewDtc alert forever.
+        assertEquals(setOf("P0133"), codes)
+    }
+
     private class FakeService : ObdService() {
         val statuses: MutableList<String?> = ArrayList()
         val statusDetails: MutableList<String?> = ArrayList()
@@ -133,13 +153,14 @@ class DiagnosticScanRunnerTest {
         service: ObdService,
     ) : ObdPollingEngine(service) {
         val commands: MutableList<String?> = ArrayList()
+        val responses = HashMap<String, String>()
 
         override fun sendRecoverableCommand(
             command: String?,
             timeoutMs: Long,
         ): String {
             commands.add(command)
-            return "OK>"
+            return responses[command] ?: "OK>"
         }
 
         override fun appendLocation(sample: JSONObject) {

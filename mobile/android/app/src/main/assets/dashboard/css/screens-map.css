@@ -389,3 +389,41 @@
     font-size: 10.5px;
     color: var(--muted);
   }
+
+  /* Scrub readout labels carry the unit ("Speed mph", "Elevation ft"), which can
+     wrap to a second line in the narrow six-across cell. Reserve two lines for
+     every label so a wrapped one doesn't push its value down and misalign the
+     row — all six block-level values baseline-align regardless of label length.
+     Higher specificity than the base .scrub-readout .kicker rule in screens.css
+     so it wins even though this sheet is injected at runtime. */
+  .scrubber .scrub-readout .kicker {
+    display: block;
+    line-height: 1.1;
+    min-height: 2.2em;
+  }
+
+  /* Grade color key for the trip-scatter. The swatches mirror the dot colors set
+     in drawTripScatterSvg (gColor): downhill = --map-accent, level = --ev,
+     uphill = --bad. Without an explicit background these <i> chips rendered
+     invisible (nothing else styles them). */
+  .eff-scatter-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+  .eff-scatter-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .eff-scatter-legend i {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .eff-scatter-legend i[data-grade="downhill"] { background: var(--map-accent); }
+  .eff-scatter-legend i[data-grade="flat"] { background: var(--ev); }
+  .eff-scatter-legend i[data-grade="uphill"] { background: var(--bad); }

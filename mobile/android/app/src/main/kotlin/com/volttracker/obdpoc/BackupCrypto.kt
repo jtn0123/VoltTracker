@@ -10,7 +10,6 @@ import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
 import java.security.SecureRandom
 import javax.crypto.Cipher
-import javax.crypto.CipherInputStream
 import javax.crypto.CipherOutputStream
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
@@ -157,12 +156,60 @@ object BackupCrypto {
                     cipher.updateAAD(iterBytes)
                 }
             }
-            CipherInputStream(fileIn, cipher).use { input ->
-                FileOutputStream(dest).use { out ->
-                    copyStream(input, out, maxPlaintextBytes)
-                    out.fd.sync()
+            // Authenticate-then-trust instead of using a CipherInputStream: some Android
+            // CipherInputStream implementations swallow the end-of-stream AEADBadTagException (they
+            // return EOF rather than throwing), so a wrong passphrase / tampered container would
+            // "succeed" and stream unauthenticated plaintext to disk — silently defeating GCM's
+            // integrity guarantee and never firing DECRYPT_FAILED. writeAuthenticatedPlaintext
+            // streams the plaintext out (never buffering the whole restore in RAM) but verifies the
+            // trailing GCM tag via doFinal() and deletes dest on any failure, so no unauthenticated
+            // or partial plaintext ever survives; DataBackup maps the thrown exception to
+            // DECRYPT_FAILED.
+            writeAuthenticatedPlaintext(cipher, fileIn, dest, maxPlaintextBytes)
+        }
+    }
+
+    /**
+     * Streams GCM plaintext from [source] to [dest] as it decrypts — the whole restore is never held
+     * in RAM — then verifies the trailing authentication tag with [Cipher.doFinal] before the output
+     * is trusted. On ANY failure (a bad tag from a wrong passphrase / tampered container, or an
+     * oversize stream) [dest] is deleted so no unauthenticated or partial plaintext is left for the
+     * caller. Output is capped at [maxPlaintextBytes].
+     */
+    @Throws(IOException::class, GeneralSecurityException::class)
+    private fun writeAuthenticatedPlaintext(
+        cipher: Cipher,
+        source: InputStream,
+        dest: File,
+        maxPlaintextBytes: Long,
+    ) {
+        var succeeded = false
+        try {
+            FileOutputStream(dest).use { out ->
+                val buffer = ByteArray(IO_BUFFER_BYTES)
+                var written = 0L
+                while (true) {
+                    val read = source.read(buffer)
+                    if (read < 0) break
+                    val chunk = cipher.update(buffer, 0, read) ?: continue
+                    written += chunk.size
+                    if (written > maxPlaintextBytes) {
+                        throw IOException("Restore file exceeds size limit")
+                    }
+                    out.write(chunk)
                 }
+                // doFinal verifies the GCM tag over the whole stream and throws on a mismatch.
+                val finalBlock = cipher.doFinal()
+                written += finalBlock.size
+                if (written > maxPlaintextBytes) {
+                    throw IOException("Restore file exceeds size limit")
+                }
+                out.write(finalBlock)
+                out.fd.sync()
             }
+            succeeded = true
+        } finally {
+            if (!succeeded) dest.delete()
         }
     }
 

@@ -25,11 +25,11 @@ class EventNotificationPrefs(
     // Monotonic version of the user-toggle/threshold settings, bumped by every settings setter. The
     // canonical value is persisted (see PREF_SETTINGS_VERSION) so it propagates across the SEPARATE
     // prefs instances the Activity (toggles) and the service (coordinator) each hold over the shared
-    // file; the @Volatile mirror lets a same-instance bump be observed without a re-read. A reader
-    // (the coordinator) caches its Settings snapshot and rebuilds only when this version moves, so a
-    // mid-session toggle still takes effect on the next sample without 6 prefs lookups per sample. (G2)
-    @Volatile
-    private var settingsVersion: Long = prefs.getLong(PREF_SETTINGS_VERSION, 0L)
+    // file. A reader (the coordinator) caches its Settings snapshot and rebuilds only when this
+    // version moves, so a mid-session toggle still takes effect on the next sample without 6 prefs
+    // lookups per sample. The accessor re-reads SharedPreferences rather than caching a mirror in a
+    // field: only a re-read observes a bump made through the OTHER instance (cross-instance
+    // visibility is the whole point here), which an in-process @Volatile mirror could not. (G2)
 
     /** Current settings-version; a change signals a cached [Settings] snapshot must be rebuilt. */
     fun settingsVersion(): Long = prefs.getLong(PREF_SETTINGS_VERSION, 0L)
@@ -150,8 +150,8 @@ class EventNotificationPrefs(
     /**
      * Crossing signatures the maintenance-overdue alert (M2) has already fired for, so a given
      * overdue crossing notifies once and never re-nags on later app-opens. Each is a
-     * [MaintenanceDueEvaluator] signature (`<entryId>:km` / `<entryId>:months`). Persisted as a JSON
-     * array, mirroring the DTC baseline set; empty when nothing has fired yet.
+     * [MaintenanceDueEvaluator] signature (`<entryId>:overdue`). Persisted as a JSON array, mirroring
+     * the DTC baseline set; empty when nothing has fired yet.
      */
     fun notifiedMaintenanceSignatures(): Set<String> {
         val raw = prefs.getString(PREF_MAINTENANCE_NOTIFIED, null) ?: return emptySet()
@@ -211,17 +211,18 @@ class EventNotificationPrefs(
      * increment when the Activity (toggles) and the service (coordinator) — which hold SEPARATE
      * [EventNotificationPrefs] over the same process-wide [SharedPreferences] — write concurrently;
      * the version stays strictly monotonic. The bump is committed in the same editor as the setting
-     * (atomic on disk) and mirrored into the @Volatile field so a same-instance bump is observed
-     * without a re-read, invalidating a cached [Settings] reader. (G2)
+     * (atomic on disk), so a cached [Settings] reader (even one on the other instance) sees the moved
+     * version on its next [settingsVersion] read and rebuilds. (G2)
      */
     private fun mutateSettings(block: SharedPreferences.Editor.() -> Unit) {
         synchronized(SETTINGS_WRITE_LOCK) {
-            val editor = prefs.edit()
-            editor.block()
-            val next = prefs.getLong(PREF_SETTINGS_VERSION, 0L) + 1L
-            editor.putLong(PREF_SETTINGS_VERSION, next)
-            editor.apply()
-            settingsVersion = next
+            // KTX edit {} (matches the rest of this class); the version bump commits in the same
+            // editor as the setting so a reader sees both atomically. (G2)
+            prefs.edit {
+                block()
+                val next = prefs.getLong(PREF_SETTINGS_VERSION, 0L) + 1L
+                putLong(PREF_SETTINGS_VERSION, next)
+            }
         }
     }
 

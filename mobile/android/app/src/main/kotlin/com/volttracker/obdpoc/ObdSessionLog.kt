@@ -89,14 +89,26 @@ class ObdSessionLog(
             currentWriter.write(line.toString())
             currentWriter.newLine()
             currentWriter.flush()
+            var syncFailedThisCall = false
+            var syncSucceededThisCall = false
             if (durable) {
                 try {
                     fos?.fd?.sync()
+                    syncSucceededThisCall = true
                 } catch (ignored: IOException) {
+                    syncFailedThisCall = true
                     noteFailure("sync_failed", ignored)
                 }
             }
-            if (lastFailure != null && (!durable || lastFailure?.startsWith("sync_failed") != true)) {
+            // The line landed, so clear any prior failure — but a stale "sync_failed" may only be
+            // cleared by a later durable write whose own sync just succeeded; a plain buffered write
+            // proves nothing about fsync health and must not mask the earlier durability failure.
+            // (And never clear when THIS call's own fsync just failed — its noteFailure must stand.)
+            val staleFailureIsSyncRelated = lastFailure?.startsWith("sync_failed") == true
+            if (lastFailure != null &&
+                !syncFailedThisCall &&
+                (!staleFailureIsSyncRelated || syncSucceededThisCall)
+            ) {
                 lastFailure = null
             }
         } catch (ex: IOException) {

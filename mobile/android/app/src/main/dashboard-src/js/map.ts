@@ -139,6 +139,12 @@ import type { MapSessionFilter } from "./map-session-list";
     const ln = Number(lng);
     if (!Number.isFinite(la) || !Number.isFinite(ln)) return;
     const point = liveRoutePoint(la, ln);
+    // Gate on isValidRoutePoint (not just finiteness) so a (0,0) null-island fix
+    // never enters the live buffer. drawMapRoute filters the buffer through
+    // isValidRoutePoint, but buildLiveRoute derives distance / point-count from the
+    // raw buffer — an unfiltered (0,0) would add a ~13,000 km phantom leg to the
+    // stats while the drawn route skips it. Reject it here so both stay in sync.
+    if (!isValidRoutePoint(point)) return;
     const result = appendLiveRoutePoint(liveRoutePoints, point);
     if (result === "skipped") return;
     if (result === "first") {
@@ -444,7 +450,7 @@ import type { MapSessionFilter } from "./map-session-list";
       fullBtn.setAttribute("aria-label", state.mapFull ? "Exit full map" : "Toggle full map");
     }
 
-    VD.setText("mapPointBadge", `${points.length} pts`);
+    VD.setText("mapPointBadge", `${points.length} ${points.length === 1 ? "pt" : "pts"}`);
     const routeSession = sessionForRoute(route);
     // Trip identity is the DRIVE, not the hardware: "Morning drive", never
     // "OBDLink MX+". The adapter model moves to the kicker line; GPS point
@@ -459,12 +465,20 @@ import type { MapSessionFilter } from "./map-session-list";
           : daypartDriveLabel(routeSession.startedAtMs))
         : "No route recorded yet"
     );
+    // For a live drive the title already reads "Current drive", so the kicker
+    // carries the hardware model (deviceModel); stored routes keep adapterName.
+    // For a live route the kicker carries ONLY the hardware model (deviceModel);
+    // it must not fall back to adapterName, which for a live route IS the title
+    // ("Current drive" / "Current demo") and would duplicate it into the kicker.
+    const kickerModel = isLiveRoute
+      ? String(routeSession.deviceModel || "")
+      : routeSession.adapterName;
     VD.setText(
       "mapKicker",
       // Use the same absolute, skim-able format as the drive-picker chips (fmtChipDate) so a
       // single drive doesn't read "Today 2:51 AM" in its chip but "6h ago" in the kicker at once.
       hasMapContent
-        ? [fmtChipDate(routeSession.startedAtMs), routeSession.adapterName].filter(Boolean).join(" · ")
+        ? [fmtChipDate(routeSession.startedAtMs), kickerModel].filter(Boolean).join(" · ")
         : "GPS map"
     );
     VD.setText("mapDistance", hasMapContent ? VD.formatDistance(route.distanceMeters || 0) : "--");
@@ -734,13 +748,13 @@ import type { MapSessionFilter } from "./map-session-list";
     const sample = state.telemetry || {};
     const source = String(sample.source || "").toLowerCase();
     const isDemo = state.demoActive || source.includes("demo");
-    const adapterName = isDemo
-      ? "Current demo"
-      : String(
-        sample.adapterName ||
-        (selectedDevice && selectedDevice.name) ||
-        CURRENT_DRIVE_LABEL
-      );
+    // The map title is the DRIVE ("Current drive"), not the hardware. Keep the
+    // adapter/device model in a separate field so renderMap shows it only in the
+    // kicker line — folding it into adapterName duplicated it into the title.
+    const deviceModel = isDemo
+      ? ""
+      : String(sample.adapterName || (selectedDevice && selectedDevice.name) || "");
+    const adapterName = isDemo ? "Current demo" : CURRENT_DRIVE_LABEL;
     // Keep the displayed distance and the duration (renderMap derives both from the values
     // below) on the SAME basis, or avg speed = distance/duration drifts once the rolling
     // 600-point GPS buffer trims its head on a long drive. When the full-session distance is
@@ -771,6 +785,7 @@ import type { MapSessionFilter } from "./map-session-list";
         id: LIVE_ROUTE_ID,
         mode: isDemo ? "demo" : "drive",
         adapterName,
+        deviceModel,
         startedAtMs,
         endedAtMs: Math.max(Date.now(), Number(lastPoint.atMs) || 0),
         status: "live",
@@ -886,7 +901,7 @@ import type { MapSessionFilter } from "./map-session-list";
     map.invalidateSize(false);
     const drawable = points.filter(isValidRoutePoint);
     const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
-    if (isLiveRoute && layer === "routes" && updateLiveRouteLayer(drawable, map, routeSession)) {
+    if (isLiveRoute && layer === "routes" && updateLiveRouteLayer(drawable, map)) {
       return;
     }
     Object.keys(mapLayerGroups).forEach((key) => {
@@ -1026,20 +1041,36 @@ import type { MapSessionFilter } from "./map-session-list";
       // fitKey gate is for one-shot historical fits and would pin the view to the
       // first point forever on a live route, so bypass it here.
       fitLiveFollow(map, latlngs);
-      mapFitKey = routeFitKey(routeSession, drawable);
+      mapFitKey = liveRouteFitKey();
       return;
     }
-    const fitKey = routeFitKey(routeSession, drawable);
+    // A live route with follow OFF gates on drive identity (liveRouteFitKey) so a
+    // buffer head-trim on a long drive can't refit and yank a panned view; historical
+    // routes keep the coordinate-based key (a changed geometry is a different drive).
+    const fitKey = isLiveRoute ? liveRouteFitKey() : routeFitKey(routeSession, drawable);
     if (fitKey !== mapFitKey) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
       mapFitKey = fitKey;
     }
   }
 
+  // Follow-OFF fit gate for the LIVE route: keyed on drive identity, NOT the first
+  // drawn coordinate. routeFitKey folds the first fix into the live key, but
+  // appendLiveRoutePoint trims the buffer head once it passes LIVE_ROUTE_MAX_POINTS
+  // (~10 min of driving), so that first coordinate changes every tick. Keying the
+  // follow-off fit on it would refit fitBounds every second and yank a manually
+  // panned view back. `liveRouteStartedAtMs` is set once when the drive starts and
+  // is stable across head-trims (unlike buildLiveRoute's session.startedAtMs, which
+  // can fall back to the trimmed first point), so the initial fit still fires once
+  // (mapFitKey starts null / carries a prior route's key) and then never re-fits
+  // until a new drive starts (which resets mapFitKey) or the user picks another drive.
+  function liveRouteFitKey(): string {
+    return [LIVE_ROUTE_ID, String(liveRouteStartedAtMs || "")].join(":");
+  }
+
   function updateLiveRouteLayer(
     drawable: MapRoutePoint[],
-    map: LeafletMapInstance,
-    routeSession: MapRouteSession
+    map: LeafletMapInstance
   ) {
     const cache = liveRouteLayerCache;
     if (!cache || drawable.length < 2) return false;
@@ -1066,10 +1097,13 @@ import type { MapSessionFilter } from "./map-session-list";
       // Follow the head as new samples stream in (see fitLiveFollow). Keep
       // mapFitKey current so a later follow-off render doesn't snap-refit.
       fitLiveFollow(map, latlngs);
-      mapFitKey = routeFitKey(routeSession, drawable);
+      mapFitKey = liveRouteFitKey();
       return true;
     }
-    const fitKey = routeFitKey(routeSession, drawable);
+    // Follow OFF: gate on drive identity (liveRouteFitKey), not the head-trimmed
+    // first fix — otherwise a long drive's rolling-window trim refits (and yanks the
+    // user's manual pan) every tick. The initial fit still runs once via the gate.
+    const fitKey = liveRouteFitKey();
     if (fitKey !== mapFitKey) {
       map.fitBounds(L.latLngBounds(latlngs), { padding: [30, 30] });
       mapFitKey = fitKey;
@@ -1156,12 +1190,16 @@ import type { MapSessionFilter } from "./map-session-list";
         : 0;
     const avgKph = durationMs > 0 ? (distanceMeters / (durationMs / 1000)) * 3.6 : 0;
     let maxMps = 0;
-    for (let i = 0; i < points.length; i += 1) {
-      const point = points[i];
+    // Filter through isValidRoutePoint (as drawMapRoute does) before the segment-speed
+    // fallback: a single (0,0) null-island fix between real ones makes segmentSpeedMps
+    // return an absurd value and blow out Max speed.
+    const drivablePoints = points.filter(isValidRoutePoint);
+    for (let i = 0; i < drivablePoints.length; i += 1) {
+      const point = drivablePoints[i];
       if (!point) continue;
       let mps = Number(point.speedMps);
       if ((!Number.isFinite(mps) || mps < 0) && i > 0) {
-        const previous = points[i - 1];
+        const previous = drivablePoints[i - 1];
         if (previous) mps = segmentSpeedMps(previous, point);
       }
       if (Number.isFinite(mps) && mps > maxMps) maxMps = mps;
@@ -1203,7 +1241,9 @@ import type { MapSessionFilter } from "./map-session-list";
     for (let i = 0; i < points.length; i += 1) {
       const point = points[i];
       if (!point) continue;
-      const eff = Number(point.eff);
+      // numOrNaN so null (regen / no-data) points are skipped — Number(null) === 0
+      // is finite and would plot a bogus 0 mi/kWh dot at the chart floor.
+      const eff = numOrNaN(point.eff);
       if (!Number.isFinite(eff)) continue;
       let mps = Number(point.speedMps);
       if (!Number.isFinite(mps) || mps < 0) {
@@ -1220,9 +1260,11 @@ import type { MapSessionFilter } from "./map-session-list";
       if (mph < 10) continue;
       let grade = 0;
       const prev = points[i - 1];
-      if (i > 0 && prev && Number.isFinite(Number(prev.altM)) && Number.isFinite(Number(point.altM))) {
+      // numOrNaN, not Number(): a JSON null altitude is Number(null) === 0, which is
+      // finite and would pass the guard and mis-color the grade dot as sea level.
+      if (i > 0 && prev && Number.isFinite(numOrNaN(prev.altM)) && Number.isFinite(numOrNaN(point.altM))) {
         const horiz = Math.max(8, haversineMetersJs(prev.lat, prev.lng, point.lat, point.lng));
-        grade = Math.max(-0.13, Math.min(0.13, (Number(point.altM) - Number(prev.altM)) / horiz));
+        grade = Math.max(-0.13, Math.min(0.13, (numOrNaN(point.altM) - numOrNaN(prev.altM)) / horiz));
       }
       pool.push({ mph, eff, grade });
     }
@@ -1326,7 +1368,10 @@ import type { MapSessionFilter } from "./map-session-list";
   // drawn as a filled line with a climb/descent headline. Returns null when the
   // drive carries too few altitude fixes (telemetry-fallback routes have none).
   function buildTripElevationProfile(route: MapRoute): { svg: SVGElement; climbM: number; descentM: number } | null {
-    const points = Array.isArray(route.points) ? route.points : [];
+    // Filter through isValidRoutePoint (as drawMapRoute does) so a (0,0) null-island
+    // fix can't inject a ~13,000 km jump into the cumulative distance and squash the
+    // whole elevation trace against one edge of the axis.
+    const points = (Array.isArray(route.points) ? route.points : []).filter(isValidRoutePoint);
     const profile: Array<{ dist: number; alt: number }> = [];
     let dist = 0;
     let prev: (typeof points)[number] | null = null;
@@ -1334,7 +1379,9 @@ import type { MapSessionFilter } from "./map-session-list";
       if (!point) continue;
       if (prev) dist += haversineMetersJs(prev.lat, prev.lng, point.lat, point.lng);
       prev = point;
-      const alt = Number(point.altM);
+      // numOrNaN, not Number(): a JSON null altitude is Number(null) === 0, which is
+      // finite and would spike the trace with a phantom sea-level point. Skip it.
+      const alt = numOrNaN(point.altM);
       if (Number.isFinite(alt)) profile.push({ dist, alt });
     }
     if (profile.length < 4) return null;

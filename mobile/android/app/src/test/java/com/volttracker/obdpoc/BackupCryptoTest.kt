@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.RandomAccessFile
+import java.security.GeneralSecurityException
 import java.security.SecureRandom
 
 /**
@@ -212,6 +213,62 @@ class BackupCryptoTest {
                 decrypted.readBytes().contentEquals(payload),
             )
         }
+    }
+
+    /**
+     * Hardened contract for the buffer-and-doFinal decrypt: a tampered ciphertext must now THROW a
+     * GCM authentication failure (AEADBadTagException, a GeneralSecurityException) instead of a
+     * CipherInputStream possibly swallowing it at EOF — and no plaintext may be written. This is the
+     * branch DataBackup maps to DECRYPT_FAILED, so the "either it throws or output isn't plaintext"
+     * soft contract above is tightened here to "it must throw and write nothing".
+     */
+    @Test
+    fun tamperedCiphertextThrowsAuthenticationFailureAndWritesNoPlaintext() {
+        val payload = randomBytes(4_096)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        val len = encrypted.length()
+        val flipAt = headerBytes + (len - headerBytes) / 2
+        RandomAccessFile(encrypted, "rw").use { raf ->
+            raf.seek(flipAt)
+            val orig = raf.readByte()
+            raf.seek(flipAt)
+            raf.writeByte(orig.toInt() xor 0x01)
+        }
+
+        try {
+            BackupCrypto.decryptFile(encrypted, decrypted, passphrase, Long.MAX_VALUE)
+            fail("a tampered GCM container must throw an authentication failure, not silently succeed")
+        } catch (ex: GeneralSecurityException) {
+            // Expected: doFinal surfaces the AEADBadTagException instead of returning EOF.
+        }
+        assertEquals("no plaintext may be written when authentication fails", 0L, decrypted.length())
+    }
+
+    /**
+     * A wrong passphrase derives the wrong key, so the GCM tag can never verify. The fix guarantees
+     * this throws (and writes nothing) rather than a swallowed-tag silent success.
+     */
+    @Test
+    fun wrongPassphraseThrowsAuthenticationFailureAndWritesNoPlaintext() {
+        val payload = randomBytes(2_048)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        try {
+            BackupCrypto.decryptFile(encrypted, decrypted, "totally different passphrase", Long.MAX_VALUE)
+            fail("a wrong passphrase must throw an authentication failure, not silently succeed")
+        } catch (ex: GeneralSecurityException) {
+            // Expected: the wrong key yields a GCM tag mismatch at doFinal.
+        }
+        assertEquals("no plaintext may be written for a wrong passphrase", 0L, decrypted.length())
     }
 
     /**

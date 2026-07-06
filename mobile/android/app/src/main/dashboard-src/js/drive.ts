@@ -124,9 +124,15 @@ type ChartPoint = {
         return { tone: "live", label: "Waiting for data", meta: ["adapter connected"] };
       }
       const meta: string[] = [];
-      if (samples) meta.push(samples.toLocaleString() + " samples");
+      if (samples) meta.push(samples.toLocaleString() + (samples === 1 ? " sample" : " samples"));
       if (runtimeMs) meta.push(fmtDuration(runtimeMs));
       if (distance) meta.push(units.distanceText(distance / 1000));
+      // hasLiveEvidence can already be true from lastSampleAt / a populated
+      // history buffer before any counted sample/runtime/distance exists, leaving
+      // meta empty. renderDriveNowChips would then setText("driveRecordingMeta",
+      // "") and setText coerces "" to "--" — "Recording · --". Emit a real
+      // placeholder instead so the live line reads "Recording · live".
+      if (!meta.length) meta.push("live");
       return { tone: "live", label: "Recording", meta: meta };
     }
     if (adapter.remembered || (state.lastDevice || {}).address) {
@@ -438,7 +444,10 @@ type ChartPoint = {
     const padT = 14;
     const padB = 10;
     const samples = state.powerHistory || [];
-    const sig = samples.length + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    // Include the OLDEST sample: at the 60-sample cap the window scrolls while
+    // length + newest value can stay identical (natives re-deliver a repeated
+    // newest reading), so keying on those alone leaves the bars stale by one.
+    const sig = samples.length + ":" + (samples[0] ?? "") + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
     if (sig === lastPowerBarsSig) return;
     lastPowerBarsSig = sig;
     if (!samples.length) {
@@ -469,16 +478,23 @@ type ChartPoint = {
         "span",
         "live-power-bar " + (v >= 0 ? "is-drive" : "is-regen")
       );
+      // Signed chart: both halves share ONE per-kW pixel scale so equal |power|
+      // renders equal height up and down. The drive half has more room than the
+      // regen half (zero line sits below center), so scaling each side by its own
+      // usable height made +40kW taller than −40kW — misreading the sign. Use the
+      // smaller half's pixels-per-kW for both, still clamping each bar to its own
+      // side so a spike can't overflow the zero line.
+      const driveUsable = zeroY - top;
+      const regenUsable = bottom - zeroY;
+      const unit = Math.min(driveUsable, regenUsable) / maxAbs;
       let y;
       let bh;
       if (v >= 0) {
         // Drive — bar grows upward from zero line.
-        const usable = zeroY - top;
-        bh = Math.min(usable, (v / maxAbs) * usable);
+        bh = Math.min(driveUsable, v * unit);
         y = zeroY - Math.max(1, bh);
       } else {
-        const usable = bottom - zeroY;
-        bh = Math.min(usable, (-v / maxAbs) * usable);
+        bh = Math.min(regenUsable, -v * unit);
         y = zeroY;
       }
       bar.style.left = x.toFixed(1) + "px";
@@ -512,7 +528,10 @@ type ChartPoint = {
     const padT = 14;
     const padB = 12;
     const samples = state.socHistory || [];
-    const sig = samples.length + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    // Include the OLDEST sample: at the 240-sample cap the window scrolls while
+    // length + newest value can stay identical (a repeated newest reading), so
+    // keying on those alone leaves the trace stale by one position.
+    const sig = samples.length + ":" + (samples[0] ?? "") + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
     if (sig === lastSocTraceSig) return;
     lastSocTraceSig = sig;
     // The live value chip lives in the panel header so the chart body can stay

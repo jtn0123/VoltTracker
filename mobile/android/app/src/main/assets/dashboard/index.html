@@ -507,6 +507,7 @@
   <div
     id="driveNowChips"
     class="map-drive-chips drive-now-chips"
+    role="group"
     aria-label="Drive session status"
   ></div>
 
@@ -688,6 +689,7 @@
       <div
         id="batteryPackReadout"
         class="battery-pack-readout"
+        role="group"
         data-optional-live-group="true"
         aria-label="HV pack live readings"
       >
@@ -1110,6 +1112,7 @@
     <div
       class="trip-detail-stats"
       id="tripDetailStats"
+      role="group"
       aria-label="Drive stats"
     >
       <div>
@@ -1222,6 +1225,7 @@
         class="scrub-btn"
         id="scrubToggle"
         aria-expanded="false"
+        aria-controls="scrubStack"
         aria-label="Toggle route detail readout"
       >
         Details
@@ -1328,21 +1332,21 @@
     </p>
     <ol class="empty-hints" aria-label="How charge tracking works">
       <li>
-        <b>1</b
+        <b aria-hidden="true">1</b
         ><span
           >Connect the OBD adapter and keep the app open while the car
           charges.</span
         >
       </li>
       <li>
-        <b>2</b
+        <b aria-hidden="true">2</b
         ><span
           >Each plug-in is detected automatically — there's no button to
           press.</span
         >
       </li>
       <li>
-        <b>3</b
+        <b aria-hidden="true">3</b
         ><span
           >Sessions, peak power, and detection status fill in the cards
           below.</span
@@ -1467,7 +1471,7 @@
     <header class="cell-balance-head">
       <div>
         <span class="kicker">Battery cell balance</span>
-        <h3 id="cellBalanceTitle">No live cell data yet</h3>
+        <h2 id="cellBalanceTitle">No live cell data yet</h2>
       </div>
       <div class="map-sheet-actions">
         <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
@@ -1660,20 +1664,20 @@
     </p>
     <ol class="empty-hints" aria-label="How insights build up">
       <li>
-        <b>1</b
+        <b aria-hidden="true">1</b
         ><span
           >Connect the adapter and log a few drives — even short ones.</span
         >
       </li>
       <li>
-        <b>2</b
+        <b aria-hidden="true">2</b
         ><span
           >Pack health, efficiency, and lifetime totals build up
           automatically.</span
         >
       </li>
       <li>
-        <b>3</b
+        <b aria-hidden="true">3</b
         ><span
           >Run a car-code scan anytime to check for stored diagnostics.</span
         >
@@ -1711,8 +1715,7 @@
         <h2>From your logged drives</h2>
       </div>
       <span class="badge"
-        ><span class="dot"></span
-        ><span><span id="insightTripCount">--</span> drives</span></span
+        ><span class="dot"></span><span id="insightTripCount">--</span></span
       >
     </div>
     <div class="map-sheet-stats">
@@ -1749,7 +1752,11 @@
           Refresh
         </button>
       </header>
-      <div class="state-grid" aria-label="Additional lifetime totals">
+      <div
+        class="state-grid"
+        role="group"
+        aria-label="Additional lifetime totals"
+      >
         <div>
           <span>Longest drive</span><strong id="insightLongest">--</strong>
         </div>
@@ -2065,7 +2072,7 @@
         Connect
       </button>
     </div>
-    <div class="state-grid" aria-label="Live app state">
+    <div class="state-grid" role="group" aria-label="Live app state">
       <div><span>Logging</span><strong id="loggingState">idle</strong></div>
       <div><span>GPS</span><strong id="gpsState">waiting</strong></div>
       <div><span>DB</span><strong id="dbState">ready</strong></div>
@@ -2096,12 +2103,7 @@
         <span>Scan</span>
         <small>Codes + live PIDs</small>
       </button>
-      <button
-        id="tpmsScanBtn"
-        type="button"
-        data-action="tpmsScan"
-        class="settings-command"
-      >
+      <button id="tpmsScanBtn" type="button" class="settings-command">
         <span>Extra signals</span>
         <small>Tires, battery internals</small>
       </button>
@@ -2161,7 +2163,7 @@
     <header class="connection-tools__head">
       <div>
         <span class="kicker">Connection tools</span>
-        <h3>Proactive adapter checks</h3>
+        <h2>Proactive adapter checks</h2>
       </div>
     </header>
 

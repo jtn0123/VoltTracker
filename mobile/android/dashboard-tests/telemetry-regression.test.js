@@ -89,4 +89,37 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(VD.state.speedHistory).toEqual([]);
     expect(VD.state.lastSampleAt).toBe(0);
   });
+
+  it('preserves the session baseline across a mid-drive Bluetooth blip', () => {
+    const VD = window.VoltDashboard;
+    // Enter an active drive (this first activation resets), then stamp a baseline.
+    VD.setStatus({ state: 'connected', detail: 'Live OBD data.' });
+    VD.state.sessionDistanceM = 4200;
+    VD.state.sessionStartSoc = 76;
+    VD.state.speedHistory = [10, 20, 30];
+
+    // A transient blip drops through an inactive error state then re-connects.
+    // The same native session is resuming, so the JS baseline must survive — only
+    // a genuine terminal stop (or a renumbered native session) may wipe it.
+    VD.setStatus({ state: 'error', detail: 'Adapter dropped.' });
+    VD.setStatus({ state: 'connected', detail: 'Reconnected.' });
+
+    expect(VD.state.sessionDistanceM).toBe(4200);
+    expect(VD.state.sessionStartSoc).toBe(76);
+    expect(VD.state.speedHistory).toEqual([10, 20, 30]);
+  });
+
+  it('resets the session baseline after a genuine stop then reconnect', () => {
+    const VD = window.VoltDashboard;
+    VD.setStatus({ state: 'connected', detail: 'Live OBD data.' });
+    VD.state.sessionDistanceM = 4200;
+    VD.state.sessionStartSoc = 76;
+
+    // A genuine terminal stop (idle) followed by a fresh connect is a new drive.
+    VD.setStatus({ state: 'idle', detail: 'Disconnected.' });
+    VD.setStatus({ state: 'connected', detail: 'Live OBD data.' });
+
+    expect(VD.state.sessionDistanceM).toBe(0);
+    expect(VD.state.sessionStartSoc).toBeNull();
+  });
 });

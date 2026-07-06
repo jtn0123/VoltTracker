@@ -112,6 +112,20 @@ class QueryPlanIndexTest {
         assertUsesIndex(sql, arrayOf("1"), "idx_events_session_time")
     }
 
+    // ---- trip-hidden lookup (route open) ---------------------------------------------
+
+    @Test
+    fun tripHiddenLookup_usesSessionTimeIndex() {
+        // ObdTripExclusions.isHidden: the unscoped `kind = ? AND detail = ?` predicate full-scanned
+        // status_events on every route open. Scoping by session_id lets the composite index narrow
+        // the scan to the session's rows.
+        val sql =
+            "SELECT 1 FROM " +
+                VoltTrackerDb.TABLE_EVENTS +
+                " WHERE session_id = ? AND kind = ? AND detail = ? LIMIT 1"
+        assertUsesIndex(sql, arrayOf("1", "trip_hidden", "1:2:3"), "idx_events_session_time")
+    }
+
     // ---- adapter history (key lookup, list) ------------------------------------------
 
     @Test

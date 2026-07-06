@@ -268,6 +268,12 @@ open class ObdPollingEngine(
             }
             return
         }
+        // Live-poll only (intentional): a long drive earns a fresh reconnect budget on every
+        // successful connect so transient mid-drive drops don't accumulate toward exhaustion across
+        // reconnects. One-shot runners (clear-DTC / scan / TPMS / detail) deliberately DON'T reset
+        // here, so their connect retries and any mid-run drop share one combined
+        // MAX_RECONNECT_ATTEMPTS bound and the operation gives up promptly rather than retrying as
+        // aggressively as a live session.
         retry.resetAttemptBudget()
         service.broadcastStatus(
             "connected",

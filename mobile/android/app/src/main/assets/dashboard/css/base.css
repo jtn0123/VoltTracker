@@ -202,6 +202,20 @@
     --accent: #6ec6ff;
   }
 
+  /* Light-scheme high contrast: the block above ships white text/lines that
+     vanish on light surfaces; flip text/line tokens to dark ink. Must follow it
+     (equal 0,2,0 specificity → source order wins on light devices). */
+  @media (prefers-color-scheme: light) {
+    :root[data-contrast="high"] {
+      --text: #0a0b10;
+      --muted: #1b1c22;
+      --soft: #33343d;
+      --line: rgba(15,18,28,0.5);
+      --line-strong: rgba(15,18,28,0.7);
+      --line-soft: rgba(15,18,28,0.4);
+    }
+  }
+
   /* Honor reduced-motion. */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -702,6 +716,9 @@
     font-size: var(--font-h3);
     line-height: 1.15;
   }
+
+  /* #cellBalanceTitle is an <h2> for heading order; keep it sized like the sibling h3s. */
+  .cell-balance-head h2 { font-size: 15px; font-weight: 650; }
 
   /* Chip/badge family (pill-shaped): .badge (status+dot), .session-badge
      (accent count), .rate-chip (live freshness), .micro-tag, .trip-route-state,

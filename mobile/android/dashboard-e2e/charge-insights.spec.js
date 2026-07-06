@@ -48,7 +48,7 @@ test('insights tab renders aggregate stats', async ({ page }) => {
   });
   await setView(page, 'insights');
 
-  await expect(page.locator('#insightTripCount')).toHaveText('5');
+  await expect(page.locator('#insightTripCount')).toHaveText('5 drives');
   await expect(page.locator('#insightTopSpeed')).toContainText('mph');
   await expect(page.locator('#insightGpsTrips')).toHaveText('4/5');
 });

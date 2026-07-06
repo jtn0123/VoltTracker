@@ -251,7 +251,8 @@ class TroubleshooterBridge(
             )
             return
         }
-        val device = activity.requireDeviceCatalog().getLastOrCandidateDevice()
+        val catalog = activity.requireDeviceCatalog()
+        val device = catalog.getLastOrCandidateDevice()
         val address = device.optString("address", "")
         val name = device.optString("name", "Test connection")
         if (address.isEmpty()) {
@@ -262,7 +263,14 @@ class TroubleshooterBridge(
             )
             return
         }
-        activity.rememberDevice(address, name)
+        // Only remember when this isn't already the remembered last device. The notify-when-ready tick
+        // re-probes every ~30 s, and rememberDevice writes SQLite, republishes the device list, and
+        // stomps the status to "Remembered device X" — churning ~30x over a 15-minute wait if done
+        // unconditionally. scheduleAdapterReadyNotify remembers the target once when the schedule arms,
+        // so subsequent probes fall through this guard.
+        if (address != catalog.lastAddress()) {
+            activity.rememberDevice(address, name)
+        }
         probeInFlight = true
         activity.startObdService(ObdService.ACTION_CONNECT, address, name)
         if (testConnectionStopHandler == null) {
@@ -284,6 +292,16 @@ class TroubleshooterBridge(
     fun scheduleAdapterReadyNotify(mins: Int) {
         adapterReadyDeadlineMs = System.currentTimeMillis() + mins * 60_000L
         adapterReadyActive = true
+        // Remember the target adapter once here, while the schedule is armed, so the per-tick
+        // startTestConnection probes can skip the rememberDevice write (SQLite + republish + status
+        // churn) on every ~30 s tick. Skip if there's no address yet, or it's already the remembered
+        // last device.
+        val catalog = activity.requireDeviceCatalog()
+        val device = catalog.getLastOrCandidateDevice()
+        val address = device.optString("address", "")
+        if (address.isNotEmpty() && address != catalog.lastAddress()) {
+            activity.rememberDevice(address, device.optString("name", "Test connection"))
+        }
         if (adapterReadyHandler == null) {
             adapterReadyHandler = Handler(activity.mainLooper)
         }
@@ -336,6 +354,12 @@ class TroubleshooterBridge(
         try {
             val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             if (nm != null) {
+                // Post on EventNotifier's DEFAULT-importance alerts channel, not ObdNotifications'
+                // IMPORTANCE_LOW ongoing-service channel: on Android 8+ the channel importance wins
+                // over setPriority, so building this walk-away alert on the LOW channel would make it
+                // silent. Ensure that channel exists first (createChannel is otherwise only guaranteed
+                // once an event notification has posted).
+                EventNotifier.ensureChannel(activity)
                 val open =
                     Intent()
                         .setClass(activity, MainActivity::class.java)
@@ -350,7 +374,7 @@ class TroubleshooterBridge(
                     )
                 val notification =
                     NotificationCompat
-                        .Builder(activity, ObdNotifications.CHANNEL_ID)
+                        .Builder(activity, EventNotifier.CHANNEL_ID)
                         .setContentTitle(activity.getString(R.string.notification_adapter_ready_title))
                         .setContentText(activity.getString(R.string.notification_adapter_ready_text))
                         .setSmallIcon(android.R.drawable.stat_notify_sync_noanim)

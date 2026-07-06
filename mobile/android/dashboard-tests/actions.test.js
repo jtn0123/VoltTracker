@@ -490,6 +490,27 @@ describe('actions.ts — bridge dispatch', () => {
     expect(VD.state.status.detail).toMatch(/example data loaded/i);
   });
 
+  it('previewDtcCodes() then clearPreviewDtcCodes() restores the real cached DTCs', async () => {
+    // A real device with cached diagnostic codes.
+    const realCodes = [{ dtc: 'P0AA6', status: 'stored', firstSeenMs: 1, lastSeenMs: 2 }];
+    VD.state.storage = {
+      latestDiagnosticCodes: realCodes,
+      diagnosticCodeCount: 1,
+      diagnosticCodeStatusCounts: { stored: 1 },
+    };
+
+    // Preview stages the sample examples over the real cache…
+    await VD.actions.previewDtcCodes();
+    expect(VD.state.storage.latestDiagnosticCodes).toHaveLength(VD.dtcSampleCodes.length);
+
+    // …and Clear must put the REAL codes/counts back, not blank them until the
+    // next native push.
+    VD.actions.clearPreviewDtcCodes();
+    expect(VD.state.storage.latestDiagnosticCodes).toEqual(realCodes);
+    expect(VD.state.storage.diagnosticCodeCount).toBe(1);
+    expect(VD.state.storage.diagnosticCodeStatusCounts).toEqual({ stored: 1 });
+  });
+
   it('shareBackup() cancel path sets a ready status and skips the bridge', async () => {
     await VD.actions.shareBackup(button);
     await clickAppDialogCancel();

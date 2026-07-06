@@ -39,6 +39,32 @@ class ClearDtcRunnerTest {
     }
 
     @Test
+    fun runTreatsResponsePendingBeforePositiveReplyAsCleared() {
+        val service = FakeService()
+        // 7F 04 78 = requestCorrectlyReceived-ResponsePending; the ECU then confirms the clear with
+        // 44. The 0x78 must be treated as non-terminal so the trailing 44 still reports success.
+        val engine = FakeEngine(service, "7F 04 78\r44\r>")
+
+        ClearDtcRunner(service, engine).run()
+
+        assertEquals("codes-cleared", service.lastStatusState())
+        assertTrue(service.lastTelemetry()!!.getBoolean("clearDtcOk"))
+        assertEquals("ok", service.lastTelemetry()!!.getString("clearDtcCode"))
+    }
+
+    @Test
+    fun runReportsFailureForResponsePendingWithNoFinalPositive() {
+        val service = FakeService()
+        // Response-pending that never resolves to a 44: still a failure, just not a terminal NRC.
+        val engine = FakeEngine(service, "7F 04 78\r>")
+
+        ClearDtcRunner(service, engine).run()
+
+        assertEquals("error", service.lastStatusState())
+        assertFalse(service.lastTelemetry()!!.getBoolean("clearDtcOk"))
+    }
+
+    @Test
     fun runReportsFailureForUnusableReply() {
         val service = FakeService()
         val engine = FakeEngine(service, "NO DATA>")

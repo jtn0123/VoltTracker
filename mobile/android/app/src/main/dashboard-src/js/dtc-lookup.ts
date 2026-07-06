@@ -652,7 +652,7 @@
     P1248: "Injection pump corrective pulse nominal - GM diesel",
     P1257: "Supercharger boost system performance (GM V6)",
     P1258: "Engine coolant overtemperature - protection active (GM)",
-    P1259: "VTEC / cam control system fault (GM HFV6 family)",
+    P1259: "Intake cam position actuator system performance (GM)",
 
     // P13xx: Ignition / misfire - GM
     P1300: "Ignition control circuit (GM - general IC module fault)",
@@ -3736,10 +3736,16 @@
         return "Transmission";
       if (hundreds === "0A") return "Hybrid propulsion (drive motors / inverter)";
       if (hundreds === "0B") return "Hybrid battery / cell";
-      if (hundreds === "0C" || hundreds === "0D") return "Hybrid charging / extension";
+      if (hundreds === "0C") return "Hybrid charging / extension";
+      if (hundreds === "0D") return "Hybrid auxiliary (heaters / A/C / charge ports)";
       if (second === "1") return "Manufacturer-specific powertrain (GM / Volt)";
       if (second === "2") return "Generic powertrain (extended SAE)";
-      if (second === "3") return "Manufacturer-specific powertrain (extended)";
+      // SAE reserves the P3400-P3499 block (hundreds === "34") as generic
+      // cylinder-deactivation; the rest of P3xxx is manufacturer-specific.
+      if (second === "3")
+        return hundreds === "34"
+          ? "Generic powertrain (cylinder deactivation / SAE)"
+          : "Manufacturer-specific powertrain (extended)";
     }
     if (head === "B") return "Body / restraints code";
     if (head === "C") return "Chassis / ABS / brakes code";

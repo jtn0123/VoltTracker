@@ -65,10 +65,16 @@ import type { DataStateValue } from "./dataset-state";
       if (category === "tpms") tally.tpms = (tally.tpms || 0) + 1;
       return tally;
     }, { confirmed: 0, rejected: 0, candidate: 0, deferred: 0, tpms: 0 });
-    const total = rows.length || Number(storage.fieldCapabilityCount || 0);
+    // With no rows the per-status chips and the list all read "0 / run a scan",
+    // so the title + All chip must agree — falling back to fieldCapabilityCount
+    // here made them claim "N tracked" while everything else showed 0.
+    const total = rows.length;
     const list = el("enhancedCapabilityList");
     VD.setText("enhancedTitle", total ? `${total} detailed signal${total === 1 ? "" : "s"} tracked` : "No detailed signal results yet");
-    setEnhancedBadge(counts.confirmed ? "working data" : total ? "evidence saved" : "ready", counts.confirmed ? "working" : total ? "saved" : "ready");
+    // Zero-result pill uses the "idle" tone (the one distinctly-styled neutral
+    // state on .signal-status-pill, alongside "blocked") so an empty scoreboard
+    // no longer renders the same green as the "saved"/"working" has-data states.
+    setEnhancedBadge(counts.confirmed ? "working data" : total ? "evidence saved" : "ready", counts.confirmed ? "working" : total ? "saved" : "idle");
     // The scoreboard counts and the status filter chips share one control now,
     // so each count is written once to the chip that also filters by it.
     VD.setText("enhancedAllCount", total);
@@ -217,7 +223,10 @@ import type { DataStateValue } from "./dataset-state";
         button.setAttribute("aria-pressed", String(on));
       });
     }
-    const count = rows.filter((row) => String(row.scanStage || sampleOf(row).scanStage || "") === stage).length;
+    // Default a stageless row to "tires" to match updateEnhancedNextList's admit
+    // filter — otherwise a default-'tires' row shows in the next-list but is
+    // excluded from this button count, so the two disagree.
+    const count = rows.filter((row) => String(row.scanStage || sampleOf(row).scanStage || "tires") === stage).length;
     const button = el("detailProbeBtn") as HTMLButtonElement | null;
     if (button) {
       button.textContent = count ? `Run ${meta.label} (${count})` : `Run ${meta.label}`;

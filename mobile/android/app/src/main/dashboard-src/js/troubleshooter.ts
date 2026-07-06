@@ -492,6 +492,17 @@ import type { FocusTrap } from "./focus-trap";
     if (actionsNode) actionsNode.hidden = !(showCancel || showHelp);
   }
 
+  // Once the module is lazily loaded, a single native status flows through BOTH
+  // actions.ts's maybeLoadTroubleshooterForStatus (which calls noteStatus) AND
+  // installStatusObserver's setStatus wrap (which also calls noteStatus) — so the
+  // same event double-incremented the retry/failure counters and opened the modal
+  // one real retry too early. Dedupe an immediate duplicate (identical signature
+  // within a tick): the two paths fire in the same microtask, while a genuine
+  // repeat retry is seconds apart, so a short window separates them safely.
+  let lastCountedSig = "";
+  let lastCountedAt = 0;
+  const DEDUPE_WINDOW_MS = 250;
+
   // Counts a status payload toward the auto-open trigger.
   function noteStatus(status: VoltStatus | null | undefined) {
     if (!status) return;
@@ -499,6 +510,18 @@ import type { FocusTrap } from "./focus-trap";
     const detail = String(status.detail || "").toLowerCase();
     const t = ts;
     renderErrorBannerCopy(status);
+
+    // Idempotency guard for the double-path described above: an identical status
+    // signature seen within DEDUPE_WINDOW_MS is the second delivery of one event,
+    // so skip the counting/edge logic (the first delivery already applied it).
+    const sig = stateName + " " + detail + " " + String(status.failureClass || "") + " " + String(Boolean(status.blocked));
+    const now = Date.now();
+    if (sig === lastCountedSig && now - lastCountedAt < DEDUPE_WINDOW_MS) {
+      if (isOpen()) renderCompeting(status.competingApps);
+      return;
+    }
+    lastCountedSig = sig;
+    lastCountedAt = now;
 
     // Retries within an active connect burst.
     if (stateName === "connecting" && detail.indexOf("retry") !== -1) {

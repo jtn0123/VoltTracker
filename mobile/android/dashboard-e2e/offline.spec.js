@@ -42,7 +42,7 @@ test('tabs still switch and demo data still renders with no network', async ({ p
   await page.locator('nav.bottom-nav [data-nav="insights"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'insights');
   await expect(page.locator('#insightTripCount')).not.toHaveText('--');
-  await expect(page.locator('#insightTripCount')).toHaveText(/^\d+$/);
+  await expect(page.locator('#insightTripCount')).toHaveText(/^\d+ drives?$/);
 
   await page.locator('nav.bottom-nav [data-nav="diagnostics"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'diagnostics');

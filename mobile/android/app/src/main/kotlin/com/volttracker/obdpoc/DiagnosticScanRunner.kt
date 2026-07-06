@@ -84,8 +84,13 @@ class DiagnosticScanRunner(
             if (full) "generic DTC and freeze-frame probes" else "generic DTC probes",
         )
         collectDtcCodes("03", probeCommand("03", 3500, raw))
-        collectDtcCodes("07", probeCommand("07", 3500, raw))
-        collectDtcCodes("0A", probeCommand("0A", 3500, raw))
+        // Mode 07 (pending) and 0A (permanent) are still probed so SessionRecorder persists them
+        // per-command for display, but only Mode 03 (stored) codes feed the notification-facing
+        // `dtcCodes` set. That baseline must match AutoDtcScanRunner's Mode-03-only on-connect scan
+        // (both persist into lastScanDtcCodes); folding 07/0A in here made a permanent-only code
+        // oscillate against the auto-scan baseline and re-fire a false NewDtc alert forever.
+        probeCommand("07", 3500, raw)
+        probeCommand("0A", 3500, raw)
 
         // FULL-only deep sweep: freeze frames, live data, and the slow Volt HV / charger /
         // transmission / brake / TPMS discovery headers. A QUICK scan stops after the generic
@@ -218,7 +223,11 @@ class DiagnosticScanRunner(
         service.updateNotification(detail)
     }
 
-    /** Parses generic DTCs from a Mode 03/07/0A response and folds them into [dtcCodes]. */
+    /**
+     * Parses generic DTCs from a mode DTC response and folds them into the notification-facing
+     * [dtcCodes] set. Only the Mode 03 (stored) read is collected here so this baseline matches
+     * AutoDtcScanRunner; 07/0A are persisted per-command elsewhere for display.
+     */
     private fun collectDtcCodes(
         command: String,
         response: String,

@@ -67,7 +67,15 @@ class WidgetUpdater(
         }
     }
 
-    /** Folds a status state (e.g. "connected", "idle") into the snapshot's connection flag. */
+    /**
+     * Folds a status state (e.g. "connected", "idle") into the snapshot's connection flag.
+     *
+     * A status transition is NOT a fresh telemetry sample, so it proposes a new [updatedAtMs]
+     * (the connection flag is a display field) but must leave [WidgetSnapshot.lastSampleAtMs]
+     * untouched. Bumping the sample time here would reset the freshness/stale signal on every
+     * status ping — a mid-charge disconnect or a stream of "connected" pings against a frozen SOC
+     * would keep reading "Updated just now" forever and never age out to stale.
+     */
     fun onStatus(state: String?) {
         try {
             synchronized(snapshotLock) {
@@ -78,7 +86,6 @@ class WidgetUpdater(
                     previous.copy(
                         connected = connected,
                         updatedAtMs = now,
-                        lastSampleAtMs = now,
                     )
                 persistAndMaybeRefresh(merged)
             }

@@ -138,7 +138,8 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       title: "Encrypt backup",
       message: "Choose a passphrase for this encrypted backup. You will need it to restore.",
       inputLabel: "Backup passphrase",
-      confirmLabel: "Share encrypted"
+      confirmLabel: "Share encrypted",
+      autocomplete: "new-password"
     }).then((passphrase) => {
       if (!passphrase) {
         VD.setStatus({ state: "ready", detail: "Encrypted backup cancelled." });

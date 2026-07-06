@@ -23,7 +23,9 @@ class DashboardPayloadJsonTest {
         assertEquals("All good.", payload.optString("detail"))
         assertFalse(payload.optBoolean("blocked", true))
         assertTrue(payload.optBoolean("bluetoothReady"))
-        assertEquals("AA:BB:CC:DD:EE:FF", payload.optString("lastAddress"))
+        // The full MAC is redacted to its last 5 chars (PII the WebView never needs); the redacted
+        // value stays truthy so the dashboard's remembered-presence checks still pass.
+        assertEquals("...EE:FF", payload.optString("lastAddress"))
         assertEquals("MyAdapter", payload.optString("lastName"))
     }
 

@@ -608,7 +608,12 @@ class SessionRecorder {
             if ("blocked" == state || "error" == state) {
                 return SessionSummary.OUTCOME_FAILED
             }
-            if ("connected" == state || "scanning" == state || "scan-complete" == state || sampleCount > 0) {
+            if ("connected" == state ||
+                "scanning" == state ||
+                "scan-complete" == state ||
+                "codes-cleared" == state ||
+                sampleCount > 0
+            ) {
                 return SessionSummary.OUTCOME_SUCCESS
             }
             return SessionSummary.OUTCOME_ABORTED

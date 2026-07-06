@@ -35,6 +35,13 @@ class EventNotifierTest {
         shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
     }
 
+    private fun maintenanceDue(
+        entryId: Long,
+        serviceType: String,
+        tripped: MaintenanceDueEvaluator.Interval,
+        overdueMagnitude: Double,
+    ) = EventNotificationDecider.Event.MaintenanceDue(entryId, serviceType, tripped, overdueMagnitude)
+
     @Test
     fun createChannelRegistersTheAlertsChannel() {
         EventNotifier(context).createChannel()
@@ -119,23 +126,53 @@ class EventNotifierTest {
         grantPostNotifications()
         val notifier = EventNotifier(context)
 
-        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1000 km"))
-        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Tire rotation", "12 days"))
+        notifier.notify(maintenanceDue(7L, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_000.0))
+        notifier.notify(maintenanceDue(8L, "Tire rotation", MaintenanceDueEvaluator.Interval.MONTHS, 12.0))
 
-        // Two distinct services -> two coexisting alerts (different per-service ids in the band).
+        // Two distinct entries -> two coexisting alerts (different per-entry ids in the band).
         assertEquals(2, shadowOf(manager).size())
     }
 
     @Test
-    fun maintenanceDueReusesTheSameIdForTheSameService() {
+    fun maintenanceDueReusesTheSameIdForTheSameEntry() {
         grantPostNotifications()
         val notifier = EventNotifier(context)
 
-        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1000 km"))
-        notifier.notify(EventNotificationDecider.Event.MaintenanceDue("Oil change", "1500 km"))
+        notifier.notify(maintenanceDue(7L, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_000.0))
+        notifier.notify(maintenanceDue(7L, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_500.0))
 
-        // Same service label -> same id -> the second replaces the first rather than stacking.
+        // Same entry id + label -> same id -> the second replaces the first rather than stacking.
         assertEquals(1, shadowOf(manager).size())
+    }
+
+    @Test
+    fun maintenanceDueDistinctEntriesSharingATypeLabelStillCoexist() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        // Two different log rows with the SAME service-type string crossing on the same app-open must
+        // get distinct notification ids, so both alerts show instead of the second replacing the first.
+        notifier.notify(maintenanceDue(7L, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_000.0))
+        notifier.notify(maintenanceDue(42L, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_000.0))
+
+        assertEquals(2, shadowOf(manager).size())
+    }
+
+    @Test
+    fun manyCoBatchedMaintenanceEntriesAllCoexistInTheWidenedIdSpace() {
+        grantPostNotifications()
+        val notifier = EventNotifier(context)
+
+        // A batch of distinct overdue rows crossing on the same app-open must each get a distinct id
+        // in the widened band (rank 51). A collision would REPLACE one alert while checkOnAppOpen
+        // persists BOTH signatures, dropping the replaced alert permanently on the next open. All
+        // entries must coexist. (String.hashCode is specified, so these ids are deterministic.)
+        val count = 8
+        for (id in 1L..count.toLong()) {
+            notifier.notify(maintenanceDue(id, "Oil change", MaintenanceDueEvaluator.Interval.KM, 1_000.0))
+        }
+
+        assertEquals(count, shadowOf(manager).size())
     }
 
     @Test

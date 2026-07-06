@@ -186,6 +186,20 @@ class EventNotificationDeciderTest {
     }
 
     @Test
+    fun targetSocReachedDoesNotFireBeforeMinChargeSamples() {
+        // A single transient charging sample already above target must NOT ping: no ChargeComplete
+        // (which guards phantom charges) would back it up. The ping waits for MIN_CHARGE_SAMPLES.
+        val decider = EventNotificationDecider(settings(targetSoc = 80.0))
+        val first = decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
+        assertTrue(first.none { it is EventNotificationDecider.Event.TargetSocReached })
+        val second = decider.onSample(sample(60_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
+        assertTrue(second.none { it is EventNotificationDecider.Event.TargetSocReached })
+        // Third charging sample reaches MIN_CHARGE_SAMPLES -> now the (still-armed) crossing fires.
+        val third = decider.onSample(sample(120_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
+        assertTrue(third.any { it is EventNotificationDecider.Event.TargetSocReached })
+    }
+
+    @Test
     fun targetSocReachedSuppressedForAFull100PercentTarget() {
         // A 100% target is a full charge, so the charge-complete alert covers it — no separate ping.
         val decider = EventNotificationDecider(settings(targetSoc = 100.0))
@@ -203,15 +217,18 @@ class EventNotificationDeciderTest {
     @Test
     fun targetSocReArmsForANewChargeAfterTheFirstEnds() {
         val decider = EventNotificationDecider(settings(targetSoc = 80.0))
-        // First charge crosses the target and ends.
-        decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
+        // First charge crosses the target and ends. The ping only fires once MIN_CHARGE_SAMPLES
+        // charging samples have accrued, so it lands on the third sample (the crossing one).
+        decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 60.0))
+        decider.onSample(sample(30_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
         assertEquals(
             1,
             decider.onSample(sample(60_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0)).size,
         )
         decider.onSample(sample(120_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 85.0))
-        // A fresh charge re-arms the ping.
-        decider.onSample(sample(180_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
+        // A fresh charge re-arms the ping (again after MIN_CHARGE_SAMPLES samples).
+        decider.onSample(sample(180_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 60.0))
+        decider.onSample(sample(210_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 70.0))
         val crossing = decider.onSample(sample(240_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 85.0))
         assertTrue(crossing.any { it is EventNotificationDecider.Event.TargetSocReached })
     }

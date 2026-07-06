@@ -1,9 +1,14 @@
 package com.volttracker.obdpoc
 
+import android.Manifest
+import android.app.NotificationManager
+import android.content.Context
 import android.os.Bundle
 import android.os.Looper
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -11,6 +16,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
@@ -66,13 +72,15 @@ class TroubleshooterBridgeConnectionTest {
 
     @Test
     fun startTestConnectionStartsProbeAndSchedulesAutoStop() {
-        // Seed a remembered adapter so getLastOrCandidateDevice() returns a real address. The
-        // bridge must remember it, kick off an ACTION_CONNECT probe, and post a delayed stop.
+        // Seed a remembered adapter so getLastOrCandidateDevice() returns a real address. Because it
+        // is ALREADY the remembered last device, the probe must NOT re-remember it (that write +
+        // republish + status stomp is the ~30x-per-wait churn rank 39 removes); it must still kick
+        // off an ACTION_CONNECT probe and post a delayed stop.
         activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
 
         bridge.startTestConnection()
 
-        assertEquals("the probe must remember the device first", 1, activity.rememberCalls)
+        assertEquals("an already-remembered adapter must not be re-remembered", 0, activity.rememberCalls)
         assertEquals("the probe must connect to the remembered adapter", REMEMBERED_ADDRESS, activity.connectAddress)
         assertEquals("the probe must pass the remembered name through", REMEMBERED_NAME, activity.connectName)
         assertEquals(
@@ -99,6 +107,7 @@ class TroubleshooterBridgeConnectionTest {
         bridge.startTestConnection()
         bridge.startTestConnection()
         assertEquals("each probe re-issues the connect", REMEMBERED_ADDRESS, activity.connectAddress)
+        assertEquals("re-probing an already-remembered adapter must never re-remember it", 0, activity.rememberCalls)
         assertEquals("no auto-stop should have fired before the looper drains", 0, activity.stopCalls)
 
         shadowOf(Looper.getMainLooper()).runToEndOfTasks()
@@ -123,6 +132,28 @@ class TroubleshooterBridgeConnectionTest {
         shadowOf(Looper.getMainLooper()).runToEndOfTasks()
 
         assertEquals("no auto-stop may be scheduled while a session is active", 0, activity.stopCalls)
+    }
+
+    @Test
+    fun adapterReadyNotificationPostsOnTheDefaultImportanceAlertsChannel() {
+        // Rank 11: the walk-away "adapter ready" alert must ride EventNotifier's DEFAULT-importance
+        // alerts channel, not ObdNotifications' IMPORTANCE_LOW ongoing-service channel (which would be
+        // silent on Android 8+). Arm the schedule, run the immediate probe tick so a probe is in
+        // flight, then feed a connected/awake status and assert the posted alert's channel.
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+
+        bridge.scheduleAdapterReadyNotify(5)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        bridge.onAdapterStatusForReadyNotify(connectedStatus(14.2))
+
+        val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val channel = nm.getNotificationChannel(EventNotifier.CHANNEL_ID)
+        assertNotNull("the adapter-ready alert must ensure the DEFAULT-importance alerts channel", channel)
+        assertEquals(NotificationManager.IMPORTANCE_DEFAULT, channel.importance)
+        val posted = shadowOf(nm).allNotifications.firstOrNull { it.channelId == EventNotifier.CHANNEL_ID }
+        assertNotNull("the adapter-ready alert must post on EventNotifier.CHANNEL_ID", posted)
     }
 
     @Test
@@ -204,5 +235,9 @@ class TroubleshooterBridgeConnectionTest {
     private companion object {
         private const val REMEMBERED_ADDRESS = "AA:BB:CC:DD:EE:FF"
         private const val REMEMBERED_NAME = "Veepeak OBDCheck"
+
+        /** A connected status with awake (DC-DC) voltage — the shape that triggers the ready alert. */
+        private fun connectedStatus(voltage: Double): JSONObject =
+            JSONObject().put("state", "connected").put("lastVoltage", voltage)
     }
 }

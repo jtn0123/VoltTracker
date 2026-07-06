@@ -821,6 +821,25 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun segmentedBroadcastDtcKeepsBothConcatenatedModules() {
+        // A broadcast Mode 03 (7DF) answered by two emissions ECUs concatenates two ELM segmented
+        // messages, each with its own total-length header ("006" then "004"). The first header's
+        // length must NOT truncate away the second module's codes.
+        val codes =
+            ObdProtocol.parseDiagnosticTroubleCodes(
+                "03",
+                "006\r0: 43 02 01 33 25 A2\r004\r0: 43 01 C0 73\r\r>",
+                "7DF",
+            )
+
+        val values = codes.map { it.code }
+        assertEquals(3, codes.size)
+        assertTrue(values.contains("P0133"))
+        assertTrue(values.contains("P25A2"))
+        assertTrue("second module's DTC must survive the first header's length", values.contains("U0073"))
+    }
+
+    @Test
     fun pendingAndPermanentDiagnosticStatusesDecode() {
         val pending = ObdProtocol.parseDiagnosticTroubleCodes("07", "47 01 C0 73 00 00", "7DF")
         assertEquals(1, pending.size)
@@ -992,6 +1011,18 @@ class ObdProtocolTest {
     fun responseContainsAllMode01Pids_emptyOrNullInputsAreFalse() {
         assertFalse(ObdProtocol.responseContainsAllMode01Pids(null, listOf("0D")))
         assertFalse(ObdProtocol.responseContainsAllMode01Pids("41 0D 50", listOf()))
+    }
+
+    @Test
+    fun responseContainsAllMode01Pids_signedTwoBytePid32NeedsBothBytes() {
+        // 0132 (EVAP vapor pressure) is a signed 2-byte Mode-01 PID. A batched frame truncated to a
+        // single trailing byte must be rejected so the completeness gate never accepts a frame the
+        // 2-byte decoder can't read (which would silently blank the value).
+        val truncated = "41 0D 50 41 32 FF\r>"
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(truncated, listOf("0D", "32")))
+
+        val complete = "41 0D 50 41 32 FF 9C\r>"
+        assertTrue(ObdProtocol.responseContainsAllMode01Pids(complete, listOf("0D", "32")))
     }
 
     @Test

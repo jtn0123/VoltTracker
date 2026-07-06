@@ -41,6 +41,15 @@ import { initialTelemetryState } from "./telemetry-state";
   // as fresh when its updatedAt actually advances past this marker — otherwise
   // a wedged adapter keeps the stale indicator and rate chip reporting "live".
   let lastSeenSampleUpdatedAt = 0;
+  // A genuinely new drive should reset the JS session baseline (distance / SOC
+  // delta / history buffers) on the inactive→active status edge, but a mid-drive
+  // Bluetooth blip that dips through disconnected/error/reconnecting before
+  // re-'connected' must NOT — it is the same native session. Only re-arm this
+  // reset after a genuine terminal/idle STOP is observed. A truly renumbered
+  // native session (sampleCount restarting) is still caught independently by the
+  // guard in updateTelemetry, so a real new session always resets either way.
+  // Starts armed so the first connect from a cold boot resets.
+  let resetArmed = true;
 
   function pushBounded(values: number[], value: number, limit: number) {
     values.push(value);
@@ -119,7 +128,14 @@ import { initialTelemetryState } from "./telemetry-state";
     const badge = el("stateBadge");
     const next = status.state || "idle";
     setDataState(badge, asDataState(next));
-    if (!wasActive && isActiveStatus() && !state.demoActive) resetTelemetry();
+    if (!wasActive && isActiveStatus() && !state.demoActive && resetArmed) {
+      resetTelemetry();
+      resetArmed = false;
+    }
+    // Re-arm the inactive→active reset only after a genuine terminal/idle STOP —
+    // a transient disconnect/error/reconnect blip mid-drive keeps the same native
+    // session, so it must not re-zero the JS session baseline.
+    if (isTerminalStopStatus(next)) resetArmed = true;
     hydrateLiveRouteIfActive();
     VD.setText("stateText", next);
     VD.setText("statusCopy", status.detail || "Ready.");
@@ -183,6 +199,16 @@ import { initialTelemetryState } from "./telemetry-state";
     return ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"].includes(status);
   }
 
+  // Status states that mark a session as genuinely ended (native stop() → IDLE),
+  // as opposed to a transient disconnect/error/reconnect blip mid-drive. Only a
+  // terminal stop re-arms the inactive→active reset in setStatus. "disconnected"
+  // is deliberately excluded: a BT blip is a disconnect, and treating it as a
+  // stop would re-arm the reset and re-zero the baseline on reconnect.
+  const TERMINAL_STOP_STATES = new Set(["idle", "ready", "stopped", "stop"]);
+  function isTerminalStopStatus(next: unknown) {
+    return TERMINAL_STOP_STATES.has(String(next == null ? "" : next).toLowerCase());
+  }
+
   function resetTelemetry() {
     // Shared factory (telemetry-state.ts) so this reset can never drift from
     // the boot-time shape core.ts seeds.
@@ -199,6 +225,10 @@ import { initialTelemetryState } from "./telemetry-state";
     state.lastSampleAt = 0;
     lastSeenSampleUpdatedAt = 0;
     liveRouteHydrated = false;
+    // The POWER bar auto-scale only ratchets up (40→80→120) during a drive; without
+    // this reset a high-power drive leaves it over-scaled for the next gentle drive
+    // until reload. Reset to the initial ceiling so each session re-scales from 40.
+    powerScaleKw = 40;
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     applyStaleIndicator();
   }
@@ -420,11 +450,11 @@ import { initialTelemetryState } from "./telemetry-state";
     if (!Number.isFinite(ts) || ts <= 0) return "saved";
     const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000));
     if (seconds < 60) return `${seconds}s ago`;
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    // Gate on the unrounded hour span so 23.5–23.99h stays "Nh ago" instead of rounding up
-    // across the 24h boundary into "1d ago"; round only for the displayed number.
-    const hours = minutes / 60;
+    // Gate on the unrounded span so e.g. 59m40s stays "60m ago" (not "1h ago") and
+    // 23.5–23.99h stays "Nh ago" instead of rounding up across the boundary into
+    // "1d ago"; round only for the displayed number.
+    if (seconds < 3600) return `${Math.round(seconds / 60)}m ago`;
+    const hours = seconds / 3600;
     if (hours < 24) return `${Math.round(hours)}h ago`;
     return `${Math.round(hours / 24)}d ago`;
   }
@@ -721,7 +751,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
     const altUnit = metric ? "mph" : "km/h";
     VD.setText("speedValue", primary ? primary.value : null);
-    VD.setText("speedUnitMain", primary ? primary.unit : altUnit);
+    VD.setText("speedUnitMain", primary ? primary.unit : (metric ? "km/h" : "mph"));
     VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
@@ -767,7 +797,11 @@ import { initialTelemetryState } from "./telemetry-state";
     // sentinel so the cell (and group empty-text) can collapse as before.
     const gpsTile = Number.isFinite(lat) && Number.isFinite(lon)
       ? Number.isFinite(acc) && acc > 0
-        ? `±${Math.round(acc)} m`
+        // Match the rest of the Drive screen's unit system: feet for imperial,
+        // meters for metric (same inline 3.28084 conversion map.ts/scrubber.ts use).
+        ? units.system() === "metric"
+          ? `±${Math.round(acc)} m`
+          : `±${Math.round(acc * 3.28084)} ft`
         : "locked"
       : gpsState === "blocked"
         ? gpsText(gpsState)
@@ -840,8 +874,12 @@ import { initialTelemetryState } from "./telemetry-state";
       : "coast";
     const powerDetail = el("powerDetail");
     if (powerDetail) {
-      powerDetail.textContent = powerState;
-      setDataState(powerDetail, powerState);
+      // Mirror liveHeroCard below: gray "idle" means "no data", NOT "no torque".
+      // A real coast (power ≈ 0) still reads "coast"; only a MISSING reading
+      // (power == null) is "idle", so the pill and the hero card never disagree.
+      const detailState = power == null ? "idle" : powerState;
+      powerDetail.textContent = detailState;
+      setDataState(powerDetail, detailState);
     }
     // State-reactive hero (X1): the whole speed+power cluster tints from one
     // accent — orange under drive power, green in regen, neutral coasting —
@@ -909,7 +947,7 @@ import { initialTelemetryState } from "./telemetry-state";
     // as a card title the trailing period clashes with every other headline.
     const diagTitle = String(status.detail || (t.updatedAt ? "Live OBD data received" : "Waiting for adapter")).replace(/\.\s*$/, "");
     VD.setText("diagState", diagTitle);
-    VD.setText("diagSamples", samples ? `${samples} samples` : "0 samples");
+    VD.setText("diagSamples", samples ? `${samples} sample${samples === 1 ? "" : "s"}` : "0 samples");
     VD.setText("diagAdapter", t.adapter || status.adapter || "--");
     // Surface the classifier's confidence inline and its reason codes (the "why"
     // behind driving/charging/parked) as a tooltip — both already reach JS via the
@@ -1526,7 +1564,7 @@ import { initialTelemetryState } from "./telemetry-state";
       "validateGps",
       hasGps ? "ok" : (gps.state === "blocked" ? "bad" : "warn"),
       "GPS trace",
-      hasGps ? `${locationRows || "live"} location samples available` : (gps.state === "blocked" ? "Location permission blocked" : "Waiting for location samples"),
+      hasGps ? `${locationRows || "live"} location sample${locationRows === 1 ? "" : "s"} available` : (gps.state === "blocked" ? "Location permission blocked" : "Waiting for location samples"),
       String(gps.state || "idle")
     );
     setValidationRow(
