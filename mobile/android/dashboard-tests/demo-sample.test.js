@@ -67,6 +67,9 @@ describe('demo sample data', () => {
     await loadDashboard({ withBridge: false });
 
     const VD = window.VoltDashboard;
+    // runBrowserDemo only streams while a demo is active (guards the start/stop
+    // race); startDemo sets this in production, so set it here too.
+    VD.state.demoActive = true;
     await VD.actions.runBrowserDemo();
     try {
       // DemoPollingLoop.kt emits 24.0 + sin(t/8) °C; telemetry.ts renders the
@@ -110,6 +113,7 @@ describe('demo sample data', () => {
     const livePosition = vi.fn();
     window.VoltDashboard.updateLivePosition = livePosition;
 
+    window.VoltDashboard.state.demoActive = true;
     await window.VoltDashboard.actions.runBrowserDemo();
     vi.advanceTimersByTime(1000);
 
@@ -125,6 +129,7 @@ describe('demo sample data', () => {
     vi.useFakeTimers();
     const VD = window.VoltDashboard;
 
+    VD.state.demoActive = true;
     await VD.actions.runBrowserDemo();
     VD.flushRender();
 

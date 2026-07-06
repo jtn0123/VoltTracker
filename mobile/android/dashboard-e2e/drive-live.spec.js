@@ -149,11 +149,15 @@ test('renderDriveLive drives every live surface in one frame', async ({ page }) 
     VD.renderDriveLive();
   });
 
-  // Chips: a live "Recording" chip with the sample count.
-  const chip = page.locator('#driveNowChips .drive-now-chip[data-tone="live"]');
-  await expect(chip).toHaveCount(1);
-  await expect(chip).toContainText('Recording');
-  await expect(chip).toContainText('64 samples');
+  // Recording state consolidates into the topbar #driveRecording line under the
+  // connection pill (not a full-width strip above the hero).
+  const rec = page.locator('#driveRecording');
+  await expect(rec).toBeVisible();
+  await expect(rec).toHaveAttribute('data-tone', 'live');
+  await expect(rec).toContainText('Recording');
+  await expect(rec).toContainText('64 samples');
+  // The retired now-chips strip stays empty.
+  await expect(page.locator('#driveNowChips .drive-now-chip')).toHaveCount(0);
 
   // All three charts ready in the same frame.
   await expect(page.locator('#liveTraceChart')).toHaveAttribute('data-trace-state', 'ready');

@@ -1242,7 +1242,11 @@ type SignalActions = {
 
   function runBrowserDemo(): Promise<void> {
     return ensureBrowserDemoStream().then((stream) => {
-      stream(VD, state);
+      // The demo chunk loads asynchronously; if the user hit Stop during the load
+      // window, demoActive is already false — starting the 1 Hz stream now would
+      // resurrect the stopped demo (its first sample re-flips demoActive on via
+      // telemetry.ts). Only start if the demo is still meant to be running.
+      if (state.demoActive) stream(VD, state);
     }).catch(() => {});
   }
 
@@ -1359,7 +1363,8 @@ type SignalActions = {
     bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
       const target = (event.target as HTMLElement | null)?.closest("[data-live-signal-filter]") as HTMLElement | null;
       if (!target) return;
-      state.liveSignalsFilter = target.dataset.liveSignalFilter === "missing" ? "missing" : "all";
+      const f = target.dataset.liveSignalFilter;
+      state.liveSignalsFilter = f === "missing" || f === "all" ? f : "reporting";
       if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
     }, opts);
     bindListenerGuarded("mapFollowBtn", "click", () => {

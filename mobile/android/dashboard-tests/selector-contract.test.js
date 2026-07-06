@@ -90,6 +90,9 @@ describe('selector / partial contract', () => {
       'driveSourceBadge',
       'driveSourceLabel',
       'driveSourceSub',
+      'driveRecording',
+      'driveRecordingLabel',
+      'driveRecordingMeta',
     ];
     const absent = required.filter((id) => !declared.has(id));
     expect(absent).toEqual([]);

@@ -832,9 +832,10 @@ import { initialTelemetryState } from "./telemetry-state";
     mapLayer: "eff",
     mapRemoteTilesEnabled: true,
     mapFull: false,
-    // Live-signals panel filter: "all" or "missing" (show only PIDs the car
-    // isn't answering) — see telemetry.ts#renderLiveSignals.
-    liveSignalsFilter: "all",
+    // Live-signals panel filter: "reporting" (default — only PIDs the car is
+    // answering), "all", or "missing" (only PIDs it isn't answering) — see
+    // telemetry.ts#renderLiveSignals.
+    liveSignalsFilter: "reporting",
     // When viewing the in-progress drive, keep the map framed on the growing
     // track. Auto-disabled the moment the user pans the map (so they can inspect
     // freely), re-enabled via the Follow button — see map.ts#setMapFollowLive.

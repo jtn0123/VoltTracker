@@ -132,17 +132,18 @@ test.describe('light mode — functional theme coverage', () => {
       const cs = getComputedStyle(el);
       return { backgroundImage: cs.backgroundImage, backgroundColor: cs.backgroundColor };
     });
-    // The gradient must resolve to light stops — not the old dark glass.
+    // The nav is flat glass now (the gloss gradient was removed in the minimal
+    // pass), so its surface may resolve via a light solid background-color OR a
+    // light gradient — either way it must be LIGHT, never the old dark glass.
     expect(backgroundImage).not.toContain(OLD_DARK_NAV_TOP);
-    const firstStop = parseRgb(backgroundImage);
-    expect(firstStop, `nav gradient should have rgb stops: ${backgroundImage}`).toBeTruthy();
-    expect(relativeLuminance(firstStop)).toBeGreaterThan(0.7);
-    // background-color is reset by the shorthand; tolerate either transparent
-    // or a light solid, but never a dark solid.
     const solid = parseRgb(backgroundColor);
-    if (solid && solid.a > 0.1) {
-      expect(relativeLuminance(solid)).toBeGreaterThan(0.7);
-    }
+    const grad = parseRgb(backgroundImage);
+    const surface = solid && solid.a > 0.1 ? solid : grad;
+    expect(
+      surface,
+      `nav surface should resolve to a light rgb: bg-color=${backgroundColor} bg-image=${backgroundImage}`,
+    ).toBeTruthy();
+    expect(relativeLuminance(surface)).toBeGreaterThan(0.7);
   });
 
   test('contrast spot-checks hold WCAG AA (>= 4.5:1)', async ({ page }) => {

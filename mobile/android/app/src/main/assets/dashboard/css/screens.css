@@ -282,6 +282,12 @@
     letter-spacing: -0.01em;
   }
 
+  /* Point-count badge dot tints to the map accent. */
+  .map-sheet-head .badge .dot {
+    background: var(--map-accent);
+    color: var(--map-accent);
+  }
+
   .map-sheet-stats {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -313,6 +319,58 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Scoped numeral bumps: Map + Insights want 19px, but the shared Drive route
+     sheet must stay at the 17px base above. */
+  .view[data-view="map"] .map-sheet .map-sheet-stats strong {
+    font-family: var(--font-display);
+    font-size: 19px;
+  }
+
+  .insights-sheet .map-sheet-stats strong {
+    font-family: var(--font-display);
+    font-size: 19px;
+  }
+
+  /* Insights lifetime grid sits on whitespace: no top hairline, no vertical
+     dividers (scoped so the Map route sheet keeps its top hairline). */
+  .insights-sheet .map-sheet-stats {
+    border-top: none;
+    padding-top: 0;
+    margin-top: 10px;
+    gap: 0 16px;
+  }
+
+  .insights-sheet .map-sheet-stats div {
+    padding: 0;
+  }
+
+  .insights-sheet .map-sheet-stats div + div {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  /* Insights lifetime card demotes its heading to a micro-label (Map keeps the
+     20px display h2 above). */
+  .insights-sheet .map-sheet-head h2 {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0;
+    color: var(--muted);
+  }
+
+  /* Insights Vehicle card summary paragraph: kept (holds the empty-state value),
+     just quieted. */
+  #vehicleCard #vehicleSummary {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  /* Elevate the Insights lifetime card to match its neighbors (radius + padding
+     come from the base .map-sheet rule above). */
+  .insights-sheet {
+    box-shadow: 0 14px 40px var(--shadow-soft);
+  }
+
   /* EV-vs-gas savings row (Insights). Sits below the lifetime stat grid. */
   .map-sheet-savings {
     margin-top: 12px;
@@ -333,10 +391,49 @@
     margin-top: 4px;
   }
 
+  /* Recorded-drive rows as individual rounded inset cards with a blue distance
+     pill; scoped to .map-list so Charge/Insights lists are untouched. */
+  .map-list .history-row {
+    border: 1px solid var(--line-soft);
+    border-top: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: var(--inset);
+  }
+
+  .map-list .history-row > b {
+    justify-self: end;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(var(--map-accent-rgb), 0.12);
+    color: var(--map-accent);
+    font-size: 12px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
   .map-list .history-row.is-active {
     border-radius: var(--radius-md);
     border: 1px solid rgba(var(--volt-rgb), 0.28);
     background: rgba(var(--volt-rgb), 0.10);
+  }
+
+  /* Recorded-drives control cluster flattened so the drive rows lead (kept, not
+     removed — the app is richer than the mock here). */
+  .map-list-controls {
+    display: grid;
+    gap: 8px;
+    margin: 6px 0 12px;
+  }
+
+  .list-card .status-copy {
+    font-size: 11px;
+    color: var(--muted);
+    opacity: 0.8;
+  }
+
+  .map-list-search input {
+    background: var(--inset);
+    border-color: var(--line);
   }
 
 /* (Section 5 "Energy & charge rows" removed: dead styles — no markup or
@@ -578,6 +675,25 @@
     white-space: nowrap;
   }
 
+  /* Hairline divider above the connect card's state strip (scoped so
+     #insightStatsCard .state-grid is unaffected). */
+  .connect-card .state-grid {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--line);
+  }
+
+  /* Demoted, compact backup/restore card; keeps all four real actions. */
+  .settings-data-card {
+    border-radius: 16px;
+    padding: var(--card-pad-tight) var(--card-pad);
+  }
+
+  .settings-data-card .db-action-grid button {
+    min-height: 44px;
+    border-radius: var(--radius-input);
+  }
+
   .connection-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -671,9 +787,12 @@
     border: 1px solid var(--line-strong);
     border-radius: 24px;
     isolation: isolate;
-    background-color: var(--surface-nav);
     background:
       linear-gradient(180deg, var(--surface-nav-hi), var(--surface-nav-lo));
+    /* Solid fallback AFTER the gradient shorthand so the shorthand doesn't reset
+       it to transparent — the opaque gradient layers over it, and content can't
+       bleed through if linear-gradient is ever unsupported. */
+    background-color: var(--surface-nav);
     box-shadow:
       0 18px 46px var(--shadow),
       0 0 0 1px rgba(255,255,255,0.04),
@@ -1179,6 +1298,24 @@
     height: 116px;
   }
 
+  /* Map scrubber chart frame + blue playhead (ID-scoped so the Drive live-trace
+     cursor stays white). */
+  #scrubChart {
+    border-radius: var(--radius-md);
+    background: var(--inset);
+    overflow: hidden;
+  }
+
+  #scrubCursor {
+    border-left-width: 2px;
+    border-left-color: var(--map-accent);
+    box-shadow: 0 0 10px rgba(var(--map-accent-rgb), 0.8);
+  }
+
+  #scrubCursor::before {
+    background: var(--map-accent);
+  }
+
   #scrubStack .scrub-track svg {
     height: 52px;
   }
@@ -1271,6 +1408,30 @@
 
   .scrub-readout .scrub-dim strong {
     color: var(--soft);
+  }
+
+  /* Map scrub readout: gapped inset chips with mono values; scoped to .scrubber
+     so the Drive .live-readout is untouched. */
+  .scrubber .scrub-readout {
+    gap: 6px;
+    border-top: 0;
+    background: transparent;
+  }
+
+  .scrubber .scrub-readout div {
+    padding: 7px 8px;
+    border-radius: var(--radius-input);
+    background: var(--inset);
+    text-align: left;
+  }
+
+  .scrubber .scrub-readout div + div {
+    border-left: 0;
+  }
+
+  .scrubber .scrub-readout strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
   }
 
   .scrub-stack {
@@ -1580,6 +1741,13 @@
     margin-bottom: 4px;
   }
 
+  /* The live/recording state now consolidates into the topbar #driveRecording
+     line, so this strip stays empty — collapse it (a .view grid item, empty, would
+     otherwise leave a stray 12px gap above the hero). */
+  .drive-now-chips:empty {
+    display: none;
+  }
+
   .drive-now-chip {
     flex: 0 0 auto;
     min-width: 158px;
@@ -1725,6 +1893,16 @@
 
   .live-micro {
     padding: 12px 14px;
+  }
+
+  .live-micro .live-trace-chart {
+    min-height: 58px;
+  }
+
+  /* Empty micro-chart placeholder matches the populated trace height. */
+  .live-micro .live-chart-empty {
+    min-height: 58px;
+    padding: 8px;
   }
 
   .live-micro header {
@@ -1933,6 +2111,17 @@
     box-shadow: none;
     padding-block: 6px;
   }
+  /* Drive footer meta tightened (interim; the full markup merge is a separate
+     call). */
+  .view[data-view="drive"] .status-meta {
+    gap: 6px 10px;
+    margin-top: 10px;
+  }
+
+  .view[data-view="drive"] .status-meta strong {
+    font-size: 12px;
+  }
+
   .live-readout .kicker {
     font-size: 9px;
     letter-spacing: 0.05em;
@@ -1961,6 +2150,18 @@
 
   .validation-collapse > summary::-webkit-details-marker {
     display: none;
+  }
+
+  /* Drive tab: give the collapsed validation summary a one-line pill affordance. */
+  .view[data-view="drive"] .validation-collapse > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 48px;
+    padding: 0 16px;
+    border: 1px solid var(--line-soft);
+    border-radius: var(--radius-md);
+    background: var(--surface-chip);
   }
 
   .validation-collapse > summary > div .kicker {

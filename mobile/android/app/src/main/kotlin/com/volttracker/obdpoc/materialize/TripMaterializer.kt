@@ -125,7 +125,7 @@ object TripMaterializer {
         samples: List<LocationSample>,
         telemetry: List<TelemetrySample>?,
     ): List<InactiveSpan> {
-        val spans = gpsStopSpans(samples).toMutableList()
+        val spans = gpsStopSpans(samples, telemetry).toMutableList()
         spans.addAll(inactiveSpans(telemetry))
         spans.sortBy { it.startMs }
 
@@ -145,7 +145,10 @@ object TripMaterializer {
         return merged
     }
 
-    private fun gpsStopSpans(samples: List<LocationSample>?): List<InactiveSpan> {
+    private fun gpsStopSpans(
+        samples: List<LocationSample>?,
+        telemetry: List<TelemetrySample>?,
+    ): List<InactiveSpan> {
         val spans = mutableListOf<InactiveSpan>()
         if (samples == null || samples.size < 2) {
             return spans
@@ -167,12 +170,12 @@ object TripMaterializer {
                     runStart = i - 1
                 }
             } else if (runStart >= 0) {
-                appendGpsStopSpan(spans, samples, runStart, i - 1)
+                appendGpsStopSpan(spans, samples, telemetry, runStart, i - 1)
                 runStart = -1
             }
         }
         if (runStart >= 0) {
-            appendGpsStopSpan(spans, samples, runStart, samples.lastIndex)
+            appendGpsStopSpan(spans, samples, telemetry, runStart, samples.lastIndex)
         }
         return spans
     }
@@ -180,17 +183,39 @@ object TripMaterializer {
     private fun appendGpsStopSpan(
         spans: MutableList<InactiveSpan>,
         samples: List<LocationSample>,
+        telemetry: List<TelemetrySample>?,
         startIndex: Int,
         endIndex: Int,
     ) {
         val startMs = samples[startIndex].capturedAtMs
         val endMs = samples[endIndex].capturedAtMs
         val stoppedAtMs = samples[min(startIndex + 1, endIndex)].capturedAtMs
+        // Mirror DriveWindowDetector.addStopSpan: a GPS-stationary stretch that
+        // still has active telemetry (creeping in traffic, engine/pack ready) is
+        // NOT a trip boundary. Only split when the vehicle is also inactive, so
+        // both splitters carve the same session into the same drive windows.
         if (endMs - stoppedAtMs >= Tunables.MIN_STOP_SPLIT_MS &&
-            pathMeters(samples, startIndex, endIndex) <= Tunables.MAX_STOP_DRIFT_METERS
+            pathMeters(samples, startIndex, endIndex) <= Tunables.MAX_STOP_DRIFT_METERS &&
+            !hasActiveTelemetryInSpan(telemetry, stoppedAtMs, endMs)
         ) {
             spans.add(InactiveSpan(startMs, endMs))
         }
+    }
+
+    private fun hasActiveTelemetryInSpan(
+        telemetry: List<TelemetrySample>?,
+        startMs: Long,
+        endMs: Long,
+    ): Boolean {
+        if (telemetry.isNullOrEmpty()) {
+            return false
+        }
+        for (sample in telemetry) {
+            if (sample.capturedAtMs in startMs..endMs && isActiveVehicleSample(sample)) {
+                return true
+            }
+        }
+        return false
     }
 
     private fun pathMeters(

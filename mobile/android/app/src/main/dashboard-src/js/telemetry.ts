@@ -1034,12 +1034,16 @@ import { initialTelemetryState } from "./telemetry-state";
     if (!list) return;
     const t = state.telemetry || {};
     const hasLiveData = isActiveStatus() || Number(t.sampleCount || 0) > 0;
-    const missingOnly = String(state.liveSignalsFilter || "all") === "missing";
+    // "reporting" (default) shows only PIDs the car is answering; "missing" only
+    // the ones it isn't; "all" shows the full catalog.
+    const filter = String(state.liveSignalsFilter || "reporting");
+    const missingOnly = filter === "missing";
+    const reportingOnly = filter === "reporting";
     // Dirty-check: build a signature from each signal's value + stale age, plus the
     // inputs that change the rendered output (filter mode, live-data state). Skip
     // the full rebuild when it matches the previous paint.
     const sig =
-      `${missingOnly ? "missing" : "all"}|${hasLiveData ? 1 : 0}|` +
+      `${filter}|${hasLiveData ? 1 : 0}|` +
       LIVE_SIGNALS
         .map((spec) => {
           const raw = t[spec.key];
@@ -1053,7 +1057,7 @@ import { initialTelemetryState } from "./telemetry-state";
     // Sync the filter buttons' active state with the current filter.
     document.querySelectorAll("[data-live-signal-filter]").forEach((node) => {
       const button = node as HTMLElement;
-      const active = (button.dataset.liveSignalFilter || "all") === (missingOnly ? "missing" : "all");
+      const active = (button.dataset.liveSignalFilter || "reporting") === filter;
       button.classList.toggle("is-active", active);
       button.setAttribute("aria-pressed", active ? "true" : "false");
     });
@@ -1067,6 +1071,7 @@ import { initialTelemetryState } from "./telemetry-state";
         const has = raw !== undefined && raw !== null && raw !== "";
         if (has) reporting += 1;
         if (missingOnly && has) continue;
+        if (reportingOnly && !has) continue;
         const row = document.createElement("div");
         row.className = "live-signal-row";
         row.dataset.status = has ? "live" : "missing";
@@ -1113,6 +1118,12 @@ import { initialTelemetryState } from "./telemetry-state";
       allGood.className = "status-copy";
       allGood.textContent = "Every polled metric is reporting.";
       frag.appendChild(allGood);
+    }
+    if (reportingOnly && reporting === 0 && hasLiveData) {
+      const none = document.createElement("p");
+      none.className = "status-copy";
+      none.textContent = "No metrics reporting yet — the car hasn't answered any PIDs.";
+      frag.appendChild(none);
     }
     list.replaceChildren(frag);
     VD.setText("liveSignalsBadge", `${reporting}/${total}`);

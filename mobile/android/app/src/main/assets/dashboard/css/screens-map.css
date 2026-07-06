@@ -153,6 +153,10 @@
     white-space: nowrap;
   }
 
+  #mapFullBtn {
+    font-size: 15px;
+  }
+
   .map-full-btn[aria-pressed="true"] {
     border-color: transparent;
     background: var(--map-accent);

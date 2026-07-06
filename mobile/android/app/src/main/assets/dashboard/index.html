@@ -451,6 +451,27 @@
     </div>
   </div>
   <!--
+    Live recording line (connected state): the session progress
+    (samples · runtime · distance) consolidates HERE, on its own row beneath
+    the top-right connection cluster, instead of a full-width now-chip + a
+    "Live car data" banner above the hero. drive.ts#renderDriveNowChips fills
+    the label/meta and toggles [hidden]; the adapter name + state pill stay on
+    the row above. Mirrors how #topDemoInfo carries demo state in this header.
+    aria-hidden: it repaints ~1 Hz, so the announced state lives in the pill /
+    status popover (same choice the old now-chip made).
+  -->
+  <div
+    id="driveRecording"
+    class="top-recording"
+    data-tone="live"
+    aria-hidden="true"
+    hidden
+  >
+    <span class="top-recording__dot" aria-hidden="true"></span>
+    <strong id="driveRecordingLabel">Recording</strong>
+    <small id="driveRecordingMeta"></small>
+  </div>
+  <!--
     Status popover: tap target is the state badge (and the last-connected line).
     Static shell only — connection-status.ts fills the state pill, detail copy,
     and the connection/trip rows on every open and live update.
@@ -2904,10 +2925,13 @@
     >
       <button
         type="button"
-        data-live-signal-filter="all"
+        data-live-signal-filter="reporting"
         class="is-active"
         aria-pressed="true"
       >
+        <span>Reporting</span>
+      </button>
+      <button type="button" data-live-signal-filter="all" aria-pressed="false">
         <span>All</span>
       </button>
       <button

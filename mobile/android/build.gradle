@@ -40,7 +40,14 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // the motion vocabulary (view-enter, accent crossfades). The Space Grotesk
 // woff2 itself is font-display:swap and NOT render-blocking, so it stays out
 // of this bucket by design.
-def dashboardStartupBudgetBytes = 364_000L
+// 364k → 370k (design pass 5): funds the "Polished" visual refresh — contained
+// live-card hero, bordered live-readout tiles, energy-bar charge rows, the
+// segmented preference control, the diagnostics breathing dot, and the map
+// sheet/scrubber/history-row restyle. All CSS (loads directly, no minify step).
+// 370k → 372k (design pass 6): funds the "minimal" flatten pass (veiled/flat
+// cards, bare-column stat rows, neutralized diagnostics tints, flat nav) plus
+// the live-signals "reporting" filter default (small telemetry.ts/core.ts JS).
+def dashboardStartupBudgetBytes = 372_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyCssBudgetBytes = 20_000L

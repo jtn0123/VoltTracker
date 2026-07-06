@@ -13,6 +13,7 @@ import {
   liveFollowShouldRecenter,
   liveSampleTimeMs,
   mapEffColor,
+  numOrNaN,
   routeFitKey
 } from "./map-route-utils";
 import type { MapRoute, MapRoutePoint, MapRouteSession } from "./map-route-utils";
@@ -852,9 +853,11 @@ import type { MapSessionFilter } from "./map-session-list";
         dot.style.background = "var(--map-accent)";
         meta.append(dot, document.createTextNode(" live"));
       }
-      const effPts = (route.points || []).filter((p) => Number.isFinite(Number(p.eff)));
+      // null eff = regen / no-data (enrichRouteEff); numOrNaN keeps those out of
+      // the average instead of letting Number(null) === 0 drag the dot down a band.
+      const effPts = (route.points || []).filter((p) => Number.isFinite(numOrNaN(p.eff)));
       const avgEff = effPts.length
-        ? effPts.reduce((acc, p) => acc + Number(p.eff), 0) / effPts.length
+        ? effPts.reduce((acc, p) => acc + numOrNaN(p.eff), 0) / effPts.length
         : 0;
       if (!live && avgEff > 0) {
         meta.append(document.createTextNode(" · "));
@@ -999,7 +1002,9 @@ import type { MapSessionFilter } from "./map-session-list";
       const previousLatLng = latlngs[i - 1];
       const latLng = latlngs[i];
       if (!point || !previousLatLng || !latLng) continue;
-      const color = mapEffColor(Number(point.eff));
+      // Pass raw eff (mapEffColor is null-safe): null regen/no-data segments
+      // render grey, not the worst-efficiency red band.
+      const color = mapEffColor(point.eff);
       (effBands[color] = effBands[color] || []).push([previousLatLng, latLng]);
     }
     mapLayerGroups.eff = L.layerGroup();
@@ -1165,7 +1170,9 @@ import type { MapSessionFilter } from "./map-session-list";
     let effSum = 0;
     let effCount = 0;
     for (const point of points) {
-      const eff = Number(point.eff);
+      // numOrNaN so null (regen / no-data) points are skipped, not averaged in as
+      // 0 — Number(null) === 0 < 6.5 would otherwise deflate the headline mi/kWh.
+      const eff = numOrNaN(point.eff);
       // Exclude only clamp-saturated samples (enrichRouteEff ceils eff at exactly 6.5);
       // averaging that pile would inflate the headline. Legitimate high-efficiency values
       // just below the ceiling are kept.

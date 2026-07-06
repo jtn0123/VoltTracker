@@ -35,6 +35,9 @@ describe('live-signals diagnostic panel', () => {
       motorAStaleMs: 65_000,
       prndlState: 'D',
     });
+    // "All" so both reporting and no-data rows are present for this assertion
+    // (the default filter is "reporting", which hides the no-data Odometer row).
+    VD.state.liveSignalsFilter = 'all';
     VD.updateDiagnostics();
 
     const speed = rowFor('Speed');
@@ -94,6 +97,29 @@ describe('live-signals diagnostic panel', () => {
     expect(rowFor('Odometer').dataset.status).toBe('missing');
 
     // The badge still counts reporting/total over the full catalog, not the filtered view.
+    expect(document.getElementById('liveSignalsBadge').textContent).toMatch(/^2\/\d+$/);
+  });
+
+  it('defaults to showing only the reporting metrics, hiding no-data rows', () => {
+    const VD = window.VoltDashboard;
+    // Default filter is "reporting" (see core.ts initial state).
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      speedKph: 42,
+      soc: 80,
+      // odometer + everything else absent.
+    });
+    VD.updateDiagnostics();
+
+    // Reporting rows are shown; the no-data ones are hidden by default.
+    expect(rowFor('Speed')).not.toBeNull();
+    expect(rowFor('Speed').dataset.status).toBe('live');
+    expect(rowFor('State of charge')).not.toBeNull();
+    expect(rowFor('Odometer')).toBeNull();
+    // The badge still counts reporting/total over the full catalog.
     expect(document.getElementById('liveSignalsBadge').textContent).toMatch(/^2\/\d+$/);
   });
 });

@@ -9,6 +9,7 @@ import {
   liveFollowShouldRecenter,
   liveSampleTimeMs,
   mapEffColor,
+  numOrNaN,
   routeFitKey,
 } from '../app/src/main/dashboard-src/js/map-route-utils.ts';
 
@@ -28,6 +29,21 @@ describe('map-route-utils.ts', () => {
     expect(mapEffColor(4.2)).toBe('#b8e63b');
     expect(mapEffColor(3.1)).toBe('#ffb84a');
     expect(mapEffColor(1.9)).toBe('#ff6b5f');
+    // Regen / no-data segments carry eff === null. These must read as grey
+    // ("no data"), never fall through Number(null) === 0 into the worst red band.
+    expect(mapEffColor(null)).toBe('#6a6a72');
+    expect(mapEffColor(undefined)).toBe('#6a6a72');
+    expect(mapEffColor('')).toBe('#6a6a72');
+  });
+
+  it('numOrNaN maps null/empty to NaN so isFinite guards fire (Number(null) === 0 trap)', () => {
+    expect(numOrNaN(null)).toBeNaN();
+    expect(numOrNaN(undefined)).toBeNaN();
+    expect(numOrNaN('')).toBeNaN();
+    expect(numOrNaN(0)).toBe(0);
+    expect(numOrNaN('4.2')).toBe(4.2);
+    expect(numOrNaN(4.2)).toBe(4.2);
+    expect(Number.isFinite(numOrNaN(null))).toBe(false);
   });
 
   it('validates route point latitude and longitude ranges', () => {

@@ -144,45 +144,6 @@ type ChartPoint = {
     };
   }
 
-  // Build via DOM APIs (textContent) instead of innerHTML string-concat so the
-  // user-controlled Bluetooth `adapter.name` (which lands in `c.meta` via
-  // deriveLiveChip()) can never be reinterpreted as markup.
-  function buildDriveNowChip(c: DriveChip) {
-    const root = document.createElement(c.isLink ? "button" : "div");
-    root.className = "map-drive-chip drive-now-chip";
-    if (c.isLink) {
-      (root as HTMLButtonElement).type = "button";
-      root.dataset.navJump = "map";
-    } else if (c.liveStable || c.tone === "idle" || c.tone === "ok") {
-      root.setAttribute("role", "status");
-      root.setAttribute("aria-live", "polite");
-    } else {
-      root.setAttribute("aria-hidden", "true");
-    }
-    setDataTone(root, c.tone);
-
-    const labelSpan = document.createElement("span");
-    labelSpan.className = "dl";
-    labelSpan.appendChild(document.createElement("u"));
-    labelSpan.appendChild(document.createTextNode(c.label));
-
-    const metaSpan = document.createElement("span");
-    metaSpan.className = "dm";
-    c.meta.forEach((m, i) => {
-      if (i > 0) {
-        const sep = document.createElement("span");
-        sep.textContent = "·";
-        metaSpan.appendChild(sep);
-      }
-      const cell = document.createElement(i === 0 ? "b" : "span");
-      cell.textContent = String(m == null ? "" : m);
-      metaSpan.appendChild(cell);
-    });
-
-    root.append(labelSpan, metaSpan);
-    return root;
-  }
-
   // Demo / Testing header line (topbar .top-status): the single demo marker.
   // While a demo runs, the purple state pill already says "demo" right next to
   // this line, so the strip chip that used to repeat it on Drive is gone — the
@@ -211,22 +172,33 @@ type ChartPoint = {
   function renderDriveNowChips() {
     renderTopDemoInfo();
     const host = el("driveNowChips");
-    if (!host) return;
-    // During a demo the topbar carries the Demo / Testing line + purple pill —
-    // a strip chip here would repeat the same state a third time.
+    const rec = el("driveRecording");
+    // During a demo the topbar carries the Demo / Testing line + purple pill, so
+    // neither the strip nor the recording line repeats it.
     if (state.demoActive) {
-      host.replaceChildren();
+      if (host) host.replaceChildren();
+      if (rec) rec.hidden = true;
       return;
     }
-    const chips: DriveChip[] = [];
-    // The Drive page is for the live drive. Idle / "ready · remembered" is already shown by the
-    // top-bar pill + slim last-connected line, and past drives live on Trips/Map — so the now-chips
-    // strip only surfaces the live chip while something is actually happening (Recording /
-    // Connecting). When idle it stays empty.
+    // A live session (Recording / Connecting / Waiting) consolidates into the
+    // slim #driveRecording line beneath the top-right connection pill — not a
+    // full-width strip above the hero. Idle / "ready · remembered" is already the
+    // top-bar pill + last-connected line's job, so nothing shows then.
     const live = deriveLiveChip();
-    if (live && live.tone !== "idle" && live.tone !== "ok") chips.push(live);
-
-    host.replaceChildren(...chips.map(buildDriveNowChip));
+    const showLive = Boolean(live && live.tone !== "idle" && live.tone !== "ok");
+    if (rec) {
+      if (showLive && live) {
+        VD.setText("driveRecordingLabel", live.label);
+        VD.setText("driveRecordingMeta", live.meta.join(" · "));
+        setDataTone(rec, live.tone);
+        rec.hidden = false;
+      } else {
+        rec.hidden = true;
+      }
+    }
+    // The strip is retired as a live-status surface; keep it empty so the
+    // :empty rule collapses it (no stray grid gap above the hero).
+    if (host) host.replaceChildren();
   }
 
   // ----- data-provenance badge + first-sample reveal ------------------------
@@ -304,15 +276,17 @@ type ChartPoint = {
     apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
     apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
 
-    // During a demo the topbar carries the Demo / Testing line + the purple
-    // pill on EVERY tab (renderTopDemoInfo), so a demo banner under the header
-    // reads as a duplicate on Drive and Charge alike — hide both badges and
-    // let the header carry the state. For live/offline/empty they stay the
-    // per-tab provenance markers.
+    // The topbar carries the live state on EVERY tab: the "demo" pill +
+    // Demo / Testing line during a preview, or the adapter/"connected" pill +
+    // the #driveRecording line while connected. A full-width source banner under
+    // the header then just repeats it — so hide both badges for demo AND live and
+    // let the header be the single source of truth. Offline/empty (not connected)
+    // keep the banner as their per-tab provenance marker.
+    const headerCarriesState = src.kind === "demo" || src.kind === "live";
     const driveBadge = el("driveSourceBadge");
-    if (driveBadge) driveBadge.hidden = src.kind === "demo";
+    if (driveBadge) driveBadge.hidden = headerCarriesState;
     const chargeBadge = el("chargeSourceBadge");
-    if (chargeBadge) chargeBadge.hidden = src.kind === "demo";
+    if (chargeBadge) chargeBadge.hidden = headerCarriesState;
 
     // First-run consolidation: with no history at all ("empty"), the Drive tab
     // collapses to badge + onboarding card + hero skeleton. The session/health/
@@ -613,7 +587,9 @@ type ChartPoint = {
     if (!tag) return;
     const tm = state.telemetry || {};
     const current = tm.soc == null || tm.soc === "" ? NaN : Number(tm.soc);
-    const start = Number(state.sessionStartSoc);
+    // Null-safe: a null baseline (fresh WebView / pre-first-sample) must take the
+    // "no baseline" branch below — Number(null) === 0 would fake a full Δ gain.
+    const start = state.sessionStartSoc == null ? NaN : Number(state.sessionStartSoc);
     if (!Number.isFinite(current)) {
       tag.textContent = "%";
       setDataTone(tag, "idle");

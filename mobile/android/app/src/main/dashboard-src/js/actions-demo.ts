@@ -59,6 +59,10 @@ export function runBrowserDemoStream(
   VD: VoltDashboard,
   state: DashboardState,
 ) {
+  // Defense in depth against the start→stop-during-chunk-load race: if the demo
+  // was stopped before this lazily-loaded stream began, don't start the interval
+  // or flip status back to "connected".
+  if (!state.demoActive) return;
   let t = 0;
   let driveT = 0;
   VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
@@ -108,6 +112,9 @@ export function runBrowserDemoStream(
     const cellSpreadMv = Math.round(14 + 6 * Math.sin(t / 9));
     const minCellVoltage = Number((cellAvgV - cellSpreadMv / 2000).toFixed(3));
     const maxCellVoltage = Number((cellAvgV + cellSpreadMv / 2000).toFixed(3));
+    // Raw (unrounded) HV pack voltage — reused for packVoltage and the
+    // packCurrentA denominator so the two stay in step (mirrors DemoPollingLoop.kt).
+    const rawPackV = 353 + (soc - 50) * 0.2;
     VD.updateTelemetry({
       source: "demo",
       connected: true,
@@ -137,6 +144,22 @@ export function runBrowserDemoStream(
       socVariationPct: 0.4,
       powerKw: powerKw,
       chargerPowerKw,
+      // Extra PIDs a real Volt answers, so the Live-signals console shows a
+      // populated "reporting" list in demo (mirrors DemoPollingLoop.kt).
+      packVoltage: Number(rawPackV.toFixed(1)),
+      packCurrentA: Number(
+        (((charging ? -chargerPowerKw : powerKw) * 1000) / rawPackV).toFixed(1),
+      ),
+      controlModuleVoltage: voltage,
+      odometerKm: 77593,
+      intakeAirTempC: Number((22 + 3 * Math.sin(t / 11)).toFixed(1)),
+      outsideTempC: Number((18 + 2 * Math.sin(t / 13)).toFixed(1)),
+      sohPct: 91,
+      packEnergyKwh: Number(((soc / 100) * 14).toFixed(1)),
+      hvBatteryRawSoc: Number((soc + 2).toFixed(1)),
+      motorAPowerKw: charging ? 0 : Number((powerKw * 0.6).toFixed(1)),
+      transmissionTempC: Number((68 + 3 * Math.sin(t / 7)).toFixed(1)),
+      prndlState: charging ? "P" : "D",
       latitude: lat,
       longitude: lng,
       updatedAt: Date.now(),

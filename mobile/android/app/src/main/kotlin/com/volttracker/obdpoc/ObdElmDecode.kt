@@ -259,4 +259,7 @@ object ObdElmDecode {
 
     @JvmStatic
     fun round1(value: Double): Double = Math.round(value * 10.0) / 10.0
+
+    @JvmStatic
+    fun round3(value: Double): Double = Math.round(value * 1000.0) / 1000.0
 }

@@ -11,6 +11,9 @@ import { loadDashboard } from './setup/load-dashboard.js';
 async function startDemoStream() {
   await import('../app/src/main/dashboard-src/js/actions-demo.ts');
   const run = window.VoltDashboardActionModules.runBrowserDemoStream;
+  // The stream bails early unless a demo is active (guards the start/stop race);
+  // in real use startDemo sets this before the stream loads.
+  window.VoltDashboard.state.demoActive = true;
   run(window.VoltDashboard, window.VoltDashboard.state);
 }
 
@@ -96,5 +99,24 @@ describe('browser demo stream drive/charge cycle', () => {
     expect(t.chargerPowerKw).toBe(0);
     expect(t.speedKph).toBeGreaterThan(0);
     expect(document.getElementById('liveChargeCard').hidden).toBe(true);
+  });
+
+  it('does not start (or resurrect) the stream if the demo was stopped during the chunk load', async () => {
+    // Race: Start kicks off the async demo-chunk load, then Stop sets
+    // demoActive=false before it resolves. When the stream finally runs it must
+    // bail — otherwise its first sample re-flips demoActive on (telemetry.ts) and
+    // the "stopped" demo animates forever.
+    await import('../app/src/main/dashboard-src/js/actions-demo.ts');
+    const run = window.VoltDashboardActionModules.runBrowserDemoStream;
+    const VD = window.VoltDashboard;
+    VD.state.demoActive = false; // user already hit Stop
+
+    run(VD, VD.state);
+    vi.advanceTimersByTime(3000);
+
+    // No interval created, no demo sample emitted, demo stays stopped.
+    expect(window.__voltDemoTimer == null).toBe(true);
+    expect(VD.state.telemetry.source).not.toBe('demo');
+    expect(VD.state.demoActive).toBe(false);
   });
 });

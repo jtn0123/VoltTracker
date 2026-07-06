@@ -456,6 +456,57 @@
     flex: 1 1 auto;
   }
 
+  /* Live recording line: its own row under .top-main, flush-right beneath the
+     connection pill, so the session progress reads as one cluster with the
+     adapter/state above it (drive.ts toggles [hidden]). The meta shrinks +
+     ellipsizes first on narrow phones; the label never truncates. */
+  .top-recording {
+    display: flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 5px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.1;
+  }
+
+  .top-recording[hidden] {
+    display: none;
+  }
+
+  .top-recording__dot {
+    flex: none;
+    align-self: center;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--volt);
+    box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.6);
+    animation: drive-chip-pulse var(--motion-pulse) var(--motion-ease-inout) infinite;
+  }
+
+  .top-recording strong {
+    flex: none;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .top-recording small {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .top-recording small::before {
+    content: "·";
+    margin-right: 6px;
+    opacity: 0.6;
+  }
+
   /* X2: one accent per tab — active-state consumers read these tokens. */
   :root {
     --tab-accent: var(--volt);
@@ -1074,6 +1125,18 @@
 
   .pref-card .card-head {
     margin-bottom: 4px;
+  }
+
+  /* The kicker above already labels each pref card visually, so the h3 is
+     redundant on screen — but visually-hide it (sr-only clip) rather than
+     display:none so it stays a heading landmark in the accessibility tree. */
+  .pref-card .card-head h3 {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   .pref-row {

@@ -202,4 +202,27 @@ describe('demo ↔ native shape contract', () => {
     const dtcMissing = MUST_COVER_DTC.filter((k) => !(k in dtc));
     expect(dtcMissing, 'demo DTC row dropped a field the Insights tab renders').toEqual([]);
   });
+
+  // The two demo telemetry emitters — browser (actions-demo.ts runBrowserDemoStream)
+  // and native (DemoPollingLoop.kt run()) — are documented mirrors. The Battery-tab
+  // cell card needs six cell-balance fields; both streams must emit them, or the
+  // card is blank on whichever demo dropped them (native was missing all six).
+  it('both demo streams emit the Battery-tab cell-balance fields (mirror parity)', () => {
+    const CELL_FIELDS = [
+      'minCellVoltage', 'maxCellVoltage', 'cellBalanceMv',
+      'minCellNumber', 'maxCellNumber', 'socVariationPct',
+    ];
+
+    const loopSource = readNativeSource('DemoPollingLoop.kt');
+    const nativeKeys = putKeys(methodBody(loopSource, ['fun run()']));
+    const nativeMissing = CELL_FIELDS.filter((k) => !nativeKeys.has(k));
+    expect(nativeMissing, 'DemoPollingLoop.kt dropped cell-balance fields the browser demo emits').toEqual([]);
+
+    const browserSource = readFileSync(
+      resolve('../app/src/main/dashboard-src/js/actions-demo.ts'),
+      'utf8',
+    );
+    const browserMissing = CELL_FIELDS.filter((k) => !new RegExp(`\\b${k}\\b`).test(browserSource));
+    expect(browserMissing, 'actions-demo.ts dropped cell-balance fields the native demo emits').toEqual([]);
+  });
 });

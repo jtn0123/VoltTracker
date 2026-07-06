@@ -129,6 +129,30 @@ class TripMaterializerTest {
     }
 
     @Test
+    fun gpsStopWithActiveTelemetryStaysOneTrip() {
+        // Mirror of DriveWindowDetector.addStopSpan: a >3-min GPS-stationary
+        // stretch (a traffic jam / long light) where the vehicle is still ACTIVE
+        // (creeping, engine/pack ready) must NOT split the drive. Without the
+        // active-telemetry guard, gpsStopSpans over-splits this into two trips.
+        val data = StubData()
+        addMovingRun(data, T_BASE, 0, 5, 34.050000)
+        // GPS parked at one point for 7 minutes, but telemetry stays active.
+        for (minute in 6..12) {
+            val atMs = T_BASE + minute * ONE_MINUTE_MS
+            data.locations.add(loc(atMs, 34.060000, -118.250000))
+            data.telemetry.add(tel(atMs, 35.0))
+        }
+        addMovingRun(data, T_BASE, 13, 18, 34.070000)
+
+        val trips = TripMaterializer.materialize(input(data), data)
+
+        assertEquals(1, trips.size)
+        assertEquals(T_BASE, trips[0].startedAtMs)
+        // The single trip must span past the stationary stretch into the second run.
+        assertTrue(trips[0].endedAtMs >= T_BASE + 13 * ONE_MINUTE_MS)
+    }
+
+    @Test
     fun shortInactivePauseStaysInsideTrip() {
         val data = StubData()
         val startLat = 34.050000

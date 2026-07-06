@@ -10,6 +10,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // REQUIRED_DOM via the loader's extraDom option.
 const DRIVE_EXTRA_DOM = `
   <div id="driveNowChips"></div>
+  <div id="driveRecording" hidden><span class="top-recording__dot"></span><strong id="driveRecordingLabel">Recording</strong><small id="driveRecordingMeta"></small></div>
   <button id="topDemoInfo" hidden><strong>Demo / Testing</strong><small id="topDemoMeta">sample data</small></button>
   <div id="liveTraceChart"><canvas id="liveTraceCanvas"></canvas><div class="scrub-cursor live-trace-cursor"></div></div>
   <div id="powerBarsChart"></div>
@@ -82,22 +83,26 @@ describe('drive.ts', () => {
       session: { state: 'connected', sampleCount: 0 },
     };
     VD.renderDriveNowChips();
-    const host = document.getElementById('driveNowChips');
-    expect(host.children.length).toBe(0);
-    expect(host.innerHTML).not.toContain('Recording');
-    expect(host.innerHTML).not.toContain('awaiting first sample');
+    // The recording state consolidates into the topbar #driveRecording line;
+    // idle keeps it hidden and the retired strip empty.
+    const rec = document.getElementById('driveRecording');
+    expect(rec.hidden).toBe(true);
+    expect(document.getElementById('driveNowChips').children.length).toBe(0);
   });
 
-  it('renders a "Recording" chip when an active session has live evidence', () => {
+  it('shows the "Recording" header line when an active session has live evidence', () => {
     const VD = window.VoltDashboard;
     VD.state.appState = {
       adapter: { connected: true, name: 'OBDLink MX+' },
       session: { state: 'connected', sampleCount: 42, runtimeMs: 90_000 },
     };
     VD.renderDriveNowChips();
-    const host = document.getElementById('driveNowChips');
-    expect(host.innerHTML).toContain('Recording');
-    expect(host.innerHTML).toContain('42 samples');
+    const rec = document.getElementById('driveRecording');
+    expect(rec.hidden).toBe(false);
+    expect(rec.textContent).toContain('Recording');
+    expect(rec.textContent).toContain('42 samples');
+    // The full-width strip is no longer a live-status surface.
+    expect(document.getElementById('driveNowChips').children.length).toBe(0);
   });
 
   it('uses waiting copy for an active session before the first sample arrives', () => {
@@ -108,11 +113,11 @@ describe('drive.ts', () => {
       session: { state: 'connected', sampleCount: 0 },
     };
     VD.renderDriveNowChips();
-    const host = document.getElementById('driveNowChips');
-    expect(host.innerHTML).toContain('Waiting for data');
-    expect(host.innerHTML).toContain('adapter connected');
-    expect(host.innerHTML).not.toContain('Recording');
-    expect(host.innerHTML).not.toContain('awaiting first sample');
+    const rec = document.getElementById('driveRecording');
+    expect(rec.hidden).toBe(false);
+    expect(rec.textContent).toContain('Waiting for data');
+    expect(rec.textContent).toContain('adapter connected');
+    expect(rec.textContent).not.toContain('Recording');
   });
 
   it('drawLiveSpeedTrace shows a placeholder when speedHistory is empty', () => {
@@ -170,6 +175,24 @@ describe('drive.ts', () => {
     expect(socHost.querySelector('.live-chart-empty')).toBeNull();
     expect(powerHost.querySelector('svg')).toBeNull();
     expect(socHost.querySelector('svg')).toBeNull();
+  });
+
+  it('shows a plain SOC (no bogus Δ gain) when the session baseline is null (Number(null) === 0 trap)', () => {
+    const VD = window.VoltDashboard;
+    const tag = document.getElementById('socMicroTag');
+    // Baseline never set (fresh WebView, or SOC arrived via an app-state broadcast
+    // before the first live sample set sessionStartSoc) while current SOC is known.
+    VD.state.sessionStartSoc = null;
+    VD.state.telemetry.soc = 64;
+    VD.renderDriveLive();
+    expect(tag.textContent).toBe('64%');
+    expect(tag.textContent).not.toContain('Δ');
+    expect(tag.dataset.tone).toBe('idle');
+
+    // Sanity: with a real baseline the delta chip still renders.
+    VD.state.sessionStartSoc = 78.4;
+    VD.renderDriveLive();
+    expect(tag.textContent).toContain('Δ');
   });
 
   it('renders layout-stable empty states for power and SOC charts', () => {

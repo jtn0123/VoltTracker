@@ -106,11 +106,45 @@ class DemoPollingLoop(
                 sample.put("coolantC", Math.round(82 + 4 * Math.sin(t / 8.0)))
                 sample.put("loadPct", if (charging) 4L else Math.round(34 + 18 * Math.sin(driveT / 4.4)))
                 sample.put("throttlePct", if (charging) 0L else Math.round(18 + 14 * Math.sin(driveT / 2.7)))
-                sample.put("voltage", ObdElmDecode.round1(if (charging) 14.2 else 13.8 + 0.2 * Math.sin(t / 5.0)))
-                sample.put("soc", ObdElmDecode.round1(demoSoc(t)))
+                // Hoist the shared demo formulas once so the mirrored PIDs below
+                // (and the raw-vs-rounded pack voltage) stay in step with the JS
+                // runBrowserDemoStream mirror instead of drifting per call site.
+                val busV = ObdElmDecode.round1(if (charging) 14.2 else 13.8 + 0.2 * Math.sin(t / 5.0))
+                val soc = demoSoc(t)
+                val chargerKw = demoChargerPowerKw(t)
+                val drivePowerKw = if (charging) 0.0 else 16.0 + Math.sin(driveT / 2.2) * 12.0
+                val rawPackV = 353.0 + (soc - 50.0) * 0.2
+                val packWatts = (if (charging) -chargerKw else drivePowerKw) * 1000.0
+                sample.put("voltage", busV)
+                sample.put("soc", ObdElmDecode.round1(soc))
                 sample.put("batteryTemp", ObdElmDecode.round1(24.0 + Math.sin(t / 8.0)))
-                sample.put("powerKw", if (charging) 0.0 else ObdElmDecode.round1(16.0 + Math.sin(driveT / 2.2) * 12.0))
-                sample.put("chargerPowerKw", demoChargerPowerKw(t))
+                sample.put("powerKw", ObdElmDecode.round1(drivePowerKw))
+                sample.put("chargerPowerKw", chargerKw)
+                // Extra PIDs a real Volt answers, so the Live-signals console shows a
+                // populated "reporting" list in demo (mirrors runBrowserDemoStream).
+                sample.put("packVoltage", ObdElmDecode.round1(rawPackV))
+                sample.put("packCurrentA", ObdElmDecode.round1(packWatts / rawPackV))
+                sample.put("controlModuleVoltage", busV)
+                sample.put("odometerKm", 77593.0)
+                sample.put("intakeAirTempC", ObdElmDecode.round1(22.0 + 3.0 * Math.sin(t / 11.0)))
+                sample.put("outsideTempC", ObdElmDecode.round1(18.0 + 2.0 * Math.sin(t / 13.0)))
+                sample.put("sohPct", 91.0)
+                sample.put("packEnergyKwh", ObdElmDecode.round1(soc / 100.0 * 14.0))
+                sample.put("hvBatteryRawSoc", ObdElmDecode.round1(soc + 2.0))
+                // HV cell-group balance for the Battery-tab cell card (mirrors
+                // actions-demo.ts): a healthy pack wobbling ~10-20 mV around ~3.9 V,
+                // cell 47 on the low side to match the "Cell 47 trending low" insight.
+                val cellAvgV = 3.85 + (soc - 50.0) * 0.003
+                val cellSpreadMv = Math.round(14.0 + 6.0 * Math.sin(t / 9.0)).toInt()
+                sample.put("minCellVoltage", ObdElmDecode.round3(cellAvgV - cellSpreadMv / 2000.0))
+                sample.put("maxCellVoltage", ObdElmDecode.round3(cellAvgV + cellSpreadMv / 2000.0))
+                sample.put("cellBalanceMv", cellSpreadMv)
+                sample.put("minCellNumber", 47)
+                sample.put("maxCellNumber", 12)
+                sample.put("socVariationPct", 0.4)
+                sample.put("motorAPowerKw", if (charging) 0.0 else ObdElmDecode.round1(drivePowerKw * 0.6))
+                sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
+                sample.put("prndlState", if (charging) "P" else "D")
                 // The position clock is driveT, so the marker parks during the
                 // charge window instead of orbiting an unplugged charger.
                 sample.put("latitude", 34.0522 + 0.009 * Math.sin(driveT / 28.0))

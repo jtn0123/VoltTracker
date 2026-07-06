@@ -458,8 +458,11 @@ function tripRows(status: VoltStatus): StatusRow[] {
   if (durationMs > 0) {
     rows.push(["Duration", formatDuration(durationMs)]);
   }
-  const startSoc = Number(state.sessionStartSoc);
-  const soc = Number(telemetry.soc);
+  // Null-safe: SOC fields default to null. Number(null) === 0 is finite, which
+  // would fabricate a "Battery 0%" row (soc null) or a bogus "0% → N%" delta
+  // (startSoc null) — map null/empty to NaN so the isFinite gates below drop them.
+  const startSoc = state.sessionStartSoc == null ? NaN : Number(state.sessionStartSoc);
+  const soc = telemetry.soc == null || telemetry.soc === "" ? NaN : Number(telemetry.soc);
   if (Number.isFinite(soc)) {
     rows.push([
       "Battery",

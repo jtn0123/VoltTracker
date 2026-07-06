@@ -47,8 +47,19 @@ export function liveSampleTimeMs(sample: VoltTelemetry) {
   return Date.now();
 }
 
+// Null-safe numeric coercion. `Number(null)` and `Number("")` are 0 (a finite
+// value), which silently defeats `Number.isFinite` guards on nullable fields
+// (SOC baselines, per-point efficiency). Map null/empty to NaN so those guards
+// fire as intended. Use this instead of bare Number() on any field that can be
+// null/absent.
+export function numOrNaN(value: unknown): number {
+  return value == null || value === "" ? NaN : Number(value);
+}
+
 export function mapEffColor(eff: unknown) {
-  const value = Number(eff);
+  // enrichRouteEff sets eff = null for regen / no-data segments; those must read
+  // as "no data" (grey), not fall through Number(null) === 0 into the worst band.
+  const value = numOrNaN(eff);
   if (!Number.isFinite(value)) return "#6a6a72";
   if (value >= 4) return "#b8e63b";
   if (value >= 2.7) return "#ffb84a";

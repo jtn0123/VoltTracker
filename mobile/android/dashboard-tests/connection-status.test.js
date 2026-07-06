@@ -128,6 +128,40 @@ describe('connection-status.ts — status popover', () => {
     expect(trip).toContain('1,234');
   });
 
+  it('does not fabricate a "0%" Battery row or delta when SOC is unknown (Number(null) === 0 trap)', async () => {
+    const VD = await loadWithSessions([
+      { adapter: 'OBDLink MX+ 54242', startMs: 1_000_000, endMs: 4_600_000, outcome: 'success' },
+    ]);
+    window.VoltTrackerNative.setStatus({ state: 'connected', detail: 'Streaming OBD data.', bluetoothReady: true });
+    VD.setAppState({
+      adapter: { name: 'OBDLink MX+', address: '...44:55', connected: true, remembered: true },
+      permissions: { bluetooth: true, bluetoothPermission: true, bluetoothEnabled: true },
+      session: { state: 'connected', sampleCount: 1234, sessionMs: 95_000 },
+      gps: { state: 'locked' },
+    });
+    VD.state.sessionDistanceM = 5000;
+
+    // Case A: no SOC PID has reported — baseline and current are both null. The
+    // Battery row must be omitted, not rendered as a fabricated "0%".
+    VD.state.sessionStartSoc = null;
+    VD.state.telemetry.soc = null;
+    badge().click();
+    let trip = document.getElementById('statusPopoverTrip').textContent;
+    expect(trip).not.toContain('0%');
+    badge().click(); // close
+
+    // Case B: current SOC known but the session baseline is still null (first
+    // value arrived via app-state before the first live sample set the baseline).
+    // Must read as the plain current value, never "0% → 76%".
+    VD.state.sessionStartSoc = null;
+    VD.state.telemetry.soc = 76;
+    badge().click();
+    trip = document.getElementById('statusPopoverTrip').textContent;
+    expect(trip).toContain('76%');
+    expect(trip).not.toContain('0% → 76%');
+    expect(trip).not.toContain('0%');
+  });
+
   it('explains a missing Bluetooth permission and shows the last trip when idle', async () => {
     const VD = await loadWithSessions([
       { adapter: 'OBDLink MX+ 54242', startMs: 1_000_000, endMs: 4_600_000, outcome: 'success' },
