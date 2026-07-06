@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.28.1 (2026-07-06)
+
+### 🔺 Fix
+
+- Resolve reported diagnostics/map UI issues and 100+ audited bugs
+  ([#296](https://github.com/jtn0123/VoltTracker/pull/296),
+  [`80e41d4`](https://github.com/jtn0123/VoltTracker/commit/80e41d46c4d9487f25276ad54e73ece7ad29c358))
+
+
 ## v0.28.0 (2026-07-06)
 
 ### ✳️ New
