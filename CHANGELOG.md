@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.28.0 (2026-07-06)
+
+### ✳️ New
+
+- **dashboard**: Polish dashboard UI to match Polished design handoff
+  ([#295](https://github.com/jtn0123/VoltTracker/pull/295),
+  [`5ab56c4`](https://github.com/jtn0123/VoltTracker/commit/5ab56c4c6ee4398178131782f69157ccd34f99e1))
+
+
 ## v0.27.0 (2026-07-04)
 
 ### ✳️ New
