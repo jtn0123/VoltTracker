@@ -4,6 +4,7 @@
   <div
     id="mapDriveChips"
     class="map-drive-chips"
+    data-noswipe="true"
     role="group"
     aria-label="Pick a logged drive"
   ></div>
@@ -13,6 +14,7 @@
       id="mapFrame"
       class="map-frame"
       data-layer="eff"
+      data-noswipe="true"
       role="tabpanel"
       aria-label="Map view"
     >
@@ -105,6 +107,7 @@
         <span><i style="background: #ff6b4a"></i>slow</span>
         <span><i style="background: #ffd23f"></i>mid</span>
         <span><i style="background: #7ee06a"></i>fast</span>
+        <span class="map-legend-hint">tap route for detail</span>
       </div>
 
       <div class="map-legend map-legend-eff" aria-hidden="true">
@@ -112,6 +115,37 @@
         <span><i style="background: #ffb84a"></i>avg</span>
         <span><i style="background: #ff6b5f"></i>poor</span>
         <span><i style="background: #6a6a72"></i>no data</span>
+        <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <!-- Tapped route detail (map.ts showSegPop): segment / stop / event
+           stats card pinned to the map's bottom edge; replaces the legend
+           while open. -->
+      <div id="mapSegPop" class="map-seg-pop" hidden>
+        <span class="map-seg-pop-text">
+          <strong id="mapSegPopTitle"></strong>
+          <small id="mapSegPopSub"></small>
+        </span>
+        <b id="mapSegPopStat"></b>
+        <button
+          type="button"
+          id="mapSegPopClose"
+          aria-label="Close route details"
+        >
+          &#10005;
+        </button>
+      </div>
+
+      <!-- Full-screen drive summary (map.ts renderMapFsInfo): bottom info
+           card shown only while the map is fullscreen, so the drive context
+           survives leaving the sheet behind. Hidden while a tapped-detail
+           card is open (both anchor to the same edge). -->
+      <div id="mapFsInfo" class="map-fs-info" hidden>
+        <span class="map-fs-info-text">
+          <strong id="mapFsInfoTitle"></strong>
+          <small id="mapFsInfoSub"></small>
+        </span>
+        <b id="mapFsInfoPill"></b>
       </div>
 
       <div id="mapEmpty" class="map-empty" role="status" aria-live="polite">
@@ -149,6 +183,13 @@
              "Avg km/h"): a metric user shouldn't flash "Avg mph" on first paint. -->
         <span class="kicker" id="mapAvgSpeedLabel">Avg speed</span
         ><strong id="mapAvgMph">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Energy used</span
+        ><strong id="mapEnergy">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Est. cost</span><strong id="mapCost">--</strong>
       </div>
     </div>
   </div>
@@ -283,11 +324,53 @@
       </header>
       <div class="eff-scatter" id="tripDetailElevation"></div>
     </article>
+    <!-- Speed over the drive (v2): GPS speed from start to finish. Hidden when
+         the route has too few points. Rendered by map.ts#renderTripDetailSpeed. -->
+    <article class="trip-detail-scatter-card" id="tripDetailSpeedCard" hidden>
+      <header>
+        <span class="kicker">Speed over the drive</span>
+        <h4 id="tripDetailSpeedHead">GPS speed from start to finish.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailSpeedChart"></div>
+    </article>
+    <!-- Stops along the drive (v2): the same >=45s stop detection the map's
+         Stops layer uses. Hidden when the drive never stopped. -->
+    <article class="trip-detail-scatter-card" id="tripDetailStopsCard" hidden>
+      <header>
+        <span class="kicker">Stops</span>
+      </header>
+      <div id="tripDetailStops" class="trip-detail-stops"></div>
+    </article>
+    <div class="trip-detail-actions">
+      <button
+        type="button"
+        id="tripDetailViewMap"
+        class="confirm"
+        data-action="tripViewOnMap"
+      >
+        View on map
+      </button>
+      <button
+        type="button"
+        id="tripDetailExportCsv"
+        data-trip-export="csv"
+        data-trip-export-key=""
+      >
+        Export drive CSV
+      </button>
+    </div>
   </div>
 
-  <div id="scrubber" class="scrubber panel" hidden>
+  <div id="scrubber" class="scrubber panel" data-noswipe="true" hidden>
     <div class="scrub-chart" id="scrubChart">
       <div class="scrub-cursor" id="scrubCursor"></div>
+    </div>
+    <!-- Always-on elevation profile strip with its own scrub cursor
+         (scrubber.ts renderScrubElevation); hidden when the route has no
+         altitude samples. -->
+    <div class="scrub-elev" id="scrubElev" hidden>
+      <div class="scrub-cursor scrub-elev-cursor" id="scrubElevCursor"></div>
+      <small class="scrub-elev-label" aria-hidden="true">Elevation</small>
     </div>
     <div class="scrub-readout" id="scrubReadout"></div>
     <div id="scrubStack" class="scrub-stack" hidden></div>
@@ -377,6 +460,17 @@
             aria-label="Show favorites only"
           >
             ☆ Favorites
+          </button>
+          <button
+            type="button"
+            id="mapSessionLongOnly"
+            class="tile-toggle map-list-fav-toggle"
+            data-map-long-only
+            data-on="false"
+            aria-pressed="false"
+            aria-label="Show long trips only"
+          >
+            Long trips
           </button>
         </div>
       </div>

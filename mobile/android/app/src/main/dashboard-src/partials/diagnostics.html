@@ -82,6 +82,33 @@
         Quick scan
       </button>
     </div>
+
+    <!-- Live scan narration (storage-status.ts startDtcScanProgress): phase
+         line + % + bar + step chips while a native scan is in flight. The %
+         is cosmetic pacing — completion is driven by the real scan-complete
+         status — so the bar parks near-full until the adapter answers. -->
+    <div
+      id="dtcScanProgress"
+      class="dtc-scan-progress"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <div class="dtc-scan-phase-row">
+        <span class="dtc-scan-phase"
+          ><span class="dot" aria-hidden="true"></span
+          ><span id="dtcScanPhase">Waking modules…</span></span
+        >
+        <span id="dtcScanPct" class="dtc-scan-pct">0%</span>
+      </div>
+      <div class="dtc-scan-bar"><span id="dtcScanBarFill"></span></div>
+      <div class="dtc-scan-steps" id="dtcScanSteps" aria-hidden="true">
+        <span data-step="0">Modules</span>
+        <span data-step="1">Stored</span>
+        <span data-step="2">Pending</span>
+        <span data-step="3">Freeze</span>
+      </div>
+    </div>
     <!-- Destructive + engineering actions demoted to text level: clearing
          codes is confirm-gated and rare, and debug logs live with the
          session-review tooling this link opens (not another boxed button
@@ -574,4 +601,53 @@
       <pre id="rawFrames">Waiting for telemetry…</pre>
     </article>
   </details>
+
+  <!-- Trouble-code detail bottom sheet (storage-status.ts openDtcDetail).
+       Opened by tapping a scanned-code row or a lookup hit; modal with a
+       focus trap, closed by Close / backdrop / Escape / Android back. -->
+  <div id="dtcDetailBackdrop" class="dtc-detail-backdrop" hidden></div>
+  <div
+    id="dtcDetailSheet"
+    class="dtc-detail-sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Trouble code detail"
+    tabindex="-1"
+    hidden
+  >
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <div class="dtc-detail-head">
+      <b id="dtcDetailCode" class="dtc-code">--</b>
+      <span class="dtc-detail-title-block">
+        <strong id="dtcDetailTitle">--</strong>
+        <small id="dtcDetailMeta"></small>
+      </span>
+      <span id="dtcDetailSev" class="dtc-sev" data-severity="info">Info</span>
+    </div>
+    <p id="dtcDetailPlain" class="dtc-detail-plain"></p>
+    <div id="dtcDetailCausesWrap" class="dtc-detail-causes" hidden>
+      <span class="kicker">Likely causes</span>
+      <ul id="dtcDetailCauses"></ul>
+    </div>
+    <div id="dtcDetailFrameWrap" class="dtc-detail-frame" hidden>
+      <span class="kicker">Freeze frame · conditions at fault</span>
+      <div id="dtcDetailFrame" class="dtc-detail-frame-grid"></div>
+    </div>
+    <div class="dtc-detail-links">
+      <button
+        type="button"
+        class="dtc-search"
+        id="dtcDetailSearch"
+        data-dtc-search=""
+      >
+        Search the web
+      </button>
+    </div>
+    <div class="dtc-detail-actions">
+      <button type="button" id="dtcDetailClose">Close</button>
+      <button type="button" id="dtcDetailCopy" class="confirm">
+        Copy report
+      </button>
+    </div>
+  </div>
 </section>

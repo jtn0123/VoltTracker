@@ -216,12 +216,16 @@
     }
   }
 
-  /* Honor reduced-motion. */
+  /* Honor reduced-motion. animation-delay is zeroed too: staggered entrances
+     (card cascade, DTC rows, cell-grid reveal) hold `backwards` fill through
+     their delay, so a zero duration alone would still pop content in
+     sequentially instead of instantly. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
     *::after {
       animation-duration: 0.001ms !important;
+      animation-delay: 0.001ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.001ms !important;
       scroll-behavior: auto !important;
@@ -431,8 +435,18 @@
      fixed descendants, so drop the layer-promotion transform while the map is fullscreen to
      keep it viewport-relative. The ghost bug cannot occur here anyway -- the fullscreen map
      fully repaints the surface. */
-  body.map-full-active .app {
+  body.map-full-active .app,
+  /* Same escape hatch for the DTC detail bottom sheet (position: fixed). */
+  body.dtc-detail-active .app {
     transform: none;
+  }
+
+  /* The view-enter/slide animations keep filling an identity transform after
+     they finish (implicit-to keyframes interpolate to identity, not `none`),
+     which would make the active section the containing block for the fixed
+     DTC sheet. Drop the (already finished) animation while the sheet is open. */
+  body.dtc-detail-active .view.is-active {
+    animation: none;
   }
 
   .topbar {
@@ -833,6 +847,59 @@
     from {
       opacity: 0;
       transform: translateY(10px);
+    }
+  }
+
+  /* Directional tab transitions: core.ts stamps data-vt-dir from the nav
+     order, so moving right slides in from the right and going back mirrors
+     it. First paint (no attr) keeps the plain rise above. */
+  body[data-vt-dir="fwd"] .view.is-active {
+    animation-name: view-slide-fwd;
+    animation-duration: 340ms;
+  }
+
+  body[data-vt-dir="back"] .view.is-active {
+    animation-name: view-slide-back;
+    animation-duration: 340ms;
+  }
+
+  @keyframes view-slide-fwd {
+    from {
+      opacity: 0;
+      transform: translateX(26px);
+    }
+  }
+
+  @keyframes view-slide-back {
+    from {
+      opacity: 0;
+      transform: translateX(-26px);
+    }
+  }
+
+  /* Staggered card entrance: direct children of the active view settle in
+     30–360ms apart so a tab reads as a cascade instead of one block.
+     `backwards` holds the pre-delay frame; the reduced-motion reset above
+     collapses the whole thing to instant. */
+  .view.is-active > * {
+    animation: card-rise 520ms cubic-bezier(0.16, 0.84, 0.28, 1) backwards;
+  }
+
+  .view.is-active > *:nth-child(1) { animation-delay: 30ms; }
+  .view.is-active > *:nth-child(2) { animation-delay: 80ms; }
+  .view.is-active > *:nth-child(3) { animation-delay: 130ms; }
+  .view.is-active > *:nth-child(4) { animation-delay: 180ms; }
+  .view.is-active > *:nth-child(5) { animation-delay: 230ms; }
+  .view.is-active > *:nth-child(6) { animation-delay: 280ms; }
+  .view.is-active > *:nth-child(7) { animation-delay: 320ms; }
+  .view.is-active > *:nth-child(n + 8) { animation-delay: 360ms; }
+
+  /* Rise only — no scale: a scale would distort mid-animation geometry (and
+     any code measuring card widths during the entrance). */
+  @keyframes card-rise {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
     }
   }
 

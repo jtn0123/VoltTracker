@@ -10,6 +10,7 @@
 import { rateForCharger } from "./cost-model";
 import { el, setSvgAttrs } from "./core";
 import { setDataState, type DataStateValue } from "./dataset-state";
+import { createFocusTrap, type FocusTrap } from "./focus-trap";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 
@@ -289,6 +290,8 @@ import { prefs, units } from "./prefs";
     return button;
   }
 
+  let lastDtcListSig = "";
+
   function updateDiagnosticCodeUi() {
     const storage = state.storage || {};
     const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
@@ -342,11 +345,31 @@ import { prefs, units } from "./prefs";
           VD.setText("dtcReportBadge", "details unavailable");
         });
     }
+    // Memo: storage pushes arrive constantly (every status broadcast), and an
+    // unconditional replaceChildren would replay the rows' entrance animation
+    // as flicker. Re-render only when the codes themselves (or the lookup DB
+    // becoming available) change.
+    // The rows' click handlers close over these row objects (openDtcDetail),
+    // so the signature must cover every field the row OR the detail sheet
+    // renders — a content-only change (freeze frame, module name) must rebuild.
+    const listSig =
+      (typeof VD.dtcInfo === "function" ? "db:" : "raw:") +
+      codes
+        .map((c) =>
+          [
+            c.dtc, c.status, c.statusLabel, c.lastSeenMs, c.firstSeenMs, c.seenCount,
+            c.moduleName, c.header,
+            c.freezeFrame ? JSON.stringify(c.freezeFrame) : ""
+          ].join(":")
+        )
+        .join(";");
+    if (listSig === lastDtcListSig) return;
+    lastDtcListSig = listSig;
     if (!codes.length) {
       list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.replaceChildren(...codes.map((c) => buildDtcItem(c, false)));
+    list.replaceChildren(...codes.map((c, i) => buildDtcItem(c, false, i)));
   }
 
   function buildDtcEmptyState() {
@@ -367,7 +390,7 @@ import { prefs, units } from "./prefs";
       header.className = "dtc-example-header";
       header.textContent = "Example - what a scan result looks like";
       wrap.append(header);
-      samples.forEach((sample) => wrap.append(buildDtcItem(sample, true)));
+      samples.forEach((sample, i) => wrap.append(buildDtcItem(sample, true, i)));
     }
     return wrap;
   }
@@ -429,7 +452,7 @@ import { prefs, units } from "./prefs";
     return second === "1" || second === "3" ? "manufacturer-specific" : "generic OBD-II";
   }
 
-  function buildDtcItem(code: VoltDtcRow, isExample: boolean) {
+  function buildDtcItem(code: VoltDtcRow, isExample: boolean, index = 0) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
@@ -499,34 +522,6 @@ import { prefs, units } from "./prefs";
     }
     moduleBlock.append(small);
 
-    // Likely-causes box + search link are appended to the ARTICLE (not the
-    // module column) so CSS can span them across the full card width — nested
-    // in the 1fr column they wrapped hard beside the code/severity column.
-    let causesWrap: HTMLDivElement | null = null;
-    if (info && Array.isArray(info.causes) && info.causes.length) {
-      causesWrap = document.createElement("div");
-      causesWrap.className = "dtc-causes";
-      const header = document.createElement("span");
-      header.className = "dtc-causes-head";
-      const tag = info.category ? ` · ${info.category}` : "";
-      header.textContent = `Likely causes${tag}`;
-      causesWrap.append(header);
-      const list = document.createElement("ul");
-      info.causes.slice(0, 5).forEach((cause: string) => {
-        const li = document.createElement("li");
-        li.textContent = cause;
-        list.append(li);
-      });
-      causesWrap.append(list);
-    }
-
-    const searchLink = document.createElement("a");
-    searchLink.className = "dtc-search";
-    searchLink.textContent = "Search the web";
-    searchLink.href = "#";
-    searchLink.dataset.dtcSearch = code.dtc || "";
-    searchLink.setAttribute("role", "button");
-
     // Occurrence count, only when we actually have one. A stored/pending code
     // seen 0 times is contradictory, so suppress the badge rather than print
     // "0x seen".
@@ -543,8 +538,34 @@ import { prefs, units } from "./prefs";
     } else {
       article.append(codeBlock, moduleBlock);
     }
-    if (causesWrap) article.append(causesWrap);
-    article.append(searchLink);
+
+    // The row itself opens the detail sheet (plain description, likely causes,
+    // freeze frame, copy report) — the causes list used to render inline here
+    // and made every row a wall; the sheet keeps rows scannable. Chevron is the
+    // affordance; Enter/Space mirror the click for keyboard users.
+    const chevron = document.createElement("span");
+    chevron.className = "dtc-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "›";
+    article.append(chevron);
+    article.setAttribute("role", "button");
+    article.tabIndex = 0;
+    article.setAttribute("aria-label", `${code.dtc || "code"} details`);
+    article.addEventListener("click", (event) => {
+      // Let real links/buttons inside the row (none today) keep their own taps.
+      const target = event.target as Element | null;
+      if (target && target.closest("a, button")) return;
+      openDtcDetail(code);
+    });
+    article.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openDtcDetail(code);
+    });
+    // Staggered entrance: rows cascade in 90ms apart when the list (re)renders
+    // after a scan. `backwards` holds them hidden until their turn.
+    article.classList.add("dtc-item-enter");
+    article.style.animationDelay = `${Math.min(index, 6) * 90}ms`;
     return article;
   }
 
@@ -981,6 +1002,39 @@ import { prefs, units } from "./prefs";
     waiting: { label: "needs data", state: "waiting" },
   };
 
+  // Latest drive's net HV energy + estimated electricity cost (Drive tab
+  // strip under the overview grid). Energy comes from the trip rollup that
+  // matches the overview route; cost multiplies it by the home rate pref.
+  // Without a rate the right side stays a "set rate for cost" Settings jump;
+  // without energy it shows "--" so the strip never invents a figure.
+  function renderTripEnergyStrip(route: VoltRoute, routeDistance: number): void {
+    const cost = el("tripCostValue") as HTMLButtonElement | null;
+    const sessionId = String(((route || {}).session || {}).id || "");
+    const trips = Array.isArray(state.trips) ? (state.trips as VoltTrip[]) : [];
+    const trip = sessionId
+      ? trips.find((row) => String(row.id) === sessionId) || null
+      : null;
+    const energyKwh = trip && trip.energyKwh != null ? Number(trip.energyKwh) : NaN;
+    const hasEnergy = Number.isFinite(energyKwh) && energyKwh > 0;
+    VD.setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
+    if (!cost) return;
+    const rate = prefs.get<number>("pricePerKwh", 0);
+    if (hasEnergy && rate > 0) {
+      cost.textContent = `≈ $${(energyKwh * rate).toFixed(2)}`;
+      setDataState(cost, "recorded");
+      cost.disabled = true;
+    } else if (rate > 0) {
+      // Rate is set but this drive logged no pack power — nothing to estimate.
+      cost.textContent = routeDistance > 0 ? "no energy logged" : "--";
+      setDataState(cost, "waiting");
+      cost.disabled = true;
+    } else {
+      cost.textContent = "set rate for cost";
+      setDataState(cost, "waiting");
+      cost.disabled = false;
+    }
+  }
+
   function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
@@ -1001,6 +1055,7 @@ import { prefs, units } from "./prefs";
     VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--"));
     VD.setText("overviewBatterySub", Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW latest power` : "SOC/power once observed");
     VD.setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
+    renderTripEnergyStrip(route, routeDistance);
 
     VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
@@ -1453,7 +1508,14 @@ import { prefs, units } from "./prefs";
         ? `${shown} of ${totalCharges} charges`
         : `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`
     );
-    list.replaceChildren(...sessions.slice(0, 12).map(buildChargeSessionRow));
+    // Scale each row's background bar to the biggest charge on screen so the
+    // list doubles as a bar chart (11.8 kWh fills the row; 3 kWh ~a quarter).
+    const shownSessions = sessions.slice(0, 12);
+    const maxEnergyKwh = shownSessions.reduce((acc, session) => {
+      const energy = chargeNum(session.energyKwh);
+      return Number.isFinite(energy) && energy > acc ? energy : acc;
+    }, 0);
+    list.replaceChildren(...shownSessions.map((session) => buildChargeSessionRow(session, maxEnergyKwh)));
     renderChargeEnergy(sessions);
   }
 
@@ -1732,11 +1794,20 @@ import { prefs, units } from "./prefs";
     return known[key] || raw.charAt(0).toUpperCase() + raw.slice(1);
   }
 
-  function buildChargeSessionRow(session: VoltChargeSessionRow) {
+  function buildChargeSessionRow(session: VoltChargeSessionRow, maxEnergyKwh = 0) {
     const row = document.createElement("article");
     row.className = "charge-session-row";
     const inProgress = isChargeInProgress(session);
     if (inProgress) row.dataset.charging = "1";
+    // Proportional energy bar behind the text (see .charge-kwh-bar). Skipped
+    // when this session logged no energy — the row keeps its flat background.
+    const rowEnergy = chargeNum(session.energyKwh);
+    if (Number.isFinite(rowEnergy) && rowEnergy > 0 && maxEnergyKwh > 0) {
+      const bar = document.createElement("span");
+      bar.className = "charge-kwh-bar";
+      bar.style.width = `${Math.max(6, Math.min(100, (rowEnergy / maxEnergyKwh) * 100)).toFixed(0)}%`;
+      row.append(bar);
+    }
     const center = document.createElement("span");
     const strong = document.createElement("strong");
     strong.textContent = [VD.formatWhen(session.startedAtMs), chargerLabel(session.chargerType)]
@@ -1865,6 +1936,229 @@ import { prefs, units } from "./prefs";
     if (node) node.hidden = Boolean(hidden);
   }
 
+  // ── DTC detail bottom sheet ───────────────────────────────────────────
+  // Opened from a scanned-code row or a lookup hit. Renders the plain-language
+  // description, severity, likely causes, and (when the row carries one) the
+  // freeze-frame conditions grid. Modal with a focus trap; Close / backdrop /
+  // Escape / Android back all route through closeDtcDetail.
+
+  let dtcDetailTrap: FocusTrap | null = null;
+  let dtcDetailCode: VoltDtcRow | null = null;
+
+  function dtcDetailNodes() {
+    return { sheet: el("dtcDetailSheet"), backdrop: el("dtcDetailBackdrop") };
+  }
+
+  function openDtcDetail(code: VoltDtcRow): void {
+    const { sheet, backdrop } = dtcDetailNodes();
+    if (!sheet || !backdrop) return;
+    const dtc = String(code.dtc || "").trim().toUpperCase();
+    const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(dtc) : null;
+    const severity = dtcSeverity(dtc, info ? info.severity : null);
+    dtcDetailCode = code;
+    VD.setText("dtcDetailCode", dtc || "--");
+    VD.setText(
+      "dtcDetailTitle",
+      info && info.description
+        ? info.description
+        : info && info.category
+          ? `Unrecognized code — likely area: ${info.category}`
+          : code.moduleName || "Unknown code"
+    );
+    const metaParts: string[] = [];
+    metaParts.push(code.statusLabel || code.status || "stored");
+    if (code.lastSeenMs) metaParts.push(`last seen ${VD.formatWhen(code.lastSeenMs)}`);
+    const seen = Number(code.seenCount || 0);
+    if (seen > 0) metaParts.push(`${seen}x`);
+    VD.setText("dtcDetailMeta", metaParts.join(" · "));
+    const sev = el("dtcDetailSev");
+    if (sev) {
+      sev.dataset.severity = severity;
+      sev.textContent = severityLabel(severity);
+    }
+    VD.setText("dtcDetailPlain", drivabilityLine(severity) + ".");
+    // Likely causes (from the on-device causes DB; hidden when unknown).
+    const causesWrap = el("dtcDetailCausesWrap");
+    const causesList = el("dtcDetailCauses");
+    const causes = info && Array.isArray(info.causes) ? info.causes : [];
+    if (causesWrap) causesWrap.hidden = !causes.length;
+    if (causesList) {
+      causesList.replaceChildren(
+        ...causes.slice(0, 5).map((cause: string) => {
+          const li = document.createElement("li");
+          li.textContent = cause;
+          return li;
+        })
+      );
+    }
+    // Freeze frame — only when this row actually carries captured conditions
+    // (native doesn't yet; the demo fault scenario does). Never invented.
+    const frameWrap = el("dtcDetailFrameWrap");
+    const frameGrid = el("dtcDetailFrame");
+    const frame = (code as VoltDtcRow & { freezeFrame?: Record<string, string | number> }).freezeFrame;
+    const entries = frame && typeof frame === "object" ? Object.entries(frame) : [];
+    if (frameWrap) frameWrap.hidden = !entries.length;
+    if (frameGrid) {
+      frameGrid.replaceChildren(
+        ...entries.map(([label, value]) => {
+          const cell = document.createElement("span");
+          const small = document.createElement("small");
+          small.textContent = label;
+          const strong = document.createElement("strong");
+          strong.textContent = String(value);
+          cell.append(small, strong);
+          return cell;
+        })
+      );
+    }
+    const search = el("dtcDetailSearch");
+    if (search) search.dataset.dtcSearch = dtc;
+    backdrop.hidden = false;
+    sheet.hidden = false;
+    // .app carries a translateZ(0) layer promotion that would turn it into the
+    // containing block for this fixed sheet — drop it while the sheet is open
+    // (same escape hatch the fullscreen map uses; see base.css).
+    document.body.classList.add("dtc-detail-active");
+    dtcDetailTrap = createFocusTrap(sheet, { onEscape: closeDtcDetail });
+    dtcDetailTrap.activate();
+    sheet.focus();
+  }
+
+  function closeDtcDetail(): void {
+    const { sheet, backdrop } = dtcDetailNodes();
+    if (dtcDetailTrap) {
+      dtcDetailTrap.deactivate();
+      dtcDetailTrap = null;
+    }
+    if (sheet) sheet.hidden = true;
+    if (backdrop) backdrop.hidden = true;
+    document.body.classList.remove("dtc-detail-active");
+    dtcDetailCode = null;
+  }
+
+  // Plain-text report for the clipboard ("Copy report" in the sheet) — the
+  // fields a mechanic or forum post actually needs, no markup.
+  function copyDtcReport(): void {
+    const code = dtcDetailCode;
+    if (!code) return;
+    const dtc = String(code.dtc || "").trim().toUpperCase();
+    const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(dtc) : null;
+    const severity = dtcSeverity(dtc, info ? info.severity : null);
+    const lines: string[] = [];
+    lines.push(`${dtc} — ${info && info.description ? info.description : code.moduleName || "unknown code"}`);
+    lines.push(`Severity: ${severityLabel(severity)} · status: ${code.statusLabel || code.status || "stored"}`);
+    if (code.firstSeenMs || code.lastSeenMs) {
+      lines.push(
+        `First seen ${VD.formatWhen(code.firstSeenMs)} · last seen ${VD.formatWhen(code.lastSeenMs)}` +
+          (Number(code.seenCount || 0) > 0 ? ` · seen ${code.seenCount}x` : "")
+      );
+    }
+    const causes = info && Array.isArray(info.causes) ? info.causes : [];
+    if (causes.length) {
+      lines.push("Likely causes:");
+      causes.slice(0, 5).forEach((cause: string) => lines.push(`- ${cause}`));
+    }
+    const frame = (code as VoltDtcRow & { freezeFrame?: Record<string, string | number> }).freezeFrame;
+    const entries = frame && typeof frame === "object" ? Object.entries(frame) : [];
+    if (entries.length) {
+      lines.push("Freeze frame (conditions at fault):");
+      entries.forEach(([label, value]) => lines.push(`- ${label}: ${value}`));
+    }
+    lines.push("Logged by Volt Tracker");
+    const text = lines.join("\n");
+    const nav = navigator as Navigator & { clipboard?: { writeText?(t: string): Promise<void> } };
+    if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
+      nav.clipboard
+        .writeText(text)
+        .then(() => VD.setStatus({ state: state.status?.state || "idle", detail: `${dtc} report copied to clipboard.` }))
+        .catch(() => VD.setStatus({ state: state.status?.state || "idle", detail: "Could not copy the report." }));
+    } else {
+      VD.setStatus({ state: state.status?.state || "idle", detail: "Copy is not available in this browser." });
+    }
+  }
+
+  function bindDtcDetailSheet(): void {
+    el("dtcDetailClose")?.addEventListener("click", closeDtcDetail);
+    el("dtcDetailBackdrop")?.addEventListener("click", closeDtcDetail);
+    el("dtcDetailCopy")?.addEventListener("click", copyDtcReport);
+  }
+  bindDtcDetailSheet();
+
+  // ── Scan progress narration ───────────────────────────────────────────
+  // The native scan is a black box between bridge.scan() and the results
+  // payload; this block narrates the OBD phases in the meantime. The % is
+  // pacing only: it parks at 94% until the REAL scan-complete status (or the
+  // codes payload) lands, and aborts on error/idle so it can't lie about a
+  // scan that died.
+  const DTC_SCAN_PHASES = [
+    "Waking modules…",
+    "Reading stored codes (Mode 03)…",
+    "Reading pending codes (Mode 07)…",
+    "Pulling freeze frames (Mode 02)…"
+  ];
+  const DTC_SCAN_STEP_AT = [30, 62, 92];
+  let dtcScanTimer: number | null = null;
+  let dtcScanPct = 0;
+
+  function dtcScanStepIndex(pct: number): number {
+    if (pct >= DTC_SCAN_STEP_AT[2]) return 3;
+    if (pct >= DTC_SCAN_STEP_AT[1]) return 2;
+    if (pct >= DTC_SCAN_STEP_AT[0]) return 1;
+    return 0;
+  }
+
+  function paintDtcScanProgress(pct: number): void {
+    const step = dtcScanStepIndex(pct);
+    VD.setText("dtcScanPhase", DTC_SCAN_PHASES[step]);
+    VD.setText("dtcScanPct", `${Math.round(pct)}%`);
+    const fill = el("dtcScanBarFill");
+    if (fill) fill.style.width = `${Math.round(pct)}%`;
+    const steps = el("dtcScanSteps");
+    if (steps) {
+      Array.from(steps.children).forEach((chip, i) => {
+        const node = chip as HTMLElement;
+        node.dataset.stepState = i < step ? "done" : i === step ? "active" : "todo";
+        const label = ["Modules", "Stored", "Pending", "Freeze"][i];
+        node.textContent = i < step ? `✓ ${label}` : label;
+      });
+    }
+  }
+
+  function stopDtcScanProgress(): void {
+    if (dtcScanTimer) {
+      clearInterval(dtcScanTimer);
+      dtcScanTimer = null;
+    }
+    const block = el("dtcScanProgress");
+    if (block) block.hidden = true;
+  }
+
+  function startDtcScanProgress(quick = false): void {
+    const block = el("dtcScanProgress");
+    if (!block) return;
+    if (dtcScanTimer) clearInterval(dtcScanTimer);
+    dtcScanPct = 0;
+    block.hidden = false;
+    paintDtcScanProgress(0);
+    const speed = quick ? 3.2 : 1.6;
+    dtcScanTimer = window.setInterval(() => {
+      const status = String((state.status || {}).state || "").toLowerCase();
+      if (["error", "blocked", "failed", "idle", "disconnected"].includes(status)) {
+        // The scan died (adapter dropped, native error) — stop narrating.
+        stopDtcScanProgress();
+        return;
+      }
+      const complete = status === "scan-complete";
+      dtcScanPct = Math.min(complete ? 100 : 94, dtcScanPct + speed);
+      paintDtcScanProgress(dtcScanPct);
+      if (complete && dtcScanPct >= 100) {
+        // Hold the finished bar for a beat so "100% · ✓ Freeze" registers.
+        if (dtcScanTimer) window.clearInterval(dtcScanTimer);
+        dtcScanTimer = window.setTimeout(stopDtcScanProgress, 900);
+      }
+    }, 50);
+  }
+
   Object.assign(VD, {
     isNativeError,
     reportNativeReadError,
@@ -1890,7 +2184,10 @@ import { prefs, units } from "./prefs";
     submitMaintenanceForm,
     closeMaintenanceForm,
     exportChargeSessionsCsv,
-    toggleHidden
+    toggleHidden,
+    openDtcDetail,
+    closeDtcDetail,
+    startDtcScanProgress
   });
 })();
 

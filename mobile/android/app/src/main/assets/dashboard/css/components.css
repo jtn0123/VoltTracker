@@ -364,6 +364,13 @@
     color: var(--soft);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
     font-size: 10px;
+    font-weight: 650;
+    letter-spacing: 0.05em;
+  }
+
+  .power-scale b {
+    font-weight: inherit;
+    font-variant-numeric: tabular-nums;
   }
 
   .battery-strip {
@@ -541,13 +548,32 @@
   /* Charge's signature: each session reads as an energy bar — a green fill
      that decays across the row instead of a bordered box. */
   .charge-session-row {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 12px;
     padding: 12px;
     border-radius: 12px;
-    background: linear-gradient(90deg, rgba(var(--ev-rgb), 0.14), rgba(var(--ev-rgb), 0.02) 72%);
+    overflow: hidden;
+    background: var(--surface-veil);
+  }
+
+  /* Per-row energy bar: width is this charge's kWh relative to the biggest
+     charge in the list, so the history doubles as a bar chart. Sits under the
+     text (absolute + relative children below). */
+  .charge-session-row .charge-kwh-bar {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    background: linear-gradient(90deg, rgba(var(--ev-rgb), 0.16), rgba(var(--ev-rgb), 0.02));
+    pointer-events: none;
+    transition: width var(--motion-medium) var(--motion-ease);
+  }
+
+  .charge-session-row > span,
+  .charge-session-row > b {
+    position: relative;
   }
 
   .charge-session-row strong {
@@ -603,6 +629,42 @@
 
   .real-overview-grid .metric strong {
     font-size: 26px;
+  }
+
+  /* Latest drive's energy + estimated cost strip (Drive tab, under the
+     overview grid). One quiet row: label+figure left, cost/prompt right. */
+  .trip-energy-strip {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 16px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+
+  .trip-energy-strip .trip-energy-label b {
+    color: var(--text);
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  .trip-energy-strip .trip-cost-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+  }
+
+  .trip-energy-strip .trip-cost-value[data-state="recorded"] {
+    color: var(--volt-soft);
+  }
+
+  .trip-energy-strip .trip-cost-value[data-state="waiting"] {
+    color: var(--soft);
+  }
+
+  .trip-energy-strip .trip-cost-value:disabled {
+    cursor: default;
+    text-decoration: none;
   }
 
   .metric header, .charge-kpi header {
@@ -1137,6 +1199,264 @@
   /* ===== 8. In-app DTC lookup (intro card) ===== */
 
   /* In-app DTC lookup (Insights → Check engine). */
+  /* ── DTC scan narration (storage-status.ts startDtcScanProgress) ── */
+  .dtc-scan-progress {
+    margin-top: 12px;
+    animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
+  }
+
+  .dtc-scan-phase-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--ok);
+    font-size: 11px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dtc-scan-phase {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-width: 0;
+  }
+
+  .dtc-scan-phase .dot {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: currentcolor;
+    box-shadow: 0 0 8px currentcolor;
+    animation: dtc-scan-pulse 0.9s ease-in-out infinite;
+  }
+
+  @keyframes dtc-scan-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.3;
+    }
+  }
+
+  .dtc-scan-bar {
+    height: 6px;
+    margin-top: 8px;
+    border-radius: 999px;
+    background: var(--fill-active);
+    overflow: hidden;
+  }
+
+  .dtc-scan-bar span {
+    display: block;
+    height: 100%;
+    width: 0%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #1f9c6c, var(--ok));
+    transition: width 120ms linear;
+  }
+
+  .dtc-scan-steps {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .dtc-scan-steps span {
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--line-strong);
+    color: var(--soft);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 10.5px;
+    font-weight: 700;
+    transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+  }
+
+  .dtc-scan-steps span[data-step-state="active"] {
+    border-color: rgba(var(--ok-rgb), 0.9);
+    color: var(--ok-soft);
+  }
+
+  .dtc-scan-steps span[data-step-state="done"] {
+    border-color: rgba(var(--ok-rgb), 0.4);
+    color: var(--ok-soft);
+  }
+
+  /* ── DTC detail bottom sheet ── */
+  #dtcDetailBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 214;
+    background: rgba(4, 5, 8, 0.6);
+    backdrop-filter: blur(4px);
+    animation: backdrop-fade 200ms ease both;
+  }
+
+  @keyframes backdrop-fade {
+    from {
+      opacity: 0;
+    }
+  }
+
+  #dtcDetailSheet {
+    position: fixed;
+    z-index: 215;
+    left: 50%;
+    bottom: 0;
+    transform: translateX(-50%);
+    width: min(560px, 100%);
+    max-height: 86vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+    padding: 20px 20px 28px;
+    border: 1px solid var(--line-strong);
+    border-bottom: 0;
+    border-radius: 22px 22px 0 0;
+    background: var(--panel);
+    box-shadow: 0 -24px 64px rgba(0, 0, 0, 0.6);
+    animation: sheet-rise 320ms cubic-bezier(0.16, 0.84, 0.28, 1) both;
+  }
+
+  @keyframes sheet-rise {
+    from {
+      opacity: 0;
+      transform: translateX(-50%) translateY(16px);
+    }
+  }
+
+  #dtcDetailSheet .sheet-grip {
+    display: block;
+    width: 36px;
+    height: 4px;
+    margin: 0 auto 14px;
+    border-radius: 999px;
+    background: var(--fill-active);
+  }
+
+  .dtc-detail-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .dtc-detail-head .dtc-code {
+    flex: 0 0 auto;
+    font-size: 16px;
+  }
+
+  .dtc-detail-title-block {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .dtc-detail-title-block strong {
+    display: block;
+    font-size: 15px;
+    line-height: 1.25;
+  }
+
+  .dtc-detail-title-block small {
+    color: var(--soft);
+    font-size: 11px;
+  }
+
+  .dtc-detail-head .dtc-sev {
+    flex: 0 0 auto;
+  }
+
+  .dtc-detail-plain {
+    margin: 14px 0 0;
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+
+  .dtc-detail-causes {
+    margin-top: 14px;
+  }
+
+  .dtc-detail-causes ul {
+    margin: 8px 0 0;
+    padding-left: 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+
+  .dtc-detail-frame {
+    margin-top: 16px;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    background: var(--surface-veil);
+  }
+
+  .dtc-detail-frame-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px 8px;
+    margin-top: 10px;
+  }
+
+  .dtc-detail-frame-grid span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .dtc-detail-frame-grid small {
+    color: var(--soft);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+
+  .dtc-detail-frame-grid strong {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .dtc-detail-links {
+    margin-top: 14px;
+  }
+
+  .dtc-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+
+  .dtc-detail-actions button {
+    flex: 1;
+    min-height: 46px;
+    border: 1px solid var(--line-strong);
+    border-radius: 12px;
+    background: var(--fill-soft);
+    color: var(--text);
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .dtc-detail-actions .confirm {
+    border-color: rgba(var(--ok-rgb), 0.3);
+    background: rgba(var(--ok-rgb), 0.08);
+    color: var(--ok-soft);
+  }
+
   .dtc-lookup {
     margin-bottom: 12px;
   }
@@ -1750,6 +2070,20 @@
     opacity: 0.35;
   }
 
+  /* First full probe render sweeps the boxes in left→right (telemetry.ts sets
+     a per-box animation-delay); `backwards` keeps each box hidden until its
+     turn. Reduced-motion collapses it via the global reset. */
+  .cell-grid-box.cell-reveal {
+    animation: cell-reveal 260ms ease backwards;
+  }
+
+  @keyframes cell-reveal {
+    from {
+      opacity: 0;
+      transform: scale(0.6);
+    }
+  }
+
   .cell-grid-box.is-min {
     background: var(--map-accent);
     border-color: var(--map-accent);
@@ -2325,22 +2659,39 @@
 
   .dtc-item {
     display: grid;
-    grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto;
+    grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto auto;
     align-items: start;
     gap: 12px;
+    /* v2: the row opens the detail sheet (causes/freeze frame moved there). */
+    cursor: pointer;
   }
 
-  /* Likely-causes + search link ride full-width rows under the code/module
-     columns (storage-status.ts appends them to the article): confined to the
-     module column they wrapped every cause over 3-4 lines. */
-  .dtc-item > .dtc-causes {
-    grid-column: 1 / -1;
-    margin-top: 0;
+  .dtc-item:focus-visible {
+    outline: 2px solid rgba(var(--map-accent-rgb), 0.7);
+    outline-offset: 2px;
   }
 
-  .dtc-item > .dtc-search {
-    grid-column: 1 / -1;
-    justify-self: start;
+  .dtc-item .dtc-chevron {
+    /* Pin to the last column: rows without a seen-count badge have only three
+       children, and auto-placement would drop the chevron into the badge slot. */
+    grid-column: 4;
+    align-self: center;
+    color: var(--soft);
+    font-size: 16px;
+    line-height: 1;
+  }
+
+  /* Rows cascade in 90ms apart after a scan (storage-status.ts sets the
+     per-row delay); `backwards` holds each row until its turn. */
+  .dtc-item.dtc-item-enter {
+    animation: dtc-item-rise 380ms cubic-bezier(0.16, 0.84, 0.28, 1) backwards;
+  }
+
+  @keyframes dtc-item-rise {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
   }
 
   .dtc-empty-state {

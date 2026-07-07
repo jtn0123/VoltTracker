@@ -257,6 +257,166 @@
     border-radius: 2px;
   }
 
+  /* v2: quiet affordance hint at the end of the legend, and the legend yields
+     entirely while a tapped-detail card is open (same bottom-left corner). */
+  .map-legend .map-legend-hint {
+    color: var(--soft);
+    text-transform: none;
+    letter-spacing: 0.02em;
+  }
+
+  .map-legend.is-hidden {
+    display: none !important;
+  }
+
+  /* Tapped route detail (segment / stop / event) — bottom-pinned card inside
+     the map frame (map.ts showSegPop). */
+  .map-seg-pop {
+    position: absolute;
+    z-index: 1150;
+    left: 10px;
+    right: 10px;
+    bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--surface-overlay);
+    backdrop-filter: blur(8px);
+    animation: view-enter 260ms var(--motion-ease-out) both;
+  }
+
+  .map-seg-pop-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .map-seg-pop-text strong {
+    display: block;
+    color: var(--text);
+    font-size: 12.5px;
+  }
+
+  .map-seg-pop-text small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 10.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .map-seg-pop > b {
+    flex: 0 0 auto;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(var(--map-accent-rgb), 0.12);
+    color: var(--map-accent);
+    font-size: 11.5px;
+    font-weight: 750;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  .map-seg-pop > b[data-tone="ok"] {
+    background: rgba(var(--ev-rgb), 0.14);
+    color: var(--ev-soft);
+  }
+
+  .map-seg-pop > b[data-tone="warn"] {
+    background: rgba(var(--warn-rgb), 0.14);
+    color: var(--warn);
+  }
+
+  .map-seg-pop > b[data-tone="bad"] {
+    background: rgba(var(--bad-rgb), 0.14);
+    color: var(--bad);
+  }
+
+  .map-seg-pop button {
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    border: 1px solid var(--line-strong);
+    border-radius: 9px;
+    background: var(--fill-soft);
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  /* Fullscreen drive summary — bottom info card while the map is fullscreen
+     (the sheet header it mirrors is hidden behind the map). */
+  .map-fs-info {
+    position: absolute;
+    z-index: 1140;
+    left: 14px;
+    right: 14px;
+    bottom: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 12px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 14px;
+    background: var(--surface-overlay);
+    backdrop-filter: blur(8px);
+  }
+
+  .map-fs-info-text {
+    min-width: 0;
+  }
+
+  .map-fs-info-text strong {
+    display: block;
+    color: var(--text);
+    font-size: 14px;
+  }
+
+  .map-fs-info-text small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .map-fs-info > b {
+    flex: 0 0 auto;
+    padding: 5px 12px;
+    border-radius: 999px;
+    background: rgba(var(--map-accent-rgb), 0.12);
+    color: var(--map-accent);
+    font-size: 13px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Drive-event diamonds (hard braking / rapid accel), Leaflet divIcon. */
+  .map-evt-icon {
+    background: none;
+    border: 0;
+  }
+
+  .map-evt-diamond {
+    display: block;
+    width: 10px;
+    height: 10px;
+    margin: 3px;
+    border: 2px solid var(--warn);
+    border-radius: 2.5px;
+    background: var(--panel);
+    transform: rotate(45deg);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  }
+
   .map-empty {
     position: absolute;
     z-index: 1100;

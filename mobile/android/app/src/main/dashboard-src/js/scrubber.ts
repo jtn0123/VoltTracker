@@ -81,6 +81,34 @@ import { units } from "./prefs";
 
   let scrubMap: ScrubMapHandle | null = null;
   let scrubMarker: ScrubMarkerHandle | null = null;
+  // Playback trail: the travelled portion of the route, drawn under the
+  // scrub marker and updated as the cursor moves (v2).
+  type ScrubTrailHandle = {
+    addTo(target: unknown): unknown;
+    setLatLngs(latlngs: LatLngTuple[]): unknown;
+  };
+  let scrubTrail: ScrubTrailHandle | null = null;
+  // Trail vertices precomputed once per route (setScrubCursor runs per frame
+  // during playback — rebuilding tuples there would be O(n) alloc each frame).
+  let scrubTrailPts: LatLngTuple[] = [];
+
+  // Index of the last scrubData sample at or before `frac` (scrubData is
+  // ordered by ascending frac), by binary search. -1 when none.
+  function scrubTravelledIdx(frac: number): number {
+    let lo = 0;
+    let hi = scrubData.length - 1;
+    let best = -1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1;
+      if ((scrubData[mid] as ScrubPoint).frac <= frac) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    return best;
+  }
   let scrubData: ScrubPoint[] = [];
   let scrubFrac = 0.5;
   let scrubExpanded = false;
@@ -582,8 +610,22 @@ import { units } from "./prefs";
         stack.appendChild(track);
       });
     }
+    // Always-on elevation strip (v2): a compact terrain silhouette with its
+    // own cursor, directly under the main chart. Hidden when the route never
+    // logged altitude.
+    const elevStrip = el("scrubElev");
+    if (elevStrip) {
+      elevStrip.hidden = !scrubHasElev;
+      if (scrubHasElev) {
+        paintScrub(
+          elevStrip,
+          drawScrubTrack(chart.clientWidth, "elevFt", "#a48cff", "rgba(164,140,255,0.18)", "", true)
+        );
+        bindScrubChart(elevStrip);
+      }
+    }
     scrubCursors = (
-      [el("scrubCursor")]
+      [el("scrubCursor"), el("scrubElevCursor")]
         .concat(
           scrubExpanded
             ? Array.prototype.slice.call(
@@ -606,6 +648,14 @@ import { units } from "./prefs";
     const chart = el("scrubChart");
     if (chart) chart.setAttribute("aria-valuenow", String(Math.round(scrubFrac * 100)));
     fillScrubReadout(s);
+    if (scrubMap && scrubTrail) {
+      // Travelled-so-far trail: every sample at or before the cursor (found by
+      // binary search over the precomputed vertices), plus the interpolated
+      // cursor position as the leading vertex.
+      const travelled = scrubTrailPts.slice(0, scrubTravelledIdx(scrubFrac) + 1);
+      travelled.push([s.lat, s.lng]);
+      scrubTrail.setLatLngs(travelled);
+    }
     if (scrubMap && scrubMarker) {
       scrubMarker.setLatLng([s.lat, s.lng]);
       // Keep the marker's tap popup content live with the cursor, so tapping
@@ -695,13 +745,19 @@ import { units } from "./prefs";
       scrubMap.removeLayer(scrubMarker);
       scrubMarker = null;
     }
+    if (scrubTrail && scrubMap) {
+      scrubMap.removeLayer(scrubTrail as unknown as ScrubMarkerHandle);
+      scrubTrail = null;
+    }
     scrubData = [];
+    scrubTrailPts = [];
   }
 
   // Called by map.js whenever the selected route changes.
   function renderScrubber(route: ScrubRoute) {
     if (typeof stopScrubPlay === "function") stopScrubPlay();
     scrubData = buildScrubData(route);
+    scrubTrailPts = scrubData.map((point) => [point.lat, point.lng] as LatLngTuple);
     const node = el("scrubber");
     if (!node) return;
     if (scrubData.length < 2) {
@@ -716,6 +772,15 @@ import { units } from "./prefs";
     );
 
     if (scrubMap) {
+      if (!scrubTrail) {
+        scrubTrail = L.polyline([], {
+          color: "#e8f7ff",
+          weight: 2.5,
+          opacity: 0.95,
+          interactive: false
+        }) as ScrubTrailHandle;
+      }
+      scrubTrail.addTo(scrubMap);
       if (!scrubMarker) {
         const firstPoint = scrubData[0];
         if (!firstPoint) return;
@@ -794,6 +859,7 @@ import { units } from "./prefs";
     if (scrubAnim) cancelAnimationFrame(scrubAnim);
     scrubAnim = null;
     setScrubAnimMode(false);
+    el("scrubReadout")?.classList.remove("is-playing");
     if (playBtn) {
       playBtn.textContent = PLAY_LABEL;
       playBtn.setAttribute("aria-label", "Play route playback");
@@ -811,6 +877,8 @@ import { units } from "./prefs";
       playBtn.textContent = STOP_LABEL;
       playBtn.setAttribute("aria-label", "Stop route playback");
       setScrubAnimMode(true);
+      // Readout cells glow while playing so the live numbers read as active.
+      el("scrubReadout")?.classList.add("is-playing");
       const lastPoint = scrubData[scrubData.length - 1];
       const totalMi = (lastPoint && lastPoint.distMi) || 22;
       // ~1 second per mile, with a sane 8-22s floor/ceiling so very short or

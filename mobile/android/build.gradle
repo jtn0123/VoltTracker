@@ -51,10 +51,21 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // fixes across the eager app.js bundle (null-guards, memo keys, demo isolation,
 // numeric-pref commit refactor) plus a global light-scheme high-contrast a11y
 // token block in base.css (cannot be lazy-loaded). ~945 B headroom retained.
-def dashboardStartupBudgetBytes = 373_500L
+// 373.5k → 396k (v2 design handoff): funds the v2 interaction layer — swipe
+// tab navigation + directional slide/stagger motion (core.ts + base.css), the
+// DTC detail bottom sheet + Mode 03/07/02 scan narration (storage-status.ts +
+// components.css), the Drive trip-energy strip, proportional charge-row kWh
+// bars, and the trip-sheet speed/stops additions. All eager CSS ships raw
+// (no minify step) and the sheet/scan markup rides the eager bundle.
+// ~890 B headroom retained.
+def dashboardStartupBudgetBytes = 396_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
-def dashboardLazyCssBudgetBytes = 20_000L
+// 20k → 23.5k (v2 design handoff): screens-map.css gains the tapped-route
+// detail card, fullscreen drive summary, drive-event diamond markers, and the
+// legend hint — all map-only chrome, kept in the lazy map stylesheet so the
+// Drive-first startup path stays unaffected. ~650 B headroom retained.
+def dashboardLazyCssBudgetBytes = 23_500L
 def dashboardDtcDataBudgetBytes = 380_000L
 def dashboardLazyPanelFiles = ["js/insights-panel.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]

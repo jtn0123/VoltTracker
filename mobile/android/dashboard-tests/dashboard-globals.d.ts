@@ -97,6 +97,9 @@ interface VoltDtcRow {
   seenCount?: number;
   lastSessionId?: string | number | null;
   rawResponse?: string;
+  /** Conditions captured when the fault set (freeze frame), label -> display value.
+   *  Native does not populate this yet; the demo fault scenario does. */
+  freezeFrame?: Record<string, string | number> | null;
 }
 
 /** A charge-session row (data/ObdStoreReports.chargeSummaryRowJson). */
@@ -764,6 +767,11 @@ interface VoltRestoreProgress {
     setStorage(payload: unknown): void;
     updateStorageUi(): void;
     updateDiagnosticCodeUi(): void;
+    /** DTC detail bottom sheet: opened from a scanned-code row or a lookup hit. */
+    openDtcDetail(code: VoltDtcRow): void;
+    closeDtcDetail(): void;
+    /** Cosmetic Mode 03/07/02 scan narration; completes on the real scan-complete status. */
+    startDtcScanProgress(quick?: boolean): void;
     updateReviewUi(): void;
     renderRealV2Ui(): void;
     renderVehicleUi(): void;
@@ -805,6 +813,8 @@ interface VoltRestoreProgress {
     renderInsightStats(): void;
     /** Monthly driving distance/efficiency/cost trend on the Insights tab. */
     renderDriveTrend(): void;
+    /** This-week per-day bars card (Distance/Efficiency toggle). */
+    renderThisWeek(): void;
     renderInsightScatter(): void;
     enrichRouteEff(route: VoltRoute): void;
 

@@ -8,13 +8,21 @@ export type MapSessionFilter = {
   query: string;
   sort: MapSessionSort;
   favoritesOnly: boolean;
+  /** v2 "Long trips" chip: keep only stored drives >= 10 mi. */
+  longOnly?: boolean;
 };
+
+/** "Long trip" floor for the v2 filter chip: 10 miles, in meters. */
+export const LONG_TRIP_MIN_METERS = 16093;
 
 type MapSessionListFormatters = {
   selectedSessionId?: unknown;
   formatChipDate: (value: unknown) => string;
   formatDistance: (meters: number) => string;
   formatWhen: (value: unknown) => string;
+  /** Optional estimated electricity cost for a stored drive ("$1.23"), from the
+   *  trip rollup + rate pref; null hides the meta segment (v2). */
+  tripCostText?: (routeKey: string) => string | null;
   filter?: MapSessionFilter;
 };
 
@@ -57,6 +65,9 @@ export function filterAndSortRoutes(
   if (filter.favoritesOnly) {
     stored = stored.filter((route) => favoriteOf(sessionForRoute(route)));
   }
+  if (filter.longOnly) {
+    stored = stored.filter((route) => Number(route.distanceMeters || 0) >= LONG_TRIP_MIN_METERS);
+  }
   if (query) {
     stored = stored.filter((route) => searchableText(route, formatWhen).includes(query));
   }
@@ -87,9 +98,12 @@ export function renderMapSessionListInto(
     const filter = formatters.filter;
     const p = document.createElement("p");
     p.className = "status-copy";
-    p.textContent = filter && filter.favoritesOnly && !String(filter.query || "").trim()
+    const noQuery = !String((filter && filter.query) || "").trim();
+    p.textContent = filter && filter.favoritesOnly && noQuery
       ? "No favorite drives yet. Tap a drive's star to add it here."
-      : "No drives match your search.";
+      : filter && filter.longOnly && noQuery
+        ? "No long trips recorded yet."
+        : "No drives match your search.";
     list.replaceChildren(p);
     return;
   }
@@ -246,9 +260,12 @@ function buildMapSessionRow(
   const distance = formatters.formatDistance(Number(route.distanceMeters || 0));
   const points = Number(route.pointCount || 0);
   const pointsLabel = `${points} ${points === 1 ? "pt" : "pts"}`;
+  const cost = !live && typeof formatters.tripCostText === "function"
+    ? formatters.tripCostText(String(session.id || ""))
+    : null;
   small.textContent = live
     ? `${formatters.formatChipDate(session.startedAtMs)} · ${distance} · ${pointsLabel}`
-    : `${formatters.formatWhen(session.startedAtMs)} · ${distance} · ${pointsLabel}`;
+    : `${formatters.formatWhen(session.startedAtMs)} · ${distance} · ${pointsLabel}${cost ? ` · ${cost}` : ""}`;
   center.append(small);
 
   const right = document.createElement("b");

@@ -5,6 +5,7 @@
   <div
     id="driveNowChips"
     class="map-drive-chips drive-now-chips"
+    data-noswipe="true"
     role="group"
     aria-label="Drive session status"
   ></div>
@@ -149,8 +150,9 @@
              covers normal driving; the track ratchets to ±80/±120 only when a
              sample exceeds it, so the bar keeps its resolution. -->
         <div class="power-scale">
-          <span id="powerScaleMin">-40</span><span>0</span
-          ><span id="powerScaleMax">+40</span>
+          <span>&#9668; REGEN <b id="powerScaleMin">-40</b></span
+          ><span>0</span
+          ><span>DRIVE <b id="powerScaleMax">+40</b> &#9658;</span>
         </div>
       </div>
     </article>
@@ -347,6 +349,24 @@
       <small>Times charging likely started</small>
     </article>
   </section>
+
+  <!-- Latest drive's net HV energy + estimated electricity cost. Energy comes
+       from the trip rollup (drive minus regen); the cost estimate needs the
+       home rate from Settings, so the right side doubles as a prompt. -->
+  <article class="panel trip-energy-strip" id="tripEnergyStrip">
+    <span class="trip-energy-label"
+      >Energy <b id="tripEnergyValue" data-live-tile="true">--</b></span
+    >
+    <button
+      type="button"
+      class="link-btn trip-cost-value"
+      id="tripCostValue"
+      data-nav-jump="settings"
+      data-state="unset"
+    >
+      set rate for cost
+    </button>
+  </article>
 
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->

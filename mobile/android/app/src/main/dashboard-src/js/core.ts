@@ -1059,12 +1059,26 @@ import { initialTelemetryState } from "./telemetry-state";
     return `${label} ${n === 1 ? "row" : "rows"}`;
   }
 
+  // Tab order for directional transitions and swipe navigation — matches the
+  // bottom-nav left→right order, not the DOM order of the view sections
+  // (Settings' section sits before Diagnostics' in the markup).
+  const NAV_VIEW_ORDER = ["drive", "map", "charge", "insights", "diagnostics", "settings"];
+
   function setView(view: string) {
     // An unknown view name (stale deep link, removed tab like the old "trips")
     // would deactivate every section and leave a blank screen with no way
     // back — fall back to Drive instead of rendering nothing.
     if (!viewNodes().some((node) => node.dataset.view === view)) view = "drive";
     startupMark("tab:" + view + ":start");
+    // Slide the incoming view from the side it lives on (nav order), so tab
+    // changes read as lateral movement. First paint keeps the plain rise.
+    const fromIdx = NAV_VIEW_ORDER.indexOf(state.view);
+    const toIdx = NAV_VIEW_ORDER.indexOf(view);
+    if (fromIdx >= 0 && toIdx >= 0 && fromIdx !== toIdx) {
+      document.body.dataset.vtDir = toIdx < fromIdx ? "back" : "fwd";
+    } else {
+      delete document.body.dataset.vtDir;
+    }
     state.view = view;
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
@@ -1105,12 +1119,72 @@ import { initialTelemetryState } from "./telemetry-state";
     afterNextPaint(() => startupMark("tab:" + view + ":paint"));
   }
 
+  // ── Swipe between tabs ──────────────────────────────────────────────────
+  // Fast, mostly-horizontal strokes move one tab left/right. Deliberately
+  // conservative so it never steals gestures from surfaces that own them:
+  // form fields, the pannable Leaflet map, horizontal scrollers marked
+  // [data-noswipe], any open dialog, and the fullscreen map.
+  let swipeStart: { x: number; y: number; at: number } | null = null;
+
+  function swipeBlocked(target: EventTarget | null): boolean {
+    if (document.body.classList.contains("map-full-active")) return true;
+    // The DTC detail sheet's backdrop is a plain sibling <div> (no dialog
+    // role), so a swipe starting on it wouldn't be caught by closest() below.
+    if (document.body.classList.contains("dtc-detail-active")) return true;
+    const node = target instanceof Element ? target : null;
+    if (!node) return true;
+    return Boolean(
+      node.closest(
+        "input, textarea, select, [data-noswipe], [role='dialog'], [aria-modal='true'], .leaflet-container"
+      )
+    );
+  }
+
+  document.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.touches[0];
+      swipeStart =
+        !touch || swipeBlocked(event.target)
+          ? null
+          : { x: touch.clientX, y: touch.clientY, at: Date.now() };
+    },
+    { passive: true }
+  );
+
+  document.addEventListener(
+    "touchend",
+    (event) => {
+      const start = swipeStart;
+      swipeStart = null;
+      if (!start || Date.now() - start.at > 600) return;
+      const touch = event.changedTouches[0];
+      if (!touch) return;
+      const dx = touch.clientX - start.x;
+      const dy = touch.clientY - start.y;
+      // ≥64px of travel, ≤48px of drift, and clearly more horizontal than
+      // vertical — anything less is a scroll, not a tab gesture.
+      if (Math.abs(dx) < 64 || Math.abs(dy) > 48 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
+      const index = NAV_VIEW_ORDER.indexOf(state.view);
+      const next = dx < 0 ? index + 1 : index - 1;
+      if (index >= 0 && next >= 0 && next < NAV_VIEW_ORDER.length) setView(NAV_VIEW_ORDER[next]);
+    },
+    { passive: true }
+  );
+
   // Android hardware/gesture Back. The native OnBackPressedCallback calls this and only lets the
   // OS exit/background the app when it returns false. Dismiss the most-nested surface first: any
   // open modal (trip-detail sheet, then the restore alertdialog, then the app confirm/prompt), then
   // the topbar status popover, then an open troubleshooter modal, then a fullscreen map, then fall
   // back to the Drive home tab.
   function dismissOpenDialogs(): boolean {
+    // DTC detail bottom sheet (storage-status.ts) — click its Close control so
+    // the trap-deactivate + focus-restore path that owns it runs.
+    const dtcDetail = el("dtcDetailSheet");
+    if (dtcDetail && !dtcDetail.hidden) {
+      el("dtcDetailClose")?.click();
+      return true;
+    }
     // Trip-detail sheet (map.ts) — click its Close control so actions.ts runs the
     // trap-deactivate + focus-restore path that owns it.
     const tripDetail = el("tripDetailSheet");

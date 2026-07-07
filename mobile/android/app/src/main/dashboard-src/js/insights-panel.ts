@@ -52,6 +52,7 @@ import { prefs, units } from "./prefs";
     VD.renderMapIfLoaded();
     renderDriveTrend();
     renderTempEfficiency();
+    renderThisWeek();
   }
 
   function handleTripsBridgeFailure() {
@@ -171,6 +172,7 @@ import { prefs, units } from "./prefs";
     renderSavingsVsGas();
     renderDriveTrend();
     renderTempEfficiency();
+    renderThisWeek();
   }
 
   // ----- efficiency vs outside temperature (winter range loss) ---------------
@@ -235,6 +237,112 @@ import { prefs, units } from "./prefs";
       chart.replaceChildren(VD.buildMonthlyTrendSvg(labels, values, aria, chart));
     }
   }
+
+  // ----- this week (per-day bars, Monday-start) ------------------------------
+  // The last seven weekday slots of the CURRENT week, with a Distance /
+  // Efficiency mode toggle (persisted like the efficiency-chart view). Hidden
+  // until at least one drive landed this week.
+  const WEEK_DAY_LABELS = ["M", "T", "W", "T", "F", "S", "S"];
+  const WEEK_DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  const DAY_MS = 86400000;
+
+  function weekChartMode(): "dist" | "eff" {
+    return prefs.get<string>("weekChartMode", "dist") === "eff" ? "eff" : "dist";
+  }
+
+  function renderThisWeek() {
+    const card = el("thisWeekCard");
+    if (!card) return;
+    const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
+    // Monday 00:00 local of the current week.
+    const today = new Date();
+    const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const monday = new Date(midnight.getTime() - ((midnight.getDay() + 6) % 7) * DAY_MS);
+    const startMs = monday.getTime();
+    const days = WEEK_DAY_LABELS.map(() => ({ miles: 0, kwh: 0, trips: 0 }));
+    for (const trip of trips) {
+      const at = Number(trip.startedAtMs);
+      const meters = Number(trip.distanceMeters);
+      if (!(at >= startMs) || !(meters > 0)) continue;
+      // Index by local calendar day (not raw ms arithmetic) so a DST shift
+      // mid-week can't push an evening drive into the next column.
+      const when = new Date(at);
+      const idx = (when.getDay() + 6) % 7;
+      const day = days[idx];
+      day.miles += meters / 1609.344;
+      day.trips += 1;
+      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      if (Number.isFinite(energy) && energy > 0) day.kwh += energy;
+    }
+    const totalTrips = days.reduce((acc, day) => acc + day.trips, 0);
+    if (!totalTrips) {
+      card.hidden = true;
+      return;
+    }
+    card.hidden = false;
+    const metric = units.system() === "metric";
+    const mode = weekChartMode();
+    // Per-day efficiency computed once — the chart values and the best-day
+    // headline both read from it.
+    const dayEffs = days.map((day) => (day.kwh > 0 ? day.miles / day.kwh : 0));
+    const values = days.map((day, i) => {
+      if (mode === "eff") {
+        const eff = dayEffs[i] as number;
+        return metric ? eff * KM_PER_MILE : eff;
+      }
+      return metric ? day.miles * KM_PER_MILE : day.miles;
+    });
+    if (mode === "eff") {
+      let bestIdx = -1;
+      let bestEff = 0;
+      dayEffs.forEach((eff, i) => {
+        if (eff > bestEff) {
+          bestEff = eff;
+          bestIdx = i;
+        }
+      });
+      VD.setText(
+        "thisWeekHead",
+        bestIdx >= 0
+          ? `Best day ${units.efficiencyText(bestEff)} — ${WEEK_DAY_NAMES[bestIdx]}`
+          : "No HV energy logged this week yet."
+      );
+    } else {
+      const totalMiles = days.reduce((acc, day) => acc + day.miles, 0);
+      VD.setText(
+        "thisWeekHead",
+        `${totalTrips} drive${totalTrips === 1 ? "" : "s"} · ${VD.formatDistance(totalMiles * 1609.344)} this week`
+      );
+    }
+    const chart = el("thisWeekChart");
+    if (chart) {
+      const aria = mode === "eff" ? "Efficiency per day this week" : "Distance per day this week";
+      chart.replaceChildren(VD.buildMonthlyTrendSvg(WEEK_DAY_LABELS, values, aria, chart));
+    }
+  }
+
+  function syncWeekModeButtons() {
+    const active = weekChartMode();
+    document.querySelectorAll<HTMLElement>("[data-week-mode]").forEach((btn) => {
+      const on = btn.getAttribute("data-week-mode") === active;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-pressed", String(on));
+    });
+  }
+
+  (function bindWeekModeSwitch() {
+    const group = el("weekModeSwitch");
+    if (!group) return;
+    group.addEventListener("click", (event) => {
+      const target =
+        event.target instanceof Element ? event.target.closest("[data-week-mode]") : null;
+      if (!target) return;
+      prefs.set("weekChartMode", target.getAttribute("data-week-mode") || "dist");
+      syncWeekModeButtons();
+      renderThisWeek();
+    });
+    syncWeekModeButtons();
+  })();
 
   // ----- monthly driving trend (Insights tab) --------------------------------
   // Buckets the logged trips by calendar month (distance always; energy when the
@@ -1144,6 +1252,7 @@ import { prefs, units } from "./prefs";
     forceLazyStorageRead: FORCE_LAZY_READ,
     renderInsightStats,
     renderDriveTrend,
+    renderThisWeek,
     renderInsightsEmptyState,
     renderInsightScatter,
     enrichRouteEff

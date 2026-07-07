@@ -1442,6 +1442,11 @@ import { initialTelemetryState } from "./telemetry-state";
       ? `full:${(slots as Array<number | null>).map((v) => (v === null ? "" : v.toFixed(3))).join(",")}:${fromProbeAtMs}`
       : `hi:${minCell}:${maxCell}:${minV}:${maxV}`;
     if (sig === lastCellGridSig) return;
+    // First transition into the full per-cell map gets a left-to-right reveal
+    // (each box staggers in ~8ms apart, reading as the probe "filling in").
+    // Subsequent refreshes of an already-full map repaint in place — a re-run
+    // of the sweep on every live update would read as flicker.
+    const revealSweep = full && !lastCellGridSig.startsWith("full:");
     lastCellGridSig = sig;
 
     const frag = document.createDocumentFragment();
@@ -1460,6 +1465,10 @@ import { initialTelemetryState } from "./telemetry-state";
         } else {
           box.style.backgroundColor = cellGridColor(v, lo, hi);
           box.title = `Cell ${i + 1}: ${v.toFixed(3)} V`;
+        }
+        if (revealSweep) {
+          box.classList.add("cell-reveal");
+          box.style.animationDelay = `${i * 8}ms`;
         }
         frag.appendChild(box);
       }

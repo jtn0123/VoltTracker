@@ -148,6 +148,37 @@
       </div>
     </article>
 
+    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
+         mode toggle, from the trips rollup. Hidden until a drive exists this
+         week. Rendered by insights-panel.ts#renderThisWeek. -->
+    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">This week</span>
+          <h3 id="thisWeekHead">--</h3>
+        </div>
+        <div
+          id="weekModeSwitch"
+          class="signal-stage-tabs week-mode-tabs"
+          role="group"
+          aria-label="This week chart mode"
+        >
+          <button
+            type="button"
+            data-week-mode="dist"
+            class="is-active"
+            aria-pressed="true"
+          >
+            Distance
+          </button>
+          <button type="button" data-week-mode="eff" aria-pressed="false">
+            Efficiency
+          </button>
+        </div>
+      </header>
+      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
+    </article>
+
     <!-- Efficiency vs outside temperature (winter range loss): real per-band
          efficiency from trips that logged ambient temperature + HV energy.
          Hidden until two temperature bands each hold two or more such drives.

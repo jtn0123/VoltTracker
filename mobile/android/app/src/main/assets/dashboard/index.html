@@ -507,6 +507,7 @@
   <div
     id="driveNowChips"
     class="map-drive-chips drive-now-chips"
+    data-noswipe="true"
     role="group"
     aria-label="Drive session status"
   ></div>
@@ -651,8 +652,9 @@
              covers normal driving; the track ratchets to ±80/±120 only when a
              sample exceeds it, so the bar keeps its resolution. -->
         <div class="power-scale">
-          <span id="powerScaleMin">-40</span><span>0</span
-          ><span id="powerScaleMax">+40</span>
+          <span>&#9668; REGEN <b id="powerScaleMin">-40</b></span
+          ><span>0</span
+          ><span>DRIVE <b id="powerScaleMax">+40</b> &#9658;</span>
         </div>
       </div>
     </article>
@@ -850,6 +852,24 @@
     </article>
   </section>
 
+  <!-- Latest drive's net HV energy + estimated electricity cost. Energy comes
+       from the trip rollup (drive minus regen); the cost estimate needs the
+       home rate from Settings, so the right side doubles as a prompt. -->
+  <article class="panel trip-energy-strip" id="tripEnergyStrip">
+    <span class="trip-energy-label"
+      >Energy <b id="tripEnergyValue" data-live-tile="true">--</b></span
+    >
+    <button
+      type="button"
+      class="link-btn trip-cost-value"
+      id="tripCostValue"
+      data-nav-jump="settings"
+      data-state="unset"
+    >
+      set rate for cost
+    </button>
+  </article>
+
   <!-- Live diagnostic counters (sample count, runtime, etc.) announced
        politely so screen readers track OBD progress without barging. -->
   <article class="panel status-card" aria-live="polite">
@@ -924,6 +944,7 @@
   <div
     id="mapDriveChips"
     class="map-drive-chips"
+    data-noswipe="true"
     role="group"
     aria-label="Pick a logged drive"
   ></div>
@@ -933,6 +954,7 @@
       id="mapFrame"
       class="map-frame"
       data-layer="eff"
+      data-noswipe="true"
       role="tabpanel"
       aria-label="Map view"
     >
@@ -1025,6 +1047,7 @@
         <span><i style="background: #ff6b4a"></i>slow</span>
         <span><i style="background: #ffd23f"></i>mid</span>
         <span><i style="background: #7ee06a"></i>fast</span>
+        <span class="map-legend-hint">tap route for detail</span>
       </div>
 
       <div class="map-legend map-legend-eff" aria-hidden="true">
@@ -1032,6 +1055,37 @@
         <span><i style="background: #ffb84a"></i>avg</span>
         <span><i style="background: #ff6b5f"></i>poor</span>
         <span><i style="background: #6a6a72"></i>no data</span>
+        <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <!-- Tapped route detail (map.ts showSegPop): segment / stop / event
+           stats card pinned to the map's bottom edge; replaces the legend
+           while open. -->
+      <div id="mapSegPop" class="map-seg-pop" hidden>
+        <span class="map-seg-pop-text">
+          <strong id="mapSegPopTitle"></strong>
+          <small id="mapSegPopSub"></small>
+        </span>
+        <b id="mapSegPopStat"></b>
+        <button
+          type="button"
+          id="mapSegPopClose"
+          aria-label="Close route details"
+        >
+          &#10005;
+        </button>
+      </div>
+
+      <!-- Full-screen drive summary (map.ts renderMapFsInfo): bottom info
+           card shown only while the map is fullscreen, so the drive context
+           survives leaving the sheet behind. Hidden while a tapped-detail
+           card is open (both anchor to the same edge). -->
+      <div id="mapFsInfo" class="map-fs-info" hidden>
+        <span class="map-fs-info-text">
+          <strong id="mapFsInfoTitle"></strong>
+          <small id="mapFsInfoSub"></small>
+        </span>
+        <b id="mapFsInfoPill"></b>
       </div>
 
       <div id="mapEmpty" class="map-empty" role="status" aria-live="polite">
@@ -1069,6 +1123,13 @@
              "Avg km/h"): a metric user shouldn't flash "Avg mph" on first paint. -->
         <span class="kicker" id="mapAvgSpeedLabel">Avg speed</span
         ><strong id="mapAvgMph">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Energy used</span
+        ><strong id="mapEnergy">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Est. cost</span><strong id="mapCost">--</strong>
       </div>
     </div>
   </div>
@@ -1203,11 +1264,53 @@
       </header>
       <div class="eff-scatter" id="tripDetailElevation"></div>
     </article>
+    <!-- Speed over the drive (v2): GPS speed from start to finish. Hidden when
+         the route has too few points. Rendered by map.ts#renderTripDetailSpeed. -->
+    <article class="trip-detail-scatter-card" id="tripDetailSpeedCard" hidden>
+      <header>
+        <span class="kicker">Speed over the drive</span>
+        <h4 id="tripDetailSpeedHead">GPS speed from start to finish.</h4>
+      </header>
+      <div class="eff-scatter" id="tripDetailSpeedChart"></div>
+    </article>
+    <!-- Stops along the drive (v2): the same >=45s stop detection the map's
+         Stops layer uses. Hidden when the drive never stopped. -->
+    <article class="trip-detail-scatter-card" id="tripDetailStopsCard" hidden>
+      <header>
+        <span class="kicker">Stops</span>
+      </header>
+      <div id="tripDetailStops" class="trip-detail-stops"></div>
+    </article>
+    <div class="trip-detail-actions">
+      <button
+        type="button"
+        id="tripDetailViewMap"
+        class="confirm"
+        data-action="tripViewOnMap"
+      >
+        View on map
+      </button>
+      <button
+        type="button"
+        id="tripDetailExportCsv"
+        data-trip-export="csv"
+        data-trip-export-key=""
+      >
+        Export drive CSV
+      </button>
+    </div>
   </div>
 
-  <div id="scrubber" class="scrubber panel" hidden>
+  <div id="scrubber" class="scrubber panel" data-noswipe="true" hidden>
     <div class="scrub-chart" id="scrubChart">
       <div class="scrub-cursor" id="scrubCursor"></div>
+    </div>
+    <!-- Always-on elevation profile strip with its own scrub cursor
+         (scrubber.ts renderScrubElevation); hidden when the route has no
+         altitude samples. -->
+    <div class="scrub-elev" id="scrubElev" hidden>
+      <div class="scrub-cursor scrub-elev-cursor" id="scrubElevCursor"></div>
+      <small class="scrub-elev-label" aria-hidden="true">Elevation</small>
     </div>
     <div class="scrub-readout" id="scrubReadout"></div>
     <div id="scrubStack" class="scrub-stack" hidden></div>
@@ -1297,6 +1400,17 @@
             aria-label="Show favorites only"
           >
             ☆ Favorites
+          </button>
+          <button
+            type="button"
+            id="mapSessionLongOnly"
+            class="tile-toggle map-list-fav-toggle"
+            data-map-long-only
+            data-on="false"
+            aria-pressed="false"
+            aria-label="Show long trips only"
+          >
+            Long trips
           </button>
         </div>
       </div>
@@ -1802,6 +1916,37 @@
           <strong id="driveTrendCost">--</strong>
         </div>
       </div>
+    </article>
+
+    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
+         mode toggle, from the trips rollup. Hidden until a drive exists this
+         week. Rendered by insights-panel.ts#renderThisWeek. -->
+    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">This week</span>
+          <h3 id="thisWeekHead">--</h3>
+        </div>
+        <div
+          id="weekModeSwitch"
+          class="signal-stage-tabs week-mode-tabs"
+          role="group"
+          aria-label="This week chart mode"
+        >
+          <button
+            type="button"
+            data-week-mode="dist"
+            class="is-active"
+            aria-pressed="true"
+          >
+            Distance
+          </button>
+          <button type="button" data-week-mode="eff" aria-pressed="false">
+            Efficiency
+          </button>
+        </div>
+      </header>
+      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
     </article>
 
     <!-- Efficiency vs outside temperature (winter range loss): real per-band
@@ -2744,6 +2889,33 @@
         Quick scan
       </button>
     </div>
+
+    <!-- Live scan narration (storage-status.ts startDtcScanProgress): phase
+         line + % + bar + step chips while a native scan is in flight. The %
+         is cosmetic pacing — completion is driven by the real scan-complete
+         status — so the bar parks near-full until the adapter answers. -->
+    <div
+      id="dtcScanProgress"
+      class="dtc-scan-progress"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <div class="dtc-scan-phase-row">
+        <span class="dtc-scan-phase"
+          ><span class="dot" aria-hidden="true"></span
+          ><span id="dtcScanPhase">Waking modules…</span></span
+        >
+        <span id="dtcScanPct" class="dtc-scan-pct">0%</span>
+      </div>
+      <div class="dtc-scan-bar"><span id="dtcScanBarFill"></span></div>
+      <div class="dtc-scan-steps" id="dtcScanSteps" aria-hidden="true">
+        <span data-step="0">Modules</span>
+        <span data-step="1">Stored</span>
+        <span data-step="2">Pending</span>
+        <span data-step="3">Freeze</span>
+      </div>
+    </div>
     <!-- Destructive + engineering actions demoted to text level: clearing
          codes is confirm-gated and rare, and debug logs live with the
          session-review tooling this link opens (not another boxed button
@@ -3236,6 +3408,55 @@
       <pre id="rawFrames">Waiting for telemetry…</pre>
     </article>
   </details>
+
+  <!-- Trouble-code detail bottom sheet (storage-status.ts openDtcDetail).
+       Opened by tapping a scanned-code row or a lookup hit; modal with a
+       focus trap, closed by Close / backdrop / Escape / Android back. -->
+  <div id="dtcDetailBackdrop" class="dtc-detail-backdrop" hidden></div>
+  <div
+    id="dtcDetailSheet"
+    class="dtc-detail-sheet"
+    role="dialog"
+    aria-modal="true"
+    aria-label="Trouble code detail"
+    tabindex="-1"
+    hidden
+  >
+    <span class="sheet-grip" aria-hidden="true"></span>
+    <div class="dtc-detail-head">
+      <b id="dtcDetailCode" class="dtc-code">--</b>
+      <span class="dtc-detail-title-block">
+        <strong id="dtcDetailTitle">--</strong>
+        <small id="dtcDetailMeta"></small>
+      </span>
+      <span id="dtcDetailSev" class="dtc-sev" data-severity="info">Info</span>
+    </div>
+    <p id="dtcDetailPlain" class="dtc-detail-plain"></p>
+    <div id="dtcDetailCausesWrap" class="dtc-detail-causes" hidden>
+      <span class="kicker">Likely causes</span>
+      <ul id="dtcDetailCauses"></ul>
+    </div>
+    <div id="dtcDetailFrameWrap" class="dtc-detail-frame" hidden>
+      <span class="kicker">Freeze frame · conditions at fault</span>
+      <div id="dtcDetailFrame" class="dtc-detail-frame-grid"></div>
+    </div>
+    <div class="dtc-detail-links">
+      <button
+        type="button"
+        class="dtc-search"
+        id="dtcDetailSearch"
+        data-dtc-search=""
+      >
+        Search the web
+      </button>
+    </div>
+    <div class="dtc-detail-actions">
+      <button type="button" id="dtcDetailClose">Close</button>
+      <button type="button" id="dtcDetailCopy" class="confirm">
+        Copy report
+      </button>
+    </div>
+  </div>
 </section>
     </main>
 

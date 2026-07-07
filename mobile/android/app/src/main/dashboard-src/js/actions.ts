@@ -449,6 +449,9 @@ type SignalActions = {
       return;
     }
     showConnectionProgress(selected, scan);
+    // Narrate the scan phases (Mode 03/07/02) while native works — the block
+    // finishes only on the real scan-complete status (storage-status.ts).
+    if (scan && typeof VD.startDtcScanProgress === "function") VD.startDtcScanProgress(quick);
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
@@ -563,6 +566,7 @@ type SignalActions = {
       case "exportAllTripsCsv": exportAllTripsCsv(); return;
       case "exportChargeSessionsCsv": VD.exportChargeSessionsCsv(); return;
       case "closeTripDetail": closeTripDetail(); return;
+      case "tripViewOnMap": tripViewOnMap(button); return;
       case "shareTripCard": if (typeof VD.shareTripCard === "function") VD.shareTripCard(); return;
     }
   }
@@ -975,6 +979,17 @@ type SignalActions = {
     return el("mapSessionList");
   }
 
+  // "View on map" in the trip-detail sheet: close the sheet (releasing its
+  // focus trap), select the drive, and re-render the map framed on it.
+  function tripViewOnMap(button?: BusyButton | null) {
+    const key = button ? String((button as HTMLElement).dataset.mapSession || "").trim() : "";
+    closeTripDetail();
+    if (!key) return;
+    VD.setState({ selectedMapSessionId: key });
+    void VD.requestMapRender().catch(() => {});
+    el("mapCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
   function closeTripDetail() {
     if (typeof VD.closeTripDetail === "function") VD.closeTripDetail();
     const panel = el("tripDetailSheet");
@@ -1046,6 +1061,18 @@ type SignalActions = {
     refreshTripList();
   }
 
+  function onMapLongOnlyClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-map-long-only]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    const next = button.dataset.on !== "true";
+    button.dataset.on = String(next);
+    button.setAttribute("aria-pressed", String(next));
+    button.setAttribute("aria-label", next ? "Showing long trips only" : "Show long trips only");
+    refreshTripList();
+  }
+
   function handleDtcSearch(event: Event) {
     const target = event.target as Element | null;
     if (!target) return;
@@ -1102,13 +1129,33 @@ type SignalActions = {
     }
     out.appendChild(head);
 
+    // Miss copy: a malformed entry gets the format hint (letter + 4 digits);
+    // a well-formed code that simply isn't in the DB points at web search.
+    const validShape = /^[PBCU][0-9A-Z]{4}$/i.test(raw);
     const desc = document.createElement("p");
     desc.className = "dtc-lookup-desc";
     desc.textContent =
       info && info.description
         ? info.description
-        : "Not in the on-device Volt database — try a web search.";
+        : validShape
+          ? "No match in the built-in database yet — try a web search."
+          : "No match in the built-in database yet — check the code format (letter + 4 digits).";
     out.appendChild(desc);
+
+    // Hit: the card links through to the same detail sheet the scanned-code
+    // rows open, so lookup and scan results read identically.
+    if (info && info.description && typeof VD.openDtcDetail === "function") {
+      const detailBtn = document.createElement("button");
+      detailBtn.type = "button";
+      detailBtn.className = "link-btn dtc-lookup-detail";
+      detailBtn.textContent = "From the built-in Volt code database · tap for detail";
+      detailBtn.addEventListener("click", () => {
+        if (typeof VD.openDtcDetail === "function") {
+          VD.openDtcDetail({ dtc: code, status: "lookup", statusLabel: "database entry" });
+        }
+      });
+      out.appendChild(detailBtn);
+    }
 
     const causes = info && Array.isArray(info.causes) ? info.causes : [];
     if (causes.length) {
@@ -1391,6 +1438,9 @@ type SignalActions = {
     bindListenerGuarded("mapSessionList", "click", onTripDetailClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripRenameClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripExportClick, opts);
+    // The trip-detail sheet's "Export drive CSV" reuses the same delegated
+    // handler; the sheet button carries the same data-trip-export contract.
+    bindListenerGuarded("tripDetailSheet", "click", onTripExportClick, opts);
     bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
     // Per-entry "Remove" on a maintenance row (M5) — the list is re-rendered dynamically, so
     // delegate off the stable container.
@@ -1400,6 +1450,7 @@ type SignalActions = {
     bindListenerGuarded("mapSessionSearch", "input", onMapSessionSearchInput, opts);
     bindListenerGuarded("mapSessionSort", "click", onMapSortClick, opts);
     bindListenerGuarded("mapSessionFavoritesOnly", "click", onMapFavoritesOnlyClick, opts);
+    bindListenerGuarded("mapSessionLongOnly", "click", onMapLongOnlyClick, opts);
     bindListenerGuarded("mapSessionList", "pointerdown", onMapSessionPointerDown, opts);
     bindListenerGuarded("mapSessionList", "pointerup", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapSessionList", "pointerleave", onMapSessionPointerEnd, opts);

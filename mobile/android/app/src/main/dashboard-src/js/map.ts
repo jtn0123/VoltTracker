@@ -59,6 +59,8 @@ import type { MapSessionFilter } from "./map-session-list";
     lat: number;
     lng: number;
     durationMs: number;
+    startMs: number;
+    endMs: number;
   };
 
   type MutablePolylineLayer = LeafletLayer & {
@@ -411,6 +413,20 @@ import type { MapSessionFilter } from "./map-session-list";
 
   // "Morning drive" / "Evening drive" from the trip's start hour — the human
   // label a person would use, instead of the adapter's model number.
+  // Small dawn/day/dusk/night pill for the drive-picker chips (v2). Returns
+  // null when the start time is unknown so the chip stays clean.
+  function timeOfDayBadge(startedAtMs: unknown): HTMLElement | null {
+    const ms = Number(startedAtMs);
+    if (!Number.isFinite(ms) || ms <= 0) return null;
+    const hour = new Date(ms).getHours();
+    const tod = hour < 5 ? "night" : hour < 8 ? "dawn" : hour < 17 ? "day" : hour < 20 ? "dusk" : "night";
+    const pill = document.createElement("small");
+    pill.className = "tod-pill";
+    pill.dataset.tod = tod;
+    pill.textContent = tod;
+    return pill;
+  }
+
   function daypartDriveLabel(startedAtMs: unknown): string {
     const ms = Number(startedAtMs);
     if (!Number.isFinite(ms) || ms <= 0) return "Logged drive";
@@ -418,6 +434,49 @@ import type { MapSessionFilter } from "./map-session-list";
     const daypart = hour < 5 ? "Night" : hour < 12 ? "Morning" : hour < 17 ? "Afternoon" : hour < 21 ? "Evening" : "Night";
     return `${daypart} drive`;
   }
+
+  // ── Tapped route detail card (v2) ─────────────────────────────────────
+  // One bottom-of-map card for whatever was tapped: a speed/efficiency band,
+  // a stop marker, or a drive-event diamond. Replaces the legend while open;
+  // in fullscreen it also displaces the drive summary card (same edge).
+  type SegPop = { title: string; sub: string; stat: string; tone?: string };
+  let segPopOpen = false;
+  let lastSegPopDrawKey = "";
+
+  function textOf(id: string): string {
+    const node = el(id);
+    return node ? String(node.textContent || "").trim() : "";
+  }
+
+  function syncMapBottomCards(): void {
+    const pop = el("mapSegPop");
+    const fsInfo = el("mapFsInfo");
+    document
+      .querySelectorAll("#mapFrame .map-legend")
+      .forEach((legend) => (legend as HTMLElement).classList.toggle("is-hidden", segPopOpen));
+    if (pop) pop.hidden = !segPopOpen;
+    if (fsInfo) fsInfo.hidden = !state.mapFull || segPopOpen;
+  }
+
+  function showSegPop(data: SegPop): void {
+    const pop = el("mapSegPop");
+    if (!pop) return;
+    VD.setText("mapSegPopTitle", data.title);
+    VD.setText("mapSegPopSub", data.sub);
+    const stat = el("mapSegPopStat");
+    if (stat) {
+      stat.textContent = data.stat;
+      stat.dataset.tone = data.tone || "idle";
+    }
+    segPopOpen = true;
+    syncMapBottomCards();
+  }
+
+  function hideSegPop(): void {
+    segPopOpen = false;
+    syncMapBottomCards();
+  }
+  el("mapSegPopClose")?.addEventListener("click", hideSegPop);
 
   function renderMap() {
     const storage = state.storage || {};
@@ -509,6 +568,27 @@ import type { MapSessionFilter } from "./map-session-list";
     // should read "--", not a bare "0".
     VD.setText("mapAvgMph", avgSpeed.value > 0 ? avgSpeed.value : "--");
     VD.setText("mapAvgSpeedLabel", `Avg ${avgSpeed.unit}`);
+    // v2: net HV energy + estimated electricity cost for the selected drive,
+    // from the trip rollup (null when the drive logged no pack power). Cost
+    // needs the home rate pref; "set rate" points at Settings without lying.
+    const tripRow = hasMapContent && !isLiveRoute ? tripRowForKey(String(routeSession.id || "")) : null;
+    const tripEnergyKwh = tripRow && tripRow.energyKwh != null ? Number(tripRow.energyKwh) : NaN;
+    const hasTripEnergy = Number.isFinite(tripEnergyKwh) && tripEnergyKwh > 0;
+    VD.setText("mapEnergy", hasTripEnergy ? `${tripEnergyKwh.toFixed(1)} kWh` : "--");
+    const homeRate = VD.prefs.get<number>("pricePerKwh", 0);
+    VD.setText(
+      "mapCost",
+      hasTripEnergy && homeRate > 0
+        ? `$${(tripEnergyKwh * homeRate).toFixed(2)}`
+        : homeRate > 0 || !hasMapContent
+          ? "--"
+          : "set rate"
+    );
+    // Fullscreen drive summary mirrors the sheet header (which fullscreen hides).
+    VD.setText("mapFsInfoTitle", textOf("mapTitle") || "Drive");
+    VD.setText("mapFsInfoSub", [textOf("mapKicker"), textOf("mapDistance")].filter((part) => part && part !== "--").join(" · "));
+    VD.setText("mapFsInfoPill", textOf("mapDistance") || "--");
+    syncMapBottomCards();
     const empty = el("mapEmpty");
     if (empty) empty.hidden = hasMapContent;
 
@@ -822,6 +902,8 @@ import type { MapSessionFilter } from "./map-session-list";
       filter.query,
       filter.sort,
       filter.favoritesOnly ? 1 : 0,
+      filter.longOnly ? 1 : 0,
+      VD.prefs.get<number>("pricePerKwh", 0),
       Math.floor(Date.now() / 60000)
     ].join("|");
     if (sig === lastMapListsSig) return;
@@ -853,6 +935,17 @@ import type { MapSessionFilter } from "./map-session-list";
       button.type = "button";
       button.className = "map-drive-chip" + (live ? " is-live" : "") + (id === selId ? " is-active" : "");
       button.dataset.mapSession = id;
+      // v2 chip anatomy: drive title + time-of-day pill, then the when line,
+      // then the distance/efficiency meta. Live chips keep their own label.
+      const title = document.createElement("span");
+      title.className = "dt";
+      const titleText = document.createElement("span");
+      titleText.textContent = live
+        ? String(s.adapterName || CURRENT_DRIVE_LABEL)
+        : daypartDriveLabel(s.startedAtMs);
+      title.append(titleText);
+      const tod = timeOfDayBadge(s.startedAtMs);
+      if (!live && tod) title.append(tod);
       const date = document.createElement("span");
       date.className = "dl";
       date.textContent = fmtChipDate(s.startedAtMs);
@@ -880,7 +973,7 @@ import type { MapSessionFilter } from "./map-session-list";
         dot.style.background = mapEffColor(avgEff);
         meta.append(dot, document.createTextNode(" " + VD.units.efficiencyText(avgEff)));
       }
-      button.append(date, meta);
+      button.append(title, date, meta);
       return button;
     });
     wrap.replaceChildren(...chips);
@@ -900,6 +993,13 @@ import type { MapSessionFilter } from "./map-session-list";
     if (!map) return;
     map.invalidateSize(false);
     const drawable = points.filter(isValidRoutePoint);
+    // A tapped-detail card describes ONE route+layer; close it when either
+    // changes (drive chip tap, layer tab tap) so it can't describe stale data.
+    const segPopDrawKey = String((routeSession || {}).id || "") + "|" + layer;
+    if (segPopDrawKey !== lastSegPopDrawKey) {
+      lastSegPopDrawKey = segPopDrawKey;
+      hideSegPop();
+    }
     const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
     if (isLiveRoute && layer === "routes" && updateLiveRouteLayer(drawable, map)) {
       return;
@@ -979,6 +1079,11 @@ import type { MapSessionFilter } from "./map-session-list";
     }
 
     const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
+    const heatStats: Record<string, { meters: number; seconds: number }> = {
+      "#ff6b4a": { meters: 0, seconds: 0 },
+      "#ffd23f": { meters: 0, seconds: 0 },
+      "#7ee06a": { meters: 0, seconds: 0 }
+    };
     for (let i = 1; i < drawable.length; i += 1) {
       const previousPoint = drawable[i - 1];
       const point = drawable[i];
@@ -989,12 +1094,36 @@ import type { MapSessionFilter } from "./map-session-list";
       const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
       const bucket = bands[color];
       if (bucket) bucket.push([previousLatLng, latLng]);
+      const bandStat = heatStats[color];
+      if (bandStat) {
+        bandStat.meters += haversineMetersJs(
+          Number(previousPoint.lat), Number(previousPoint.lng), Number(point.lat), Number(point.lng));
+        bandStat.seconds += Math.max(1, (Number(point.atMs) - Number(previousPoint.atMs)) / 1000);
+      }
     }
+    const HEAT_BAND_LABELS: Record<string, { label: string; tone: string }> = {
+      "#ff6b4a": { label: "Slow stretches", tone: "bad" },
+      "#ffd23f": { label: "Steady stretches", tone: "warn" },
+      "#7ee06a": { label: "Fast stretches", tone: "ok" }
+    };
     mapLayerGroups.heat = L.layerGroup();
     Object.entries(bands).forEach(([color, segments]) => {
-      if (segments.length) {
-        L.polyline(segments, { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.heat);
-      }
+      if (!segments.length) return;
+      const line = L.polyline(segments, { color, weight: 5, opacity: 0.95 });
+      const bandStat = heatStats[color];
+      const bandMeta = HEAT_BAND_LABELS[color];
+      // Tap a speed band -> aggregated distance + average speed for that band.
+      line.on("click", () => {
+        if (!bandStat || !bandMeta) return;
+        const speed = VD.units.speed(bandStat.seconds > 0 ? (bandStat.meters / bandStat.seconds) * 3.6 : 0);
+        showSegPop({
+          title: bandMeta.label,
+          sub: `${VD.formatDistance(bandStat.meters)} of this drive · avg ${speed.value} ${speed.unit}`,
+          stat: VD.formatDistance(bandStat.meters),
+          tone: bandMeta.tone
+        });
+      });
+      line.addTo(mapLayerGroups.heat);
     });
 
     mapLayerGroups.stops = L.layerGroup([
@@ -1003,25 +1132,51 @@ import type { MapSessionFilter } from "./map-session-list";
     const stops = detectStops(drawable).slice(0, MAX_DRAWN_STOPS);
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
-      L.circleMarker([stop.lat, stop.lng], {
+      const marker = L.circleMarker([stop.lat, stop.lng], {
         radius, color: "#ffd7b0", weight: 3, fillColor: "#ff8a3d", fillOpacity: 0.38
-      }).bindTooltip(`Stop · ${VD.formatDuration(stop.durationMs)}`).addTo(mapLayerGroups.stops);
+      }).bindTooltip(`Stop · ${VD.formatDuration(stop.durationMs)}`);
+      // Tap a stop -> arrived / back-on-road times in the detail card.
+      marker.on("click", () => {
+        showSegPop({
+          title: "Stop",
+          sub: `Arrived ${fmtClockTime(stop.startMs)} · back on road ${fmtClockTime(stop.endMs)}`,
+          stat: VD.formatDuration(stop.durationMs),
+          tone: "warn"
+        });
+      });
+      marker.addTo(mapLayerGroups.stops);
     });
 
     // V3 efficiency layer — per-segment polylines bucketed by mi/kWh.
     // Segments with no power data (eff null) render grey so the user
     // can tell which portions of the drive lack derived efficiency.
     const effBands: Record<string, LatLngSegment[]> = {};
+    const effStats: Record<string, { meters: number; effSum: number; effCount: number }> = {};
     for (let i = 1; i < drawable.length; i += 1) {
+      const previousPoint = drawable[i - 1];
       const point = drawable[i];
       const previousLatLng = latlngs[i - 1];
       const latLng = latlngs[i];
-      if (!point || !previousLatLng || !latLng) continue;
+      if (!previousPoint || !point || !previousLatLng || !latLng) continue;
       // Pass raw eff (mapEffColor is null-safe): null regen/no-data segments
       // render grey, not the worst-efficiency red band.
       const color = mapEffColor(point.eff);
       (effBands[color] = effBands[color] || []).push([previousLatLng, latLng]);
+      const effStat = (effStats[color] = effStats[color] || { meters: 0, effSum: 0, effCount: 0 });
+      effStat.meters += haversineMetersJs(
+        Number(previousPoint.lat), Number(previousPoint.lng), Number(point.lat), Number(point.lng));
+      const effVal = numOrNaN(point.eff);
+      if (Number.isFinite(effVal)) {
+        effStat.effSum += effVal;
+        effStat.effCount += 1;
+      }
     }
+    const EFF_BAND_LABELS: Record<string, { label: string; tone: string }> = {
+      "#b8e63b": { label: "Efficient stretches", tone: "ok" },
+      "#ffb84a": { label: "Average-efficiency stretches", tone: "warn" },
+      "#ff6b5f": { label: "Low-efficiency stretches", tone: "bad" },
+      "#6a6a72": { label: "No power data", tone: "idle" }
+    };
     mapLayerGroups.eff = L.layerGroup();
     // Soft white halo underneath the colored segments so the route reads
     // clearly against busy basemap areas (urban grid, dense streets).
@@ -1029,10 +1184,34 @@ import type { MapSessionFilter } from "./map-session-list";
       color: "#ffffff", weight: 11, opacity: 0.09, interactive: false
     }).addTo(mapLayerGroups.eff);
     Object.entries(effBands).forEach(([color, segments]) => {
-      L.polyline(segments, { color, weight: 5, opacity: 0.95 }).addTo(mapLayerGroups.eff);
+      const line = L.polyline(segments, { color, weight: 5, opacity: 0.95 });
+      // Tap an efficiency band -> aggregated distance + average mi/kWh.
+      line.on("click", () => {
+        const effStat = effStats[color];
+        const bandMeta = EFF_BAND_LABELS[color] || { label: "Route section", tone: "idle" };
+        if (!effStat) return;
+        const avgEff = effStat.effCount > 0 ? effStat.effSum / effStat.effCount : NaN;
+        showSegPop({
+          title: bandMeta.label,
+          sub: `${VD.formatDistance(effStat.meters)} of this drive`,
+          stat: Number.isFinite(avgEff) ? VD.units.efficiencyText(avgEff) : "no data",
+          tone: bandMeta.tone
+        });
+      });
+      line.addTo(mapLayerGroups.eff);
     });
     L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
     L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+
+    // Drive-event diamonds (hard braking / rapid accel) ride every layer
+    // except Stops. Fresh marker instances per group — a Leaflet layer can
+    // only live in one group at a time.
+    const driveEvents = isLiveRoute ? [] : detectDriveEvents(drawable);
+    if (driveEvents.length) {
+      [mapLayerGroups.routes, mapLayerGroups.heat, mapLayerGroups.eff].forEach((group) => {
+        if (group) buildDriveEventMarkers(driveEvents).forEach((marker) => marker.addTo(group));
+      });
+    }
 
     addActiveLayerGroup(layer, map);
 
@@ -1118,11 +1297,24 @@ import type { MapSessionFilter } from "./map-session-list";
     const search = el("mapSessionSearch") as HTMLInputElement | null;
     const activeSort = document.querySelector("[data-map-sort].is-active") as HTMLElement | null;
     const favToggle = el("mapSessionFavoritesOnly");
+    const longToggle = el("mapSessionLongOnly");
     return {
       query: search ? String(search.value || "") : "",
       sort: activeSort && activeSort.dataset.mapSort === "distance" ? "distance" : "recent",
       favoritesOnly: Boolean(favToggle && favToggle.dataset.on === "true"),
+      longOnly: Boolean(longToggle && longToggle.dataset.on === "true"),
     };
+  }
+
+  // Estimated electricity cost for one stored drive: trip-rollup net energy x
+  // the home rate pref. Null (no meta segment) when either is missing.
+  function tripCostTextForRow(routeKey: string): string | null {
+    const rate = VD.prefs.get<number>("pricePerKwh", 0);
+    if (!(rate > 0)) return null;
+    const trip = tripRowForKey(routeKey);
+    const energy = trip && trip.energyKwh != null ? Number(trip.energyKwh) : NaN;
+    if (!Number.isFinite(energy) || energy <= 0) return null;
+    return `$${(energy * rate).toFixed(2)}`;
   }
 
   function renderMapSessionList(routes: MapRoute[]) {
@@ -1133,6 +1325,7 @@ import type { MapSessionFilter } from "./map-session-list";
       formatChipDate: (value) => fmtChipDate(value),
       formatDistance: (value) => VD.formatDistance(value),
       formatWhen: (value) => VD.formatWhen(value),
+      tripCostText: tripCostTextForRow,
       filter: readMapSessionFilter(),
     });
   }
@@ -1487,6 +1680,91 @@ import type { MapSessionFilter } from "./map-session-list";
     chart.replaceChildren(built.svg);
   }
 
+  // Speed-over-the-drive line (v2): GPS-derived speed per segment, smoothed
+  // over a 3-sample window and downsampled to <=120 vertices. Hidden when the
+  // route is too short to draw a meaningful line.
+  function renderTripDetailSpeed(route: MapRoute): void {
+    const card = el("tripDetailSpeedCard");
+    const chart = el("tripDetailSpeedChart");
+    if (!card || !chart) return;
+    const points = (route.points || []).filter(isValidRoutePoint);
+    if (points.length < 6) {
+      card.hidden = true;
+      chart.replaceChildren();
+      return;
+    }
+    const speeds: number[] = [];
+    for (let i = 1; i < points.length; i += 1) {
+      speeds.push(segmentSpeedMps(points[i - 1] as VoltRoutePoint, points[i] as VoltRoutePoint));
+    }
+    const smoothed = speeds.map((_, i) => {
+      const lo = Math.max(0, i - 1);
+      const hi = Math.min(speeds.length - 1, i + 1);
+      let sum = 0;
+      for (let j = lo; j <= hi; j += 1) sum += speeds[j] as number;
+      return sum / (hi - lo + 1);
+    });
+    const step = Math.max(1, Math.ceil(smoothed.length / 120));
+    const series: number[] = [];
+    for (let i = 0; i < smoothed.length; i += step) series.push(smoothed[i] as number);
+    const w = 320;
+    const h = 84;
+    const maxV = Math.max(...series, 1);
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg") as SVGElement;
+    VD.setSvgAttrs(svg, {
+      viewBox: `0 0 ${w} ${h}`,
+      preserveAspectRatio: "none",
+      role: "img",
+      "aria-label": "Speed over the drive",
+      class: "trip-detail-speed-svg"
+    });
+    const coords = series.map((v, i) => [
+      (i / Math.max(1, series.length - 1)) * w,
+      h - 4 - (v / maxV) * (h - 10)
+    ]);
+    const d = "M" + coords.map((c) => `${(c[0] as number).toFixed(1)},${(c[1] as number).toFixed(1)}`).join(" L");
+    const fill = document.createElementNS(ns, "path") as SVGElement;
+    VD.setSvgAttrs(fill, { d: `${d} L${w},${h} L0,${h} Z`, fill: "rgba(76,196,255,0.14)" });
+    const line = document.createElementNS(ns, "path") as SVGElement;
+    VD.setSvgAttrs(line, { d, fill: "none", stroke: "#4cc4ff", "stroke-width": 2, "stroke-linejoin": "round" });
+    svg.append(fill, line);
+    card.hidden = false;
+    const maxSpeed = VD.units.speed(maxV * 3.6);
+    VD.setText("tripDetailSpeedHead", `Peaks at ${maxSpeed.value} ${maxSpeed.unit}.`);
+    chart.replaceChildren(svg);
+  }
+
+  // Stops along the drive (v2): same detection as the map's Stops layer,
+  // listed with arrive time + dwell duration.
+  function renderTripDetailStops(route: MapRoute): void {
+    const card = el("tripDetailStopsCard");
+    const list = el("tripDetailStops");
+    if (!card || !list) return;
+    const stops = detectStops((route.points || []).filter(isValidRoutePoint)).slice(0, 6);
+    if (!stops.length) {
+      card.hidden = true;
+      list.replaceChildren();
+      return;
+    }
+    card.hidden = false;
+    list.replaceChildren(
+      ...stops.map((stop, i) => {
+        const row = document.createElement("div");
+        row.className = "trip-detail-stop-row";
+        const dot = document.createElement("span");
+        dot.className = "trip-detail-stop-dot";
+        const name = document.createElement("span");
+        name.className = "trip-detail-stop-name";
+        name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
+        const dur = document.createElement("b");
+        dur.textContent = VD.formatDuration(stop.durationMs);
+        row.append(dot, name, dur);
+        return row;
+      })
+    );
+  }
+
   // The trip-list row for a route key (state.trips is the source the list
   // renders from), carrying the rollup-only fields the route projection
   // doesn't: evShare and energyKwh.
@@ -1663,6 +1941,14 @@ import type { MapSessionFilter } from "./map-session-list";
     renderTripDetailEvSplit(routeKey);
     renderTripDetailScatter(route);
     renderTripDetailElevation(route);
+    renderTripDetailSpeed(route);
+    renderTripDetailStops(route);
+    // Footer actions carry the route key: View-on-map selects this drive via
+    // the shared [data-map-session] path; export reuses the per-row CSV path.
+    const viewBtn = el("tripDetailViewMap");
+    if (viewBtn) viewBtn.dataset.mapSession = routeKey;
+    const exportBtn = el("tripDetailExportCsv");
+    if (exportBtn) exportBtn.dataset.tripExportKey = routeKey;
     // Reveal the sheet here so the function is self-contained; actions.ts then
     // layers the focus trap on top (it re-sets hidden=false too, harmlessly).
     sheet.hidden = false;
@@ -1702,6 +1988,96 @@ import type { MapSessionFilter } from "./map-session-list";
     return haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / seconds;
   }
 
+  // Wall-clock label for stop arrive/resume times ("6:09 AM").
+  function fmtClockTime(ms: number): string {
+    if (!Number.isFinite(ms) || ms <= 0) return "--";
+    return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  }
+
+  // Drive events: sustained hard-braking / rapid-accel between GPS samples.
+  // Speeds are GPS-derived (segment distance over time), accel from consecutive
+  // segment speeds; thresholds are deliberately conservative (~0.25 g with a
+  // real >=3 m/s speed change) so GPS jitter doesn't spray false diamonds.
+  type MapDriveEvent = {
+    lat: number;
+    lng: number;
+    type: "brake" | "accel";
+    fromMps: number;
+    toMps: number;
+    seconds: number;
+    accelMps2: number;
+    atMeters: number;
+  };
+  const MAX_DRAWN_EVENTS = 8;
+
+  function detectDriveEvents(points: VoltRoutePoint[]): MapDriveEvent[] {
+    const events: MapDriveEvent[] = [];
+    let prevSpeed: number | null = null;
+    let cumMeters = 0;
+    let lastEventAtMs = -Infinity;
+    for (let i = 1; i < points.length; i += 1) {
+      const a = points[i - 1];
+      const b = points[i];
+      if (!a || !b) continue;
+      const dt = (Number(b.atMs) - Number(a.atMs)) / 1000;
+      const stepMeters = haversineMetersJs(Number(a.lat), Number(a.lng), Number(b.lat), Number(b.lng));
+      cumMeters += stepMeters;
+      if (!(dt > 0) || dt > 10) {
+        // A sampling gap breaks the speed chain — don't derive accel across it.
+        prevSpeed = null;
+        continue;
+      }
+      const speed = stepMeters / dt;
+      if (prevSpeed !== null) {
+        const accel = (speed - prevSpeed) / dt;
+        const dv = speed - prevSpeed;
+        const atMs = Number(b.atMs);
+        const isBrake = accel <= -2.5 && dv <= -3;
+        const isLaunch = accel >= 2.2 && dv >= 3;
+        if ((isBrake || isLaunch) && atMs - lastEventAtMs > 15000 && events.length < MAX_DRAWN_EVENTS) {
+          lastEventAtMs = atMs;
+          events.push({
+            lat: Number(b.lat),
+            lng: Number(b.lng),
+            type: isBrake ? "brake" : "accel",
+            fromMps: prevSpeed,
+            toMps: speed,
+            seconds: dt,
+            accelMps2: accel,
+            atMeters: cumMeters
+          });
+        }
+      }
+      prevSpeed = speed;
+    }
+    return events;
+  }
+
+  function buildDriveEventMarkers(events: MapDriveEvent[]): LeafletLayer[] {
+    return events.map((ev) => {
+      const color = ev.type === "brake" ? "#ff6b5f" : "#ffb84a";
+      const icon = L.divIcon({
+        className: "map-evt-icon",
+        html: `<span class="map-evt-diamond" style="border-color: ${color}"></span>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
+      });
+      const marker = L.marker([ev.lat, ev.lng], { icon, keyboard: false }) as LeafletLayer;
+      marker.on("click", () => {
+        const from = VD.units.speed(ev.fromMps * 3.6);
+        const to = VD.units.speed(ev.toMps * 3.6);
+        const g = ev.accelMps2 / 9.81;
+        showSegPop({
+          title: ev.type === "brake" ? "Hard braking" : "Rapid acceleration",
+          sub: `${from.value}\u2192${to.value} ${to.unit} in ${ev.seconds.toFixed(1)}s \u00B7 ${VD.formatDistance(ev.atMeters)} into drive`,
+          stat: `${g >= 0 ? "+" : "\u2212"}${Math.abs(g).toFixed(2)} g`,
+          tone: ev.type === "brake" ? "bad" : "warn"
+        });
+      });
+      return marker;
+    });
+  }
+
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
   function detectStops(points: VoltRoutePoint[]): MapStop[] {
     const stops: MapStop[] = [];
@@ -1730,7 +2106,13 @@ import type { MapSessionFilter } from "./map-session-list";
     if (durationMs < 45000) return;
     const mid = points[Math.floor((startIdx + endIdx) / 2)];
     if (!mid) return;
-    stops.push({ lat: mid.lat, lng: mid.lng, durationMs });
+    stops.push({
+      lat: mid.lat,
+      lng: mid.lng,
+      durationMs,
+      startMs: Number(startPoint.atMs),
+      endMs: Number(endPoint.atMs)
+    });
   }
 
   // Fabricated Los Angeles-area preview geometry, kept as [secondsFromStart, lat, lng]
@@ -1869,7 +2251,10 @@ import type { MapSessionFilter } from "./map-session-list";
       pointCount: r.points.length,
       hasRoute: true,
       adapterName: r.session.adapterName,
-      status: "complete"
+      status: "complete",
+      // Plausible net HV energy (~4.8 mi/kWh) so the demo exercises the v2
+      // energy/cost surfaces (map sheet, trip rows, Drive strip).
+      energyKwh: Math.round((r.distanceMeters / 1609.344 / 4.8) * 10) / 10
     }));
 
     const totalDistance = routes.reduce((s, r) => s + r.distanceMeters, 0);
@@ -2066,7 +2451,7 @@ import type { MapSessionFilter } from "./map-session-list";
       s.latestDiagnosticCodes = [
         { dtc: "P0420", status: "current", statusLabel: "current", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - hour, seenCount: 9 },
         { dtc: "P0301", status: "permanent", statusLabel: "permanent", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 50 * hour, lastSeenMs: now - 2 * hour, seenCount: 5 },
-        { dtc: "P0128", status: "freeze-frame", statusLabel: "freeze-frame", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 30 * hour, lastSeenMs: now - 3 * hour, seenCount: 2 },
+        { dtc: "P0128", status: "freeze-frame", statusLabel: "freeze-frame", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 30 * hour, lastSeenMs: now - 3 * hour, seenCount: 2, freezeFrame: { Speed: "43 mph", SOC: "12%", Engine: "1,840 RPM", Coolant: "148\u00B0F", Load: "31%", Odometer: "48,102 mi" } },
         { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - hour, seenCount: 1 }
       ];
       s.diagnosticCodeCount = 4;
