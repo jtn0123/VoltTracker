@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -123,6 +124,16 @@ class VoltBridgeDispatchTest {
 
         assertEquals(ObdService.ACTION_TPMS_SCAN, activity.lastServiceAction)
         assertEquals(EnhancedPidProfiles.STAGE_TIRES, activity.lastServiceStage)
+    }
+
+    @Test
+    fun quickScanStartsScanServiceWithQuickProfile() {
+        bridge.quickScan(VALID_ADDRESS, "OBDLink")
+        drain()
+
+        assertEquals(ObdService.ACTION_SCAN, activity.lastServiceAction)
+        assertEquals(VALID_ADDRESS, activity.lastServiceAddress)
+        assertEquals(DiagnosticScanProfile.QUICK.wireName, activity.lastServiceStage)
     }
 
     // ---- service dispatch against the remembered/last adapter --------------------------
@@ -246,6 +257,18 @@ class VoltBridgeDispatchTest {
         assertEquals(EnhancedPidProfiles.STAGE_TIRES, activity.lastServiceStage)
     }
 
+    @Test
+    fun quickScanLastStartsRememberedScanWithQuickProfile() {
+        rememberLastDevice()
+
+        bridge.quickScanLast()
+        drain()
+
+        assertEquals(ObdService.ACTION_SCAN, activity.lastServiceAction)
+        assertEquals(VALID_ADDRESS, activity.lastServiceAddress)
+        assertEquals(DiagnosticScanProfile.QUICK.wireName, activity.lastServiceStage)
+    }
+
     // ---- demo / disconnect -------------------------------------------------------------
 
     @Test
@@ -277,6 +300,48 @@ class VoltBridgeDispatchTest {
         assertEquals(VALID_ADDRESS, activity.lastRememberedAddress)
         assertEquals("My Adapter", activity.lastRememberedName)
         assertNull("rememberDevice must not start a service", activity.lastServiceAction)
+    }
+
+    // ---- light wrapper forwarding ------------------------------------------------------
+
+    @Test
+    fun deviceAndStartupWrappersUseHostSeams() {
+        bridge.startupMark("Dashboard ready! @ boot")
+        assertEquals("[]", bridge.listDevices())
+
+        activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
+
+        assertEquals(VALID_ADDRESS, JSONObject(bridge.getLastDevice()).optString("address"))
+        assertEquals(VALID_ADDRESS, JSONArray(bridge.getDeviceHistory()).getJSONObject(0).optString("address"))
+    }
+
+    @Test
+    fun requestPermissionsAndRefreshDevicesRunOnUiThread() {
+        bridge.requestPermissions()
+        bridge.refreshDevices()
+        drain()
+
+        assertTrue(
+            "permission gate should request at least one missing runtime permission",
+            activity.permissionRequests > 0,
+        )
+        assertEquals(1, activity.deviceListCalls)
+        assertEquals(1, activity.storageSummaryCalls)
+    }
+
+    @Test
+    fun readThroughGettersForwardToTheHost() {
+        activity.autoConnectStatePayload = "{\"enabled\":true}"
+        activity.storageSummaryPayload = "{\"sampleCount\":3}"
+        activity.storageDetailsPayload = "{\"storageDetails\":true}"
+        activity.tripsPayload = "[{\"routeKey\":\"12:1:2\"}]"
+        activity.insightsPayload = "{\"tripCount\":1}"
+
+        assertEquals("{\"enabled\":true}", bridge.getAutoConnectState())
+        assertEquals("{\"sampleCount\":3}", bridge.getStorageSummary())
+        assertEquals("{\"storageDetails\":true}", bridge.getStorageDetails())
+        assertEquals("[{\"routeKey\":\"12:1:2\"}]", bridge.getTrips())
+        assertEquals("{\"tripCount\":1}", bridge.getInsights())
     }
 
     // ---- clearStoredData ---------------------------------------------------------------
@@ -443,6 +508,23 @@ class VoltBridgeDispatchTest {
     }
 
     @Test
+    fun bulkTripAndCardExportWrappersForwardSentinelFormats() {
+        activity.tripExportResult = JSONObject().put("ok", true).toString()
+
+        assertTrue(JSONObject(bridge.exportAllTripsCsv()).optBoolean("ok"))
+        assertNull(activity.lastTripExportRouteKey)
+        assertEquals("csv_all", activity.lastTripExportFormat)
+
+        assertTrue(JSONObject(bridge.exportChargeSessionsCsv(" 0.27 ")).optBoolean("ok"))
+        assertEquals("0.27", activity.lastTripExportRouteKey)
+        assertEquals("csv_charges", activity.lastTripExportFormat)
+
+        assertTrue(JSONObject(bridge.shareTripCard(" {\"routeKey\":\"12:1:2\"} ")).optBoolean("ok"))
+        assertEquals("{\"routeKey\":\"12:1:2\"}", activity.lastTripExportRouteKey)
+        assertEquals("card", activity.lastTripExportFormat)
+    }
+
+    @Test
     fun exportDetailedSignalLogsReturnsValidJsonWhenStorageUnavailable() {
         activity.localStore = null
 
@@ -509,6 +591,20 @@ class VoltBridgeDispatchTest {
     }
 
     @Test
+    fun forceStopPackageReportsBlockedWhenHostCannotStopApp() {
+        activity.forceStopReturn = false
+
+        val result = bridge.forceStopPackage("io.tripovan.voltage")
+        drain()
+
+        assertTrue("known OBD package should still reach the confirm path", result)
+        assertEquals("io.tripovan.voltage", activity.lastForceStopPackage)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+        assertTrue(activity.lastStatusDetail!!.contains("Could not force-stop io.tripovan.voltage."))
+    }
+
+    @Test
     fun forceStopPackageShortCircuitsEmptyPackageWithoutForwarding() {
         val result = bridge.forceStopPackage("   ")
 
@@ -570,6 +666,14 @@ class VoltBridgeDispatchTest {
     }
 
     @Test
+    fun shareDiagnosticsDigestForwardsToActivity() {
+        bridge.shareDiagnosticsDigest()
+        drain()
+
+        assertEquals(1, activity.shareDiagnosticsDigestCalls)
+    }
+
+    @Test
     fun startTestConnectionForwardsToActivity() {
         bridge.startTestConnection()
         drain()
@@ -600,6 +704,14 @@ class VoltBridgeDispatchTest {
         assertEquals(1, activity.cancelAdapterReadyNotifyCalls)
     }
 
+    @Test
+    fun openSetupGuideForwardsToActivity() {
+        bridge.openSetupGuide()
+        drain()
+
+        assertEquals(1, activity.openSetupGuideCalls)
+    }
+
     // ---- auto-connect ------------------------------------------------------------------
 
     @Test
@@ -614,6 +726,37 @@ class VoltBridgeDispatchTest {
         bridge.setAutoConnectEnabled(false)
         drain()
         assertEquals(false, activity.lastAutoConnectEnabled)
+    }
+
+    @Test
+    fun tripLabelFavoriteAndMaintenanceWrappersForwardThroughDataExports() {
+        activity.store.setTripLabelReturn = true
+        activity.store.setTripFavoriteReturn = true
+        activity.store.addMaintenanceReturn = 42L
+        activity.store.maintenanceLog = JSONArray().put(JSONObject().put("id", 42))
+        activity.store.deleteMaintenanceReturn = 1
+
+        bridge.setTripLabel(" 12:1000:2000 ", " Commute ")
+        drain()
+        assertEquals("12:1000:2000", activity.store.lastTripLabelRouteKey)
+        assertEquals("Commute", activity.store.lastTripLabel)
+
+        bridge.setTripFavorite("12:1000:2000", true)
+        drain()
+        assertEquals("12:1000:2000", activity.store.lastTripFavoriteRouteKey)
+        assertEquals(true, activity.store.lastTripFavorite)
+
+        bridge.addMaintenanceEntry(JSONObject().put("type", "Coolant").put("note", "Flush").toString())
+        drain()
+        assertEquals("Coolant", activity.store.lastMaintenanceType)
+        assertEquals("Flush", activity.store.lastMaintenanceNote)
+
+        val log = JSONArray(bridge.getMaintenanceLog())
+        assertEquals(42, log.getJSONObject(0).optInt("id"))
+
+        bridge.deleteMaintenanceEntry("42")
+        drain()
+        assertEquals(42L, activity.store.lastDeletedMaintenanceId)
     }
 
     // ---- event-notification + auto-scan settings (M1 / M3) -----------------------------
@@ -758,6 +901,37 @@ class VoltBridgeDispatchTest {
         assertEquals("native_request_failed", payload.getString("error"))
     }
 
+    @Test
+    fun asyncStorageReadFailurePublishesGenericErrorPayload() {
+        activity.storageDetailsThrows = true
+
+        assertTrue(bridge.requestStorageDetails())
+
+        assertEquals(1, activity.dashboardCallbacks.size)
+        assertEquals("setStorage", activity.dashboardCallbacks[0].first)
+        val payload = JSONObject(activity.dashboardCallbacks[0].second!!)
+        assertEquals(false, payload.getBoolean("ok"))
+        assertEquals("native_request_failed", payload.getString("error"))
+    }
+
+    @Test
+    fun asyncStoragePublishFailureIsSwallowedAfterTheRequestStarts() {
+        activity.publishDashboardPayloadThrows = true
+
+        assertTrue(bridge.requestTrips())
+
+        assertTrue(activity.dashboardCallbacks.isEmpty())
+    }
+
+    @Test
+    fun asyncStorageRequestReturnsFalseWhenBackgroundDispatchThrows() {
+        activity.runOnBackgroundThrows = true
+
+        assertFalse(bridge.requestTrips())
+
+        assertTrue(activity.dashboardCallbacks.isEmpty())
+    }
+
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
@@ -786,8 +960,12 @@ class VoltBridgeDispatchTest {
         var lastRememberedName: String? = null
 
         var loggingActive = false
+        var runOnBackgroundThrows = false
+        var permissionRequests = 0
+        var deviceListCalls = 0
         var storageSummaryCalls = 0
         val dashboardCallbacks = ArrayList<Pair<String, String?>>()
+        var publishDashboardPayloadThrows = false
 
         var confirmationCalls = 0
         var lastConfirmationTitle: String? = null
@@ -801,21 +979,26 @@ class VoltBridgeDispatchTest {
         var recentSessionsJson = "[]"
         var lastRecentSessionsCount = Int.MIN_VALUE
         var shareDiagnosticsCalls = 0
+        var shareDiagnosticsDigestCalls = 0
         var startTestConnectionCalls = 0
         var lastScheduleMinutes = Int.MIN_VALUE
         var cancelAdapterReadyNotifyCalls = 0
+        var openSetupGuideCalls = 0
 
         var tripRouteJson = "{}"
         var tripRouteThrows = false
         var currentRouteJson = "{}"
         var sohHistoryJson = "[]"
         var storageDetailsPayload = "{\"storageDetails\":true}"
+        var storageDetailsThrows = false
         var tripsPayload = "[]"
         var insightsPayload = "{}"
         var lastTripRouteKey: String? = null
         var tripExportResult = "{}"
         var lastTripExportRouteKey: String? = null
         var lastTripExportFormat: String? = null
+        var autoConnectStatePayload = "{}"
+        var storageSummaryPayload = "{\"database\":\"volttracker_obd_poc.db\",\"sessionCount\":0,\"sampleCount\":0}"
         var lastAutoConnectEnabled: Boolean? = null
 
         var eventNotificationStateJsonValue = "{}"
@@ -844,6 +1027,9 @@ class VoltBridgeDispatchTest {
         // runOnBackground hops to a single-thread executor in production; run inline so the
         // background body completes before the test asserts.
         override fun runOnBackground(task: Runnable) {
+            if (runOnBackgroundThrows) {
+                throw IllegalStateException("background unavailable")
+            }
             task.run()
         }
 
@@ -902,6 +1088,15 @@ class VoltBridgeDispatchTest {
 
         override fun isLoggingActive(): Boolean = loggingActive
 
+        override fun requirePermissionGate(): PermissionGate =
+            PermissionGate(this) {
+                permissionRequests += 1
+            }
+
+        override fun publishDeviceList() {
+            deviceListCalls += 1
+        }
+
         override fun confirmBridgeAction(
             title: String,
             message: String,
@@ -923,6 +1118,9 @@ class VoltBridgeDispatchTest {
             functionName: String,
             jsonPayload: String?,
         ) {
+            if (publishDashboardPayloadThrows) {
+                throw IllegalStateException("publish failed")
+            }
             dashboardCallbacks.add(functionName to jsonPayload)
         }
 
@@ -948,6 +1146,10 @@ class VoltBridgeDispatchTest {
             shareDiagnosticsCalls += 1
         }
 
+        override fun shareDiagnosticsDigestFromBridge() {
+            shareDiagnosticsDigestCalls += 1
+        }
+
         override fun startTestConnectionFromBridge() {
             startTestConnectionCalls += 1
         }
@@ -960,6 +1162,10 @@ class VoltBridgeDispatchTest {
             cancelAdapterReadyNotifyCalls += 1
         }
 
+        override fun openSetupGuideFromBridge() {
+            openSetupGuideCalls += 1
+        }
+
         override fun getTripRouteJson(routeKey: String?): String {
             lastTripRouteKey = routeKey
             if (tripRouteThrows) {
@@ -968,7 +1174,14 @@ class VoltBridgeDispatchTest {
             return tripRouteJson
         }
 
-        override fun getStorageDetailsJson(): String = storageDetailsPayload
+        override fun getStorageDetailsJson(): String {
+            if (storageDetailsThrows) {
+                throw IllegalStateException("storage details failed")
+            }
+            return storageDetailsPayload
+        }
+
+        override fun getStorageSummaryJson(): String = storageSummaryPayload
 
         override fun getTripsJson(): String = tripsPayload
 
@@ -990,6 +1203,8 @@ class VoltBridgeDispatchTest {
         override fun setAutoConnectEnabledFromBridge(enabled: Boolean) {
             lastAutoConnectEnabled = enabled
         }
+
+        override fun getAutoConnectStateJson(): String = autoConnectStatePayload
 
         // The event-notification cluster is now a single host accessor (A1/I3): override
         // eventNotifications() to return a recorder that captures into the fields the assertions
@@ -1061,6 +1276,18 @@ class VoltBridgeDispatchTest {
         var lastBulkExportLimit = Int.MIN_VALUE
         var markTripReturn = false
         var lastMarkedTripRouteKey: String? = null
+        var setTripLabelReturn = false
+        var lastTripLabelRouteKey: String? = null
+        var lastTripLabel: String? = null
+        var setTripFavoriteReturn = false
+        var lastTripFavoriteRouteKey: String? = null
+        var lastTripFavorite: Boolean? = null
+        var addMaintenanceReturn = -1L
+        var lastMaintenanceType: String? = null
+        var lastMaintenanceNote: String? = null
+        var maintenanceLog = JSONArray()
+        var deleteMaintenanceReturn = 0
+        var lastDeletedMaintenanceId = Long.MIN_VALUE
 
         override fun clearAllData() {
             clearAllDataCalls += 1
@@ -1084,6 +1311,44 @@ class VoltBridgeDispatchTest {
         override fun markTripNotTrip(routeKey: String?): Boolean {
             lastMarkedTripRouteKey = routeKey
             return markTripReturn
+        }
+
+        override fun setTripLabel(
+            routeKey: String?,
+            label: String?,
+        ): Boolean {
+            lastTripLabelRouteKey = routeKey
+            lastTripLabel = label
+            return setTripLabelReturn
+        }
+
+        override fun setTripFavorite(
+            routeKey: String?,
+            favorite: Boolean,
+        ): Boolean {
+            lastTripFavoriteRouteKey = routeKey
+            lastTripFavorite = favorite
+            return setTripFavoriteReturn
+        }
+
+        override fun addMaintenanceEntry(
+            createdAtMs: Long,
+            odometerKm: Double?,
+            type: String?,
+            note: String?,
+            intervalKm: Double?,
+            intervalMonths: Int?,
+        ): Long {
+            lastMaintenanceType = type
+            lastMaintenanceNote = note
+            return addMaintenanceReturn
+        }
+
+        override fun getMaintenanceLogJson(limit: Int): JSONArray = maintenanceLog
+
+        override fun deleteMaintenanceEntry(id: Long): Int {
+            lastDeletedMaintenanceId = id
+            return deleteMaintenanceReturn
         }
     }
 

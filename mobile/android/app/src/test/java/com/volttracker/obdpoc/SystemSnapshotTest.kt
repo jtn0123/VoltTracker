@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc
 
+import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -11,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.IOException
@@ -99,5 +102,17 @@ class SystemSnapshotTest {
         assertTrue(snap.has("androidSdk"))
         // App version comes from the context — absent when context is null.
         assertFalse(snap.has("appVersionName"))
+    }
+
+    @Test
+    fun collectMarksBluetoothIdentityReadableWhenConnectPermissionIsGranted() {
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        BluetoothAdapter.getDefaultAdapter()?.let { shadowOf(it).setEnabled(true) }
+
+        val snap = SystemSnapshot.collect(context, null)
+
+        assertTrue(snap.getBoolean("btAdapterAvailable"))
+        assertTrue(snap.getBoolean("btIdentityReadable"))
+        assertTrue(snap.has("btEnabled"))
     }
 }

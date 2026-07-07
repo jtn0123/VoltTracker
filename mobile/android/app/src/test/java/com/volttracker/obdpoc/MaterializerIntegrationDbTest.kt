@@ -2,7 +2,9 @@ package com.volttracker.obdpoc
 
 import android.database.sqlite.SQLiteDatabase
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.materialize.ChargeSession
 import com.volttracker.obdpoc.materialize.ChargeSessionMaterializer
+import com.volttracker.obdpoc.materialize.Confidence
 import com.volttracker.obdpoc.materialize.MaterializerInput
 import com.volttracker.obdpoc.materialize.Trip
 import com.volttracker.obdpoc.materialize.TripMaterializer
@@ -221,6 +223,158 @@ class MaterializerIntegrationDbTest {
         assertEquals(T_BASE + 1000L, samples[0].capturedAtMs)
         assertEquals(T_BASE + 2000L, samples[1].capturedAtMs)
         assertEquals(T_BASE + 3000L, samples[2].capturedAtMs)
+    }
+
+    @Test
+    fun readPidObservationsReturnOldestFirstWithNullableNumericValues() {
+        val store = this.store!!
+        val sessionId = store.startSession("obd", "AA:BB", "Adapter", T_BASE)
+
+        store.recordPidObservation(
+            sessionId,
+            T_BASE + 3000L,
+            "01 0C",
+            "7E8",
+            "0C",
+            "Engine RPM",
+            "1500 rpm",
+            1500.0,
+            "rpm",
+            "01 0C",
+            "41 0C 2E E0",
+        )
+        store.recordPidObservation(
+            sessionId,
+            T_BASE + 1000L,
+            "01 05",
+            "7E8",
+            "05",
+            "Coolant",
+            "no parse",
+            null,
+            "C",
+            "01 05",
+            "NO DATA",
+        )
+        store.recordPidObservation(
+            sessionId,
+            T_BASE + 2000L,
+            "22 2414",
+            "7E4",
+            "2414",
+            "Pack current",
+            "-12.5 A",
+            -12.5,
+            "A",
+            "22 2414",
+            "62 24 14 FF 83",
+        )
+
+        val observations = store.readPidObservations(sessionId)
+
+        assertEquals(3, observations.size)
+        assertEquals(T_BASE + 1000L, observations[0].capturedAtMs)
+        assertEquals("01 05", observations[0].command)
+        assertEquals("7E8", observations[0].header)
+        assertEquals("NO DATA", observations[0].response)
+        assertEquals(null, observations[0].parserKey)
+        assertEquals(null, observations[0].parsedNumeric)
+        assertEquals(T_BASE + 2000L, observations[1].capturedAtMs)
+        assertEquals(-12.5, observations[1].parsedNumeric!!, 0.001)
+        assertEquals(T_BASE + 3000L, observations[2].capturedAtMs)
+        assertEquals(1500.0, observations[2].parsedNumeric!!, 0.001)
+    }
+
+    @Test
+    fun persistMethodsWriteOptionalEnergySocAndPowerColumns() {
+        val store = this.store!!
+        val sessionId = store.startSession("obd", "AA:BB", "Adapter", T_BASE)
+
+        store.persistTrips(
+            sessionId,
+            listOf(
+                Trip(
+                    T_BASE,
+                    T_BASE,
+                    0.0,
+                    0L,
+                    0.0,
+                    1,
+                    false,
+                    Confidence.WEAK,
+                    Trip.CLASSIFICATION_UNKNOWN,
+                    1.75,
+                ),
+            ),
+        )
+        store.persistChargeSessions(
+            sessionId,
+            listOf(
+                ChargeSession(
+                    T_BASE + ONE_MINUTE_MS,
+                    T_BASE + 11 * ONE_MINUTE_MS,
+                    10 * ONE_MINUTE_MS,
+                    355.5,
+                    361.0,
+                    2,
+                    "level2",
+                    Confidence.OBSERVED,
+                    startSoc = 44.0,
+                    endSoc = 66.5,
+                    peakPowerKw = 6.8,
+                    energyKwh = 3.4,
+                ),
+            ),
+        )
+
+        val db = openHelper(store)
+        db
+            .query(
+                "trip_segments",
+                arrayOf("route_available", "avg_speed_kph", "energy_kwh", "confidence"),
+                "session_id = ?",
+                arrayOf(sessionId.toString()),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(0, cursor.getInt(0))
+                assertTrue("zero-duration trips must not persist an average speed", cursor.isNull(1))
+                assertEquals(1.75, cursor.getDouble(2), 0.001)
+                assertEquals(0.4, cursor.getDouble(3), 0.001)
+            }
+        db
+            .query(
+                "charge_sessions",
+                arrayOf(
+                    "charger_type",
+                    "start_soc",
+                    "end_soc",
+                    "power_kw",
+                    "energy_kwh",
+                    "interrupted",
+                    "summary_json",
+                ),
+                "session_id = ?",
+                arrayOf(sessionId.toString()),
+                null,
+                null,
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("level2", cursor.getString(0))
+                assertEquals(44.0, cursor.getDouble(1), 0.001)
+                assertEquals(66.5, cursor.getDouble(2), 0.001)
+                assertEquals(6.8, cursor.getDouble(3), 0.001)
+                assertEquals(3.4, cursor.getDouble(4), 0.001)
+                assertEquals(1, cursor.getInt(5))
+                val summary = JSONObject(cursor.getString(6))
+                assertEquals(2, summary.getInt("interruptionCount"))
+                assertEquals("OBSERVED", summary.getString("confidence"))
+                assertEquals(355.5, summary.getDouble("voltageStart"), 0.001)
+                assertEquals(361.0, summary.getDouble("voltageEnd"), 0.001)
+            }
     }
 
     // ---- helpers ------------------------------------------------------------------

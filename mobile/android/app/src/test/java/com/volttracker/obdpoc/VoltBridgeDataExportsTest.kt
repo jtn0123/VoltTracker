@@ -58,6 +58,54 @@ class VoltBridgeDataExportsTest {
         shadowOf(Looper.getMainLooper()).idle()
     }
 
+    // ---- backup forwarders ------------------------------------------------------------------
+
+    @Test
+    fun exportDebugBundleUsesCurrentBridgeStateAndStorageJson() {
+        activity.appStatePayload = JSONObject().put("state", "ready").toString()
+        activity.storageJson = JSONObject().put("sessions", 3).toString()
+
+        val payload = JSONObject(dataExports.exportDebugBundle())
+        val content = JSONObject(payload.getString("content"))
+
+        assertTrue(payload.getBoolean("ok"))
+        assertEquals("ready", content.getJSONObject("appState").getString("state"))
+        assertEquals(3, content.getJSONObject("storage").getInt("sessions"))
+    }
+
+    @Test
+    fun backupForwardersMarshalThroughControllerBlockedPaths() {
+        activity.loggingActive = true
+        dataExports.shareBackup()
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+
+        activity.lastStatusState = null
+        activity.lastStatusBlocked = false
+        activity.loggingActive = false
+        dataExports.shareEncryptedBackup("  short  ")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+
+        activity.lastStatusState = null
+        activity.lastStatusBlocked = false
+        activity.loggingActive = true
+        dataExports.restoreBackup()
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+
+        activity.lastStatusState = null
+        activity.lastStatusBlocked = false
+        activity.loggingActive = false
+        dataExports.restoreEncryptedBackup("   ")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
     // ---- clearStoredData ---------------------------------------------------------------------
 
     @Test
@@ -85,6 +133,33 @@ class VoltBridgeDataExportsTest {
         assertEquals(0, activity.store.clearAllDataCalls)
         assertEquals("blocked", activity.lastStatusState)
         assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun clearStoredDataBlocksIfLoggingStartsAfterConfirmation() {
+        activity.loggingActive = false
+        activity.activateLoggingBeforeConfirmed = true
+
+        dataExports.clearStoredData()
+        drain()
+
+        assertEquals("Clear stored data?", activity.lastConfirmationTitle)
+        assertEquals(0, activity.store.clearAllDataCalls)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun clearStoredDataReportsBlockedWhenStoreClearThrows() {
+        activity.store.throwClearAllData = true
+
+        dataExports.clearStoredData()
+        drain()
+
+        assertEquals(1, activity.store.clearAllDataCalls)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+        assertEquals(0, activity.storageSummaryCalls)
     }
 
     // ---- exportDetailedSignalLog -------------------------------------------------------------
@@ -172,6 +247,39 @@ class VoltBridgeDataExportsTest {
         assertEquals("storage_unavailable", payload.optString("error"))
     }
 
+    // ---- trip export forwarders ---------------------------------------------------------------
+
+    @Test
+    fun tripExportForwardersTrimClampAndUseExpectedFormats() {
+        val longRouteKey = "  " + "r".repeat(BRIDGE_MAX_LABEL_LEN + 20) + "  "
+
+        assertTrue(JSONObject(dataExports.exportTripGpx(longRouteKey)).optBoolean("ok"))
+        assertEquals("gpx", activity.lastExportFormat)
+        assertEquals(BRIDGE_MAX_LABEL_LEN, activity.lastExportRouteKey!!.length)
+
+        dataExports.exportTripCsv(" 12:1000:2000 ")
+        assertEquals("csv", activity.lastExportFormat)
+        assertEquals("12:1000:2000", activity.lastExportRouteKey)
+
+        dataExports.exportAllTripsCsv()
+        assertEquals("csv_all", activity.lastExportFormat)
+        assertNull(activity.lastExportRouteKey)
+
+        dataExports.exportChargeSessionsCsv(" 0.21 ")
+        assertEquals("csv_charges", activity.lastExportFormat)
+        assertEquals("0.21", activity.lastExportRouteKey)
+    }
+
+    @Test
+    fun shareTripCardUsesTheWiderDetailClamp() {
+        val cardJson = "x".repeat(BRIDGE_MAX_LABEL_LEN + 50)
+
+        dataExports.shareTripCard(cardJson)
+
+        assertEquals("card", activity.lastExportFormat)
+        assertEquals(cardJson.length, activity.lastExportRouteKey!!.length)
+    }
+
     // ---- deleteDetailedSignalLog -------------------------------------------------------------
 
     @Test
@@ -190,6 +298,18 @@ class VoltBridgeDataExportsTest {
     @Test
     fun deleteDetailedSignalLogReportsBlockedWhenNothingWasRemoved() {
         activity.store.deleteReturn = 0
+
+        dataExports.deleteDetailedSignalLog("42")
+        drain()
+
+        assertEquals(42L, activity.store.lastDeletedId)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun deleteDetailedSignalLogReportsBlockedWhenStoreThrows() {
+        activity.store.throwDeleteEnhancedCapability = true
 
         dataExports.deleteDetailedSignalLog("42")
         drain()
@@ -228,6 +348,18 @@ class VoltBridgeDataExportsTest {
     @Test
     fun markTripNotTripReportsBlockedWhenStoreReportsNoChange() {
         activity.store.markTripReturn = false
+
+        dataExports.markTripNotTrip("12:1000:2000")
+        drain()
+
+        assertEquals("12:1000:2000", activity.store.lastMarkedTripRouteKey)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun markTripNotTripReportsBlockedWhenStoreThrows() {
+        activity.store.throwMarkTrip = true
 
         dataExports.markTripNotTrip("12:1000:2000")
         drain()
@@ -288,11 +420,89 @@ class VoltBridgeDataExportsTest {
     }
 
     @Test
+    fun setTripLabelTrimsAndClampsBeforePersisting() {
+        activity.store.setTripLabelReturn = true
+        val longLabel = "  " + "x".repeat(com.volttracker.obdpoc.data.ObdTripLabels.MAX_LABEL_LEN + 20) + "  "
+
+        dataExports.setTripLabel("12:1000:2000", longLabel)
+        drain()
+
+        assertEquals(com.volttracker.obdpoc.data.ObdTripLabels.MAX_LABEL_LEN, activity.store.lastLabelValue!!.length)
+        assertEquals("ready", activity.lastStatusState)
+    }
+
+    @Test
+    fun setTripLabelReportsBlockedWhenStoreThrows() {
+        activity.store.throwSetTripLabel = true
+
+        dataExports.setTripLabel("12:1000:2000", "x")
+        drain()
+
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
     fun setTripLabelRejectsBlankRouteKeyWithoutTouchingStore() {
         dataExports.setTripLabel("   ", "x")
         drain()
 
         assertNull(activity.store.lastLabelRouteKey)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    // ---- setTripFavorite (M4) -----------------------------------------------------------------
+
+    @Test
+    fun setTripFavoritePersistsTrueAndRefreshesStorageOnSuccess() {
+        activity.store.setTripFavoriteReturn = true
+
+        dataExports.setTripFavorite("12:1000:2000", true)
+        drain()
+
+        assertEquals("12:1000:2000", activity.store.lastFavoriteRouteKey)
+        assertEquals(true, activity.store.lastFavoriteValue)
+        assertEquals("ready", activity.lastStatusState)
+        assertFalse(activity.lastStatusBlocked)
+        assertTrue(activity.storageSummaryCalls > 0)
+    }
+
+    @Test
+    fun setTripFavoritePersistsFalseAndReportsRemoved() {
+        activity.store.setTripFavoriteReturn = true
+
+        dataExports.setTripFavorite("12:1000:2000", false)
+        drain()
+
+        assertEquals(false, activity.store.lastFavoriteValue)
+        assertEquals("ready", activity.lastStatusState)
+        assertFalse(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun setTripFavoriteReportsBlockedWhenStoreRejectsOrThrows() {
+        activity.store.setTripFavoriteReturn = false
+        dataExports.setTripFavorite("12:1000:2000", true)
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+
+        activity.lastStatusState = null
+        activity.lastStatusBlocked = false
+        activity.store.throwSetTripFavorite = true
+        dataExports.setTripFavorite("12:1000:2000", true)
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun setTripFavoriteRejectsBlankRouteKeyWithoutTouchingStore() {
+        dataExports.setTripFavorite("   ", true)
+        drain()
+
+        assertNull(activity.store.lastFavoriteRouteKey)
         assertEquals("blocked", activity.lastStatusState)
         assertTrue(activity.lastStatusBlocked)
     }
@@ -352,8 +562,61 @@ class VoltBridgeDataExportsTest {
     }
 
     @Test
+    fun addMaintenanceEntryTreatsMalformedJsonAsEmptyForm() {
+        dataExports.addMaintenanceEntry("{not-json")
+        drain()
+
+        assertEquals(Long.MIN_VALUE, activity.store.lastMaintenanceCreatedAtMs)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
     fun addMaintenanceEntryReportsBlockedWhenStoreInsertFails() {
         activity.store.addMaintenanceReturn = -1L
+
+        dataExports.addMaintenanceEntry(JSONObject().put("type", "Coolant").toString())
+        drain()
+
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun addMaintenanceEntryReportsBlockedWhenStorageUnavailable() {
+        activity.localStore = null
+
+        dataExports.addMaintenanceEntry(JSONObject().put("type", "Coolant").toString())
+        drain()
+
+        assertEquals(Long.MIN_VALUE, activity.store.lastMaintenanceCreatedAtMs)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun addMaintenanceEntrySanitizesInvalidNumericFields() {
+        activity.store.addMaintenanceReturn = 4L
+
+        dataExports.addMaintenanceEntry(
+            JSONObject()
+                .put("type", "Brake inspection")
+                .put("odometerKm", -5.0)
+                .put("intervalKm", 0.0)
+                .put("intervalMonths", -1)
+                .toString(),
+        )
+        drain()
+
+        assertNull(activity.store.lastMaintenanceOdometerKm)
+        assertNull(activity.store.lastMaintenanceIntervalKm)
+        assertNull(activity.store.lastMaintenanceIntervalMonths)
+        assertEquals("ready", activity.lastStatusState)
+    }
+
+    @Test
+    fun addMaintenanceEntryReportsBlockedWhenStoreThrows() {
+        activity.store.throwAddMaintenance = true
 
         dataExports.addMaintenanceEntry(JSONObject().put("type", "Coolant").toString())
         drain()
@@ -395,6 +658,16 @@ class VoltBridgeDataExportsTest {
     }
 
     @Test
+    fun getMaintenanceLogReturnsErrorWhenStoreReadThrows() {
+        activity.store.throwMaintenanceLog = true
+
+        val result = JSONObject(dataExports.getMaintenanceLog())
+
+        assertEquals(false, result.getBoolean("ok"))
+        assertEquals("maintenance_log_failed", result.getString("error"))
+    }
+
+    @Test
     fun deleteMaintenanceEntryRemovesRowAndReportsReadyOnSuccess() {
         activity.store.deleteMaintenanceReturn = 1
 
@@ -404,6 +677,23 @@ class VoltBridgeDataExportsTest {
         assertEquals(42L, activity.store.lastDeletedMaintenanceId)
         assertEquals("ready", activity.lastStatusState)
         assertTrue(activity.storageSummaryCalls > 0)
+    }
+
+    @Test
+    fun deleteMaintenanceEntryReportsBlockedWhenNothingWasRemovedOrStoreThrows() {
+        activity.store.deleteMaintenanceReturn = 0
+        dataExports.deleteMaintenanceEntry("42")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+
+        activity.lastStatusState = null
+        activity.lastStatusBlocked = false
+        activity.store.throwDeleteMaintenance = true
+        dataExports.deleteMaintenanceEntry("42")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
     }
 
     @Test
@@ -426,16 +716,24 @@ class VoltBridgeDataExportsTest {
         lateinit var store: RecordingStore
 
         var loggingActive = false
+        var activateLoggingBeforeConfirmed = false
         var storageSummaryCalls = 0
 
         var lastConfirmationTitle: String? = null
 
         var lastStatusState: String? = null
         var lastStatusBlocked = false
+        var lastExportRouteKey: String? = null
+        var lastExportFormat: String? = null
+        var exportPayload = JSONObject().put("ok", true).toString()
+        var appStatePayload = JSONObject().put("state", "idle").toString()
+        var storageJson = JSONObject().put("sessions", 0).toString()
 
         override fun onCreate(savedInstanceState: Bundle?) {
             store = RecordingStore(this)
             localStore = store
+            dataBackup = DataBackup(this)
+            backupController = BackupController(this, dataBackup!!, null)
         }
 
         override fun runOnBackground(task: Runnable) {
@@ -457,6 +755,19 @@ class VoltBridgeDataExportsTest {
             storageSummaryCalls += 1
         }
 
+        override fun exportTripFromBridge(
+            routeKey: String?,
+            format: String?,
+        ): String {
+            lastExportRouteKey = routeKey
+            lastExportFormat = format
+            return exportPayload
+        }
+
+        override fun getAppStateJson(): String = appStatePayload
+
+        override fun getStorageSummaryJson(): String = storageJson
+
         override fun confirmBridgeAction(
             title: String,
             message: String,
@@ -464,6 +775,9 @@ class VoltBridgeDataExportsTest {
             onConfirmed: Runnable,
         ) {
             lastConfirmationTitle = title
+            if (activateLoggingBeforeConfirmed) {
+                loggingActive = true
+            }
             onConfirmed.run()
         }
     }
@@ -475,8 +789,10 @@ class VoltBridgeDataExportsTest {
         var open = true
 
         var clearAllDataCalls = 0
+        var throwClearAllData = false
 
         var deleteReturn = 0
+        var throwDeleteEnhancedCapability = false
         var lastDeletedId = Long.MIN_VALUE
 
         var singleExport = JSONObject()
@@ -486,11 +802,18 @@ class VoltBridgeDataExportsTest {
         var lastBulkExportLimit = Int.MIN_VALUE
 
         var markTripReturn = false
+        var throwMarkTrip = false
         var lastMarkedTripRouteKey: String? = null
 
         var setTripLabelReturn = false
+        var throwSetTripLabel = false
         var lastLabelRouteKey: String? = null
         var lastLabelValue: String? = null
+
+        var setTripFavoriteReturn = false
+        var throwSetTripFavorite = false
+        var lastFavoriteRouteKey: String? = null
+        var lastFavoriteValue: Boolean? = null
 
         var addMaintenanceReturn = 7L
         var lastMaintenanceCreatedAtMs = Long.MIN_VALUE
@@ -499,11 +822,14 @@ class VoltBridgeDataExportsTest {
         var lastMaintenanceNote: String? = null
         var lastMaintenanceIntervalKm: Double? = Double.NaN
         var lastMaintenanceIntervalMonths: Int? = Int.MIN_VALUE
+        var throwAddMaintenance = false
 
         var maintenanceLog = org.json.JSONArray()
+        var throwMaintenanceLog = false
         var lastMaintenanceLogLimit = Int.MIN_VALUE
 
         var deleteMaintenanceReturn = 0
+        var throwDeleteMaintenance = false
         var lastDeletedMaintenanceId = Long.MIN_VALUE
 
         override val isOpen: Boolean
@@ -511,10 +837,16 @@ class VoltBridgeDataExportsTest {
 
         override fun clearAllData() {
             clearAllDataCalls += 1
+            if (throwClearAllData) {
+                throw IllegalStateException("clear failed")
+            }
         }
 
         override fun deleteEnhancedCapability(id: Long): Int {
             lastDeletedId = id
+            if (throwDeleteEnhancedCapability) {
+                throw IllegalStateException("delete failed")
+            }
             return deleteReturn
         }
 
@@ -530,6 +862,9 @@ class VoltBridgeDataExportsTest {
 
         override fun markTripNotTrip(routeKey: String?): Boolean {
             lastMarkedTripRouteKey = routeKey
+            if (throwMarkTrip) {
+                throw IllegalStateException("mark failed")
+            }
             return markTripReturn
         }
 
@@ -539,7 +874,22 @@ class VoltBridgeDataExportsTest {
         ): Boolean {
             lastLabelRouteKey = routeKey
             lastLabelValue = label
+            if (throwSetTripLabel) {
+                throw IllegalStateException("label failed")
+            }
             return setTripLabelReturn
+        }
+
+        override fun setTripFavorite(
+            routeKey: String?,
+            favorite: Boolean,
+        ): Boolean {
+            lastFavoriteRouteKey = routeKey
+            lastFavoriteValue = favorite
+            if (throwSetTripFavorite) {
+                throw IllegalStateException("favorite failed")
+            }
+            return setTripFavoriteReturn
         }
 
         override fun addMaintenanceEntry(
@@ -556,16 +906,25 @@ class VoltBridgeDataExportsTest {
             lastMaintenanceNote = note
             lastMaintenanceIntervalKm = intervalKm
             lastMaintenanceIntervalMonths = intervalMonths
+            if (throwAddMaintenance) {
+                throw IllegalStateException("maintenance failed")
+            }
             return addMaintenanceReturn
         }
 
         override fun getMaintenanceLogJson(limit: Int): org.json.JSONArray {
+            if (throwMaintenanceLog) {
+                throw IllegalStateException("maintenance log failed")
+            }
             lastMaintenanceLogLimit = limit
             return maintenanceLog
         }
 
         override fun deleteMaintenanceEntry(id: Long): Int {
             lastDeletedMaintenanceId = id
+            if (throwDeleteMaintenance) {
+                throw IllegalStateException("delete failed")
+            }
             return deleteMaintenanceReturn
         }
     }

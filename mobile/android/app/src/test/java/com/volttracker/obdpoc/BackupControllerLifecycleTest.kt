@@ -69,6 +69,31 @@ class BackupControllerLifecycleTest {
     }
 
     @Test
+    fun restorePickerLaunchFailureClearsInFlightState() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            activity.rejectRestorePicker = true
+
+            activity.backupController!!.launchRestorePicker()
+
+            assertNull(activity.launchedRestoreIntent)
+            assertEquals("blocked", activity.lastState)
+            assertEquals("Could not open the file picker.", activity.lastDetail)
+
+            activity.rejectRestorePicker = false
+            activity.backupController!!.launchRestorePicker()
+
+            assertNotNull(activity.launchedRestoreIntent)
+            assertEquals("ready", activity.lastState)
+            assertEquals("Choose a Volt Tracker backup file.", activity.lastDetail)
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
     fun restorePickerCancelReportsNoFileSelected() {
         val controller =
             Robolectric.buildActivity(HarnessActivity::class.java).create()
@@ -85,6 +110,27 @@ class BackupControllerLifecycleTest {
     }
 
     @Test
+    fun restoreWorkerUnavailablePublishesFailedProgress() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+
+            activity.backupController!!.onRestorePickerResult(
+                Activity.RESULT_OK,
+                Intent().setData(Uri.parse("content://volttracker.test/backup.db")),
+            )
+
+            assertEquals("blocked", activity.lastState)
+            assertEquals("Could not start the restore worker.", activity.lastDetail)
+            assertTrue(activity.progressTitles.contains("Reading backup"))
+            assertEquals("Restore failed", activity.progressTitles.last())
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
     fun restorePickerBlocksSecondLaunchWhilePickerIsOpen() {
         val controller =
             Robolectric.buildActivity(HarnessActivity::class.java).create()
@@ -94,6 +140,31 @@ class BackupControllerLifecycleTest {
             activity.backupController!!.launchEncryptedRestorePicker("old1")
             activity.backupController!!.launchRestorePicker()
 
+            assertEquals("blocked", activity.lastState)
+            assertEquals("Backup file picker is already open.", activity.lastDetail)
+        } finally {
+            destroyQuietly(controller)
+        }
+    }
+
+    @Test
+    fun restoredPickerInFlightStateBlocksNewPickerLaunch() {
+        val controller =
+            Robolectric.buildActivity(HarnessActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val state =
+                Bundle().apply {
+                    putBoolean("volttracker.restore_picker_in_flight", true)
+                }
+
+            activity.backupController =
+                BackupController(activity, DataBackup(activity), null).also {
+                    it.restoreState(state)
+                }
+            activity.backupController!!.launchRestorePicker()
+
+            assertNull(activity.launchedRestoreIntent)
             assertEquals("blocked", activity.lastState)
             assertEquals("Backup file picker is already open.", activity.lastDetail)
         } finally {
@@ -153,6 +224,8 @@ class BackupControllerLifecycleTest {
 
         @JvmField var rejectStartService = false
 
+        @JvmField var rejectRestorePicker = false
+
         @JvmField var launchedRestoreIntent: Intent? = null
 
         @JvmField var lastState: String? = null
@@ -177,6 +250,9 @@ class BackupControllerLifecycleTest {
         }
 
         override fun launchRestoreFilePicker(intent: Intent) {
+            if (rejectRestorePicker) {
+                throw IllegalStateException("picker unavailable")
+            }
             launchedRestoreIntent = intent
         }
 

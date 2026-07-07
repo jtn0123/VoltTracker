@@ -120,6 +120,17 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun vinRejectsTruncatedPositiveResponses() {
+        val shortVin = "1G1ZD5ST8JF20202"
+        val hex = StringBuilder("490201")
+        for (c in shortVin.toCharArray()) {
+            hex.append(String.format(Locale.US, "%02X", c.code))
+        }
+
+        assertNull(ObdProtocol.parseVin(hex.toString()))
+    }
+
+    @Test
     fun stateOfChargeDecodesPercent() {
         // 015B uses A * 100 / 255 (community sheet, mode-01 PID 5B).
         assertEquals(0, ObdProtocol.parseStateOfChargePct("415B00"))
@@ -131,6 +142,7 @@ class ObdProtocolTest {
     fun adapterVoltageDecodes() {
         assertEquals(14.3f, ObdProtocol.parseVoltage("14.3V")!!, 0.001f)
         assertEquals(12.0f, ObdProtocol.parseVoltage("12.0V")!!, 0.001f)
+        assertEquals(14.3f, ObdProtocol.parseVoltage("OK 14.3V")!!, 0.001f)
     }
 
     @Test
@@ -372,6 +384,8 @@ class ObdProtocolTest {
         // A genuinely unmodeled non-zero frame is NOT benign: it stays a real parse failure.
         assertFalse(ObdProtocol.isBenignSentinelResponse("22203F", "62203F17"))
         assertFalse(ObdProtocol.isBenignSentinelResponse("010D", "410D3C"))
+        assertFalse(ObdProtocol.isBenignSentinelResponse("0902", "490201"))
+        assertFalse(ObdProtocol.isBenignSentinelResponse("22", "62"))
         assertFalse("NO DATA is not a positive sentinel", ObdProtocol.isBenignSentinelResponse("22432A", "NO DATA"))
     }
 
@@ -803,6 +817,16 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun diagnosticTroubleCodesRecoverWhenMarkerIsSplitAcrossLines() {
+        // A socket read can split the positive-response marker itself. The per-line pass misses it,
+        // so the joined fallback must still recover the DTC from the clean hex stream.
+        val codes = ObdProtocol.parseDiagnosticTroubleCodes("03", "4\r3 01 01 33\r>", "")
+
+        assertEquals(1, codes.size)
+        assertEquals("P0133", codes[0].code)
+    }
+
+    @Test
     fun segmentedDiagnosticTroubleCodesDecodeAcrossElmSegments() {
         // ELM segmented output (ATH0 + CAF1): total-length line "00A" (10 bytes) then
         // "N:"-indexed data lines. 43 + count 04 + four codes spread over two segments.
@@ -1023,6 +1047,15 @@ class ObdProtocolTest {
 
         val complete = "41 0D 50 41 32 FF 9C\r>"
         assertTrue(ObdProtocol.responseContainsAllMode01Pids(complete, listOf("0D", "32")))
+    }
+
+    @Test
+    fun responseContainsAllMode01Pids_odometerNeedsFourBytes() {
+        val truncated = "41 0D 50 41 A6 00 12 D6\r>"
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(truncated, listOf("0D", "A6")))
+
+        val complete = "41 0D 50 41 A6 00 12 D6 87\r>"
+        assertTrue(ObdProtocol.responseContainsAllMode01Pids(complete, listOf("0D", "A6")))
     }
 
     @Test

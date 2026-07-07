@@ -1,12 +1,15 @@
 package com.volttracker.obdpoc
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.webkit.WebView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -127,6 +130,40 @@ class MainActivityPermissionTest {
     }
 
     @Test
+    fun disabledBluetoothBlocksConnectAndLaunchesEnablePrompt() {
+        val activity = rawHarnessActivity()
+        grantBluetoothPermissions(activity)
+        val manager = activity.getSystemService(BluetoothManager::class.java)
+        shadowOf(manager.adapter).setEnabled(false)
+
+        activity.startObdService(ObdService.ACTION_CONNECT, ADDRESS, NAME)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Turn on Bluetooth to connect to the OBD adapter.", activity.lastDetail)
+        assertEquals(listOf(BluetoothAdapter.ACTION_REQUEST_ENABLE), activity.startedActivityActions)
+        assertNull(shadowOf(activity).nextStartedService)
+    }
+
+    @Test
+    fun disabledBluetoothReportsManualSettingsWhenEnableAndSettingsLaunchesFail() {
+        val activity = rawHarnessActivity()
+        grantBluetoothPermissions(activity)
+        val manager = activity.getSystemService(BluetoothManager::class.java)
+        shadowOf(manager.adapter).setEnabled(false)
+        activity.startActivityFailure = IllegalStateException("settings unavailable")
+
+        activity.startObdService(ObdService.ACTION_CONNECT, ADDRESS, NAME)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Open Android Bluetooth settings, then try again.", activity.lastDetail)
+        assertEquals(
+            listOf(BluetoothAdapter.ACTION_REQUEST_ENABLE, android.provider.Settings.ACTION_BLUETOOTH_SETTINGS),
+            activity.startedActivityActions,
+        )
+        assertNull(shadowOf(activity).nextStartedService)
+    }
+
+    @Test
     fun grantWithoutPendingConnectDoesNotStartAService() {
         val activity = harnessActivity()
         grantBluetoothPermissions(activity)
@@ -169,12 +206,86 @@ class MainActivityPermissionTest {
         assertEquals(2, activity.startServiceCalls)
     }
 
+    @Test
+    fun serviceStartFailureAfterPermissionsPublishesBlockedStatus() {
+        val activity = harnessActivity()
+        grantBluetoothPermissions(activity)
+        activity.startServiceFailure = SecurityException("foreground service denied")
+
+        activity.startObdService(ObdService.ACTION_CONNECT, ADDRESS, NAME)
+
+        assertEquals(1, activity.startForegroundServiceCalls)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Android blocked OBD logging startup. Check permissions and try again.", activity.lastDetail)
+    }
+
+    @Test
+    fun publishRestoreProgressSendsDashboardPayloadThroughPublisher() {
+        val activity = rawHarnessActivity()
+        val webView = WebView(activity)
+        val publisher = DashboardPublisher(webView, { true }, Runnable::run)
+        publisher.setPageReady(true)
+        activity.installDashboardPublisher(publisher)
+
+        activity.publishRestoreProgress(
+            visible = true,
+            busy = true,
+            title = "Reading backup",
+            detail = "Copying bytes",
+            tone = "busy",
+            phase = "copy",
+            bytesDone = 50L,
+            bytesTotal = 100L,
+            rowsDone = -1L,
+            rowsTotal = -1L,
+            percent = 50,
+            etaSeconds = 4L,
+            operation = "restore",
+        )
+
+        val script = shadowOf(webView).getLastEvaluatedJavascript()
+        assertNotNull(script)
+        assertTrue(script!!.contains("window.VoltTrackerNative.setRestoreProgress("))
+        assertTrue(script.contains("\\\"title\\\":\\\"Reading backup\\\""))
+        assertTrue(script.contains("\\\"bytesDone\\\":50"))
+        assertTrue(script.contains("\\\"operation\\\":\\\"restore\\\""))
+
+        activity.publishDashboardPayload("setStatus", "{\"state\":\"ready\"}")
+
+        val statusScript = shadowOf(webView).getLastEvaluatedJavascript()
+        assertNotNull(statusScript)
+        assertTrue(statusScript!!.contains("window.VoltTrackerNative.setStatus("))
+        assertTrue(statusScript.contains("\\\"state\\\":\\\"ready\\\""))
+    }
+
+    @Test
+    fun rememberDevicePublishesRefreshesAndStatus() {
+        val activity = rawHarnessActivity()
+        activity.deviceCatalog = DeviceCatalog(activity, activity.getSharedPreferences("remember-device-test", 0))
+
+        activity.rememberDevice(ADDRESS, NAME)
+
+        assertEquals(1, activity.publishDeviceListCalls)
+        assertEquals(1, activity.publishStorageSummaryCalls)
+        assertEquals("ready", activity.lastState)
+        assertEquals("Remembered TestOBD.", activity.lastDetail)
+    }
+
+    private fun MainActivity.installDashboardPublisher(publisher: DashboardPublisher) {
+        val field = MainActivity::class.java.getDeclaredField("dashboardPublisher")
+        field.isAccessible = true
+        field.set(this, publisher)
+    }
+
     private fun harnessActivity(): HarnessActivity {
-        val activity = Robolectric.buildActivity(HarnessActivity::class.java).create().get()
+        val activity = rawHarnessActivity()
         val manager = activity.getSystemService(BluetoothManager::class.java)
         shadowOf(manager.adapter).setEnabled(true)
         return activity
     }
+
+    private fun rawHarnessActivity(): HarnessActivity =
+        Robolectric.buildActivity(HarnessActivity::class.java).create().get()
 
     private fun grantBluetoothPermissions(activity: HarnessActivity) {
         shadowOf(activity).grantPermissions(
@@ -204,12 +315,23 @@ class MainActivityPermissionTest {
         var openedAppSettings = false
         var startServiceFailure: RuntimeException? = null
         var startServiceCalls = 0
+        var startForegroundServiceCalls = 0
+        var startActivityFailure: RuntimeException? = null
+        val startedActivityActions = mutableListOf<String?>()
+        var publishDeviceListCalls = 0
+        var publishStorageSummaryCalls = 0
 
         override fun onCreate(savedInstanceState: Bundle?) {
             permissionGate = PermissionGate(this) { requestedPermissions += it }
         }
 
-        override fun publishDeviceList() {}
+        override fun publishDeviceList() {
+            publishDeviceListCalls += 1
+        }
+
+        override fun publishStorageSummary() {
+            publishStorageSummaryCalls += 1
+        }
 
         override fun publishStatus(
             state: String?,
@@ -228,7 +350,15 @@ class MainActivityPermissionTest {
         }
 
         override fun startActivity(intent: Intent?) {
+            startedActivityActions += intent?.action
+            startActivityFailure?.let { throw it }
             // Robolectric records the launch; nothing to render in unit tests.
+        }
+
+        override fun startForegroundService(service: Intent?): ComponentName? {
+            startForegroundServiceCalls += 1
+            startServiceFailure?.let { throw it }
+            return super.startForegroundService(service)
         }
 
         override fun startService(service: Intent?): ComponentName? {

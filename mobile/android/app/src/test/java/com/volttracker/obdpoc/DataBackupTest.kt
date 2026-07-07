@@ -1,14 +1,19 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.database.sqlite.SQLiteDatabase
+import android.net.Uri
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdStoreMaintenance
+import com.volttracker.obdpoc.data.VoltTrackerDb
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -19,6 +24,7 @@ import java.io.FileWriter
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 
 /** Verifies [DataBackup.isVoltTrackerBackup] accepts only real Volt Tracker databases. */
 @RunWith(RobolectricTestRunner::class)
@@ -29,6 +35,21 @@ class DataBackupTest {
         assertFalse(DataBackup.hasMinimumPassphrase(null))
         assertFalse(DataBackup.hasMinimumPassphrase("hunter2"))
         assertTrue(DataBackup.hasMinimumPassphrase("hunter22"))
+    }
+
+    @Test
+    fun encryptedBackupPassphraseCountsUserPerceivedCharacters() {
+        assertFalse(
+            "four emoji are eight UTF-16 units but only four user-perceived characters",
+            DataBackup.hasMinimumPassphrase("🙂🙂🙂🙂"),
+        )
+        assertTrue(DataBackup.hasMinimumPassphrase("  🙂🙂🙂🙂🙂🙂🙂🙂  "))
+    }
+
+    @Test
+    fun redactDebugLogTextTreatsNullAndEmptyAsEmptyText() {
+        assertEquals("", DataBackup.redactDebugLogText(null))
+        assertEquals("", DataBackup.redactDebugLogText(""))
     }
 
     @Test
@@ -207,6 +228,28 @@ class DataBackupTest {
     }
 
     @Test
+    fun backupBuildersReturnNullForNullStoreOrUnavailableBackupDir() {
+        val context = RuntimeEnvironment.getApplication()
+        val backup = DataBackup(context)
+        assertNull(backup.buildBackupFile(null))
+        assertNull(backup.buildEncryptedBackupFile(null, "hunter22"))
+
+        val store = ObdLocalStore(context)
+        try {
+            store.clearAllData()
+            assertNull(backup.buildEncryptedBackupFile(store, "short"))
+
+            val cacheRoot = File(context.cacheDir, "backup-cache-root-file").apply { writeText("not a directory") }
+            val badBackup = DataBackup(contextWithCacheDir(cacheRoot))
+
+            assertNull(badBackup.buildBackupFile(store))
+            assertNull(badBackup.buildEncryptedBackupFile(store, "hunter22"))
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
     fun sweepClearsTransientRestoreFilesFromPriorRuns() {
         val context = RuntimeEnvironment.getApplication()
         val restoreDb = File(context.cacheDir, "restore-stale.db")
@@ -241,6 +284,23 @@ class DataBackupTest {
 
         assertFalse(plaintext.exists())
         assertFalse(encrypted.exists())
+        assertTrue(unrelated.exists())
+        unrelated.delete()
+    }
+
+    @Test
+    fun sweepClearsTransientDebugExportsFromPriorRuns() {
+        val context = RuntimeEnvironment.getApplication()
+        val exports = File(context.cacheDir, "exports")
+        assertTrue(exports.mkdirs() || exports.isDirectory)
+        val staleExport = File(exports, "volttracker-debug-summary-stale.json")
+        val unrelated = File(exports, "keep.txt")
+        writeFile(staleExport, "{}")
+        writeFile(unrelated, "keep me")
+
+        DataBackup(context).sweepTransientCacheFiles()
+
+        assertFalse(staleExport.exists())
         assertTrue(unrelated.exists())
         unrelated.delete()
     }
@@ -307,7 +367,9 @@ class DataBackupTest {
         assertTrue(sessionLogDir.mkdirs() || sessionLogDir.isDirectory)
         assertTrue(appLogDir.mkdirs() || appLogDir.isDirectory)
         val sessionLog = File(sessionLogDir, "session-1000-obd.jsonl")
+        val skippedDirectory = File(sessionLogDir, "session-directory.jsonl")
         val appLogFile = File(appLogDir, "app.log")
+        assertTrue(skippedDirectory.mkdir())
         val sessionLatitude = "34." + "052345"
         val sessionLongitude = "-118." + "252233"
         writeFile(
@@ -342,7 +404,13 @@ class DataBackupTest {
         assertNotNull(exported.optJSONObject("appState"))
         assertNotNull(exported.optJSONObject("storage"))
         val diagnostics = exported.getJSONObject("diagnostics")
-        val sessionTrace = diagnostics.getJSONArray("sessionCommandTrace").getJSONObject(0)
+        val sessionTraceArray = diagnostics.getJSONArray("sessionCommandTrace")
+        assertEquals(
+            "directories that match the session filename pattern must be skipped",
+            1,
+            sessionTraceArray.length(),
+        )
+        val sessionTrace = sessionTraceArray.getJSONObject(0)
         assertEquals("session-1000-obd.jsonl", sessionTrace.optString("name"))
         assertTrue(sessionTrace.optString("text").contains("\"command\":\"010C\""))
         assertFalse(sessionTrace.optString("text").contains("AA:BB:CC:DD:EE:FF"))
@@ -357,6 +425,365 @@ class DataBackupTest {
         file.delete()
         sessionLog.delete()
         appLogFile.delete()
+    }
+
+    @Test
+    fun debugExportRealignsTailWhenCutStartsInsideUtf8Character() {
+        val context = RuntimeEnvironment.getApplication()
+        val sessionLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(sessionLogDir.mkdirs() || sessionLogDir.isDirectory)
+        val sessionLog = File(sessionLogDir, "session-utf8-tail-obd.jsonl")
+        val maxTailBytes = 64 * 1024
+        val prefix =
+            byteArrayOf(0xE2.toByte(), 0x82.toByte(), 0xAC.toByte()) +
+                "partial-line\nkept-line\n".toByteArray(StandardCharsets.UTF_8)
+        val bytes = prefix + ByteArray(maxTailBytes + 1 - prefix.size) { 'x'.code.toByte() }
+        Files.write(sessionLog.toPath(), bytes)
+
+        val result =
+            JSONObject(
+                DataBackup(context).exportDebugBundle(
+                    "{\"session\":{\"state\":\"idle\"}}",
+                    "{\"sampleCount\":0}",
+                ),
+            )
+
+        assertTrue(result.optBoolean("ok"))
+        val file = File(result.getString("path"))
+        val exported =
+            JSONObject(
+                String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8),
+            )
+        val text =
+            exported
+                .getJSONObject("diagnostics")
+                .getJSONArray("sessionCommandTrace")
+                .getJSONObject(0)
+                .optString("text")
+        assertTrue(
+            "tail should resume at the first full line after the split UTF-8 character",
+            text.startsWith("kept-line"),
+        )
+        assertFalse("tail text should not contain a replacement character", text.contains("\uFFFD"))
+        file.delete()
+        sessionLog.delete()
+    }
+
+    @Test
+    fun debugExportTailsLargeLogsFromALineBoundaryBeforeRedaction() {
+        val context = RuntimeEnvironment.getApplication()
+        val sessionLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(sessionLogDir.mkdirs() || sessionLogDir.isDirectory)
+        val sessionLog = File(sessionLogDir, "session-2000-obd.jsonl")
+        val keptLine = "{\"type\":\"command\",\"payload\":{\"command\":\"010D\",\"response\":\"410D28\"}}\n"
+        writeFile(
+            sessionLog,
+            "A".repeat(70 * 1024) +
+                " 00:11:22:33:44:55 1G1RD6E45CU" + "112233\n" +
+                keptLine,
+        )
+
+        val result =
+            JSONObject(
+                DataBackup(context).exportDebugBundle(
+                    "{\"session\":{\"state\":\"idle\"}}",
+                    "{\"sampleCount\":0}",
+                ),
+            )
+
+        assertTrue(result.optBoolean("ok"))
+        val file = File(result.getString("path"))
+        val exported =
+            JSONObject(
+                String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8),
+            )
+        val text =
+            exported
+                .getJSONObject("diagnostics")
+                .getJSONArray("sessionCommandTrace")
+                .getJSONObject(0)
+                .optString("text")
+        assertTrue(
+            "tail export should drop the partial first line before redaction, got: $text",
+            text.startsWith("{\"type\":\"command\""),
+        )
+        assertFalse(text.contains("00:11:22:33:44:55"))
+        assertFalse(text.contains("1G1RD6E45CU" + "112233"))
+        file.delete()
+        sessionLog.delete()
+    }
+
+    @Test
+    fun debugExportReportsExceptionsAsJsonErrors() {
+        val brokenContext =
+            object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+                override fun getCacheDir(): File = throw IllegalStateException("cache unavailable")
+            }
+
+        val result =
+            JSONObject(
+                DataBackup(brokenContext).exportDebugBundle(
+                    "{\"session\":{\"state\":\"idle\"}}",
+                    "{\"sampleCount\":0}",
+                ),
+            )
+
+        assertFalse(result.optBoolean("ok", true))
+        assertTrue(result.optString("error").contains("IllegalStateException: cache unavailable"))
+    }
+
+    @Test
+    fun debugExportReportsErrorWhenExportDirCannotBeCreated() {
+        val context = RuntimeEnvironment.getApplication()
+        val cacheRoot = File(context.cacheDir, "debug-export-cache-root-file").apply { writeText("not a directory") }
+
+        val result =
+            JSONObject(
+                DataBackup(contextWithCacheDir(cacheRoot)).exportDebugBundle(
+                    "{\"session\":{\"state\":\"idle\"}}",
+                    "{\"sampleCount\":0}",
+                ),
+            )
+
+        assertFalse(result.optBoolean("ok", true))
+        assertEquals("Could not create export directory.", result.optString("error"))
+    }
+
+    @Test
+    fun stageRestoreFileWithStatusReturnsNoFileForNullUri() {
+        val outcome = DataBackup(RuntimeEnvironment.getApplication()).stageRestoreFileWithStatus(null, null)
+
+        assertFalse(outcome.ok)
+        assertNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.NO_FILE, outcome.status)
+    }
+
+    @Test
+    fun stageRestoreFileWithStatusReportsOpenFailedWhenUriCannotBeRead() {
+        val context = RuntimeEnvironment.getApplication()
+        val missing = File(context.cacheDir, "missing-restore-source.db")
+        assertFalse(missing.exists())
+
+        val outcome = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(missing), null)
+
+        assertFalse(outcome.ok)
+        assertNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.OPEN_FAILED, outcome.status)
+        assertEquals(0L, outcome.bytesRead)
+    }
+
+    @Test
+    fun stageRestoreFileWithStatusAcceptsPlainCurrentBackupAndClearsRollups() {
+        val context = RuntimeEnvironment.getApplication()
+        val backupFile = currentBackupCopy(context, "plain-restore-current.db", seedRollup = true)
+        val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+
+        val outcome =
+            DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(backupFile), null) {
+                snapshots.add(it)
+            }
+
+        assertTrue(outcome.ok)
+        assertNotNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.OK, outcome.status)
+        assertFalse(outcome.encrypted)
+        assertFalse(outcome.migrated)
+        assertTrue("bytesRead should report the copied backup size", outcome.bytesRead > 0L)
+        assertTrue(snapshots.any { it.phase == "Reading backup" && it.bytesDone == 0L })
+        assertTrue(snapshots.any { it.phase == "Checking backup" })
+        assertTrue(snapshots.any { it.phase == "Preparing restore" })
+        assertTrue(snapshots.any { it.phase == "Backup verified" })
+
+        val staged = outcome.file!!
+        val verify = SQLiteDatabase.openDatabase(staged.path, null, SQLiteDatabase.OPEN_READONLY)
+        try {
+            assertEquals(0, rowCount(verify, "session_trip_rollups"))
+            assertEquals(1, rowCount(verify, "obd_sessions"))
+        } finally {
+            verify.close()
+            staged.delete()
+            backupFile.delete()
+        }
+    }
+
+    @Test
+    fun stageRestoreFileWithStatusRejectsPlainTextAsNotBackup() {
+        val context = RuntimeEnvironment.getApplication()
+        val file = File(context.cacheDir, "not-a-restore-db.txt")
+        writeFile(file, "not a sqlite backup")
+
+        val outcome = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(file), null)
+
+        assertFalse(outcome.ok)
+        assertNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.NOT_A_BACKUP, outcome.status)
+        assertFalse(outcome.encrypted)
+        assertEquals(file.length(), outcome.bytesRead)
+        file.delete()
+    }
+
+    @Test
+    fun stageRestoreFileWithStatusRejectsNewerSchemaBackup() {
+        val context = RuntimeEnvironment.getApplication()
+        val file = File(context.cacheDir, "too-new-restore.db")
+        file.delete()
+        val db = SQLiteDatabase.openOrCreateDatabase(file.path, null)
+        try {
+            db.execSQL("CREATE TABLE obd_sessions (_id INTEGER PRIMARY KEY)")
+            db.version = VoltTrackerDb.DATABASE_VERSION + 1
+        } finally {
+            db.close()
+        }
+
+        val outcome = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(file), null)
+
+        assertFalse(outcome.ok)
+        assertNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.TOO_NEW, outcome.status)
+        assertFalse(outcome.encrypted)
+        assertEquals(file.length(), outcome.bytesRead)
+        file.delete()
+    }
+
+    @Test
+    fun stageRestoreEncryptedBackupRequiresPassphraseThenDecryptsShortLegacyPassphrase() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = currentBackupCopy(context, "encrypted-restore-source.db")
+        val encrypted = File(context.cacheDir, "encrypted-restore.vtdb")
+        BackupCrypto.encryptFile(source, encrypted, "short")
+
+        val missing = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(encrypted), null)
+        assertFalse(missing.ok)
+        assertNull(missing.file)
+        assertEquals(DataBackup.RestoreStageStatus.MISSING_PASSPHRASE, missing.status)
+        assertTrue(missing.encrypted)
+        assertEquals(encrypted.length(), missing.bytesRead)
+
+        val restored = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(encrypted), "short")
+
+        assertTrue(restored.ok)
+        assertNotNull(restored.file)
+        assertEquals(DataBackup.RestoreStageStatus.OK, restored.status)
+        assertTrue(restored.encrypted)
+        assertTrue(DataBackup.isVoltTrackerBackup(restored.file))
+        val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+        val restoredWithProgress =
+            DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(encrypted), "short") {
+                snapshots.add(it)
+            }
+        assertTrue(restoredWithProgress.ok)
+        assertTrue(snapshots.any { it.phase == "Decrypting backup" && it.bytesDone == 0L })
+        assertTrue(
+            snapshots.any {
+                it.phase == "Decrypting backup" &&
+                    it.detail == "Encrypted backup unlocked." &&
+                    it.bytesDone == encrypted.length()
+            },
+        )
+        restored.file!!.delete()
+        restoredWithProgress.file!!.delete()
+        encrypted.delete()
+        source.delete()
+    }
+
+    @Test
+    fun stageRestoreEncryptedBackupRejectsWrongPassphrase() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = currentBackupCopy(context, "encrypted-wrong-pass-source.db")
+        val encrypted = File(context.cacheDir, "encrypted-wrong-pass.vtdb")
+        BackupCrypto.encryptFile(source, encrypted, "correct-pass")
+        val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+
+        val outcome =
+            DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(encrypted), "wrong-pass") {
+                snapshots.add(it)
+            }
+
+        assertFalse(outcome.ok)
+        assertNull(outcome.file)
+        assertEquals(DataBackup.RestoreStageStatus.DECRYPT_FAILED, outcome.status)
+        assertTrue(outcome.encrypted)
+        assertEquals(encrypted.length(), outcome.bytesRead)
+        assertTrue(snapshots.any { it.phase == "Decrypting backup" && it.bytesDone == 0L })
+        encrypted.delete()
+        source.delete()
+    }
+
+    @Test
+    fun copyFileEmitsProgressSnapshotsAndCopiesBytes() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = File(context.cacheDir, "copy-source.txt")
+        val dest = File(context.cacheDir, "copy-dest.txt")
+        writeFile(source, "abcdef")
+        val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
+
+        DataBackup.copyFile(
+            source,
+            dest,
+            { snapshots.add(it) },
+            phase = "Copying test",
+            detail = "Copying fixture bytes.",
+        )
+
+        assertEquals("abcdef", dest.readText())
+        assertEquals(0L, snapshots.first().bytesDone)
+        assertEquals(source.length(), snapshots.last().bytesDone)
+        assertTrue(snapshots.all { it.phase == "Copying test" })
+        source.delete()
+        dest.delete()
+    }
+
+    @Test
+    fun backupBuildersReturnNullWhenDatabaseFileIsMissingOrUnreadable() {
+        val context = RuntimeEnvironment.getApplication()
+        val backup = DataBackup(context)
+        val missing = MissingDatabaseFileStore(context)
+        val unreadable = DirectoryDatabaseFileStore(context)
+        try {
+            assertNull(backup.buildBackupFile(missing))
+            assertNull(backup.buildEncryptedBackupFile(missing, "hunter22"))
+            assertNull(backup.buildBackupFile(unreadable))
+            assertNull(backup.buildEncryptedBackupFile(unreadable, "hunter22"))
+        } finally {
+            missing.close()
+            unreadable.close()
+            unreadable.fakeDatabaseFile.delete()
+        }
+    }
+
+    @Test
+    fun renameFileMovesFileToExistingDestination() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = File(context.cacheDir, "rename-source-ok.db")
+        val dest = File(context.cacheDir, "rename-dest-ok.db")
+        writeFile(source, "backup")
+        dest.delete()
+
+        DataBackup.renameFile(source, dest)
+
+        assertFalse(source.exists())
+        assertTrue(dest.exists())
+        assertEquals("backup", dest.readText())
+        dest.delete()
+    }
+
+    @Test
+    fun renameFileThrowsWhenDestinationParentIsMissing() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = File(context.cacheDir, "rename-source.db")
+        val dest = File(File(context.cacheDir, "missing-parent-${System.nanoTime()}"), "dest.db")
+        writeFile(source, "backup")
+
+        try {
+            DataBackup.renameFile(source, dest)
+            fail("renameFile should throw when the destination parent does not exist")
+        } catch (ex: IOException) {
+            assertTrue(ex.message!!.contains("Could not move"))
+        }
+
+        assertTrue(source.exists())
+        assertFalse(dest.exists())
+        source.delete()
     }
 
     @Test
@@ -392,6 +819,25 @@ class DataBackupTest {
         assertTrue(redacted.contains("[coordinate-redacted]"))
     }
 
+    @Test
+    fun companionFileHelpersHandleNullMissingAndExistingFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        val existing = File(context.cacheDir, "delete-existing.tmp")
+        val missing = File(context.cacheDir, "delete-missing.tmp")
+        writeFile(existing, "delete me")
+        missing.delete()
+
+        assertFalse(DataBackup.isEncryptedBackup(null))
+        assertFalse(DataBackup.isVoltTrackerBackup(null))
+        DataBackup.clearRegenerableRollupCache(null)
+        DataBackup.deleteIfExists(null)
+        DataBackup.deleteIfExists(missing)
+        DataBackup.deleteIfExists(existing)
+
+        assertFalse(existing.exists())
+        assertFalse(missing.exists())
+    }
+
     /** Real store whose `PRAGMA quick_check` is stubbed to always report corruption. */
     private class CorruptQuickCheckStore(
         context: Context,
@@ -400,8 +846,44 @@ class DataBackupTest {
             ObdStoreMaintenance.IntegrityResult(false, listOf(FAKE_INTEGRITY_PROBLEM))
     }
 
+    private class MissingDatabaseFileStore(
+        private val appContext: Context,
+    ) : ObdLocalStore(appContext) {
+        override fun checkpoint() {
+            // Do not create or checkpoint the real DB; this fake is for backup-file absence.
+        }
+
+        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
+            ObdStoreMaintenance.IntegrityResult(true, emptyList())
+
+        override fun getDatabaseFile(): File = File(appContext.cacheDir, "missing-db-${System.nanoTime()}.db")
+    }
+
+    private class DirectoryDatabaseFileStore(
+        appContext: Context,
+    ) : ObdLocalStore(appContext) {
+        val fakeDatabaseFile: File = File(appContext.cacheDir, "directory-db-${System.nanoTime()}.db")
+
+        override fun checkpoint() {
+            // The unreadable path is a directory, so copying/encrypting it must fail cleanly.
+        }
+
+        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
+            ObdStoreMaintenance.IntegrityResult(true, emptyList())
+
+        override fun getDatabaseFile(): File {
+            fakeDatabaseFile.mkdirs()
+            return fakeDatabaseFile
+        }
+    }
+
     companion object {
         private const val FAKE_INTEGRITY_PROBLEM = "row 7 missing from index idx_samples"
+
+        private fun contextWithCacheDir(cacheDir: File): Context =
+            object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+                override fun getCacheDir(): File = cacheDir
+            }
 
         private fun rowCount(
             db: SQLiteDatabase,
@@ -430,6 +912,41 @@ class DataBackupTest {
             FileWriter(file, false).use { writer ->
                 writer.write(contents)
             }
+        }
+
+        @Throws(IOException::class)
+        private fun currentBackupCopy(
+            context: Context,
+            fileName: String,
+            seedRollup: Boolean = false,
+        ): File {
+            val store = ObdLocalStore(context)
+            val source: File
+            var sessionId = 0L
+            try {
+                store.clearAllData()
+                sessionId = store.startSession("obd", "AA:BB", "Adapter")
+                store.finishSession(sessionId, ObdLocalStore.STATUS_COMPLETE, 2_000L, "")
+                store.checkpoint()
+                source = store.getDatabaseFile()
+            } finally {
+                store.close()
+            }
+            if (seedRollup) {
+                val db = SQLiteDatabase.openDatabase(source.path, null, SQLiteDatabase.OPEN_READWRITE)
+                try {
+                    db.execSQL(
+                        "INSERT OR REPLACE INTO session_trip_rollups" +
+                            " (session_id, counted, distance_m, duration_ms, started_at_ms)" +
+                            " VALUES ($sessionId, 1, 100.0, 1000, 1)",
+                    )
+                } finally {
+                    db.close()
+                }
+            }
+            val copy = File(context.cacheDir, fileName)
+            Files.copy(source.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING)
+            return copy
         }
 
         private fun createMinimalVoltSchema(

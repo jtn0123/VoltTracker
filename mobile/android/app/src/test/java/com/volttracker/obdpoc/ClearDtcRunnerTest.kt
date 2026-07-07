@@ -78,6 +78,41 @@ class ClearDtcRunnerTest {
     }
 
     @Test
+    fun runReportsSpecificMessagesForKnownNegativeResponseCodes() {
+        val expectations =
+            mapOf(
+                "11" to "does not support",
+                "12" to "sub-function",
+                "13" to "invalid message length",
+                "33" to "security access denied",
+                "31" to "NRC 0x31",
+            )
+
+        for ((nrc, phrase) in expectations) {
+            val service = FakeService()
+            val engine = FakeEngine(service, "7F 04 $nrc\r>")
+
+            ClearDtcRunner(service, engine).run()
+
+            assertEquals("error", service.lastStatusState())
+            assertTrue("NRC $nrc should mention $phrase", service.lastStatusDetail()!!.contains(phrase))
+            assertFalse(service.lastTelemetry()!!.getBoolean("clearDtcOk"))
+            assertEquals(nrc, service.lastTelemetry()!!.getString("clearDtcCode"))
+        }
+    }
+
+    @Test
+    fun runTruncatesOversizedRawTelemetry() {
+        val service = FakeService()
+        val oversized = "7F 04 31 " + "A".repeat(400)
+        val engine = FakeEngine(service, oversized)
+
+        ClearDtcRunner(service, engine).run()
+
+        assertEquals(256, service.lastTelemetry()!!.getString("raw").length)
+    }
+
+    @Test
     fun positiveMode04ResponseMustBeExplicitToken() {
         assertTrue(ClearDtcRunner.hasPositiveMode04Response("04 44"))
         assertTrue(ClearDtcRunner.hasPositiveMode04Response("SEARCHING... 44"))
@@ -85,12 +120,15 @@ class ClearDtcRunnerTest {
         assertFalse(ClearDtcRunner.hasPositiveMode04Response("7F 04 22"))
         assertFalse(ClearDtcRunner.hasPositiveMode04Response("014400"))
         assertFalse(ClearDtcRunner.hasPositiveMode04Response("NO DATA"))
+        assertFalse(ClearDtcRunner.hasPositiveMode04Response(null))
     }
 
     @Test
     fun negativeResponseCodeHandlesSpacedAndCompactPayloads() {
         assertEquals("22", ClearDtcRunner.extractNegativeResponseCode("7F 04 22"))
         assertEquals("11", ClearDtcRunner.extractNegativeResponseCode("SEARCHING... 7F0411"))
+        assertEquals("22", ClearDtcRunner.extractNegativeResponseCode("7F 04 78 7F 04 22"))
+        assertEquals("78", ClearDtcRunner.extractNegativeResponseCode("7F 04 78"))
         assertEquals("", ClearDtcRunner.extractNegativeResponseCode("44"))
     }
 
@@ -98,6 +136,7 @@ class ClearDtcRunnerTest {
     fun compactResponsePreservesFrameBoundaries() {
         assertEquals("04 44", ClearDtcRunner.compactResponse("04\r44\r>"))
         assertEquals("7F 04 22", ClearDtcRunner.compactResponse("7F 04 22>"))
+        assertEquals("", ClearDtcRunner.compactResponse(null))
     }
 
     private class FakeService : ObdService() {

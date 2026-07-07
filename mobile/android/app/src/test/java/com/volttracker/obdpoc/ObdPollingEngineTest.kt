@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothDevice
+import android.content.Context
+import com.volttracker.obdpoc.data.ObdLocalStore
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -54,6 +56,11 @@ class ObdPollingEngineTest {
     @Before
     fun setUp() {
         service = Robolectric.setupService(ObdService::class.java)
+        service
+            .getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+            .edit()
+            .clear()
+            .commit()
         // Match what ObdService.onStartCommand does for ACTION_CONNECT: name the adapter and
         // mark the session as just-started so sessionMs computations make sense.
         service.activeName = "Test Adapter"
@@ -249,6 +256,265 @@ class ObdPollingEngineTest {
                 realEngine.openBluetoothSocket("not-a-mac-address")
             }
         assertTrue(ex.message!!.contains("Invalid Bluetooth adapter address"))
+    }
+
+    @Test
+    fun blankAddressAbortsBeforeOpeningSocket() {
+        openSession()
+
+        engine.runBluetoothLoop("   ", false)
+
+        assertEquals("blank adapter address must not open a socket", 0, engine.openCount.get())
+        assertTrue("blank address must not transact commands", fake.commandLog.isEmpty())
+        assertFalse("pre-connect abort must mark the session inactive", service.running.get())
+        assertTrue(latestObdLogText().contains("No adapter selected."))
+    }
+
+    @Test
+    fun cancelRetryBeforeFirstConnectStopsWithoutOpeningSocket() {
+        openSession()
+        service.cancelRetryRequested = true
+
+        engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false)
+
+        assertEquals("user cancel before connect must not open a socket", 0, engine.openCount.get())
+        assertFalse("cancel request should be consumed", service.cancelRetryRequested)
+        assertFalse("cancel should stop the active session", service.running.get())
+        val log = latestObdLogText()
+        assertTrue(log.contains("retry_cancelled_by_user"))
+        assertTrue(log.contains("Retry cancelled."))
+    }
+
+    @Test
+    fun bluetoothNotReadyAbortsBeforeOpeningSocket() {
+        engine.bluetoothReady = false
+        openSession()
+
+        engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false)
+
+        assertEquals("Bluetooth-off preflight must not open a socket", 0, engine.openCount.get())
+        assertTrue("Bluetooth-off preflight must not transact commands", fake.commandLog.isEmpty())
+        assertFalse("Bluetooth-off preflight must mark the session inactive", service.running.get())
+        assertTrue(latestObdLogText().contains("Bluetooth is off or unavailable."))
+    }
+
+    @Test
+    fun wakeNudgeFailureIsLoggedAsFirstReadConnectFailure() {
+        fake.wakeNudgeFailure = IOException("simulated first-read wake failure")
+        engine.afterOpen = Runnable { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals("wake failure happens after one socket open", 1, engine.openCount.get())
+        assertEquals("init commands must not run after wake-nudge failure", 0, fake.commandLog.size)
+        assertTrue("failed connect must close the fake socket", fake.closeCalls.get() >= 1)
+        val log = latestObdLogText()
+        assertTrue(log.contains("\"event\":\"wake_nudge\""))
+        assertTrue(log.contains("\"gotResponse\":\"false\""))
+        assertTrue(log.contains("simulated first-read wake failure"))
+        assertTrue(log.contains("\"errorPhase\":\"first_read\""))
+    }
+
+    @Test
+    fun runtimeFailureInLoopReportsConnectionFailureAndStops() {
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if (command == "ATZ") {
+                    throw IllegalStateException("runtime init boom")
+                }
+                null
+            }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertFalse("runtime loop failure must end the session", service.running.get())
+        val log = latestObdLogText()
+        assertTrue(log.contains("connection_failure"))
+        assertTrue(log.contains("runtime init boom"))
+    }
+
+    @Test
+    fun repeatedFirstReadInstantDropsEmitWedgedSuspectedEvent() {
+        fake.wakeNudgeFailure = IOException("read failed, socket might closed or timeout, read ret: -1")
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        assertTrue(log.contains("wedged_suspected"))
+        assertTrue(log.contains("failureClass\":\"instant_drop"))
+    }
+
+    @Test
+    fun protocolProbeTotalMissExhaustsRetriesWithoutLivePolling() {
+        fake.defaultResponse = "NO DATA\r>"
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals(
+            "a persistent protocol miss should burn the initial try plus the bounded retry budget",
+            ObdProbes.MAX_RECONNECT_ATTEMPTS + 1,
+            engine.openCount.get(),
+        )
+        assertTrue("pinned protocol must be tried", fake.commandLog.contains("ATSP6"))
+        assertTrue("ATSP0 fallback must be tried after the pinned miss", fake.commandLog.contains("ATSP0"))
+        assertTrue("ELM protocol close must be sent around fallback/recovery", fake.commandLog.contains("ATPC"))
+        assertEquals("no telemetry sample should land without a valid 4100 response", 0, engine.sampleCount())
+        val log = latestObdLogText()
+        assertTrue(log.contains("protocol_probe_pinned_miss"))
+        assertTrue(log.contains("protocol_probe_no_prompt"))
+        assertTrue(log.contains("reconnect_exhausted"))
+    }
+
+    @Test
+    fun cancelRetryAfterFailedAttemptStopsBeforeSecondOpen() {
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if (command == "ATZ") {
+                    service.cancelRetryRequested = true
+                    throw IOException("simulated init failure before retry cancel")
+                }
+                null
+            }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals(
+            "cancel after the first failed attempt must stop before the second open",
+            1,
+            engine.openCount.get(),
+        )
+        assertFalse("cancel request should be consumed after the failed attempt", service.cancelRetryRequested)
+        assertFalse("cancel after failure should stop the active session", service.running.get())
+        val log = latestObdLogText()
+        assertTrue(log.contains("simulated init failure before retry cancel"))
+        assertTrue(log.contains("retry_cancelled_by_user"))
+    }
+
+    @Test
+    fun clearDtcLoopRunsMode04AsOneShotWithoutLivePolling() {
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["04"] = "44\r>"
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false, true) }
+
+        assertTrue("clear-DTC mode must send Mode 04", fake.commandLog.contains("04"))
+        assertEquals("clear-DTC one-shot must not enter the live poll loop", 0, engine.sampleCount())
+        assertFalse("clear-DTC one-shot must not poll speed", fake.commandLog.contains("010D"))
+        assertFalse("clear-DTC one-shot must not run deferred VIN probe", fake.commandLog.contains("0902"))
+    }
+
+    @Test
+    fun autoDtcScanRunsAfterConnectBeforeLivePollingWhenEnabled() {
+        val eventPrefs = EventNotificationPrefs(service.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE))
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["03"] = "43 01 04 20\r>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.afterCommand("ATSH7DF") {
+            if (fake.commandLog.contains("010D")) {
+                service.running.set(false)
+            }
+        }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val scanIndex = fake.commandLog.indexOf("03")
+        val firstLiveSpeedIndex = fake.commandLog.indexOf("010D")
+        assertTrue("auto-DTC scan must send Mode 03", scanIndex >= 0)
+        assertTrue("live polling must still read speed after auto-scan", firstLiveSpeedIndex >= 0)
+        assertTrue("auto-DTC scan should run before the first live polling PID", scanIndex < firstLiveSpeedIndex)
+        assertEquals("one successful connect should run one auto-scan", 1, fake.commandLog.count { it == "03" })
+        assertEquals(setOf("P0420"), eventPrefs.lastScanDtcCodes())
+        assertTrue("completed scan should establish a DTC baseline", eventPrefs.hasDtcBaseline())
+        assertTrue("live session should still persist a telemetry sample", engine.sampleCount() >= 1)
+    }
+
+    @Test
+    fun failedAutoDtcScanDoesNotBreakLivePollingOrArmThrottle() {
+        val eventPrefs = EventNotificationPrefs(service.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE))
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if (command == "03") {
+                    throw IOException("simulated Mode 03 bus error")
+                }
+                null
+            }
+        fake.afterCommand("ATSH7DF") {
+            if (fake.commandLog.contains("010D")) {
+                service.running.set(false)
+            }
+        }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertTrue("failed auto-scan still attempted Mode 03", fake.commandLog.contains("03"))
+        assertTrue("live polling should continue after auto-scan failure", fake.commandLog.contains("010D"))
+        assertTrue("live session should keep collecting samples", engine.sampleCount() >= 1)
+        assertEquals("failed auto-scan must not arm the throttle", 0L, eventPrefs.lastAutoScanAtMs())
+        assertFalse("failed auto-scan must not establish a false DTC baseline", eventPrefs.hasDtcBaseline())
+    }
+
+    @Test
+    fun runScanLoopUsesQuickProfileWithoutDeepFreezeFrameOrVoltProbes() {
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["03"] = "43 01 33 00 00\r>"
+
+        openSession()
+        runEngineUntilFinished { engine.runScanLoop("AA:BB:CC:DD:EE:FF", DiagnosticScanProfile.QUICK.wireName) }
+
+        assertTrue("quick scan must read stored DTCs", fake.commandLog.contains("03"))
+        assertTrue("quick scan must still read pending DTCs for display", fake.commandLog.contains("07"))
+        assertTrue("quick scan must still read permanent DTCs for display", fake.commandLog.contains("0A"))
+        assertFalse("quick scan must skip freeze-frame probing", fake.commandLog.contains("0200"))
+        assertFalse("quick scan must skip Volt HV module probing", fake.commandLog.contains("ATSH7E4"))
+        assertEquals("scan mode must not enter the live poll loop", 0, engine.sampleCount())
+    }
+
+    @Test
+    fun cellDetailProbeLoopRunsCellVoltageRunnerInsteadOfGenericDiscovery() {
+        fake.defaultResponse = "NO DATA\r>"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+
+        openSession()
+        runEngineUntilFinished { engine.runDetailProbeLoop("AA:BB:CC:DD:EE:FF", EnhancedPidProfiles.STAGE_CELLS) }
+
+        assertTrue("cell detail probe must select the BECM cell header", fake.commandLog.contains("ATSH7E7"))
+        assertTrue(
+            "cell detail probe must read the first shared-layout cell",
+            fake.commandLog.contains(CellVoltageProbeRunner.cellCommandBolt(1)),
+        )
+        assertTrue(
+            "cell detail probe must test the contiguous cell-32 layout",
+            fake.commandLog.contains(CellVoltageProbeRunner.cellCommandBolt(32)),
+        )
+        assertTrue(
+            "when the contiguous layout misses, the Gen-1 tail must be read through cell 96",
+            fake.commandLog.contains(CellVoltageProbeRunner.cellCommandGen1(96)),
+        )
+        assertFalse(
+            "cell detail probe must not run generic adapter identity discovery",
+            fake.commandLog.contains("ATI"),
+        )
+        assertEquals("cell detail probe must not enter the live poll loop", 0, engine.sampleCount())
     }
 
     // ---- 2. Mid-session drop → backoff → reconnect → session continues -------------
@@ -674,6 +940,22 @@ class ObdPollingEngineTest {
     }
 
     @Test
+    fun liveConnectLogsVinPersistenceFailureButKeepsRedactedVin() {
+        service.localStore?.close()
+        service.localStore = ThrowingVinStore(service)
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["0902"] = mode09VinResponse("1G1ZD5ST8JF" + "202020")
+        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals("…2020", engine.redactedVin())
+        assertTrue(latestObdLogText().contains("vin_persist_failed"))
+    }
+
+    @Test
     fun liveConnectSkipsVinProbeWhenVehicleIsAlreadyStored() {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
@@ -742,6 +1024,31 @@ class ObdPollingEngineTest {
         )
         assertTrue("fallback must poll speed per-PID", fake.commandLog.contains("010D"))
         assertTrue("fallback must poll RPM per-PID", fake.commandLog.contains("010C"))
+    }
+
+    @Test
+    fun deferredMode01BatchProbeFailureIsLoggedAndDisablesBatching() {
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.responses["222414"] = "62 24 14 00 64\r>"
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if (command == "010D0C") {
+                    throw IOException("batch probe failed")
+                }
+                null
+            }
+        fake.afterCommand("ATSH7DF") { service.running.set(false) }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        assertTrue(log.contains("mode01_batch_probe_failed"))
+        assertTrue(log.contains("batch probe failed"))
+        assertFalse("failed probe must not enable hot-lane batching", fake.commandLog.contains("010D0C49"))
     }
 
     // ---- helpers --------------------------------------------------------------------
@@ -821,7 +1128,11 @@ class ObdPollingEngineTest {
         @Volatile
         var afterOpen: Runnable? = null
 
-        override fun isBluetoothReady(): Boolean = true // bypass the real BluetoothAdapter — see file-level docs
+        @Volatile
+        var bluetoothReady = true
+
+        override fun isBluetoothReady(): Boolean =
+            bluetoothReady // bypass the real BluetoothAdapter — see file-level docs
 
         override fun openBluetoothSocket(address: String?) {
             val n = openCount.incrementAndGet()
@@ -870,6 +1181,9 @@ class ObdPollingEngineTest {
         @Volatile
         var transactInterceptor: TransactInterceptor? = null
 
+        @Volatile
+        var wakeNudgeFailure: IOException? = null
+
         /** After-command hooks, one per command (the last registration wins per command). */
         private val afterCommandHooks = LinkedHashMap<String, Runnable>()
 
@@ -890,6 +1204,11 @@ class ObdPollingEngineTest {
         }
 
         override fun wakeNudge(toleranceMs: Long): WakeNudgeResult {
+            wakeNudgeFailure?.let {
+                firstReadMs = 0L
+                lastErrorPhase = "first_read"
+                throw it
+            }
             // The fake doesn't run a real RFCOMM stream, so the wake-nudge probe has nothing to
             // read. Pretend the adapter answered immediately so the engine progresses straight
             // into initializeElm327() and the connect / poll / reconnect logic under test runs.
@@ -935,5 +1254,11 @@ class ObdPollingEngineTest {
     private fun interface TransactInterceptor {
         @Throws(IOException::class)
         fun handle(command: String): String?
+    }
+
+    private class ThrowingVinStore(
+        context: android.content.Context,
+    ) : ObdLocalStore(context) {
+        override fun upsertVehicleFromVin(vin: String?): Long = throw IllegalStateException("vin store failed")
     }
 }

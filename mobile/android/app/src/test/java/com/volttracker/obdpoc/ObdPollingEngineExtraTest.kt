@@ -2,6 +2,8 @@ package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import com.volttracker.obdpoc.location.FilteredLocation
+import com.volttracker.obdpoc.location.LocationTracker
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -165,6 +167,79 @@ class ObdPollingEngineExtraTest {
         assertEquals("a prompt-terminated response must not trigger an escape", 0, fake.escapeCalls.get())
     }
 
+    @Test
+    fun transactOneShotTreatsNullCommandAsEmptyCommand() {
+        fake.responses[""] = "OK\r>"
+
+        val response = engine.transactOneShot(null, 1200)
+
+        assertEquals("OK\r>", response)
+        assertEquals(listOf(""), fake.commandLog.toList())
+    }
+
+    // ---- appendLocation -----------------------------------------------------------
+
+    @Test
+    fun appendLocationCopiesTheLatestFixIntoTheSample() {
+        val fixTimeMs = System.currentTimeMillis() - 1_234L
+        service.locationTracker =
+            FakeLocationTracker(
+                FilteredLocation(
+                    41.8819,
+                    -87.6278,
+                    8.5,
+                    188.0,
+                    12.3,
+                    270.0,
+                    fixTimeMs,
+                    null,
+                    null,
+                    "gps",
+                ),
+            )
+        val sample = JSONObject()
+
+        engine.appendLocation(sample)
+
+        assertEquals(41.8819, sample.getDouble("latitude"), 0.0001)
+        assertEquals(-87.6278, sample.getDouble("longitude"), 0.0001)
+        assertEquals(8.5, sample.getDouble("accuracyM"), 0.0001)
+        assertEquals(12.3, sample.getDouble("gpsSpeedMps"), 0.0001)
+        assertEquals(270.0, sample.getDouble("bearingDeg"), 0.0001)
+        assertEquals("gps", sample.getString("provider"))
+        assertEquals("gps", sample.getString("locationProvider"))
+        assertTrue("locationAgeMs should be non-negative", sample.getLong("locationAgeMs") >= 0L)
+    }
+
+    @Test
+    fun appendLocationLeavesTheSampleUnchangedWhenNoFixIsAvailable() {
+        service.locationTracker = FakeLocationTracker(null)
+        val sample = JSONObject()
+
+        engine.appendLocation(sample)
+
+        assertEquals(0, sample.length())
+    }
+
+    // ---- pure diagnostics helpers --------------------------------------------------
+
+    @Test
+    fun exceptionClassNameAndStackHeadHandleNullEmptyAndTruncatedStacks() {
+        assertEquals("", ObdPollingEngine.exceptionClassName(null))
+        assertEquals("", ObdPollingEngine.stackHead(null))
+
+        val noStack = IllegalStateException("no stack")
+        noStack.stackTrace = emptyArray()
+        assertEquals("", ObdPollingEngine.stackHead(noStack))
+
+        val longClassName = "com.volttracker." + "VeryLongClassName".repeat(80)
+        val longStack = RuntimeException("long stack")
+        longStack.stackTrace = arrayOf(StackTraceElement(longClassName, "method", "LongFile.kt", 42))
+
+        assertEquals(RuntimeException::class.java.name, ObdPollingEngine.exceptionClassName(longStack))
+        assertEquals(1000, ObdPollingEngine.stackHead(longStack).length)
+    }
+
     // ---- runDetailProbeLoop --------------------------------------------------------
 
     @Test
@@ -230,6 +305,16 @@ class ObdPollingEngineExtraTest {
 
     private companion object {
         private const val ENGINE_JOIN_TIMEOUT_MS = 10_000L
+    }
+
+    private class FakeLocationTracker(
+        private val location: FilteredLocation?,
+    ) : LocationTracker {
+        override fun start(listener: LocationTracker.Listener) = Unit
+
+        override fun stop() = Unit
+
+        override fun getLastLocation(): FilteredLocation? = location
     }
 
     /**

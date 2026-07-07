@@ -94,6 +94,27 @@ class RollingAppLogTest {
     }
 
     @Test
+    fun writeDropsLineWhenLogDirCannotBeCreated() {
+        val parentFile = File(dir, "not-a-directory").apply { writeText("blocks child mkdirs") }
+        val blockedDir = File(parentFile, "app-log")
+        val blockedLog = RollingAppLog(blockedDir, clock::get)
+
+        blockedLog.write("D", "tag", "dropped")
+
+        assertFalse("mkdir failure should leave the blocked log dir absent", blockedDir.exists())
+    }
+
+    @Test
+    fun writeDropsLineWhenLiveLogPathIsADirectory() {
+        val livePath = log.liveFile()
+        assertTrue(livePath.mkdirs())
+
+        log.write("D", "tag", "dropped")
+
+        assertTrue("the bad live path should remain a directory after the failed append", livePath.isDirectory)
+    }
+
+    @Test
     fun freshLogYoungerThan7DaysIsNotRotated() {
         log.write("D", "tag", "fresh")
 
@@ -104,6 +125,36 @@ class RollingAppLogTest {
 
         assertTrue(log.liveFile().exists())
         assertFalse("must not roll before 7 days", log.rolledFile().exists())
+    }
+
+    @Test
+    fun existingLiveFileWithoutBornMarkerIsTreatedAsFresh() {
+        assertTrue(dir.exists())
+        log.liveFile().writeText("legacy\n")
+        clock.addAndGet(RollingAppLog.ROTATE_AGE_MS + 1L)
+
+        log.write("D", "tag", "after-missing-born")
+
+        assertFalse("missing born marker should skip rotation", log.rolledFile().exists())
+        val live = readAll(log.liveFile())
+        assertTrue(live.contains("legacy"))
+        assertTrue(live.contains("after-missing-born"))
+        assertTrue("a fresh born marker should be written for later age checks", File(dir, "app.log.born").exists())
+    }
+
+    @Test
+    fun invalidBornMarkerIsTreatedAsFresh() {
+        assertTrue(dir.exists())
+        log.liveFile().writeText("legacy\n")
+        File(dir, "app.log.born").writeText("not-a-timestamp\n")
+        clock.addAndGet(RollingAppLog.ROTATE_AGE_MS + 1L)
+
+        log.write("D", "tag", "after-invalid-born")
+
+        assertFalse("unparseable born marker should not rotate spuriously", log.rolledFile().exists())
+        val live = readAll(log.liveFile())
+        assertTrue(live.contains("legacy"))
+        assertTrue(live.contains("after-invalid-born"))
     }
 
     @Test
@@ -130,6 +181,22 @@ class RollingAppLogTest {
             "live file should not contain the old (rotated) line",
             readAll(log.liveFile()).contains("first-week"),
         )
+    }
+
+    @Test
+    fun staleLiveLogStaysInPlaceWhenRolledFileCannotBeDeleted() {
+        log.write("D", "tag", "first-week")
+        val blockedRolled = log.rolledFile()
+        assertTrue(blockedRolled.mkdirs())
+        File(blockedRolled, "child").writeText("prevents directory delete")
+        clock.addAndGet(RollingAppLog.ROTATE_AGE_MS + 1L)
+
+        log.write("D", "tag", "second-week")
+
+        assertTrue("blocked rolled path should still be a directory", blockedRolled.isDirectory)
+        val live = readAll(log.liveFile())
+        assertTrue("old line should stay in live file when roll cannot proceed", live.contains("first-week"))
+        assertTrue("new line should still be appended instead of being dropped", live.contains("second-week"))
     }
 
     @Test

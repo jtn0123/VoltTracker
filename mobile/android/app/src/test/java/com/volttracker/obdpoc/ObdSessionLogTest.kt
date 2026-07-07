@@ -99,6 +99,43 @@ class ObdSessionLogTest {
     }
 
     @Test
+    @Throws(IOException::class)
+    fun openFailureIsSurfacedWhenParentPathBlocksMkdir() {
+        val parentFile = File(dir, "not-a-directory").apply { writeText("blocks child mkdirs") }
+        val blockedDir = File(parentFile, "obd-logs")
+        val log = ObdSessionLog(blockedDir)
+
+        log.open("obd")
+
+        assertFalse(log.isOpen())
+        assertTrue(log.lastWriteFailure()!!.contains("open_mkdir_failed"))
+    }
+
+    @Test
+    fun openFailureIsSurfacedWhenModeCreatesNestedFilePath() {
+        val log = ObdSessionLog(dir)
+
+        log.open("bad/mode")
+
+        assertFalse(log.isOpen())
+        assertTrue(log.lastWriteFailure()!!.contains("open_failed"))
+    }
+
+    @Test
+    fun successfulWriteClearsLatestPointerFailure() {
+        assertTrue(File(dir, "latest.txt").mkdir())
+        val log = ObdSessionLog(dir)
+
+        log.open("obd")
+        assertTrue(log.isOpen())
+        assertTrue(log.lastWriteFailure()!!.contains("latest_pointer_failed"))
+
+        log.write("event", JSONObject().put("ok", true))
+
+        assertEquals("a later successful write should clear the stale pointer failure", null, log.lastWriteFailure())
+    }
+
+    @Test
     fun fileNameIsNullWhenClosedAndPopulatedWhenOpen() {
         val log = ObdSessionLog(dir)
         assertEquals(null, log.fileName())

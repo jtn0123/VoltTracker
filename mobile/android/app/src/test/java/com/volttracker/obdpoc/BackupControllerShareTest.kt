@@ -186,6 +186,52 @@ class BackupControllerShareTest {
     }
 
     @Test
+    fun cancellingDisclosureWithBackButtonSharesNothingAndAllowsNextRequest() {
+        seedOneSession()
+
+        activity.backupController!!.launchShare()
+        latestDialog().cancel()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("ready", activity.lastState)
+        assertEquals("Backup cancelled.", activity.lastDetail)
+
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+    }
+
+    @Test
+    fun cancellingEncryptedDisclosureClearsInFlightState() {
+        seedOneSession()
+
+        activity.backupController!!.launchEncryptedShare("hunter22")
+        latestDialog().cancel()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("ready", activity.lastState)
+        assertEquals("Backup cancelled.", activity.lastDetail)
+
+        activity.backupController!!.launchShare()
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+    }
+
+    @Test
+    fun shareDisclosureIsSkippedWhenActivityIsFinishing() {
+        seedOneSession()
+        activity.finish()
+
+        activity.backupController!!.launchShare()
+
+        assertNull(activity.lastStartedIntent)
+        assertNull(activity.lastState)
+        assertNull(activity.lastDetail)
+    }
+
+    @Test
     fun secondBackupRequestIsBlockedWhileDisclosureIsOpen() {
         seedOneSession()
 
@@ -202,6 +248,24 @@ class BackupControllerShareTest {
         assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
     }
 
+    @Test
+    fun secondPlainBackupRequestIsBlockedWhileDisclosureIsOpen() {
+        seedOneSession()
+
+        activity.backupController!!.launchShare()
+        val firstDialog = latestDialog()
+        activity.backupController!!.launchShare()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Backup already in progress.", activity.lastDetail)
+
+        firstDialog.getButton(DialogInterface.BUTTON_NEGATIVE).performClick()
+        activity.backupController!!.launchShare()
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+    }
+
     // --- launchShare / performBackupAndShare ---------------------------------
 
     @Test
@@ -214,6 +278,41 @@ class BackupControllerShareTest {
         assertNull(activity.lastStartedIntent)
         assertEquals("blocked", activity.lastState)
         assertEquals("Stop logging before creating a backup.", activity.lastDetail)
+    }
+
+    @Test
+    fun launchEncryptedShareWhileLoggingIsBlockedAndShowsNoDialog() {
+        activity.loggingActive = true
+
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertNull(ShadowAlertDialog.getLatestAlertDialog())
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Stop logging before creating a backup.", activity.lastDetail)
+    }
+
+    @Test
+    fun confirmingDisclosureAfterLoggingStartsBlocksBeforeBuildingBackup() {
+        seedOneSession()
+
+        activity.backupController!!.launchShare()
+        activity.loggingActive = true
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Stop logging before creating a backup.", activity.lastDetail)
+
+        activity.loggingActive = false
+        activity.backupController!!.launchEncryptedShare("hunter22")
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertEquals(Intent.ACTION_SEND, startedShareIntent().action)
+        assertEquals("ready", activity.lastState)
+        assertTrue(activity.lastDetail!!.contains("Encrypted backup ready"))
     }
 
     @Test
@@ -242,6 +341,49 @@ class BackupControllerShareTest {
             Intent.FLAG_GRANT_READ_URI_PERMISSION,
             share.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION,
         )
+    }
+
+    @Test
+    fun backupBuildFailureClearsBusyProgressAndStatus() {
+        activity.localStore?.close()
+        activity.localStore = null
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not create the backup file.", activity.lastDetail)
+        assertEquals("Backup failed", activity.lastProgressTitle)
+        assertEquals("Could not create the backup file.", activity.lastProgressDetail)
+        assertEquals(false, activity.lastProgressBusy)
+        assertEquals("blocked", activity.lastProgressTone)
+        assertEquals("backup", activity.lastProgressOperation)
+    }
+
+    @Test
+    fun shareSheetFailureClearsBusyProgressAndStatus() {
+        seedOneSession()
+        activity.rejectStartActivity = true
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not open the share sheet.", activity.lastDetail)
+        assertEquals("Backup failed", activity.lastProgressTitle)
+        assertEquals("Could not open the share sheet.", activity.lastProgressDetail)
+        assertEquals(false, activity.lastProgressBusy)
+        assertEquals("blocked", activity.lastProgressTone)
+        assertEquals("backup", activity.lastProgressOperation)
+
+        activity.rejectStartActivity = false
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
     }
 
     // --- integrity warning surfacing ------------------------------------------
@@ -313,6 +455,26 @@ class BackupControllerShareTest {
         seedOneSession()
         activity.backupController =
             BackupController(activity, DataBackup(activity), RejectingExecutorService())
+
+        activity.backupController!!.launchShare()
+        latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+        settle()
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not start the backup worker.", activity.lastDetail)
+        assertEquals("Backup failed", activity.lastProgressTitle)
+        assertEquals("Could not start the backup worker.", activity.lastProgressDetail)
+        assertEquals(false, activity.lastProgressBusy)
+        assertEquals("blocked", activity.lastProgressTone)
+        assertEquals("backup", activity.lastProgressOperation)
+    }
+
+    @Test
+    fun runtimeThrowingBackupWorkerClearsBusyProgress() {
+        seedOneSession()
+        activity.backupController =
+            BackupController(activity, DataBackup(activity), RuntimeThrowingExecutorService())
 
         activity.backupController!!.launchShare()
         latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
@@ -455,6 +617,24 @@ class BackupControllerShareTest {
         ): Boolean = false
     }
 
+    /** Executor that throws a generic runtime failure so runBackground() covers its broad catch. */
+    private class RuntimeThrowingExecutorService : AbstractExecutorService() {
+        override fun execute(command: Runnable): Unit = throw IllegalStateException("worker failed")
+
+        override fun shutdown() = Unit
+
+        override fun shutdownNow(): List<Runnable> = emptyList()
+
+        override fun isShutdown(): Boolean = false
+
+        override fun isTerminated(): Boolean = false
+
+        override fun awaitTermination(
+            timeout: Long,
+            unit: TimeUnit,
+        ): Boolean = false
+    }
+
     /** Minimal MainActivity that wires a real store + inline executor and captures status/intents. */
     class HarnessActivity : MainActivity() {
         @JvmField var loggingActive = false
@@ -477,6 +657,8 @@ class BackupControllerShareTest {
 
         @JvmField var lastProgressOperation: String? = null
 
+        @JvmField var rejectStartActivity = false
+
         override fun onCreate(savedInstanceState: Bundle?) {
             localStore = ObdLocalStore(this)
             backupController =
@@ -493,6 +675,9 @@ class BackupControllerShareTest {
         // real startActivity, whose content-URI permission-grant path is fragile when the same
         // backup file name recurs across tests in one JVM (it throws on the second share).
         override fun startActivity(intent: Intent?) {
+            if (rejectStartActivity) {
+                throw IllegalStateException("share sheet unavailable")
+            }
             lastStartedIntent = intent
         }
 

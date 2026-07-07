@@ -59,9 +59,56 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun finishSessionTwoArgumentOverloadMarksSessionEnded() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE)
+
+        val session = store.getSession(id)
+        assertNotNull(session)
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, session!!.status)
+        assertTrue("finishSession(status) should stamp an end time", session.endedAtMs > 0L)
+    }
+
+    @Test
+    fun recordTelemetryUsesSampleUpdatedAtWhenOverrideIsOmitted() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+
+        val rowId = store.recordTelemetry(id, sample(41, 1510, 34.05, -118.25, 12_345L))
+
+        assertTrue(rowId > 0L)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT captured_at_ms FROM " + VoltTrackerDb.TABLE_TELEMETRY + " WHERE _id = ?",
+                    arrayOf(rowId.toString()),
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(12_345L, cursor.getLong(0))
+                }
+        }
+    }
+
+    @Test
     fun emptyTelemetryIsRejected() {
         val id = store.startSession("obd", "00:11", "Adapter")
         assertEquals(-1L, store.recordTelemetry(id, JSONObject()))
+        assertEquals(
+            0L,
+            StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"),
+        )
+    }
+
+    @Test
+    fun nullTelemetryIsRejectedWithoutCountingSamples() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+
+        assertEquals(-1L, store.recordTelemetry(id, null))
+
+        val session = store.getSession(id)
+        assertNotNull(session)
+        assertEquals(0, session!!.sampleCount)
         assertEquals(
             0L,
             StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("sampleCount"),
@@ -79,9 +126,13 @@ class ObdLocalStoreDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000, "")
 
         val route = store.getTripRouteJson(id)
-        assertEquals(id, route.optJSONObject("session").optLong("id"))
+        val session = route.optJSONObject("session")
+        val points = route.optJSONArray("points")
+        assertNotNull(session)
+        assertNotNull(points)
+        assertEquals(id, session!!.optLong("id"))
         assertTrue("route must carry >= 2 points", route.optInt("pointCount") >= 2)
-        assertEquals(route.optInt("pointCount"), route.optJSONArray("points").length())
+        assertEquals(route.optInt("pointCount"), points!!.length())
         assertTrue("route distance should be > 0", route.optDouble("distanceMeters") > 0)
     }
 
@@ -128,6 +179,110 @@ class ObdLocalStoreDbTest {
         val id = store.startSession("demo", "", "Demo")
         store.recordTelemetry(id, sample(30, 0, 34.05, -118.25, 1000))
         assertEquals(0, store.getTripsJson(10).length())
+    }
+
+    @Test
+    fun recordPidObservationUsesObservedAtFallbackWhenOverrideIsOmitted() {
+        val id = store.startSession("scan", "00:11", "Adapter")
+        val observation =
+            pidObservation(
+                1L,
+                "221154",
+                "ATSH7E0",
+                "1154",
+                "engine oil temperature",
+                "56",
+                56.0,
+                "C",
+                "62115460",
+            ).apply {
+                remove("observedAtMs")
+                put("observedAt", 12_345L)
+            }
+
+        val rowId = store.recordPidObservation(id, observation)
+
+        assertTrue(rowId > 0L)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT observed_at_ms FROM " + VoltTrackerDb.TABLE_PID_OBSERVATIONS + " WHERE _id = ?",
+                    arrayOf(rowId.toString()),
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(12_345L, cursor.getLong(0))
+                }
+        }
+    }
+
+    @Test
+    fun emptyPidObservationBatchIsANoOp() {
+        val id = store.startSession("scan", "00:11", "Adapter")
+
+        assertEquals(0, store.recordPidObservations(id, emptyList()))
+
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT COUNT(*) FROM " + VoltTrackerDb.TABLE_PID_OBSERVATIONS + " WHERE session_id = ?",
+                    arrayOf(id.toString()),
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+        }
+    }
+
+    @Test
+    fun recordLocationSampleUsesTimestampFallbackWhenOverrideIsOmitted() {
+        val id = store.startSession("gps", "00:11", "Adapter")
+        val location =
+            JSONObject()
+                .put("provider", "gps")
+                .put("latitude", 34.05)
+                .put("longitude", -118.25)
+                .put("timestampMs", 23_456L)
+
+        val rowId = store.recordLocationSample(id, location)
+
+        assertTrue(rowId > 0L)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT captured_at_ms FROM " + VoltTrackerDb.TABLE_LOCATION_SAMPLES + " WHERE _id = ?",
+                    arrayOf(rowId.toString()),
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(23_456L, cursor.getLong(0))
+                }
+        }
+    }
+
+    @Test
+    fun invalidLocationSampleIsRejected() {
+        val id = store.startSession("gps", "00:11", "Adapter")
+        val missingLongitude =
+            JSONObject()
+                .put("provider", "gps")
+                .put("latitude", 34.05)
+                .put("capturedAtMs", 23_456L)
+
+        assertEquals(-1L, store.recordLocationSample(id, missingLongitude))
+
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT COUNT(*) FROM " + VoltTrackerDb.TABLE_LOCATION_SAMPLES + " WHERE session_id = ?",
+                    arrayOf(id.toString()),
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(0, cursor.getInt(0))
+                }
+        }
     }
 
     @Test
@@ -282,6 +437,31 @@ class ObdLocalStoreDbTest {
         assertEquals(1000L, capability.optLong("firstSeenMs"))
         assertEquals(1200L, capability.optLong("lastSeenMs"))
         assertFalse(capability.getJSONObject("sample").optBoolean("positiveResponse"))
+
+        val updated =
+            store.recordPidObservations(
+                id,
+                listOf(
+                    pidObservation(
+                        2000L,
+                        "221154",
+                        "ATSH7E0",
+                        "1154",
+                        "engine oil temperature",
+                        "58",
+                        58.0,
+                        "C",
+                        "62115462",
+                    ),
+                ),
+            )
+
+        assertEquals(1, updated)
+        val updatedCapability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0)
+        assertEquals(3L, updatedCapability.optLong("responseCount"))
+        assertEquals(1000L, updatedCapability.optLong("firstSeenMs"))
+        assertEquals(2000L, updatedCapability.optLong("lastSeenMs"))
+        assertTrue(updatedCapability.getJSONObject("sample").optBoolean("positiveResponse"))
     }
 
     @Test
@@ -1029,6 +1209,20 @@ class ObdLocalStoreDbTest {
 
     @Test
     fun cellSnapshotIsEmptyBeforeAnyProbe() {
+        assertEquals(
+            0,
+            store
+                .projections()
+                .batterySummary()
+                .getJSONObject("latestCellSnapshot")
+                .length(),
+        )
+    }
+
+    @Test
+    fun emptyCellProbeDoesNotCreateSnapshot() {
+        assertEquals(-1L, store.recordCellSnapshot(List(96) { null }))
+
         assertEquals(
             0,
             store

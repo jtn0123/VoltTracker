@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import com.volttracker.obdpoc.data.ObdLocalStore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -196,6 +197,74 @@ class ObdPersistenceWorkerTest {
         assertFalse("no-op worker must not run submitted telemetry", ran.get())
         assertEquals("dropped count must be 0 for a no-op worker", 0L, worker.drainDroppedTelemetryCount())
         assertEquals("failed count must be 0 for a no-op worker", 0L, worker.drainFailedTelemetryCount())
+    }
+
+    @Test
+    fun lifecycleRuntimeFailureRecordsPersistFailureEvent() {
+        val store = newStore()
+        try {
+            store.clearAllData()
+            val sessionId = store.startSession("obd", "AA:BB:CC:DD:EE:FF", "ELM327", 1_000L)
+            val worker = ObdPersistenceWorker(store)
+
+            worker.submitLifecycle(
+                { throw IllegalStateException("finalize blew up") },
+                sessionId,
+                "finalize",
+            )
+            worker.shutdown()
+
+            val failure = store.getRecentEvents(sessionId, 10).firstOrNull { it.kind == "persist_failure" }
+            assertNotNull("lifecycle failure should be recorded as a persist_failure event", failure)
+            assertEquals("finalize", failure!!.detail)
+            assertTrue("persist failure should be marked blocked", failure.blocked)
+            val payload = failure.toJson()
+            assertEquals("finalize", payload.optString("op"))
+            assertEquals(IllegalStateException::class.java.name, payload.optString("exception"))
+            assertEquals("finalize blew up", payload.optString("message"))
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun lifecycleSubmitAfterShutdownRunsInlineFallback() {
+        val store = newStore()
+        try {
+            val worker = ObdPersistenceWorker(store)
+            worker.shutdown()
+            val ranInline = AtomicBoolean(false)
+
+            worker.submitLifecycle({ ranInline.set(true) }, 0L, "post_shutdown")
+
+            assertTrue("post-shutdown lifecycle work should run through inline fallback", ranInline.get())
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
+    fun lifecycleInlineFallbackFailureIsRecorded() {
+        val store = newStore()
+        try {
+            store.clearAllData()
+            val sessionId = store.startSession("obd", "AA:BB:CC:DD:EE:FF", "ELM327", 1_000L)
+            val worker = ObdPersistenceWorker(store)
+            worker.shutdown()
+
+            worker.submitLifecycle(
+                { throw IllegalArgumentException("inline failed") },
+                sessionId,
+                "post_shutdown",
+            )
+
+            val failure = store.getRecentEvents(sessionId, 10).firstOrNull { it.kind == "persist_failure" }
+            assertNotNull("inline fallback failure should also be recorded", failure)
+            assertEquals("post_shutdown", failure!!.detail)
+            assertEquals(IllegalArgumentException::class.java.name, failure.toJson().optString("exception"))
+        } finally {
+            store.close()
+        }
     }
 
     // ---- helpers ------------------------------------------------------------------

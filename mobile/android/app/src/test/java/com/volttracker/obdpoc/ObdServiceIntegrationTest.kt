@@ -1,10 +1,12 @@
 package com.volttracker.obdpoc
 
+import android.Manifest
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.ServiceInfo
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.LocationTracker
@@ -55,7 +57,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ObdServiceIntegrationTest {
-    private val controllers = mutableListOf<ServiceController<TestObdService>>()
+    private val controllers = mutableListOf<ServiceController<out TestObdService>>()
     private val receivers = mutableListOf<BroadcastReceiver>()
 
     @After
@@ -141,6 +143,21 @@ class ObdServiceIntegrationTest {
         assertEquals("a nameless CONNECT uses the default adapter label", "OBD adapter", service.activeName)
     }
 
+    @Test
+    fun connectWithLocationPermissionStartsForegroundWithLocationServiceType() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "GPS ELM", null))
+        val service = controller.create().get()
+        shadowOf(service).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+
+        controller.startCommand(0, 1)
+
+        assertTrue("CONNECT marks the session running", service.running.get())
+        assertTrue(
+            "foreground service type should include LOCATION when GPS permission is available",
+            activeForegroundServiceType(service) and ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION != 0,
+        )
+    }
+
     // ---- DISCONNECT / teardown -----------------------------------------------------
 
     @Test
@@ -179,6 +196,54 @@ class ObdServiceIntegrationTest {
         assertEquals("Retry cancelled.", status.optString("detail"))
     }
 
+    @Test
+    fun cancelRetryActionKeepsActiveSessionSticky() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+        controller.startCommand(0, 1)
+        assertTrue("precondition: a session is running before CANCEL_RETRY", service.running.get())
+
+        val result = service.onStartCommand(intentFor(ObdService.ACTION_CANCEL_RETRY, null, null, null), 0, 2)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("active cancel retry should keep the service sticky", Service.START_STICKY, result)
+        assertTrue("CANCEL_RETRY flips the cancel-retry request flag", service.cancelRetryRequested)
+        assertFalse("active cancel retry must not stop the service directly", shadowOf(service).isStoppedBySelf)
+        val status = captured.lastStatus()
+        assertNotNull("CANCEL_RETRY must broadcast a status", status)
+        assertEquals("idle", status!!.optString("state"))
+        assertEquals("Retry cancelled.", status.optString("detail"))
+    }
+
+    @Test
+    fun appVisibilityActionsStopIdleServiceButKeepActiveSessionSticky() {
+        val idleController = newController(null)
+        val idleService = idleController.create().get()
+
+        val idleBackground =
+            idleService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 1)
+
+        assertEquals(Service.START_NOT_STICKY, idleBackground)
+        assertFalse("background action records the app as backgrounded", idleService.appInForeground)
+        assertTrue("idle background action should stop the service", shadowOf(idleService).isStoppedBySelf)
+
+        val activeController =
+            newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val activeService = activeController.create().get()
+        activeController.startCommand(0, 1)
+
+        val activeBackground =
+            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 2)
+        val activeForeground =
+            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_FOREGROUND, null, null, null), 0, 3)
+
+        assertEquals(Service.START_STICKY, activeBackground)
+        assertEquals(Service.START_STICKY, activeForeground)
+        assertTrue("foreground action records the app as foregrounded again", activeService.appInForeground)
+        assertFalse("active visibility changes must not stop the service", shadowOf(activeService).isStoppedBySelf)
+    }
+
     // ---- null / unrecognized start commands ------------------------------------------
 
     @Test
@@ -193,6 +258,14 @@ class ObdServiceIntegrationTest {
 
         assertEquals("a null-intent restart must not re-stick", Service.START_NOT_STICKY, result)
         assertTrue("an idle service must stop itself on a null-intent restart", shadowOf(service).isStoppedBySelf)
+    }
+
+    @Test
+    fun onBindReturnsNullBecauseDashboardUsesBroadcasts() {
+        val controller = newController(null)
+        val service = controller.create().get()
+
+        assertEquals(null, service.onBind(Intent()))
     }
 
     @Test
@@ -259,6 +332,47 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
+    fun broadcastStatusIncludesFailureVoltageCompetingAppsAndExtras() {
+        val controller = newController(null)
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+        service.activeName = "Helper Adapter"
+        service.setLastFailureClass(FailureClass.INSTANT_DROP)
+        service.setLastFailureClass(null)
+        service.setLastVoltage(12.4)
+        service.setCompetingApps("Torque Pro, Car Scanner")
+
+        service.broadcastStatus(
+            "connecting",
+            "Retrying adapter.",
+            false,
+            JSONObject().put("retryAttempt", 2).put("origin", "test"),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val status = captured.lastStatus()
+        assertNotNull(status)
+        assertEquals("connecting", status!!.optString("state"))
+        assertEquals("Helper Adapter", status.optString("adapter"))
+        assertEquals(FailureClass.INSTANT_DROP.wireName(), status.optString("failureClass"))
+        assertEquals(12.4, status.optDouble("lastVoltage"), 0.01)
+        assertEquals("Torque Pro, Car Scanner", status.optString("competingApps"))
+        assertEquals(2, status.optInt("retryAttempt"))
+        assertEquals("test", status.optString("origin"))
+
+        service.clearLastFailureClass()
+        service.setCompetingApps(null)
+        service.broadcastStatus("idle", "Done.", false)
+        shadowOf(Looper.getMainLooper()).idle()
+        val cleared = captured.lastStatus()
+        assertFalse(
+            "clearLastFailureClass should remove the failure class from later statuses",
+            cleared!!.has("failureClass"),
+        )
+        assertFalse("null competing-app state should be omitted from later statuses", cleared.has("competingApps"))
+    }
+
+    @Test
     fun broadcastTelemetryEmitsTelemetryIntentWithTypedFields() {
         val controller = newController(null)
         val service = controller.create().get()
@@ -305,6 +419,7 @@ class ObdServiceIntegrationTest {
         val captured = captureBroadcasts()
 
         service.broadcastTelemetry(JSONObject())
+        service.broadcastTelemetry(null as JSONObject?)
         shadowOf(Looper.getMainLooper()).idle()
 
         assertTrue("an empty telemetry payload must not be broadcast", captured.telemetry.isEmpty())
@@ -324,12 +439,18 @@ class ObdServiceIntegrationTest {
         return controller.get()
     }
 
-    private fun newController(intent: Intent?): ServiceController<TestObdService> {
+    private fun newController(intent: Intent?): ServiceController<TestObdService> =
+        newController(TestObdService::class.java, intent)
+
+    private fun <T : TestObdService> newController(
+        serviceClass: Class<T>,
+        intent: Intent?,
+    ): ServiceController<T> {
         val controller =
             if (intent != null) {
-                Robolectric.buildService(TestObdService::class.java, intent)
+                Robolectric.buildService(serviceClass, intent)
             } else {
-                Robolectric.buildService(TestObdService::class.java)
+                Robolectric.buildService(serviceClass)
             }
         controllers += controller
         return controller
@@ -347,6 +468,12 @@ class ObdServiceIntegrationTest {
         if (name != null) intent.putExtra(ObdService.EXTRA_NAME, name)
         if (detailStage != null) intent.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         return intent
+    }
+
+    private fun activeForegroundServiceType(service: ObdService): Int {
+        val field = ObdService::class.java.getDeclaredField("activeForegroundServiceType")
+        field.isAccessible = true
+        return field.getInt(service)
     }
 
     private fun captureBroadcasts(): CapturedBroadcasts {

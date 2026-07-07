@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -236,6 +237,41 @@ class SessionRecorderTest {
         }
     }
 
+    @Test
+    fun startSessionFailureLeavesRecorderInactive() {
+        val store = RecordingStore()
+        store.failStartSession = true
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-start-failure-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        assertEquals(0L, recorder.activeSessionId())
+        assertEquals(ObdLocalStore.MODE_OBD, recorder.activeMode())
+        recorder.shutdown()
+    }
+
+    @Test
+    fun snapshotCaptureFailureDoesNotAbortSessionStart() {
+        val store = RecordingStore()
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-snapshot-failure-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder =
+            SessionRecorder(
+                Any(),
+                ObdSessionLog(logsDir),
+                store,
+                null,
+                SessionRecorder.SystemSnapshotSource { throw RuntimeException("snapshot unavailable") },
+            )
+
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        assertEquals(SESSION_ID, recorder.activeSessionId())
+        recorder.shutdown()
+    }
+
     /**
      * Status events submitted via `persistStatus` reach the store as a `recordStatus` call (which
      * delegates to `recordEvent` with kind=`"status"`) carrying the expected state + detail +
@@ -269,6 +305,92 @@ class SessionRecorderTest {
         // The status executor was not the recorder thread — we can't easily prove a different
         // thread without instrumentation, but we can prove the work landed by the time
         // shutdown() returned, which is what callers actually rely on.
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun duplicateStatusInsideWindowIsThrottled() {
+        val store = RecordingStore()
+        val recorder = newOpenRecorder(store, "sr-status-dupe-test")
+        val payload = JSONObject().put("seq", 1)
+
+        recorder.persistStatus("connecting", "same detail", false, payload)
+        recorder.persistStatus("connecting", "same detail", false, JSONObject().put("seq", 2))
+        recorder.shutdown()
+
+        assertEquals("the immediate duplicate status should be dropped", 1, store.statusCalls.size)
+        assertEquals(1, store.statusCalls[0].payload!!.optInt("seq"))
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun statusDedupeStateIsResetWhenANewSessionOpens() {
+        val store = RecordingStore()
+        val recorder = newOpenRecorder(store, "sr-status-reset-test")
+
+        recorder.persistStatus("connecting", "same detail", false, JSONObject().put("session", 1))
+        recorder.closeSession("idle", "end first", "", 0)
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 2_000L)
+        recorder.persistStatus("connecting", "same detail", false, JSONObject().put("session", 2))
+        recorder.shutdown()
+
+        assertEquals("a new session must not inherit the old duplicate-status key", 2, store.statusCalls.size)
+        assertEquals(1, store.statusCalls[0].payload!!.optInt("session"))
+        assertEquals(2, store.statusCalls[1].payload!!.optInt("session"))
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun persistLocationRoutesThroughTelemetryExecutor() {
+        val store = RecordingStore()
+        val recorder = newOpenRecorder(store, "sr-location-test")
+
+        recorder.persistLocation(
+            FilteredLocation(
+                37.7749,
+                -122.4194,
+                4.5,
+                12.0,
+                8.25,
+                91.0,
+                123_456L,
+                250L,
+                987_654_321L,
+                "gps",
+            ),
+        )
+        recorder.shutdown()
+
+        assertEquals(1, store.locationCalls.size)
+        val location = store.locationCalls[0]
+        assertEquals(SESSION_ID, location.sessionId)
+        assertEquals(123_456L, location.capturedAtMs)
+        assertEquals("gps", location.provider)
+        assertEquals(37.7749, location.latitude, 0.0001)
+        assertEquals(-122.4194, location.longitude, 0.0001)
+        assertEquals(4.5, location.accuracyM!!, 0.0001)
+        assertEquals(12.0, location.altitudeM!!, 0.0001)
+        assertEquals(8.25, location.speedMps!!, 0.0001)
+        assertEquals(91.0, location.bearingDeg!!, 0.0001)
+        assertEquals(250L, location.locationAgeMs)
+        assertEquals(987_654_321L, location.elapsedRealtimeNanos)
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun persistLocationSkipsDemoNullAndClosedSessions() {
+        val store = RecordingStore()
+        val demo = newOpenDemoRecorder(store, "sr-location-demo-test")
+        demo.persistLocation(testLocation())
+        demo.shutdown()
+
+        val normal = newOpenRecorder(store, "sr-location-null-closed-test")
+        normal.persistLocation(null)
+        normal.closeSession("idle", "done", "", 0)
+        normal.persistLocation(testLocation())
+        normal.shutdown()
+
+        assertEquals("demo, null, and post-close locations should be ignored", 0, store.locationCalls.size)
     }
 
     /**
@@ -339,6 +461,59 @@ class SessionRecorderTest {
     }
 
     @Test
+    fun logCommandWritesDeadlineWarningToSessionLog() {
+        val store = RecordingStore()
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-deadline-warning-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        recorder.logCommand("010C", 1_000L, 999L, "41 0C 1A F8", truncatedOnDeadline = true)
+        recorder.closeSession("connected", "done", "0100", 1)
+        recorder.shutdown()
+
+        val text = sessionLogText(logsDir)
+        assertTrue(text.contains("\"truncatedOnDeadline\":true"))
+        assertTrue(text.contains("Response ended at the command deadline"))
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun logCommandCarriesActiveHeaderAndResetsItAfterAdapterReset() {
+        val store = RecordingStore()
+        val recorder = newOpenRecorder(store, "sr-header-test")
+
+        recorder.logCommand("ATSH7E8", 1_000L, 5L, "OK>")
+        recorder.logCommand("010C", 1_000L, 8L, "41 0C 1A F8>")
+        recorder.logCommand("ATZ", 1_000L, 9L, "ELM327>")
+        recorder.logCommand("0105", 1_000L, 10L, "41 05 7B>")
+        recorder.shutdown()
+
+        val rpm = store.pidObservationCalls.first { it.payload!!.optString("command") == "010C" }
+        assertEquals("7E8", rpm.payload!!.optString("header"))
+
+        val coolant = store.pidObservationCalls.first { it.payload!!.optString("command") == "0105" }
+        assertEquals("", coolant.payload!!.optString("header"))
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun logCommandRecordsDiagnosticCodesFromHeaderedResponses() {
+        val store = RecordingStore()
+        val recorder = newOpenScanRecorder(store, "sr-dtc-test")
+
+        recorder.logCommand("ATSH7E8", 1_000L, 5L, "OK>")
+        recorder.logCommand("03", 2_000L, 18L, "43 01 33 00 00>")
+        recorder.shutdown()
+
+        assertEquals(1, store.diagnosticCodeCalls.size)
+        val code = store.diagnosticCodeCalls[0]
+        assertEquals("P3300", code.optString("dtc"))
+        assertEquals("7E8", code.optString("header"))
+        assertEquals("03", code.optString("command"))
+    }
+
+    @Test
     @Throws(InterruptedException::class)
     fun scanModeBatchesPidObservationsUntilShutdown() {
         val store = RecordingStore()
@@ -354,6 +529,36 @@ class SessionRecorderTest {
         assertEquals("0105", store.pidObservationCalls[0].payload!!.optString("command"))
         assertEquals("010C", store.pidObservationCalls[1].payload!!.optString("command"))
         assertEquals(1, store.pidBatchCalls.get())
+    }
+
+    @Test
+    @Throws(InterruptedException::class)
+    fun scanModeFlushesPidBatchAsSoonAsItReachesBatchSize() {
+        val store = RecordingStore()
+        val recorder = newOpenScanRecorder(store, "sr-pid-auto-batch-test")
+
+        for (i in 0 until 16) {
+            recorder.logCommand("0105", 1_000L, i.toLong(), "41 05 7B")
+        }
+        recorder.shutdown()
+
+        assertEquals(16, store.pidObservationCalls.size)
+        assertEquals("batch should flush once at the size threshold", 1, store.pidBatchCalls.get())
+    }
+
+    @Test
+    fun materializeFailureIsPersistedAsStatusEvent() {
+        val store = RecordingStore()
+        store.failMaterializeSession = true
+        val recorder = newOpenRecorder(store, "sr-materialize-failure-test")
+
+        recorder.closeSession("connected", "done", "0100", 2)
+        recorder.shutdown()
+
+        val materializeFailure = store.statusCalls.firstOrNull { it.state == "materialize_failure" }
+        assertNotNull("materialization failures should be visible in persisted status events", materializeFailure)
+        assertEquals(SESSION_ID, materializeFailure!!.sessionId)
+        assertEquals("RuntimeException", materializeFailure.detail)
     }
 
     /**
@@ -539,6 +744,43 @@ class SessionRecorderTest {
         assertEquals(SessionSummary.OUTCOME_ABORTED, SessionRecorder.outcomeFor("idle", 0))
     }
 
+    @Test
+    fun diagnosticCodeJsonIncludesAllDiagnosticFields() {
+        val payload =
+            SessionRecorder.diagnosticCodeJson(
+                ObdProtocol.DiagnosticTroubleCode(
+                    "P25A2",
+                    "stored",
+                    "Stored/current",
+                    "generic-obd",
+                    "ECM / powertrain (generic OBD-II)",
+                    "7E8",
+                    "43 25 A2 00 00",
+                ),
+                123_456L,
+                "03",
+            )
+
+        assertEquals(123_456L, payload.optLong("seenAtMs"))
+        assertEquals(123_456L, payload.optLong("observedAtMs"))
+        assertEquals("03", payload.optString("command"))
+        assertEquals("P25A2", payload.optString("dtc"))
+        assertEquals("stored", payload.optString("status"))
+        assertEquals("Stored/current", payload.optString("statusLabel"))
+        assertEquals("generic-obd", payload.optString("moduleKey"))
+        assertEquals("ECM / powertrain (generic OBD-II)", payload.optString("moduleName"))
+        assertEquals("7E8", payload.optString("header"))
+        assertEquals("43 25 A2 00 00", payload.optString("rawResponse"))
+    }
+
+    @Test
+    fun failureClassForPrefersExplicitFailureClass() {
+        assertEquals("bt_off", SessionRecorder.failureClassFor("error", FailureClass.BT_OFF))
+        assertEquals("error", SessionRecorder.failureClassFor("error", null))
+        assertEquals("blocked", SessionRecorder.failureClassFor("blocked", null))
+        assertEquals(null, SessionRecorder.failureClassFor("connected", null))
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     private fun newRecorderWithSummary(
@@ -574,6 +816,31 @@ class SessionRecorderTest {
         return recorder
     }
 
+    private fun newOpenDemoRecorder(
+        store: RecordingStore,
+        dirName: String,
+    ): SessionRecorder {
+        val logsDir = File(System.getProperty("java.io.tmpdir"), dirName)
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_DEMO, "", "Demo", 1_000L)
+        return recorder
+    }
+
+    private fun testLocation(): FilteredLocation =
+        FilteredLocation(
+            1.0,
+            2.0,
+            null,
+            null,
+            null,
+            null,
+            100L,
+            null,
+            null,
+            "gps",
+        )
+
     // ---- fake store ---------------------------------------------------------------
 
     /**
@@ -587,6 +854,8 @@ class SessionRecorderTest {
         val telemetryCalls = ArrayList<RecordedTelemetry>()
         val statusCalls = ArrayList<RecordedStatus>()
         val pidObservationCalls = ArrayList<RecordedPidObservation>()
+        val diagnosticCodeCalls = ArrayList<JSONObject>()
+        val locationCalls = ArrayList<RecordedLocation>()
         val pidBatchCalls = AtomicInteger()
         val eventCalls = ArrayList<RecordedEvent>()
         val arrivalCounter = AtomicLong()
@@ -594,6 +863,11 @@ class SessionRecorderTest {
         @Volatile var blockTelemetryWrites = false
 
         @Volatile var failTelemetryWrites = false
+
+        @Volatile var failStartSession = false
+
+        @Volatile var failMaterializeSession = false
+
         val firstTelemetryEntered = CountDownLatch(1)
         val releaseTelemetryWrites = CountDownLatch(1)
 
@@ -603,6 +877,9 @@ class SessionRecorderTest {
             adapterName: String?,
             startedAtMs: Long,
         ): Long {
+            if (failStartSession) {
+                throw RuntimeException("simulated start failure")
+            }
             // Non-zero so the recorder enters the "session is active" branches.
             return SESSION_ID
         }
@@ -656,6 +933,16 @@ class SessionRecorderTest {
             return pidObservationCalls.size.toLong()
         }
 
+        override fun recordDiagnosticCode(
+            sessionId: Long,
+            diagnosticCode: JSONObject?,
+        ): Long {
+            synchronized(diagnosticCodeCalls) {
+                diagnosticCodeCalls.add(diagnosticCode ?: JSONObject())
+            }
+            return diagnosticCodeCalls.size.toLong()
+        }
+
         override fun recordPidObservations(
             sessionId: Long,
             observations: List<JSONObject>,
@@ -675,6 +962,39 @@ class SessionRecorderTest {
             return observations.size
         }
 
+        override fun recordLocationSample(
+            sessionId: Long,
+            capturedAtMs: Long,
+            provider: String?,
+            latitude: Double,
+            longitude: Double,
+            accuracyM: Double?,
+            altitudeM: Double?,
+            speedMps: Double?,
+            bearingDeg: Double?,
+            locationAgeMs: Long?,
+            elapsedRealtimeNanos: Long?,
+        ): Long {
+            synchronized(locationCalls) {
+                locationCalls.add(
+                    RecordedLocation(
+                        sessionId,
+                        capturedAtMs,
+                        provider,
+                        latitude,
+                        longitude,
+                        accuracyM,
+                        altitudeM,
+                        speedMps,
+                        bearingDeg,
+                        locationAgeMs,
+                        elapsedRealtimeNanos,
+                    ),
+                )
+            }
+            return locationCalls.size.toLong()
+        }
+
         override fun finalizeSession(
             sessionId: Long,
             status: String?,
@@ -688,6 +1008,16 @@ class SessionRecorderTest {
         ) {
             finalizeArrivalOrder.compareAndSet(0L, arrivalCounter.incrementAndGet())
             finalizeCalls.incrementAndGet()
+        }
+
+        override fun materializeSession(
+            sessionId: Long,
+            startedAtMs: Long,
+            closedAtMs: Long,
+        ) {
+            if (failMaterializeSession) {
+                throw RuntimeException("simulated materialize failure")
+            }
         }
 
         override fun recordEvent(
@@ -741,6 +1071,20 @@ class SessionRecorderTest {
         val observedAtMs: Long,
     )
 
+    private class RecordedLocation(
+        val sessionId: Long,
+        val capturedAtMs: Long,
+        val provider: String?,
+        val latitude: Double,
+        val longitude: Double,
+        val accuracyM: Double?,
+        val altitudeM: Double?,
+        val speedMps: Double?,
+        val bearingDeg: Double?,
+        val locationAgeMs: Long?,
+        val elapsedRealtimeNanos: Long?,
+    )
+
     private class RecordedEvent(
         val sessionId: Long,
         val kind: String?,
@@ -770,6 +1114,13 @@ class SessionRecorderTest {
                 throw AssertionError(ex)
             }
             return p
+        }
+
+        private fun sessionLogText(logsDir: File): String {
+            val files = logsDir.listFiles { _, name -> name.startsWith("session-") && name.endsWith(".jsonl") }
+            assertNotNull(files)
+            assertTrue("expected a session log in $logsDir", files!!.isNotEmpty())
+            return files.maxByOrNull { it.lastModified() }!!.readText()
         }
     }
 }

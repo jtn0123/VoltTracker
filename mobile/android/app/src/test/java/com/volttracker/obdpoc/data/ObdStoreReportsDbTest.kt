@@ -145,6 +145,42 @@ class ObdStoreReportsDbTest {
     }
 
     @Test
+    fun latestReviewWarningsExplainRejectedFramesGapsUnknownPidsAndEmptyTelemetry() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val useful = sample(42, 60.0, 34.05, -118.25, 1_000L)
+        useful.put("chargeTransitionHint", true)
+        useful.put("appForeground", false)
+        store.recordTelemetry(id, useful)
+        store.recordEvent(id, "status", "connected", "speed_rejected", false, JSONObject().put("updatedAt", 1_100L))
+        store.recordEvent(id, "status", "connected", "sample_gap", false, JSONObject().put("updatedAt", 1_200L))
+        store.recordEvent(id, "status", "connected", "app_backgrounded", false, JSONObject().put("updatedAt", 1_300L))
+        store.recordPidObservation(
+            id,
+            pidObservation(1_400L, "22F190", "ATSH7E0", "F190", "unknown", "", null, "", "NO DATA"),
+            1_400L,
+        )
+        insertEmptyTelemetryRow(id, 1_500L)
+
+        val warnings =
+            store
+                .getStorageDetailsJson()
+                .getJSONObject("latestReview")
+                .getJSONArray("warnings")
+        val byCode = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until warnings.length()) {
+            val warning = warnings.getJSONObject(i)
+            byCode[warning.getString("code")] = warning
+        }
+
+        assertEquals(1L, byCode.getValue("charge-speed-hint").getLong("count"))
+        assertEquals(1L, byCode.getValue("pid-unparsed").getLong("count"))
+        assertEquals(1L, byCode.getValue("sample-gap").getLong("count"))
+        assertEquals(1L, byCode.getValue("background-tested").getLong("count"))
+        assertEquals(1L, byCode.getValue("empty-telemetry").getLong("count"))
+        assertTrue(byCode.getValue("charge-speed-hint").getString("detail").contains("255 km/h"))
+    }
+
+    @Test
     fun summaryDerivesTelemetryCountsFromASingleScan() {
         // L10: storageCountsProjection now derives the raw + useful telemetry counts from one
         // telemetry_samples scan (ObdStoreSupport.telemetryTotalAndUsefulCounts) instead of two
@@ -187,6 +223,144 @@ class ObdStoreReportsDbTest {
 
         val routes = store.getRecentRoutesJson(4, 120)
         assertNotNull(routes)
+    }
+
+    @Test
+    fun recentSessionsEventsAndAdapterHistoryJsonExposeDashboardFields() {
+        val first = store.startSession("obd", "00:11", "Adapter A", 1_000L)
+        store.recordTelemetry(first, sample(40, 50.0, 34.05, -118.25, 1_100L))
+        store.recordEvent(first, "status", "connected", "polling", false, JSONObject().put("updatedAt", 1_200L))
+        store.finalizeSession(
+            first,
+            ObdLocalStore.STATUS_COMPLETE,
+            2_000L,
+            "0100",
+            "00:11",
+            "Adapter A",
+            "obd",
+            1,
+            "done",
+        )
+
+        val second = store.startSession("scan", "00:22", "Adapter B", 3_000L)
+        store.recordEvent(second, "status", "scan-complete", "ok", false, JSONObject().put("updatedAt", 3_200L))
+        store.finalizeSession(
+            second,
+            ObdLocalStore.STATUS_COMPLETE,
+            4_000L,
+            "0100,0120",
+            "00:22",
+            "Adapter B",
+            "scan",
+            0,
+            "scan done",
+        )
+
+        val recentSessions = store.getRecentSessionsJson(2)
+        assertEquals(2, recentSessions.length())
+        assertEquals(second, recentSessions.getJSONObject(0).optLong("id"))
+        assertEquals(0L, recentSessions.getJSONObject(0).optLong("usefulSampleCount"))
+        assertEquals(first, recentSessions.getJSONObject(1).optLong("id"))
+        assertEquals(1L, recentSessions.getJSONObject(1).optLong("usefulSampleCount"))
+
+        val recentEvents = store.getRecentEvents(first, 5)
+        assertEquals(1, recentEvents.size)
+        assertEquals("connected", recentEvents[0].state)
+        assertEquals("polling", recentEvents[0].detail)
+
+        val adapterHistory = store.getAdapterHistoryJson(2)
+        assertEquals(2, adapterHistory.length())
+        val historyByAddress = LinkedHashMap<String, JSONObject>()
+        for (i in 0 until adapterHistory.length()) {
+            val row = adapterHistory.getJSONObject(i)
+            historyByAddress[row.optString("address")] = row
+        }
+        assertEquals(setOf("00:22", "00:11"), historyByAddress.keys)
+        assertEquals("scan", historyByAddress.getValue("00:22").optString("lastMode"))
+        assertEquals("obd", historyByAddress.getValue("00:11").optString("lastMode"))
+    }
+
+    @Test
+    fun enhancedCapabilityDetailExportAndDeleteRoundTrip() {
+        val id = store.startSession("scan", "00:11", "Adapter")
+        store.recordPidObservation(
+            id,
+            pidObservation(1000L, "221154", "ATSH7E0", "1154", "engine oil temperature", "56", 56.0, "C", "62115460"),
+            1000L,
+        )
+
+        val list = store.getEnhancedCapabilitiesJson(10)
+        assertEquals(1, list.length())
+        val capabilityId = list.getJSONObject(0).getLong("id")
+
+        val detail = store.getEnhancedCapabilityExportJson(capabilityId)
+        assertTrue(detail.optBoolean("ok"))
+        assertEquals("detailed-signal-log", detail.optString("kind"))
+        assertEquals("221154", detail.getJSONObject("item").optString("command"))
+
+        val all = store.getEnhancedCapabilitiesExportJson(10)
+        assertTrue(all.optBoolean("ok"))
+        assertEquals("detailed-signal-logs", all.optString("kind"))
+        assertEquals(1, all.getJSONArray("items").length())
+
+        assertEquals(1, store.deleteEnhancedCapability(capabilityId))
+        val missing = store.getEnhancedCapabilityExportJson(capabilityId)
+        assertFalse(missing.optBoolean("ok"))
+        assertEquals("not_found", missing.optString("error"))
+    }
+
+    @Test
+    fun latestOdometerAndSohHistoryUseFreshBatterySnapshotsOldestFirst() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val older = sample(30, 50.0, 34.05, -118.25, 1_000L)
+        older.put("capacityAh", 50.0)
+        older.put("capacityAhStaleMs", 0L)
+        older.put("sohPct", 96.5)
+        older.put("packVoltage", 350.0)
+        older.put("batteryTemp", 21.0)
+        older.put("odometerKm", 12_345.0)
+        store.recordTelemetry(id, older)
+
+        val newer = sample(32, 51.0, 34.06, -118.25, 2_000L)
+        newer.put("capacityAh", 49.5)
+        newer.put("capacityAhStaleMs", 0L)
+        newer.put("sohPct", 95.9)
+        newer.put("packVoltage", 351.0)
+        newer.put("batteryTemp", 22.0)
+        newer.put("odometerKm", 12_456.0)
+        store.recordTelemetry(id, newer)
+
+        assertEquals(12_456.0, store.projections().latestOdometerKm()!!, 0.001)
+
+        val history = store.getBatterySohHistoryJson()
+        assertEquals(2, history.length())
+        assertEquals(1_000L, history.getJSONObject(0).optLong("capturedAtMs"))
+        assertEquals(96.5, history.getJSONObject(0).optDouble("sohPct"), 0.001)
+        assertEquals(12_345.0, history.getJSONObject(0).optDouble("odometerKm"), 0.001)
+        assertEquals(2_000L, history.getJSONObject(1).optLong("capturedAtMs"))
+        assertEquals(95.9, history.getJSONObject(1).optDouble("sohPct"), 0.001)
+        assertEquals(12_456.0, history.getJSONObject(1).optDouble("odometerKm"), 0.001)
+    }
+
+    @Test
+    fun allTripsForExportIncludesBoundedRoutesAndSkipsHiddenTrips() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, sample(40, 50.0, 34.05, -118.25, 1_000L))
+        store.recordTelemetry(id, sample(50, 51.0, 34.06, -118.25, 2_000L))
+        store.recordTelemetry(id, sample(60, 52.0, 34.07, -118.25, 3_000L))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4_000L, "")
+
+        val exported = store.getAllTripsForExportJson(10, 2)
+        assertEquals(1, exported.length())
+        val trip = exported.getJSONObject(0)
+        assertTrue("export payload should always carry the label key", trip.has("label"))
+        assertTrue(trip.optString("tripId").isNotEmpty())
+        val points = trip.getJSONObject("route").getJSONArray("points")
+        assertTrue("export should include at least one route point", points.length() > 0)
+        assertTrue("export route must honor the point limit", points.length() <= 2)
+
+        assertTrue(store.markTripNotTrip(trip.optString("tripId")))
+        assertEquals(0, store.getAllTripsForExportJson(10, 2).length())
     }
 
     @Test
@@ -649,6 +823,22 @@ class ObdStoreReportsDbTest {
         return row
     }
 
+    private fun insertEmptyTelemetryRow(
+        sessionId: Long,
+        capturedAtMs: Long,
+    ) {
+        val helper = VoltTrackerDb(RuntimeEnvironment.getApplication())
+        try {
+            val row = ContentValues()
+            row.put("session_id", sessionId)
+            row.put("captured_at_ms", capturedAtMs)
+            row.put("json", "{}")
+            helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_TELEMETRY, null, row)
+        } finally {
+            helper.close()
+        }
+    }
+
     private fun diagnosticCode(
         dtc: String,
         status: String,
@@ -662,4 +852,31 @@ class ObdStoreReportsDbTest {
             .put("moduleName", "ECM / powertrain (generic OBD-II)")
             .put("seenAtMs", seenAtMs)
             .put("rawResponse", "43 25 A2 00 00")
+
+    private fun pidObservation(
+        observedAtMs: Long,
+        command: String,
+        header: String,
+        pid: String,
+        name: String,
+        valueText: String,
+        valueNumeric: Double?,
+        unit: String,
+        rawResponse: String,
+    ): JSONObject {
+        val observation = JSONObject()
+        observation.put("observedAtMs", observedAtMs)
+        observation.put("command", command)
+        observation.put("header", header)
+        observation.put("pid", pid)
+        observation.put("name", name)
+        observation.put("valueText", valueText)
+        if (valueNumeric != null) {
+            observation.put("valueNumeric", valueNumeric)
+        }
+        observation.put("unit", unit)
+        observation.put("rawRequest", command)
+        observation.put("rawResponse", rawResponse)
+        return observation
+    }
 }

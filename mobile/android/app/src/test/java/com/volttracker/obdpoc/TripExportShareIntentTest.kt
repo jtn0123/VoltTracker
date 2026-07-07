@@ -1,12 +1,16 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
+import android.graphics.Bitmap
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -96,7 +100,107 @@ class TripExportShareIntentTest {
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
     }
 
+    @Test
+    fun formatFromKeyAcceptsOnlyTextExportFormats() {
+        assertEquals(TripExportShareIntent.Format.GPX, TripExportShareIntent.Format.fromKey(" gPx "))
+        assertEquals(TripExportShareIntent.Format.CSV, TripExportShareIntent.Format.fromKey("CSV"))
+        assertNull("the card sentinel is not a bridge text-export format", TripExportShareIntent.Format.fromKey("card"))
+        assertNull(TripExportShareIntent.Format.fromKey("kml"))
+        assertNull(TripExportShareIntent.Format.fromKey(null))
+    }
+
+    @Test
+    fun writeExportRejectsEmptyRoutesAndCardSentinel() {
+        assertNull(TripExportShareIntent.writeExport(context, emptyRoute(), TripExportShareIntent.Format.GPX))
+        assertNull(TripExportShareIntent.writeExport(context, sampleRoute(), TripExportShareIntent.Format.CARD))
+    }
+
+    @Test
+    fun bulkCsvWritersRejectNonPositiveCounts() {
+        assertNull(TripExportShareIntent.writeAllTripsCsv(context, sampleAllTrips(), 0))
+        assertNull(TripExportShareIntent.writeAllTripsCsv(context, sampleAllTrips(), -1))
+
+        assertNull(TripExportShareIntent.writeChargeSessionsCsv(context, sampleChargeRows(), 0.18, 0))
+        assertNull(TripExportShareIntent.writeChargeSessionsCsv(context, sampleChargeRows(), null, -1))
+    }
+
+    @Test
+    fun writeChargeSessionsCsvIncludesRowsAndOptionalCost() {
+        val export = TripExportShareIntent.writeChargeSessionsCsv(context, sampleChargeRows(), 0.20, 2)
+
+        assertNotNull(export)
+        assertEquals(TripExportShareIntent.Format.CSV, export!!.format)
+        assertEquals(2, export.pointCount)
+        val csv = export.file.readText()
+        assertTrue(csv.contains("est_cost"))
+        assertTrue(csv.contains("Home"))
+    }
+
+    @Test
+    fun writeCardPngProducesShareableImageIntent() {
+        val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+
+        val export = TripExportShareIntent.writeCardPng(context, bitmap)
+
+        assertNotNull(export)
+        assertEquals(TripExportShareIntent.Format.CARD, export!!.format)
+        assertTrue(export.file.name.endsWith(".png"))
+        assertTrue("PNG file must not be empty", export.bytes > 0L)
+
+        val intent = TripExportShareIntent.buildShareIntent(context, export)
+        assertNotNull(intent)
+        assertEquals("image/png", intent!!.type)
+        assertEquals("content", intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.scheme)
+    }
+
+    @Test
+    fun writersReturnNullWhenTripExportPathIsAFile() {
+        val exportPath = File(context.cacheDir, "trip-exports")
+        wipe(exportPath)
+        exportPath.writeText("not a directory")
+        val bitmap = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888)
+
+        assertNull(TripExportShareIntent.writeExport(context, sampleRoute(), TripExportShareIntent.Format.GPX))
+        assertNull(TripExportShareIntent.writeAllTripsCsv(context, sampleAllTrips(), 5))
+        assertNull(TripExportShareIntent.writeChargeSessionsCsv(context, sampleChargeRows(), 0.18, 2))
+        assertNull(TripExportShareIntent.writeCardPng(context, bitmap))
+    }
+
+    @Test
+    fun writeExportReturnsNullWhenCacheRootCannotCreateTripExportDir() {
+        val cacheRoot = File(context.cacheDir, "cache-root-file").apply { writeText("not a directory") }
+        val badContext = contextWithCacheDir(cacheRoot)
+
+        val export = TripExportShareIntent.writeExport(badContext, sampleRoute(), TripExportShareIntent.Format.GPX)
+
+        assertNull(export)
+    }
+
+    @Test
+    fun preparingExportDirPurgesOnlyStaleArtifacts() {
+        val exportDir = File(context.cacheDir, "trip-exports")
+        assertTrue(exportDir.mkdirs())
+        val stale =
+            File(exportDir, "stale.gpx").apply {
+                writeText("old")
+                assertTrue(setLastModified(System.currentTimeMillis() - 2L * 60L * 60L * 1000L))
+            }
+        val recent =
+            File(exportDir, "recent.gpx").apply {
+                writeText("new")
+                assertTrue(setLastModified(System.currentTimeMillis()))
+            }
+
+        val export = TripExportShareIntent.writeExport(context, sampleRoute(), TripExportShareIntent.Format.GPX)
+
+        assertNotNull(export)
+        assertFalse("old cache artifacts are purged", stale.exists())
+        assertTrue("recent artifacts are preserved for concurrent shares", recent.exists())
+    }
+
     private companion object {
+        private fun emptyRoute(): JSONObject = JSONObject().put("session", JSONObject()).put("points", JSONArray())
+
         private fun sampleRoute(): JSONObject {
             val points = JSONArray()
             points.put(
@@ -126,6 +230,30 @@ class TripExportShareIntentTest {
                     JSONObject().put("id", "1:10000:30000").put("sessionId", 1).put("adapterName", "OBDLink"),
                 ).put("points", points)
         }
+
+        private fun sampleChargeRows(): JSONArray =
+            JSONArray()
+                .put(
+                    JSONObject()
+                        .put("startedAtMs", 1_700_000_000_000L)
+                        .put("endedAtMs", 1_700_003_600_000L)
+                        .put("startSoc", 40.0)
+                        .put("endSoc", 75.0)
+                        .put("energyKwh", 9.5)
+                        .put("powerKw", 7.2)
+                        .put("chargerType", "Home")
+                        .put("confidence", 0.95),
+                ).put(
+                    JSONObject()
+                        .put("startedAtMs", 1_700_100_000_000L)
+                        .put("endedAtMs", 1_700_101_800_000L)
+                        .put("startSoc", 52.0)
+                        .put("endSoc", 62.0)
+                        .put("energyKwh", 3.0)
+                        .put("powerKw", 6.1)
+                        .put("chargerType", "Public")
+                        .put("confidence", 0.8),
+                )
 
         private fun sampleAllTrips(): JSONArray {
             val trips = JSONArray()
@@ -170,11 +298,19 @@ class TripExportShareIntentTest {
             }
         }
 
-        private fun wipe(dir: File) {
-            if (dir.isDirectory) {
-                dir.listFiles()?.forEach { it.delete() }
-                dir.delete()
+        private fun contextWithCacheDir(cacheDir: File): Context =
+            object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+                override fun getCacheDir(): File = cacheDir
             }
+
+        private fun wipe(dir: File) {
+            if (!dir.exists()) {
+                return
+            }
+            if (dir.isDirectory) {
+                dir.listFiles()?.forEach { wipe(it) }
+            }
+            dir.delete()
         }
     }
 }

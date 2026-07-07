@@ -13,6 +13,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.io.IOException
 
 /**
  * Exercises [EventNotificationCoordinator] end to end: it reads the broadcast telemetry / scan
@@ -235,6 +236,35 @@ class EventNotificationCoordinatorTest {
         )
     }
 
+    @Test
+    fun failedAutoScanDoesNotThrottleSoReconnectCanRetryAndNotify() {
+        eventPrefs.setAutoScanOnConnectEnabled(true)
+        eventPrefs.setLastScanDtcCodes(listOf("P0AA6"))
+        val coord = coordinator()
+        val failingEngine = FakeDtcEngine(throwOnMode03 = true)
+
+        coord.maybeRunAutoDtcScan(failingEngine)
+
+        assertTrue("failed auto-scan still attempted Mode 03", failingEngine.commands.contains("03"))
+        assertTrue("failed scan must not post a new-DTC alert", notifier.posted.isEmpty())
+        assertEquals("failed scan must not stamp the auto-scan throttle", 0L, eventPrefs.lastAutoScanAtMs())
+        assertEquals(
+            "failed scan must leave the prior DTC baseline intact",
+            setOf("P0AA6"),
+            eventPrefs.lastScanDtcCodes(),
+        )
+
+        now += 5L * 60L * 1000L
+        coord.onSessionStart()
+        val retryEngine = FakeDtcEngine()
+        coord.maybeRunAutoDtcScan(retryEngine)
+
+        assertEquals(1, notifier.posted.size)
+        val event = notifier.posted[0] as EventNotificationDecider.Event.NewDtc
+        assertEquals(listOf("P0420"), event.newCodes)
+        assertEquals(now, eventPrefs.lastAutoScanAtMs())
+    }
+
     // ---- reconnect / null-payload / clock-fallback (D5) --------------------------------
 
     @Test
@@ -388,6 +418,7 @@ class EventNotificationCoordinatorTest {
     /** An engine whose Mode 03 read returns one stored DTC (a generic 43 01 P0420 reply). */
     private class FakeDtcEngine(
         private val mode03Response: String = "43 01 04 20 \r>",
+        private val throwOnMode03: Boolean = false,
     ) : ObdPollingEngine(ObdService()) {
         val commands: MutableList<String?> = ArrayList()
 
@@ -396,6 +427,9 @@ class EventNotificationCoordinatorTest {
             timeoutMs: Long,
         ): String {
             commands.add(command)
+            if (command == "03" && throwOnMode03) {
+                throw IOException("simulated Mode 03 failure")
+            }
             // Mode 03 positive response: 43 01 04 20 -> one DTC P0420.
             return if (command == "03") mode03Response else "OK\r>"
         }

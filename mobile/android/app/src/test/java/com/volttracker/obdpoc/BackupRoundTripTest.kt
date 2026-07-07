@@ -7,6 +7,7 @@ import android.net.Uri
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.VoltTrackerDb
 import com.volttracker.obdpoc.data.VoltTrackerSchema
+import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -345,6 +346,121 @@ class BackupRoundTripTest {
         )
     }
 
+    @Test
+    fun encryptedRoundTripFeedsDashboardReaderProjectionsAfterRestore() {
+        val startedAtMs = 10_000L
+        val sessionId = store!!.startSession("obd", "AA:BB:CC:DD:EE:FF", "Projection Adapter", startedAtMs)
+        store!!.upsertVehicleFromVin("1G1ZD5ST8JF" + "202020")
+        val syntheticLat = 10.0
+        val syntheticLng = 20.0
+        val samples =
+            listOf(
+                restoredBatterySample(35, 64.0, syntheticLat, syntheticLng, 45.8, 95.1, startedAtMs),
+                restoredBatterySample(
+                    42,
+                    63.0,
+                    syntheticLat + 0.002,
+                    syntheticLng + 0.002,
+                    45.4,
+                    94.7,
+                    startedAtMs + 10_000L,
+                ),
+                restoredBatterySample(
+                    48,
+                    62.0,
+                    syntheticLat + 0.004,
+                    syntheticLng + 0.004,
+                    45.1,
+                    94.0,
+                    startedAtMs + 20_000L,
+                ),
+            )
+        for (sample in samples) {
+            val atMs = sample.optLong("updatedAt")
+            store!!.recordTelemetry(sessionId, sample, atMs)
+            store!!.recordLocationSample(
+                sessionId,
+                atMs,
+                "restore-roundtrip",
+                sample.optDouble("latitude"),
+                sample.optDouble("longitude"),
+                sample.optDouble("accuracyM"),
+                null,
+                sample.optDouble("gpsSpeedMps"),
+                null,
+                0L,
+                null,
+            )
+        }
+        store!!.recordDiagnosticCode(sessionId, diagnosticCode("P25A2", "stored", startedAtMs + 25_000L))
+        store!!.addMaintenanceEntry(
+            createdAtMs = startedAtMs + 30_000L,
+            odometerKm = 12_345.6,
+            type = "Coolant service",
+            note = "Restore projection check",
+            intervalKm = 8_000.0,
+            intervalMonths = 12,
+        )
+        store!!.finalizeSession(
+            sessionId,
+            ObdLocalStore.STATUS_COMPLETE,
+            startedAtMs + 30_000L,
+            "0100,010D,015B,2241A3",
+            "AA:BB:CC:DD:EE:FF",
+            "Projection Adapter",
+            "obd",
+            samples.size,
+            "projection seed complete",
+        )
+        store!!.materializeSession(sessionId, startedAtMs, startedAtMs + 30_000L)
+
+        val encrypted = dataBackup.buildEncryptedBackupFile(store, "projection passphrase")
+        assertNotNull(encrypted)
+        val staged = dataBackup.stageRestoreFile(registerAsSafUri(encrypted!!), "projection passphrase")
+        assertNotNull(staged)
+
+        swapStagedFileIntoLiveDb(staged!!)
+        staged.delete()
+        encrypted.delete()
+
+        val reader = DashboardStorageReader { store }
+        val summary = JSONObject(reader.storageSummaryJson())
+        assertEquals(1, summary.optInt("sessionCount"))
+        assertEquals(3L, summary.optLong("sampleCount"))
+        assertEquals(1L, summary.optLong("diagnosticCodeCount"))
+        assertEquals(3L, summary.optLong("batterySnapshotCount"))
+        assertEquals(3L, summary.optLong("locationSampleCount"))
+
+        val details = JSONObject(reader.storageDetailsJson())
+        val vehicle = details.getJSONObject("latestVehicle")
+        assertTrue(vehicle.optString("vin").endsWith("2020"))
+        assertFalse(
+            "dashboard projection must keep the raw VIN out of restore reads",
+            vehicle.optString("vin").contains("1G1ZD5"),
+        )
+
+        val route = details.getJSONObject("latestRoute")
+        assertTrue("restored route should be renderable", route.optInt("pointCount") >= 3)
+        assertTrue("restored route should keep real movement", route.optDouble("distanceMeters") > 250.0)
+
+        val battery = details.getJSONObject("batterySummary").getJSONObject("latestBatterySnapshot")
+        assertEquals(45.1, battery.optDouble("capacityAh"), 0.001)
+        assertEquals(94.0, battery.optDouble("sohPct"), 0.001)
+
+        val sohHistory = JSONArray(reader.batterySohHistoryJson())
+        assertEquals(3, sohHistory.length())
+        assertEquals(95.1, sohHistory.getJSONObject(0).optDouble("sohPct"), 0.001)
+        assertEquals(94.0, sohHistory.getJSONObject(2).optDouble("sohPct"), 0.001)
+
+        val trips = JSONArray(reader.tripsJson())
+        assertEquals(1, trips.length())
+        assertTrue(trips.getJSONObject(0).optBoolean("hasRoute"))
+
+        val maintenance = store!!.getMaintenanceLogJson(10)
+        assertEquals(1, maintenance.length())
+        assertEquals("Coolant service", maintenance.getJSONObject(0).optString("type"))
+    }
+
     /**
      * Backups created before the 8-character minimum existed can carry shorter passphrases. The
      * minimum gates creating NEW backups only — restore must keep accepting any non-empty
@@ -548,6 +664,39 @@ class BackupRoundTripTest {
             sample.put("updatedAt", atMs)
             return sample
         }
+
+        private fun restoredBatterySample(
+            speedKph: Int,
+            soc: Double,
+            lat: Double,
+            lng: Double,
+            capacityAh: Double,
+            sohPct: Double,
+            atMs: Long,
+        ): JSONObject =
+            telemetrySample(speedKph, 1500, lat, lng, atMs)
+                .put("soc", soc)
+                .put("packVoltage", 355.0)
+                .put("packCurrentA", 12.0)
+                .put("capacityAh", capacityAh)
+                .put("capacityAhStaleMs", 0L)
+                .put("sohPct", sohPct)
+                .put("accuracyM", 6.0)
+                .put("gpsSpeedMps", speedKph / 3.6)
+
+        private fun diagnosticCode(
+            dtc: String,
+            status: String,
+            seenAtMs: Long,
+        ): JSONObject =
+            JSONObject()
+                .put("dtc", dtc)
+                .put("status", status)
+                .put("statusLabel", "Stored/current")
+                .put("moduleKey", "generic-obd")
+                .put("moduleName", "ECM / powertrain (generic OBD-II)")
+                .put("seenAtMs", seenAtMs)
+                .put("rawResponse", "43 25 A2 00 00")
 
         @Throws(IOException::class)
         private fun tempDbFile(prefix: String): File {

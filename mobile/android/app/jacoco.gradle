@@ -56,8 +56,8 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   pure-logic packages so a regression there can't hide behind the aggregate
 //   project floor (a 38%-covered framework class averaged against an 87% one).
 //   We deliberately do NOT add a blanket element="CLASS" rule: several classes
-//   are framework-bound and legitimately near-zero (SdpProbe ~8%, LogcatMirror
-//   ~0%, raw Bluetooth socket paths, MainActivity$obdReceiver), so a CLASS floor
+//   are framework-bound and legitimately near-zero (SdpProbe ~8%, raw Bluetooth
+//   socket paths, MainActivity$obdReceiver), so a CLASS floor
 //   would be unworkable. Instead we pin the two packages that are pure,
 //   testable domain logic and already very well covered:
 //     materialize  LINE 88.9% (386/434) -> floor 0.85 (~actual-4, churn room)
@@ -91,7 +91,91 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   classify packages. The class-level WidgetStateFormatter rule is kept as-is
 //   (a tighter 0.95 on the pure formatter is still useful). Actual at this round:
 //     widget  LINE 93.0% (186/200) -> floor 0.89 (~actual-4, churn room)
+//   2026-07-06 (round 7, test bump): added focused JVM/Robolectric coverage for
+//   OBD decode contracts, bridge input clamps, auto-DTC scan outcomes, voltage
+//   probe safety, trip/export bridge paths, dashboard storage reader failures,
+//   and LogcatMirror diagnostics plumbing. Actual aggregate project LINE is
+//   88.1% (15684/17809), so the project floor moves from 0.80 -> 0.85
+//   (~actual-3, churn room). Newly well-covered top-level contracts also get
+//   focused per-CLASS floors:
+//     ObdElmDecode             LINE 100%  (158/158) -> floor 0.95
+//     DashboardStorageReader   LINE 100%  (56/56)   -> floor 0.95
+//     LogcatMirror             LINE 100%  (22/22)   -> floor 0.95
+//     VoltageProbe             LINE 97.7% (43/44)   -> floor 0.93
+//     AutoDtcScanRunner        LINE 91.7% (22/24)   -> floor 0.87
+//     VoltBridgeDataExports    LINE 90.0% (226/251) -> floor 0.86
+//   2026-07-06 (round 8, "more" test bump): added additional focused coverage
+//   for trip-label normalization/SQLite precedence, data-record JSON fallback,
+//   dashboard Back callback results, session-state branches, SystemSnapshot BT
+//   permission reporting, async storage bridge failures, AutoConnect policy
+//   gates/cooldown, and ClearDtcRunner NRC/log-truncation paths. Actual
+//   aggregate project LINE is now 88.3% (15726/17809), so the project floor
+//   moves again from 0.85 -> 0.86. Additional per-CLASS floors:
+//     AutoConnectController       LINE 97.8% (44/45) -> floor 0.94
+//     DashboardBackPressCallback  LINE 100%  (13/13) -> floor 0.95
+//     SessionStateMachine         LINE 95.5% (21/22) -> floor 0.91
+//     VoltBridgeStorage           LINE 96.2% (51/53) -> floor 0.92
+//     ClearDtcRunner              LINE 89.4% (42/47) -> floor 0.85
+//     data.ObdTripLabels          LINE 92.5% (37/40) -> floor 0.88
+//     data.StatusEventRecord      LINE 100%  (14/14) -> floor 0.95
+//     data.TelemetrySampleRecord  LINE 100%  (24/24) -> floor 0.95
+//   2026-07-06 (round 9, delegate/detail-probe bump): added direct tests for
+//   EventNotificationHostDelegate's ready/not-ready flows and TpmsDiscoveryRunner's
+//   detail-probe telemetry/stage normalization. Actual aggregate project LINE is
+//   88.5% (15767/17809), so the project floor moves from 0.86 -> 0.87.
+//     EventNotificationHostDelegate LINE 100%  (28/28) -> floor 0.95
+//     TpmsDiscoveryRunner           LINE 86.1% (74/86) -> floor 0.82
+//   2026-07-06 (round 10, share/log/backup failure-path bump): added edge-path coverage
+//   for diagnostics/trip share cache failures, session-log open/pointer failures,
+//   rolling app-log stale marker and blocked-rotation paths, and bridge diagnostics
+//   forwarding/status reporting, plus backup/debug-export cache-root guards and
+//   null-store/passphrase restore checks. Actual aggregate project LINE is now
+//   88.9% (15835/17809), so the project floor moves from 0.87 -> 0.88.
+//     RollingAppLog          LINE 91.5% (86/94)  -> floor 0.88
+//     VoltBridgeDiagnostics  LINE 95.2% (59/62)  -> floor 0.92
+//     TripExportShareIntent  LINE 89.4% (76/85)  -> floor 0.85
+//     DiagnosticsShareIntent LINE 87.3% (117/134) -> floor 0.83
+//     ObdSessionLog          LINE 85.2% (75/88)  -> floor 0.81
+//     DataBackup             LINE 80.0% (244/305) -> floor 0.77
+//   2026-07-06 (round 11, bigger live/persistence/bluetooth bump): added richer
+//   LiveSampleReader scripted polling coverage across standard, battery, charge,
+//   thermal, motor, and raw-payload fields; ObdPersistenceWorker lifecycle
+//   failure/fallback coverage; DeviceCatalog malformed-history recovery; and
+//   BluetoothStateReporter system/status broadcast handling. Actual aggregate
+//   project LINE is now 89.6% (15957/17809), so the project floor moves from
+//   0.88 -> 0.89.
+//     LiveSampleReader       LINE 93.9% (356/379) -> floor 0.90
+//     BluetoothStateReporter LINE 86.7% (163/188) -> floor 0.83
+//     DeviceCatalog          LINE 88.1% (126/143) -> floor 0.84
+//     ObdPersistenceWorker   LINE 84.4% (81/96)   -> floor 0.80
+//   2026-07-06 (round 12, backup/engine edge-flow bump): added backup share
+//   failure handling, restore picker/worker failures, restore-mode finishing
+//   cleanup, missing-store merge/replace failures, and ObdPollingEngine location,
+//   one-shot command, and diagnostics-helper tests. Actual aggregate project LINE
+//   is now 90.1% (16037/17809), so the project floor moves from 0.89 -> 0.90.
+//     BackupController       LINE 85.8% (477/556) -> floor 0.82
+//     ObdPollingEngine       LINE 71.5% (364/509) -> floor 0.70
+//   2026-07-06 (round 13, recorder/report projection bump): added
+//   SessionRecorder status/location/header/diagnostic-code coverage, report projection coverage
+//   for enhanced capability detail/export/delete, sessions/adapters, SOH/odometer, and all-trips
+//   export payloads. Also fixed a downsampling bug where tiny point limits could still return a
+//   forced middle sample. Actual aggregate project LINE is now 90.5% (16123/17813); the project
+//   floor stays at 0.90, and strengthened classes get focused floors:
+//     SessionRecorder         LINE 85.8% (296/345) -> floor 0.82
+//     data.ObdStoreReports    LINE 96.2% (503/523) -> floor 0.93
+//     data.ObdStoreRouteProjection LINE 97.6% (246/252) -> floor 0.94
 //   No existing floor is lowered.
+//   2026-07-06 (round 14, engine failure-loop bump): added ObdPollingEngine loop
+//   coverage for pre-connect aborts, one-shot scan/clear-DTC/detail-probe handoff,
+//   wake-nudge first-read failures, protocol-probe exhaustion, and retry cancellation
+//   after a failed attempt. DataBackup restore-staging tests now cover plain,
+//   invalid, and encrypted restore file outcomes. ObdService integration tests now
+//   cover foreground/background app actions, active cancel-retry behavior, and rich
+//   status payload extras. Actual aggregate project LINE is now 91.2% (16248/17813),
+//   so the project floor moves from 0.90 -> 0.91.
+//     ObdPollingEngine LINE 85.5% (435/509) -> floor 0.85
+//     ObdService       LINE 84.4% (422/500) -> floor 0.80
+//     SessionRecorder   LINE 89.0% (307/345) -> floor 0.86
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -148,6 +232,178 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             includes = ["com.volttracker.obdpoc.AutoScanController"]
             limit { counter = "LINE"; minimum = 0.78 }
         }
+        // Round 7 focused class floors: deterministic JVM/Robolectric contracts newly covered by
+        // the July 2026 test bump. These are intentionally below measured coverage by several
+        // points so ordinary refactors have room, while real coverage drops fail the gate.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdElmDecode"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.DashboardStorageReader"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.LogcatMirror"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltageProbe"]
+            limit { counter = "LINE"; minimum = 0.93 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.AutoDtcScanRunner"]
+            limit { counter = "LINE"; minimum = 0.87 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeDataExports"]
+            limit { counter = "LINE"; minimum = 0.86 }
+        }
+        // Round 8 focused class floors from the expanded July 2026 test bump.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.AutoConnectController"]
+            limit { counter = "LINE"; minimum = 0.94 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.DashboardBackPressCallback"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.SessionStateMachine"]
+            limit { counter = "LINE"; minimum = 0.91 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeStorage"]
+            limit { counter = "LINE"; minimum = 0.92 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ClearDtcRunner"]
+            limit { counter = "LINE"; minimum = 0.85 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.data.ObdTripLabels"]
+            limit { counter = "LINE"; minimum = 0.88 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.data.StatusEventRecord"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.data.TelemetrySampleRecord"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        // Round 9 focused class floors: Activity-side notification delegate and deterministic
+        // detail-probe orchestration are now covered directly.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.EventNotificationHostDelegate"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.TpmsDiscoveryRunner"]
+            limit { counter = "LINE"; minimum = 0.82 }
+        }
+        // Round 10 focused class floors from share/log failure-path coverage.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.RollingAppLog"]
+            limit { counter = "LINE"; minimum = 0.88 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeDiagnostics"]
+            limit { counter = "LINE"; minimum = 0.92 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.TripExportShareIntent"]
+            limit { counter = "LINE"; minimum = 0.85 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.DiagnosticsShareIntent"]
+            limit { counter = "LINE"; minimum = 0.83 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdSessionLog"]
+            limit { counter = "LINE"; minimum = 0.81 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.DataBackup"]
+            limit { counter = "LINE"; minimum = 0.77 }
+        }
+        // Round 11 focused class floors from the larger live-reader, persistence,
+        // catalog-history, and Bluetooth broadcast coverage bump.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.LiveSampleReader"]
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.BluetoothStateReporter"]
+            limit { counter = "LINE"; minimum = 0.83 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.DeviceCatalog"]
+            limit { counter = "LINE"; minimum = 0.84 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdPersistenceWorker"]
+            limit { counter = "LINE"; minimum = 0.80 }
+        }
+        // Round 12/14 focused class floors from backup failure-flow and engine helper/loop coverage.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.BackupController"]
+            limit { counter = "LINE"; minimum = 0.82 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdPollingEngine"]
+            limit { counter = "LINE"; minimum = 0.85 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdService"]
+            limit { counter = "LINE"; minimum = 0.80 }
+        }
+        // Round 13 focused class floors from recorder/report-projection coverage and the
+        // route-downsampling point-limit fix.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.SessionRecorder"]
+            limit { counter = "LINE"; minimum = 0.86 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.data.ObdStoreReports"]
+            limit { counter = "LINE"; minimum = 0.93 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.data.ObdStoreRouteProjection"]
+            limit { counter = "LINE"; minimum = 0.94 }
+        }
         // M2 maintenance-overdue evaluator: pure due/overdue math + crossing-signature de-dup, the
         // exact "pure, testable domain logic" the focused floors guard. MaintenanceDueEvaluatorTest
         // exercises every branch; floor set just under the measured line rate for churn room.
@@ -157,7 +413,7 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             limit { counter = "LINE"; minimum = 0.90 }
         }
         rule {
-            limit { counter = "LINE"; minimum = 0.80 }
+            limit { counter = "LINE"; minimum = 0.91 }
         }
     }
 }

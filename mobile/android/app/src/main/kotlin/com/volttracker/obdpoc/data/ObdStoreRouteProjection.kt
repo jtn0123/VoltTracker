@@ -373,7 +373,13 @@ object ObdStoreRouteProjection {
         target: Int,
     ): Cursor {
         val projection = columns.joinToString(", ")
-        val sampledLimit = maxOf(1, target - 2)
+        if (target <= 1) {
+            return db.rawQuery(
+                "SELECT $projection FROM $table WHERE ($where) ORDER BY captured_at_ms ASC, _id ASC LIMIT 1",
+                whereArgs,
+            )
+        }
+        val sampledLimit = maxOf(0, target - 2)
         val sql =
             "SELECT $projection FROM $table WHERE ($where) AND (" +
                 "_id = (SELECT _id FROM $table WHERE ($where) ORDER BY captured_at_ms ASC, _id ASC LIMIT 1) " +

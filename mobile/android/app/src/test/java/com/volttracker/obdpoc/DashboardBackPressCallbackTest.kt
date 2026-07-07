@@ -42,6 +42,30 @@ class DashboardBackPressCallbackTest {
     }
 
     @Test
+    fun dashboardConsumedBackResultDoesNotExit() {
+        val webView = WebView(RuntimeEnvironment.getApplication())
+        var exits = 0
+        val callback = DashboardBackPressCallback({ webView }, { exits += 1 })
+
+        callback.handleOnBackPressed()
+        shadowOf(webView).lastEvaluatedJavascriptCallback.onReceiveValue("true")
+
+        assertEquals(0, exits)
+    }
+
+    @Test
+    fun dashboardFalseBackResultFallsBackToTheOs() {
+        val webView = WebView(RuntimeEnvironment.getApplication())
+        var exits = 0
+        val callback = DashboardBackPressCallback({ webView }, { exits += 1 })
+
+        callback.handleOnBackPressed()
+        shadowOf(webView).lastEvaluatedJavascriptCallback.onReceiveValue("false")
+
+        assertEquals(1, exits)
+    }
+
+    @Test
     fun callbackStartsEnabledSoItInterceptsSystemBack() {
         assertTrue(DashboardBackPressCallback({ null }, {}).isEnabled)
     }

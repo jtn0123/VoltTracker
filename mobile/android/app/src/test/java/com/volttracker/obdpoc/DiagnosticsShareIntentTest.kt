@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Parcelable
 import org.junit.After
@@ -140,6 +141,24 @@ class DiagnosticsShareIntentTest {
     }
 
     @Test
+    fun zipStillBuildsDigestWhenSessionLogDirectoryIsEmpty() {
+        val obdLogDir = File(context.filesDir, "obd-logs")
+        assertTrue(obdLogDir.mkdirs())
+
+        val zip = DiagnosticsShareIntent.buildZip(context)
+
+        assertNotNull(zip)
+        val entries = listZip(zip!!)
+        assertTrue(entries.contains("diagnostics-bundle.txt"))
+        for (entry in entries) {
+            assertFalse(
+                "empty session dir should not add session entries: $entries",
+                entry.startsWith("obd-logs/session-"),
+            )
+        }
+    }
+
+    @Test
     fun zipIncludesRolledAppLogWhenPresent() {
         val appLogDir = File(context.filesDir, "app-log")
         assertTrue(appLogDir.mkdirs())
@@ -256,6 +275,27 @@ class DiagnosticsShareIntentTest {
     @Test
     fun buildDigestIntentReturnsNullWhenContextIsNull() {
         assertNull(DiagnosticsShareIntent.buildDigestIntent(null))
+    }
+
+    @Test
+    fun buildZipAndDigestReturnNullWhenDiagnosticsPathIsAFile() {
+        val diagnosticsPath = File(context.cacheDir, "diagnostics")
+        wipe(diagnosticsPath)
+        diagnosticsPath.writeText("not a directory")
+
+        assertNull(DiagnosticsShareIntent.buildZip(context))
+        assertNull(DiagnosticsShareIntent.buildDigestFile(context))
+    }
+
+    @Test
+    fun diagnosticsSharesReturnNullWhenCacheRootCannotCreateDiagnosticsDir() {
+        val cacheRoot = File(context.cacheDir, "cache-root-file").apply { writeText("not a directory") }
+        val badContext = contextWithCacheDir(cacheRoot)
+
+        assertNull(DiagnosticsShareIntent.buildZip(badContext))
+        assertNull(DiagnosticsShareIntent.buildDigestFile(badContext))
+        assertNull(DiagnosticsShareIntent.buildIntent(badContext))
+        assertNull(DiagnosticsShareIntent.buildDigestIntent(badContext))
     }
 
     @Test
@@ -442,6 +482,11 @@ class DiagnosticsShareIntentTest {
                 // become order-sensitive again, but we don't want to mask that with a crash here.
             }
         }
+
+        private fun contextWithCacheDir(cacheDir: File): Context =
+            object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+                override fun getCacheDir(): File = cacheDir
+            }
 
         private fun wipe(f: File?) {
             if (f == null || !f.exists()) return

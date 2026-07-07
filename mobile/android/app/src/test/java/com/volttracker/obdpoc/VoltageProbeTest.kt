@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.io.IOException
 
 /**
  * Pure JVM tests for [VoltageProbe.parseVolts]. The decode is the only piece worth unit-testing in
@@ -79,7 +80,65 @@ class VoltageProbeTest {
         assertEquals(8.0, v!!, EPS)
     }
 
+    @Test
+    fun runSendsPid42WithDefaultTimeoutAndStoresDecodedVoltage() {
+        val service = ObdService()
+        val sender = RecordingSender("41 42 31 D4\r>")
+
+        VoltageProbe(service).run(sender)
+
+        assertEquals(VoltageProbe.PID, sender.command)
+        assertEquals(VoltageProbe.DEFAULT_TIMEOUT_MS, sender.timeoutMs)
+        assertEquals(12.756, lastVoltage(service)!!, EPS)
+    }
+
+    @Test
+    fun runReturnsWithoutTouchingSenderWhenSenderMissing() {
+        VoltageProbe(ObdService()).run(null)
+    }
+
+    @Test
+    fun runSwallowsIoRuntimeAndDecodeFailures() {
+        val ioService = ObdService()
+        VoltageProbe(ioService).run(RecordingSender(ioFailure = IOException("boom")))
+        assertNull(lastVoltage(ioService))
+
+        val runtimeService = ObdService()
+        VoltageProbe(runtimeService).run(RecordingSender(runtimeFailure = IllegalStateException("boom")))
+        assertNull(lastVoltage(runtimeService))
+
+        val decodeService = ObdService()
+        VoltageProbe(decodeService).run(RecordingSender("NO DATA\r>"))
+        assertNull(lastVoltage(decodeService))
+    }
+
     companion object {
         private const val EPS = 1e-3
+
+        private fun lastVoltage(service: ObdService): Double? {
+            val field = ObdService::class.java.getDeclaredField("lastVoltage")
+            field.isAccessible = true
+            return field.get(service) as Double?
+        }
+    }
+
+    private class RecordingSender(
+        private val response: String? = null,
+        private val ioFailure: IOException? = null,
+        private val runtimeFailure: RuntimeException? = null,
+    ) : VoltageProbe.Sender {
+        var command: String? = null
+        var timeoutMs: Long = -1L
+
+        override fun transactOneShot(
+            command: String,
+            timeoutMs: Long,
+        ): String? {
+            this.command = command
+            this.timeoutMs = timeoutMs
+            ioFailure?.let { throw it }
+            runtimeFailure?.let { throw it }
+            return response
+        }
     }
 }

@@ -71,6 +71,19 @@ class DeviceCatalogHistoryTest {
     }
 
     @Test
+    fun rememberRejectsNullBlankAndLowercaseAddressesWithoutChangingLastDevice() {
+        catalog.remember(macA, "ELM327")
+
+        assertEquals("", catalog.remember(null, "ignored"))
+        assertEquals("", catalog.remember("   ", "ignored"))
+        assertEquals("", catalog.remember(macB.lowercase(Locale.US), "lowercase framework reject"))
+
+        val last = JSONObject(catalog.getLastDeviceJson())
+        assertEquals("invalid remembers must not replace the last adapter", macA, last.getString("address"))
+        assertEquals("ELM327", last.getString("name"))
+    }
+
+    @Test
     fun repeatRememberIncrementsConnectCountAndPreservesFirstSeen() {
         catalog.remember(macA, "ELM327")
         val firstSeen = JSONArray(catalog.getDeviceHistoryJson()).getJSONObject(0).getLong("firstSeen")
@@ -128,6 +141,36 @@ class DeviceCatalogHistoryTest {
         assertEquals(4, entry.getInt("connectCount"))
         // firstSeen is inherited from the seeded record.
         assertEquals(1_000L, entry.getLong("firstSeen"))
+    }
+
+    @Test
+    fun malformedStoredHistoryFallsBackToStoredLastDevice() {
+        prefs
+            .edit()
+            .putString("device_history", "{not json")
+            .putString(DeviceCatalog.PREF_LAST_ADDRESS, macA)
+            .putString(DeviceCatalog.PREF_LAST_NAME, "Saved Adapter")
+            .commit()
+
+        val history = JSONArray(catalog.getDeviceHistoryJson())
+
+        assertEquals(1, history.length())
+        val entry = history.getJSONObject(0)
+        assertEquals(macA, entry.getString("address"))
+        assertEquals("Saved Adapter", entry.getString("name"))
+        assertEquals(1, entry.getInt("connectCount"))
+    }
+
+    @Test
+    fun malformedStoredHistoryIsReplacedOnNextRemember() {
+        prefs.edit().putString("device_history", "not-json").commit()
+
+        catalog.remember(macA, "ELM327")
+
+        val history = JSONArray(catalog.getDeviceHistoryJson())
+        assertEquals(1, history.length())
+        assertEquals(macA, history.getJSONObject(0).getString("address"))
+        assertEquals("ELM327", history.getJSONObject(0).getString("name"))
     }
 
     @Test
@@ -208,6 +251,34 @@ class DeviceCatalogHistoryTest {
         val second = devices.getJSONObject(1)
         assertEquals("AirPods Pro", second.getString("name"))
         assertFalse(second.getBoolean("obdCandidate"))
+    }
+
+    @Test
+    fun getBondedDevicesJsonSortsAlphabeticallyWithinCandidateBucket() {
+        grantConnectPermission()
+        registerBondedDevices(
+            "AA:BB:CC:DD:EE:03" to "Veepeak",
+            macB to "ELM327",
+            macA to "Carista",
+        )
+
+        val devices = JSONArray(catalog.getBondedDevicesJson())
+
+        assertEquals(3, devices.length())
+        assertEquals("Carista", devices.getJSONObject(0).getString("name"))
+        assertEquals("ELM327", devices.getJSONObject(1).getString("name"))
+        assertEquals("Veepeak", devices.getJSONObject(2).getString("name"))
+    }
+
+    @Test
+    fun bondedDeviceWithBlankNameFallsBackToObdAdapterLabel() {
+        grantConnectPermission()
+        registerBondedDevices(macA to "   ")
+
+        val devices = JSONArray(catalog.getBondedDevicesJson())
+
+        assertEquals(1, devices.length())
+        assertEquals("OBD adapter", devices.getJSONObject(0).getString("name"))
     }
 
     @Test

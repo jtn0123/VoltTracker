@@ -27,6 +27,9 @@ class SessionStateMachineTest {
         val state = SessionStateMachine()
 
         assertThrows(IllegalArgumentException::class.java) {
+            state.start(null, "bad")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
             state.start(SessionStateMachine.Phase.IDLE, "bad")
         }
         assertThrows(IllegalArgumentException::class.java) {
@@ -41,6 +44,10 @@ class SessionStateMachineTest {
             SessionStateMachine.phaseForDashboardState("initializing", false),
         )
         assertEquals(
+            SessionStateMachine.Phase.CONNECTING,
+            SessionStateMachine.phaseForDashboardState(" reconnecting ", false),
+        )
+        assertEquals(
             SessionStateMachine.Phase.CONNECTED,
             SessionStateMachine.phaseForDashboardState("connected", false),
         )
@@ -49,16 +56,40 @@ class SessionStateMachineTest {
             SessionStateMachine.phaseForDashboardState("scan-complete", false),
         )
         assertEquals(
+            SessionStateMachine.Phase.SCANNING,
+            SessionStateMachine.phaseForDashboardState("scanning", false),
+        )
+        assertEquals(
             SessionStateMachine.Phase.CLEAR_DTC,
             SessionStateMachine.phaseForDashboardState("codes-cleared", false),
+        )
+        assertEquals(
+            SessionStateMachine.Phase.CLEAR_DTC,
+            SessionStateMachine.phaseForDashboardState("clearing-codes", false),
         )
         assertEquals(
             SessionStateMachine.Phase.DEMO,
             SessionStateMachine.phaseForDashboardState("demo", false),
         )
         assertEquals(
+            SessionStateMachine.Phase.STOPPING,
+            SessionStateMachine.phaseForDashboardState("stopping", false),
+        )
+        assertEquals(
             SessionStateMachine.Phase.ERROR,
             SessionStateMachine.phaseForDashboardState("connected", true),
+        )
+        assertEquals(
+            SessionStateMachine.Phase.ERROR,
+            SessionStateMachine.phaseForDashboardState("error", false),
+        )
+        assertEquals(
+            SessionStateMachine.Phase.IDLE,
+            SessionStateMachine.phaseForDashboardState(null, false),
+        )
+        assertEquals(
+            SessionStateMachine.Phase.IDLE,
+            SessionStateMachine.phaseForDashboardState("ready", false),
         )
     }
 
@@ -72,5 +103,21 @@ class SessionStateMachineTest {
         assertEquals("Adapter timed out", state.detail())
         assertTrue(state.blocked())
         assertFalse(state.active())
+    }
+
+    @Test
+    fun nullDetailsNormalizeToBlankOnStartStopAndObserve() {
+        val state = SessionStateMachine()
+
+        state.start(SessionStateMachine.Phase.DEMO, null)
+        assertEquals("", state.detail())
+
+        state.observeStatus("connected", null, false)
+        assertEquals("", state.detail())
+        assertFalse(state.blocked())
+        assertTrue(state.active())
+
+        state.stop(null)
+        assertEquals("", state.detail())
     }
 }

@@ -157,6 +157,43 @@ class TroubleshooterBridgeConnectionTest {
     }
 
     @Test
+    fun adapterReadyStatusBelowAwakeVoltagePostsNoNotification() {
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+
+        bridge.scheduleAdapterReadyNotify(5)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        bridge.onAdapterStatusForReadyNotify(connectedStatus(12.4))
+
+        val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        assertTrue(
+            "sleeping-car voltage must not post adapter-ready notifications",
+            shadowOf(nm).allNotifications.isEmpty(),
+        )
+    }
+
+    @Test
+    fun adapterReadyStatusWithoutNotificationPermissionCancelsSchedule() {
+        shadowOf(RuntimeEnvironment.getApplication()).denyPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+
+        bridge.scheduleAdapterReadyNotify(5)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        bridge.onAdapterStatusForReadyNotify(connectedStatus(14.2))
+
+        val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        assertTrue(
+            "missing POST_NOTIFICATIONS permission must skip the notification",
+            shadowOf(nm).allNotifications.isEmpty(),
+        )
+        activity.connectAddress = null
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(30))
+        assertNull("permission-denied path should cancel future ready probes", activity.connectAddress)
+    }
+
+    @Test
     fun adapterReadyTickSkipsProbeWhileSessionActiveAndReschedules() {
         // The notify-when-ready tick must not probe over a live session (see above), but the
         // schedule itself stays armed: once the session ends, the next tick probes again.

@@ -4,13 +4,16 @@ import android.app.Activity
 import android.app.AlertDialog
 import android.content.DialogInterface
 import android.content.Intent
+import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.VoltTrackerDb
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -90,6 +93,30 @@ class BackupControllerDialogTest {
         return dialog
     }
 
+    private fun registerFileForPicker(file: File): Uri {
+        val uri = Uri.parse("content://test/" + file.name)
+        shadowOf(activity.contentResolver)
+            .registerInputStream(uri, FileInputStream(file))
+        return uri
+    }
+
+    private fun sqliteFixture(
+        fileName: String,
+        version: Int,
+        ddl: SQLiteDatabase.() -> Unit,
+    ): File {
+        val file = File(activity.cacheDir, fileName)
+        file.delete()
+        val db = SQLiteDatabase.openOrCreateDatabase(file.path, null)
+        try {
+            db.ddl()
+            db.version = version
+        } finally {
+            db.close()
+        }
+        return file
+    }
+
     @Test
     fun verifiedBackupOffersMergeReplaceAndCancel() {
         val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
@@ -131,6 +158,22 @@ class BackupControllerDialogTest {
     }
 
     @Test
+    fun mergeButtonReportsFailureWhenStoreIsUnavailable() {
+        val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
+        activity.localStore?.close()
+        activity.localStore = null
+
+        clickAndSettle(dialog, DialogInterface.BUTTON_POSITIVE) // Merge
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Merge failed - the backup could not be merged.", activity.lastDetail)
+        val failed = activity.restoreProgress.last()
+        assertEquals(false, failed.busy)
+        assertEquals("blocked", failed.tone)
+        assertEquals("Restore failed", failed.title)
+    }
+
+    @Test
     fun replaceButtonRestoresTheBackupWholesale() {
         val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
 
@@ -142,6 +185,63 @@ class BackupControllerDialogTest {
             activity.lastDetail!!.contains("Backup restored"),
         )
         assertEquals(1, activity.localStore!!.getRecentSessions(10).size)
+    }
+
+    @Test
+    fun replaceButtonStopsLoggingBeforeReplacing() {
+        val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
+        activity.loggingActive = true
+
+        clickAndSettle(dialog, DialogInterface.BUTTON_NEGATIVE) // Replace all
+
+        assertEquals(1, activity.stopObdCalls)
+        assertEquals(false, activity.loggingActive)
+        assertEquals("ready", activity.lastState)
+        assertTrue(
+            "replace status should confirm the restore after logging stops, got: " + activity.lastDetail,
+            activity.lastDetail!!.contains("Backup restored"),
+        )
+        assertEquals(1, activity.localStore!!.getRecentSessions(10).size)
+    }
+
+    @Test
+    fun mergeButtonReportsLoggingActiveWhenStopFails() {
+        val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
+        activity.loggingActive = true
+        activity.stopObdThrows = true
+
+        clickAndSettle(dialog, DialogInterface.BUTTON_POSITIVE) // Merge
+
+        assertEquals(1, activity.stopObdCalls)
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - logging is still active. Stop logging and try again.",
+            activity.lastDetail,
+        )
+        val failed = activity.restoreProgress.last()
+        assertEquals(false, failed.busy)
+        assertEquals("blocked", failed.tone)
+        assertEquals("Restore failed", failed.title)
+        assertEquals(
+            "Restore failed - logging is still active. Stop logging and try again.",
+            failed.detail,
+        )
+    }
+
+    @Test
+    fun replaceButtonReportsFailureWhenStoreIsUnavailable() {
+        val dialog = openRestoreDialog(stagedBackupOfOneClearedSession())
+        activity.localStore?.close()
+        activity.localStore = null
+
+        clickAndSettle(dialog, DialogInterface.BUTTON_NEGATIVE) // Replace all
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Restore failed - could not replace the on-device database.", activity.lastDetail)
+        val failed = activity.restoreProgress.last()
+        assertEquals(false, failed.busy)
+        assertEquals("blocked", failed.tone)
+        assertEquals("Restore failed", failed.title)
     }
 
     @Test
@@ -173,6 +273,22 @@ class BackupControllerDialogTest {
     }
 
     @Test
+    fun verifiedBackupIsCancelledWhenActivityFinishesBeforeOptionsDialog() {
+        val data = Intent().setData(stagedBackupOfOneClearedSession())
+        activity.finish()
+
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertEquals("ready", activity.lastState)
+        assertEquals("Restore cancelled.", activity.lastDetail)
+        assertEquals(0, activity.localStore!!.getRecentSessions(10).size)
+        val hidden = activity.restoreProgress.last()
+        assertEquals(false, hidden.visible)
+        assertEquals("idle", hidden.tone)
+    }
+
+    @Test
     fun invalidFileIsRejectedWithoutOfferingTheDialog() {
         val uri = Uri.parse("content://test/not-a-backup.db")
         shadowOf(activity.contentResolver)
@@ -194,6 +310,88 @@ class BackupControllerDialogTest {
         val logText = appLog.readText()
         assertTrue(logText.contains("backup_restore_stage_failed"))
         assertTrue(logText.contains("status=NOT_A_BACKUP"))
+    }
+
+    @Test
+    fun missingRestoreUriPublishesOpenFailedWithoutOfferingDialog() {
+        val missing = File(activity.cacheDir, "restore-source-missing.db")
+        missing.delete()
+        val data = Intent().setData(Uri.fromFile(missing))
+
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - Android could not read the selected file.",
+            activity.lastDetail,
+        )
+        val progress = activity.restoreProgress.last()
+        assertEquals(false, progress.busy)
+        assertEquals("blocked", progress.tone)
+        assertEquals("Restore failed", progress.title)
+    }
+
+    @Test
+    fun newerSchemaBackupPublishesTooNewWithoutOfferingDialog() {
+        val newer =
+            sqliteFixture("restore-too-new-controller.db", VoltTrackerDb.DATABASE_VERSION + 1) {
+                execSQL("CREATE TABLE obd_sessions (_id INTEGER PRIMARY KEY)")
+            }
+        val data = Intent().setData(registerFileForPicker(newer))
+
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - that backup was created by a newer Volt Tracker app.",
+            activity.lastDetail,
+        )
+        assertEquals("Restore failed", activity.restoreProgress.last().title)
+        assertNull("newer backups must not reach the restore-mode dialog", ShadowAlertDialog.getLatestAlertDialog())
+        newer.delete()
+    }
+
+    @Test
+    fun brokenLegacyBackupPublishesMigrationFailedWithoutOfferingDialog() {
+        val brokenLegacy =
+            sqliteFixture("restore-broken-legacy-controller.db", 1) {
+                execSQL("CREATE TABLE obd_sessions (_id INTEGER PRIMARY KEY)")
+                // Version 1 should have telemetry_samples. Leaving it out forces the migration
+                // path to fail instead of silently treating a partial backup as restorable.
+            }
+        val data = Intent().setData(registerFileForPicker(brokenLegacy))
+
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - the backup could not be upgraded for this app.",
+            activity.lastDetail,
+        )
+        assertEquals("blocked", activity.restoreProgress.last().tone)
+        assertNull("failed migration must not offer merge/replace choices", ShadowAlertDialog.getLatestAlertDialog())
+        brokenLegacy.delete()
+    }
+
+    @Test
+    fun encryptedBackupWrongPassphrasePublishesDecryptFailedWithoutOfferingDialog() {
+        val id = activity.localStore!!.startSession("obd", "AA:BB", "Adapter")
+        activity.localStore!!.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+        val backup = DataBackup(activity).buildEncryptedBackupFile(activity.localStore, "correct-pass")
+        assertNotNull("buildEncryptedBackupFile should produce a backup", backup)
+        val data = Intent().setData(registerFileForPicker(backup!!))
+
+        activity.backupController!!.launchEncryptedRestorePicker("wrong-pass")
+        activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - the passphrase did not unlock that backup.",
+            activity.lastDetail,
+        )
+        assertEquals("Restore failed", activity.restoreProgress.last().title)
+        assertNull("decrypt failures must not offer merge/replace choices", ShadowAlertDialog.getLatestAlertDialog())
+        backup.delete()
     }
 
     @Test
@@ -245,6 +443,12 @@ class BackupControllerDialogTest {
 
     /** Minimal MainActivity that wires a real store + inline executor and captures status. */
     class HarnessActivity : MainActivity() {
+        @JvmField var loggingActive = false
+
+        @JvmField var stopObdThrows = false
+
+        @JvmField var stopObdCalls = 0
+
         @JvmField var lastState: String? = null
 
         @JvmField var lastDetail: String? = null
@@ -257,7 +461,15 @@ class BackupControllerDialogTest {
                 BackupController(this, DataBackup(this), DirectExecutorService())
         }
 
-        override fun isLoggingActive(): Boolean = false
+        override fun isLoggingActive(): Boolean = loggingActive
+
+        override fun stopObdService() {
+            stopObdCalls += 1
+            if (stopObdThrows) {
+                throw IllegalStateException("stop failed")
+            }
+            loggingActive = false
+        }
 
         override fun publishStatus(
             state: String?,
