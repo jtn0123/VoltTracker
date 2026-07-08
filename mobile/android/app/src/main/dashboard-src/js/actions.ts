@@ -578,7 +578,9 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "All-trips export is only available inside the Android app." });
       return;
     }
-    callBridgeAction("exportAllTripsCsv", [], "All-trips export failed.");
+    if (callBridgeAction("exportAllTripsCsv", [], "All-trips export failed.")) {
+      VD.showToast?.("Exporting all drives to CSV…");
+    }
   }
 
   // Submit handler for the inline maintenance form (M1/C4). Intercepts the native submit so the
@@ -847,7 +849,9 @@ type SignalActions = {
       VD.setStatus({ state: "idle", detail: "Drive export is only available inside the Android app." });
       return;
     }
-    callBridgeAction(wantCsv ? "exportTripCsv" : "exportTripGpx", [routeKey], "Drive export failed.");
+    if (callBridgeAction(wantCsv ? "exportTripCsv" : "exportTripGpx", [routeKey], "Drive export failed.")) {
+      VD.showToast?.(wantCsv ? "Exporting drive CSV…" : "Exporting drive GPX…");
+    }
   }
 
   // Delegated handler for the per-row "Rename / Name" button on a stored map route (M4). Reads the
@@ -907,7 +911,10 @@ type SignalActions = {
     paintFavoriteButton(button, next);
     if (!callBridgeAction("setTripFavorite", [routeKey, next], "Could not update drive favorite.")) {
       paintFavoriteButton(button, !next);
+      return;
     }
+    // v2: confirm the action with a toast (the star alone is easy to miss).
+    VD.showToast?.(next ? "Drive added to favorites" : "Removed from favorites");
   }
 
   // ---- M7 per-trip detail sheet --------------------------------------------
@@ -1466,6 +1473,12 @@ type SignalActions = {
     bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
     bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
+      void VD.requestMapRender().catch(() => {});
+    }, opts);
+    // "Full map" in the scrubber action row (v2) — always opens (never toggles
+    // closed: the row is unreachable while the map is fullscreen anyway).
+    bindListenerGuarded("mapFullOpenBtn", "click", () => {
+      state.mapFull = true;
       void VD.requestMapRender().catch(() => {});
     }, opts);
     bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {

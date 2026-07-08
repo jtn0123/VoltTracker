@@ -20,10 +20,10 @@ test('charge tab renders KPIs from charge summary', async ({ page }) => {
   await setView(page, 'charge');
 
   await expect(page.locator('#chargeEmptyState')).toBeHidden();
-  await expect(page.locator('#realChargeSessions')).toHaveText('3');
+  // v2: the KPI row is Plug-ins / Peak power / Est. cost; the session count
+  // lives in the Recent-charges headline instead of a Sessions tile.
   await expect(page.locator('#realChargeHints')).toHaveText('2');
   await expect(page.locator('#realChargePower')).toHaveText('48.2 kW');
-  await expect(page.locator('#realChargeStatus')).toHaveText('recorded');
 });
 
 test('insights tab shows "--" placeholders with no insight data', async ({ page }) => {

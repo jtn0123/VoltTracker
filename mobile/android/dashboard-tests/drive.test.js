@@ -150,7 +150,7 @@ describe('drive.ts', () => {
     VD.drawLiveSpeedTrace();
     expect(host.querySelector('canvas')).not.toBeNull();
     expect(host.dataset.traceState).toBe('empty');
-    expect(host.dataset.traceLabel).toBe('waiting for samples');
+    expect(host.dataset.traceLabel).toBe('speed trace appears once samples stream in');
   });
 
   it('keeps the optional live readout collapsed until a signal arrives', () => {

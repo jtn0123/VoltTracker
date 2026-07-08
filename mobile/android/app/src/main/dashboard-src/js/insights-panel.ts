@@ -175,67 +175,175 @@ import { prefs, units } from "./prefs";
     renderThisWeek();
   }
 
-  // ----- efficiency vs outside temperature (winter range loss) ---------------
-  // Buckets the logged trips into ambient-temperature bands (each trip carries
-  // its window-averaged outside-air reading) and compares real efficiency
-  // (distance over integrated HV energy) across bands — the honest answer to
-  // "why is my range down this winter?". Hidden until two bands each hold two
-  // or more drives with power data.
-  const TEMP_BANDS_C: Array<{ maxC: number; labelF: string; labelC: string }> = [
-    { maxC: 0, labelF: "<32°F", labelC: "<0°C" },
-    { maxC: 10, labelF: "32–50°F", labelC: "0–10°C" },
-    { maxC: 20, labelF: "50–68°F", labelC: "10–20°C" },
-    { maxC: 30, labelF: "68–86°F", labelC: "20–30°C" },
-    { maxC: Infinity, labelF: ">86°F", labelC: ">30°C" },
-  ];
+  // ----- temperature vs range (v2 design) -------------------------------------
+  // Dot-per-drive scatter: x = the trip's window-averaged outside temperature,
+  // y = the EV range that trip's REAL efficiency implies (mi/kWh × usable pack
+  // energy) — the honest answer to "what does temperature do to my range?",
+  // with the peak called out ("Range peaks near 71°F — about 54 mi"). Hidden
+  // until three or more drives carry both an ambient reading and HV energy.
+
+  // Mirrors telemetry.ts VOLT_USABLE_KWH (nominal Gen-2 usable pack energy).
+  const TEMP_RANGE_USABLE_KWH = 14;
+  // Guard against absurd short-trip artifacts (a 0.2 kWh rollup on a downhill
+  // half-mile reads as 40 mi/kWh) — beyond any real Volt efficiency.
+  const TEMP_RANGE_MAX_MI_PER_KWH = 10;
 
   function renderTempEfficiency() {
     const card = el("tempEffCard");
     if (!card) return;
     const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
-    const bands = TEMP_BANDS_C.map((band) => ({ ...band, miles: 0, kwh: 0, trips: 0 }));
+    const pts: Array<{ tempC: number; rangeMi: number }> = [];
     for (const trip of trips) {
       const tempC = trip.avgOutsideTempC == null ? NaN : Number(trip.avgOutsideTempC);
       const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
       const meters = Number(trip.distanceMeters);
       if (!Number.isFinite(tempC) || !Number.isFinite(energy) || energy <= 0 || !(meters > 0)) continue;
-      const band = bands.find((b) => tempC < b.maxC);
-      if (!band) continue;
-      band.miles += meters / 1609.344;
-      band.kwh += energy;
-      band.trips += 1;
+      const miPerKwh = meters / 1609.344 / energy;
+      if (!(miPerKwh > 0) || miPerKwh > TEMP_RANGE_MAX_MI_PER_KWH) continue;
+      pts.push({ tempC, rangeMi: miPerKwh * TEMP_RANGE_USABLE_KWH });
     }
-    // A band needs a couple of drives before its average means anything.
-    const populated = bands
-      .filter((band) => band.trips >= 2 && band.kwh > 0)
-      .map((band) => ({ ...band, eff: band.miles / band.kwh }));
-    if (populated.length < 2) {
+    if (pts.length < 3) {
       card.hidden = true;
       return;
     }
     card.hidden = false;
-    const metric = units.system() === "metric";
-    const labels = populated.map((band) => (metric ? band.labelC : band.labelF));
-    const values = populated.map((band) => (metric ? band.eff * KM_PER_MILE : band.eff));
-    const best = populated.reduce((a, b) => (b.eff > a.eff ? b : a));
-    const coldest = populated[0] as (typeof populated)[number];
-    const lossPct = best.eff > 0 ? Math.round((1 - coldest.eff / best.eff) * 100) : 0;
-    VD.setText(
-      "tempEffHead",
-      coldest !== best && lossPct >= 5
-        ? `${lossPct}% lower efficiency in ${metric ? coldest.labelC : coldest.labelF} weather`
-        : "Efficiency holds steady across temperatures so far.",
-    );
-    VD.setText("tempEffBest", units.efficiencyText(best.eff));
-    VD.setText("tempEffBestLabel", `Best (${metric ? best.labelC : best.labelF})`);
-    VD.setText("tempEffCold", units.efficiencyText(coldest.eff));
-    VD.setText("tempEffColdLabel", `Coldest (${metric ? coldest.labelC : coldest.labelF})`);
-    VD.setText("tempEffTrips", String(populated.reduce((acc, band) => acc + band.trips, 0)));
+    pts.sort((a, b) => a.tempC - b.tempC);
+    // Peak = the best 5°C bucket mean (a single lucky drive shouldn't set the
+    // headline); ties resolve to the warmer bucket, matching the physics.
+    const buckets = new Map<number, { sum: number; n: number }>();
+    for (const p of pts) {
+      const key = Math.round(p.tempC / 5) * 5;
+      const b = buckets.get(key) || { sum: 0, n: 0 };
+      b.sum += p.rangeMi;
+      b.n += 1;
+      buckets.set(key, b);
+    }
+    let peakTempC = pts[0]!.tempC;
+    let peakRangeMi = 0;
+    for (const [key, b] of buckets) {
+      const mean = b.sum / b.n;
+      if (mean > peakRangeMi || (mean === peakRangeMi && key > peakTempC)) {
+        peakRangeMi = mean;
+        peakTempC = key;
+      }
+    }
+    const peakRangeText = units.distanceText(peakRangeMi * KM_PER_MILE);
+    VD.setText("tempEffHead", `Range peaks near ${units.tempText(peakTempC)} — about ${peakRangeText}`);
     const chart = el("tempEffChart");
     if (chart) {
-      const aria = `Efficiency by outside temperature; best band ${units.efficiencyText(best.eff)}`;
-      chart.replaceChildren(VD.buildMonthlyTrendSvg(labels, values, aria, chart));
+      chart.replaceChildren(buildTempRangeSvg(pts, peakTempC));
     }
+  }
+
+  // The scatter SVG: temp on x (data-driven domain), estimated range on y,
+  // one dot per drive, dots in the peak temperature bucket highlighted.
+  function buildTempRangeSvg(pts: Array<{ tempC: number; rangeMi: number }>, peakTempC: number) {
+    const token = (name: string, fallback: string) => {
+      const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+      return v || fallback;
+    };
+    const lineColor = token("--line-soft", "rgba(255,255,255,0.06)");
+    const axisColor = token("--soft", "#8b8c99");
+    const dotColor = token("--ev", "#b8e63b");
+    const svgNs = "http://www.w3.org/2000/svg";
+    const w = 330;
+    const h = 140;
+    const padL = 30;
+    const padR = 10;
+    const padT = 10;
+    const padB = 22;
+    const tMin = Math.floor((pts[0]!.tempC - 2) / 5) * 5;
+    const tMax = Math.ceil((pts[pts.length - 1]!.tempC + 2) / 5) * 5;
+    const rMax = pts.reduce((m, p) => Math.max(m, p.rangeMi), 1);
+    const rMin = pts.reduce((m, p) => Math.min(m, p.rangeMi), rMax);
+    const rLo = Math.max(0, Math.floor(rMin - 3));
+    const rHi = Math.ceil(rMax + 3);
+    const xOf = (t: number) => padL + ((t - tMin) / Math.max(1, tMax - tMin)) * (w - padL - padR);
+    const yOf = (r: number) => padT + (1 - (r - rLo) / Math.max(1, rHi - rLo)) * (h - padT - padB);
+    const svg = document.createElementNS(svgNs, "svg");
+    setSvgAttrs(svg, {
+      viewBox: `0 0 ${w} ${h}`,
+      role: "img",
+      "aria-label": "Estimated EV range for each drive against outside temperature"
+    });
+    svg.style.width = "100%";
+    svg.style.display = "block";
+    const add = (tag: string, attrs: Record<string, string | number>, text?: string) => {
+      const node = setSvgAttrs(document.createElementNS(svgNs, tag), attrs);
+      if (text != null) node.textContent = text;
+      svg.append(node);
+    };
+    // Horizontal range gridlines + labels (3 steps).
+    for (let i = 0; i <= 2; i += 1) {
+      const r = rLo + ((rHi - rLo) * i) / 2;
+      add("line", { x1: padL, y1: yOf(r), x2: w - padR, y2: yOf(r), stroke: lineColor });
+      add(
+        "text",
+        {
+          x: padL - 5,
+          y: yOf(r) + 3,
+          fill: axisColor,
+          "font-size": 9,
+          "text-anchor": "end",
+          "font-family": "ui-monospace,monospace"
+        },
+        units.distanceKm(r * KM_PER_MILE).value
+      );
+    }
+    // Temperature ticks every 10 in display units' source scale (°C buckets).
+    for (let t = tMin; t <= tMax; t += 10) {
+      add(
+        "text",
+        {
+          x: xOf(t),
+          y: h - padB + 14,
+          fill: axisColor,
+          "font-size": 9,
+          "text-anchor": "middle",
+          "font-family": "ui-monospace,monospace"
+        },
+        units.tempText(t)
+      );
+    }
+    // Trend path through the temp-sorted points (bucket means keep it calm).
+    const meanByBucket = new Map<number, { sum: number; n: number }>();
+    for (const p of pts) {
+      const key = Math.round(p.tempC / 5) * 5;
+      const b = meanByBucket.get(key) || { sum: 0, n: 0 };
+      b.sum += p.rangeMi;
+      b.n += 1;
+      meanByBucket.set(key, b);
+    }
+    const meanPts = [...meanByBucket.entries()]
+      .map(([t, b]) => ({ t, r: b.sum / b.n }))
+      .sort((a, b) => a.t - b.t);
+    if (meanPts.length >= 2) {
+      const d = meanPts
+        .map((p, i) => `${i ? "L" : "M"}${xOf(p.t).toFixed(1)},${yOf(p.r).toFixed(1)}`)
+        .join(" ");
+      add("path", {
+        d,
+        fill: "none",
+        stroke: dotColor,
+        "stroke-width": 2,
+        "stroke-linejoin": "round",
+        opacity: 0.5
+      });
+    }
+    // One dot per drive; the peak bucket's dots read solid, the rest muted.
+    for (const p of pts) {
+      const inPeak = Math.round(p.tempC / 5) * 5 === peakTempC;
+      add("circle", {
+        cx: xOf(p.tempC).toFixed(1),
+        cy: yOf(p.rangeMi).toFixed(1),
+        r: 4,
+        fill: dotColor,
+        opacity: inPeak ? 1 : 0.45,
+        stroke: token("--bg-top", "#12131a"),
+        "stroke-width": 1.5
+      });
+    }
+    return svg;
   }
 
   // ----- this week (per-day bars, Monday-start) ------------------------------

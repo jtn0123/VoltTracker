@@ -76,6 +76,21 @@
         ><strong id="insightTopSpeed">--</strong>
       </div>
     </div>
+    <!-- Second stat row (v2: the old "More lifetime stats" card folded in). -->
+    <div class="map-sheet-stats insights-sheet-more">
+      <div>
+        <span class="kicker">Longest drive</span
+        ><strong id="insightLongest">--</strong>
+      </div>
+      <div>
+        <span class="kicker">GPS drives</span
+        ><strong id="insightGpsTrips">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Electric driving</span
+        ><strong id="insightElectricPct">--</strong>
+      </div>
+    </div>
     <!-- EV-vs-gas savings. Hidden until the user has set their gas MPG, gas
          price, and electricity rate in Settings → Preferences; the value is an
          estimate (EV energy is derived from distance when not logged). -->
@@ -89,124 +104,6 @@
   </div>
 
   <section class="map-layout">
-    <article class="panel" id="insightStatsCard">
-      <header>
-        <span class="kicker">More lifetime stats</span>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
-      </header>
-      <div
-        class="state-grid"
-        role="group"
-        aria-label="Additional lifetime totals"
-      >
-        <div>
-          <span>Longest drive</span><strong id="insightLongest">--</strong>
-        </div>
-        <div>
-          <span>GPS drives</span><strong id="insightGpsTrips">--</strong>
-        </div>
-        <!-- Speed-weighted share of classified driving done on electric (EV vs
-             engine-on samples); "--" until the classifier has seen real driving. -->
-        <div>
-          <span>Electric driving</span
-          ><strong id="insightElectricPct">--</strong>
-        </div>
-      </div>
-    </article>
-
-    <!-- Monthly driving trend: distance per month from the logged trips, with
-         real efficiency (integrated HV energy) and estimated cost stats.
-         Mirrors the monthly charging trend on the Battery tab (shared SVG via
-         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
-         Rendered by insights-panel.ts#renderDriveTrend. -->
-    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">Driving over time</span>
-          <h3 id="driveTrendTitle">Monthly distance</h3>
-        </div>
-        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
-          >--</strong
-        >
-      </header>
-      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
-      <div id="driveTrendStats" class="charge-cost-trend-stats">
-        <div>
-          <span class="kicker">Avg / month</span>
-          <strong id="driveTrendAvg">--</strong>
-        </div>
-        <div>
-          <span class="kicker">Efficiency</span>
-          <strong id="driveTrendEff">--</strong>
-        </div>
-        <div>
-          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
-          <strong id="driveTrendCost">--</strong>
-        </div>
-      </div>
-    </article>
-
-    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
-         mode toggle, from the trips rollup. Hidden until a drive exists this
-         week. Rendered by insights-panel.ts#renderThisWeek. -->
-    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">This week</span>
-          <h3 id="thisWeekHead">--</h3>
-        </div>
-        <div
-          id="weekModeSwitch"
-          class="signal-stage-tabs week-mode-tabs"
-          role="group"
-          aria-label="This week chart mode"
-        >
-          <button
-            type="button"
-            data-week-mode="dist"
-            class="is-active"
-            aria-pressed="true"
-          >
-            Distance
-          </button>
-          <button type="button" data-week-mode="eff" aria-pressed="false">
-            Efficiency
-          </button>
-        </div>
-      </header>
-      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
-    </article>
-
-    <!-- Efficiency vs outside temperature (winter range loss): real per-band
-         efficiency from trips that logged ambient temperature + HV energy.
-         Hidden until two temperature bands each hold two or more such drives.
-         Rendered by insights-panel.ts#renderTempEfficiency. -->
-    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">Temperature vs efficiency</span>
-          <h3 id="tempEffHead">Range across the seasons</h3>
-        </div>
-      </header>
-      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
-      <div id="tempEffStats" class="charge-cost-trend-stats">
-        <div>
-          <span class="kicker" id="tempEffBestLabel">Best band</span>
-          <strong id="tempEffBest">--</strong>
-        </div>
-        <div>
-          <span class="kicker" id="tempEffColdLabel">Coldest band</span>
-          <strong id="tempEffCold">--</strong>
-        </div>
-        <div>
-          <span class="kicker">Drives</span>
-          <strong id="tempEffTrips">--</strong>
-        </div>
-      </div>
-    </article>
-
     <article class="panel eff-scatter-card" id="effScatterCard" hidden>
       <header>
         <div>
@@ -277,6 +174,89 @@
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
 
+    <!-- Temperature vs range (v2 design): dot-per-drive scatter of estimated
+         EV range (from each trip's real efficiency × usable pack energy)
+         against that trip's outside temperature, with the peak highlighted
+         ("Range peaks near 71°F — about 54 mi"). Hidden until enough drives
+         logged both ambient temperature and HV energy. Rendered by
+         insights-panel.ts#renderTempRange. -->
+    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Temperature vs range</span>
+          <h3 id="tempEffHead">Range across the seasons</h3>
+        </div>
+      </header>
+      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
+      <small class="status-copy temp-range-footnote"
+        >Each dot is a drive · EV range estimated from that drive's efficiency
+        vs outside temperature.</small
+      >
+    </article>
+
+    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
+         mode toggle, from the trips rollup. Hidden until a drive exists this
+         week. Rendered by insights-panel.ts#renderThisWeek. -->
+    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">This week</span>
+          <h3 id="thisWeekHead">--</h3>
+        </div>
+        <div
+          id="weekModeSwitch"
+          class="signal-stage-tabs week-mode-tabs"
+          role="group"
+          aria-label="This week chart mode"
+        >
+          <button
+            type="button"
+            data-week-mode="dist"
+            class="is-active"
+            aria-pressed="true"
+          >
+            Distance
+          </button>
+          <button type="button" data-week-mode="eff" aria-pressed="false">
+            Efficiency
+          </button>
+        </div>
+      </header>
+      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
+    </article>
+
+    <!-- Monthly driving trend: distance per month from the logged trips, with
+         real efficiency (integrated HV energy) and estimated cost stats.
+         Mirrors the monthly charging trend on the Battery tab (shared SVG via
+         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
+         Rendered by insights-panel.ts#renderDriveTrend. -->
+    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Driving over time</span>
+          <h3 id="driveTrendTitle">Monthly distance</h3>
+        </div>
+        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
+          >--</strong
+        >
+      </header>
+      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
+      <div id="driveTrendStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker">Avg / month</span>
+          <strong id="driveTrendAvg">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Efficiency</span>
+          <strong id="driveTrendEff">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
+          <strong id="driveTrendCost">--</strong>
+        </div>
+      </div>
+    </article>
+
     <article class="panel list-card">
       <header>
         <span class="kicker">Maintenance</span>
@@ -288,7 +268,7 @@
           aria-expanded="false"
           aria-controls="maintenanceForm"
         >
-          Add entry
+          Add maintenance
         </button>
       </header>
       <p
@@ -415,6 +395,13 @@
       <div>
         <span>Logged distance</span
         ><strong id="vehicleLoggedDistance">--</strong>
+      </div>
+      <!-- v2: maintenance rollup at a glance ("none logged" / "3 entries"),
+           mirroring the Maintenance card above. storage-status.ts keeps it
+           in sync with the maintenance list. -->
+      <div>
+        <span>Maintenance</span
+        ><strong id="vehicleMaintenance">none logged</strong>
       </div>
       <div style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>

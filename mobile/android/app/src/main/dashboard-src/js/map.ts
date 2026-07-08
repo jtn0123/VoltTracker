@@ -2239,7 +2239,13 @@ import type { MapSessionFilter } from "./map-session-list";
     });
     const routes = [today, yesterday, earlier];
 
-    state.trips = routes.map((r) => ({
+    // Per-trip ambient + efficiency so the demo exercises the v2
+    // temperature-vs-range scatter: a cold drive reads less efficient, a warm
+    // one better — range visibly peaks in the mild-warm band.
+    const demoAmbientC = [21, 3, 27];
+    const demoMiPerKwh = [4.8, 3.7, 5.1];
+
+    state.trips = routes.map((r, i) => ({
       id: r.session.id,
       startedAtMs: r.session.startedAtMs,
       endedAtMs: r.session.endedAtMs,
@@ -2252,9 +2258,10 @@ import type { MapSessionFilter } from "./map-session-list";
       hasRoute: true,
       adapterName: r.session.adapterName,
       status: "complete",
-      // Plausible net HV energy (~4.8 mi/kWh) so the demo exercises the v2
-      // energy/cost surfaces (map sheet, trip rows, Drive strip).
-      energyKwh: Math.round((r.distanceMeters / 1609.344 / 4.8) * 10) / 10
+      avgOutsideTempC: demoAmbientC[i] ?? 20,
+      // Plausible net HV energy so the demo exercises the v2 energy/cost
+      // surfaces (map sheet, trip rows, Drive strip, temp-vs-range scatter).
+      energyKwh: Math.round((r.distanceMeters / 1609.344 / (demoMiPerKwh[i] ?? 4.8)) * 10) / 10
     }));
 
     const totalDistance = routes.reduce((s, r) => s + r.distanceMeters, 0);

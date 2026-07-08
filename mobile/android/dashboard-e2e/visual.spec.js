@@ -69,10 +69,11 @@ test('charge — live-charge ETA card is wired and renders while charging (D6)',
 
   const liveCard = page.locator('#liveChargeCard');
   await expect(liveCard).toBeVisible();
-  // 14 kWh usable * (100-50)/100 = 7.0 kWh remaining; 7.0 / 3.5 kW = 2h to 100%.
+  // 14 kWh usable * (100-50)/100 = 7.0 kWh remaining; 7.0 / 3.5 kW = 2h → the
+  // v2 headline is "50% — full around <wall clock 2h from now>".
   await expect(page.locator('#liveChargeSoc')).toHaveText('50%');
   await expect(page.locator('#liveChargeRemaining')).toHaveText('7.0 kWh');
-  await expect(page.locator('#liveChargeEta')).toHaveText('~2h 00m to 100%');
+  await expect(page.locator('#liveChargeEta')).toHaveText(/^50% — full around \d{1,2}:\d{2}\s?(AM|PM)?$/);
 });
 
 test('insights — aggregate stats', async ({ page }) => {
@@ -89,11 +90,12 @@ test('insights — aggregate stats', async ({ page }) => {
   });
   await setView(page, 'insights');
 
-  // Semantic guard: the stats card must be visible and carry rendered content, not an empty shell.
-  const statsCard = page.locator('#insightStatsCard');
-  await expect(statsCard).toBeVisible();
-  await expect(statsCard).not.toBeEmpty();
-  await expect(statsCard).toHaveScreenshot('insights-stats.png');
+  // Semantic guard (v2): the extra lifetime stats fold into the lifetime
+  // sheet's second row — visible, populated, and screenshot-pinned.
+  const statsRow = page.locator('.insights-sheet .insights-sheet-more');
+  await expect(statsRow).toBeVisible();
+  await expect(page.locator('#insightLongest')).toHaveText('34 mi');
+  await expect(statsRow).toHaveScreenshot('insights-stats.png');
 });
 
 test('insights — savings row is wired and computes once prefs are set (D6)', async ({ page }) => {

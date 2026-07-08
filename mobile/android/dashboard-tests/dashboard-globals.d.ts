@@ -758,6 +758,12 @@ interface VoltRestoreProgress {
     applyCellSnapshot(payload: unknown): void;
     formatDistance(meters: unknown): string;
     formatDuration(ms: unknown): string;
+    /** Action-confirmation toast (v2): CSV exported, favorite toggled, report
+     *  copied, units changed. Reuses the #statusToast pill without the
+     *  status-stream gating; `urgent` announces assertively (failures).
+     *  Optional: telemetry.ts attaches it after the earliest eager modules
+     *  (prefs) have loaded. */
+    showToast?(message: unknown, urgent?: boolean): void;
     formatShortDuration(ms: unknown): string;
     formatWhen(value: unknown): string;
     formatBytes(value: unknown): string;

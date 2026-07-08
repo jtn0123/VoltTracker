@@ -40,11 +40,23 @@ type ChartPoint = {
 
   // ----- shared SVG helpers -------------------------------------------------
 
+  // Waiting charts render as skeleton shimmer bars + a small caption (v2
+  // design) instead of a bare text box, so the empty state reads as "chart
+  // loading here" rather than a broken tile. The shimmer animation lives in
+  // CSS (.chart-skel-bar) and is disabled under prefers-reduced-motion.
   function paintEmpty(target: HTMLElement | null, label: string) {
     if (!target) return;
     const empty = document.createElement("div");
     empty.className = "live-chart-empty";
-    empty.textContent = label;
+    for (const width of ["62%", "90%", "44%"]) {
+      const bar = document.createElement("span");
+      bar.className = "chart-skel-bar";
+      bar.style.width = width;
+      empty.appendChild(bar);
+    }
+    const caption = document.createElement("small");
+    caption.textContent = label;
+    empty.appendChild(caption);
     target.dataset.chartState = "empty";
     target.replaceChildren(empty);
   }

@@ -404,6 +404,13 @@
     color: var(--soft);
   }
 
+  /* Two right-hand head columns (v2 design): Pack temp + Pack kW side by side. */
+  .battery-head-cols {
+    display: flex;
+    flex: none;
+    gap: 18px;
+  }
+
   .battery-temp {
     flex: none;
     text-align: right;
@@ -441,7 +448,8 @@
      jittering as the values update. */
   .battery-pack-readout {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    /* Two cells since Pack kW was promoted into the card head (v2 design). */
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
     margin-top: 12px;
     padding-top: 12px;
@@ -614,25 +622,8 @@
     background: rgba(var(--ev-rgb), 0.24);
   }
 
-  .real-overview-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
-
-  .real-overview-grid .metric {
-    padding: 12px 14px;
-    border-radius: 14px;
-    background: var(--surface-veil);
-    box-shadow: none;
-  }
-
-  .real-overview-grid .metric strong {
-    font-size: 26px;
-  }
-
-  /* Latest drive's energy + estimated cost strip (Drive tab, under the
-     overview grid). One quiet row: label+figure left, cost/prompt right. */
+  /* Latest drive's energy + estimated cost row (Drive tab, footer of the
+     "This trip" card). One quiet row: label+figure left, cost/prompt right. */
   .trip-energy-strip {
     display: flex;
     align-items: center;
@@ -1550,37 +1541,16 @@
     margin-top: 10px;
   }
 
-  /* ===== 9. Charge energy & cost card ===== */
+  /* ===== 9. Charge est-cost tile ===== */
 
-  /* Charge energy + estimated-cost card (Charge tab). */
-  .charge-energy-card {
-    padding: var(--card-pad);
-  }
-
-  .charge-energy-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .charge-energy-head strong {
-    display: block;
-    font-size: 24px;
-    font-weight: 800;
-    margin-top: 2px;
-  }
-
-  .charge-energy-cost {
-    text-align: right;
-  }
-
-  .charge-energy-cost strong {
+  /* Est. cost KPI tile (v2: the old energy/cost card folded into the KPI row +
+     the Recent-charges headline). */
+  #chargeEnergyCost {
     color: var(--ok);
   }
 
   #chargeEnergyHint {
-    margin: 10px 0 0;
+    margin: 4px 0 0;
   }
 
   .dtc-status-grid {
@@ -1940,16 +1910,24 @@
 
   /* ===== 11. Battery-tab cards (cell balance / cell map / SOH) ===== */
 
-  /* Shared layout for the three Battery-tab cards (cell balance, cell map, SOH).
-     These inherit .panel, which carries no padding of its own, so give them the
-     standard card padding — without it the header, chart, and stats sit flush
-     against the card border. */
+  /* Shared layout for the Battery-tab cards (cell balance, SOH). These inherit
+     .panel, which carries no padding of its own, so give them the standard card
+     padding — without it the header, chart, and stats sit flush against the
+     card border. */
   .cell-balance-card,
-  .cell-grid-card,
   .soh-trend-card,
   .live-charge-card {
     margin-top: 12px;
     padding: var(--card-pad);
+  }
+
+  /* v2 charging hero: green-tinted card so an active charge reads as the
+     tab's headline state at a glance. */
+  .live-charge-card {
+    border-color: rgba(var(--ev-rgb), 0.22);
+    background:
+      linear-gradient(160deg, rgba(var(--ev-rgb), 0.1), transparent 55%),
+      var(--surface-raised);
   }
 
   /* Motion: charging starting is a state change worth staging — the live
@@ -1957,6 +1935,37 @@
      popping. Same enter vocabulary as the view switch. */
   .live-charge-card:not([hidden]) {
     animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
+  }
+
+  .live-charge-sub {
+    margin: 4px 0 0;
+  }
+
+  /* v2 charge progress: green SOC-wide bar + from→to / target caption row. */
+  .live-charge-meter {
+    margin-top: 12px;
+  }
+
+  .live-charge-meter span {
+    background: var(--ev);
+  }
+
+  .live-charge-meter-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 6px;
+    color: var(--soft);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Inline cell-voltage map section inside the cell-balance card (v2): divider
+     row instead of standalone-card chrome. */
+  .cell-grid-section {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--line-soft);
   }
 
   /* Monthly trend cards (Charge monthly energy, Insights monthly distance /

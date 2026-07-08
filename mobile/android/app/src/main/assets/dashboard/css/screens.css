@@ -246,11 +246,11 @@
     }
   }
 
-  .map-frame[data-layer="heat"] .map-legend:not(.map-legend-eff) {
-    display: flex;
-  }
-
-  .map-frame[data-layer="eff"] .map-legend-eff {
+  /* One legend per layer (v2): each explains exactly the colors it draws. */
+  .map-frame[data-layer="heat"] .map-legend-heat,
+  .map-frame[data-layer="eff"] .map-legend-eff,
+  .map-frame[data-layer="routes"] .map-legend-routes,
+  .map-frame[data-layer="stops"] .map-legend-stops {
     display: flex;
   }
 
@@ -351,6 +351,20 @@
   .insights-sheet .map-sheet-stats div + div {
     border-left: none;
     padding-left: 0;
+  }
+
+  /* Second lifetime stat row (v2: the old "More lifetime stats" card folded
+     in): a quiet hairline separates it from the headline totals. */
+  .insights-sheet .insights-sheet-more {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--line-soft);
+  }
+
+  /* Temperature-vs-range scatter footnote. */
+  .temp-range-footnote {
+    display: block;
+    margin-top: 8px;
   }
 
   /* Insights lifetime card demotes its heading to a micro-label (Map keeps the
@@ -457,7 +471,8 @@
 
   .charge-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    /* Three tiles, one row (v2: Plug-ins / Peak power / Est. cost). */
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
   }
 
@@ -2164,26 +2179,55 @@
     background: var(--fill-ghost);
   }
 
+  /* Waiting chart = skeleton shimmer bars + caption (v2 design), built by
+     drive.ts#paintEmpty. Left-aligned column of three shimmer lines mimics an
+     incoming trace instead of a bare "waiting" label. */
   .live-chart-empty {
-    display: grid;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 8px;
     min-height: 86px;
-    place-items: center;
-    padding: 12px;
+    padding: 8px 12px;
     position: relative;
     color: var(--soft);
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    text-align: center;
+    font-size: 10px;
     user-select: none;
   }
 
-  .live-chart-empty::before {
-    content: "";
-    position: absolute;
-    left: 12px;
-    right: 12px;
-    top: 50%;
-    border-top: 1px dashed var(--line-soft);
+  .chart-skel-bar {
+    display: block;
+    height: 9px;
+    border-radius: 6px;
+    background-image: linear-gradient(
+      100deg,
+      var(--fill-faint, rgba(255, 255, 255, 0.04)) 30%,
+      var(--fill-bold, rgba(255, 255, 255, 0.13)) 50%,
+      var(--fill-faint, rgba(255, 255, 255, 0.04)) 70%
+    );
+    background-size: 200% 100%;
+    animation: chart-skel-shimmer 1.5s linear infinite;
+  }
+
+  @keyframes chart-skel-shimmer {
+    from {
+      background-position: 180% 0;
+    }
+    to {
+      background-position: -180% 0;
+    }
+  }
+
+  .live-chart-empty small {
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .chart-skel-bar {
+      animation: none;
+    }
   }
 
   .live-dom-chart {
@@ -2278,29 +2322,9 @@
   /* First-run ("empty" source, drive.ts#renderDriveSourceBadge): one
      page-level empty state replaces a screenful of dead placeholder tiles. */
   .view.is-prelive .live-microcharts,
-  .view.is-prelive .status-card,
-  .view.is-prelive .validation-collapse,
-  .view.is-prelive .real-overview-grid {
+  .view.is-prelive .trip-card,
+  .view.is-prelive .session-footer-btn {
     display: none;
-  }
-
-  /* X4 footnote tier: reference info loses the card chrome. */
-  .view[data-view="drive"] .status-card,
-  .view[data-view="drive"] .validation-collapse {
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    padding-block: 6px;
-  }
-  /* Drive footer meta tightened (interim; the full markup merge is a separate
-     call). */
-  .view[data-view="drive"] .status-meta {
-    gap: 6px 10px;
-    margin-top: 10px;
-  }
-
-  .view[data-view="drive"] .status-meta strong {
-    font-size: 12px;
   }
 
   .live-readout .kicker {
@@ -2313,59 +2337,116 @@
 
   /* ===== 13. Validation card ===== */
 
-  /* Collapsed-by-default validation card. The summary stays as the regular
-     .card-head, with a small disclosure caret tucked into the badge so the
-     control discoverable but quiet. */
-  .validation-collapse {
-    padding-bottom: 14px;
+  .validation-card > .validation-list {
+    margin-top: 12px;
   }
 
-  .validation-collapse > summary {
-    list-style: none;
-    cursor: pointer;
-    /* Stretch summary to fill the panel padding so the whole row is tappable. */
-    margin: -14px -14px 0;
-    padding: 14px 14px;
-    border-radius: 16px;
+  /* ===== 13b. Drive "This trip" card + session/health footer (v2) ===== */
+
+  .trip-card {
+    padding: var(--card-pad-tight);
   }
 
-  .validation-collapse > summary::-webkit-details-marker {
-    display: none;
+  .trip-stats {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 10px;
   }
 
-  /* Drive tab: give the collapsed validation summary a one-line pill affordance. */
-  .view[data-view="drive"] .validation-collapse > summary {
+  .trip-stats > div {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .trip-stats .kicker {
+    color: var(--soft);
+  }
+
+  .trip-stats strong {
+    font-family: var(--font-display);
+    /* Scales with the viewport so "4.7 mi/kWh" fits its quarter-width column
+       on a narrow phone instead of ellipsizing the unit away. */
+    font-size: clamp(14px, 4.4vw, 18px);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .trip-stats > div:last-child strong {
+    color: var(--ev-soft);
+  }
+
+  /* The energy/cost footer keeps its .trip-energy-strip typography but loses
+     the standalone-card chrome — it's a divider row inside the trip card. */
+  .trip-card-footer.trip-energy-strip {
+    margin-top: 12px;
+    padding: 12px 0 0;
+    border: 0;
+    border-top: 1px solid var(--line-soft);
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  /* Slim tappable session/health row (v2): quiet chip chrome, dot + one line
+     of session state, checks summary + chevron on the right. */
+  .session-footer-btn {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
+    width: 100%;
     min-height: 48px;
     padding: 0 16px;
     border: 1px solid var(--line-soft);
     border-radius: var(--radius-md);
     background: var(--surface-chip);
+    box-shadow: none;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
   }
 
-  .validation-collapse > summary > div .kicker {
-    display: flex;
+  .session-footer-lead {
+    display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    min-width: 0;
   }
 
-  /* Replace the native disclosure marker with a chevron in the kicker so the
-     toggle reads as a button without taking extra space. */
-  .validation-collapse > summary > div .kicker::after {
-    content: "▾";
+  .session-footer-lead > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .session-footer-dot {
+    flex: none;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--warn);
+    box-shadow: 0 0 8px var(--warn);
+  }
+
+  .session-footer-dot[data-tone="ok"] {
+    background: var(--ok);
+    box-shadow: 0 0 8px var(--ok);
+  }
+
+  .session-footer-health {
+    flex: none;
     color: var(--soft);
-    font-size: 10px;
-    transition: transform var(--motion-fast) var(--motion-ease);
-  }
-
-  .validation-collapse[open] > summary > div .kicker::after {
-    transform: rotate(180deg);
-  }
-
-  .validation-collapse > .validation-list {
-    margin-top: 12px;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   .diagnostic-compact-card {

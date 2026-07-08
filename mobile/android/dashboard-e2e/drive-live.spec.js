@@ -67,7 +67,7 @@ test('speed trace paints a non-blank canvas once samples arrive', async ({ page 
   });
   const host = page.locator('#liveTraceChart');
   await expect(host).toHaveAttribute('data-trace-state', 'empty');
-  await expect(host).toHaveAttribute('data-trace-label', 'waiting for samples');
+  await expect(host).toHaveAttribute('data-trace-label', 'speed trace appears once samples stream in');
 
   // Now stream a speed history and re-render: the trace must actually rasterise pixels, and the
   // dataset must flip to a live "NN mph" readout. 112 kph ≈ 70 mph.

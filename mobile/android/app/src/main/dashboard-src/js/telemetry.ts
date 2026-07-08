@@ -89,13 +89,29 @@ import { initialTelemetryState } from "./telemetry-state";
   // failed" the moment it happens rather than after whatever it was reading.
   const URGENT_TOAST_STATES = new Set(["error", "blocked", "failed"]);
 
+  // Shared presentation for both toast paths (status stream + direct action
+  // confirmations): points the live region's politeness — assertive for
+  // failures, set before the text lands so assistive tech picks the right
+  // urgency — writes the pill, and (re)arms the hide timer on the shared
+  // module state. Callers own their gating; this owns the DOM.
+  function presentToast(node: HTMLElement, text: string, hideAfterMs: number, urgent: boolean) {
+    node.setAttribute("aria-live", urgent ? "assertive" : "polite");
+    node.textContent = text;
+    node.hidden = false;
+    lastToastDetail = text;
+    if (statusToastTimer) clearTimeout(statusToastTimer);
+    statusToastTimer = setTimeout(() => {
+      node.hidden = true;
+      // Reset the dedupe baseline once the toast is gone so a later repeat of
+      // the SAME action detail (e.g. tapping "Scan car codes" twice) gives
+      // feedback again instead of silently doing nothing.
+      lastToastDetail = "";
+    }, hideAfterMs);
+  }
+
   function showStatusToast(detail: unknown, statusState?: unknown) {
     const node = el("statusToast");
     if (!node) return;
-    // Re-point the live region's politeness per push: assertive for failures,
-    // polite otherwise. Set it before the text lands so assistive tech picks the
-    // right urgency for the announcement it's about to make.
-    node.setAttribute("aria-live", URGENT_TOAST_STATES.has(String(statusState == null ? "" : statusState)) ? "assertive" : "polite");
     // The very first setStatus call is the boot-time status push ("Viewing
     // local data…"), not feedback on a user action — consume the baseline
     // silently even when its detail is empty, so the first user-triggered
@@ -108,16 +124,21 @@ import { initialTelemetryState } from "./telemetry-state";
     if (isBaseline) return;
     if (text === "Ready.") return;
     if (state.view === "settings") return;
-    node.textContent = text;
-    node.hidden = false;
-    if (statusToastTimer) clearTimeout(statusToastTimer);
-    statusToastTimer = setTimeout(() => {
-      node.hidden = true;
-      // Reset the dedupe baseline once the toast is gone so a later repeat of
-      // the SAME action detail (e.g. tapping "Scan car codes" twice) gives
-      // feedback again instead of silently doing nothing.
-      lastToastDetail = "";
-    }, 3200);
+    presentToast(node, text, 3200, URGENT_TOAST_STATES.has(String(statusState == null ? "" : statusState)));
+  }
+
+  // Direct action-confirmation toast (v2 design): CSV exported, favorite
+  // toggled, report copied, units changed. Same pill + timer as the status
+  // toast (via presentToast) but none of the status-stream gating (baseline
+  // consumption, Settings-tab suppression, dedupe) — a user action always
+  // deserves immediate visible feedback, on any tab. `urgent` flags a failure
+  // so it announces assertively like failed status pushes do.
+  function showToast(message: unknown, urgent = false) {
+    const node = el("statusToast");
+    if (!node) return;
+    const text = String(message == null ? "" : message).trim();
+    if (!text) return;
+    presentToast(node, text, 2600, urgent);
   }
 
   function setStatus(payload: unknown) {
@@ -834,6 +855,16 @@ import { initialTelemetryState } from "./telemetry-state";
     const soc = finiteNum(t.soc);
     const batteryTemp = finiteNum(t.batteryTemp);
     VD.setText("driveSocValue", soc != null ? `${Math.round(soc)}%` : "--");
+    // v2 design: the SOC caption doubles as the EV-range note ("≈ 26 mi EV
+    // range") once the enhanced range signal reports; otherwise it stays the
+    // static "state of charge" label so the number is never unexplained.
+    const evRangeKm = finiteNum(t.evDistanceThisCycleKm);
+    VD.setText(
+      "driveSocSub",
+      evRangeKm != null && evRangeKm > 0
+        ? `≈ ${units.distanceText(evRangeKm)} EV range`
+        : "state of charge"
+    );
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
     VD.setMeter("driveSocMeter", soc ?? NaN);
@@ -948,6 +979,12 @@ import { initialTelemetryState } from "./telemetry-state";
     const diagTitle = String(status.detail || (t.updatedAt ? "Live OBD data received" : "Waiting for adapter")).replace(/\.\s*$/, "");
     VD.setText("diagState", diagTitle);
     VD.setText("diagSamples", samples ? `${samples} sample${samples === 1 ? "" : "s"}` : "0 samples");
+    // Drive's slim session/health footer (v2 design) mirrors this card's state
+    // in one line; the full card itself now lives on Diagnostics.
+    VD.setText(
+      "sessionFooterLine",
+      `OBD session · ${diagTitle.toLowerCase()} · ${samples} sample${samples === 1 ? "" : "s"}`
+    );
     VD.setText("diagAdapter", t.adapter || status.adapter || "--");
     // Surface the classifier's confidence inline and its reason codes (the "why"
     // behind driving/charging/parked) as a tooltip — both already reach JS via the
@@ -1325,6 +1362,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const nearlyFull =
       remainingKwh < LIVE_CHARGE_NEARLY_FULL_KWH || socGap <= LIVE_CHARGE_NEARLY_FULL_SOC_GAP;
     const etaMs = (remainingKwh / powerKw) * 3600 * 1000;
+    const socRound = Math.round(soc);
     let etaText: string;
     if (nearlyFull) {
       // SOC is essentially at target but the charger is still drawing a trickle.
@@ -1333,27 +1371,76 @@ import { initialTelemetryState } from "./telemetry-state";
       // Implausibly long (low power into a large gap); commit to no number.
       etaText = "Estimating…";
     } else {
-      etaText = `~${formatChargeEta(etaMs)} to ${targetSoc}%`;
+      // v2 design: lead with the current SOC and give a wall-clock finish time
+      // ("71% — full around 9:40 PM"), which answers the question the user is
+      // actually asking; a custom target names the target instead of "full".
+      const finish = fmtWallClock(Date.now() + etaMs);
+      etaText =
+        targetSoc >= LIVE_CHARGE_TARGET_SOC_MAX
+          ? `${socRound}% — full around ${finish}`
+          : `${socRound}% — ${targetSoc}% around ${finish}`;
     }
     VD.setText("liveChargeEta", etaText);
-    VD.setText("liveChargeSoc", `${Math.round(soc)}%`);
+    VD.setText("liveChargeSoc", `${socRound}%`);
     VD.setText("liveChargeRemaining", `${remainingKwh.toFixed(1)} kWh`);
     const powerBadge = el("liveChargePower");
     if (powerBadge) {
       const label = powerBadge.querySelector("span:last-child");
       if (label) label.textContent = `${powerKw.toFixed(1)} kW`;
     }
+    // Progress toward the target (v2): SOC-wide green bar with the session's
+    // from→to on the left and the target caption on the right.
+    VD.setMeter("liveChargeMeter", soc);
+    const session = liveChargeSession();
+    const startSoc = session ? Number(session.startSoc) : NaN;
+    VD.setText(
+      "liveChargeFromTo",
+      Number.isFinite(startSoc) && Math.round(startSoc) !== socRound
+        ? `${Math.round(startSoc)}% → ${socRound}%`
+        : `${socRound}%`
+    );
+    VD.setText("liveChargeTargetLabel", `target ${targetSoc}%`);
+    // "Level 2 · 3.4 kW · started 38m ago" — charger type + live power +
+    // session age. Hidden when the in-progress session hasn't landed yet.
+    const subEl = el("liveChargeSub");
+    if (subEl) {
+      const parts: string[] = [];
+      const chargerType = session ? String(session.chargerType || "") : "";
+      const chargerNames: Record<string, string> = {
+        level1: "Level 1",
+        level2: "Level 2",
+        dc_fast: "DC fast",
+        dcfast: "DC fast"
+      };
+      const chargerKey = chargerType.trim().toLowerCase().replace(/[\s-]+/g, "_");
+      if (chargerKey && chargerKey !== "unknown") {
+        parts.push(chargerNames[chargerKey] || chargerType.charAt(0).toUpperCase() + chargerType.slice(1));
+      }
+      parts.push(`${powerKw.toFixed(1)} kW`);
+      const startedAtMs = session ? Number(session.startedAtMs) : NaN;
+      if (Number.isFinite(startedAtMs) && startedAtMs > 0) {
+        parts.push(`started ${relativeTime(startedAtMs)}`);
+      }
+      subEl.textContent = parts.join(" · ");
+      subEl.hidden = parts.length <= 1;
+    }
   }
 
-  // "Xh Ym" / "Ym" for the charge ETA. formatDuration() rolls minutes into
-  // "Xh YYm" but also emits seconds for short spans; a charge ETA is always at
-  // least minutes, so round to whole minutes for a calmer readout.
-  function formatChargeEta(ms: number): string {
-    const totalMinutes = Math.max(0, Math.round(Number(ms) / 60000));
-    if (totalMinutes < 60) return `${totalMinutes}m`;
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+  // The in-progress charge session (endedAtMs still null) from the storage
+  // summary — carries startSoc/chargerType/startedAtMs for the hero's
+  // from→to and sub line. Newest-first, so the first open session wins.
+  function liveChargeSession(): PayloadRecord | null {
+    const charge = ((state.storage || {}) as PayloadRecord).chargeSummary as PayloadRecord | undefined;
+    const sessions = charge && Array.isArray(charge.recentSessions) ? (charge.recentSessions as PayloadRecord[]) : [];
+    for (const session of sessions) {
+      if (session && session.endedAtMs == null && session.startedAtMs) return session;
+    }
+    return null;
+  }
+
+  // "9:40 PM" — locale hour:minute for the charge-finish estimate.
+  function fmtWallClock(ms: number): string {
+    return new Date(ms).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
 
   const CELL_GRID_COUNT = 96;
@@ -1612,6 +1699,11 @@ import { initialTelemetryState } from "./telemetry-state";
     const total = document.querySelectorAll(".validation-row").length;
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
     VD.setText("validationSummary", okCount ? `${okCount}/${total} ok` : "waiting");
+    // Drive's slim footer mirrors the same summary ("N/5 checks ok") and tints
+    // its dot green only once most checks pass — same threshold the design uses.
+    VD.setText("sessionFooterHealth", okCount ? `${okCount}/${total} checks ok` : "waiting");
+    const footerDot = el("sessionFooterDot");
+    if (footerDot) footerDot.dataset.tone = okCount >= Math.max(1, total - 1) ? "ok" : "warn";
   }
 
   function setValidationRow(
@@ -1691,7 +1783,8 @@ import { initialTelemetryState } from "./telemetry-state";
     setValidationRow,
     formatAge,
     summarizePidLine,
-    formatDuration
+    formatDuration,
+    showToast
   });
 
 export {};

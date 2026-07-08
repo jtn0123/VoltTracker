@@ -49,7 +49,8 @@ describe('dashboard charge session history', () => {
 
     const card = document.getElementById('chargeSessionsCard');
     expect(card.hidden).toBe(false);
-    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('2 recent charges');
+    // v2: the headline carries the energy rollup ('X kWh across N charges').
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('9.6 kWh across 2 charges');
 
     const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
     expect(rows).toHaveLength(2);
@@ -73,17 +74,19 @@ describe('dashboard charge session history', () => {
       { id: 1, startedAtMs: Date.now() - 90_000_000, endedAtMs: Date.now() - 86_000_000, chargerType: 'level2', startSoc: 30, endSoc: 80, powerKw: 7.0, energyKwh: 9.0 },
     ];
     window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 2, recentSessions: rows } });
-    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('2 recent charges');
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('18.6 kWh across 2 charges');
 
     // A backfilled older charge bumps the lifetime count while native re-ships the
     // same newest rows. chargeSessionCount is part of the memo signature now, so
     // the title switches to the "X of Y" truncation form instead of staying stale.
     window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 3, recentSessions: rows } });
-    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('2 of 3 charges');
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('18.6 kWh across last 2 of 3 charges');
   });
 
-  it('hides and clears the energy card when the charge sessions go away', () => {
-    // Populate: a session with logged energy reveals the energy card.
+  it('clears the Est. cost tile when the charge sessions go away', () => {
+    // Populate: a session with logged energy + a rate set fills the cost tile
+    // (v2: the old energy card is the Est. cost KPI tile + the list headline).
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.25);
     window.VoltDashboard.setStorage({
       chargeSummary: {
         chargeSessionCount: 1,
@@ -92,18 +95,33 @@ describe('dashboard charge session history', () => {
         ],
       },
     });
-    const energyCard = document.getElementById('chargeEnergyCard');
-    expect(energyCard.hidden).toBe(false);
-    expect(document.getElementById('chargeEnergyTotal').textContent).toBe('9.6 kWh');
+    expect(document.getElementById('chargeSessionsTitle').textContent).toBe('9.6 kWh across 1 charge');
+    expect(document.getElementById('chargeEnergyCost').textContent).toBe('$2.40');
+    expect(document.getElementById('chargeEnergyHint').textContent).toBe('1 charge @ $0.25/kWh');
 
-    // Clear the stored data: the energy card must hide too (its hidden flag is
-    // owned by renderChargeEnergy, which must also run on the empty path) and
-    // drop the stale kWh total.
+    // Clear the stored data: the cost tile must drop the stale figure too.
     window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 0 } });
     expect(document.getElementById('chargeSessionsCard').hidden).toBe(true);
-    expect(energyCard.hidden).toBe(true);
-    expect(document.getElementById('chargeEnergyTotal').textContent).toBe('-- kWh');
     expect(document.getElementById('chargeEnergyCost').textContent).toBe('--');
+    expect(document.getElementById('chargeEnergyHint').textContent).toBe('Set rate in Settings');
+  });
+
+  it('says "mixed rates" in the cost hint when home and public rates both apply', () => {
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.25);
+    window.VoltDashboard.prefs.set('publicPricePerKwh', 0.5);
+    window.VoltDashboard.setStorage({
+      chargeSummary: {
+        chargeSessionCount: 2,
+        recentSessions: [
+          { id: 5, startedAtMs: Date.now() - 3_600_000, endedAtMs: Date.now() - 600_000, chargerType: 'dc_fast', startSoc: 30, endSoc: 80, powerKw: 45, energyKwh: 4.0 },
+          { id: 4, startedAtMs: Date.now() - 90_000_000, endedAtMs: Date.now() - 86_000_000, chargerType: 'level2', startSoc: 40, endSoc: 90, powerKw: 7.2, energyKwh: 9.6 },
+        ],
+      },
+    });
+    // 4.0 kWh @ $0.50 (public/DC-fast) + 9.6 kWh @ $0.25 (home) = $4.40 — the
+    // caption must not quote a single rate that contradicts that mixed total.
+    expect(document.getElementById('chargeEnergyCost').textContent).toBe('$4.40');
+    expect(document.getElementById('chargeEnergyHint').textContent).toBe('2 charges · mixed rates');
   });
 
   it('marks an in-progress (still plugged in) charge as charging', () => {
@@ -119,7 +137,6 @@ describe('dashboard charge session history', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].dataset.charging).toBe('1');
     expect(rows[0].textContent).toContain('charging now');
-    expect(document.getElementById('realChargeStatus').textContent).toBe('charging');
   });
 
   it('reports a blocked status when native charge-history export throws', async () => {

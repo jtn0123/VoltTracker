@@ -75,11 +75,29 @@
       <div>
         <span class="kicker">Charging now</span>
         <h3 id="liveChargeEta">Estimating time to full…</h3>
+        <!-- "Level 2 · 3.4 kW · started 38m ago" — charger type + live power +
+             session age (v2 design), from the in-progress charge session. -->
+        <p id="liveChargeSub" class="status-copy live-charge-sub" hidden></p>
       </div>
       <span id="liveChargePower" class="badge" data-state="charging"
         ><span class="dot"></span><span>-- kW</span></span
       >
     </header>
+    <!-- Charge progress toward the target (v2 design): SOC-wide green bar with
+         the session's from→to on the left and the target on the right. -->
+    <div class="meter live-charge-meter">
+      <span
+        id="liveChargeMeter"
+        role="meter"
+        aria-label="Charge progress, state of charge percent"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      ></span>
+    </div>
+    <div class="live-charge-meter-row">
+      <span id="liveChargeFromTo">--</span>
+      <span id="liveChargeTargetLabel">target 100%</span>
+    </div>
     <div class="live-charge-stats">
       <div>
         <span class="kicker">State of charge</span>
@@ -119,14 +137,10 @@
     </p>
   </article>
 
+  <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
+       session count lives in the Recent-charges headline ("29.6 kWh across 4
+       charges") and detection status in the source badge + live hero chip. -->
   <section class="charge-grid" aria-label="Charging summary">
-    <article class="panel charge-kpi">
-      <header><span>Sessions</span></header>
-      <strong id="realChargeSessions" aria-live="polite" aria-atomic="true"
-        >0</strong
-      >
-      <small>Charging sessions recorded</small>
-    </article>
     <article class="panel charge-kpi">
       <header><span>Plug-ins</span></header>
       <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
@@ -135,28 +149,50 @@
       <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Max power</span></header>
+      <header><span>Peak power</span></header>
       <strong id="realChargePower" aria-live="polite" aria-atomic="true"
         >--</strong
       >
       <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span></header>
-      <!-- Color-coded like the other status badges; storage-status.ts keeps
-           data-state in sync with the text (waiting/needs-review/recorded/charging). -->
-      <span
-        id="realChargeStatusBadge"
-        class="badge"
-        data-state="waiting"
-        aria-live="polite"
-        aria-atomic="true"
-        ><span class="dot"></span
-        ><span id="realChargeStatus">needs data</span></span
+      <header><span>Est. cost</span></header>
+      <strong id="chargeEnergyCost" aria-live="polite" aria-atomic="true"
+        >--</strong
       >
-      <small>Detection</small>
+      <small id="chargeEnergyHint">Set rate in Settings</small>
     </article>
   </section>
+
+  <article
+    id="chargeSessionsCard"
+    class="panel list-card charge-sessions-card"
+    hidden
+  >
+    <header>
+      <div>
+        <span class="kicker">Recent charges</span>
+        <h3 id="chargeSessionsTitle">Charge sessions</h3>
+      </div>
+      <div class="map-sheet-actions">
+        <button
+          type="button"
+          class="link-btn"
+          data-action="exportChargeSessionsCsv"
+          id="exportChargeSessionsBtn"
+        >
+          Export CSV
+        </button>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
+      </div>
+    </header>
+    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
+         live region would re-announce all 12 rows each time. The count in
+         #chargeSessionsTitle is the quiet signal that the history changed. -->
+    <div id="chargeSessionsList" class="charge-session-list"></div>
+  </article>
 
   <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
        (the headline cell-health number), and which cells. Rendered live from
@@ -206,31 +242,31 @@
         </div>
       </div>
     </div>
-  </article>
 
-  <!-- 96-cell voltage map (scaffold). Renders full per-cell data when telemetry
-       carries a cellVoltages array; otherwise highlights the live lowest/highest
-       cell groups. Hidden until there's cell data to show (renderCellGrid toggles
-       the whole card, not just the inner grid, so it isn't a perpetual empty
-       scaffold — C5). See telemetry.ts#renderCellGrid. -->
-  <article id="cellGridCard" class="panel cell-grid-card" hidden>
-    <header class="cell-grid-head">
-      <div>
-        <span class="kicker">Cell voltage map</span>
-        <h3 id="cellGridTitle">Per-cell voltage map</h3>
-      </div>
-      <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
-    </header>
-    <div
-      id="cellGrid"
-      class="cell-grid"
-      role="img"
-      aria-label="Battery cell voltage map"
-    ></div>
-    <p id="cellGridNote" class="status-copy">
-      Connect to the car to highlight the lowest and highest cell groups; a full
-      per-cell probe fills in the complete map.
-    </p>
+    <!-- 96-cell voltage map, inline in the cell-balance card (v2 design: one
+         battery-cell card whose "Read all 96 cells" action reveals the grid).
+         Renders full per-cell data when telemetry carries a cellVoltages array;
+         otherwise highlights the live lowest/highest cell groups. Hidden until
+         there's cell data to show. See telemetry.ts#renderCellGrid. -->
+    <div id="cellGridCard" class="cell-grid-section" hidden>
+      <header class="cell-grid-head">
+        <div>
+          <span class="kicker">Cell voltage map</span>
+          <h3 id="cellGridTitle">Per-cell voltage map</h3>
+        </div>
+        <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
+      </header>
+      <div
+        id="cellGrid"
+        class="cell-grid"
+        role="img"
+        aria-label="Battery cell voltage map"
+      ></div>
+      <p id="cellGridNote" class="status-copy">
+        Connect to the car to highlight the lowest and highest cell groups; a
+        full per-cell probe fills in the complete map.
+      </p>
+    </div>
   </article>
 
   <!-- Battery state-of-health trend. Fed by bridge.getBatterySohHistory() from the
@@ -261,26 +297,6 @@
         <strong id="sohTrendSpan">--</strong>
       </div>
     </div>
-  </article>
-
-  <article id="chargeEnergyCard" class="panel charge-energy-card" hidden>
-    <div class="charge-energy-head">
-      <div>
-        <span class="kicker">Energy logged</span>
-        <strong id="chargeEnergyTotal">-- kWh</strong>
-        <small id="chargeEnergySub" class="status-copy"
-          >from logged charges</small
-        >
-      </div>
-      <div class="charge-energy-cost">
-        <span class="kicker">Est. cost</span>
-        <strong id="chargeEnergyCost">--</strong>
-      </div>
-    </div>
-    <p id="chargeEnergyHint" class="status-copy">
-      Set your electricity rate in Settings → Preferences to estimate charging
-      cost.
-    </p>
   </article>
 
   <!-- Charging cost-over-time (M5). Buckets logged charge sessions by month and
@@ -316,35 +332,5 @@
         <strong id="chargeCostTrendTotal">--</strong>
       </div>
     </div>
-  </article>
-
-  <article
-    id="chargeSessionsCard"
-    class="panel list-card charge-sessions-card"
-    hidden
-  >
-    <header>
-      <div>
-        <span class="kicker">Recent charges</span>
-        <h3 id="chargeSessionsTitle">Charge sessions</h3>
-      </div>
-      <div class="map-sheet-actions">
-        <button
-          type="button"
-          class="link-btn"
-          data-action="exportChargeSessionsCsv"
-          id="exportChargeSessionsBtn"
-        >
-          Export CSV
-        </button>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
-      </div>
-    </header>
-    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
-         live region would re-announce all 12 rows each time. The count in
-         #chargeSessionsTitle is the quiet signal that the history changed. -->
-    <div id="chargeSessionsList" class="charge-session-list"></div>
   </article>
 </section>

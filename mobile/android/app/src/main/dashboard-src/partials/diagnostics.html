@@ -270,6 +270,73 @@
     </div>
   </details>
 
+  <!-- OBD session counters + Data health (moved from the Drive tab per the v2
+       design — Drive keeps only the slim session/health footer button). The
+       element ids are unchanged, so telemetry.ts#updateDiagnostics and
+       #updateValidationUi render here verbatim. -->
+  <article class="panel status-card" aria-live="polite">
+    <div class="status-head">
+      <div>
+        <div class="kicker">OBD session</div>
+        <h2 id="diagState">Waiting for adapter</h2>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span><span id="diagSamples">0 samples</span></span
+      >
+    </div>
+    <div class="status-meta">
+      <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
+      <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
+      <div><span>Runtime</span><strong id="diagSession">--</strong></div>
+      <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
+    </div>
+  </article>
+
+  <article class="panel validation-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Health</span>
+        <h3>Data health</h3>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span
+        ><span id="validationSummary">waiting</span></span
+      >
+    </div>
+    <div class="validation-list">
+      <div id="validateObd" class="validation-row" data-tone="warn">
+        <span
+          ><strong>OBD stream</strong
+          ><small>Waiting for adapter samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateGps" class="validation-row" data-tone="warn">
+        <span
+          ><strong>GPS trace</strong
+          ><small>Waiting for location samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateDb" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Database writes</strong
+          ><small>Waiting for stored rows</small></span
+        ><b>ready</b>
+      </div>
+      <div id="validateParser" class="validation-row" data-tone="warn">
+        <span
+          ><strong>PID parsing</strong
+          ><small>Waiting for parsed values</small></span
+        ><b>unknown</b>
+      </div>
+      <div id="validateBackground" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Background test</strong
+          ><small>Minimize the app during a drive to validate gaps</small></span
+        ><b>manual</b>
+      </div>
+    </div>
+  </article>
+
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->
   <article id="liveSignalsCard" class="panel list-card">

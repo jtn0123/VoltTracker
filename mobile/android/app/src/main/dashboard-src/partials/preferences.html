@@ -199,10 +199,9 @@
         Off
       </button>
     </div>
-    <!-- Polite confirmation for the accessibility controls (prefs.ts): the
-         pressed-state flip alone isn't reliably announced by TalkBack, and
-         these are the settings a low-vision user is most likely to change. -->
-    <p id="prefA11yAnnounce" class="visually-hidden" role="status"></p>
+    <!-- Accessibility-control confirmations announce through the #statusToast
+         live region (prefs.ts#toast) — a dedicated announcer here double-spoke
+         every toggle. -->
   </article>
 
   <article class="panel pref-card">

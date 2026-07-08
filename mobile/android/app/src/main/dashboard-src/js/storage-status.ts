@@ -9,7 +9,7 @@
 // published on VD here so this module stays the single owner of them.
 import { rateForCharger } from "./cost-model";
 import { el, setSvgAttrs } from "./core";
-import { setDataState, type DataStateValue } from "./dataset-state";
+import { setDataState } from "./dataset-state";
 import { createFocusTrap, type FocusTrap } from "./focus-trap";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
@@ -991,31 +991,36 @@ import { prefs, units } from "./prefs";
     VD.applyCellSnapshot(snapshot);
   }
 
-  // Single source of truth for the charge-status badge: each key maps to BOTH
-  // its visible label and its data-state color token, so the badge text and the
-  // pill color are derived together and can never drift apart. Labels keep the
-  // existing strings ("needs data" for the empty/waiting case).
-  const CHARGE_STATUS_DISPLAY: Record<string, { label: string; state: DataStateValue }> = {
-    charging: { label: "charging", state: "charging" },
-    recorded: { label: "recorded", state: "recorded" },
-    "needs-review": { label: "needs review", state: "needs-review" },
-    waiting: { label: "needs data", state: "waiting" },
-  };
-
-  // Latest drive's net HV energy + estimated electricity cost (Drive tab
-  // strip under the overview grid). Energy comes from the trip rollup that
-  // matches the overview route; cost multiplies it by the home rate pref.
-  // Without a rate the right side stays a "set rate for cost" Settings jump;
-  // without energy it shows "--" so the strip never invents a figure.
-  function renderTripEnergyStrip(route: VoltRoute, routeDistance: number): void {
+  // Drive's "This trip" card (v2 design): time + efficiency from the trip
+  // rollup that matches the overview route, plus the net HV energy + estimated
+  // electricity cost footer. Distance/max speed are written by the caller from
+  // the overview payload. Without a rate the footer's right side stays a
+  // "set rate for cost" Settings jump; without energy it shows "--" so the
+  // card never invents a figure.
+  function renderThisTripCard(route: VoltRoute, routeDistance: number): void {
     const cost = el("tripCostValue") as HTMLButtonElement | null;
     const sessionId = String(((route || {}).session || {}).id || "");
     const trips = Array.isArray(state.trips) ? (state.trips as VoltTrip[]) : [];
     const trip = sessionId
       ? trips.find((row) => String(row.id) === sessionId) || null
       : null;
+    const durationMs = trip && trip.durationMs != null ? Number(trip.durationMs) : NaN;
+    VD.setText(
+      "tripTimeValue",
+      Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function"
+        ? VD.formatDuration(durationMs)
+        : "--"
+    );
     const energyKwh = trip && trip.energyKwh != null ? Number(trip.energyKwh) : NaN;
     const hasEnergy = Number.isFinite(energyKwh) && energyKwh > 0;
+    const tripMeters = trip && trip.distanceMeters != null ? Number(trip.distanceMeters) : routeDistance;
+    const miles = Number.isFinite(tripMeters) && tripMeters > 0 ? tripMeters / 1609.344 : NaN;
+    VD.setText(
+      "tripEffValue",
+      hasEnergy && Number.isFinite(miles) && miles > 0
+        ? units.efficiencyText(miles / energyKwh)
+        : "--"
+    );
     VD.setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
     if (!cost) return;
     const rate = prefs.get<number>("pricePerKwh", 0);
@@ -1048,30 +1053,13 @@ import { prefs, units } from "./prefs";
     toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
-    VD.setText("overviewDistanceSub", route.pointCount ? `${route.pointCount} GPS sample${route.pointCount === 1 ? "" : "s"} in latest route` : "waiting for route samples");
     VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
-    VD.setText("overviewBattery", Number.isFinite(soc) && soc > 0 ? `${Math.round(soc)}%` : (Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--"));
-    VD.setText("overviewBatterySub", Number.isFinite(power) && power ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW latest power` : "SOC/power once observed");
-    VD.setText("overviewChargeHints", Number(charge.chargingHintCount || overview.chargingHints || 0));
-    renderTripEnergyStrip(route, routeDistance);
+    renderThisTripCard(route, routeDistance);
 
-    VD.setText("realChargeSessions", Number(charge.chargeSessionCount || 0));
     VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
     VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
-    const chargingNow = (Array.isArray(charge.recentSessions) ? charge.recentSessions : [])
-      .some(isChargeInProgress);
-    // Derive the badge label AND its data-state color from one key so the text
-    // and the pill color can never desync (they used to be twin ternaries that
-    // could drift). Keys map to the existing strings exactly.
-    const chargeStatusKey = chargingNow
-      ? "charging"
-      : (charge.chargeSessionCount ? "recorded" : (charge.chargingHintCount ? "needs-review" : "waiting"));
-    const chargeStatus = CHARGE_STATUS_DISPLAY[chargeStatusKey];
-    VD.setText("realChargeStatus", chargeStatus.label);
-    // Keep the status pill's color in sync with the text (see base.css badge states).
-    setDataState(el("realChargeStatusBadge"), chargeStatus.state);
     renderChargeSessions(charge);
     renderBatterySohTrend();
     refreshCellSnapshot();
@@ -1186,6 +1174,11 @@ import { prefs, units } from "./prefs";
     const maintenance = el("maintenanceList");
     if (!maintenance) return;
     const entries = Array.isArray(state.maintenanceLog) ? state.maintenanceLog : [];
+    // Vehicle card's at-a-glance maintenance stat (v2) mirrors the list.
+    VD.setText(
+      "vehicleMaintenance",
+      entries.length ? `${entries.length} entr${entries.length === 1 ? "y" : "ies"}` : "none logged"
+    );
     if (!entries.length) {
       maintenance.replaceChildren(buildMaintenanceEmptyState());
       renderMaintenanceDueHint([]);
@@ -1496,17 +1489,23 @@ import { prefs, units } from "./prefs";
       return;
     }
     const shown = Math.min(sessions.length, 12);
-    // Native caps recentSessions at 12, so compare against the true lifetime
-    // total (chargeSessionCount) rather than sessions.length — otherwise the
-    // "X of Y" truncation form could never fire. "12 of 14 charges", not
-    // "Latest 12 of 14 charges": the longer form wraps to two lines next to the
-    // header's Export CSV + Refresh actions.
+    // v2 design: the headline carries the energy rollup too ("29.6 kWh across
+    // 4 charges") — the old standalone Energy card folded in here. Native caps
+    // recentSessions at 12, so compare against the true lifetime total
+    // (chargeSessionCount); when more exist than we hold, say "last N of M" so
+    // the copy doesn't imply a lifetime figure that contradicts the count.
     const totalCharges = Number(charge.chargeSessionCount || sessions.length);
+    const shownEnergyKwh = sessions.slice(0, 12).reduce((acc, session) => {
+      const e = chargeNum(session.energyKwh);
+      return Number.isFinite(e) && e > 0 ? acc + e : acc;
+    }, 0);
+    const countLabel =
+      totalCharges > sessions.length
+        ? `last ${shown} of ${totalCharges} charges`
+        : `${sessions.length} charge${sessions.length === 1 ? "" : "s"}`;
     VD.setText(
       "chargeSessionsTitle",
-      totalCharges > sessions.length
-        ? `${shown} of ${totalCharges} charges`
-        : `${sessions.length} recent charge${sessions.length === 1 ? "" : "s"}`
+      shownEnergyKwh > 0 ? `${shownEnergyKwh.toFixed(1)} kWh across ${countLabel}` : countLabel
     );
     // Scale each row's background bar to the biggest charge on screen so the
     // list doubles as a bar chart (11.8 kWh fills the row; 3 kWh ~a quarter).
@@ -1561,54 +1560,52 @@ import { prefs, units } from "./prefs";
     const price = prefs.get<number>("pricePerKwh", 0);
     try {
       bridge.exportChargeSessionsCsv(price > 0 ? String(price) : "");
+      VD.showToast?.("Exporting charge history CSV…");
     } catch (err) {
       reportBridgeWriteFailure("charge_export_failed", "Charge-history export failed.", err);
     }
   }
 
-  // Sums energy across the logged charge sessions and, when the user has set an
-  // electricity rate (Settings → Preferences), shows the estimated cost. The rate
-  // is a display-layer preference, so the math lives here in JS.
+  // Estimated total charging cost for the logged sessions (v2: an Est. cost KPI
+  // tile — the kWh total lives in the Recent-charges headline). Bills each
+  // session at the rate its charger type selects (home vs public), rather than
+  // a single flat rate on the lifetime kWh, so a mix of cheap overnight +
+  // pricey DC-fast charges estimates honestly. The rate is a display-layer
+  // preference, so the math lives here in JS.
   function renderChargeEnergy(sessions: VoltChargeSessionRow[]) {
-    const card = el("chargeEnergyCard");
-    if (!card) return;
     const total = sessions.reduce((acc, session) => {
       const e = chargeNum(session.energyKwh);
       return Number.isFinite(e) && e > 0 ? acc + e : acc;
     }, 0);
-    if (total <= 0) {
-      card.hidden = true;
-      // Clear the previous totals so a momentary unhide can never flash stale
-      // kWh / cost figures from a cleared database.
-      VD.setText("chargeEnergyTotal", "-- kWh");
-      VD.setText("chargeEnergyCost", "--");
-      // No positive energy → the monthly trend has nothing to plot either; hide
-      // it so a cleared database can't leave a stale chart behind.
-      renderChargeCostTrend(sessions);
-      return;
-    }
-    card.hidden = false;
-    VD.setText("chargeEnergyTotal", `${total.toFixed(1)} kWh`);
-    // This total only sums the ≤12 recent sessions native returns, not the full
-    // lifetime. When more charges exist than we hold, say "last N" so the copy
-    // doesn't imply a lifetime figure that contradicts the true session count.
-    const totalCharges = Number(((state.storage || {}).chargeSummary || {}).chargeSessionCount || 0);
-    VD.setText(
-      "chargeEnergySub",
-      totalCharges > sessions.length
-        ? `across last ${sessions.length} charge${sessions.length === 1 ? "" : "s"}`
-        : `across ${sessions.length} logged charge${sessions.length === 1 ? "" : "s"}`
-    );
-    // Bill each session at the rate its charger type selects (home vs public),
-    // rather than a single flat rate on the lifetime kWh, so a mix of cheap
-    // overnight + pricey DC-fast charges estimates honestly.
     const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
-    if (price > 0) {
+    if (total > 0 && price > 0) {
       VD.setText("chargeEnergyCost", formatMoney(chargeCostFor(sessions)));
-      if (hint) hint.hidden = true;
+      const rates = chargeRates();
+      // Mirror chargeCostFor's per-session billing in the caption: count and
+      // quote only the sessions that actually contribute energy, and name the
+      // rate only when every one of them bills at the same one — a home +
+      // public/DC-fast mix says "mixed rates" so the caption can never
+      // contradict the total above it.
+      const billableSessions = sessions.filter((session) => {
+        const e = chargeNum(session.energyKwh);
+        return Number.isFinite(e) && e > 0;
+      });
+      const billedRates = new Set(
+        billableSessions.map((session) => rateForCharger(session.chargerType, rates.home, rates.public))
+      );
+      const chargesLabel = `${billableSessions.length} charge${billableSessions.length === 1 ? "" : "s"}`;
+      VD.setText(
+        "chargeEnergyHint",
+        billedRates.size === 1
+          ? `${chargesLabel} @ ${formatMoney([...billedRates][0] as number)}/kWh`
+          : `${chargesLabel} · mixed rates`
+      );
+      if (hint) hint.hidden = false;
     } else {
+      // Clear a previous figure so a cleared database can't flash stale cost.
       VD.setText("chargeEnergyCost", "--");
+      VD.setText("chargeEnergyHint", "Set rate in Settings");
       if (hint) hint.hidden = false;
     }
     renderChargeCostTrend(sessions);
@@ -2068,12 +2065,14 @@ import { prefs, units } from "./prefs";
     const text = lines.join("\n");
     const nav = navigator as Navigator & { clipboard?: { writeText?(t: string): Promise<void> } };
     if (nav.clipboard && typeof nav.clipboard.writeText === "function") {
+      // Direct toast, not a status push (v2): copy is a user action, and the
+      // status stream suppresses toasts on the Settings tab + dedupes repeats.
       nav.clipboard
         .writeText(text)
-        .then(() => VD.setStatus({ state: state.status?.state || "idle", detail: `${dtc} report copied to clipboard.` }))
-        .catch(() => VD.setStatus({ state: state.status?.state || "idle", detail: "Could not copy the report." }));
+        .then(() => VD.showToast?.(`${dtc} report copied to clipboard`))
+        .catch(() => VD.showToast?.("Could not copy the report", true));
     } else {
-      VD.setStatus({ state: state.status?.state || "idle", detail: "Copy is not available in this browser." });
+      VD.showToast?.("Copy is not available in this browser", true);
     }
   }
 

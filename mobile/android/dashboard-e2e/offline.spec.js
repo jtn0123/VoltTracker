@@ -37,7 +37,7 @@ test('tabs still switch and demo data still renders with no network', async ({ p
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'charge');
   // Charge history is local data: the KPIs fill in instead of the empty state.
   await expect(page.locator('#chargeEmptyState')).toBeHidden();
-  await expect(page.locator('#realChargeSessions')).toHaveText(/^\d+$/);
+  await expect(page.locator('#realChargeHints')).toHaveText(/^\d+$/);
 
   await page.locator('nav.bottom-nav [data-nav="insights"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'insights');

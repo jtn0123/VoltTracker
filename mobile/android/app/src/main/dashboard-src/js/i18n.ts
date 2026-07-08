@@ -36,7 +36,7 @@ export const EN = {
   "status.logging.sample": "{count} sample",
   "status.logging.samples": "{count} samples",
   // drive.ts chart empty states (migrated in the X5 copy pass).
-  "drive.trace.waitingForSamples": "waiting for samples",
+  "drive.trace.waitingForSamples": "speed trace appears once samples stream in",
   "drive.power.waitingForSamples": "Waiting for power samples",
   "drive.soc.waitingForSamples": "Waiting for SOC samples",
 } as const;

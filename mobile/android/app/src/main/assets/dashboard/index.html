@@ -541,11 +541,11 @@
        dead gauges with the "how to start" card below the fold. Hidden by
        storage-status.ts#toggleHidden("appEmptyState") once any rows exist. -->
   <article id="appEmptyState" class="panel empty-state">
-    <span class="kicker">App data</span>
-    <h2>No drive, charging, or insight history captured on this phone yet</h2>
+    <span class="kicker">No live data</span>
+    <h2>Waiting for your car</h2>
     <p>
-      Open Settings to connect an adapter — or try Demo / Testing to explore
-      every screen with realistic sample data, no car needed.
+      Connect the OBD adapter to stream live speed, power, and battery — or
+      preview every screen with sample data, no car needed.
     </p>
     <ol class="empty-hints" aria-label="How to start logging">
       <li>
@@ -572,10 +572,10 @@
         class="primary primary-action"
         data-nav-jump="settings"
       >
-        Open Settings to connect
+        Connect adapter
       </button>
       <button type="button" class="demo primary-action" data-action="demo">
-        Try Demo / Testing
+        Try demo
       </button>
     </div>
   </article>
@@ -671,12 +671,23 @@
           <div class="kicker">HV Battery</div>
           <div class="battery-soc">
             <strong id="driveSocValue" data-live-tile="true">--</strong>
-            <span class="battery-soc-sub">state of charge</span>
+            <!-- Doubles as the EV-range note ("≈ 26 mi EV range") once the
+                 enhanced range signal reports; falls back to the static label.
+                 telemetry.ts#updateLiveUi owns the swap. -->
+            <span class="battery-soc-sub" id="driveSocSub"
+              >state of charge</span
+            >
           </div>
         </div>
-        <div class="battery-temp">
-          <div class="kicker">Pack temp</div>
-          <strong id="drivePackTempValue" data-live-tile="true">--</strong>
+        <div class="battery-head-cols">
+          <div class="battery-temp">
+            <div class="kicker">Pack temp</div>
+            <strong id="drivePackTempValue" data-live-tile="true">--</strong>
+          </div>
+          <div class="battery-temp">
+            <div class="kicker">Pack kW</div>
+            <strong id="drivePackPower" data-live-tile="true">--</strong>
+          </div>
         </div>
       </div>
       <div class="meter battery-meter">
@@ -702,10 +713,6 @@
         <div data-live-cell="true">
           <span class="kicker">Pack A</span>
           <strong id="drivePackCurrent" data-live-tile="true">--</strong>
-        </div>
-        <div data-live-cell="true">
-          <span class="kicker">Pack kW</span>
-          <strong id="drivePackPower" data-live-tile="true">--</strong>
         </div>
       </div>
     </article>
@@ -829,114 +836,79 @@
     </div>
   </div>
 
-  <section class="real-overview-grid">
-    <article class="panel metric">
-      <header><span>GPS distance</span><span>real</span></header>
-      <strong id="overviewDistance">--</strong>
-      <small id="overviewDistanceSub">Waiting for route samples</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Max speed</span><span>session</span></header>
-      <strong id="overviewMaxSpeed">--</strong>
-      <small>From accepted OBD speed</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Battery</span><span>latest</span></header>
-      <strong id="overviewBattery">--</strong>
-      <small id="overviewBatterySub">SOC and power once observed</small>
-    </article>
-    <article class="panel metric">
-      <header><span>Charge</span><span>hints</span></header>
-      <strong id="overviewChargeHints">0</strong>
-      <small>Times charging likely started</small>
-    </article>
-  </section>
-
-  <!-- Latest drive's net HV energy + estimated electricity cost. Energy comes
-       from the trip rollup (drive minus regen); the cost estimate needs the
-       home rate from Settings, so the right side doubles as a prompt. -->
-  <article class="panel trip-energy-strip" id="tripEnergyStrip">
-    <span class="trip-energy-label"
-      >Energy <b id="tripEnergyValue" data-live-tile="true">--</b></span
-    >
-    <button
-      type="button"
-      class="link-btn trip-cost-value"
-      id="tripCostValue"
-      data-nav-jump="settings"
-      data-state="unset"
-    >
-      set rate for cost
-    </button>
-  </article>
-
-  <!-- Live diagnostic counters (sample count, runtime, etc.) announced
-       politely so screen readers track OBD progress without barging. -->
-  <article class="panel status-card" aria-live="polite">
-    <div class="status-head">
+  <!-- "This trip" rollup (v2 design): one card for the latest drive — distance,
+       time, max speed, efficiency — with the net HV energy + estimated cost
+       footer. Distance/max come from the overview payload (ids kept from the
+       old overview grid); time/efficiency/energy come from the matching trip
+       rollup. Rendered by storage-status.ts#renderThisTripCard. -->
+  <article class="panel trip-card" id="thisTripCard">
+    <header class="card-head">
+      <span class="kicker">This trip</span>
+      <button type="button" class="link-btn" data-nav-jump="map">
+        View on map &#8594;
+      </button>
+    </header>
+    <div class="trip-stats" role="group" aria-label="Latest drive summary">
       <div>
-        <div class="kicker">OBD session</div>
-        <!-- h2 (not h3): the first heading under the topbar h1, so the Drive
-             view's outline doesn't skip a level. Sized like an h3 via
-             .status-head h2 in components.css. -->
-        <h2 id="diagState">Waiting for adapter</h2>
+        <span class="kicker">Distance</span>
+        <strong id="overviewDistance">--</strong>
       </div>
-      <span class="badge"
-        ><span class="dot"></span><span id="diagSamples">0 samples</span></span
-      >
+      <div>
+        <span class="kicker">Time</span>
+        <strong id="tripTimeValue">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Max</span>
+        <strong id="overviewMaxSpeed">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Efficiency</span>
+        <strong id="tripEffValue">--</strong>
+      </div>
     </div>
-    <div class="status-meta">
-      <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
-      <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
-      <div><span>Runtime</span><strong id="diagSession">--</strong></div>
-      <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
+    <!-- Net HV energy (drive minus regen) + estimated electricity cost. The
+         cost estimate needs the home rate from Settings, so the right side
+         doubles as a prompt. -->
+    <div class="trip-energy-strip trip-card-footer" id="tripEnergyStrip">
+      <span class="trip-energy-label"
+        >Energy <b id="tripEnergyValue" data-live-tile="true">--</b></span
+      >
+      <button
+        type="button"
+        class="link-btn trip-cost-value"
+        id="tripCostValue"
+        data-nav-jump="settings"
+        data-state="unset"
+      >
+        set rate for cost
+      </button>
     </div>
   </article>
 
-  <details class="panel validation-card validation-collapse">
-    <summary class="card-head">
-      <div>
-        <span class="kicker">Health</span>
-        <h3>Data health</h3>
-      </div>
-      <span class="badge"
-        ><span class="dot"></span
-        ><span id="validationSummary">waiting</span></span
-      >
-    </summary>
-    <div class="validation-list">
-      <div id="validateObd" class="validation-row" data-tone="warn">
-        <span
-          ><strong>OBD stream</strong
-          ><small>Waiting for adapter samples</small></span
-        ><b>idle</b>
-      </div>
-      <div id="validateGps" class="validation-row" data-tone="warn">
-        <span
-          ><strong>GPS trace</strong
-          ><small>Waiting for location samples</small></span
-        ><b>idle</b>
-      </div>
-      <div id="validateDb" class="validation-row" data-tone="warn">
-        <span
-          ><strong>Database writes</strong
-          ><small>Waiting for stored rows</small></span
-        ><b>ready</b>
-      </div>
-      <div id="validateParser" class="validation-row" data-tone="warn">
-        <span
-          ><strong>PID parsing</strong
-          ><small>Waiting for parsed values</small></span
-        ><b>unknown</b>
-      </div>
-      <div id="validateBackground" class="validation-row" data-tone="warn">
-        <span
-          ><strong>Background test</strong
-          ><small>Minimize the app during a drive to validate gaps</small></span
-        ><b>manual</b>
-      </div>
-    </div>
-  </details>
+  <!-- Slim session/health footer (v2 design): one tappable row — session state
+       dot + "OBD session · <state> · N samples" + "N/5 checks ok ›" — jumping
+       to Diagnostics, where the full OBD-session card and Data health rows now
+       live. Line + dot rendered by telemetry.ts#updateDiagnostics; the checks
+       summary by telemetry.ts#updateValidationUi. -->
+  <button
+    type="button"
+    class="panel session-footer-btn"
+    id="sessionFooterBtn"
+    data-nav-jump="diagnostics"
+  >
+    <span class="session-footer-lead">
+      <span
+        class="session-footer-dot"
+        id="sessionFooterDot"
+        data-tone="warn"
+        aria-hidden="true"
+      ></span>
+      <span id="sessionFooterLine">OBD session &#183; waiting for adapter</span>
+    </span>
+    <span class="session-footer-health"
+      ><span id="sessionFooterHealth">waiting</span> &#8250;</span
+    >
+  </button>
 </section>
 <section id="view-map" class="view" data-view="map">
   <!-- role="group": an aria-label on a bare div is dropped by most screen
@@ -1043,7 +1015,7 @@
         </div>
       </div>
 
-      <div class="map-legend" aria-hidden="true">
+      <div class="map-legend map-legend-heat" aria-hidden="true">
         <span><i style="background: #ff6b4a"></i>slow</span>
         <span><i style="background: #ffd23f"></i>mid</span>
         <span><i style="background: #7ee06a"></i>fast</span>
@@ -1056,6 +1028,20 @@
         <span><i style="background: #ff6b5f"></i>poor</span>
         <span><i style="background: #6a6a72"></i>no data</span>
         <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <!-- v2: every layer explains its colors — Routes distinguishes a logged
+           drive from the live one; Stops keys the amber dwell markers. -->
+      <div class="map-legend map-legend-routes" aria-hidden="true">
+        <span><i style="background: #ff7a45"></i>drive</span>
+        <span><i style="background: #4cc4ff"></i>live</span>
+        <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <div class="map-legend map-legend-stops" aria-hidden="true">
+        <span><i style="background: #ff8a3d"></i>stop</span>
+        <span><i style="background: rgba(255, 122, 69, 0.4)"></i>moving</span>
+        <span class="map-legend-hint">tap a stop for detail</span>
       </div>
 
       <!-- Tapped route detail (map.ts showSegPop): segment / stop / event
@@ -1323,6 +1309,16 @@
       >
         &#9654; Play
       </button>
+      <!-- v2: full-screen entry lives in the action row too, not only the small
+           ⛶ overlay on the map frame. Same toggle (actions.ts#mapFullOpenBtn). -->
+      <button
+        type="button"
+        class="scrub-btn"
+        id="mapFullOpenBtn"
+        aria-label="Open full-screen map"
+      >
+        Full map
+      </button>
       <button
         type="button"
         class="scrub-btn"
@@ -1495,11 +1491,29 @@
       <div>
         <span class="kicker">Charging now</span>
         <h3 id="liveChargeEta">Estimating time to full…</h3>
+        <!-- "Level 2 · 3.4 kW · started 38m ago" — charger type + live power +
+             session age (v2 design), from the in-progress charge session. -->
+        <p id="liveChargeSub" class="status-copy live-charge-sub" hidden></p>
       </div>
       <span id="liveChargePower" class="badge" data-state="charging"
         ><span class="dot"></span><span>-- kW</span></span
       >
     </header>
+    <!-- Charge progress toward the target (v2 design): SOC-wide green bar with
+         the session's from→to on the left and the target on the right. -->
+    <div class="meter live-charge-meter">
+      <span
+        id="liveChargeMeter"
+        role="meter"
+        aria-label="Charge progress, state of charge percent"
+        aria-valuemin="0"
+        aria-valuemax="100"
+      ></span>
+    </div>
+    <div class="live-charge-meter-row">
+      <span id="liveChargeFromTo">--</span>
+      <span id="liveChargeTargetLabel">target 100%</span>
+    </div>
     <div class="live-charge-stats">
       <div>
         <span class="kicker">State of charge</span>
@@ -1539,14 +1553,10 @@
     </p>
   </article>
 
+  <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
+       session count lives in the Recent-charges headline ("29.6 kWh across 4
+       charges") and detection status in the source badge + live hero chip. -->
   <section class="charge-grid" aria-label="Charging summary">
-    <article class="panel charge-kpi">
-      <header><span>Sessions</span></header>
-      <strong id="realChargeSessions" aria-live="polite" aria-atomic="true"
-        >0</strong
-      >
-      <small>Charging sessions recorded</small>
-    </article>
     <article class="panel charge-kpi">
       <header><span>Plug-ins</span></header>
       <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
@@ -1555,28 +1565,50 @@
       <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Max power</span></header>
+      <header><span>Peak power</span></header>
       <strong id="realChargePower" aria-live="polite" aria-atomic="true"
         >--</strong
       >
       <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
-      <header><span>Status</span></header>
-      <!-- Color-coded like the other status badges; storage-status.ts keeps
-           data-state in sync with the text (waiting/needs-review/recorded/charging). -->
-      <span
-        id="realChargeStatusBadge"
-        class="badge"
-        data-state="waiting"
-        aria-live="polite"
-        aria-atomic="true"
-        ><span class="dot"></span
-        ><span id="realChargeStatus">needs data</span></span
+      <header><span>Est. cost</span></header>
+      <strong id="chargeEnergyCost" aria-live="polite" aria-atomic="true"
+        >--</strong
       >
-      <small>Detection</small>
+      <small id="chargeEnergyHint">Set rate in Settings</small>
     </article>
   </section>
+
+  <article
+    id="chargeSessionsCard"
+    class="panel list-card charge-sessions-card"
+    hidden
+  >
+    <header>
+      <div>
+        <span class="kicker">Recent charges</span>
+        <h3 id="chargeSessionsTitle">Charge sessions</h3>
+      </div>
+      <div class="map-sheet-actions">
+        <button
+          type="button"
+          class="link-btn"
+          data-action="exportChargeSessionsCsv"
+          id="exportChargeSessionsBtn"
+        >
+          Export CSV
+        </button>
+        <button type="button" class="link-btn" data-action="refreshStorage">
+          Refresh
+        </button>
+      </div>
+    </header>
+    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
+         live region would re-announce all 12 rows each time. The count in
+         #chargeSessionsTitle is the quiet signal that the history changed. -->
+    <div id="chargeSessionsList" class="charge-session-list"></div>
+  </article>
 
   <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
        (the headline cell-health number), and which cells. Rendered live from
@@ -1626,31 +1658,31 @@
         </div>
       </div>
     </div>
-  </article>
 
-  <!-- 96-cell voltage map (scaffold). Renders full per-cell data when telemetry
-       carries a cellVoltages array; otherwise highlights the live lowest/highest
-       cell groups. Hidden until there's cell data to show (renderCellGrid toggles
-       the whole card, not just the inner grid, so it isn't a perpetual empty
-       scaffold — C5). See telemetry.ts#renderCellGrid. -->
-  <article id="cellGridCard" class="panel cell-grid-card" hidden>
-    <header class="cell-grid-head">
-      <div>
-        <span class="kicker">Cell voltage map</span>
-        <h3 id="cellGridTitle">Per-cell voltage map</h3>
-      </div>
-      <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
-    </header>
-    <div
-      id="cellGrid"
-      class="cell-grid"
-      role="img"
-      aria-label="Battery cell voltage map"
-    ></div>
-    <p id="cellGridNote" class="status-copy">
-      Connect to the car to highlight the lowest and highest cell groups; a full
-      per-cell probe fills in the complete map.
-    </p>
+    <!-- 96-cell voltage map, inline in the cell-balance card (v2 design: one
+         battery-cell card whose "Read all 96 cells" action reveals the grid).
+         Renders full per-cell data when telemetry carries a cellVoltages array;
+         otherwise highlights the live lowest/highest cell groups. Hidden until
+         there's cell data to show. See telemetry.ts#renderCellGrid. -->
+    <div id="cellGridCard" class="cell-grid-section" hidden>
+      <header class="cell-grid-head">
+        <div>
+          <span class="kicker">Cell voltage map</span>
+          <h3 id="cellGridTitle">Per-cell voltage map</h3>
+        </div>
+        <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
+      </header>
+      <div
+        id="cellGrid"
+        class="cell-grid"
+        role="img"
+        aria-label="Battery cell voltage map"
+      ></div>
+      <p id="cellGridNote" class="status-copy">
+        Connect to the car to highlight the lowest and highest cell groups; a
+        full per-cell probe fills in the complete map.
+      </p>
+    </div>
   </article>
 
   <!-- Battery state-of-health trend. Fed by bridge.getBatterySohHistory() from the
@@ -1681,26 +1713,6 @@
         <strong id="sohTrendSpan">--</strong>
       </div>
     </div>
-  </article>
-
-  <article id="chargeEnergyCard" class="panel charge-energy-card" hidden>
-    <div class="charge-energy-head">
-      <div>
-        <span class="kicker">Energy logged</span>
-        <strong id="chargeEnergyTotal">-- kWh</strong>
-        <small id="chargeEnergySub" class="status-copy"
-          >from logged charges</small
-        >
-      </div>
-      <div class="charge-energy-cost">
-        <span class="kicker">Est. cost</span>
-        <strong id="chargeEnergyCost">--</strong>
-      </div>
-    </div>
-    <p id="chargeEnergyHint" class="status-copy">
-      Set your electricity rate in Settings → Preferences to estimate charging
-      cost.
-    </p>
   </article>
 
   <!-- Charging cost-over-time (M5). Buckets logged charge sessions by month and
@@ -1736,36 +1748,6 @@
         <strong id="chargeCostTrendTotal">--</strong>
       </div>
     </div>
-  </article>
-
-  <article
-    id="chargeSessionsCard"
-    class="panel list-card charge-sessions-card"
-    hidden
-  >
-    <header>
-      <div>
-        <span class="kicker">Recent charges</span>
-        <h3 id="chargeSessionsTitle">Charge sessions</h3>
-      </div>
-      <div class="map-sheet-actions">
-        <button
-          type="button"
-          class="link-btn"
-          data-action="exportChargeSessionsCsv"
-          id="exportChargeSessionsBtn"
-        >
-          Export CSV
-        </button>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
-      </div>
-    </header>
-    <!-- No aria-live here: the list is rebuilt on every storage broadcast and a
-         live region would re-announce all 12 rows each time. The count in
-         #chargeSessionsTitle is the quiet signal that the history changed. -->
-    <div id="chargeSessionsList" class="charge-session-list"></div>
   </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
@@ -1846,6 +1828,21 @@
         ><strong id="insightTopSpeed">--</strong>
       </div>
     </div>
+    <!-- Second stat row (v2: the old "More lifetime stats" card folded in). -->
+    <div class="map-sheet-stats insights-sheet-more">
+      <div>
+        <span class="kicker">Longest drive</span
+        ><strong id="insightLongest">--</strong>
+      </div>
+      <div>
+        <span class="kicker">GPS drives</span
+        ><strong id="insightGpsTrips">--</strong>
+      </div>
+      <div>
+        <span class="kicker">Electric driving</span
+        ><strong id="insightElectricPct">--</strong>
+      </div>
+    </div>
     <!-- EV-vs-gas savings. Hidden until the user has set their gas MPG, gas
          price, and electricity rate in Settings → Preferences; the value is an
          estimate (EV energy is derived from distance when not logged). -->
@@ -1859,124 +1856,6 @@
   </div>
 
   <section class="map-layout">
-    <article class="panel" id="insightStatsCard">
-      <header>
-        <span class="kicker">More lifetime stats</span>
-        <button type="button" class="link-btn" data-action="refreshStorage">
-          Refresh
-        </button>
-      </header>
-      <div
-        class="state-grid"
-        role="group"
-        aria-label="Additional lifetime totals"
-      >
-        <div>
-          <span>Longest drive</span><strong id="insightLongest">--</strong>
-        </div>
-        <div>
-          <span>GPS drives</span><strong id="insightGpsTrips">--</strong>
-        </div>
-        <!-- Speed-weighted share of classified driving done on electric (EV vs
-             engine-on samples); "--" until the classifier has seen real driving. -->
-        <div>
-          <span>Electric driving</span
-          ><strong id="insightElectricPct">--</strong>
-        </div>
-      </div>
-    </article>
-
-    <!-- Monthly driving trend: distance per month from the logged trips, with
-         real efficiency (integrated HV energy) and estimated cost stats.
-         Mirrors the monthly charging trend on the Battery tab (shared SVG via
-         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
-         Rendered by insights-panel.ts#renderDriveTrend. -->
-    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">Driving over time</span>
-          <h3 id="driveTrendTitle">Monthly distance</h3>
-        </div>
-        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
-          >--</strong
-        >
-      </header>
-      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
-      <div id="driveTrendStats" class="charge-cost-trend-stats">
-        <div>
-          <span class="kicker">Avg / month</span>
-          <strong id="driveTrendAvg">--</strong>
-        </div>
-        <div>
-          <span class="kicker">Efficiency</span>
-          <strong id="driveTrendEff">--</strong>
-        </div>
-        <div>
-          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
-          <strong id="driveTrendCost">--</strong>
-        </div>
-      </div>
-    </article>
-
-    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
-         mode toggle, from the trips rollup. Hidden until a drive exists this
-         week. Rendered by insights-panel.ts#renderThisWeek. -->
-    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">This week</span>
-          <h3 id="thisWeekHead">--</h3>
-        </div>
-        <div
-          id="weekModeSwitch"
-          class="signal-stage-tabs week-mode-tabs"
-          role="group"
-          aria-label="This week chart mode"
-        >
-          <button
-            type="button"
-            data-week-mode="dist"
-            class="is-active"
-            aria-pressed="true"
-          >
-            Distance
-          </button>
-          <button type="button" data-week-mode="eff" aria-pressed="false">
-            Efficiency
-          </button>
-        </div>
-      </header>
-      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
-    </article>
-
-    <!-- Efficiency vs outside temperature (winter range loss): real per-band
-         efficiency from trips that logged ambient temperature + HV energy.
-         Hidden until two temperature bands each hold two or more such drives.
-         Rendered by insights-panel.ts#renderTempEfficiency. -->
-    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
-      <header class="charge-cost-trend-head">
-        <div>
-          <span class="kicker">Temperature vs efficiency</span>
-          <h3 id="tempEffHead">Range across the seasons</h3>
-        </div>
-      </header>
-      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
-      <div id="tempEffStats" class="charge-cost-trend-stats">
-        <div>
-          <span class="kicker" id="tempEffBestLabel">Best band</span>
-          <strong id="tempEffBest">--</strong>
-        </div>
-        <div>
-          <span class="kicker" id="tempEffColdLabel">Coldest band</span>
-          <strong id="tempEffCold">--</strong>
-        </div>
-        <div>
-          <span class="kicker">Drives</span>
-          <strong id="tempEffTrips">--</strong>
-        </div>
-      </div>
-    </article>
-
     <article class="panel eff-scatter-card" id="effScatterCard" hidden>
       <header>
         <div>
@@ -2047,6 +1926,89 @@
       <div class="eff-scatter-stats" id="effScatterStats"></div>
     </article>
 
+    <!-- Temperature vs range (v2 design): dot-per-drive scatter of estimated
+         EV range (from each trip's real efficiency × usable pack energy)
+         against that trip's outside temperature, with the peak highlighted
+         ("Range peaks near 71°F — about 54 mi"). Hidden until enough drives
+         logged both ambient temperature and HV energy. Rendered by
+         insights-panel.ts#renderTempRange. -->
+    <article id="tempEffCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Temperature vs range</span>
+          <h3 id="tempEffHead">Range across the seasons</h3>
+        </div>
+      </header>
+      <div id="tempEffChart" class="charge-cost-trend-chart"></div>
+      <small class="status-copy temp-range-footnote"
+        >Each dot is a drive · EV range estimated from that drive's efficiency
+        vs outside temperature.</small
+      >
+    </article>
+
+    <!-- This week: per-day bars (Mon-start week) with a Distance/Efficiency
+         mode toggle, from the trips rollup. Hidden until a drive exists this
+         week. Rendered by insights-panel.ts#renderThisWeek. -->
+    <article id="thisWeekCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">This week</span>
+          <h3 id="thisWeekHead">--</h3>
+        </div>
+        <div
+          id="weekModeSwitch"
+          class="signal-stage-tabs week-mode-tabs"
+          role="group"
+          aria-label="This week chart mode"
+        >
+          <button
+            type="button"
+            data-week-mode="dist"
+            class="is-active"
+            aria-pressed="true"
+          >
+            Distance
+          </button>
+          <button type="button" data-week-mode="eff" aria-pressed="false">
+            Efficiency
+          </button>
+        </div>
+      </header>
+      <div id="thisWeekChart" class="charge-cost-trend-chart"></div>
+    </article>
+
+    <!-- Monthly driving trend: distance per month from the logged trips, with
+         real efficiency (integrated HV energy) and estimated cost stats.
+         Mirrors the monthly charging trend on the Battery tab (shared SVG via
+         VD.buildMonthlyTrendSvg); hidden until two months of drives exist.
+         Rendered by insights-panel.ts#renderDriveTrend. -->
+    <article id="driveTrendCard" class="panel charge-cost-trend-card" hidden>
+      <header class="charge-cost-trend-head">
+        <div>
+          <span class="kicker">Driving over time</span>
+          <h3 id="driveTrendTitle">Monthly distance</h3>
+        </div>
+        <strong id="driveTrendLatest" class="charge-cost-trend-latest"
+          >--</strong
+        >
+      </header>
+      <div id="driveTrendChart" class="charge-cost-trend-chart"></div>
+      <div id="driveTrendStats" class="charge-cost-trend-stats">
+        <div>
+          <span class="kicker">Avg / month</span>
+          <strong id="driveTrendAvg">--</strong>
+        </div>
+        <div>
+          <span class="kicker">Efficiency</span>
+          <strong id="driveTrendEff">--</strong>
+        </div>
+        <div>
+          <span class="kicker" id="driveTrendCostLabel">Est. cost / mi</span>
+          <strong id="driveTrendCost">--</strong>
+        </div>
+      </div>
+    </article>
+
     <article class="panel list-card">
       <header>
         <span class="kicker">Maintenance</span>
@@ -2058,7 +2020,7 @@
           aria-expanded="false"
           aria-controls="maintenanceForm"
         >
-          Add entry
+          Add maintenance
         </button>
       </header>
       <p
@@ -2185,6 +2147,13 @@
       <div>
         <span>Logged distance</span
         ><strong id="vehicleLoggedDistance">--</strong>
+      </div>
+      <!-- v2: maintenance rollup at a glance ("none logged" / "3 entries"),
+           mirroring the Maintenance card above. storage-status.ts keeps it
+           in sync with the maintenance list. -->
+      <div>
+        <span>Maintenance</span
+        ><strong id="vehicleMaintenance">none logged</strong>
       </div>
       <div style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>
@@ -2728,10 +2697,9 @@
         Off
       </button>
     </div>
-    <!-- Polite confirmation for the accessibility controls (prefs.ts): the
-         pressed-state flip alone isn't reliably announced by TalkBack, and
-         these are the settings a low-vision user is most likely to change. -->
-    <p id="prefA11yAnnounce" class="visually-hidden" role="status"></p>
+    <!-- Accessibility-control confirmations announce through the #statusToast
+         live region (prefs.ts#toast) — a dedicated announcer here double-spoke
+         every toggle. -->
   </article>
 
   <article class="panel pref-card">
@@ -3076,6 +3044,73 @@
       </button>
     </div>
   </details>
+
+  <!-- OBD session counters + Data health (moved from the Drive tab per the v2
+       design — Drive keeps only the slim session/health footer button). The
+       element ids are unchanged, so telemetry.ts#updateDiagnostics and
+       #updateValidationUi render here verbatim. -->
+  <article class="panel status-card" aria-live="polite">
+    <div class="status-head">
+      <div>
+        <div class="kicker">OBD session</div>
+        <h2 id="diagState">Waiting for adapter</h2>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span><span id="diagSamples">0 samples</span></span
+      >
+    </div>
+    <div class="status-meta">
+      <div><span>Adapter</span><strong id="diagAdapter">--</strong></div>
+      <div><span>Vehicle</span><strong id="diagVehicleState">--</strong></div>
+      <div><span>Runtime</span><strong id="diagSession">--</strong></div>
+      <div><span>PIDs</span><strong id="diagSupported">--</strong></div>
+    </div>
+  </article>
+
+  <article class="panel validation-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Health</span>
+        <h3>Data health</h3>
+      </div>
+      <span class="badge"
+        ><span class="dot"></span
+        ><span id="validationSummary">waiting</span></span
+      >
+    </div>
+    <div class="validation-list">
+      <div id="validateObd" class="validation-row" data-tone="warn">
+        <span
+          ><strong>OBD stream</strong
+          ><small>Waiting for adapter samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateGps" class="validation-row" data-tone="warn">
+        <span
+          ><strong>GPS trace</strong
+          ><small>Waiting for location samples</small></span
+        ><b>idle</b>
+      </div>
+      <div id="validateDb" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Database writes</strong
+          ><small>Waiting for stored rows</small></span
+        ><b>ready</b>
+      </div>
+      <div id="validateParser" class="validation-row" data-tone="warn">
+        <span
+          ><strong>PID parsing</strong
+          ><small>Waiting for parsed values</small></span
+        ><b>unknown</b>
+      </div>
+      <div id="validateBackground" class="validation-row" data-tone="warn">
+        <span
+          ><strong>Background test</strong
+          ><small>Minimize the app during a drive to validate gaps</small></span
+        ><b>manual</b>
+      </div>
+    </div>
+  </article>
 
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->

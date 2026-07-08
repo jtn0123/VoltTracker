@@ -103,7 +103,7 @@
         </div>
       </div>
 
-      <div class="map-legend" aria-hidden="true">
+      <div class="map-legend map-legend-heat" aria-hidden="true">
         <span><i style="background: #ff6b4a"></i>slow</span>
         <span><i style="background: #ffd23f"></i>mid</span>
         <span><i style="background: #7ee06a"></i>fast</span>
@@ -116,6 +116,20 @@
         <span><i style="background: #ff6b5f"></i>poor</span>
         <span><i style="background: #6a6a72"></i>no data</span>
         <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <!-- v2: every layer explains its colors — Routes distinguishes a logged
+           drive from the live one; Stops keys the amber dwell markers. -->
+      <div class="map-legend map-legend-routes" aria-hidden="true">
+        <span><i style="background: #ff7a45"></i>drive</span>
+        <span><i style="background: #4cc4ff"></i>live</span>
+        <span class="map-legend-hint">tap route for detail</span>
+      </div>
+
+      <div class="map-legend map-legend-stops" aria-hidden="true">
+        <span><i style="background: #ff8a3d"></i>stop</span>
+        <span><i style="background: rgba(255, 122, 69, 0.4)"></i>moving</span>
+        <span class="map-legend-hint">tap a stop for detail</span>
       </div>
 
       <!-- Tapped route detail (map.ts showSegPop): segment / stop / event
@@ -382,6 +396,16 @@
         aria-label="Play route playback"
       >
         &#9654; Play
+      </button>
+      <!-- v2: full-screen entry lives in the action row too, not only the small
+           ⛶ overlay on the map frame. Same toggle (actions.ts#mapFullOpenBtn). -->
+      <button
+        type="button"
+        class="scrub-btn"
+        id="mapFullOpenBtn"
+        aria-label="Open full-screen map"
+      >
+        Full map
       </button>
       <button
         type="button"

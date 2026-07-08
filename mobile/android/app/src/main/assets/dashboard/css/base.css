@@ -389,6 +389,25 @@
     [role="button"]:not([aria-disabled="true"]):hover {
       filter: brightness(1.07);
     }
+
+    /* v2: cards lift subtly under a pointer. Transition lives here (not on the
+       base .panel) so touch devices pay nothing for it. */
+    .panel {
+      transition:
+        transform var(--motion-medium, 260ms) var(--motion-ease, ease),
+        box-shadow var(--motion-medium, 260ms) var(--motion-ease, ease);
+    }
+
+    .panel:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 20px 48px var(--shadow-soft);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .panel:hover {
+      transform: none;
+    }
   }
 
   select, input {

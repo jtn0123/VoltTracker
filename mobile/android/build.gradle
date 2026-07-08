@@ -58,7 +58,12 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // bars, and the trip-sheet speed/stops additions. All eager CSS ships raw
 // (no minify step) and the sheet/scan markup rides the eager bundle.
 // ~890 B headroom retained.
-def dashboardStartupBudgetBytes = 396_000L
+// 396k → 404k (v2 fidelity pass, 2026-07-08): funds the design's card-stack
+// rework — Drive This-trip card + slim session/health footer, charge hero
+// progress treatment, per-layer map legends, insights temp-vs-range scatter,
+// skeleton chart placeholders, and action-confirmation toasts. All eager
+// Drive/Charge-first chrome (CSS ships raw). ~3.6 KB headroom retained.
+def dashboardStartupBudgetBytes = 404_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 // 20k → 23.5k (v2 design handoff): screens-map.css gains the tapped-route

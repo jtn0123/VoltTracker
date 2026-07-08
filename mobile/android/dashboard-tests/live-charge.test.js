@@ -38,8 +38,12 @@ describe('live charge time-to-full', () => {
     // Target defaults to a full 100% charge and is now an editable input (M2).
     expect(document.getElementById('liveChargeTargetInput').value).toBe('100');
 
-    // time = 7.0 kWh / 3.5 kW = 2.0 h = 2h 00m
-    expect(document.getElementById('liveChargeEta').textContent).toBe('~2h 00m to 100%');
+    // time = 7.0 kWh / 3.5 kW = 2.0 h → the v2 headline leads with the live
+    // SOC and gives a wall-clock finish ("50% — full around 9:40 PM"). The
+    // clock half is locale/now-dependent, so match the shape, not the time.
+    expect(document.getElementById('liveChargeEta').textContent).toMatch(
+      /^50% — full around \d{1,2}:\d{2}\s?(AM|PM)?$/
+    );
 
     // Charger power is echoed in the badge.
     expect(document.getElementById('liveChargePower').textContent).toContain('3.5 kW');
@@ -61,8 +65,10 @@ describe('live charge time-to-full', () => {
     expect(document.getElementById('liveChargeCard').hidden).toBe(false);
     // usable = 14 * 0.5 = 7.0 kWh; remaining (0 → 100) = 7.0 kWh.
     expect(document.getElementById('liveChargeRemaining').textContent).toBe('7.0 kWh');
-    // time = 7.0 / 7 = 1.0 h.
-    expect(document.getElementById('liveChargeEta').textContent).toBe('~1h 00m to 100%');
+    // time = 7.0 / 7 = 1.0 h → "0% — full around <an hour from now>".
+    expect(document.getElementById('liveChargeEta').textContent).toMatch(
+      /^0% — full around \d{1,2}:\d{2}\s?(AM|PM)?$/
+    );
   });
 
   it('hides the card when the car is not charging (no charger power)', () => {
@@ -144,7 +150,10 @@ describe('charge target SOC (M2)', () => {
     expect(card.hidden).toBe(false);
     // remaining = 14 * (80-50)/100 = 4.2 kWh; time = 4.2 / 3.5 = 1.2 h = 1h 12m.
     expect(document.getElementById('liveChargeRemaining').textContent).toBe('4.2 kWh');
-    expect(document.getElementById('liveChargeEta').textContent).toBe('~1h 12m to 80%');
+    // Custom target names the target instead of "full" (v2 clock-time form).
+    expect(document.getElementById('liveChargeEta').textContent).toMatch(
+      /^50% — 80% around \d{1,2}:\d{2}\s?(AM|PM)?$/
+    );
   });
 
   it('hides the card once the pack reaches a sub-100 target', () => {

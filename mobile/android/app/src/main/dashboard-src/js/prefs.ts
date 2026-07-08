@@ -275,13 +275,15 @@
     }
   }
 
-  // Spoken confirmation for the accessibility controls: #prefA11yAnnounce is a
-  // visually-hidden role="status" node in preferences.html — writing to it gets
-  // TalkBack to announce the change, which the aria-pressed flip alone doesn't
-  // reliably do on the just-tapped element.
-  function announceA11yPref(message: string): void {
-    const node = document.getElementById("prefA11yAnnounce");
-    if (node) node.textContent = message;
+  // Visible action confirmation (v2) — also the spoken one: #statusToast is a
+  // polite live region, so TalkBack announces the change without a second
+  // dedicated announcer (the old #prefA11yAnnounce path double-spoke every
+  // toggle). Late-bound off the global: prefs is the first eager module, so
+  // telemetry's VD.showToast doesn't exist yet at load time — but it does by
+  // the time any click handler runs.
+  function toast(message: string): void {
+    const show = window.VoltDashboard && window.VoltDashboard.showToast;
+    if (typeof show === "function") show(message);
   }
 
   function syncAccessibilityControls(): void {
@@ -640,13 +642,17 @@
       if (!target) return;
       const unitBtn = target.closest("[data-pref-units]");
       if (unitBtn) {
-        set("units", unitBtn.getAttribute("data-pref-units") === "metric" ? "metric" : "imperial");
+        const metric = unitBtn.getAttribute("data-pref-units") === "metric";
+        set("units", metric ? "metric" : "imperial");
         applyUnitsAttr();
         syncUnitButtons();
         rerenderForUnits();
+        toast(metric ? "Metric · km · °C" : "Imperial · mi · °F");
         return;
       }
       // Accessibility font scale (M9): pick one of the offered multipliers.
+      // The toast live region carries the announcement alone (same
+      // single-announcement pattern as the high-contrast toggle below).
       const scaleBtn = target.closest("[data-pref-font-scale]");
       if (scaleBtn) {
         const value = Number(scaleBtn.getAttribute("data-pref-font-scale"));
@@ -656,16 +662,19 @@
         set("fontScale", clamped);
         applyAccessibilityAttrs();
         syncAccessibilityControls();
-        announceA11yPref(`Text size set to ${Math.round(clamped * 100)}%`);
+        toast(clamped <= 1 ? "Default text size" : clamped >= FONT_SCALE_MAX ? "Largest text size" : "Large text size");
         return;
       }
-      // Accessibility high-contrast theme toggle (M9).
+      // Accessibility high-contrast theme toggle (M9). The toast is itself a
+      // polite live region, so it carries the announcement alone — pushing the
+      // same string through #prefA11yAnnounce too made screen readers say it
+      // twice per toggle.
       const contrastBtn = target.closest("[data-pref-contrast-toggle]");
       if (contrastBtn) {
         set("highContrast", !highContrast());
         applyAccessibilityAttrs();
         syncAccessibilityControls();
-        announceA11yPref(highContrast() ? "High contrast on" : "High contrast off");
+        toast(highContrast() ? "High contrast on" : "High contrast off");
       }
     });
   }

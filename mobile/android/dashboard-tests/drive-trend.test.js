@@ -129,38 +129,36 @@ describe('efficiency vs outside temperature (Insights)', () => {
     return t;
   }
 
-  it('stays hidden until two temperature bands hold two drives each', () => {
+  it('stays hidden until three drives carry ambient and energy data', () => {
     window.VoltDashboard.setTrips([
       tempTrip(1, -5, 30, 10),
-      tempTrip(2, -6, 30, 10),
-      tempTrip(3, 22, 40, 10), // warm band has only one drive
+      tempTrip(2, 22, 40, 10),
     ]);
     expect(document.getElementById('tempEffCard').hidden).toBe(true);
   });
 
-  it('compares cold-band efficiency against the best band with an honest headline', () => {
+  it('plots a dot per drive and headlines the peak-range temperature', () => {
     window.VoltDashboard.setTrips([
-      // Cold band (<32°F): 60 mi / 20 kWh = 3.0 mi/kWh.
+      // Cold drives: 3.0 mi/kWh → ~42 mi estimated range.
       tempTrip(1, -5, 30, 10),
       tempTrip(2, -6, 30, 10),
-      // Mild band (68–86°F): 80 mi / 20 kWh = 4.0 mi/kWh.
+      // Warm drives: 4.0 mi/kWh → ~56 mi estimated range. Buckets are 5°C wide,
+      // so 22°C→20 and 25°C→25; the tie resolves to the warmer bucket.
       tempTrip(3, 22, 40, 10),
       tempTrip(4, 25, 40, 10),
     ]);
 
     const card = document.getElementById('tempEffCard');
     expect(card.hidden).toBe(false);
-    // 3.0 vs 4.0 → 25% lower in the cold.
-    expect(document.getElementById('tempEffHead').textContent).toBe('25% lower efficiency in <32°F weather');
-    expect(document.getElementById('tempEffBest').textContent).toBe('4.0 mi/kWh');
-    expect(document.getElementById('tempEffBestLabel').textContent).toBe('Best (68–86°F)');
-    expect(document.getElementById('tempEffCold').textContent).toBe('3.0 mi/kWh');
-    expect(document.getElementById('tempEffTrips').textContent).toBe('4');
-    // One bar per populated band.
-    expect(document.querySelectorAll('#tempEffChart rect')).toHaveLength(2);
+    // Peak bucket = 25°C (77°F) at 4.0 mi/kWh × 14 kWh usable = 56 mi.
+    expect(document.getElementById('tempEffHead').textContent).toBe(
+      'Range peaks near 77°F — about 56 mi',
+    );
+    // One dot per qualifying drive.
+    expect(document.querySelectorAll('#tempEffChart circle')).toHaveLength(4);
   });
 
-  it('uses Celsius band labels and km/kWh in metric mode', () => {
+  it('uses Celsius and km in metric mode', () => {
     window.VoltDashboard.prefs.set('units', 'metric');
     window.VoltDashboard.setTrips([
       tempTrip(1, -5, 30, 10),
@@ -168,22 +166,9 @@ describe('efficiency vs outside temperature (Insights)', () => {
       tempTrip(3, 22, 40, 10),
       tempTrip(4, 25, 40, 10),
     ]);
-    expect(document.getElementById('tempEffHead').textContent).toBe('25% lower efficiency in <0°C weather');
-    expect(document.getElementById('tempEffBestLabel').textContent).toBe('Best (20–30°C)');
-    // 4.0 mi/kWh ≈ 6.4 km/kWh, 3.0 mi/kWh ≈ 4.8 km/kWh.
-    expect(document.getElementById('tempEffBest').textContent).toBe('6.4 km/kWh');
-    expect(document.getElementById('tempEffCold').textContent).toBe('4.8 km/kWh');
-  });
-
-  it('reports a steady range when the bands barely differ', () => {
-    window.VoltDashboard.setTrips([
-      tempTrip(1, -5, 39, 10),
-      tempTrip(2, -6, 39, 10),
-      tempTrip(3, 22, 40, 10),
-      tempTrip(4, 25, 40, 10),
-    ]);
+    // 56 mi ≈ 90 km.
     expect(document.getElementById('tempEffHead').textContent).toBe(
-      'Efficiency holds steady across temperatures so far.',
+      'Range peaks near 25°C — about 90 km',
     );
   });
 
