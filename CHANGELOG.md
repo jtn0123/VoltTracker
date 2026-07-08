@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.29.0 (2026-07-08)
+
+### ✳️ New
+
+- **dashboard**: Implement VoltTracker v2 design handoff
+  ([#298](https://github.com/jtn0123/VoltTracker/pull/298),
+  [`5a1f5f2`](https://github.com/jtn0123/VoltTracker/commit/5a1f5f29c2ded0a17b34c97af00a484607770227))
+
+### 🔷 Changed
+
+- Expand Android simulation coverage ([#297](https://github.com/jtn0123/VoltTracker/pull/297),
+  [`24cd13f`](https://github.com/jtn0123/VoltTracker/commit/24cd13f506016855ba810f725202f7e0a9d3a527))
+
+
 ## v0.28.1 (2026-07-06)
 
 ### 🔺 Fix
