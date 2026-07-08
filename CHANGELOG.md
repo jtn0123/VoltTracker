@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.30.0 (2026-07-08)
+
+### ✳️ New
+
+- **dashboard**: Tab-by-tab fidelity pass for the VoltTracker v2 design
+  ([#299](https://github.com/jtn0123/VoltTracker/pull/299),
+  [`a86dcb3`](https://github.com/jtn0123/VoltTracker/commit/a86dcb3db88a7f7b1d3faffc67b9b3b71619c071))
+
+
 ## v0.29.0 (2026-07-08)
 
 ### ✳️ New
