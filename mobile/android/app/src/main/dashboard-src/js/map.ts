@@ -1709,7 +1709,11 @@ import type { MapSessionFilter } from "./map-session-list";
     for (let i = 0; i < smoothed.length; i += step) series.push(smoothed[i] as number);
     const w = 320;
     const h = 84;
-    const maxV = Math.max(...series, 1);
+    // Read the true peak from the full-resolution smoothed data, not the ~120-point
+    // downsample used only for drawing: on a drive with >120 segments the fastest
+    // sample can fall on a skipped index, so "Peaks at N" under-reported the real
+    // maximum. reduce (not spread) avoids the argument-count limit on long drives.
+    const maxV = smoothed.reduce((m, v) => Math.max(m, v as number), 1);
     const ns = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(ns, "svg") as SVGElement;
     VD.setSvgAttrs(svg, {

@@ -769,9 +769,23 @@ import { units } from "./prefs";
     scrubTrailPts = [];
   }
 
+  // Session id of the last render. The live route is re-rendered on every appended
+  // GPS fix (~1/s), so keying off it lets a same-route update preserve the user's
+  // scrub position and running playback instead of snapping back to 50% and
+  // stopping the animation roughly once a second.
+  let lastScrubRouteKey = "";
+
   // Called by map.js whenever the selected route changes.
   function renderScrubber(route: ScrubRoute) {
-    if (typeof stopScrubPlay === "function") stopScrubPlay();
+    // The route identity lives at route.session.id (MapRoute shape; the live route
+    // is session:{ id: LIVE_ROUTE_ID }) — the same field routeIsLive() keys on. A
+    // bare route.id is always undefined here, which would make sameRoute never match.
+    const routeSession = (route as { session?: { id?: unknown } }).session || {};
+    const routeKey = String(routeSession.id || "");
+    const sameRoute = routeKey !== "" && routeKey === lastScrubRouteKey && scrubData.length >= 2;
+    lastScrubRouteKey = routeKey;
+    // Only a genuinely new route resets playback; a live append keeps it running.
+    if (!sameRoute && typeof stopScrubPlay === "function") stopScrubPlay();
     scrubData = buildScrubData(route);
     scrubTrailPts = scrubData.map((point) => [point.lat, point.lng] as LatLngTuple);
     const node = el("scrubber");
@@ -825,7 +839,12 @@ import { units } from "./prefs";
     renderScrubCharts();
     bindScrubChart(el("scrubChart"));
     bindScrubTracks();
-    setScrubCursor(0.5);
+    // Keep the user's position on a same-route update (live append); only a freshly
+    // selected route jumps to the mid-route default. While playback is running on
+    // the same route, let the animation loop drive the cursor instead of resetting it.
+    if (!(sameRoute && scrubAnim)) {
+      setScrubCursor(sameRoute ? scrubFrac : 0.5);
+    }
   }
 
   // Bind toggle once on first script load.

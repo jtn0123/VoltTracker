@@ -157,6 +157,12 @@ import { initialTelemetryState } from "./telemetry-state";
       display === lastErrorBannerText && now - lastErrorBannerAt < ERROR_BANNER_DEDUPE_MS;
     try {
       if (duplicate) {
+        // Slide the window on every repeat so a continuous same-message storm
+        // (e.g. a ~1Hz reconnect loop) keeps counting as the SAME message. Only
+        // refreshing this in the else branch anchored the window to the first
+        // occurrence, so at ~2.5s the storm looked "new" and re-showed a banner
+        // the user had dismissed. Now a dismissal sticks until the error clears.
+        lastErrorBannerAt = now;
         errorBannerRepeatCount += 1;
         // Keep a visible banner's counter fresh, but never re-show one the
         // user dismissed for a message they have already seen.

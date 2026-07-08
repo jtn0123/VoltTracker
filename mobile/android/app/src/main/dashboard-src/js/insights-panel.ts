@@ -625,7 +625,10 @@ import { prefs, units } from "./prefs";
     // EV electricity is pricier than the gas it replaced (rare but possible).
     VD.setText("insightSavings", formatSignedMoney(savings));
     setSavingsNoteText(
-      `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
+      // Route the efficiency assumption through units.efficiencyText so a metric
+      // user reads "5.6 km/kWh" to match the km/kWh charts/headlines on this tab,
+      // not a hardcoded "3.5 mi/kWh". (mpg / $/gal stay as the gas-comparison inputs.)
+      `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${units.efficiencyText(ASSUMED_VOLT_MI_PER_KWH)}`
     );
   }
 
@@ -745,7 +748,7 @@ import { prefs, units } from "./prefs";
   const EFF_CHART_VIEWS = ["bars", "scatter", "curve"] as const;
   type EffChartView = (typeof EFF_CHART_VIEWS)[number];
   type EffBucket = { mid: number; n: number; med: number; q1: number; q3: number };
-  type EffPoint = { mph: number; eff: number; effFlat: number; grade: number };
+  type EffPoint = { mph: number; eff: number; effFlat: number; grade: number; route: number };
 
   function scatterView(): EffChartView {
     const v = prefs.get<string>("effChartView", "scatter");
@@ -1018,15 +1021,12 @@ import { prefs, units } from "./prefs";
         ? state.storage.recentRoutes
         : [];
     const pool: EffPoint[] = [];
-    // "Drives" reports routes that actually contributed a plotted sample, not
-    // every recentRoute: City/Highway averages pool only routes that clear
-    // enrichRouteEff (>=2 points AND >=2 in-range power samples), so counting
-    // routes.length beside them overstated the drive count.
-    let contributingRoutes = 0;
-    routes.forEach((route) => {
+    // Each sample carries its source route index so the stats can count distinct
+    // drives in the (optionally outlier-filtered) plotted pool and weight the
+    // City/Highway averages per drive rather than per correlated sample.
+    routes.forEach((route, routeIdx) => {
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
-      const poolBefore = pool.length;
       for (let i = 0; i < pts.length; i += 1) {
         // enrichRouteEff sets eff = null for all-regen/idle windows (no positive
         // drive sample in range) even when the point has real highway speed.
@@ -1072,9 +1072,8 @@ import { prefs, units } from "./prefs";
         const whmi = 1000 / eff;
         const flatWhmi = Math.max(143, whmi - GRADE_WHMI_PER_UNIT * grade);
         const effFlat = Math.max(0.8, Math.min(7, 1000 / flatWhmi));
-        pool.push({ mph, eff, effFlat, grade });
+        pool.push({ mph, eff, effFlat, grade, route: routeIdx });
       }
-      if (pool.length > poolBefore) contributingRoutes += 1;
     });
     // Card visibility tracks the raw pool so toggling outlier removal can't hide
     // the whole card; everything downstream plots the (optionally) filtered pool.
@@ -1266,20 +1265,34 @@ import { prefs, units } from "./prefs";
       }
     }
     if (statsEl) {
-      // Grade-normalized averages (effFlat). "Drives" counts the routes that
-      // actually contributed a plotted sample (contributingRoutes) — far more
-      // honest than the old per-sample "Samples", where one long trip dumped
-      // hundreds of correlated points, and than routes.length, which counted
-      // routes the averages never drew from. Downhill avg is gone: grade is
-      // normalized out, so a city/highway split is what's left to compare.
-      const city = plotPool.filter((p) => p.mph < 35).map((p) => p.effFlat);
-      const hwy = plotPool.filter((p) => p.mph > 55).map((p) => p.effFlat);
-      const avgText = (a: number[]) =>
-        a.length ? units.efficiencyText(a.reduce((s, x) => s + x, 0) / a.length) : "--";
+      // Grade-normalized averages (effFlat), weighted PER DRIVE, not per sample:
+      // average each route's in-band samples first, then average those route
+      // means. Otherwise one long trip's hundreds of correlated points dominate
+      // the figure (the same skew the "Drives" count was already fixed to avoid).
+      const perDriveAvg = (inBand: (p: EffPoint) => boolean) => {
+        const byRoute = new Map<number, { sum: number; n: number }>();
+        for (const p of plotPool) {
+          if (!inBand(p)) continue;
+          const acc = byRoute.get(p.route) || { sum: 0, n: 0 };
+          acc.sum += p.effFlat;
+          acc.n += 1;
+          byRoute.set(p.route, acc);
+        }
+        if (!byRoute.size) return "--";
+        let total = 0;
+        byRoute.forEach((a) => {
+          total += a.sum / a.n;
+        });
+        return units.efficiencyText(total / byRoute.size);
+      };
+      // "Drives" counts the distinct routes present in the PLOTTED pool, so with
+      // "Hide outliers" on a route whose only sample was fenced out no longer
+      // inflates the count beside averages it doesn't back.
+      const drives = new Set(plotPool.map((p) => p.route)).size;
       statsEl.replaceChildren(
-        insightStat("Drives", String(contributingRoutes)),
-        insightStat("City avg", avgText(city)),
-        insightStat("Highway avg", avgText(hwy))
+        insightStat("Drives", String(drives)),
+        insightStat("City avg", perDriveAvg((p) => p.mph < 35)),
+        insightStat("Highway avg", perDriveAvg((p) => p.mph > 55))
       );
     }
   }

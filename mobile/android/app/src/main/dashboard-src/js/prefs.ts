@@ -433,6 +433,12 @@
     };
     safe(VD.updateLiveUi);
     safe(VD.updateStorageUi);
+    // updateStorageUi doesn't touch the storage-overview tiles (Drive Max
+    // speed/Distance, "This trip" efficiency, Insights pack Temp) — those are
+    // owned by renderRealV2Ui, which every other refresh site pairs with
+    // updateStorageUi. Without this, a units toggle leaves them in the old units
+    // until the next native storage broadcast (never, when reviewing history).
+    safe(VD.renderRealV2Ui);
     try {
       const view = VD.state && VD.state.view;
       if (view && typeof VD.setView === "function") VD.setView(view);

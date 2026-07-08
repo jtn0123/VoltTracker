@@ -113,6 +113,10 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  /* Number the steps with a CSS counter so the visible badges stay 1..N even when
+     an optional step (Stop competing apps / Stale telemetry) is hidden. A
+     display:none step doesn't increment, so no "1, 2, 4" gap can appear. */
+  counter-reset: troubleshooter-step;
 }
 
 .troubleshooter-step {
@@ -120,6 +124,7 @@
   border-radius: var(--radius-md);
   background: var(--fill-ghost);
   overflow: hidden;
+  counter-increment: troubleshooter-step;
 }
 
 .troubleshooter-step[hidden] {
@@ -158,6 +163,12 @@
   font-weight: 600;
   font-size: 12px;
   flex: none;
+}
+
+/* The visible step number comes from the counter (see .troubleshooter-steps), not
+   a hardcoded digit in the markup, so hidden steps never leave a numbering gap. */
+.troubleshooter-step-number::before {
+  content: counter(troubleshooter-step);
 }
 
 .troubleshooter-step-title {

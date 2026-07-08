@@ -246,7 +246,8 @@ import { prefs, units } from "./prefs";
     VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
     VD.setText("dbState", VD.formatRowCount(VD.dbRowCount(storage)));
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
-    VD.setText("dbSummaryTitle", sessions ? (last ? `${samples} samples · ${VD.formatWhen(last)}` : `${samples} samples`) : "No stored sessions yet");
+    const sampleLabel = `${samples} sample${samples === 1 ? "" : "s"}`;
+    VD.setText("dbSummaryTitle", sessions ? (last ? `${sampleLabel} · ${VD.formatWhen(last)}` : sampleLabel) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
@@ -581,8 +582,14 @@ import { prefs, units } from "./prefs";
     const parsed = Number(review.parsedPidCount || 0);
     const unknown = Number(review.unknownPidCount || 0);
     const interval = Number(review.avgSampleIntervalMs || 0);
-    const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
-    const sampleGaps = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
+    // Presence-based fallback (not `||`): a genuine current-session 0 must render
+    // as 0, not fall through to a stale non-zero latestHealth count from a prior
+    // session. Only reach for latestHealth when the current field is truly absent.
+    const health = review.latestHealth || {};
+    const firstPresent = (primary: unknown, fallback: unknown) =>
+      primary != null ? Number(primary) : Number(fallback || 0);
+    const backgroundSamples = firstPresent(review.backgroundSampleCount, health.backgroundSampleCount);
+    const sampleGaps = firstPresent(review.sampleGapEventCount, health.sampleGapCount);
     const usefulSamples = Number(review.usefulTelemetryCount || 0);
     const emptySamples = Number(review.emptyTelemetryCount || 0);
     const reviewCard = el("reviewCard");
@@ -595,11 +602,11 @@ import { prefs, units } from "./prefs";
     VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
     VD.setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
     VD.setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
-    VD.setText("reviewBackground", backgroundSamples ? `${backgroundSamples} samples` : "--");
+    VD.setText("reviewBackground", backgroundSamples ? `${backgroundSamples} sample${backgroundSamples === 1 ? "" : "s"}` : "--");
     VD.setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
     VD.setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
     VD.setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
-    VD.setText("pidFrameTitle", frames.length ? `${frames.length} latest frames` : "Waiting for scan data");
+    VD.setText("pidFrameTitle", frames.length ? `${frames.length} latest frame${frames.length === 1 ? "" : "s"}` : "Waiting for scan data");
 
     const warningList = el("reviewWarnings");
     if (warningList) {
@@ -706,8 +713,14 @@ import { prefs, units } from "./prefs";
     const unknown = Number(review.unknownPidCount || 0);
     const gps = Number(review.locationSampleCount || 0);
     const maxSpeed = Number(review.maxSpeedKph || 0);
-    const backgroundSamples = Number(review.backgroundSampleCount || (review.latestHealth || {}).backgroundSampleCount || 0);
-    const gapCount = Number(review.sampleGapEventCount || (review.latestHealth || {}).sampleGapCount || 0);
+    // Presence-based fallback matching updateReviewUi: a genuine current-session 0
+    // must not fall through to a stale non-zero latestHealth count, or this insight
+    // ("N samples captured in background") would contradict the review tile above it.
+    const health = review.latestHealth || {};
+    const firstPresent = (primary: unknown, fallback: unknown) =>
+      primary != null ? Number(primary) : Number(fallback || 0);
+    const backgroundSamples = firstPresent(review.backgroundSampleCount, health.backgroundSampleCount);
+    const gapCount = firstPresent(review.sampleGapEventCount, health.sampleGapCount);
     const hasChargeHint = warnings.some((item) => String(item.code || "") === "charge-speed-hint");
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
@@ -732,11 +745,11 @@ import { prefs, units } from "./prefs";
         detail: hasDriving ? stateCountSummary(stateCounts) : "Driving classifiers will become useful after a connected drive session."
       },
       {
-        title: backgroundSamples ? `${backgroundSamples} samples captured in background` : "Background logging not proven yet",
+        title: backgroundSamples ? `${backgroundSamples} sample${backgroundSamples === 1 ? "" : "s"} captured in background` : "Background logging not proven yet",
         detail: backgroundSamples ? "The foreground service kept writing samples while the app was minimized." : "Minimize the app during the next drive to prove background collection."
       },
       {
-        title: gapCount ? `${gapCount} sample gaps detected` : "No sample gaps flagged",
+        title: gapCount ? `${gapCount} sample gap${gapCount === 1 ? "" : "s"} detected` : "No sample gaps flagged",
         detail: gapCount ? "Review these gaps against Android background behavior and adapter reconnects." : "No long active-session sample gaps are stored for the latest session."
       }
     ];
@@ -1605,7 +1618,11 @@ import { prefs, units } from "./prefs";
     } else {
       // Clear a previous figure so a cleared database can't flash stale cost.
       VD.setText("chargeEnergyCost", "--");
-      VD.setText("chargeEnergyHint", "Set rate in Settings");
+      // Distinguish "no rate configured" from "rate set but no energy logged yet":
+      // this else fires for both (price===0 OR total===0), and telling a user who
+      // already set a $/kWh rate to "Set rate in Settings" is misleading — the cost
+      // just can't be computed until a session records energy.
+      VD.setText("chargeEnergyHint", price > 0 ? "No charge energy logged yet" : "Set rate in Settings");
       if (hint) hint.hidden = false;
     }
     renderChargeCostTrend(sessions);

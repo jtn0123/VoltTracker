@@ -262,9 +262,12 @@ class BluetoothStateReporter(
         val device = bluetoothDeviceExtra(intent)
         val address = if (device == null) "" else safeString(device.address)
         // Only log events for the device we're actually trying to talk to — keeps the log from
-        // being flooded by every nearby keyboard/headset/watch on the user's phone.
+        // being flooded by every nearby keyboard/headset/watch on the user's phone. When no adapter
+        // is being tracked yet (activeAddress null, i.e. before the first pre-connect), drop the
+        // device-scoped broadcasts entirely: the old `!isNullOrEmpty && !equals` guard let every
+        // nearby device through during that window, the exact flooding this filter exists to prevent.
         val tracking = activeAddress
-        if (!tracking.isNullOrEmpty() && !tracking.equals(address, ignoreCase = true)) {
+        if (tracking.isNullOrEmpty() || !tracking.equals(address, ignoreCase = true)) {
             return
         }
         when (action) {

@@ -425,7 +425,13 @@ function connectionRows(status: VoltStatus): StatusRow[] {
     ? "Demo telemetry"
     : String(adapter.name || status.lastName || lastDevice.name || "") || "None selected";
   const address = demo ? "" : String(adapter.address || "");
-  const samples = Number(session.sampleCount || 0);
+  // Fall back to the telemetry sample count like tripRows() and
+  // deriveRecoveryView() do: during a live session (and always in Demo) the
+  // count rides on the telemetry payload while app.session.sampleCount stays 0,
+  // so reading only session.sampleCount here showed "Waiting for data" in the
+  // Logging row while the Trip row right below counted hundreds of samples.
+  const telemetry: VoltTelemetry = state.telemetry || {};
+  const samples = Number(session.sampleCount || telemetry.sampleCount || 0);
   const sessionState = String(status.state || session.state || "idle");
   const logging = ACTIVE_TRIP_STATES.includes(sessionState.toLowerCase())
     ? (samples

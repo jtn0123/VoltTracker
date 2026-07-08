@@ -439,6 +439,13 @@ import type { FocusTrap } from "./focus-trap";
   // the actions row (cancel + help) so the banner is actionable instead of
   // a plain "Dashboard error" string. Called from noteStatus on every status
   // payload.
+  // Sticky across a trailing benign status: once a failure paints actionable copy
+  // + Help into the VISIBLE banner, a follow-up "idle"/"ready" (a common tail right
+  // after a failed session) must not wipe them — the user still needs the guidance
+  // and the entry point. Cleared when the banner is dismissed (rendered while
+  // hidden) or the connection actually recovers.
+  let stickyFailureCopy = false;
+
   function renderErrorBannerCopy(status: VoltStatus | null | undefined) {
     const titleNode = el("errorBannerTitle");
     const hintNode = el("errorBannerHint");
@@ -449,6 +456,14 @@ import type { FocusTrap } from "./focus-trap";
     const stateName = String((status && status.state) || "").toLowerCase();
     const detail = String((status && status.detail) || "").toLowerCase();
     const failureClass = String((status && status.failureClass) || "").toUpperCase();
+    const bannerNode = el("errorBanner");
+    const bannerVisible = Boolean(bannerNode && !bannerNode.hidden);
+    // A dismissed / never-shown banner starts a clean slate; a real recovery
+    // (connected/scanning) also clears the sticky failure state.
+    if (!bannerVisible) stickyFailureCopy = false;
+    if (stateName === "connected" || stateName === "scanning" || stateName === "scan-complete") {
+      stickyFailureCopy = false;
+    }
     const isFailure =
       stateName === "failed" ||
       stateName === "blocked" ||
@@ -462,6 +477,7 @@ import type { FocusTrap } from "./focus-trap";
         hintNode.textContent = copy.hint;
         hintNode.hidden = false;
       }
+      if (isFailure) stickyFailureCopy = true;
     } else if (isFailure) {
       // Generic / UNKNOWN — keep existing detail line, don't add a hint.
       titleNode.textContent = "Can't reach the adapter";
@@ -469,12 +485,13 @@ import type { FocusTrap } from "./focus-trap";
         hintNode.textContent = "";
         hintNode.hidden = true;
       }
-    } else if (stateName !== "connecting" && !isRetrying) {
+      stickyFailureCopy = true;
+    } else if (stateName !== "connecting" && !isRetrying && !stickyFailureCopy) {
       // Reset to the default banner label when there's no live failure to
       // describe (e.g. a generic JS error coming from window.error). Skip
-      // in-flight connect/retry transitions so an active connect attempt
-      // doesn't clobber existing actionable failure copy with the generic
-      // "Dashboard error" line.
+      // in-flight connect/retry transitions AND an unresolved sticky failure so an
+      // active connect attempt or a trailing benign "idle" doesn't clobber
+      // existing actionable failure copy with the generic "Dashboard error" line.
       titleNode.textContent = "Dashboard error";
       if (hintNode) {
         hintNode.textContent = "";
@@ -483,10 +500,10 @@ import type { FocusTrap } from "./focus-trap";
     }
 
     // Surface the in-flight Cancel button only while a retry burst is
-    // actively running. Help button shows whenever we have failure copy or
-    // an active retry.
+    // actively running. Help button shows whenever we have failure copy (or a
+    // still-unresolved sticky failure) or an active retry.
     const showCancel = isRetrying;
-    const showHelp = isFailure || isRetrying;
+    const showHelp = isFailure || isRetrying || stickyFailureCopy;
     if (cancelNode) cancelNode.hidden = !showCancel;
     if (helpNode) helpNode.hidden = !showHelp;
     if (actionsNode) actionsNode.hidden = !(showCancel || showHelp);
@@ -548,7 +565,14 @@ import type { FocusTrap } from "./focus-trap";
     const prev = t.lastSessionState;
     if (
       (prev === "connecting" || prev === "connected" || prev === "scanning" || prev === "initializing") &&
-      (stateName === "failed" || (stateName === "idle" && Boolean(status.blocked)))
+      // The native OBD engine broadcasts "error" (reconnect exhausted / abort) or
+      // "blocked" for a lost/stuck adapter — never "failed", which is only a stored
+      // session outcome. Counting just "failed"/idle+blocked meant the consecutive-
+      // failures auto-open never fired on a real device, so include error/blocked.
+      (stateName === "failed" ||
+        stateName === "error" ||
+        stateName === "blocked" ||
+        (stateName === "idle" && Boolean(status.blocked)))
     ) {
       t.consecutiveFailedSessions += 1;
       if (

@@ -947,7 +947,11 @@ import { initialTelemetryState } from "./telemetry-state";
     const frac = power != null ? Math.min(1, Math.abs(power) / powerScaleKw) : 0;
     const fill = el("powerFill");
     if (fill) {
-      fill.style.transform = `scaleX(${power != null && power < 0 ? -frac : frac})`;
+      // Mirror the fill left only when the reading is actually classified regen
+      // (power < -0.5), matching the is-regen tint and the coast/regen pill. Using
+      // a bare `power < 0` here pushed a light-regen coast (e.g. -0.3 kW) onto the
+      // regen half while keeping the drive colour, so direction and colour disagreed.
+      fill.style.transform = `scaleX(${powerState === "regen" ? -frac : frac})`;
       fill.classList.toggle("is-regen", powerState === "regen");
     }
     const powerMeter = el("powerMeter");
@@ -1091,8 +1095,13 @@ import { initialTelemetryState } from "./telemetry-state";
   function formatSignalAge(ms: number) {
     if (!Number.isFinite(ms) || ms < 0) return "live";
     if (ms < 1500) return "now";
-    if (ms < 60_000) return `${Math.round(ms / 1000)}s ago`;
-    if (ms < 3_600_000) return `${Math.round(ms / 60_000)}m ago`;
+    // Gate each tier on the ROUNDED value, not the raw ms: rounding first and
+    // range-checking after meant ~59.6s printed "60s ago" (and ~59.6m "60m ago")
+    // instead of rolling into the next unit.
+    const secs = Math.round(ms / 1000);
+    if (secs < 60) return `${secs}s ago`;
+    const mins = Math.round(ms / 60_000);
+    if (mins < 60) return `${mins}m ago`;
     return `${Math.round(ms / 3_600_000)}h ago`;
   }
 

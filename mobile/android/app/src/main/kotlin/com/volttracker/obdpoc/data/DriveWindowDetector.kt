@@ -22,8 +22,11 @@ object DriveWindowDetector {
     /**
      * Memory guard on the batched sample reads: a detection pass never materializes more rows
      * than this per query. At ~1 telemetry row/850 ms that is weeks of continuous driving for a
-     * single batch; if a pathological dataset ever exceeds it, sessions past the cap fall back to
-     * coarse session-bounds windows instead of OOMing the process.
+     * single batch; if a dataset ever exceeds it, sessions past the cap fall back to coarse
+     * session-bounds windows instead of OOMing the process. The batched reads order by
+     * session_id DESC so this budget is spent on the NEWEST sessions first — those are what
+     * recentRoutes renders — and only the oldest sessions in an over-cap batch get truncated,
+     * rather than the newest (the ones the map view exists to show).
      */
     private const val MAX_SAMPLE_ROWS: Int = 200_000
 
@@ -415,7 +418,7 @@ object DriveWindowDetector {
                 "SELECT session_id, captured_at_ms, latitude, longitude " +
                     "FROM ${VoltTrackerDb.TABLE_LOCATION_SAMPLES} " +
                     "WHERE session_id IN (${selection.placeholders}) " +
-                    "ORDER BY session_id ASC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
+                    "ORDER BY session_id DESC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
                 selection.args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {
@@ -445,7 +448,7 @@ object DriveWindowDetector {
                 "SELECT session_id, captured_at_ms, speed_kph, rpm, voltage, power_kw, pack_current_a, " +
                     "latitude, longitude " +
                     "FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id IN (${selection.placeholders}) " +
-                    "ORDER BY session_id ASC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
+                    "ORDER BY session_id DESC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
                 selection.args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {

@@ -218,6 +218,31 @@ class BluetoothStateReporterTest {
     }
 
     @Test
+    fun systemBroadcastBeforeAnyPreConnectIsIgnored() {
+        // Regression: before onPreConnect sets activeAddress, the old
+        // `!isNullOrEmpty && !equals` guard let device-scoped broadcasts for ANY nearby device
+        // through, flooding the session log. With no adapter being tracked (activeAddress null) they
+        // must be dropped, not logged.
+        val reporter = BluetoothStateReporter(service, null)
+        val device = BluetoothAdapter.getDefaultAdapter()!!.getRemoteDevice("AA:BB:CC:DD:EE:FF")
+
+        invokeSystemBroadcast(
+            reporter,
+            Intent(BluetoothDevice.ACTION_ACL_CONNECTED).putExtra(BluetoothDevice.EXTRA_DEVICE, device),
+        )
+        invokeSystemBroadcast(
+            reporter,
+            Intent(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+                .putExtra(BluetoothDevice.EXTRA_DEVICE, device)
+                .putExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_BONDED)
+                .putExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_BONDING),
+        )
+
+        assertEquals(0, countEvents("bluetooth_acl_connected"))
+        assertEquals(0, countEvents("bluetooth_bond_state_changed"))
+    }
+
+    @Test
     fun nullLifecycleCallsAndBlankPreflightAreNoOps() {
         val reporter = BluetoothStateReporter(service, RecordingSdpProbe())
 

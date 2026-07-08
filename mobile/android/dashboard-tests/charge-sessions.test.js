@@ -6,6 +6,10 @@ import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
 describe('dashboard charge session history', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
+    // Prefs (pricePerKwh / publicPricePerKwh) persist in localStorage across the
+    // dashboard reload, so clear it up front — otherwise a rate set by one test
+    // leaks into the next charge-session case's cost/hint assertions.
+    if (typeof localStorage !== 'undefined') localStorage.clear();
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
@@ -99,9 +103,28 @@ describe('dashboard charge session history', () => {
     expect(document.getElementById('chargeEnergyCost').textContent).toBe('$2.40');
     expect(document.getElementById('chargeEnergyHint').textContent).toBe('1 charge @ $0.25/kWh');
 
-    // Clear the stored data: the cost tile must drop the stale figure too.
+    // Clear the stored data: the cost tile must drop the stale figure too. The
+    // rate is still set, so the hint reflects the missing ENERGY, not a missing
+    // rate ("Set rate in Settings" would wrongly imply the configured rate is gone).
     window.VoltDashboard.setStorage({ chargeSummary: { chargeSessionCount: 0 } });
     expect(document.getElementById('chargeSessionsCard').hidden).toBe(true);
+    expect(document.getElementById('chargeEnergyCost').textContent).toBe('--');
+    expect(document.getElementById('chargeEnergyHint').textContent).toBe('No charge energy logged yet');
+  });
+
+  it('prompts to set a rate only when no rate is configured', () => {
+    // A logged session WITH energy but no pricePerKwh set: the cost can't be
+    // computed because the rate is genuinely missing, so "Set rate in Settings"
+    // is the correct prompt (distinct from the rate-set/no-energy case above).
+    window.VoltDashboard.prefs.set('pricePerKwh', 0);
+    window.VoltDashboard.setStorage({
+      chargeSummary: {
+        chargeSessionCount: 1,
+        recentSessions: [
+          { id: 5, startedAtMs: Date.now() - 3_600_000, endedAtMs: Date.now() - 600_000, chargerType: 'level2', startSoc: 40, endSoc: 90, powerKw: 7.2, energyKwh: 9.6 },
+        ],
+      },
+    });
     expect(document.getElementById('chargeEnergyCost').textContent).toBe('--');
     expect(document.getElementById('chargeEnergyHint').textContent).toBe('Set rate in Settings');
   });

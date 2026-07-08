@@ -10,15 +10,16 @@
   ></div>
 
   <article id="mapCard" class="panel map-card">
-    <div
-      id="mapFrame"
-      class="map-frame"
-      data-layer="eff"
-      data-noswipe="true"
-      role="tabpanel"
-      aria-label="Map view"
-    >
-      <div id="mapLeaflet" class="map-canvas"></div>
+    <div id="mapFrame" class="map-frame" data-layer="eff" data-noswipe="true">
+      <!-- The layer tabs all render into this one Leaflet canvas, so it (not the
+           #mapFrame wrapper that contains the tablist) is the tabpanel the tabs
+           control — pointing aria-controls at the ancestor was a circular reference. -->
+      <div
+        id="mapLeaflet"
+        class="map-canvas"
+        role="tabpanel"
+        aria-label="Map view"
+      ></div>
       <div
         id="mapTileError"
         class="map-tile-error"
@@ -38,7 +39,7 @@
             type="button"
             id="mapTabRoutes"
             role="tab"
-            aria-controls="mapFrame"
+            aria-controls="mapLeaflet"
             data-map-layer="routes"
             aria-selected="false"
           >
@@ -48,7 +49,7 @@
             type="button"
             id="mapTabHeat"
             role="tab"
-            aria-controls="mapFrame"
+            aria-controls="mapLeaflet"
             data-map-layer="heat"
             aria-selected="false"
           >
@@ -58,7 +59,7 @@
             type="button"
             id="mapTabStops"
             role="tab"
-            aria-controls="mapFrame"
+            aria-controls="mapLeaflet"
             data-map-layer="stops"
             aria-selected="false"
           >
@@ -68,7 +69,7 @@
             type="button"
             id="mapTabEff"
             role="tab"
-            aria-controls="mapFrame"
+            aria-controls="mapLeaflet"
             data-map-layer="eff"
             class="is-active"
             aria-selected="true"
