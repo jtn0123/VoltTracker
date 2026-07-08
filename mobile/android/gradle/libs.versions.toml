@@ -12,7 +12,7 @@ detekt = "1.23.8"
 junit = "4.13.2"
 json = "20260522"
 robolectric = "4.16.1"
-spotless = "8.7.0"
+spotless = "8.8.0"
 test-retry = "1.6.5"
 
 [libraries]
