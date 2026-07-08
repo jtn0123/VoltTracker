@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.30.2 (2026-07-08)
+
+### 🔺 Fix
+
+- **app**: Batches B–D UI/UX bug-hunt fixes (medium + polish)
+  ([#302](https://github.com/jtn0123/VoltTracker/pull/302),
+  [`95d58c5`](https://github.com/jtn0123/VoltTracker/commit/95d58c57f5de49ba467f35e1b8e259b393588d97))
+
+### 🔷 Changed
+
+- **deps**: Bump github/codeql-action to v4.36.3
+  ([#301](https://github.com/jtn0123/VoltTracker/pull/301),
+  [`7d39ab9`](https://github.com/jtn0123/VoltTracker/commit/7d39ab9f4adfd38c9f5f50aef4b9f79a940ffd80))
+
+
 ## v0.30.1 (2026-07-08)
 
 ### 🔺 Fix
