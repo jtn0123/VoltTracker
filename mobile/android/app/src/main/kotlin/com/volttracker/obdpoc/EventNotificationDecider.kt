@@ -229,7 +229,11 @@ class EventNotificationDecider(
         // alert. Otherwise it's a normal completed charge. A null SOC at stop (current seen but SOC
         // never reported) falls back to the complete copy rather than a false "check the plug" alert;
         // the event still reports the SOC at stop.
-        if (socAtStop != null && peakSoc != null && peakSoc <= target - INTERRUPTED_SOC_MARGIN_PCT) {
+        // Compare against a target the pack can actually reach: a full Volt reports ~90%, never the
+        // default 100, so a normal completed charge would otherwise always land 5+ points "under
+        // target" and be misreported as interrupted. A user-set sub-90 target is used unchanged.
+        val reachableTarget = minOf(target, VOLT_FULL_SOC_PCT)
+        if (socAtStop != null && peakSoc != null && peakSoc <= reachableTarget - INTERRUPTED_SOC_MARGIN_PCT) {
             events.add(Event.ChargeInterrupted(socAtStop, target))
             return
         }
@@ -388,6 +392,15 @@ class EventNotificationDecider(
          * usual tail-end taper where the car cuts off a hair under the requested target.
          */
         const val INTERRUPTED_SOC_MARGIN_PCT = 5.0
+
+        /**
+         * The SOC a fully-charged Volt actually reports. The Gen-2 pack keeps a hidden buffer, so a
+         * complete charge tops out around 88-91% on the raw PID and never reaches 100. The
+         * interrupted check compares against min(target, this) so a normal full charge under the
+         * default 100% target isn't misread as "interrupted / check the plug"; a target the user
+         * sets below this is used as-is.
+         */
+        const val VOLT_FULL_SOC_PCT = 90.0
 
         /**
          * A sample counts as charging only when BOTH gates pass: the car is stationary (speed at or

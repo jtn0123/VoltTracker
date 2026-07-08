@@ -29,6 +29,12 @@ import { initialTelemetryState } from "./telemetry-state";
   const STALE_THRESHOLD_MS = 3000;
   // Max age (ms) of an inactive-status sample we'll still accept as recent.
   const RECENT_SAMPLE_ACCEPT_MS = 30000;
+  // Max age (ms) of a GPS fix before the Drive tile treats it as no-current-fix.
+  // The native side keeps stamping the last accepted lat/lon into every sample
+  // during a signal outage (tunnel/garage), so age — not lat/lon presence — is
+  // what tells us the fix is stale. Generous enough to ride out ordinary ~1 Hz
+  // gaps without flapping.
+  const GPS_FIX_STALE_MS = 15000;
   // Below this duration, formatShortDuration shows one decimal (e.g. "1.5s").
   const SHORT_DURATION_DECIMAL_CUTOFF_MS = 10000;
   let rateChipReconnectBound = false;
@@ -810,13 +816,18 @@ import { initialTelemetryState } from "./telemetry-state";
     const lon = Number(t.longitude);
     const acc = Number(t.accuracyM);
     const gpsState = String((state.appState.gps || {}).state || "");
+    // A stale fix must not read as current: the native side keeps re-stamping the
+    // last accepted lat/lon during a signal outage, so a finite fix age past
+    // GPS_FIX_STALE_MS means "no current fix" even though lat/lon are present.
+    const gpsAgeMs = Number((state.appState.gps || {}).ageMs);
+    const gpsStale = Number.isFinite(gpsAgeMs) && gpsAgeMs > GPS_FIX_STALE_MS;
     // Surface fix quality, not just "locked": ±Nm tells the user whether the GPS
     // is precise enough to trust the route. accuracyM is already in the payload.
     // No fix yet: reuse the status-popover's shared gpsText() wording so the tile
     // and the popover agree. A "blocked" permission is an actionable status worth
-    // showing in-cell; the plain waiting/unknown case stays the "--" empty
+    // showing in-cell; the plain waiting/unknown/stale case stays the "--" empty
     // sentinel so the cell (and group empty-text) can collapse as before.
-    const gpsTile = Number.isFinite(lat) && Number.isFinite(lon)
+    const gpsTile = Number.isFinite(lat) && Number.isFinite(lon) && !gpsStale
       ? Number.isFinite(acc) && acc > 0
         // Match the rest of the Drive screen's unit system: feet for imperial,
         // meters for metric (same inline 3.28084 conversion map.ts/scrubber.ts use).

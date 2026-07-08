@@ -1192,6 +1192,15 @@ import { initialTelemetryState } from "./telemetry-state";
       el("tripDetailClose")?.click();
       return true;
     }
+    // Clear-DTC warning alertdialog (actions.ts) — a modal that inerts the whole
+    // shell via dtcTrap. Click its Cancel control so actions.ts runs the
+    // trap-deactivate + focus-restore path; skipping it here would leave the
+    // background inert after Back navigated away, freezing the app.
+    const dtcClear = el("dtcClearWarning");
+    if (dtcClear && !dtcClear.hidden) {
+      (dtcClear.querySelector('[data-action="cancelClearDtc"]') as HTMLElement | null)?.click();
+      return true;
+    }
     // Restore alertdialog — only dismissible while NOT busy (the busy restore is a
     // deliberately non-dismissible modal). hideRestoreProgress releases the trap.
     if (dismissRestoreProgressIfAllowed()) {
@@ -1315,7 +1324,11 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setDevices(payload: unknown) {
-    const devices = parsePayload(payload, []);
+    // Guard the array invariant like setHistory does: parsePayload only falls
+    // back to [] for a falsy/unparseable payload, so a payload that parses to a
+    // non-array JSON value would reach .length/.forEach/.find and throw.
+    const parsed = parsePayload(payload, []);
+    const devices = Array.isArray(parsed) ? parsed : [];
     const select = el("deviceSelect") as HTMLSelectElement | null;
     const preferred = VD.getLastDevice();
     if (!select) return;

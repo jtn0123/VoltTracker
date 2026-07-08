@@ -448,6 +448,16 @@ type SignalActions = {
       });
       return;
     }
+    // Same up-front guard for the plain connect path: if the bridge lacks
+    // connect() we must not paint "Connecting…" and then have callBridgeAction
+    // silently no-op, leaving the UI stuck on the connecting state forever.
+    if (!scan && typeof bridge.connect !== "function") {
+      VD.setStatus({
+        state: "idle",
+        detail: "Connecting is only available inside the Android app."
+      });
+      return;
+    }
     showConnectionProgress(selected, scan);
     // Narrate the scan phases (Mode 03/07/02) while native works — the block
     // finishes only on the real scan-complete status (storage-status.ts).

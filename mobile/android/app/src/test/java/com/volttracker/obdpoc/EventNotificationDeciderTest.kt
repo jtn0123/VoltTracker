@@ -155,6 +155,42 @@ class EventNotificationDeciderTest {
     }
 
     @Test
+    fun normalFullChargeUnderDefault100TargetCompletesNotInterrupted() {
+        // Default target is 100%, but a full Gen-2 Volt pack reports only ~90% on the raw PID. A
+        // normal completed charge peaking at 90% must NOT be misreported as interrupted just because
+        // it sits >5% under the unreachable 100 target.
+        val decider = EventNotificationDecider(settings())
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 90.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 90.0))
+
+        val end = events.last()
+        assertTrue(
+            "a normal ~90% full charge under the default 100 target is complete",
+            end is EventNotificationDecider.Event.ChargeComplete,
+        )
+    }
+
+    @Test
+    fun genuineInterruptionUnderDefault100TargetStillReportsInterrupted() {
+        // The reachable-target cap must not blind us to a real interruption: a charge yanked at 40%
+        // under the default 100 target is still well below the ~90% a full pack reaches -> interrupted.
+        val decider = EventNotificationDecider(settings())
+        for (i in 0..3) {
+            decider.onSample(sample(i * 600_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 40.0))
+        }
+        val events = decider.onSample(sample(2_500_000L, packCurrentA = 0.0, speedKph = 0.0, socPct = 40.0))
+
+        assertEquals(1, events.size)
+        // The `as` cast is itself the "is interrupted" assertion. The reported target must be the
+        // user's configured target (100), not the internal reachable cap (90) — the cap only gates
+        // the interrupted-vs-complete decision, it must not leak into what the event reports.
+        val event = events[0] as EventNotificationDecider.Event.ChargeInterrupted
+        assertEquals(100.0, event.targetPct, 0.001)
+    }
+
+    @Test
     fun chargeInterruptedRidesTheChargeCompleteToggle() {
         val decider = EventNotificationDecider(settings(chargeComplete = false, targetSoc = 80.0))
         for (i in 0..3) {

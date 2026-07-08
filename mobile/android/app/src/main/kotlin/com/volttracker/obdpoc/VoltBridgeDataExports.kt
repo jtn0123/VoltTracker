@@ -237,7 +237,7 @@ internal class VoltBridgeDataExports(
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
-                activity.publishStatus(
+                activity.publishActionConfirmation(
                     if (changed) "ready" else "blocked",
                     when {
                         !changed -> "That trip could not be renamed."
@@ -277,7 +277,7 @@ internal class VoltBridgeDataExports(
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
-                activity.publishStatus(
+                activity.publishActionConfirmation(
                     if (changed) "ready" else "blocked",
                     when {
                         !changed -> "That trip could not be updated."
@@ -339,7 +339,7 @@ internal class VoltBridgeDataExports(
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
-                activity.publishStatus(
+                activity.publishActionConfirmation(
                     if (id > 0L) "ready" else "blocked",
                     if (id > 0L) "Maintenance entry saved." else "Could not save the maintenance entry.",
                     id <= 0L,
@@ -381,7 +381,7 @@ internal class VoltBridgeDataExports(
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
-                activity.publishStatus(
+                activity.publishActionConfirmation(
                     if (deleted > 0) "ready" else "blocked",
                     if (deleted > 0) "Maintenance entry removed." else "That maintenance entry was already gone.",
                     deleted <= 0,
@@ -401,7 +401,7 @@ internal class VoltBridgeDataExports(
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
-                activity.publishStatus(
+                activity.publishActionConfirmation(
                     if (changed) "ready" else "blocked",
                     if (changed) {
                         "Trip marked as not a trip. Raw data was kept."

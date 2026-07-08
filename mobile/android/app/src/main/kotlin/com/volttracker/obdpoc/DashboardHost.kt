@@ -240,6 +240,24 @@ interface DashboardHost :
     fun startActivity(intent: Intent?)
 
     /**
+     * Publish a transient action-confirmation status (trip favorite/label edits, maintenance
+     * add/remove). These confirmations ride the SAME single status channel the dashboard reads for
+     * live connection state, so a "ready"/"blocked" push mid-drive flips the badge out of "logging"
+     * and — because "ready" is a terminal-stop state on the JS side — primes a telemetry reset on the
+     * next reconnect, wiping the in-progress drive's stats and route. Suppress the push while a
+     * session is logging; the caller's paired publishStorageSummary() still refreshes the affected
+     * list so the change is visible, and the not-logging case keeps the confirmation as before.
+     */
+    fun publishActionConfirmation(
+        state: String?,
+        detail: String?,
+        blocked: Boolean,
+    ) {
+        if (isLoggingActive()) return
+        publishStatus(state, detail, blocked)
+    }
+
+    /**
      * The event-notification + auto-scan settings seam (M1/M3), exposed as one accessor instead of
      * mixing its toggles into the host's flat override surface. The bridge calls e.g.
      * `eventNotifications().setNewDtcEnabled(...)`. `MainActivity` returns its

@@ -216,8 +216,15 @@ import { units } from "./prefs";
       return mps * 2.2369363;
     });
 
-    scrubHasElev = pts.some((p) => Number.isFinite(Number(p.altM)));
-    const rawElev = pts.map((p) => Number(p.altM));
+    // Use the null-safe scrubNum (not bare Number) so a null altitude stays NaN
+    // instead of coercing to a real 0 m reading and faking a sea-level trace.
+    scrubHasElev = pts.some((p) => Number.isFinite(scrubNum(p.altM)));
+    const rawElev = pts.map((p) => scrubNum(p.altM));
+    // Carry-forward seed for windowed elevation: the first finite altitude, so a
+    // gap in altitude coverage holds the last known height rather than dropping
+    // to a false 0 m dip. Falls back to 0 only when no point has altitude.
+    let lastElevM = rawElev.find((v) => Number.isFinite(v));
+    if (lastElevM === undefined) lastElevM = 0;
     scrubHasEff = pts.some((p) => Number.isFinite(scrubNum(p.eff)));
     const track = Array.isArray(route.socTrack) ? route.socTrack as ScrubSocPoint[] : [];
     scrubHasSoc = track.length >= 2;
@@ -230,7 +237,16 @@ import { units } from "./prefs";
       // fall through to the raw sample only when the average is non-finite (no finite neighbors).
       const mphAvg = scrubWindowAvg(rawMph, i, 1);
       point.mph = Math.max(0, Number.isFinite(mphAvg) ? mphAvg : (rawMph[i] || 0));
-      point.elevM = scrubHasElev ? scrubWindowAvg(rawElev, i, 3) || 0 : 0;
+      if (scrubHasElev) {
+        // Hold the last finite windowed average across altitude gaps; a `|| 0`
+        // here would turn a NaN (no finite neighbours) into a fake 0 m dip and
+        // a phantom steep grade at each edge of the gap.
+        const elevAvg = scrubWindowAvg(rawElev, i, 3);
+        if (Number.isFinite(elevAvg)) lastElevM = elevAvg;
+        point.elevM = lastElevM;
+      } else {
+        point.elevM = 0;
+      }
       point.soc = scrubHasSoc ? scrubSocAt(track, point.atMs) : null;
       // Don't coerce null -> 0; missing samples must remain null so the chart
       // can skip them and the readout can show "soon" rather than "0.0".

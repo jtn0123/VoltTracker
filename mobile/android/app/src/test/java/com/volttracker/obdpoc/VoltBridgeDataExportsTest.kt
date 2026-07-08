@@ -507,6 +507,54 @@ class VoltBridgeDataExportsTest {
         assertTrue(activity.lastStatusBlocked)
     }
 
+    // ---- action-confirmation logging gate ----------------------------------------------------
+
+    @Test
+    fun actionConfirmationIsSuppressedWhileLoggingButMutationStillApplies() {
+        // publishActionConfirmation must NOT push a "ready"/"blocked" onto the shared status channel
+        // while a drive is logging: that flips the live badge out of "logging" and primes a telemetry
+        // reset. The underlying edit and the storage refresh must still happen.
+        activity.store.setTripFavoriteReturn = true
+        activity.loggingActive = true
+
+        dataExports.setTripFavorite("12:1000:2000", true)
+        drain()
+
+        assertEquals(true, activity.store.lastFavoriteValue)
+        assertTrue("the edit still refreshes storage while logging", activity.storageSummaryCalls > 0)
+        assertNull("the confirmation status must be suppressed while logging", activity.lastStatusState)
+    }
+
+    @Test
+    fun actionConfirmationPublishesStatusWhenNotLogging() {
+        // The mirror of the suppression case: with no active session the confirmation is published as
+        // before, so users still get the "ready" feedback when they are not mid-drive.
+        activity.store.setTripFavoriteReturn = true
+        activity.loggingActive = false
+
+        dataExports.setTripFavorite("12:1000:2000", true)
+        drain()
+
+        assertEquals("ready", activity.lastStatusState)
+        assertFalse(activity.lastStatusBlocked)
+    }
+
+    @Test
+    fun publishActionConfirmationDirectlyGatesOnLoggingState() {
+        // Direct coverage of the DashboardHost.publishActionConfirmation default method itself: while
+        // logging it must publish nothing (so it can't disturb the live status stream); otherwise it
+        // forwards state/detail/blocked to publishStatus verbatim.
+        activity.loggingActive = true
+        activity.publishActionConfirmation("ready", "Trip added to favorites.", false)
+        assertNull("no status may be published while logging", activity.lastStatusState)
+
+        activity.loggingActive = false
+        activity.publishActionConfirmation("ready", "Trip added to favorites.", false)
+        assertEquals("ready", activity.lastStatusState)
+        assertEquals("Trip added to favorites.", activity.lastStatusDetail)
+        assertFalse(activity.lastStatusBlocked)
+    }
+
     // ---- maintenance log (M5) ----------------------------------------------------------------
 
     @Test
@@ -722,6 +770,7 @@ class VoltBridgeDataExportsTest {
         var lastConfirmationTitle: String? = null
 
         var lastStatusState: String? = null
+        var lastStatusDetail: String? = null
         var lastStatusBlocked = false
         var lastExportRouteKey: String? = null
         var lastExportFormat: String? = null
@@ -748,6 +797,7 @@ class VoltBridgeDataExportsTest {
             blocked: Boolean,
         ) {
             lastStatusState = state
+            lastStatusDetail = detail
             lastStatusBlocked = blocked
         }
 

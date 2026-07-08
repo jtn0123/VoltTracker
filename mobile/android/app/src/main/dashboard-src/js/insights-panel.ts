@@ -367,7 +367,7 @@ import { prefs, units } from "./prefs";
     const midnight = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     const monday = new Date(midnight.getTime() - ((midnight.getDay() + 6) % 7) * DAY_MS);
     const startMs = monday.getTime();
-    const days = WEEK_DAY_LABELS.map(() => ({ miles: 0, kwh: 0, trips: 0 }));
+    const days = WEEK_DAY_LABELS.map(() => ({ miles: 0, kwh: 0, energyMiles: 0, trips: 0 }));
     for (const trip of trips) {
       const at = Number(trip.startedAtMs);
       const meters = Number(trip.distanceMeters);
@@ -380,7 +380,13 @@ import { prefs, units } from "./prefs";
       day.miles += meters / 1609.344;
       day.trips += 1;
       const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
-      if (Number.isFinite(energy) && energy > 0) day.kwh += energy;
+      if (Number.isFinite(energy) && energy > 0) {
+        // Pair distance with energy: only miles from energy-logged trips may feed
+        // the mi/kWh denominator. Adding every trip's miles (day.miles) but only
+        // some trips' energy would inflate efficiency on mixed days.
+        day.kwh += energy;
+        day.energyMiles += meters / 1609.344;
+      }
     }
     const totalTrips = days.reduce((acc, day) => acc + day.trips, 0);
     if (!totalTrips) {
@@ -392,7 +398,7 @@ import { prefs, units } from "./prefs";
     const mode = weekChartMode();
     // Per-day efficiency computed once — the chart values and the best-day
     // headline both read from it.
-    const dayEffs = days.map((day) => (day.kwh > 0 ? day.miles / day.kwh : 0));
+    const dayEffs = days.map((day) => (day.kwh > 0 ? day.energyMiles / day.kwh : 0));
     const values = days.map((day, i) => {
       if (mode === "eff") {
         const eff = dayEffs[i] as number;
