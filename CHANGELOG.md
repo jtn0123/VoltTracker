@@ -1,6 +1,32 @@
 # CHANGELOG
 
 
+## v0.30.1 (2026-07-08)
+
+### 🔺 Fix
+
+- **app**: Batch A UI/UX bug-hunt fixes (high-severity + guards)
+  ([#300](https://github.com/jtn0123/VoltTracker/pull/300),
+  [`79b56a7`](https://github.com/jtn0123/VoltTracker/commit/79b56a7ed1c7fbe3add6077482a69b680fe701aa))
+
+### 🔷 Changed
+
+- **deps**: Bump androidx.test.uiautomator:uiautomator
+  ([#293](https://github.com/jtn0123/VoltTracker/pull/293),
+  [`ff14786`](https://github.com/jtn0123/VoltTracker/commit/ff14786a012810fdf5d9f2b14f879043a6929f6c))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#294](https://github.com/jtn0123/VoltTracker/pull/294),
+  [`2e4bf24`](https://github.com/jtn0123/VoltTracker/commit/2e4bf24a7ddd42bddcc8919558d446de42027b52))
+
+- **deps**: Bump dorny/paths-filter from 4.0.1 to 4.0.2
+  ([#289](https://github.com/jtn0123/VoltTracker/pull/289),
+  [`d852269`](https://github.com/jtn0123/VoltTracker/commit/d852269ed5ecab081d0952fc830ce982b9525767))
+
+- **deps-dev**: Bump typescript-eslint ([#290](https://github.com/jtn0123/VoltTracker/pull/290),
+  [`2728c91`](https://github.com/jtn0123/VoltTracker/commit/2728c9182d1ba2468f8ba9815d9957e52091a7b9))
+
+
 ## v0.30.0 (2026-07-08)
 
 ### ✳️ New
