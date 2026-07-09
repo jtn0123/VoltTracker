@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.31.1 (2026-07-09)
+
+### 🔺 Fix
+
+- **dashboard**: Resolve flicker, loading, and flash-in/out bugs in the WebView UI
+  ([#305](https://github.com/jtn0123/VoltTracker/pull/305),
+  [`291dc3d`](https://github.com/jtn0123/VoltTracker/commit/291dc3d4cac4611eceb730074a1335de0ce58533))
+
+### 🔷 Changed
+
+- Cache the AVD snapshot and parallelize static analysis
+  ([#304](https://github.com/jtn0123/VoltTracker/pull/304),
+  [`fd5376d`](https://github.com/jtn0123/VoltTracker/commit/fd5376d3d01c305c4062b092864e27205b0f0e76))
+
+
 ## v0.31.0 (2026-07-09)
 
 ### ✳️ New
