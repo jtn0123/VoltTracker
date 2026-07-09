@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.31.0 (2026-07-09)
+
+### ✳️ New
+
+- **dashboard**: Align the whole dashboard with the v2 design handoff
+  ([#303](https://github.com/jtn0123/VoltTracker/pull/303),
+  [`b66a3af`](https://github.com/jtn0123/VoltTracker/commit/b66a3af81dca599fe166064f0098893e8417bbcd))
+
+
 ## v0.30.2 (2026-07-08)
 
 ### 🔺 Fix
