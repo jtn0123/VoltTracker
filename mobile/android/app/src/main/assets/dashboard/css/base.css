@@ -473,8 +473,13 @@
   /* The view-enter/slide animations keep filling an identity transform after
      they finish (implicit-to keyframes interpolate to identity, not `none`),
      which would make the active section the containing block for the fixed
-     DTC sheet. Drop the (already finished) animation while the sheet is open. */
-  body.dtc-detail-active .view.is-active {
+     DTC sheet OR the fullscreen map (.map-card.is-fullscreen lives inside
+     #view-map.view.is-active). Neutralizing .app's transform above is not
+     enough on its own — the finished view animation still leaves a resolved
+     identity matrix on the active section. Drop the (already finished)
+     animation while either fixed surface is open. */
+  body.dtc-detail-active .view.is-active,
+  body.map-full-active .view.is-active {
     animation: none;
   }
 

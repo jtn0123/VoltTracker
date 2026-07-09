@@ -774,7 +774,12 @@ import { initialTelemetryState } from "./telemetry-state";
   function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
-    const hasSpeed = Number.isFinite(kph);
+    // Guard null/"" explicitly (like the rpm/voltage/soc tiles below) BEFORE the
+    // finite check: Number(null) === 0 is finite, so a seeded/reset speedKph:null
+    // otherwise rendered a real-looking "0 mph" with a filled meter while every
+    // neighboring tile correctly showed "--", then jumped to the true value on
+    // the first sample. A genuine stopped-car 0 (numeric) still passes.
+    const hasSpeed = t.speedKph != null && t.speedKph !== "" && Number.isFinite(kph);
     // Primary = the user's chosen unit; secondary readout = the other system so
     // both are always visible. Driven by the units preference (prefs.ts).
     const metric = units.system() === "metric";

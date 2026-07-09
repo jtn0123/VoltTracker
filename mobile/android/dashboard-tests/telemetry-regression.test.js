@@ -63,6 +63,33 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(VD.state.telemetry.sampleCount).toBe(1);
   });
 
+  it('renders the speed hero as "--" (not a false 0) for a missing reading', async () => {
+    const { initialTelemetryState } = await import(
+      '../app/src/main/dashboard-src/js/telemetry-state.ts'
+    );
+    const VD = window.VoltDashboard;
+    // Boot/disconnect seed: speedKph is null. Number(null) === 0 is finite, which
+    // used to render a real-looking "0 mph" with a filled meter while every
+    // neighboring tile showed "--".
+    VD.state.telemetry = initialTelemetryState();
+    VD.updateLiveUi();
+
+    // The tile appends a visually-hidden "(stale)" marker; assert the value only.
+    const speedText = () => document.getElementById('speedValue').firstChild.textContent;
+    expect(speedText()).toBe('--');
+    expect(document.getElementById('speedKph').textContent).toMatch(/^-- (mph|km\/h)/);
+    const meter = document.getElementById('speedValue').closest("[role='meter']");
+    expect(meter).not.toBeNull();
+    expect(meter.getAttribute('aria-valuenow')).toBeNull();
+    expect(meter.getAttribute('aria-valuetext')).toBe('no data yet');
+
+    // A genuine stopped-car zero (numeric) must still read "0".
+    VD.state.telemetry = { ...initialTelemetryState(), speedKph: 0 };
+    VD.updateLiveUi();
+    expect(speedText()).toBe('0');
+    expect(meter.getAttribute('aria-valuenow')).toBe('0');
+  });
+
   it('resetTelemetry restores the exact boot-time telemetry shape', async () => {
     // Both core.ts (state seed / clearDemoTelemetry) and telemetry.ts
     // (resetTelemetry) build the empty sample from the shared factory in

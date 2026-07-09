@@ -633,7 +633,16 @@ import { initialTelemetryState } from "./telemetry-state";
       script.async = false;
       script.dataset.dashboardLazy = "true";
       script.onload = () => resolve(undefined);
-      script.onerror = () => reject(new Error("Unable to load " + src));
+      script.onerror = () => {
+        // Remove the dead tag before rejecting. dashboardScriptAlreadyLoaded()
+        // matches on the <script> being present, so a leftover failed node would
+        // make every retry (ensureDtcData/ensureInsightsModule/ensureMapModule
+        // null their cached promise and call back in) resolve instantly without
+        // re-fetching — permanently wedging that chunk after one transient
+        // failure. Removing it lets the intended retry re-append and re-execute.
+        script.remove();
+        reject(new Error("Unable to load " + src));
+      };
       document.head.append(script);
     });
   }

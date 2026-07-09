@@ -116,6 +116,12 @@ import type { MapSessionFilter } from "./map-session-list";
   let liveRouteLayerCache: LiveRouteLayerCache | null = null;
   const mapLayerGroups: Record<string, LeafletLayer | null> = { routes: null, heat: null, stops: null, eff: null };
   let mapFitKey: string | null = null;
+  // Signature of the last STATIC (already-logged) route drawn, so a broadcast-
+  // driven re-render with unchanged geometry/layer/efficiency skips the full
+  // teardown+rebuild of every Leaflet layer. null means "last draw was live or
+  // cleared" — forces the next static draw to rebuild. Live routes never use it
+  // (they have their own incremental updateLiveRouteLayer fast-path).
+  let lastStaticDrawKey: string | null = null;
 
   // Add the layer group for the active layer (falling back to "routes") onto
   // the map. The groups are always populated before this runs, but the typed
@@ -757,11 +763,39 @@ import type { MapSessionFilter } from "./map-session-list";
   // a restore/merge/hide can never serve stale geometry.
   const fetchedRouteCache = new Map<string, MapRoute>();
   const pendingRouteFetches = new Set<string>();
-  let fetchedRouteCacheTripsRef: unknown = null;
+  let fetchedRouteCacheTripsSig: string | null = null;
+
+  // Content signature over the geometry-relevant trip fields only. applyTripsPayload
+  // reassigns state.trips to a brand-new array on every load, and non-details
+  // storage broadcasts reload trips ~1 Hz, so keying eviction on the array
+  // *reference* threw away the on-demand geometry cache on essentially every
+  // broadcast — an older selected route then missed the cache, rendered as a
+  // point-less stub (mapEmpty, polyline removed) and re-fetched, flashing out
+  // then back in each tick. Comparing content keeps the stale-geometry
+  // protection (a restore/merge/hide still busts it) without per-broadcast churn.
+  function tripsGeometrySignature(): string {
+    const trips = Array.isArray(state.trips) ? state.trips : [];
+    return (
+      trips.length +
+      "|" +
+      trips
+        .map((entry) => {
+          const trip = (entry || {}) as Record<string, unknown>;
+          const id = trip.id == null ? "" : String(trip.id);
+          const points = Number(trip.pointCount) || 0;
+          const hasRoute = trip.hasRoute === false ? 0 : 1;
+          const start = Number(trip.startedAtMs) || 0;
+          const end = Number(trip.endedAtMs) || 0;
+          return `${id}:${points}:${hasRoute}:${start}:${end}`;
+        })
+        .join("|")
+    );
+  }
 
   function syncRouteCacheWithTrips() {
-    if (state.trips !== fetchedRouteCacheTripsRef) {
-      fetchedRouteCacheTripsRef = state.trips;
+    const sig = tripsGeometrySignature();
+    if (sig !== fetchedRouteCacheTripsSig) {
+      fetchedRouteCacheTripsSig = sig;
       fetchedRouteCache.clear();
       pendingRouteFetches.clear();
     }
@@ -990,6 +1024,18 @@ import type { MapSessionFilter } from "./map-session-list";
     }
   }
 
+  // Folds the one-shot efficiency-enrichment transition into the static draw
+  // signature: enrichRouteEff assigns `eff` (number | null) to every point the
+  // first time a route's power track is available, which recolors the eff layer,
+  // so a change in how many points carry eff must bust the redraw memo.
+  function effDrawSignature(points: VoltRoutePoint[]): number {
+    let enriched = 0;
+    for (const point of points) {
+      if (point && point.eff !== undefined) enriched += 1;
+    }
+    return enriched;
+  }
+
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
   function drawMapRoute(points: VoltRoutePoint[], hasRoute: boolean, layer: string, routeSession: MapRouteSession) {
     const container = el("mapLeaflet");
@@ -1007,7 +1053,27 @@ import type { MapSessionFilter } from "./map-session-list";
     }
     const isLiveRoute = String((routeSession || {}).id || "") === LIVE_ROUTE_ID;
     if (isLiveRoute && layer === "routes" && updateLiveRouteLayer(drawable, map)) {
+      // A live→static transition must rebuild, so drop the static memo here.
+      lastStaticDrawKey = null;
       return;
+    }
+    // Static-route redraw guard. renderMap runs on every telemetry-bearing
+    // broadcast (~1 Hz on a live session), but for an already-logged selected
+    // route the geometry and per-point efficiency are stable, so tearing down
+    // and recreating every layer group each tick was pure churn — and it
+    // restarted the animated .route-flow overlay's CSS keyframe from zero every
+    // render (the visible "flowing dashes" flicker) plus re-ran the speed/eff
+    // band, stop, and drive-event math for nothing. Skip when nothing that
+    // affects the drawn output changed. Live routes keep their incremental
+    // fast-path above and are excluded (staticDrawKey === null).
+    const staticDrawKey = isLiveRoute
+      ? null
+      : [routeFitKey(routeSession, drawable), layer, hasRoute ? 1 : 0, effDrawSignature(drawable)].join("|");
+    if (staticDrawKey !== null) {
+      if (staticDrawKey === lastStaticDrawKey) return;
+      lastStaticDrawKey = staticDrawKey;
+    } else {
+      lastStaticDrawKey = null;
     }
     Object.keys(mapLayerGroups).forEach((key) => {
       if (mapLayerGroups[key]) {

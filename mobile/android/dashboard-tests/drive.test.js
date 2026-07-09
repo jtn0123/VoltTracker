@@ -153,6 +153,28 @@ describe('drive.ts', () => {
     expect(host.dataset.traceLabel).toBe('speed trace appears once samples stream in');
   });
 
+  it('drawLiveSpeedTrace does not repaint the canvas on an unchanged history', () => {
+    const VD = window.VoltDashboard;
+    const host = document.getElementById('liveTraceChart');
+    Object.defineProperty(host, 'clientWidth', { configurable: true, value: 320 });
+    const ctx = document.getElementById('liveTraceCanvas').getContext('2d');
+    const strokeSpy = vi.spyOn(ctx, 'stroke');
+
+    VD.state.speedHistory = [10, 20, 30];
+    VD.drawLiveSpeedTrace();
+    expect(strokeSpy).toHaveBeenCalledTimes(1);
+
+    // renderDriveLive re-runs on every broadcast and natives re-deliver the last
+    // sample verbatim — an unchanged history must NOT re-stroke the canvas.
+    VD.drawLiveSpeedTrace();
+    expect(strokeSpy).toHaveBeenCalledTimes(1);
+
+    // A genuinely new sample repaints.
+    VD.state.speedHistory = [10, 20, 30, 40];
+    VD.drawLiveSpeedTrace();
+    expect(strokeSpy).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the optional live readout collapsed until a signal arrives', () => {
     const VD = window.VoltDashboard;
     const group = document.getElementById('liveReadout');

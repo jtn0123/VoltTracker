@@ -125,4 +125,42 @@ describe('dashboard enhanced capability evidence', () => {
     expect(document.getElementById('enhancedCapabilityList').textContent).toContain('odometer');
     expect(document.getElementById('enhancedCapabilityList').textContent).toContain('deferred');
   });
+
+  it('does not rebuild the detailed-signal list on an unchanged broadcast, preserving focus', () => {
+    const VD = window.VoltDashboard;
+    VD.setStorage({
+      fieldCapabilityCount: 2,
+      enhancedCapabilities: [
+        {
+          header: 'ATSH7E0', id: 10, command: '221154', pid: '1154',
+          name: 'engine oil temperature', supported: true, responseCount: 1, lastSeenMs: 1000,
+          sample: { pollLane: 'warm', scanStage: 'low-risk', risk: 'low', validationStatus: 'confirmed' },
+        },
+        {
+          header: 'ATSH7E4', id: 12, command: '22F00A', pid: 'F00A',
+          name: 'battery coolant pump RPM', supported: true, responseCount: 3, lastSeenMs: 2000,
+          sample: { pollLane: 'warm', scanStage: 'experimental', risk: 'medium', validationStatus: 'confirmed' },
+        },
+      ],
+    });
+    const list = document.getElementById('enhancedCapabilityList');
+    const firstRow = list.querySelector('.enhanced-capability-item');
+    expect(firstRow).not.toBeNull();
+
+    // Re-render with identical storage — the rows must be the SAME nodes.
+    VD.updateEnhancedCapabilityUi();
+    expect(list.querySelector('.enhanced-capability-item')).toBe(firstRow);
+
+    // Focus an Export button; an unchanged re-render must not steal focus.
+    const exportBtn = list.querySelector('[data-signal-export]');
+    exportBtn.focus();
+    expect(document.activeElement).toBe(exportBtn);
+    VD.updateEnhancedCapabilityUi();
+    expect(document.activeElement).toBe(exportBtn);
+
+    // A real change (fresh last-seen) rebuilds.
+    VD.state.storage.enhancedCapabilities[0].lastSeenMs = 9999;
+    VD.updateEnhancedCapabilityUi();
+    expect(list.querySelector('.enhanced-capability-item')).not.toBe(firstRow);
+  });
 });

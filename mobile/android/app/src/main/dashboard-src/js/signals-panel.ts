@@ -16,6 +16,12 @@ import type { DataStateValue } from "./dataset-state";
   const VD = window.VoltDashboard;
   const state = VD.state;
   let enhancedSignalFilter = "all";
+  // Signature of the last rendered detailed-signal list. updateEnhancedCapabilityUi
+  // runs on every storage broadcast (~1 Hz), and it used to replaceChildren the
+  // whole list unconditionally — rebuilding up to 18 rows with focusable
+  // Export/Delete buttons even when nothing changed, destroying focus/selection
+  // mid-session. Memoized like updateDiagnosticCodeUi (lastDtcListSig).
+  let lastSignalListSig = "";
   type SignalStageMeta = { label: string; hint: string };
   const signalStageMeta: Record<string, SignalStageMeta> = {
     passive: {
@@ -87,16 +93,46 @@ import type { DataStateValue } from "./dataset-state";
     updateEnhancedFilterButtons();
     updateEnhancedNextList(rows);
     if (!list) return;
+    // The cheap idempotent setText/badge/stage/filter/next-list updates above run
+    // every pass (like updateDiagnosticCodeUi); only the expensive row rebuild
+    // below is memoized. Signature covers the filter, the visible count, and
+    // every field each visible row (capped at 18) renders — so a real change
+    // (new signal, status flip, fresh last-seen) still rebuilds, but an
+    // unchanged broadcast leaves the existing rows (and their focus) untouched.
+    const visible = rows.length ? rows.filter((row) => matchesEnhancedFilter(row)) : [];
+    const shown = visible.slice(0, 18);
+    const rowSig = (r: VoltEnhancedCapability) => {
+      const s = sampleOf(r);
+      return [
+        r._status,
+        r.name || r.pid || r.command || "",
+        String(r.category || s.category || ""),
+        String(r.scanStage || s.scanStage || ""),
+        String(r.risk || s.risk || ""),
+        r.header || "",
+        r.command || r.pid || "",
+        r._hasEvidence ? 1 : 0,
+        r._hasEvidence && r.lastSeenMs ? r.lastSeenMs : "",
+        r.notes || r.source || "",
+        r.id || "",
+      ].join("");
+    };
+    const listSig = !rows.length
+      ? "empty"
+      : !visible.length
+        ? "nomatch:" + enhancedSignalFilter
+        : ["rows", enhancedSignalFilter, visible.length, ...shown.map(rowSig)].join("");
+    if (listSig === lastSignalListSig) return;
+    lastSignalListSig = listSig;
     if (!rows.length) {
       list.replaceChildren(VD.buildStatusCopy("Run Scan or Detail Probe once to collect detailed signal evidence."));
       return;
     }
-    const visible = rows.filter((row) => matchesEnhancedFilter(row));
     if (!visible.length) {
       list.replaceChildren(VD.buildStatusCopy("No detailed signals match this filter yet."));
       return;
     }
-    const nodes: Node[] = visible.slice(0, 18).map(buildEnhancedCapabilityRow);
+    const nodes: Node[] = shown.map(buildEnhancedCapabilityRow);
     // The list caps at 18 rows while the title/chips advertise the full count —
     // say so instead of silently truncating, and point at the filter chips as
     // the way to reach the rest.

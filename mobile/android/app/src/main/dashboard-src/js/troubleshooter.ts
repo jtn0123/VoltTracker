@@ -138,6 +138,10 @@ import type { FocusTrap } from "./focus-trap";
   // containment, and focus save/restore to the opener. Created on open,
   // deactivated (and dropped) on close.
   let modalTrap: FocusTrap | null = null;
+  // Packages currently rendered in the competing-apps step, so a repeated status
+  // with the same CSV leaves the existing Force-stop rows (and their "Sent"
+  // state / any manual collapse) untouched instead of rebuilding + re-expanding.
+  let lastCompetingKey: string | null = null;
 
   function modal(): HTMLElement | null { return el("troubleshooterModal"); }
 
@@ -160,6 +164,18 @@ import type { FocusTrap } from "./focus-trap";
   function open(reason: unknown) {
     const node = modal();
     if (!node) return;
+    // Re-entrancy guard. A second open() while already open would build a fresh
+    // trap without deactivating the first. createFocusTrap makes a new controller
+    // each call, so focus-trap's own guard can't catch it, and the second trap
+    // snapshots the background AFTER the first already set inert=true — so on
+    // close it *restores* inert=true, permanently freezing the whole app shell.
+    // The two auto-open paths are already !isOpen()-guarded; this covers the
+    // public VD.troubleshooter.open() surface and any other programmatic re-open.
+    if (isOpen()) return;
+    if (modalTrap) {
+      modalTrap.deactivate();
+      modalTrap = null;
+    }
     // The shared trap remembers the focused element (so it can be restored on
     // close) and inerts the background. Activate while the opener still holds
     // focus, then move focus into the modal.
@@ -193,6 +209,9 @@ import type { FocusTrap } from "./focus-trap";
       modalTrap = null;
     }
     ts.autoOpened = false;
+    // Reset the competing-apps memo so the next open() re-expands and rebuilds
+    // the step from scratch.
+    lastCompetingKey = null;
     // Every close of this modal originates from a user action on it (dismiss
     // buttons, Escape, or the primary action), so treat it as a dismissal:
     // don't auto-reopen again until the current burst resets.
@@ -289,9 +308,19 @@ import type { FocusTrap } from "./focus-trap";
     if (!packages.length) {
       stepNode.hidden = true;
       listNode.replaceChildren();
+      lastCompetingKey = null;
       return;
     }
     stepNode.hidden = false;
+    // renderCompeting runs on every status while the modal is open, and
+    // competingAppsCsv is a sticky field emitted on every snapshot — so the same
+    // CSV rides every tick. Rebuilding + re-expanding each time discarded a row
+    // the user just tapped (reset from "Sent" back to an enabled "Force-stop")
+    // and snapped a step the user collapsed back open. Only rebuild + do the
+    // one-time reveal when the package set actually changes.
+    const key = packages.join(",");
+    if (key === lastCompetingKey) return;
+    lastCompetingKey = key;
     // Expand the collapsible body so the one-tap fix is visible the moment a
     // competing app is found, instead of staying hidden behind a tap.
     const body = el("troubleshooterStepCompetingBody");
@@ -445,6 +474,12 @@ import type { FocusTrap } from "./focus-trap";
   // and the entry point. Cleared when the banner is dismissed (rendered while
   // hidden) or the connection actually recovers.
   let stickyFailureCopy = false;
+  // Latches the Help/Cancel action row across a single connecting burst. The
+  // native engine alternates "opening serial connection…" (not retrying) with
+  // "…retrying (N/M)…" (retrying) ticks, so keying the row purely on isRetrying
+  // tore it down on every interstitial tick and flashed it back on the next
+  // retry. Set true on the first retry tick, cleared on any non-connecting state.
+  let actionsLatched = false;
 
   function renderErrorBannerCopy(status: VoltStatus | null | undefined) {
     const titleNode = el("errorBannerTitle");
@@ -459,8 +494,14 @@ import type { FocusTrap } from "./focus-trap";
     const bannerNode = el("errorBanner");
     const bannerVisible = Boolean(bannerNode && !bannerNode.hidden);
     // A dismissed / never-shown banner starts a clean slate; a real recovery
-    // (connected/scanning) also clears the sticky failure state.
-    if (!bannerVisible) stickyFailureCopy = false;
+    // (connected/scanning) also clears the sticky failure state. Drop the
+    // action-row latch on the same signal so a dismissed sticky failure can't
+    // carry a stale retry latch into the next display cycle — only a fresh retry
+    // tick (or an active connecting burst) may re-establish it.
+    if (!bannerVisible) {
+      stickyFailureCopy = false;
+      actionsLatched = false;
+    }
     if (stateName === "connected" || stateName === "scanning" || stateName === "scan-complete") {
       stickyFailureCopy = false;
     }
@@ -501,9 +542,14 @@ import type { FocusTrap } from "./focus-trap";
 
     // Surface the in-flight Cancel button only while a retry burst is
     // actively running. Help button shows whenever we have failure copy (or a
-    // still-unresolved sticky failure) or an active retry.
-    const showCancel = isRetrying;
-    const showHelp = isFailure || isRetrying || stickyFailureCopy;
+    // still-unresolved sticky failure) or an active retry. The row is latched
+    // across the connecting burst (mirroring the title guard above) so a
+    // non-retry interstitial tick doesn't flash it out then back in.
+    if (isRetrying) actionsLatched = true;
+    else if (stateName !== "connecting") actionsLatched = false;
+    const inConnectBurst = stateName === "connecting" && actionsLatched;
+    const showCancel = isRetrying || inConnectBurst;
+    const showHelp = isFailure || isRetrying || stickyFailureCopy || inConnectBurst;
     if (cancelNode) cancelNode.hidden = !showCancel;
     if (helpNode) helpNode.hidden = !showHelp;
     if (actionsNode) actionsNode.hidden = !(showCancel || showHelp);

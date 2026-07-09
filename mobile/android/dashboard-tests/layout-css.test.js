@@ -22,6 +22,21 @@ describe('dashboard layout css', () => {
     expect(appRule).toMatch(/min-height\s*:\s*auto/);
   });
 
+  it('makes the fullscreen map viewport-relative, not view-relative', () => {
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+
+    // .map-card.is-fullscreen uses position: fixed; inset: 0 to fill the
+    // viewport. It lives inside #view-map.view.is-active, so two ancestors must
+    // NOT establish a containing block while the map is fullscreen:
+    //   1. .app's layer-promotion transform, and
+    //   2. the leftover identity matrix the finished view-enter/slide animation
+    //      keeps filling on the active section.
+    // Neutralizing only (1) still left the map clipped/offset ~90px below the
+    // topbar. Both escape hatches must cover map-full-active.
+    expect(baseCss).toMatch(/body\.map-full-active\s+\.app\b/);
+    expect(baseCss).toMatch(/body\.map-full-active\s+\.view\.is-active\s*\{\s*animation\s*:\s*none/);
+  });
+
   it('keeps the empty map message below the overlay controls', () => {
     // .map-empty was split into the lazy screens-map.css (G3) — Map-tab-exclusive.
     const mapCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens-map.css'), 'utf8');

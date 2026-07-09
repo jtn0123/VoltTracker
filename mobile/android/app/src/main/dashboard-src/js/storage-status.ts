@@ -23,6 +23,33 @@ import { prefs, units } from "./prefs";
   let storageDetailsScheduled = false;
   let storageDetailsInFlight = false;
   let applyingStorageDetails = false;
+  // Signature of the last storage summary that drove a lazy-rollup reload. Every
+  // non-details broadcast used to invalidate the trips/insights rollups and
+  // re-fetch them (rebuilding every Insights chart via replaceChildren) even when
+  // the summary was identical — and setStorage fires from setAppState on every
+  // app-state push. Only reload when a rollup-relevant field actually changes.
+  let lastRollupSig: string | null = null;
+
+  function rollupSignature(storage: VoltStorageSummary): string {
+    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
+    return [
+      Number(storage.sessionCount || 0),
+      Number(storage.sampleCount || 0),
+      Number(storage.tripSegmentCount || 0),
+      Number(storage.chargeSessionCount || 0),
+      Number(storage.batterySnapshotCount || 0),
+      Number(storage.locationSampleCount || 0),
+      routes.length,
+      routes
+        .map(
+          (r) =>
+            String((r.session || {}).id || "") +
+            ":" +
+            Number(r.pointCount || (Array.isArray(r.points) ? r.points.length : 0)),
+        )
+        .join("|"),
+    ].join(":");
+  }
 
   function invalidateLazyRollups() {
     state.tripsLoaded = false;
@@ -207,8 +234,18 @@ import { prefs, units } from "./prefs";
     VD.renderMapIfLoaded();
     VD.updateValidationUi();
     if (!isDetails) {
-      invalidateLazyRollups();
-      loadRollupsForActiveView();
+      // Only invalidate + reload the trips/insights rollups (which rebuild every
+      // Insights chart) when the summary actually changed in a rollup-relevant
+      // way. Tab-switching still loads independently (core.ts setView), so an
+      // unchanged broadcast can safely skip this. loadMaintenanceLog stays on
+      // every broadcast (its own render is memoized) so odometer/time-driven due
+      // dates still refresh.
+      const rollupSig = rollupSignature(state.storage || {});
+      if (rollupSig !== lastRollupSig) {
+        lastRollupSig = rollupSig;
+        invalidateLazyRollups();
+        loadRollupsForActiveView();
+      }
       loadMaintenanceLog();
       scheduleStorageDetailsLoad();
     }
@@ -292,6 +329,12 @@ import { prefs, units } from "./prefs";
   }
 
   let lastDtcListSig = "";
+  // Signature of the last rendered post-session review. updateReviewUi runs on
+  // every storage push (setStorage fires from setAppState ~1 Hz during a live
+  // drive), but latestReview only changes at session end — so the same ~20-30
+  // warning/insight/timeline/PID-frame nodes were torn down and rebuilt for
+  // nothing. Memoized like lastDtcListSig.
+  let lastReviewSig = "";
 
   function updateDiagnosticCodeUi() {
     const storage = state.storage || {};
@@ -370,7 +413,12 @@ import { prefs, units } from "./prefs";
       list.replaceChildren(buildDtcEmptyState());
       return;
     }
-    list.replaceChildren(...codes.map((c, i) => buildDtcItem(c, false, i)));
+    // Only cascade on the first empty->populated render. When rows are already
+    // visible (e.g. the dtc-causes DB just resolved and flipped the signature
+    // from raw: to db:), rebuild silently so the icons/descriptions fill in
+    // without the rows flashing out to opacity 0 and cascading in a second time.
+    const hadRows = Boolean(list.querySelector(".dtc-item"));
+    list.replaceChildren(...codes.map((c, i) => buildDtcItem(c, false, i, !hadRows)));
   }
 
   function buildDtcEmptyState() {
@@ -453,7 +501,7 @@ import { prefs, units } from "./prefs";
     return second === "1" || second === "3" ? "manufacturer-specific" : "generic OBD-II";
   }
 
-  function buildDtcItem(code: VoltDtcRow, isExample: boolean, index = 0) {
+  function buildDtcItem(code: VoltDtcRow, isExample: boolean, index = 0, animate = true) {
     const article = document.createElement("article");
     article.className = "dtc-item";
     article.dataset.status = String(code.status || "stored");
@@ -563,10 +611,15 @@ import { prefs, units } from "./prefs";
       event.preventDefault();
       openDtcDetail(code);
     });
-    // Staggered entrance: rows cascade in 90ms apart when the list (re)renders
-    // after a scan. `backwards` holds them hidden until their turn.
-    article.classList.add("dtc-item-enter");
-    article.style.animationDelay = `${Math.min(index, 6) * 90}ms`;
+    // Staggered entrance: rows cascade in 90ms apart the first time the list
+    // populates after a scan. `backwards` holds them hidden until their turn.
+    // Gated on `animate` so the necessary content rebuild when the lazy
+    // dtc-causes DB resolves (raw:->db: signature flip) does NOT reset
+    // already-visible rows to opacity 0 and replay the whole cascade.
+    if (animate) {
+      article.classList.add("dtc-item-enter");
+      article.style.animationDelay = `${Math.min(index, 6) * 90}ms`;
+    }
     return article;
   }
 
@@ -577,6 +630,28 @@ import { prefs, units } from "./prefs";
     const warnings = Array.isArray(review.warnings) ? review.warnings : [];
     const timeline = Array.isArray(review.timeline) ? review.timeline : [];
     const frames = Array.isArray(review.recentPidFrames) ? review.recentPidFrames : [];
+    // Every rendered output derives solely from `review`, so an unchanged review
+    // makes the whole body safely skippable. Sign over each field the card reads.
+    const reviewSig = JSON.stringify([
+      session.id || "",
+      session.mode || "",
+      session.adapterName || "",
+      Number(review.maxSpeedKph || 0),
+      Number(review.locationSampleCount || 0),
+      Number(review.parsedPidCount || 0),
+      Number(review.unknownPidCount || 0),
+      Number(review.avgSampleIntervalMs || 0),
+      review.backgroundSampleCount ?? null,
+      review.sampleGapEventCount ?? null,
+      Number(review.usefulTelemetryCount || 0),
+      Number(review.emptyTelemetryCount || 0),
+      warnings,
+      timeline,
+      frames,
+      review.latestHealth || null,
+    ]);
+    if (reviewSig === lastReviewSig) return;
+    lastReviewSig = reviewSig;
     const maxSpeed = Number(review.maxSpeedKph || 0);
     const gpsCount = Number(review.locationSampleCount || 0);
     const parsed = Number(review.parsedPidCount || 0);
@@ -1192,14 +1267,21 @@ import { prefs, units } from "./prefs";
       "vehicleMaintenance",
       entries.length ? `${entries.length} entr${entries.length === 1 ? "y" : "ies"}` : "none logged"
     );
+    const nowMs = Date.now();
+    const odometerKm = latestOdometerKm();
+    const dueByEntry = entries.length
+      ? entries.map((entry) => maintenanceDue(entry, nowMs, odometerKm))
+      : [];
+    // Sign over the entries AND the computed due state, so a time/odometer-driven
+    // due-date change still busts the memo even when the entries are unchanged.
+    const sig = JSON.stringify([entries, dueByEntry]);
+    if (sig === lastMaintenanceSig) return;
+    lastMaintenanceSig = sig;
     if (!entries.length) {
       maintenance.replaceChildren(buildMaintenanceEmptyState());
       renderMaintenanceDueHint([]);
       return;
     }
-    const nowMs = Date.now();
-    const odometerKm = latestOdometerKm();
-    const dueByEntry = entries.map((entry) => maintenanceDue(entry, nowMs, odometerKm));
     maintenance.replaceChildren(...entries.map((entry, i) => buildMaintenanceEntryRow(entry, dueByEntry[i])));
     renderMaintenanceDueHint(dueByEntry);
   }
@@ -1473,6 +1555,13 @@ import { prefs, units } from "./prefs";
   // Memoized like renderCellGrid/renderLiveSignals: native re-delivers storage
   // on every broadcast, and rebuilding 12 unchanged rows each time is wasted DOM
   // churn on the busiest render path.
+  // Memo signatures for the always-visible Insights hero renders that run on
+  // every renderRealV2Ui tick (every app-state/storage broadcast). Without them
+  // the pack-stat row and maintenance list rebuilt their DOM ~1-2 Hz during a
+  // live stream — churn/reflow plus the risk of recreating the maintenance
+  // delete button under a user's finger mid-tap. Mirrors lastChargeSessionsSig.
+  let lastPackStatsSig = "";
+  let lastMaintenanceSig = "";
   let lastChargeSessionsSig = "";
   function renderChargeSessions(charge: VoltChargeSummary) {
     const card = el("chargeSessionsCard");
@@ -1927,6 +2016,9 @@ import { prefs, units } from "./prefs";
       ["Health", Number.isFinite(soh) && soh > 0 ? `${Math.round(soh)}%` : null],
       ["Power", Number.isFinite(packPower) && packPower !== 0 ? `${packPower.toFixed(1)} kW` : null]
     ].filter((pair) => pair[1] != null) as Array<[string, string]>;
+    const sig = stats.length ? stats.map((pair) => pair[0] + "=" + pair[1]).join("|") : "empty";
+    if (sig === lastPackStatsSig) return;
+    lastPackStatsSig = sig;
     if (!stats.length) {
       row.hidden = true;
       row.replaceChildren();

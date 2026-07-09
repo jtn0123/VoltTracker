@@ -175,6 +175,22 @@ describe('troubleshooter.ts — auto-open triggers', () => {
     expect(app.inert).toBe(false);
   });
 
+  it('does not stack focus traps when open() is called twice', () => {
+    const app = document.querySelector('main.app');
+    VD.troubleshooter.open();
+    // A second programmatic open() must be a no-op, not a second stacked trap.
+    // A stacked trap snapshots the background AFTER the first inerted it, then
+    // restores inert=true on close — permanently freezing the whole app shell.
+    VD.troubleshooter.open();
+    expect(app.inert).toBe(true);
+
+    VD.troubleshooter.close();
+
+    expect(isModalOpen()).toBe(false);
+    expect(app.inert).toBe(false);
+    expect(app.getAttribute('aria-hidden')).toBeNull();
+  });
+
   it('traps Tab focus inside the modal', () => {
     VD.troubleshooter.open();
     const first = modal().querySelector('.troubleshooter-close');
@@ -234,6 +250,37 @@ describe('troubleshooter.ts — failure-class banner copy', () => {
     pushStatus({ state: 'failed', failureClass: 'TOTALLY_UNKNOWN', detail: 'mystery' });
     expect(bannerTitle()).toBe("Can't reach the adapter");
     expect(bannerHint().hidden).toBe(true);
+  });
+
+  it('keeps the action row visible across a non-retry interstitial in a connect burst', () => {
+    const actions = () => document.getElementById('errorBannerActions');
+    const cancel = () => document.getElementById('errorBannerCancelRetry');
+    const help = () => document.getElementById('errorBannerHelp');
+
+    // The action row lives inside the error banner, so the latch only matters
+    // (and only holds) while the banner is actually visible — mirror that here.
+    document.getElementById('errorBanner').hidden = false;
+
+    // Retry tick — the action row appears.
+    pushStatus({ state: 'connecting', failureClass: 'CONNECT_TIMEOUT', detail: 'retry 1' });
+    expect(actions().hidden).toBe(false);
+    expect(cancel().hidden).toBe(false);
+    expect(help().hidden).toBe(false);
+
+    // Interstitial connecting tick (native alternates this with retry ticks): no
+    // "retry" in the detail, no failureClass. The row must stay latched, not
+    // flash out then back in on the next retry.
+    pushStatus({ state: 'connecting', detail: 'opening serial connection to volt…' });
+    expect(actions().hidden).toBe(false);
+    expect(cancel().hidden).toBe(false);
+
+    // Next retry tick — still visible.
+    pushStatus({ state: 'connecting', failureClass: 'CONNECT_TIMEOUT', detail: 'retry 2' });
+    expect(actions().hidden).toBe(false);
+
+    // A terminal non-connecting state clears the latch and hides the row.
+    pushStatus({ state: 'idle', detail: 'idle' });
+    expect(actions().hidden).toBe(true);
   });
 
   it('resets the banner to the default label when there is no live failure', () => {
@@ -382,6 +429,48 @@ describe('troubleshooter.ts — competing-apps force-stop step', () => {
     expect(bridge.forceStopPackage).toHaveBeenCalledWith('com.torque.full');
     expect(button.disabled).toBe(true);
     expect(button.textContent).toBe('Sent');
+  });
+
+  it('preserves the Force-stop "Sent" state across an identical competing-apps status', () => {
+    pushStatus({ state: 'failed', competingApps: 'com.torque.full', detail: 'a' });
+    window.VoltDashboard.troubleshooter.open();
+    const button = competingRows()[0].querySelector('.troubleshooter-force-stop');
+    button.click();
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Sent');
+
+    // Same package set on the next tick (vary detail so the status isn't deduped,
+    // guaranteeing renderCompeting runs) must NOT rebuild the row — the tapped
+    // button stays disabled/"Sent" instead of reverting to an enabled "Force-stop".
+    pushStatus({ state: 'failed', competingApps: 'com.torque.full', detail: 'b' });
+    const after = competingRows();
+    expect(after).toHaveLength(1);
+    expect(after[0].querySelector('.troubleshooter-force-stop')).toBe(button);
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toBe('Sent');
+  });
+
+  it('does not re-expand a manually collapsed competing step until the package set changes', () => {
+    pushStatus({ state: 'failed', competingApps: 'com.torque.full', detail: 'a' });
+    window.VoltDashboard.troubleshooter.open();
+    const body = document.getElementById('troubleshooterStepCompetingBody');
+    const head = document
+      .getElementById('troubleshooterStepCompeting')
+      .querySelector('.troubleshooter-step-head');
+    // Simulate the user collapsing the step.
+    body.hidden = true;
+    head.setAttribute('aria-expanded', 'false');
+
+    // Identical package set — stays collapsed.
+    pushStatus({ state: 'failed', competingApps: 'com.torque.full', detail: 'b' });
+    expect(body.hidden).toBe(true);
+    expect(head.getAttribute('aria-expanded')).toBe('false');
+
+    // A changed package set rebuilds and re-expands.
+    pushStatus({ state: 'failed', competingApps: 'com.torque.full, com.obd.app', detail: 'c' });
+    expect(body.hidden).toBe(false);
+    expect(head.getAttribute('aria-expanded')).toBe('true');
+    expect(competingRows()).toHaveLength(2);
   });
 
   it('reverts the Force-stop button when the bridge throws so the user can retry', async () => {

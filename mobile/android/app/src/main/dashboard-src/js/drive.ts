@@ -327,6 +327,13 @@ type ChartPoint = {
 
   // ----- live speed trace ---------------------------------------------------
 
+  // Memoized like drawLivePowerBars/drawLiveSocTrace: renderDriveLive runs on
+  // every app-state broadcast and natives re-deliver the last sample verbatim,
+  // so skip the canvas bitmap realloc + full re-stroke when nothing changed. The
+  // resolved theme tokens are folded into the key so a light/dark or high-contrast
+  // flip still repaints (the canvas resolves its colors via getComputedStyle,
+  // which a naive length+value memo would leave stale).
+  let lastSpeedTraceSig = "";
   function drawLiveSpeedTrace() {
     const host = el("liveTraceChart");
     const canvas = el("liveTraceCanvas") as HTMLCanvasElement | null;
@@ -336,21 +343,10 @@ type ChartPoint = {
     const h = 56; // v2 design trace height
     const padT = 8;
     const padB = 4;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(w * dpr));
-    canvas.height = Math.max(1, Math.round(h * dpr));
-    canvas.style.height = h + "px";
-    const ctx = canvas.getContext && canvas.getContext("2d");
     const metric = units.system() === "metric";
     const samples = (state.speedHistory || []).map((kph: unknown) =>
       metric ? Number(kph) : Number(kph) * 0.621371,
     );
-    host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
-    const latestSample = samples[samples.length - 1];
-    host.dataset.traceLabel = samples.length >= 2
-      ? `${Math.round(latestSample || 0)} ${units.speedUnit()}`
-      : t("drive.trace.waitingForSamples");
-    if (!ctx) return;
 
     // Theme-aware colors: a <canvas> can't read CSS vars, so resolve the relevant
     // tokens once per render (renderDriveLive re-runs each frame, so a theme flip
@@ -365,6 +361,33 @@ type ChartPoint = {
     const mutedColor = token("--muted", "#5d5e69"); // empty-state label
     const voltColor = token("--volt", "#ff7a45"); // trace stroke
     const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // fill base
+
+    // Sign over the full sample window (not just first+last): at the cap the
+    // window scrolls, and a shifted series can keep the same length + boundary
+    // values while its shape changes, which a first/last key would wrongly skip.
+    // ~48 numbers joined is negligible. Plus the metric flag and resolved colors.
+    const sig = [
+      samples.length,
+      samples.join(","),
+      w,
+      metric ? 1 : 0,
+      voltColor,
+      mutedColor,
+    ].join(":");
+    if (sig === lastSpeedTraceSig) return;
+    lastSpeedTraceSig = sig;
+
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.max(1, Math.round(w * dpr));
+    canvas.height = Math.max(1, Math.round(h * dpr));
+    canvas.style.height = h + "px";
+    const ctx = canvas.getContext && canvas.getContext("2d");
+    host.dataset.traceState = samples.length >= 2 ? "ready" : "empty";
+    const latestSample = samples[samples.length - 1];
+    host.dataset.traceLabel = samples.length >= 2
+      ? `${Math.round(latestSample || 0)} ${units.speedUnit()}`
+      : t("drive.trace.waitingForSamples");
+    if (!ctx) return;
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);

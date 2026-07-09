@@ -448,6 +448,59 @@ describe('map.ts — route selection regressions', () => {
     expect(requestTripRoute).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps fetched route geometry across a structurally-identical trips reassignment', async () => {
+    const now = Date.now();
+    const day = 86_400_000;
+    const routeId = '7:6000:9500';
+    const fullRoute = {
+      session: { id: routeId, sessionId: 7, startedAtMs: now - 12 * day, endedAtMs: now - 12 * day + 700_000, mode: 'obd' },
+      points: [
+        { lat: 34.05, lng: -118.25, atMs: now - 12 * day },
+        { lat: 34.07, lng: -118.28, atMs: now - 12 * day + 350_000 },
+        { lat: 34.1, lng: -118.32, atMs: now - 12 * day + 700_000 },
+      ],
+      pointCount: 3,
+      distanceMeters: 6000,
+    };
+    const requestTripRoute = vi.fn(() => true);
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ requestTripRoute }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = { recentRoutes: [] };
+    const tripStub = {
+      id: routeId,
+      sessionId: 7,
+      hasRoute: true,
+      pointCount: 3,
+      startedAtMs: now - 12 * day,
+      endedAtMs: now - 12 * day + 700_000,
+      distanceMeters: 6000,
+    };
+    VD.state.trips = [tripStub];
+    VD.state.selectedMapSessionId = routeId;
+
+    // First render fetches geometry once; resolving it fills the point badge.
+    VD.renderMap();
+    expect(requestTripRoute).toHaveBeenCalledTimes(1);
+    window.VoltTrackerNative.setTripRoute(JSON.stringify({ routeKey: routeId, payload: fullRoute }));
+    expect(document.getElementById('mapPointBadge').textContent).toBe('3 pts');
+
+    // A storage broadcast reassigns state.trips to a BRAND-NEW array with the
+    // same content (applyTripsPayload does this ~1 Hz). The route cache must NOT
+    // be evicted: no re-fetch, and the route stays drawn instead of flashing out
+    // to the point-less stub / mapEmpty.
+    VD.state.trips = [{ ...tripStub }];
+    VD.renderMap();
+
+    expect(requestTripRoute).toHaveBeenCalledTimes(1);
+    expect(document.getElementById('mapPointBadge').textContent).toBe('3 pts');
+    expect(document.getElementById('mapEmpty').hidden).toBe(true);
+  });
+
   it('surfaces basemap tile failures with a retry affordance', () => {
     const VD = window.VoltDashboard;
     const banner = document.getElementById('mapTileError');
@@ -631,6 +684,110 @@ describe('map.ts — route selection regressions', () => {
 
       tileHandlers.tileload({});
       expect(banner.hidden).toBe(true);
+    } finally {
+      window.L = previousLeaflet;
+    }
+  });
+
+  it('does not rebuild every Leaflet layer when re-rendering an unchanged static route', async () => {
+    const chainable = () => {
+      const obj = {
+        addTo: vi.fn(() => obj),
+        on: vi.fn(() => obj),
+        bindTooltip: vi.fn(() => obj),
+        setLatLngs: vi.fn(() => obj),
+        setLatLng: vi.fn(() => obj),
+        addLayer: vi.fn(() => obj),
+        removeLayer: vi.fn(() => obj),
+        remove: vi.fn(() => obj),
+      };
+      return obj;
+    };
+    const fakeMap = {
+      setView: vi.fn(() => fakeMap),
+      fitBounds: vi.fn(() => fakeMap),
+      invalidateSize: vi.fn(() => fakeMap),
+      on: vi.fn(() => fakeMap),
+      remove: vi.fn(() => fakeMap),
+      removeLayer: vi.fn(() => fakeMap),
+      addLayer: vi.fn(() => fakeMap),
+      hasLayer: vi.fn(() => false),
+    };
+    const layerGroup = vi.fn(() => chainable());
+    const polyline = vi.fn(() => chainable());
+    const previousLeaflet = window.L;
+
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    window.L = {
+      map: vi.fn(() => fakeMap),
+      tileLayer: vi.fn(() => chainable()),
+      layerGroup,
+      polyline,
+      circleMarker: vi.fn(() => chainable()),
+      marker: vi.fn(() => chainable()),
+      divIcon: vi.fn(() => ({})),
+      latLngBounds: vi.fn(() => ({})),
+    };
+    try {
+      await loadDashboard();
+      const VD = window.VoltDashboard;
+      await VD.ensureMapModule();
+      // Scrubber marker rides the real Leaflet map; the fake has no marker layer,
+      // so isolate the draw path we're measuring.
+      VD.renderScrubber = () => {};
+
+      // drawMapRoute bails on a zero-size container; give #mapLeaflet a size so
+      // the real Leaflet draw path runs.
+      const container = document.getElementById('mapLeaflet');
+      Object.defineProperty(container, 'offsetWidth', { value: 320, configurable: true });
+      Object.defineProperty(container, 'offsetHeight', { value: 240, configurable: true });
+
+      const routeId = '55:1000:5000';
+      const firstRoute = {
+        session: { id: routeId, startedAtMs: 1000, endedAtMs: 5000 },
+        points: [
+          { lat: 34.05, lng: -118.25, atMs: 1000 },
+          { lat: 34.08, lng: -118.28, atMs: 3000 },
+          { lat: 34.12, lng: -118.31, atMs: 5000 },
+        ],
+        distanceMeters: 5000,
+      };
+      VD.state.storage = { recentRoutes: [firstRoute] };
+      VD.state.selectedMapSessionId = routeId;
+
+      VD.renderMap();
+      const groupsAfterFirst = layerGroup.mock.calls.length;
+      const polylinesAfterFirst = polyline.mock.calls.length;
+      expect(groupsAfterFirst).toBeGreaterThan(0);
+
+      // A broadcast-driven re-render with identical route data must NOT rebuild
+      // the Leaflet layers (rebuilding restarted the animated route-flow overlay
+      // and re-ran all the band/stop math ~1 Hz).
+      VD.renderMap();
+      expect(layerGroup.mock.calls.length).toBe(groupsAfterFirst);
+      expect(polyline.mock.calls.length).toBe(polylinesAfterFirst);
+
+      // Selecting a different route (changed id + geometry) must rebuild.
+      VD.state.storage = {
+        recentRoutes: [
+          firstRoute,
+          {
+            session: { id: '66:1000:5000', startedAtMs: 1000, endedAtMs: 5000 },
+            points: [
+              { lat: 40.05, lng: -74.25, atMs: 1000 },
+              { lat: 40.08, lng: -74.28, atMs: 3000 },
+              { lat: 40.12, lng: -74.31, atMs: 5000 },
+            ],
+            distanceMeters: 5000,
+          },
+        ],
+      };
+      VD.state.selectedMapSessionId = '66:1000:5000';
+      VD.renderMap();
+      expect(layerGroup.mock.calls.length).toBeGreaterThan(groupsAfterFirst);
     } finally {
       window.L = previousLeaflet;
     }
