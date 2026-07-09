@@ -207,6 +207,54 @@
         <span class="kicker">Est. cost</span><strong id="mapCost">--</strong>
       </div>
     </div>
+
+    <!-- v2 design: the playback scrubber lives INSIDE the drive sheet — one
+         card carries the drive header, stats, charts, readout, and actions.
+         Hidden until a route loads (scrubber.ts toggles [hidden]). -->
+    <div id="scrubber" class="scrubber" data-noswipe="true" hidden>
+      <div class="scrub-chart" id="scrubChart">
+        <div class="scrub-cursor" id="scrubCursor"></div>
+      </div>
+      <!-- Always-on elevation profile strip with its own scrub cursor
+           (scrubber.ts renderScrubElevation); hidden when the route has no
+           altitude samples. -->
+      <div class="scrub-elev" id="scrubElev" hidden>
+        <div class="scrub-cursor scrub-elev-cursor" id="scrubElevCursor"></div>
+        <small class="scrub-elev-label" aria-hidden="true">Elevation</small>
+      </div>
+      <div class="scrub-readout" id="scrubReadout"></div>
+      <div id="scrubStack" class="scrub-stack" hidden></div>
+      <div class="scrub-toolbar">
+        <button
+          type="button"
+          class="scrub-btn"
+          id="scrubPlay"
+          aria-label="Play route playback"
+        >
+          &#9654; Play
+        </button>
+        <!-- v2: full-screen entry lives in the action row too, not only the small
+             ⛶ overlay on the map frame. Same toggle (actions.ts#mapFullOpenBtn). -->
+        <button
+          type="button"
+          class="scrub-btn"
+          id="mapFullOpenBtn"
+          aria-label="Open full-screen map"
+        >
+          Full map
+        </button>
+        <button
+          type="button"
+          class="scrub-btn"
+          id="scrubToggle"
+          aria-expanded="false"
+          aria-controls="scrubStack"
+          aria-label="Toggle route detail readout"
+        >
+          Details
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
@@ -376,72 +424,22 @@
     </div>
   </div>
 
-  <div id="scrubber" class="scrubber panel" data-noswipe="true" hidden>
-    <div class="scrub-chart" id="scrubChart">
-      <div class="scrub-cursor" id="scrubCursor"></div>
-    </div>
-    <!-- Always-on elevation profile strip with its own scrub cursor
-         (scrubber.ts renderScrubElevation); hidden when the route has no
-         altitude samples. -->
-    <div class="scrub-elev" id="scrubElev" hidden>
-      <div class="scrub-cursor scrub-elev-cursor" id="scrubElevCursor"></div>
-      <small class="scrub-elev-label" aria-hidden="true">Elevation</small>
-    </div>
-    <div class="scrub-readout" id="scrubReadout"></div>
-    <div id="scrubStack" class="scrub-stack" hidden></div>
-    <div class="scrub-toolbar">
-      <button
-        type="button"
-        class="scrub-btn"
-        id="scrubPlay"
-        aria-label="Play route playback"
-      >
-        &#9654; Play
-      </button>
-      <!-- v2: full-screen entry lives in the action row too, not only the small
-           ⛶ overlay on the map frame. Same toggle (actions.ts#mapFullOpenBtn). -->
-      <button
-        type="button"
-        class="scrub-btn"
-        id="mapFullOpenBtn"
-        aria-label="Open full-screen map"
-      >
-        Full map
-      </button>
-      <button
-        type="button"
-        class="scrub-btn"
-        id="scrubToggle"
-        aria-expanded="false"
-        aria-controls="scrubStack"
-        aria-label="Toggle route detail readout"
-      >
-        Details
-      </button>
-    </div>
-  </div>
-
   <section class="map-layout">
     <article class="panel list-card">
+      <!-- v2 design: kicker + a single Export CSV action. (The list refreshes
+           itself on every storage broadcast; long-press "not a trip" still
+           works, it just isn't advertised as a copy line.) -->
       <header>
         <span class="kicker">Recorded drives</span>
-        <div class="map-sheet-actions">
-          <button
-            type="button"
-            class="link-btn"
-            data-action="exportAllTripsCsv"
-            id="exportAllTripsBtn"
-          >
-            Export all (CSV)
-          </button>
-          <button type="button" class="link-btn" data-action="refreshStorage">
-            Refresh
-          </button>
-        </div>
+        <button
+          type="button"
+          class="link-btn"
+          data-action="exportAllTripsCsv"
+          id="exportAllTripsBtn"
+        >
+          Export CSV
+        </button>
       </header>
-      <p class="status-copy">
-        Long-press a drive to mark it as &ldquo;not a trip&rdquo;.
-      </p>
       <!-- Trip list search / sort / favorites filter (M4). Client-side over the
            already-loaded routes; map.ts reads these and re-renders the list. -->
       <div class="map-list-controls" role="group" aria-label="Filter drives">

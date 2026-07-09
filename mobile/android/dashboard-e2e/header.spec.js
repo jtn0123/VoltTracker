@@ -49,15 +49,16 @@ test('header action stays unclipped on the Charge tab too', async ({ page }) => 
   }
 });
 
-// Detailed Signals was folded into the Settings/Diag tab; its standalone header is
-// gone, and every remaining view now uses a filled title icon.
-test('Settings header renders a filled title icon', async ({ page }) => {
+// v2 design header glyphs: every view's title icon is a stroked outline except
+// the Charge bolt, which is filled — mirroring the bottom-nav icon treatment.
+test('Settings header renders a stroked outline title icon', async ({ page }) => {
   await openDashboard(page);
   await setView(page, 'settings');
 
   await expect(page.locator('#screenTitle')).toHaveText('Settings');
   const icon = page.locator('#screenTitleIcon');
-  await expect(icon).toHaveAttribute('fill', 'currentColor');
+  await expect(icon).toHaveAttribute('fill', 'none');
+  await expect(icon).toHaveAttribute('stroke', 'currentColor');
 
   const box = await icon.evaluate((el) => {
     const b = el.getBBox();
@@ -65,4 +66,10 @@ test('Settings header renders a filled title icon', async ({ page }) => {
   });
   expect(box.width).toBeGreaterThan(0);
   expect(box.height).toBeGreaterThan(0);
+});
+
+test('Charge header keeps the filled bolt icon', async ({ page }) => {
+  await openDashboard(page);
+  await setView(page, 'charge');
+  await expect(page.locator('#screenTitleIcon')).toHaveAttribute('fill', 'currentColor');
 });

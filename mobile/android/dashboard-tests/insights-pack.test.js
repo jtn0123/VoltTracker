@@ -127,6 +127,9 @@ describe('efficiency-vs-speed scatter axis + units', () => {
   }
 
   it('keeps 85-95 mph samples inside the plot by growing the x-axis with the data', () => {
+    // The chart defaults to the bars view (v2 design); this test exercises the
+    // scatter axis, so opt into scatter explicitly.
+    window.VoltDashboard.prefs.set('effChartView', 'scatter');
     window.VoltDashboard.setStorage(fastRouteStorage());
     window.VoltDashboard.renderInsightScatter();
     const card = document.getElementById('effScatterCard');
@@ -244,13 +247,15 @@ describe('efficiency-vs-speed chart view switcher + grade-normalization', () => 
     expect(circles.length).toBe(8);
   });
 
-  it('falls back to the scatter view when no view preference is stored', () => {
+  it('falls back to the bars view when no view preference is stored (v2 design)', () => {
     // beforeEach cleared effChartView, so this exercises the default path with no
-    // setView() call — scatter must render its per-sample dots.
+    // setView() call — the v2 design defaults to green per-bucket bars: rect
+    // bars render and the only circle is the peak marker.
     window.VoltDashboard.setStorage(clusteredRoute(0));
     window.VoltDashboard.renderInsightScatter();
-    const circles = document.querySelectorAll('#effScatter svg circle');
-    expect(circles.length).toBe(8);
+    const svg = document.querySelector('#effScatter svg');
+    expect(svg.querySelectorAll('rect').length).toBeGreaterThan(0);
+    expect(svg.querySelectorAll('circle')).toHaveLength(1);
   });
 
   it('grade-normalizes efficiency so a downhill run plots lower than the same eff on the flat', () => {

@@ -576,14 +576,19 @@ import type { MapSessionFilter } from "./map-session-list";
     const hasTripEnergy = Number.isFinite(tripEnergyKwh) && tripEnergyKwh > 0;
     VD.setText("mapEnergy", hasTripEnergy ? `${tripEnergyKwh.toFixed(1)} kWh` : "--");
     const homeRate = VD.prefs.get<number>("pricePerKwh", 0);
+    const hasCost = hasTripEnergy && homeRate > 0;
     VD.setText(
       "mapCost",
-      hasTripEnergy && homeRate > 0
+      hasCost
         ? `$${(tripEnergyKwh * homeRate).toFixed(2)}`
         : homeRate > 0 || !hasMapContent
           ? "--"
           : "set rate"
     );
+    // v2 design: a computed cost tints soft green (matches the Charge tab's
+    // Est. cost treatment); placeholders stay quiet.
+    const mapCostEl = el("mapCost");
+    if (mapCostEl) mapCostEl.dataset.state = hasCost ? "recorded" : "empty";
     // Fullscreen drive summary mirrors the sheet header (which fullscreen hides).
     VD.setText("mapFsInfoTitle", textOf("mapTitle") || "Drive");
     VD.setText("mapFsInfoSub", [textOf("mapKicker"), textOf("mapDistance")].filter((part) => part && part !== "--").join(" · "));
@@ -2124,6 +2129,42 @@ import type { MapSessionFilter } from "./map-session-list";
   // loaded; it is not captured device data and never runs inside the real app.
   const SAMPLE_ROUTE: Array<[number, number, number]> = [[0,34.11872,-118.30064],[25,34.11766,-118.29943],[53,34.11699,-118.29818],[78,34.11532,-118.29755],[105,34.11502,-118.29607],[130,34.11379,-118.29581],[156,34.11331,-118.29444],[185,34.11252,-118.29361],[214,34.11012,-118.29201],[240,34.10983,-118.29046],[267,34.10874,-118.28941],[294,34.10729,-118.28843],[321,34.10664,-118.28671],[349,34.10559,-118.28549],[377,34.10511,-118.28492],[404,34.1033,-118.28202],[429,34.1023,-118.28133],[457,34.1008,-118.27949],[483,34.09991,-118.27795],[508,34.09915,-118.27716],[536,34.09834,-118.27577],[561,34.09684,-118.27385],[590,34.09515,-118.27155],[616,34.09342,-118.271],[642,34.09256,-118.26922],[668,34.09135,-118.26858],[695,34.08982,-118.26784],[720,34.08844,-118.26674],[745,34.08693,-118.26578],[771,34.0843,-118.26341],[796,34.08263,-118.26337],[822,34.0816,-118.26159],[848,34.07927,-118.2616],[873,34.07817,-118.26081],[901,34.07642,-118.25998],[926,34.07477,-118.25933],[951,34.07184,-118.25716],[980,34.07051,-118.25643],[1006,34.06868,-118.25502],[1033,34.06792,-118.25419],[1058,34.06598,-118.25286],[1087,34.06515,-118.25179],[1112,34.06331,-118.25034],[1139,34.06027,-118.2478],[1165,34.05899,-118.24718],[1191,34.05694,-118.24539],[1217,34.05534,-118.24367],[1245,34.05383,-118.24281],[1270,34.05279,-118.24071],[1299,34.05117,-118.23964],[1328,34.04818,-118.23953],[1355,34.0477,-118.24092],[1384,34.04669,-118.24208],[1409,34.04499,-118.24255],[1437,34.04389,-118.24347],[1462,34.04302,-118.24425],[1489,34.04196,-118.24531],[1518,34.03951,-118.24858],[1544,34.03842,-118.25072],[1572,34.03737,-118.25368],[1600,34.03604,-118.25494],[1626,34.0352,-118.25727],[1654,34.03402,-118.25954],[1679,34.03298,-118.26183],[1707,34.03128,-118.26548],[1733,34.03023,-118.26819],[1758,34.02976,-118.2707],[1785,34.02839,-118.27292],[1811,34.02762,-118.2752],[1837,34.02678,-118.27692],[1866,34.02614,-118.27939],[1893,34.02432,-118.28434],[1918,34.02337,-118.28802],[1946,34.02334,-118.29035],[1973,34.022,-118.29332],[2002,34.02129,-118.29641],[2031,34.02046,-118.29924],[2057,34.01996,-118.30215],[2082,34.0191,-118.30761],[2107,34.0194,-118.31139],[2135,34.02004,-118.31402],[2161,34.01943,-118.31713],[2189,34.01987,-118.31994],[2215,34.02041,-118.32298],[2240,34.02081,-118.32606],[2266,34.02166,-118.33312],[2293,34.02148,-118.33598],[2322,34.02206,-118.33889],[2347,34.02288,-118.34169],[2373,34.02263,-118.34537],[2401,34.02381,-118.34841],[2427,34.02384,-118.35127],[2456,34.02433,-118.35766],[2485,34.0248,-118.36111],[2513,34.02565,-118.36468],[2539,34.02532,-118.36794],[2566,34.02551,-118.37083],[2595,34.02644,-118.37385],[2620,34.02654,-118.37771],[2648,34.0269,-118.3805]];
 
+  // Per-slot speed envelopes (multiples of the segment's average speed) for the
+  // two shaped demo moments. Each envelope covers one ~25 s survey segment cut
+  // into 2.5 s GPS slots; the sharp step between slots is what crosses the
+  // detector's ≥0.25 g / ≥3 m/s thresholds honestly.
+  const DEMO_BRAKE_ENV = [1.65, 1.65, 1.65, 1.65, 1.6, 0.45, 0.15, 0.1, 0.05, 0.05];
+  const DEMO_LAUNCH_ENV = [0.1, 0.1, 0.15, 0.4, 1.5, 1.62, 1.62, 1.62, 1.62, 1.62];
+
+  function densifySampleRoute(sparse: MapRoutePoint[]): MapRoutePoint[] {
+    const out: MapRoutePoint[] = [];
+    const brakeAt = Math.max(1, Math.floor(sparse.length * 0.33));
+    const launchAt = brakeAt + 1;
+    for (let i = 0; i < sparse.length - 1; i += 1) {
+      const a = sparse[i];
+      const b = sparse[i + 1];
+      if (!a || !b) continue;
+      const env = i === brakeAt ? DEMO_BRAKE_ENV : i === launchAt ? DEMO_LAUNCH_ENV : null;
+      // Plain segments get a 5 s cadence; event segments a finer 2.5 s one.
+      const slots = env ? env.length : 5;
+      const raw = env || new Array<number>(slots).fill(1);
+      const total = raw.reduce((s, v) => s + v, 0);
+      const dtMs = (b.atMs - a.atMs) / slots;
+      let f = 0;
+      for (let k = 0; k < slots; k += 1) {
+        out.push({
+          atMs: Math.round(a.atMs + dtMs * k),
+          lat: a.lat + (b.lat - a.lat) * f,
+          lng: a.lng + (b.lng - a.lng) * f
+        });
+        f += (raw[k] as number) / total;
+      }
+    }
+    const last = sparse[sparse.length - 1];
+    if (last) out.push(last);
+    return out;
+  }
+
   // Build one synthetic route from a slice of SAMPLE_ROUTE. Each route gets its
   // own session id, start time, altitude profile, socTrack, and powerTrack so
   // the chip strip, Eff layer, scrubber, and Insights scatter all populate
@@ -2135,9 +2176,17 @@ import type { MapSessionFilter } from "./map-session-list";
       throw new Error("Sample route slice is empty");
     }
     const baseT = firstSlicePoint[0];
-    const points: MapRoutePoint[] = slice.map(([t, lat, lng]) => ({
+    const sparse: MapRoutePoint[] = slice.map(([t, lat, lng]) => ({
       atMs: opts.startedAtMs + (t - baseT) * 1000, lat, lng
     }));
+    // Densify the ~25 s survey points to a real GPS cadence (the drive-event
+    // detector ignores speed chains across >10 s gaps, so sparse points can
+    // never surface event diamonds), and shape two genuine moments about a
+    // third of the way in — a hard brake, then a brisk pull-away — so demo
+    // drives light up the same hard-braking / rapid-accel markers a real
+    // drive does. Positions stay on the segment; only the along-segment
+    // distance distribution (i.e. speed) varies.
+    const points: MapRoutePoint[] = densifySampleRoute(sparse);
     const firstPoint = points[0];
     const lastPoint = points[points.length - 1];
     if (!firstPoint || !lastPoint) {

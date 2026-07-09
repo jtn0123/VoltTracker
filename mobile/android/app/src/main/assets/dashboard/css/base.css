@@ -27,7 +27,7 @@
     --panel: #171820;
     --panel-2: #20222c;
     --panel-3: #101117;
-    --line: rgba(255,255,255,0.06);
+    --line: rgba(255,255,255,0.08); /* v2 design card hairline */
     --line-strong: rgba(255,255,255,0.16);
     --text: #f5f3ec;
     --muted: #aaaab4;
@@ -90,6 +90,13 @@
     --scrim-strong: rgba(4,8,12,0.86);
     --shadow: rgba(0,0,0,0.5);
     --shadow-soft: rgba(0,0,0,0.34);
+    /* v2 design card depth: a top inset highlight + a near + a deep drop, so
+       cards read as raised planes rather than a single flat shadow. Overridden
+       lighter in the light-theme block below. */
+    --shadow-card:
+      inset 0 1px 0 rgba(255,255,255,0.05),
+      0 2px 8px rgba(0,0,0,0.28),
+      0 18px 48px rgba(0,0,0,0.42);
     /* Neutral fills: lighten-on-dark, darken-on-light */
     --fill-ghost: rgba(255,255,255,0.025);
     --fill-soft: rgba(255,255,255,0.05);
@@ -111,6 +118,7 @@
     --bg-top: #12131a;
     --bg-glow: rgba(var(--volt-rgb), 0.14);
     /* Map-tab blue accent */
+    --link: #9bdcff; /* v2 design link/action text */
     --map-accent: #4cc4ff;
     --map-accent-rgb: 76, 196, 255; /* RGB of --map-accent, for rgba(var(--map-accent-rgb), a) tints */
     --on-map-accent: #04222e;
@@ -157,7 +165,9 @@
     /* Brand voice for headings + hero numerals; falls back to the body stack
        until the woff2 is parsed (font-display: swap). */
     --font-display: "Space Grotesk", Inter, Roboto, system-ui, sans-serif;
-    --map-height: min(62vh, 600px);
+    /* v2 design: a compact 340px map frame — the sheet + scrubber stay above
+       the fold; the ⛶ full-map view covers immersive browsing. */
+    --map-height: 340px;
     /* Motion design tokens — one vocabulary for every transition/animation.
        fast = hover/press/tone feedback; medium = meter fills and fades.
        The named long durations are intentional, attention-getting loops. */
@@ -639,8 +649,8 @@
 
   .drive-title-mark {
     display: grid;
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
     flex: 0 0 auto;
     place-items: center;
     border: 1px solid rgba(var(--volt-rgb), 0.34);
@@ -708,7 +718,9 @@
 
   .topbar h1 {
     margin-top: 0;
-    font-size: 17px;
+    /* v2 design: 19px, slightly tightened. */
+    font-size: 19px;
+    letter-spacing: -0.01em;
     white-space: nowrap;
   }
 
@@ -717,7 +729,7 @@
   .kicker {
     color: var(--soft);
     font-size: 11px;
-    font-weight: 640;
+    font-weight: 650;
     letter-spacing: 0.07em;
     text-transform: uppercase;
   }
@@ -841,7 +853,7 @@
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    box-shadow: 0 14px 40px var(--shadow-soft);
+    box-shadow: var(--shadow-card);
   }
 
   .view {
@@ -940,7 +952,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 24px;
+    font-size: 22px;
     letter-spacing: -0.02em;
   }
 
@@ -1105,9 +1117,11 @@
 
   .sandbox-tools {
     margin-top: 10px;
-    padding: 11px;
+    /* v2 design: the Demo/Testing card is a full purple card (20px radius,
+       16/20 padding), not a compact tile. */
+    padding: 16px 20px;
     border: 1px solid rgba(var(--mixed-rgb), 0.2);
-    border-radius: 14px;
+    border-radius: var(--radius-lg);
     background: rgba(var(--mixed-rgb), 0.06);
   }
 
@@ -1228,6 +1242,17 @@
 
   .pref-card .card-head {
     margin-bottom: 4px;
+  }
+
+  /* Generic screen-reader-only utility: keeps a heading/label in the
+     accessibility tree while removing it from the visual layout. */
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
 
   /* The kicker above already labels each pref card visually, so the h3 is
@@ -1406,6 +1431,8 @@
 
   .demo {
     border-color: rgba(var(--mixed-rgb), 0.32);
+    /* v2 design: a faint purple wash, not just an outlined chip. */
+    background: rgba(var(--mixed-rgb), 0.06);
     color: var(--mixed-soft);
   }
 
@@ -1533,6 +1560,10 @@
       --scrim-strong: rgba(23,26,34,0.55);
       --shadow: rgba(24,26,34,0.2);
       --shadow-soft: rgba(24,26,34,0.1);
+      /* Light theme: no dark inset highlight, softer drops. */
+      --shadow-card:
+        0 1px 2px rgba(24,26,34,0.06),
+        0 12px 32px rgba(24,26,34,0.1);
       --fill-ghost: rgba(0,0,0,0.02);
       --fill-soft: rgba(0,0,0,0.03);
       --fill: rgba(0,0,0,0.045);
@@ -1551,6 +1582,7 @@
       --bg-glow: rgba(232,90,31,0.06);
       --map-accent: #0b6dc2;
       --map-accent-rgb: 11, 109, 194;
+      --link: #0b6dc2; /* readable blue link ink on light surfaces */
       /* RGB companions for the light tones (rgba() tints otherwise keep
          the dark theme's neon hues). */
       --volt-rgb: 184, 65, 13;

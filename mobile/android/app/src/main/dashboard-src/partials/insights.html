@@ -53,14 +53,15 @@
   </article>
 
   <div class="map-sheet insights-sheet">
+    <!-- v2 design: one quiet "Lifetime · N drives" line — the heading is kept
+         for the document outline but visually clipped (sr-only). -->
     <div class="map-sheet-head">
       <div>
-        <span class="kicker">Lifetime totals</span>
-        <h2>From your logged drives</h2>
+        <span class="kicker"
+          >Lifetime &#183; <span id="insightTripCount">--</span></span
+        >
+        <h2 class="sr-only">Lifetime totals from your logged drives</h2>
       </div>
-      <span class="badge"
-        ><span class="dot"></span><span id="insightTripCount">--</span></span
-      >
     </div>
     <div class="map-sheet-stats">
       <div>
@@ -107,7 +108,7 @@
     <article class="panel eff-scatter-card" id="effScatterCard" hidden>
       <header>
         <div>
-          <span class="kicker">Efficiency vs speed · grade-normalized</span>
+          <span class="kicker">Efficiency vs speed</span>
           <h3 id="effScatterHead">
             Pooling samples across every logged drive.
           </h3>
@@ -126,7 +127,7 @@
           class="eff-view-btn"
           data-eff-view="bars"
           role="tab"
-          aria-selected="false"
+          aria-selected="true"
           aria-controls="effScatter"
         >
           Bars
@@ -136,7 +137,7 @@
           class="eff-view-btn"
           data-eff-view="scatter"
           role="tab"
-          aria-selected="true"
+          aria-selected="false"
           aria-controls="effScatter"
         >
           Scatter
@@ -257,123 +258,8 @@
       </div>
     </article>
 
-    <article class="panel list-card">
-      <header>
-        <span class="kicker">Maintenance</span>
-        <button
-          type="button"
-          class="link-btn"
-          data-action="addMaintenance"
-          id="addMaintenanceBtn"
-          aria-expanded="false"
-          aria-controls="maintenanceForm"
-        >
-          Add maintenance
-        </button>
-      </header>
-      <p
-        id="maintenanceDueHint"
-        class="maintenance-due-hint"
-        role="status"
-        hidden
-      ></p>
-      <form
-        id="maintenanceForm"
-        class="maintenance-form"
-        aria-label="Log a maintenance entry"
-        hidden
-      >
-        <label class="maint-field">
-          <span>Service</span>
-          <input
-            type="text"
-            id="maintTypeInput"
-            name="type"
-            placeholder="Oil change, Tire rotation…"
-            maxlength="80"
-            autocomplete="off"
-            required
-          />
-        </label>
-        <label class="maint-field">
-          <span id="maintOdometerLabel">Odometer (mi)</span>
-          <input
-            type="number"
-            id="maintOdometerInput"
-            name="odometer"
-            inputmode="decimal"
-            min="0"
-            step="any"
-            placeholder="optional"
-            aria-describedby="maintOdometerHint"
-          />
-          <small
-            id="maintOdometerHint"
-            class="maint-field-hint"
-            role="alert"
-            hidden
-          ></small>
-        </label>
-        <label class="maint-field">
-          <span>Note</span>
-          <input
-            type="text"
-            id="maintNoteInput"
-            name="note"
-            placeholder="optional"
-            maxlength="200"
-            autocomplete="off"
-          />
-        </label>
-        <div class="maint-field-row">
-          <label class="maint-field">
-            <span id="maintIntervalKmLabel">Every (mi)</span>
-            <input
-              type="number"
-              id="maintIntervalKmInput"
-              name="intervalKm"
-              inputmode="decimal"
-              min="0"
-              step="any"
-              placeholder="optional"
-              aria-describedby="maintIntervalKmHint"
-            />
-            <small
-              id="maintIntervalKmHint"
-              class="maint-field-hint"
-              role="alert"
-              hidden
-            ></small>
-          </label>
-          <label class="maint-field">
-            <span>Every (months)</span>
-            <input
-              type="number"
-              id="maintIntervalMonthsInput"
-              name="intervalMonths"
-              inputmode="numeric"
-              min="0"
-              step="1"
-              placeholder="optional"
-            />
-          </label>
-        </div>
-        <p
-          id="maintFormError"
-          class="maint-form-error"
-          role="alert"
-          aria-live="assertive"
-          hidden
-        ></p>
-        <div class="maint-form-actions">
-          <button type="button" data-action="cancelMaintenance">Cancel</button>
-          <button type="submit" class="primary" id="maintSaveBtn">
-            Save entry
-          </button>
-        </div>
-      </form>
-      <div id="maintenanceList" class="maintenance-list"></div>
-    </article>
+    <!-- v2 design: maintenance lives inside the Vehicle card below — its
+         "Add maintenance" action, due hint, form, and log moved there. -->
   </section>
 
   <!-- X3: identity/reference info sits after the trends the tab is named
@@ -388,24 +274,140 @@
           are read.
         </p>
       </div>
+      <button
+        type="button"
+        class="link-btn"
+        data-action="addMaintenance"
+        id="addMaintenanceBtn"
+        aria-expanded="false"
+        aria-controls="maintenanceForm"
+      >
+        Add maintenance
+      </button>
     </div>
     <div class="review-grid">
-      <div><span>Model year</span><strong id="vehicleYear">--</strong></div>
+      <!-- v2 design: a lean 3-up rollup — Odometer / Logged / Maintenance.
+           Model year (already in the card title) and VIN keep their IDs and
+           renderers but are visually dropped (.vehicle-extra). -->
+      <div class="vehicle-extra">
+        <span>Model year</span><strong id="vehicleYear">--</strong>
+      </div>
       <div><span>Odometer</span><strong id="vehicleOdometer">--</strong></div>
       <div>
-        <span>Logged distance</span
-        ><strong id="vehicleLoggedDistance">--</strong>
+        <span>Logged</span><strong id="vehicleLoggedDistance">--</strong>
       </div>
       <!-- v2: maintenance rollup at a glance ("none logged" / "3 entries"),
-           mirroring the Maintenance card above. storage-status.ts keeps it
+           mirroring the maintenance log below. storage-status.ts keeps it
            in sync with the maintenance list. -->
       <div>
         <span>Maintenance</span
         ><strong id="vehicleMaintenance">none logged</strong>
       </div>
-      <div style="grid-column: 1 / -1">
+      <div class="vehicle-extra" style="grid-column: 1 / -1">
         <span>VIN</span><strong id="vehicleVin">--</strong>
       </div>
     </div>
+    <p
+      id="maintenanceDueHint"
+      class="maintenance-due-hint"
+      role="status"
+      hidden
+    ></p>
+    <form
+      id="maintenanceForm"
+      class="maintenance-form"
+      aria-label="Log a maintenance entry"
+      hidden
+    >
+      <label class="maint-field">
+        <span>Service</span>
+        <input
+          type="text"
+          id="maintTypeInput"
+          name="type"
+          placeholder="Oil change, Tire rotation…"
+          maxlength="80"
+          autocomplete="off"
+          required
+        />
+      </label>
+      <label class="maint-field">
+        <span id="maintOdometerLabel">Odometer (mi)</span>
+        <input
+          type="number"
+          id="maintOdometerInput"
+          name="odometer"
+          inputmode="decimal"
+          min="0"
+          step="any"
+          placeholder="optional"
+          aria-describedby="maintOdometerHint"
+        />
+        <small
+          id="maintOdometerHint"
+          class="maint-field-hint"
+          role="alert"
+          hidden
+        ></small>
+      </label>
+      <label class="maint-field">
+        <span>Note</span>
+        <input
+          type="text"
+          id="maintNoteInput"
+          name="note"
+          placeholder="optional"
+          maxlength="200"
+          autocomplete="off"
+        />
+      </label>
+      <div class="maint-field-row">
+        <label class="maint-field">
+          <span id="maintIntervalKmLabel">Every (mi)</span>
+          <input
+            type="number"
+            id="maintIntervalKmInput"
+            name="intervalKm"
+            inputmode="decimal"
+            min="0"
+            step="any"
+            placeholder="optional"
+            aria-describedby="maintIntervalKmHint"
+          />
+          <small
+            id="maintIntervalKmHint"
+            class="maint-field-hint"
+            role="alert"
+            hidden
+          ></small>
+        </label>
+        <label class="maint-field">
+          <span>Every (months)</span>
+          <input
+            type="number"
+            id="maintIntervalMonthsInput"
+            name="intervalMonths"
+            inputmode="numeric"
+            min="0"
+            step="1"
+            placeholder="optional"
+          />
+        </label>
+      </div>
+      <p
+        id="maintFormError"
+        class="maint-form-error"
+        role="alert"
+        aria-live="assertive"
+        hidden
+      ></p>
+      <div class="maint-form-actions">
+        <button type="button" data-action="cancelMaintenance">Cancel</button>
+        <button type="submit" class="primary" id="maintSaveBtn">
+          Save entry
+        </button>
+      </div>
+    </form>
+    <div id="maintenanceList" class="maintenance-list"></div>
   </article>
 </section>

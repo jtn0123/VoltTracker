@@ -86,30 +86,28 @@
     font-size: 12px;
   }
 
+  /* v2 design: a rounded-rect segmented control (radius 12, 3px pad), not a pill
+     cluster. */
   .map-layer-tabs {
     display: inline-flex;
-    gap: 4px;
-    padding: 4px;
+    gap: 3px;
+    padding: 3px;
     border: 1px solid var(--line-strong);
-    border-radius: 999px;
+    border-radius: 12px;
     background: var(--surface-overlay);
     backdrop-filter: blur(12px);
   }
 
   .map-layer-tabs button {
-    /* Compacted for phone (B4): tighter padding + slightly smaller type so all
-       four layer tabs and the right-hand follow/full controls share the top of
-       the route without crowding it. Still a 40px touch target via min-height. */
-    min-height: 40px;
-    padding: 0 10px;
+    /* Design segments: mixed-case 12px, 9px radius, 36px touch target. */
+    min-height: 36px;
+    padding: 0 12px;
     border: 0;
-    border-radius: 999px;
+    border-radius: 9px;
     background: transparent;
     color: var(--muted);
-    font-size: 10.5px;
-    font-weight: 750;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-size: 12px;
+    font-weight: 700;
   }
 
   .map-layer-tabs button span,
@@ -144,7 +142,7 @@
     min-width: 40px;
     padding: 0 12px;
     border: 1px solid var(--line-strong);
-    border-radius: 999px;
+    border-radius: 12px;
     background: var(--surface-overlay);
     backdrop-filter: blur(12px);
     color: var(--muted);
@@ -442,40 +440,43 @@
     margin-bottom: 6px;
   }
 
-  /* Trip-list search / sort / favorites controls (M4). */
+  /* v2 design: the Recorded-drives filters are a simple pill row (Favorites /
+     Long trips). The M4 search box + Recent/Longest sort stay wired in the DOM
+     for power users but are hidden to match the handoff's clean card. */
   .map-list-controls {
     display: grid;
     gap: 8px;
-    margin: 4px 0 10px;
+    margin: 10px 0;
   }
 
-  .map-list-search {
-    display: block;
-  }
-
-  .map-list-search input {
-    width: 100%;
-    min-height: 40px;
-    padding: 8px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-input);
-    background: var(--fill-soft);
-    color: var(--text);
-    font-size: 14px;
+  .map-list-search,
+  .map-list-sort {
+    display: none;
   }
 
   .map-list-control-row {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+    gap: 6px;
     flex-wrap: wrap;
   }
 
+  /* Design pill chips: 32px, 11.5px/700, blue-tinted when active. */
+  .map-list-fav-toggle {
+    min-height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: var(--fill-soft);
+    color: var(--muted);
+    font-size: 11.5px;
+    font-weight: 700;
+  }
+
   .map-list-fav-toggle[data-on="true"] {
-    border-color: rgba(var(--volt-rgb), 0.4);
-    color: var(--volt);
-    background: rgba(var(--volt-rgb), 0.1);
+    border-color: rgba(var(--map-accent-rgb), 0.42);
+    color: var(--accent-soft);
+    background: rgba(var(--map-accent-rgb), 0.14);
   }
 
   .map-list {
@@ -483,28 +484,28 @@
     gap: 8px;
   }
 
+  /* v2 design: the scrubber is a section INSIDE the drive-sheet card, not a
+     standalone panel — no chrome of its own, just the design's 14px gap above
+     the chart stack. */
   .scrubber {
-    padding: 12px 14px;
-    /* Visually bind playback to the selected drive (C4): a map-accent top edge +
-       faint tint ties the scrubber to the route/sheet above it, so "Play" reads
-       as "play THIS drive" rather than a detached control. */
-    margin-top: 8px;
-    border-top: 2px solid var(--map-accent);
-    background:
-      linear-gradient(180deg, var(--map-accent-veil, rgba(var(--map-accent-rgb), 0.08)), transparent 64px),
-      var(--surface-raised);
+    margin-top: 14px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .scrub-btn {
     flex: 1;
-    min-height: 40px;
+    /* v2 design: full 44px touch height + 13px/700 labels. */
+    min-height: 44px;
     padding: 0 14px;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: var(--fill);
     color: var(--text);
-    font-size: 12px;
-    font-weight: 650;
+    font-size: 13px;
+    font-weight: 700;
     cursor: pointer;
   }
 

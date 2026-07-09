@@ -919,16 +919,20 @@ import { initialTelemetryState } from "./telemetry-state";
     diagnostics: ["Adapter & debug", "Diagnostics"]
   };
 
+  // v2 design header glyphs (VoltTracker v2.dc.html#screenIconPath): each view's
+  // title icon mirrors its bottom-nav icon — house / folded map / bolt / line
+  // chart / pulse / gear-sun.
   const viewIconPaths: Record<string, string> = {
-    drive: "M13 2 5 13h6l-1 9 9-13h-6z",
-    map: "M15 4 9 2 3 4v18l6-2 6 2 6-2V2l-6 2zm-1 15-4-1.35V5l4 1.35V19z",
-    charge: "M14 2v7h5l-9 13v-7H5l9-13z",
-    insights: "M4 19h16v2H2V3h2v16zm3-2V9h3v8H7zm5 0V5h3v12h-3zm5 0v-6h3v6h-3z",
-    settings: "M12 2a3 3 0 0 1 3 3v1h2.2l1.1 1.9-1.6 1.6c.2.5.3 1 .3 1.5s-.1 1-.3 1.5l1.6 1.6-1.1 1.9H15v1a3 3 0 0 1-6 0v-1H6.8l-1.1-1.9 1.6-1.6A4.2 4.2 0 0 1 7 11c0-.5.1-1 .3-1.5L5.7 7.9 6.8 6H9V5a3 3 0 0 1 3-3zm0 7a2 2 0 1 0 0 4 2 2 0 0 0 0-4z",
+    drive: "M4 11.5 12 5l8 6.5V20h-5v-5H9v5H4z",
+    map: "m4 6 5-2 6 2 5-2v14l-5 2-6-2-5 2zM9 4v14M15 6v14",
+    charge: "M13 2 5 13h6l-1 9 9-13h-6z",
+    insights: "M4 19V5M4 19h16M8 15l3-4 3 2 5-7",
+    settings: "M12 8a4 4 0 1 1 0 8 4 4 0 0 1 0-8Zm0-5v3m0 12v3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1M1 12h3m16 0h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1",
     diagnostics: "M3 12h4l2.5-7 4 14 2.5-7H21"
   };
-  // The Diagnostics icon is a stroked pulse line (open path), not a filled glyph.
-  const strokedViewIcons = new Set(["diagnostics"]);
+  // Design: only the Charge bolt is a filled glyph; every other header icon is a
+  // stroked outline (matching the nav icons).
+  const filledViewIcons = new Set(["charge"]);
 
   function parsePayload(payload: unknown, fallback: unknown = null) {
     if (!payload) return fallback;
@@ -1258,18 +1262,18 @@ import { initialTelemetryState } from "./telemetry-state";
     const iconPath = viewIconPaths[String(state.view)] || viewIconPaths.drive;
     if (icon && iconPath) {
       icon.setAttribute("d", iconPath);
-      if (strokedViewIcons.has(String(state.view))) {
-        icon.setAttribute("fill", "none");
-        icon.setAttribute("stroke", "currentColor");
-        icon.setAttribute("stroke-width", "2");
-        icon.setAttribute("stroke-linecap", "round");
-        icon.setAttribute("stroke-linejoin", "round");
-      } else {
+      if (filledViewIcons.has(String(state.view))) {
         icon.setAttribute("fill", "currentColor");
         icon.removeAttribute("stroke");
         icon.removeAttribute("stroke-width");
         icon.removeAttribute("stroke-linecap");
         icon.removeAttribute("stroke-linejoin");
+      } else {
+        icon.setAttribute("fill", "none");
+        icon.setAttribute("stroke", "currentColor");
+        icon.setAttribute("stroke-width", "2");
+        icon.setAttribute("stroke-linecap", "round");
+        icon.setAttribute("stroke-linejoin", "round");
       }
     }
   }
@@ -1409,6 +1413,13 @@ import { initialTelemetryState } from "./telemetry-state";
     button.append(center, right);
     return button;
   }
+
+  // v2 design: the Demo/Testing sandbox ships expanded — the scenario picker is
+  // a first-class control. Opened here at boot rather than via a static `open`
+  // attribute, which trips a jsdom HTMLDetailsElement parse bug under the
+  // vitest fake-timer harness.
+  const sandboxDetails = document.querySelector<HTMLDetailsElement>("details.sandbox-tools");
+  if (sandboxDetails) sandboxDetails.open = true;
 
   Object.assign(VD, {
     reportClientError,

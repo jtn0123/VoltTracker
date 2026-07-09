@@ -719,8 +719,12 @@ import { initialTelemetryState } from "./telemetry-state";
     const chip = el("liveRateChip");
     if (!chip) return;
     const samples = hasLiveSamples();
-    const label = samples && isStale ? "stale" : samples ? "live" : "waiting";
-    setDataState(chip, label);
+    // The data-state / logic key stays the short token so the CSS state selectors
+    // and the checks below keep working; the visible label appends the ~1 Hz poll
+    // cadence when live to match the v2 design chip ("LIVE · 1 HZ").
+    const state = samples && isStale ? "stale" : samples ? "live" : "waiting";
+    const label = state === "live" ? "live · 1 Hz" : state;
+    setDataState(chip, state);
     chip.dataset.reconnectActive = samples && isStale && bridge ? "true" : "false";
     if (samples && isStale) {
       chip.tabIndex = bridge ? 0 : -1;
@@ -738,7 +742,7 @@ import { initialTelemetryState } from "./telemetry-state";
       chip.setAttribute("role", "status");
       chip.setAttribute(
         "aria-label",
-        label === "live"
+        state === "live"
           ? "Telemetry live. Samples are updating."
           : "Waiting for the first telemetry sample."
       );
@@ -799,10 +803,10 @@ import { initialTelemetryState } from "./telemetry-state";
         speedMeter.setAttribute("aria-label", "Vehicle speed");
       }
     }
-    // A Volt in EV mode reports rpm 0 for the whole drive — a permanent "0"
-    // tile is dead weight, so treat engine-off as not-reporting and let the
-    // cell collapse (is-empty) until the range extender actually spins.
-    setOptionalLiveText("rpmValue", Number(t.rpm) === 0 ? "--" : t.rpm);
+    // v2 design shows "RPM 0" while in EV mode (engine off is a real reading on
+    // a Volt, and the visible 0 keeps the 3×2 tile grid even); only a missing
+    // value collapses the tile.
+    setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : t.rpm);
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(
@@ -938,8 +942,11 @@ import { initialTelemetryState } from "./telemetry-state";
         powerScaleKw = powerScaleKw === 40 ? 80 : 120;
       }
     }
-    VD.setText("powerScaleMin", `-${powerScaleKw}`);
-    VD.setText("powerScaleMax", `+${powerScaleKw}`);
+    // The visible scale drops the +/- sign — the "REGEN"/"DRIVE" words already carry
+    // the direction (v2 design: "◄ REGEN 40 … DRIVE 40 ►"). The signed range stays on
+    // the meter's aria-valuemin/max below for assistive tech.
+    VD.setText("powerScaleMin", `${powerScaleKw}`);
+    VD.setText("powerScaleMax", `${powerScaleKw}`);
     // Fraction of the half-track (0..1); the fill's CSS spans the right half
     // and scaleX stretches it from the zero-line — a negative scale mirrors it
     // left for regen. Transform-only so this per-sample update stays on the
@@ -996,9 +1003,11 @@ import { initialTelemetryState } from "./telemetry-state";
     VD.setText("diagSamples", samples ? `${samples} sample${samples === 1 ? "" : "s"}` : "0 samples");
     // Drive's slim session/health footer (v2 design) mirrors this card's state
     // in one line; the full card itself now lives on Diagnostics.
+    // "demo scenario: typical" compresses to the design's "demo typical" so the
+    // one-line footer fits without ellipsizing the samples count off-screen.
     VD.setText(
       "sessionFooterLine",
-      `OBD session · ${diagTitle.toLowerCase()} · ${samples} sample${samples === 1 ? "" : "s"}`
+      `OBD session · ${diagTitle.toLowerCase().replace(/^demo scenario:\s*/, "demo ")} · ${samples} sample${samples === 1 ? "" : "s"}`
     );
     VD.setText("diagAdapter", t.adapter || status.adapter || "--");
     // Surface the classifier's confidence inline and its reason codes (the "why"
@@ -1232,9 +1241,6 @@ import { initialTelemetryState } from "./telemetry-state";
   // Working cell-voltage window for the balance graphic's horizontal scale. The
   // Gen-2 Volt cell groups sit ~3.4-4.1 V in use; a slightly wider track keeps
   // both markers comfortably inside their gutters.
-  const CELL_SCALE_MIN_V = 3.3;
-  const CELL_SCALE_MAX_V = 4.25;
-
   function cellBalanceTone(mv: number) {
     if (!Number.isFinite(mv)) return "none";
     if (mv < 30) return "ok";
@@ -1246,68 +1252,51 @@ import { initialTelemetryState } from "./telemetry-state";
   // every rAF flush and app-state broadcast, but the cell min/max move slowly —
   // skip the style/text writes when nothing in the readout changed.
   let lastCellBalanceSig = "";
+  // Whether the 96-group heatmap is revealed (toggled by the "Read 96 cells" /
+  // "Hide cells" button). Kept in module state so both renders and the toggle
+  // action agree, and so a data refresh alone never forces the grid open.
+  let cellGridOpen = false;
+
+  // Summary word for the spread, keyed off the same tone thresholds as the grid.
+  function cellHealthWord(tone: string): string {
+    return tone === "bad" ? "imbalanced" : tone === "warn" ? "drifting" : "healthy";
+  }
+
   function renderCellBalance() {
     const card = el("cellBalanceCard");
     if (!card) return;
     const t = state.telemetry || {};
     const sig = [
       t.minCellVoltage, t.maxCellVoltage, t.cellBalanceMv,
-      t.minCellNumber, t.maxCellNumber, t.socVariationPct
+      t.minCellNumber, t.maxCellNumber, t.socVariationPct, cellGridOpen
     ].join(":");
     if (sig === lastCellBalanceSig) return;
     lastCellBalanceSig = sig;
     const minV = Number(t.minCellVoltage);
     const maxV = Number(t.maxCellVoltage);
     const has = Number.isFinite(minV) && Number.isFinite(maxV);
-    const graphic = el("cellBalanceGraphic");
-    const empty = el("cellBalanceEmpty");
-    if (graphic) graphic.hidden = !has;
-    if (empty) empty.hidden = has;
-    const deltaEl = el("cellBalanceDelta");
+    const toggle = el("cellToggleBtn");
     if (!has) {
-      VD.setText("cellBalanceTitle", "No live cell data yet");
-      // Hide the spread badge entirely in the empty state — a "-- mV" pill next
-      // to the "Read all 96 cells" action just crowds the header with a
-      // placeholder that carries no information until cell data arrives.
-      if (deltaEl) {
-        deltaEl.hidden = true;
-        deltaEl.textContent = "-- mV";
-        deltaEl.dataset.tone = "none";
-      }
+      VD.setText("cellBalanceCopy", "No cell readings yet — connect while the car is awake.");
+      // No data → hide the toggle and keep the heatmap collapsed. renderCellGrid
+      // (called right after in updateLiveUi) then hides the grid section.
+      if (toggle) toggle.hidden = true;
+      cellGridOpen = false;
       return;
     }
-    if (deltaEl) deltaEl.hidden = false;
     const mv = Number.isFinite(Number(t.cellBalanceMv))
       ? Number(t.cellBalanceMv)
       : Math.round((maxV - minV) * 1000);
-    VD.setText("cellBalanceTitle", "Cell-group balance");
     const tone = cellBalanceTone(mv);
-    if (deltaEl) {
-      deltaEl.textContent = `${mv} mV spread`;
-      deltaEl.dataset.tone = tone;
+    VD.setText(
+      "cellBalanceCopy",
+      `Δ ${mv} mV across ${CELL_GRID_COUNT} groups — ${cellHealthWord(tone)}`,
+    );
+    if (toggle) {
+      toggle.hidden = false;
+      toggle.textContent = cellGridOpen ? "Hide cells" : "Read 96 cells";
+      toggle.setAttribute("aria-expanded", cellGridOpen ? "true" : "false");
     }
-    // Tone the spread fill to match the badge so the bar itself reads health
-    // (tight = green, drifting = amber/red) instead of a fixed decorative wash.
-    if (graphic) graphic.dataset.tone = tone;
-    const span = CELL_SCALE_MAX_V - CELL_SCALE_MIN_V;
-    const pos = (v: number) => Math.max(0, Math.min(100, ((v - CELL_SCALE_MIN_V) / span) * 100));
-    const minPos = pos(minV);
-    const maxPos = pos(maxV);
-    const fill = el("cellBalanceFill");
-    if (fill) {
-      fill.style.left = minPos + "%";
-      fill.style.width = Math.max(0, maxPos - minPos) + "%";
-    }
-    const minMarker = el("cellBalanceMinMarker");
-    if (minMarker) minMarker.style.left = minPos + "%";
-    const maxMarker = el("cellBalanceMaxMarker");
-    if (maxMarker) maxMarker.style.left = maxPos + "%";
-    const minCell = Number(t.minCellNumber);
-    const maxCell = Number(t.maxCellNumber);
-    VD.setText("cellBalanceMin", `${minV.toFixed(3)} V${Number.isFinite(minCell) ? ` · #${minCell}` : ""}`);
-    VD.setText("cellBalanceMax", `${maxV.toFixed(3)} V${Number.isFinite(maxCell) ? ` · #${maxCell}` : ""}`);
-    const soc = Number(t.socVariationPct);
-    VD.setText("cellBalanceSoc", Number.isFinite(soc) ? `${soc}%` : "--");
   }
 
   // Usable HV-pack energy for a Gen-2 Chevy Volt. The pack is ~18.4 kWh
@@ -1406,7 +1395,9 @@ import { initialTelemetryState } from "./telemetry-state";
     const powerBadge = el("liveChargePower");
     if (powerBadge) {
       const label = powerBadge.querySelector("span:last-child");
-      if (label) label.textContent = `${powerKw.toFixed(1)} kW`;
+      // v2 design: the hero chip carries the state word; the live kW figure
+      // lives in the "Level 2 · 3.4 kW · started 38m ago" sub-line below.
+      if (label) label.textContent = "charging";
     }
     // Progress toward the target (v2): SOC-wide green bar with the session's
     // from→to on the left and the target caption on the right.
@@ -1442,7 +1433,9 @@ import { initialTelemetryState } from "./telemetry-state";
         parts.push(`started ${relativeTime(startedAtMs)}`);
       }
       subEl.textContent = parts.join(" · ");
-      subEl.hidden = parts.length <= 1;
+      // Always shown: parts always carries at least the live kW figure, which
+      // moved here now that the hero chip is the state word ("charging").
+      subEl.hidden = false;
     }
   }
 
@@ -1499,31 +1492,35 @@ import { initialTelemetryState } from "./telemetry-state";
     renderCellGrid();
   }
 
-  // Maps a cell voltage to a blue→red color across the observed pack range, so an
-  // outlier cell stands out in the grid.
-  function cellGridColor(v: number, lo: number, hi: number): string {
-    const span = hi - lo;
-    const norm = span > 0.0005 ? Math.max(0, Math.min(1, (v - lo) / span)) : 0.5;
-    const hue = 220 - norm * 220; // blue (low) → red (high)
-    return `hsl(${hue.toFixed(0)}, 70%, 52%)`;
+  // Tints a cell-group bar by how far its voltage deviates from the pack mean, so
+  // outliers pop (v2 handoff heatmap): green when near the mean, amber past ~2.6 mV,
+  // red past ~6 mV. Green brightens toward the mean. Uses the app's --ev/--warn/--bad
+  // rgb tokens (inline var() is theme-aware) instead of the design's fixed hex.
+  function cellHeatColor(v: number, mean: number): string {
+    const d = Math.abs(v - mean);
+    if (d > 0.006) return "rgba(var(--bad-rgb), 0.9)";
+    if (d > 0.0026) return "rgba(var(--warn-rgb), 0.85)";
+    const alpha = (0.45 + Math.max(0, 1 - d / 0.0026) * 0.4).toFixed(2);
+    return `rgba(var(--ev-rgb), ${alpha})`;
   }
 
   /**
-   * 96-cell voltage map on the Battery tab. Phase E left the full per-cell read deferred until the
-   * real car confirms the cell-PID layout, so this is a scaffold: if telemetry ever carries a
-   * `cellVoltages` array (per-cell probe) it renders the full heatmap; until then it highlights the
-   * lowest/highest cell groups the car DOES report live and greys the rest, with a note explaining a
-   * probe is needed for the complete map. Memoized so we don't rebuild 96 nodes every sample.
+   * 96-group voltage heatmap on the Charge tab (v2 handoff). Revealed by the
+   * "Read 96 cells" toggle (cellGridOpen). A full per-cell probe (a live
+   * `cellVoltages` array or the persisted probe snapshot) tints every group by its
+   * deviation off the pack mean; before that it seeds only the live lowest/highest
+   * groups the car reports and leaves the rest as faint "awaiting probe"
+   * placeholders. Memoized so we don't rebuild 96 nodes every sample.
    */
   function renderCellGrid() {
     const grid = el("cellGrid");
     if (!grid) return;
-    // The whole card article (header, badge, note) — hidden alongside the inner
-    // grid when there's nothing to show, so it isn't a perpetual empty scaffold.
+    // The heatmap section (grid + min/max/Δ footer) — hidden unless the toggle is
+    // open and there's at least one known group.
     const card = el("cellGridCard");
     const t = state.telemetry || {};
     const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
-    // Positional slots (null = cell didn't answer): live sample first, then the
+    // Positional slots (null = group didn't answer): live sample first, then the
     // persisted probe snapshot so the map survives disconnects and app restarts.
     let slots: Array<number | null> | null = null;
     let fromProbeAtMs = 0;
@@ -1539,103 +1536,114 @@ import { initialTelemetryState } from "./telemetry-state";
       slots = probeCellSlots;
       fromProbeAtMs = probeCellCapturedAtMs;
     }
-    const known: number[] = slots ? (slots.filter((v) => v !== null) as number[]) : [];
     const minCell = Number(t.minCellNumber);
     const maxCell = Number(t.maxCellNumber);
     const minV = Number(t.minCellVoltage);
     const maxV = Number(t.maxCellVoltage);
+    if (!slots) {
+      // No full read — seed the two groups the car reports live so the heatmap
+      // isn't empty while the probe runs.
+      const partial: Array<number | null> = new Array(CELL_GRID_COUNT).fill(null);
+      if (Number.isFinite(minCell) && minCell >= 1 && minCell <= CELL_GRID_COUNT && Number.isFinite(minV)) {
+        partial[minCell - 1] = minV;
+      }
+      if (Number.isFinite(maxCell) && maxCell >= 1 && maxCell <= CELL_GRID_COUNT && Number.isFinite(maxV)) {
+        partial[maxCell - 1] = maxV;
+      }
+      slots = partial.some((v) => v !== null) ? partial : null;
+    }
+    const known: number[] = slots ? (slots.filter((v) => v !== null) as number[]) : [];
+    // Section visible only while the toggle is open AND there's something to show.
+    if (!cellGridOpen || known.length === 0 || !slots) {
+      if (card) card.hidden = true;
+      grid.hidden = true;
+      grid.replaceChildren();
+      lastCellGridSig = `hidden:${cellGridOpen}:${known.length}`;
+      return;
+    }
     const full = known.length >= CELL_GRID_FULL_MIN;
-    const sig = full
-      ? `full:${(slots as Array<number | null>).map((v) => (v === null ? "" : v.toFixed(3))).join(",")}:${fromProbeAtMs}`
-      : `hi:${minCell}:${maxCell}:${minV}:${maxV}`;
+    const sig = `open:${slots.map((v) => (v === null ? "" : v.toFixed(3))).join(",")}:${fromProbeAtMs}`;
     if (sig === lastCellGridSig) return;
-    // First transition into the full per-cell map gets a left-to-right reveal
-    // (each box staggers in ~8ms apart, reading as the probe "filling in").
-    // Subsequent refreshes of an already-full map repaint in place — a re-run
-    // of the sweep on every live update would read as flicker.
-    const revealSweep = full && !lastCellGridSig.startsWith("full:");
+    // First transition into a shown grid gets a left-to-right reveal sweep (each
+    // box staggers ~8ms apart, reading as the probe "filling in"); later refreshes
+    // of an already-open grid repaint in place so live updates don't flicker.
+    const revealSweep = !lastCellGridSig.startsWith("open:");
     lastCellGridSig = sig;
 
+    const lo = Math.min(...known);
+    const hi = Math.max(...known);
+    const mean = known.reduce((a, b) => a + b, 0) / known.length;
+    // With only a couple of groups (pre-probe) deviation coloring is noise — paint
+    // the known groups a nominal green until a full read gives a real mean.
+    const heat = known.length >= 4;
     const frag = document.createDocumentFragment();
-    if (full && slots) {
-      if (card) card.hidden = false;
-      grid.hidden = false;
-      const lo = Math.min(...known);
-      const hi = Math.max(...known);
-      for (let i = 0; i < CELL_GRID_COUNT; i += 1) {
-        const v = slots[i];
-        const box = document.createElement("span");
-        box.className = "cell-grid-box";
-        if (v === null) {
-          box.classList.add("is-unknown");
-          box.title = `Cell ${i + 1}: no data`;
-        } else {
-          box.style.backgroundColor = cellGridColor(v, lo, hi);
-          box.title = `Cell ${i + 1}: ${v.toFixed(3)} V`;
-        }
-        if (revealSweep) {
-          box.classList.add("cell-reveal");
-          box.style.animationDelay = `${i * 8}ms`;
-        }
-        frag.appendChild(box);
+    for (let i = 0; i < CELL_GRID_COUNT; i += 1) {
+      const v = slots[i];
+      const box = document.createElement("span");
+      box.className = "cell-grid-box";
+      if (v === null) {
+        box.title = `Group ${i + 1}: awaiting probe`;
+      } else {
+        box.style.background = heat ? cellHeatColor(v, mean) : "rgba(var(--ev-rgb), 0.6)";
+        box.title = `Group ${i + 1}: ${v.toFixed(3)} V`;
       }
-      VD.setText(
-        "cellGridBadge",
-        known.length >= CELL_GRID_COUNT ? `${CELL_GRID_COUNT} cells` : `${known.length} of ${CELL_GRID_COUNT} cells`,
-      );
-      VD.setText("cellGridTitle", "Per-cell voltage map");
-      VD.setText(
-        "cellGridNote",
-        fromProbeAtMs > 0
-          ? `Per-cell voltages from the cell probe ${formatWhen(fromProbeAtMs)}.`
-          : "Per-cell voltages from the latest cell probe.",
-      );
-    } else {
-      const knownMin = Number.isFinite(minCell);
-      const knownMax = Number.isFinite(maxCell);
-      const known = (knownMin ? 1 : 0) + (knownMax ? 1 : 0);
-      if (known === 0) {
-        // M9 → C5: with no per-cell probe data AND no live lowest/highest groups yet, hide the WHOLE
-        // card (header, badge, note, grid) rather than leaving a permanently-visible empty scaffold
-        // that can only ever show "min/max or nothing". The card reappears the moment the car reports
-        // any cell data. (Full per-cell probe is deferred pending on-car PID validation — see
-        // sensor-expansion-plan.)
-        if (card) card.hidden = true;
-        grid.hidden = true;
-        grid.replaceChildren();
-        VD.setText("cellGridBadge", "awaiting probe");
-        VD.setText("cellGridTitle", "Per-cell voltage map");
-        VD.setText(
-          "cellGridNote",
-          "Connect to the car to highlight the lowest and highest cell groups; a full per-cell probe fills in the complete map.",
-        );
-        return;
+      if (revealSweep) {
+        box.classList.add("cell-reveal");
+        box.style.animationDelay = `${i * 8}ms`;
       }
-      if (card) card.hidden = false;
-      grid.hidden = false;
-      for (let i = 1; i <= CELL_GRID_COUNT; i += 1) {
-        const box = document.createElement("span");
-        box.className = "cell-grid-box";
-        if (knownMin && i === minCell) {
-          box.classList.add("is-min");
-          box.title = `Cell ${i}: ${Number.isFinite(minV) ? minV.toFixed(3) + " V (lowest)" : "lowest"}`;
-        } else if (knownMax && i === maxCell) {
-          box.classList.add("is-max");
-          box.title = `Cell ${i}: ${Number.isFinite(maxV) ? maxV.toFixed(3) + " V (highest)" : "highest"}`;
-        } else {
-          box.classList.add("is-unknown");
-        }
-        frag.appendChild(box);
-      }
-      // known is guaranteed > 0 here (the known === 0 case returned early above).
-      VD.setText("cellGridBadge", `${known} of ${CELL_GRID_COUNT} known`);
-      VD.setText("cellGridTitle", "Per-cell voltage map");
-      VD.setText(
-        "cellGridNote",
-        "Live data reports only the lowest and highest cell groups (highlighted). A full per-cell probe on the car fills in the rest.",
-      );
+      frag.appendChild(box);
     }
+    if (card) card.hidden = false;
+    grid.hidden = false;
     grid.replaceChildren(frag);
+    // Footer: min / max / Δ (green when tight, amber when wide) / note.
+    VD.setText("cellGridMin", `${lo.toFixed(3)} V`);
+    VD.setText("cellGridMax", `${hi.toFixed(3)} V`);
+    const mv = Math.round((hi - lo) * 1000);
+    VD.setText("cellGridDelta", `${mv} mV`);
+    const deltaEl = el("cellGridDelta");
+    if (deltaEl) deltaEl.style.color = mv > 14 ? "var(--warn)" : "var(--ev)";
+    VD.setText(
+      "cellGridNote",
+      full
+        ? Number.isFinite(minCell)
+          ? `group ${minCell} runs low`
+          : "full read"
+        : `${known.length} of ${CELL_GRID_COUNT} read`,
+    );
+  }
+
+  // Reveal/hide the 96-group heatmap. Called from the "Read 96 cells" / "Hide
+  // cells" toggle (actions.ts). Forces a grid re-render since the memo key depends
+  // on the open state.
+  function setCellGridOpen(open: boolean) {
+    cellGridOpen = open;
+    const toggle = el("cellToggleBtn");
+    if (toggle) {
+      toggle.textContent = open ? "Hide cells" : "Read 96 cells";
+      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
+    lastCellGridSig = "";
+    renderCellGrid();
+  }
+
+  function isCellGridOpen(): boolean {
+    return cellGridOpen;
+  }
+
+  // True when a full per-cell read is already loaded (live array or stored probe),
+  // so the toggle can skip firing a fresh probe.
+  function cellGridHasFull(): boolean {
+    const t = state.telemetry || {};
+    const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
+    let liveKnown = 0;
+    for (let i = 0; i < Math.min(rawCells.length, CELL_GRID_COUNT); i += 1) {
+      const c = rawCells[i];
+      const v = typeof c === "object" && c !== null ? Number((c as PayloadRecord).voltage) : Number(c);
+      if (Number.isFinite(v)) liveKnown += 1;
+    }
+    const probeKnown = probeCellSlots ? probeCellSlots.filter((v) => v !== null).length : 0;
+    return Math.max(liveKnown, probeKnown) >= CELL_GRID_FULL_MIN;
   }
 
   function updateValidationUi() {
@@ -1798,6 +1806,9 @@ import { initialTelemetryState } from "./telemetry-state";
     updateLiveUi,
     updateDiagnostics,
     applyCellSnapshot,
+    setCellGridOpen,
+    isCellGridOpen,
+    cellGridHasFull,
     renderLiveCharge,
     updateValidationUi,
     setValidationRow,

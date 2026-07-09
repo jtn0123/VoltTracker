@@ -216,10 +216,13 @@ describe('dashboard charge session history', () => {
       window.VoltDashboard.setStorage(twoSessions());
 
       const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
+      // v2 design: the pill is kWh-only; the per-session cost joins the meta line.
       // Row 0 = public DC-fast: 10 kWh × $0.45 = $4.50.
-      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh · $4.50');
+      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(rows[0].querySelector('small').textContent).toContain('$4.50');
       // Row 1 = home L2: 10 kWh × $0.12 = $1.20.
-      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
+      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(rows[1].querySelector('small').textContent).toContain('$1.20');
       // Lifetime energy-card cost bills each session at its own rate: 4.50 + 1.20.
       expect(document.getElementById('chargeEnergyCost').textContent).toBe('$5.70');
     });
@@ -229,9 +232,12 @@ describe('dashboard charge session history', () => {
       window.VoltDashboard.setStorage(twoSessions());
 
       const rows = document.querySelectorAll('#chargeSessionsList .charge-session-row');
-      // Both sessions billed at the home rate: 10 kWh × $0.12 = $1.20 each.
-      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
-      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh · $1.20');
+      // Both sessions billed at the home rate: 10 kWh × $0.12 = $1.20 each,
+      // shown on the meta line (kWh-only pill per the v2 design).
+      expect(rows[0].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(rows[0].querySelector('small').textContent).toContain('$1.20');
+      expect(rows[1].querySelector('b').textContent).toBe('10.0 kWh');
+      expect(rows[1].querySelector('small').textContent).toContain('$1.20');
       expect(document.getElementById('chargeEnergyCost').textContent).toBe('$2.40');
     });
 

@@ -184,7 +184,7 @@ describe('scrubber.ts', () => {
     try {
       expect(play.textContent).toContain('Play');
       play.click(); // start
-      expect(play.textContent).toContain('Stop');
+      expect(play.textContent).toContain('Pause');
       expect(rafSpy).toHaveBeenCalled();
       play.click(); // stop
       expect(play.textContent).toContain('Play');

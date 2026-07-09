@@ -47,7 +47,7 @@
         <strong id="diagRecoveryBt">--</strong>
       </div>
       <div>
-        <span class="kicker">Data source</span>
+        <span class="kicker">Source</span>
         <strong id="diagRecoverySource">--</strong>
       </div>
     </div>
@@ -212,6 +212,8 @@
     </div>
   </article>
 
+  <!-- v2 design: the Demo/Testing card ships expanded (open is set by core.ts at
+       boot — a static open attribute trips a jsdom parse bug in the test DOM). -->
   <details class="sandbox-tools" aria-label="Demo / Testing controls">
     <summary aria-label="Toggle the Demo / Testing controls">
       Demo / Testing

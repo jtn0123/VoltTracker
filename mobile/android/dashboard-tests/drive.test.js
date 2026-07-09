@@ -195,22 +195,16 @@ describe('drive.ts', () => {
     expect(socHost.querySelector('svg')).toBeNull();
   });
 
-  it('shows a plain SOC (no bogus Δ gain) when the session baseline is null (Number(null) === 0 trap)', () => {
+  it('keeps the micro-card corner tags as static unit labels (v2 design)', () => {
     const VD = window.VoltDashboard;
-    const tag = document.getElementById('socMicroTag');
-    // Baseline never set (fresh WebView, or SOC arrived via an app-state broadcast
-    // before the first live sample set sessionStartSoc) while current SOC is known.
-    VD.state.sessionStartSoc = null;
-    VD.state.telemetry.soc = 64;
-    VD.renderDriveLive();
-    expect(tag.textContent).toBe('64%');
-    expect(tag.textContent).not.toContain('Δ');
-    expect(tag.dataset.tone).toBe('idle');
-
-    // Sanity: with a real baseline the delta chip still renders.
+    // The old live value/Δ chips were replaced by the design's bare "kW" / "%"
+    // unit labels — a render pass must not overwrite them with values.
     VD.state.sessionStartSoc = 78.4;
+    VD.state.telemetry.soc = 64;
+    VD.state.telemetry.powerKw = 12.3;
     VD.renderDriveLive();
-    expect(tag.textContent).toContain('Δ');
+    expect(document.getElementById('socMicroTag').textContent).toBe('%');
+    expect(document.getElementById('powerMicroTag').textContent).toBe('kW');
   });
 
   it('renders layout-stable empty states for power and SOC charts', () => {

@@ -45,8 +45,10 @@ describe('live charge time-to-full', () => {
       /^50% — full around \d{1,2}:\d{2}\s?(AM|PM)?$/
     );
 
-    // Charger power is echoed in the badge.
-    expect(document.getElementById('liveChargePower').textContent).toContain('3.5 kW');
+    // v2 design: the hero chip carries the state word; the live kW figure moves
+    // to the sub-line under the headline.
+    expect(document.getElementById('liveChargePower').textContent).toContain('charging');
+    expect(document.getElementById('liveChargeSub').textContent).toContain('3.5 kW');
   });
 
   it('scales the pack capacity by reported state-of-health', () => {
@@ -119,8 +121,9 @@ describe('live charge time-to-full', () => {
     const card = document.getElementById('liveChargeCard');
     expect(card.hidden).toBe(false);
     expect(document.getElementById('liveChargeEta').textContent).toBe('Topping off — nearly full');
-    // Power badge still echoes the live draw.
-    expect(document.getElementById('liveChargePower').textContent).toContain('1.4 kW');
+    // The chip reads the state; the live draw is echoed in the sub-line.
+    expect(document.getElementById('liveChargePower').textContent).toContain('charging');
+    expect(document.getElementById('liveChargeSub').textContent).toContain('1.4 kW');
   });
 });
 

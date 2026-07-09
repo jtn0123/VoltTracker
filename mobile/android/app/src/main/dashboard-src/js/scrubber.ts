@@ -117,7 +117,8 @@ import { units } from "./prefs";
   let scrubHasEff = false;
   let scrubCursors: HTMLElement[] = [];
 
-  const SCRUB_SPEED = "#ff7a45";
+  // v2 design: the scrub speed tone is the softer #ff9d6e, not full volt orange.
+  const SCRUB_SPEED = "#ff9d6e";
   const SCRUB_ELEV = "#8b94ad";
   const SCRUB_SOC = "#a48cff";
   const SCRUB_EFF = "#b8e63b";
@@ -873,8 +874,9 @@ import { units } from "./prefs";
   // (toggled on only while playing so manual drags stay responsive).
   let scrubAnim: number | null = null;
   const playBtn = el("scrubPlay");
-  const PLAY_LABEL = "▶ Play";
-  const STOP_LABEL = "■ Stop";
+  // v2 design copy: "Play route" / "Pause".
+  const PLAY_LABEL = "▶ Play route";
+  const STOP_LABEL = "❚❚ Pause";
 
   function prefersReducedMotion() {
     return Boolean(

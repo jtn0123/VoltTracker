@@ -45,25 +45,8 @@
       Connect the OBD adapter to stream live speed, power, and battery — or
       preview every screen with sample data, no car needed.
     </p>
-    <ol class="empty-hints" aria-label="How to start logging">
-      <li>
-        <b aria-hidden="true">1</b
-        ><span>Grant Bluetooth and location permissions when prompted.</span>
-      </li>
-      <li>
-        <b aria-hidden="true">2</b
-        ><span
-          >Connect your OBD adapter — or tap Scan to test the link first.</span
-        >
-      </li>
-      <li>
-        <b aria-hidden="true">3</b
-        ><span
-          >Drive: speed, power, and battery stream in live and save
-          automatically.</span
-        >
-      </li>
-    </ol>
+    <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
+         actions — no numbered how-to list. -->
     <div class="empty-state-actions">
       <button
         type="button"
@@ -262,7 +245,7 @@
     <section class="live-microcharts">
       <article class="panel live-micro">
         <header>
-          <span class="kicker">Power last 60s</span>
+          <span class="kicker">Power &#183; 60s</span>
           <span
             id="powerMicroTag"
             class="micro-tag"
@@ -275,7 +258,7 @@
       </article>
       <article class="panel live-micro">
         <header>
-          <span class="kicker">SOC this session</span>
+          <span class="kicker">SOC &#183; session</span>
           <span
             id="socMicroTag"
             class="micro-tag"

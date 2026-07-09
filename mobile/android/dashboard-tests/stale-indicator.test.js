@@ -82,7 +82,8 @@ describe('stale-tile indicator', () => {
     });
     vi.advanceTimersByTime(1100);
     expect(chip.dataset.state).toBe('live');
-    expect(label.textContent).toBe('live');
+    // The visible label appends the ~1 Hz poll cadence; data-state stays the token.
+    expect(label.textContent).toBe('live · 1 Hz');
 
     // Going quiet past the threshold flips it to "stale" (not back to waiting).
     vi.advanceTimersByTime(4000);

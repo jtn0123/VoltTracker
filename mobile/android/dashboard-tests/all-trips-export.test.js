@@ -13,12 +13,13 @@ describe('M6 — bulk all-trips CSV export', () => {
     delete window.VoltTrackerAndroid;
   });
 
-  it('renders the Export all (CSV) button in the map sheet header', async () => {
+  it('renders the Export CSV button in the map sheet header', async () => {
     await loadDashboard();
     const btn = document.getElementById('exportAllTripsBtn');
     expect(btn).toBeTruthy();
     expect(btn.dataset.action).toBe('exportAllTripsCsv');
-    expect(btn.textContent).toContain('Export all');
+    // v2 design copy: a terse "Export CSV" link (still the bulk all-trips export).
+    expect(btn.textContent).toContain('Export CSV');
   });
 
   it('clicking forwards to bridge.exportAllTripsCsv', async () => {

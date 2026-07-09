@@ -60,7 +60,8 @@ describe('browser demo stream drive/charge cycle', () => {
 
     const card = document.getElementById('liveChargeCard');
     expect(card.hidden).toBe(false);
-    expect(document.getElementById('liveChargePower').textContent).toContain('kW');
+    expect(document.getElementById('liveChargePower').textContent).toContain('charging');
+    expect(document.getElementById('liveChargeSub').textContent).toContain('kW');
     expect(document.getElementById('liveChargeEta').textContent).not.toBe('');
   });
 

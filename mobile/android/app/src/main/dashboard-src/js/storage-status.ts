@@ -1592,8 +1592,10 @@ import { prefs, units } from "./prefs";
     }, 0);
     const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
+    const costEl = el("chargeEnergyCost");
     if (total > 0 && price > 0) {
       VD.setText("chargeEnergyCost", formatMoney(chargeCostFor(sessions)));
+      if (costEl) costEl.dataset.state = "recorded";
       const rates = chargeRates();
       // Mirror chargeCostFor's per-session billing in the caption: count and
       // quote only the sessions that actually contribute energy, and name the
@@ -1618,6 +1620,7 @@ import { prefs, units } from "./prefs";
     } else {
       // Clear a previous figure so a cleared database can't flash stale cost.
       VD.setText("chargeEnergyCost", "--");
+      if (costEl) costEl.dataset.state = "empty";
       // Distinguish "no rate configured" from "rate set but no energy logged yet":
       // this else fires for both (price===0 OR total===0), and telling a user who
       // already set a $/kWh rate to "Set rate in Settings" is misleading — the cost
@@ -1679,7 +1682,23 @@ import { prefs, units } from "./prefs";
 
   // Monthly bar chart shared by the charging trend (Battery tab) and the driving
   // trend (Insights tab, via VD.buildMonthlyTrendSvg) so the two can't drift.
-  function buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string, host?: Element | null): SVGElement {
+  function buildMonthlyTrendSvg(
+    labels: string[],
+    values: number[],
+    ariaLabel: string,
+    host?: Element | null,
+    opts?: {
+      // Resolve a specific CSS accent (e.g. "--ev") instead of the view accent.
+      colorVar?: string;
+      // Full-opacity this bar, dim the rest (design "today" highlight).
+      highlightIndex?: number;
+      // Print each non-zero value above its bar.
+      showValues?: boolean;
+      valueFormat?: (v: number) => string;
+      // Draw a dashed baseline placeholder for zero-value slots.
+      dashEmpty?: boolean;
+    },
+  ): SVGElement {
     const ns = "http://www.w3.org/2000/svg";
     const w = 320;
     const h = 132;
@@ -1697,7 +1716,7 @@ import { prefs, units } from "./prefs";
     // painting Drive orange onto every tab.
     const tokens = getComputedStyle(host || document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const barColor = token("--view-accent", token("--volt", "#ff7a45"));
+    const barColor = token(opts?.colorVar || "--view-accent", token("--volt", "#ff7a45"));
     const axisColor = token("--muted", "#aaaab4");
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
     const make = (tag: string, attrs: Record<string, string | number>) =>
@@ -1720,18 +1739,38 @@ import { prefs, units } from "./prefs";
     const slot = Math.min(plotW / n, 56);
     const originX = padL + (plotW - slot * n) / 2;
     const barW = Math.max(4, Math.min(34, slot * 0.6));
+    const baselineY = padT + plotH;
     values.forEach((v, i) => {
       const cx = originX + slot * (i + 0.5);
       const barH = (v / maxV) * plotH;
-      svg.appendChild(make("rect", {
-        x: (cx - barW / 2).toFixed(1),
-        y: (padT + plotH - barH).toFixed(1),
-        width: barW.toFixed(1),
-        height: Math.max(0, barH).toFixed(1),
-        rx: 3,
-        fill: barColor,
-        "fill-opacity": 0.85,
-      }));
+      if (!(v > 0) && opts?.dashEmpty) {
+        // Design: a dashed placeholder marks a day/slot with no data.
+        svg.appendChild(make("line", {
+          x1: (cx - barW / 2).toFixed(1), x2: (cx + barW / 2).toFixed(1),
+          y1: baselineY.toFixed(1), y2: baselineY.toFixed(1),
+          stroke: barColor, "stroke-opacity": 0.4, "stroke-width": 2, "stroke-dasharray": "2 4",
+        }));
+      } else {
+        // Highlight one bar (design "today"); dim the rest. No highlight → flat 0.85.
+        const op = opts?.highlightIndex != null ? (i === opts.highlightIndex ? 1 : 0.3) : 0.85;
+        svg.appendChild(make("rect", {
+          x: (cx - barW / 2).toFixed(1),
+          y: (baselineY - barH).toFixed(1),
+          width: barW.toFixed(1),
+          height: Math.max(0, barH).toFixed(1),
+          rx: 3,
+          fill: barColor,
+          "fill-opacity": op,
+        }));
+        if (opts?.showValues && v > 0) {
+          const valLabel = make("text", {
+            x: cx.toFixed(1), y: Math.max(padT + 7, baselineY - barH - 4).toFixed(1), fill: axisColor,
+            "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+          });
+          valLabel.textContent = opts.valueFormat ? opts.valueFormat(v) : String(Math.round(v));
+          svg.appendChild(valLabel);
+        }
+      }
       const label = make("text", {
         x: cx.toFixed(1), y: (h - padB + 16).toFixed(1), fill: axisColor,
         "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
@@ -1838,18 +1877,21 @@ import { prefs, units } from "./prefs";
     if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
     if (inProgress) parts.push("charging now");
     else if (Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function") parts.push(VD.formatDuration(durationMs));
+    const energy = chargeNum(session.energyKwh);
+    // Bill this session at the rate its charger type selects: the public/DCFC
+    // rate for a public charger when one is set, else the home rate. v2 design:
+    // the estimated cost joins the meta line; the right pill stays kWh-only.
+    const rates = chargeRates();
+    const sessionRate = rateForCharger(session.chargerType, rates.home, rates.public);
+    if (Number.isFinite(energy) && energy > 0 && rates.home > 0) {
+      parts.push(formatMoney(energy * sessionRate));
+    }
     small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
     center.append(strong, small);
     const right = document.createElement("b");
-    const energy = chargeNum(session.energyKwh);
     const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
-    // Bill this session at the rate its charger type selects: the public/DCFC
-    // rate for a public charger when one is set, else the home rate.
-    const rates = chargeRates();
-    const sessionRate = rateForCharger(session.chargerType, rates.home, rates.public);
     if (Number.isFinite(energy) && energy > 0) {
-      right.textContent =
-        rates.home > 0 ? `${energy.toFixed(1)} kWh · ${formatMoney(energy * sessionRate)}` : `${energy.toFixed(1)} kWh`;
+      right.textContent = `${energy.toFixed(1)} kWh`;
     } else if (Number.isFinite(socGain) && socGain > 0) {
       right.textContent = `+${Math.round(socGain)}%`;
     } else {

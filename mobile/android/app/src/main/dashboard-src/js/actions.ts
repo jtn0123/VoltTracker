@@ -514,6 +514,18 @@ type SignalActions = {
     });
   }
 
+  // "Read 96 cells" / "Hide cells" toggle on the battery-cell card. Reveals or
+  // hides the 96-group heatmap; when opening it for the first time (no full read
+  // loaded yet) it also fires the real per-cell probe to fill the map in.
+  function toggleCellGrid(button?: BusyButton | null) {
+    const isOpen = typeof VD.isCellGridOpen === "function" && VD.isCellGridOpen();
+    const willOpen = !isOpen;
+    if (typeof VD.setCellGridOpen === "function") VD.setCellGridOpen(willOpen);
+    if (willOpen && !(typeof VD.cellGridHasFull === "function" && VD.cellGridHasFull())) {
+      cellProbeLast(button);
+    }
+  }
+
   function connectLastAdapter(button?: BusyButton | null) {
     const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
     if (!last || !String(last.address || "").trim()) {
@@ -552,6 +564,7 @@ type SignalActions = {
       case "tpmsScan": tpmsScanSelected(button); return;
       case "detailProbe": detailProbeSelected(button); return;
       case "cellProbe": cellProbeLast(button); return;
+      case "cellToggle": toggleCellGrid(button); return;
       case "connect": connectSelected(false, button); return;
       case "demo": startDemo(); return;
       case "stopDemo": stopDemo(); return;

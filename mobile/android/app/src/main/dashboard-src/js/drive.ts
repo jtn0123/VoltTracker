@@ -333,9 +333,9 @@ type ChartPoint = {
     if (!host || !canvas) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 96;
-    const padT = 16;
-    const padB = 10;
+    const h = 56; // v2 design trace height
+    const padT = 8;
+    const padB = 4;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     canvas.width = Math.max(1, Math.round(w * dpr));
     canvas.height = Math.max(1, Math.round(h * dpr));
@@ -357,32 +357,18 @@ type ChartPoint = {
     // is picked up). Mirrors the insights-panel.ts / map.ts scatter pattern. The
     // gradient/glow/wash are rgba fades derived from the resolved --volt / --text
     // channels so they track the theme instead of being dark-only literals.
-    // Resolve on the hero card (falling back to :root) so the trace inherits
-    // the X1 state-reactive --hero-accent — the stroke tints orange/green/
-    // neutral together with the power readout below it.
+    // v2 design: the trace is always volt orange (the design's fixed #ff7a45),
+    // resolved from the theme token so light mode keeps its darker orange.
     const tokens = getComputedStyle(el("liveHeroCard") || document.documentElement);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const lineColor = token("--line", "rgba(255, 255, 255, 0.06)"); // gridlines
     const mutedColor = token("--muted", "#5d5e69"); // empty-state label
-    const voltColor = token("--hero-accent", token("--volt", "#ff7a45")); // trace stroke
-    const dotColor = token("--hero-accent-soft", token("--volt-soft", "#ffd0b8")); // now-cursor dot
-    const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // gradient + glow base
-    const textRgb = rgbChannels(token("--text", "#ffffff"), "255, 255, 255"); // bg wash base
+    const voltColor = token("--volt", "#ff7a45"); // trace stroke
+    const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // fill base
 
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = `rgba(${textRgb}, 0.012)`;
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = lineColor;
-    ctx.lineWidth = 1;
-    for (let i = 1; i < 4; i += 1) {
-      const y = padT + (i / 4) * (h - padT - padB);
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(w, y);
-      ctx.stroke();
-    }
+    // v2 design: a bare full-bleed sparkline — no gridlines or background wash.
     if (samples.length < 2) {
       ctx.fillStyle = mutedColor;
       ctx.font = "11px ui-monospace, monospace";
@@ -391,33 +377,36 @@ type ChartPoint = {
       return;
     }
 
-    // Autoscale floor must match the unit of `samples` (km/h in metric, mph in imperial)
-    // so the trace scales consistently across unit systems. 64 km/h ≈ 40 mph.
-    const axisFloor = metric ? 64 : 40;
-    const maxAxis = Math.max(axisFloor, ...samples) * 1.12;
+    // v2 design sparkline scaling: normalize to the visible window's min..max
+    // (not 0..axis) so the wave fills the band and speed changes read large.
+    // A floor on the span keeps a steady cruise from rendering as noise.
+    const lo = Math.min(...samples);
+    const hi = Math.max(...samples);
+    const minSpan = metric ? 16 : 10; // don't amplify jitter below ~10 mph of range
+    const span = Math.max(hi - lo, minSpan);
+    const base = lo - (span - (hi - lo)) / 2;
     const cap = Math.max(12, samples.length);
     const stride = w / Math.max(1, cap - 1);
     const offset = w - (samples.length - 1) * stride;
     const points: ChartPoint[] = samples.map((sample: number, index: number) => ({
       x: offset + index * stride,
-      y: padT + (1 - sample / maxAxis) * (h - padT - padB)
+      y: padT + (1 - (sample - base) / span) * (h - padT - padB)
     }));
     const firstPoint = points[0];
     const latest = points[points.length - 1];
     if (!firstPoint || !latest) return;
 
-    const gradient = ctx.createLinearGradient(0, padT, 0, h - padB);
-    gradient.addColorStop(0, `rgba(${voltRgb}, 0.2)`);
-    gradient.addColorStop(1, `rgba(${voltRgb}, 0)`);
+    // v2 design sparkline: a flat translucent fill down to the canvas base and
+    // a plain 2px stroke — no glow, no now-dot (the trace itself is the story).
     ctx.beginPath();
     points.forEach((point, index) => {
       if (index === 0) ctx.moveTo(point.x, point.y);
       else ctx.lineTo(point.x, point.y);
     });
-    ctx.lineTo(latest.x, h - padB);
-    ctx.lineTo(firstPoint.x, h - padB);
+    ctx.lineTo(latest.x, h);
+    ctx.lineTo(firstPoint.x, h);
     ctx.closePath();
-    ctx.fillStyle = gradient;
+    ctx.fillStyle = `rgba(${voltRgb}, 0.14)`;
     ctx.fill();
 
     ctx.beginPath();
@@ -426,18 +415,10 @@ type ChartPoint = {
       else ctx.lineTo(point.x, point.y);
     });
     ctx.strokeStyle = voltColor;
-    ctx.lineWidth = 2.4;
+    ctx.lineWidth = 2;
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.shadowColor = `rgba(${voltRgb}, 0.38)`;
-    ctx.shadowBlur = 12;
     ctx.stroke();
-    ctx.shadowBlur = 0;
-
-    ctx.beginPath();
-    ctx.arc(latest.x, latest.y, 3.2, 0, Math.PI * 2);
-    ctx.fillStyle = dotColor;
-    ctx.fill();
   }
 
   // ----- power bars ---------------------------------------------------------
@@ -452,7 +433,7 @@ type ChartPoint = {
     if (!host) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 86;
+    const h = 58; // v2 design microchart height
     const padT = 14;
     const padB = 10;
     const samples = state.powerHistory || [];
@@ -521,14 +502,6 @@ type ChartPoint = {
 
   // ----- SOC trace ----------------------------------------------------------
 
-  // Typographic minus matches the +/- glyph advance width — same trick the Map
-  // scrubber uses to keep the SOC delta chip from twitching as it crosses zero.
-  function fmtSocDelta(v: number) {
-    const abs = Math.abs(v);
-    if (abs < 0.05) return "+0.0";
-    return (v < 0 ? "−" : "+") + abs.toFixed(1);
-  }
-
   // Same broadcast-churn memo as drawLivePowerBars — the SOC trace is ~95 spans.
   let lastSocTraceSig = "";
   function drawLiveSocTrace() {
@@ -536,7 +509,7 @@ type ChartPoint = {
     if (!host) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 86;
+    const h = 58; // v2 design microchart height
     const padT = 14;
     const padB = 12;
     const samples = state.socHistory || [];
@@ -611,63 +584,18 @@ type ChartPoint = {
     host.replaceChildren(chart);
   }
 
-  // Update the SOC micro-card header with the current value and a delta-from-
-  // session-start chip. Lives outside the SVG so we can use real text + CSS.
-  function renderSocMicroHeader() {
-    const tag = el("socMicroTag");
-    if (!tag) return;
-    const tm = state.telemetry || {};
-    const current = tm.soc == null || tm.soc === "" ? NaN : Number(tm.soc);
-    // Null-safe: a null baseline (fresh WebView / pre-first-sample) must take the
-    // "no baseline" branch below — Number(null) === 0 would fake a full Δ gain.
-    const start = state.sessionStartSoc == null ? NaN : Number(state.sessionStartSoc);
-    if (!Number.isFinite(current)) {
-      tag.textContent = "%";
-      setDataTone(tag, "idle");
-      return;
-    }
-    if (!Number.isFinite(start)) {
-      tag.textContent = Math.round(current) + "%";
-      setDataTone(tag, "idle");
-      return;
-    }
-    const delta = current - start;
-    tag.textContent = Math.round(current) + "% · Δ " + fmtSocDelta(delta) + "%";
-    // Tone: meaningful drop = warn, gain (regen / charging) = ok, drift = idle.
-    setDataTone(tag, delta <= -0.5 ? "warn" : delta >= 0.5 ? "ok" : "idle");
-  }
-
   // ----- top-level driver ---------------------------------------------------
 
-  // Update the Power micro-card header with the current value, colored by
-  // drive/regen/coast — mirrors the .power-state vocabulary above.
-  function renderPowerMicroHeader() {
-    const tag = el("powerMicroTag");
-    if (!tag) return;
-    const tm = state.telemetry || {};
-    const v = tm.powerKw == null || tm.powerKw === "" ? NaN : Number(tm.powerKw);
-    if (!Number.isFinite(v)) {
-      tag.textContent = "kW";
-      setDataTone(tag, "idle");
-      return;
-    }
-    // Match the existing thresholds in telemetry.js updateLiveUi() so the
-    // tag tone is consistent with #powerDetail.
-    const tone = v < -0.5 ? "regen" : v > 0.5 ? "drive" : "coast";
-    const abs = Math.abs(v);
-    const sign = v < -0.05 ? "−" : "+";
-    tag.textContent = sign + abs.toFixed(1) + " kW";
-    setDataTone(tag, tone);
-  }
+  // v2 design: the micro-card corner tags are static unit labels ("kW" / "%")
+  // baked into the markup — the old live value/delta chips were app additions
+  // the design doesn't have, and the values already live in the hero above.
 
   function renderDriveLive() {
     renderDriveNowChips();
     renderDriveSourceBadge();
     drawLiveSpeedTrace();
     drawLivePowerBars();
-    renderPowerMicroHeader();
     drawLiveSocTrace();
-    renderSocMicroHeader();
   }
 
   // Resize redraws — drop the cached host widths first so the redraw measures

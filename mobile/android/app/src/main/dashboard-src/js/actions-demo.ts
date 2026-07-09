@@ -53,7 +53,9 @@ const DEMO_CHARGER_KW = 7.2;
 // repeats forever instead of drifting into a cap and plateauing there.
 const DEMO_CHARGE_SOC_PER_S = 0.12;
 const DEMO_DRIVE_SOC_PER_S = 0.06;
-const DEMO_SOC_START = 77.8;
+// Starts the drive-phase sawtooth at ~65% so the hero SOC reads the design
+// demo's ~63% mid-drive (declines to ~61% before the charge window refills it).
+const DEMO_SOC_START = 64.8;
 
 export function runBrowserDemoStream(
   VD: VoltDashboard,
@@ -80,9 +82,11 @@ export function runBrowserDemoStream(
     if (!charging) driveT += 1;
     const gas = !charging && Math.floor(driveT / 30) % 2 === 1;
     state.mode = gas ? "gas" : "ev";
+    // EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
+    // mostly drive with regen dips, peaking ~25 kW.
     const powerKw = charging ? 0
       : gas ? 30 + Math.sin(driveT / 3) * 9
-      : 9 + Math.sin(driveT / 2.2) * 22;
+      : 6 + 14 * Math.sin(driveT / 3.1) + 5 * Math.sin(driveT / 1.3);
     // 0 while driving (not omitted: samples merge into state.telemetry, so a
     // stale charger reading from the last charge window would otherwise pin
     // the live charge card open forever).
@@ -92,13 +96,19 @@ export function runBrowserDemoStream(
     const routeDrift = Math.sin(driveT / 40);
     const lat = 34.11872 + routeDrift * 0.004;
     const lng = -118.30064 - Math.abs(routeDrift) * 0.012;
-    const speedKph = charging ? 0 : Math.round(54 + 23 * Math.sin(driveT / 3.4));
+    // Speed follows the v2 design prototype's demo series (34 + 9sin + 4sin mph,
+    // converted to kph) — a gentle 25–47 mph urban band.
+    const speedKph = charging
+      ? 0
+      : Math.round((34 + 9 * Math.sin(driveT / 4.2) + 4 * Math.sin(driveT / 1.7)) * 1.609);
     const rpm = gas ? Math.round(1260 + 420 * Math.sin(driveT / 2.1)) : 0;
-    const coolantC = Math.round(82 + 4 * Math.sin(t / 8));
-    const loadPct = charging ? 4 : Math.round(34 + 18 * Math.sin(driveT / 4.4));
-    const throttlePct = charging ? 0 : Math.round(18 + 14 * Math.sin(driveT / 2.7));
-    const voltage = charging ? 14.2 : 13.8;
-    // Continuous periodic sawtooth (74.2..77.8), derived from the cycle phase
+    // 80 °C = the design's steady 176 °F coolant.
+    const coolantC = Math.round(80 + Math.sin(t / 8));
+    // Throttle/load track the design's tile formulas (14+9sin / 20+7sin).
+    const loadPct = charging ? 4 : Math.round(20 + 7 * Math.sin(driveT / 3.3));
+    const throttlePct = charging ? 0 : Math.round(14 + 9 * Math.sin(driveT / 2.2));
+    const voltage = 14.2;
+    // Continuous periodic sawtooth (61.2..64.8), derived from the cycle phase
     // rather than accumulated — always below the 100% default target, so the
     // charge hero stays visible for the whole window. Mirrors demoSoc() in
     // DemoPollingLoop.kt.
@@ -132,10 +142,15 @@ export function runBrowserDemoStream(
       throttlePct,
       voltage,
       soc,
-      // °C, matching DemoPollingLoop.kt's 24.0 + sin(t/8) — telemetry.ts renders
-      // batteryTemp via units.tempText which converts °C→°F when needed, so a
-      // Fahrenheit-shaped value here would show as ~162 °F pack temp.
-      batteryTemp: 24 + Math.sin(t / 8),
+      // °C — 22.8 °C reads as the design demo's steady 73 °F pack temp.
+      // telemetry.ts renders batteryTemp via units.tempText (°C→°F when needed).
+      batteryTemp: 22.8 + 0.3 * Math.sin(t / 8),
+      // GPS fix quality for the design's "±4 m" GPS tile (±13 ft imperial).
+      accuracyM: 4,
+      // Remaining EV range, SOC-proportional off a ~66 km full-charge range —
+      // at the demo's ~63% SOC this reads "≈ 26 mi EV range" under the SOC
+      // number and in the enhanced-signals card, matching the design demo.
+      evDistanceThisCycleKm: Number(((soc / 100) * 66).toFixed(1)),
       minCellVoltage,
       maxCellVoltage,
       cellBalanceMv: cellSpreadMv,

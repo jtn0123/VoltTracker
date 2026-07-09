@@ -1,4 +1,4 @@
-  /* ===========================================================================
+/* ===========================================================================
      screens.css — per-tab / per-screen layouts (Trips, Map, Charge, Insights,
      Settings, the floating bottom nav). Builds on the reusable pieces in
      components.css; colors come from the base.css token palette.
@@ -28,2551 +28,2848 @@
      (max-width: 340px), (prefers-color-scheme: light).
      =========================================================================== */
 
-  /* ===== 1. Trip detail & route preview SVG ===== */
+/* ===== 1. Trip detail & route preview SVG ===== */
 
-  .detail-grid {
-    display: grid;
-    gap: var(--space-md);
-    min-width: 0;
-  }
+.detail-grid {
+  display: grid;
+  gap: var(--space-md);
+  min-width: 0;
+}
 
-  .route-box {
-    position: relative;
-    height: 150px;
-    margin-top: 12px;
-    border-radius: 14px;
-    overflow: hidden;
-    background:
-      linear-gradient(135deg, rgba(93,166,120,0.2), var(--surface-chip-strong)),
-      repeating-linear-gradient(24deg, var(--line-soft) 0 1px, transparent 1px 24px);
-  }
+.route-box {
+  position: relative;
+  height: 150px;
+  margin-top: 12px;
+  border-radius: 14px;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      135deg,
+      rgba(93, 166, 120, 0.2),
+      var(--surface-chip-strong)
+    ),
+    repeating-linear-gradient(
+      24deg,
+      var(--line-soft) 0 1px,
+      transparent 1px 24px
+    );
+}
 
-  .real-trip-detail .card-head {
-    align-items: start;
-  }
+.real-trip-detail .card-head {
+  align-items: start;
+}
 
-  .real-trip-detail .link-btn {
-    padding: 6px 10px;
-    border: 1px solid rgba(var(--volt-rgb), 0.28);
-    border-radius: 999px;
-    background: rgba(var(--volt-rgb), 0.08);
-    color: var(--soft);
-    font-weight: 750;
-  }
+.real-trip-detail .link-btn {
+  padding: 6px 10px;
+  border: 1px solid rgba(var(--volt-rgb), 0.28);
+  border-radius: 999px;
+  background: rgba(var(--volt-rgb), 0.08);
+  color: var(--soft);
+  font-weight: 750;
+}
 
-  .real-trip-detail .link-btn:disabled {
-    opacity: 0.5;
-  }
+.real-trip-detail .link-btn:disabled {
+  opacity: 0.5;
+}
 
-  /* ===== 2. Empty / no-route states ===== */
+/* ===== 2. Empty / no-route states ===== */
 
-  /* Context-aware "no route" state: title + reason + optional enable-location CTA. */
-  .route-empty-rich {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-    padding: 0 22px;
-    font-family: inherit;
-    text-align: center;
-  }
+/* Context-aware "no route" state: title + reason + optional enable-location CTA. */
+.route-empty-rich {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 0 22px;
+  font-family: inherit;
+  text-align: center;
+}
 
-  .route-empty-rich .route-empty-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text);
-  }
+.route-empty-rich .route-empty-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
 
-  .route-empty-rich .route-empty-sub {
-    font-size: 12px;
-    line-height: 1.4;
-    color: var(--muted);
-  }
+.route-empty-rich .route-empty-sub {
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted);
+}
 
-  .route-empty-rich .route-empty-cta {
-    margin-top: 4px;
-    min-height: var(--touch-min-dense);
-    padding: 0 18px;
-    border: 0;
-    border-radius: 999px;
-    background: var(--volt);
-    color: var(--on-volt);
-    font-size: 13px;
-    font-weight: 800;
-    cursor: pointer;
-  }
+.route-empty-rich .route-empty-cta {
+  margin-top: 4px;
+  min-height: var(--touch-min-dense);
+  padding: 0 18px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--volt);
+  color: var(--on-volt);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
 
-  .map-layout {
-    display: grid;
-    gap: var(--space-md);
-  }
+.map-layout {
+  display: grid;
+  gap: var(--space-md);
+}
 
-  .map-card {
-    padding: 0;
-    overflow: hidden;
-    border: 0;
-  }
+.map-card {
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+}
 
-  .map-card.is-fullscreen {
-    position: fixed;
-    z-index: 80;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-    border-radius: 0;
-    border: 0;
-    background:
-      radial-gradient(620px 430px at 76% -120px, var(--bg-glow), transparent 62%),
-      var(--bg);
-  }
+.map-card.is-fullscreen {
+  position: fixed;
+  z-index: 80;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: max(12px, env(safe-area-inset-top))
+    max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  border-radius: 0;
+  border: 0;
+  background:
+    radial-gradient(620px 430px at 76% -120px, var(--bg-glow), transparent 62%),
+    var(--bg);
+}
 
-  .map-card.is-fullscreen .map-frame {
-    flex: 1;
-    min-height: 0;
-    height: auto;
-    border-radius: 14px;
-  }
+.map-card.is-fullscreen .map-frame {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+  border-radius: 14px;
+}
 
-  .map-frame {
-    position: relative;
-    height: var(--map-height);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    background: var(--surface-map);
-  }
+.map-frame {
+  position: relative;
+  height: var(--map-height);
+  /* v2 design: the map is a full card — hairline border + layered depth. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--surface-map);
+  box-shadow: var(--shadow-card);
+}
 
-  .map-canvas {
-    position: absolute;
-    inset: 0;
-  }
+.map-canvas {
+  position: absolute;
+  inset: 0;
+}
 
-  .map-tile-error {
-    position: absolute;
-    z-index: 1250;
-    left: 12px;
-    right: 12px;
-    bottom: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 9px 10px 9px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--surface-overlay);
-    color: var(--soft);
-    box-shadow: 0 10px 24px var(--shadow-soft);
-    backdrop-filter: blur(10px);
-    font-size: 12px;
-  }
+.map-tile-error {
+  position: absolute;
+  z-index: 1250;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-overlay);
+  color: var(--soft);
+  box-shadow: 0 10px 24px var(--shadow-soft);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+}
 
-  .map-tile-error[hidden] {
-    display: none;
-  }
+.map-tile-error[hidden] {
+  display: none;
+}
 
-  .map-tile-error .link-btn {
-    flex: none;
-    min-height: var(--touch-min-dense);
-    padding: 0 10px;
-  }
+.map-tile-error .link-btn {
+  flex: none;
+  min-height: var(--touch-min-dense);
+  padding: 0 10px;
+}
 
-  .map-overlay-top {
-    position: absolute;
-    z-index: 1200;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-    pointer-events: none;
-  }
+.map-overlay-top {
+  position: absolute;
+  z-index: 1200;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  pointer-events: none;
+}
 
-  .map-overlay-top > * {
-    pointer-events: auto;
-  }
+.map-overlay-top > * {
+  pointer-events: auto;
+}
 
-  /* ===== 3. Map tab chrome (layer pills, route-flow, Leaflet controls, legend) ===== */
+/* ===== 3. Map tab chrome (layer pills, route-flow, Leaflet controls, legend) ===== */
 
-  /* One selection grammar: soft tint + hairline (solid = primary only). */
-  .map-layer-tabs button.is-active {
-    border: 1px solid rgba(var(--tab-accent-rgb), 0.45);
-    background: rgba(var(--tab-accent-rgb), 0.16);
-    color: var(--tab-accent-soft);
-  }
+/* v2 design: the active segment is a borderless soft-blue fill (no hairline). */
+.map-layer-tabs button.is-active {
+  border: 0;
+  background: rgba(var(--tab-accent-rgb), 0.18);
+  color: var(--tab-accent-soft);
+}
 
-  .map-layer-tabs button.is-active b {
-    background: rgba(var(--tab-accent-rgb), 0.25);
-    color: var(--tab-accent-soft);
-  }
+.map-layer-tabs button.is-active b {
+  background: rgba(var(--tab-accent-rgb), 0.25);
+  color: var(--tab-accent-soft);
+}
 
-  /* Direction-of-travel: round dashes that flow start -> end along the route
+/* Direction-of-travel: round dashes that flow start -> end along the route
      (chronological draw order), so "which way" reads at a glance. Kept thin and
      translucent so it layers over the route line without overpowering it. */
+.route-flow {
+  stroke-dasharray: 1 14;
+  stroke-linecap: round;
+  animation: route-flow-move 1.15s linear infinite;
+}
+
+@keyframes route-flow-move {
+  to {
+    stroke-dashoffset: -30;
+  }
+}
+
+/* The live "head" marker (current position) gently pulses a soft glow. */
+.live-head-pulse {
+  animation: live-head-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-head-pulse {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 1px rgba(var(--map-accent-rgb), 0.7));
+  }
+  50% {
+    filter: drop-shadow(0 0 6px rgba(var(--map-accent-rgb), 0.95));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
   .route-flow {
-    stroke-dasharray: 1 14;
-    stroke-linecap: round;
-    animation: route-flow-move 1.15s linear infinite;
+    animation: none;
   }
-
-  @keyframes route-flow-move {
-    to {
-      stroke-dashoffset: -30;
-    }
-  }
-
-  /* The live "head" marker (current position) gently pulses a soft glow. */
   .live-head-pulse {
-    animation: live-head-pulse 1.6s ease-in-out infinite;
+    animation: none;
   }
+}
 
-  @keyframes live-head-pulse {
-    0%,
-    100% {
-      filter: drop-shadow(0 0 1px rgba(var(--map-accent-rgb), 0.7));
-    }
-    50% {
-      filter: drop-shadow(0 0 6px rgba(var(--map-accent-rgb), 0.95));
-    }
-  }
+/* One legend per layer (v2): each explains exactly the colors it draws. */
+.map-frame[data-layer="heat"] .map-legend-heat,
+.map-frame[data-layer="eff"] .map-legend-eff,
+.map-frame[data-layer="routes"] .map-legend-routes,
+.map-frame[data-layer="stops"] .map-legend-stops {
+  display: flex;
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    .route-flow {
-      animation: none;
-    }
-    .live-head-pulse {
-      animation: none;
-    }
-  }
+/* ===== 4. Map sheet & route list ===== */
 
-  /* One legend per layer (v2): each explains exactly the colors it draws. */
-  .map-frame[data-layer="heat"] .map-legend-heat,
-  .map-frame[data-layer="eff"] .map-legend-eff,
-  .map-frame[data-layer="routes"] .map-legend-routes,
-  .map-frame[data-layer="stops"] .map-legend-stops {
-    display: flex;
-  }
+/* v2 design: full card treatment (20px radius, 16/20 padding, layered depth). */
+.map-sheet {
+  padding: 16px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(180deg, var(--sheen-soft), transparent 50%),
+    var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
 
-  /* ===== 4. Map sheet & route list ===== */
+.map-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  .map-sheet {
-    padding: var(--card-pad-tight) var(--card-pad);
-    border: 1px solid var(--line);
-    border-radius: 16px;
-    background:
-      linear-gradient(180deg, var(--sheen-soft), transparent 50%),
-      var(--surface-raised);
-  }
+.map-sheet-head h2 {
+  margin-top: 1px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  /* v2 design: 20px display headline (Space Grotesk), like the drive name. */
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
 
-  .map-sheet-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
+/* Point-count badge dot tints to the map accent. */
+.map-sheet-head .badge .dot {
+  background: var(--map-accent);
+  color: var(--map-accent);
+}
 
-  .map-sheet-head h2 {
-    margin-top: 1px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.01em;
-  }
+/* v2 design: a 6-track grid — three stats span 2 tracks on the first row,
+     Energy/Est-cost span 3 each on the second, so both rows fill evenly.
+     Divider by gap alone (no vertical hairlines between cells). */
+.map-sheet-stats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  /* Point-count badge dot tints to the map accent. */
-  .map-sheet-head .badge .dot {
-    background: var(--map-accent);
-    color: var(--map-accent);
-  }
+.map-sheet-stats div {
+  min-width: 0;
+  grid-column: span 2;
+}
 
-  .map-sheet-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    row-gap: 10px;
-    margin-top: 9px;
-    padding-top: 9px;
-    border-top: 1px solid var(--line);
-  }
+.map-sheet-stats div:nth-child(4),
+.map-sheet-stats div:nth-child(5) {
+  grid-column: span 3;
+}
 
-  .map-sheet-stats div {
-    min-width: 0;
-    padding: 0 12px;
-  }
-
-  .map-sheet-stats div + div {
-    border-left: 1px solid var(--line);
-  }
-
-  /* Row starts (1st, 4th, ...) drop the divider + lead padding — the stats
+/* Row starts (1st, 4th, ...) drop the divider + lead padding — the stats
      grid wraps to a second row now that Energy/Est. cost joined it (v2). */
-  .map-sheet-stats div:nth-child(3n + 1) {
-    border-left: 0;
-    padding-left: 0;
-  }
+.map-sheet-stats div:nth-child(3n + 1) {
+  border-left: 0;
+  padding-left: 0;
+}
 
-  .map-sheet-stats strong {
-    display: block;
-    margin-top: 3px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 17px;
-    font-variant-numeric: tabular-nums;
-  }
+.map-sheet-stats strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
 
-  /* Scoped numeral bumps: Map + Insights want 19px, but the shared Drive route
+/* Scoped numeral bumps: Map + Insights want 19px, but the shared Drive route
      sheet must stay at the 17px base above. */
-  .view[data-view="map"] .map-sheet .map-sheet-stats strong {
-    font-family: var(--font-display);
-    font-size: 19px;
-  }
+.view[data-view="map"] .map-sheet .map-sheet-stats strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+}
 
-  .insights-sheet .map-sheet-stats strong {
-    font-family: var(--font-display);
-    font-size: 19px;
-  }
+.insights-sheet .map-sheet-stats strong {
+  font-family: var(--font-display);
+  font-size: 19px;
+}
 
-  /* Insights lifetime grid sits on whitespace: no top hairline, no vertical
+/* Insights lifetime grid sits on whitespace: no top hairline, no vertical
      dividers (scoped so the Map route sheet keeps its top hairline). */
-  .insights-sheet .map-sheet-stats {
-    border-top: none;
-    padding-top: 0;
-    margin-top: 10px;
-    gap: 0 16px;
-  }
+.insights-sheet .map-sheet-stats {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 10px;
+  gap: 0 16px;
+}
 
-  .insights-sheet .map-sheet-stats div {
-    padding: 0;
-  }
+.insights-sheet .map-sheet-stats div {
+  padding: 0;
+}
 
-  .insights-sheet .map-sheet-stats div + div {
-    border-left: none;
-    padding-left: 0;
-  }
+.insights-sheet .map-sheet-stats div + div {
+  border-left: none;
+  padding-left: 0;
+}
 
-  /* Second lifetime stat row (v2: the old "More lifetime stats" card folded
+/* Second lifetime stat row (v2: the old "More lifetime stats" card folded
      in): a quiet hairline separates it from the headline totals. */
-  .insights-sheet .insights-sheet-more {
-    margin-top: 12px;
-    padding-top: 10px;
-    border-top: 1px solid var(--line-soft);
-  }
+.insights-sheet .insights-sheet-more {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  /* Temperature-vs-range scatter footnote. */
-  .temp-range-footnote {
-    display: block;
-    margin-top: 8px;
-  }
+/* Temperature-vs-range scatter footnote. */
+.temp-range-footnote {
+  display: block;
+  margin-top: 8px;
+}
 
-  /* Insights lifetime card demotes its heading to a micro-label (Map keeps the
+/* Insights lifetime card demotes its heading to a micro-label (Map keeps the
      20px display h2 above). */
-  .insights-sheet .map-sheet-head h2 {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0;
-    color: var(--muted);
-  }
+.insights-sheet .map-sheet-head h2 {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--muted);
+}
 
-  /* Insights Vehicle card summary paragraph: kept (holds the empty-state value),
+/* Insights Vehicle card summary paragraph: kept (holds the empty-state value),
      just quieted. */
-  #vehicleCard #vehicleSummary {
-    font-size: 12px;
-    margin-top: 4px;
-  }
+#vehicleCard #vehicleSummary {
+  font-size: 12px;
+  margin-top: 4px;
+}
 
-  /* Elevate the Insights lifetime card to match its neighbors (radius + padding
+/* Elevate the Insights lifetime card to match its neighbors (radius + padding
      come from the base .map-sheet rule above). */
-  .insights-sheet {
-    box-shadow: 0 14px 40px var(--shadow-soft);
-  }
+.insights-sheet {
+  box-shadow: var(--shadow-card);
+}
 
-  /* EV-vs-gas savings row (Insights). Sits below the lifetime stat grid. */
-  .map-sheet-savings {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-  }
+/* v2 design: the Lifetime card is one stat row (Distance / Drive time / Top
+     speed) + the savings strip. The second row (Longest/GPS/Electric) and the
+     Vehicle card's explainer copy are app extras the design doesn't show —
+     kept in the DOM, hidden to match. */
+.insights-sheet-more,
+#vehicleSummary,
+#vehicleCard .vehicle-extra,
+#maintenanceList .maint-empty {
+  display: none;
+}
 
-  .map-sheet-savings strong {
-    display: block;
-    margin-top: 5px;
-    font-size: 22px;
-    font-variant-numeric: tabular-nums;
-    color: var(--ok, var(--soft));
-  }
+/* v2 design: the Lifetime stat row has no top divider (the kicker line above
+     already separates it) and Insights uses a plain 3-up split. */
+.insights-sheet .map-sheet-stats {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 10px;
+  padding-top: 0;
+  border-top: 0;
+}
 
-  .map-sheet-savings small {
-    display: block;
-    margin-top: 4px;
-  }
+.insights-sheet .map-sheet-stats div {
+  grid-column: auto;
+}
 
-  /* Recorded-drive rows as individual rounded inset cards with a blue distance
+/* EV-vs-gas savings (Insights). v2 design: an inset dark card — kicker and
+     value stacked on top, then the note on the left with the Settings pill on
+     the right. */
+.map-sheet-savings {
+  display: grid;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--inset);
+}
+
+.map-sheet-savings strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ev);
+}
+
+.map-sheet-savings small {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 0;
+  text-align: left;
+}
+
+/* v2 design: a computed per-drive cost reads soft green in the map sheet. */
+#mapCost[data-state="recorded"] {
+  color: var(--ev-soft);
+}
+
+/* v2 design: the Vehicle card's Add-maintenance link speaks the Insights
+   purple accent, not the global link blue. */
+#addMaintenanceBtn {
+  color: var(--mixed-soft);
+}
+
+/* v2 design: the Settings tap-through in the savings row is a purple pill
+     (the Insights accent), not a bare text link. */
+.map-sheet-savings .link-btn {
+  margin: -6px 0 -6px 6px;
+  padding: 7px 12px;
+  border: 1px solid rgba(var(--mixed-rgb), 0.32);
+  border-radius: 999px;
+  background: rgba(var(--mixed-rgb), 0.08);
+  color: var(--mixed-soft);
+}
+
+/* Recorded-drive rows as individual rounded inset cards with a blue distance
      pill; scoped to .map-list so Charge/Insights lists are untouched. */
-  .map-list .history-row {
-    border: 1px solid var(--line-soft);
-    border-top: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    background: var(--inset);
-  }
+.map-list .history-row {
+  border: 1px solid var(--line-soft);
+  border-top: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--inset);
+}
 
-  .map-list .history-row > b {
-    justify-self: end;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(var(--map-accent-rgb), 0.12);
-    color: var(--map-accent);
-    font-size: 12px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
+.map-list .history-row > b {
+  justify-self: end;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(var(--map-accent-rgb), 0.12);
+  /* Design pill ink: the soft accent (#c7edff), not full map blue. */
+  color: var(--accent-soft);
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
-  .map-list .history-row.is-active {
-    border-radius: var(--radius-md);
-    border: 1px solid rgba(var(--volt-rgb), 0.28);
-    background: rgba(var(--volt-rgb), 0.10);
-  }
+.map-list .history-row.is-active {
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(var(--volt-rgb), 0.28);
+  background: rgba(var(--volt-rgb), 0.1);
+}
 
-  /* Recorded-drives control cluster flattened so the drive rows lead (kept, not
+/* Recorded-drives control cluster flattened so the drive rows lead (kept, not
      removed — the app is richer than the mock here). */
-  .map-list-controls {
-    display: grid;
-    gap: 8px;
-    margin: 6px 0 12px;
-  }
+.map-list-controls {
+  display: grid;
+  gap: 8px;
+  margin: 6px 0 12px;
+}
 
-  .list-card .status-copy {
-    font-size: 11px;
-    color: var(--muted);
-    opacity: 0.8;
-  }
+.list-card .status-copy {
+  font-size: 11px;
+  color: var(--muted);
+  opacity: 0.8;
+}
 
-  .map-list-search input {
-    background: var(--inset);
-    border-color: var(--line);
-  }
+.map-list-search input {
+  background: var(--inset);
+  border-color: var(--line);
+}
 
 /* (Section 5 "Energy & charge rows" removed: dead styles — no markup or
      TS references remained.) */
 
-  .energy-rows b {
-    text-align: right;
-    white-space: nowrap;
-  }
+.energy-rows b {
+  text-align: right;
+  white-space: nowrap;
+}
 
-  .energy-rows i {
-    display: block;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--volt);
-  }
+.energy-rows i {
+  display: block;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--volt);
+}
 
-  .charge-grid {
-    display: grid;
-    /* Three tiles, one row (v2: Plug-ins / Peak power / Est. cost). */
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-  }
+.charge-grid {
+  display: grid;
+  /* Three tiles, one row (v2: Plug-ins / Peak power / Est. cost). */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
 
-  /* On the narrowest phones the two KPI columns get cramped, so stack to a
+/* On the narrowest phones the two KPI columns get cramped, so stack to a
      single column (mirrors how .state-grid drops a column at narrow widths). */
-  /* Charge KPIs stay two-up on narrow phones: four stacked full-width
+/* Charge KPIs stay two-up on narrow phones: four stacked full-width
      cards for four small numbers doubled the scroll for no legibility win. */
 
-  .session-badge {
-    display: inline-flex;
-    align-items: center;
-    min-height: 26px;
-    padding: 0 9px;
-    border-radius: 999px;
-    background: rgba(var(--volt-rgb), 0.1);
-    color: var(--volt);
-    font-size: 11px;
-    font-weight: 700;
-  }
+.session-badge {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: rgba(var(--volt-rgb), 0.1);
+  color: var(--volt);
+  font-size: 11px;
+  font-weight: 700;
+}
 
-  /* ===== 6. Maintenance list & tags ===== */
+/* ===== 6. Maintenance list & tags ===== */
 
-  .maintenance-list {
-    display: grid;
-    gap: 8px;
-    margin-top: 12px;
-  }
+.maintenance-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
 
-  .maintenance-list .real-insight-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.maintenance-list .real-insight-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  /* Maintenance status as a pill (matches the app's badge language) instead of
+/* Maintenance status as a pill (matches the app's badge language) instead of
      a bare bold word. watch = warn, pending = the Insights purple, manual = neutral. */
-  .maint-tag {
-    flex: 0 0 auto;
-    padding: 5px 11px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--fill);
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+.maint-tag {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
-  .maint-tag[data-tag="watch"] {
-    border-color: rgba(var(--warn-rgb), 0.3);
-    background: rgba(var(--warn-rgb), 0.1);
-    color: var(--warn-soft);
-  }
+.maint-tag[data-tag="watch"] {
+  border-color: rgba(var(--warn-rgb), 0.3);
+  background: rgba(var(--warn-rgb), 0.1);
+  color: var(--warn-soft);
+}
 
-  .maint-tag[data-tag="pending"] {
-    border-color: rgba(var(--mixed-rgb), 0.3);
-    background: rgba(var(--mixed-rgb), 0.1);
-    color: var(--mixed-soft);
-  }
+.maint-tag[data-tag="pending"] {
+  border-color: rgba(var(--mixed-rgb), 0.3);
+  background: rgba(var(--mixed-rgb), 0.1);
+  color: var(--mixed-soft);
+}
 
-  /* Per-entry "Remove" on a real maintenance row (M5). Quiet by default; reddens on press so a
+/* Per-entry "Remove" on a real maintenance row (M5). Quiet by default; reddens on press so a
      destructive tap reads as destructive without shouting at rest. */
-  .maint-del {
-    flex: 0 0 auto;
-    padding: 5px 11px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--fill);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-    cursor: pointer;
-    white-space: nowrap;
-  }
+.maint-del {
+  flex: 0 0 auto;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
 
-  .maint-del:active {
-    border-color: rgba(var(--bad-rgb), 0.4);
-    background: rgba(var(--bad-rgb), 0.12);
-    color: var(--bad-soft);
-  }
+.maint-del:active {
+  border-color: rgba(var(--bad-rgb), 0.4);
+  background: rgba(var(--bad-rgb), 0.12);
+  color: var(--bad-soft);
+}
 
-  /* Empty-state guidance row (M5): no logged entry yet, so it reads as a prompt, not history. */
-  .maintenance-list .maint-empty {
-    color: var(--muted);
-  }
+/* Empty-state guidance row (M5): no logged entry yet, so it reads as a prompt, not history. */
+.maintenance-list .maint-empty {
+  color: var(--muted);
+}
 
-  /* Per-entry "next due / overdue" line (M1/C4). Muted by default; warns when due soon, reddens
+/* Per-entry "next due / overdue" line (M1/C4). Muted by default; warns when due soon, reddens
      when overdue — using the same theme tokens as the rest of the dashboard so both themes work. */
-  .maint-due {
-    display: block;
-    margin-top: 2px;
-    font-weight: 700;
-    color: var(--muted);
-  }
+.maint-due {
+  display: block;
+  margin-top: 2px;
+  font-weight: 700;
+  color: var(--muted);
+}
 
-  .maint-due[data-due="due-soon"] {
-    color: var(--warn-soft);
-  }
+.maint-due[data-due="due-soon"] {
+  color: var(--warn-soft);
+}
 
-  .maint-due[data-due="overdue"] {
-    color: var(--bad-soft);
-  }
+.maint-due[data-due="overdue"] {
+  color: var(--bad-soft);
+}
 
-  /* Aggregate "service due soon / overdue" banner above the list (M1/C4). */
-  .maintenance-due-hint {
-    margin: 10px 0 0;
-    padding: 8px 12px;
-    border-radius: 10px;
-    background: var(--fill);
-    color: var(--warn-soft);
-    font-size: 12px;
-    font-weight: 700;
-  }
+/* Aggregate "service due soon / overdue" banner above the list (M1/C4). */
+.maintenance-due-hint {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--fill);
+  color: var(--warn-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
 
-  .maintenance-due-hint[data-due="due-soon"] {
-    border-color: rgba(var(--warn-rgb), 0.3);
-    background: rgba(var(--warn-rgb), 0.1);
-    color: var(--warn-soft);
-  }
+.maintenance-due-hint[data-due="due-soon"] {
+  border-color: rgba(var(--warn-rgb), 0.3);
+  background: rgba(var(--warn-rgb), 0.1);
+  color: var(--warn-soft);
+}
 
-  .maintenance-due-hint[data-due="overdue"] {
-    border-color: rgba(var(--bad-rgb), 0.4);
-    background: rgba(var(--bad-rgb), 0.12);
-    color: var(--bad-soft);
-  }
+.maintenance-due-hint[data-due="overdue"] {
+  border-color: rgba(var(--bad-rgb), 0.4);
+  background: rgba(var(--bad-rgb), 0.12);
+  color: var(--bad-soft);
+}
 
-  /* Inline "Add entry" form (M1/C4), replacing the old window.prompt() chain. */
-  .maintenance-form {
-    display: grid;
-    gap: 10px;
-    margin: 12px 0 0;
-    padding: 12px;
-    border-radius: 12px;
-    background: var(--fill);
-  }
+/* Inline "Add entry" form (M1/C4), replacing the old window.prompt() chain. */
+.maintenance-form {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--fill);
+}
 
-  .maint-field {
-    display: grid;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--muted);
-  }
+.maint-field {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
 
-  .maint-field input {
-    padding: 8px 10px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-input);
-    /* Use the standard input surface token (matches the global `select, input`
+.maint-field input {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-input);
+  /* Use the standard input surface token (matches the global `select, input`
        rule) rather than --bg — the page background made the field read as the
        page itself, not an input, especially in the light scheme. */
-    background: var(--panel-2);
-    color: var(--text);
-    font-size: 14px;
-  }
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 14px;
+}
 
-  .maint-field-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-  }
+.maint-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
 
-  /* Inline validation messages (M1/C4). Both are `hidden` by default and the JS
+/* Inline validation messages (M1/C4). Both are `hidden` by default and the JS
      only toggles `hidden`/textContent, so only the visible state is styled. Color
      matches the overdue `.maintenance-due-hint` so all form errors read the same.
      The form-level `<p>` zeroes its UA margin — the grid `gap` already spaces it. */
-  .maint-form-error {
-    margin: 0;
-    color: var(--bad-soft);
-    font-size: 12px;
-    font-weight: 700;
-  }
+.maint-form-error {
+  margin: 0;
+  color: var(--bad-soft);
+  font-size: 12px;
+  font-weight: 700;
+}
 
-  .maint-field-hint {
-    color: var(--bad-soft);
-    font-size: 11px;
-    font-weight: 600;
-  }
+.maint-field-hint {
+  color: var(--bad-soft);
+  font-size: 11px;
+  font-weight: 600;
+}
 
-  .maint-form-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 8px;
-  }
+.maint-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
 
-  /* ===== 7. Settings controls ===== */
+/* ===== 7. Settings controls ===== */
 
-  /* Lower-frequency Settings cards (backup/restore, etc.) are demoted below the
+/* Lower-frequency Settings cards (backup/restore, etc.) are demoted below the
      connection/setup card (B3): muted surface + dimmer heading so the
      setup-critical control reads as primary during setup. Still fully usable. */
-  .settings-secondary {
-    background: var(--surface-veil);
-  }
+.settings-secondary {
+  background: var(--surface-veil);
+}
 
-  .settings-secondary > header .kicker,
-  .settings-secondary > header h3 {
-    color: var(--soft);
-  }
+.settings-secondary > header .kicker,
+.settings-secondary > header h3 {
+  color: var(--soft);
+}
 
-  .settings-secondary > header h3 {
-    font-size: 15px;
-  }
+.settings-secondary > header h3 {
+  font-size: 15px;
+}
 
-  .setting-stack {
-    display: grid;
-    gap: 10px;
-  }
+.setting-stack {
+  display: grid;
+  gap: 10px;
+}
 
-  .settings-primary-action {
-    padding-inline: 16px;
-    white-space: nowrap;
-  }
+.settings-primary-action {
+  padding-inline: 16px;
+  white-space: nowrap;
+}
 
-  .settings-refresh-btn {
-    min-width: 86px;
-    white-space: nowrap;
-  }
+.settings-refresh-btn {
+  min-width: 86px;
+  white-space: nowrap;
+}
 
-  /* Hairline divider above the connect card's state strip (scoped so
+/* Hairline divider above the connect card's state strip (scoped so
      #insightStatsCard .state-grid is unaffected). */
-  .connect-card .state-grid {
-    margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px solid var(--line);
-  }
+.connect-card .state-grid {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
 
-  /* Demoted, compact backup/restore card; keeps all four real actions. */
-  .settings-data-card {
-    border-radius: 16px;
-    padding: var(--card-pad-tight) var(--card-pad);
-  }
+/* Demoted, compact backup/restore card; keeps all four real actions. */
+.settings-data-card {
+  border-radius: 16px;
+  padding: var(--card-pad-tight) var(--card-pad);
+}
 
-  .settings-data-card .db-action-grid button {
-    min-height: 44px;
-    border-radius: var(--radius-input);
-  }
+.settings-data-card .db-action-grid button {
+  min-height: 44px;
+  border-radius: var(--radius-input);
+}
 
-  .connection-actions {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+.connection-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
 
-  .settings-command {
-    display: grid;
-    align-content: center;
-    gap: 2px;
-    min-width: 0;
-    min-height: 56px;
-    padding: 7px 10px;
-    border-radius: 12px;
-    line-height: 1.1;
-    text-align: left;
-  }
+.settings-command {
+  display: grid;
+  align-content: center;
+  gap: 2px;
+  min-width: 0;
+  min-height: 56px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  line-height: 1.1;
+  text-align: left;
+}
 
-  .settings-command span,
-  .settings-command small {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
+.settings-command span,
+.settings-command small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 
-  .settings-command span {
-    font-size: 13px;
-    font-weight: 800;
-  }
+.settings-command span {
+  font-size: 13px;
+  font-weight: 800;
+}
 
-  .settings-command small {
-    display: block;
-    color: var(--muted);
-    font-size: 10.5px;
-    line-height: 1.2;
-  }
+.settings-command small {
+  display: block;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.2;
+}
 
-  .settings-command.scan {
-    border-color: rgba(var(--volt-rgb), 0.36);
-    background: rgba(var(--volt-rgb), 0.08);
-    color: var(--volt-soft);
-  }
+/* v2 design: the Settings scan command is amber (the Settings tab accent),
+     not orange. */
+.settings-command.scan {
+  border-color: rgba(var(--warn-rgb), 0.36);
+  background: rgba(var(--warn-rgb), 0.08);
+  color: var(--warn-soft);
+}
 
-  .settings-command.scan small {
-    color: var(--volt-soft-dim);
-  }
+.settings-command.scan small {
+  color: var(--warn);
+}
 
-  .settings-command.danger {
-    border-color: rgba(var(--bad-rgb), 0.38);
-    background: rgba(var(--bad-rgb), 0.08);
-    color: var(--bad-soft);
-  }
+.settings-command.danger {
+  border-color: rgba(var(--bad-rgb), 0.38);
+  background: rgba(var(--bad-rgb), 0.08);
+  color: var(--bad-soft);
+}
 
-  .settings-command.danger small {
-    color: var(--bad-text);
-  }
+.settings-command.danger small {
+  color: var(--bad-text);
+}
 
-  .raw {
-    padding: var(--card-pad);
-  }
+.raw {
+  padding: var(--card-pad);
+}
 
-  pre {
-    min-height: 120px;
-    max-height: 250px;
-    overflow: auto;
-    margin: 12px 0 0;
-    padding: 12px;
-    border-radius: var(--radius-md);
-    background: var(--inset-deep);
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    line-height: 1.45;
-    white-space: pre-wrap;
-  }
+pre {
+  min-height: 120px;
+  max-height: 250px;
+  overflow: auto;
+  margin: 12px 0 0;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  background: var(--inset-deep);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
 
-  /* ===== 8. Bottom navigation ===== */
+/* ===== 8. Bottom navigation ===== */
 
-  .bottom-nav {
-    position: fixed;
-    z-index: 40;
-    left: 50%;
-    right: auto;
-    bottom: max(10px, calc(env(safe-area-inset-bottom) + 10px));
-    width: min(760px, calc(100vw - 24px));
-    max-width: calc(100vw - 24px);
-    display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 4px;
-    margin: 0;
-    padding: 6px;
-    overflow: visible;
-    box-sizing: border-box;
-    border: 1px solid var(--line-strong);
-    border-radius: 24px;
-    isolation: isolate;
-    background:
-      linear-gradient(180deg, var(--surface-nav-hi), var(--surface-nav-lo));
-    /* Solid fallback AFTER the gradient shorthand so the shorthand doesn't reset
+.bottom-nav {
+  position: fixed;
+  z-index: 40;
+  left: 50%;
+  right: auto;
+  bottom: max(10px, calc(env(safe-area-inset-bottom) + 10px));
+  width: min(760px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  margin: 0;
+  padding: 6px;
+  overflow: visible;
+  box-sizing: border-box;
+  border: 1px solid var(--line-strong);
+  border-radius: 24px;
+  isolation: isolate;
+  background: linear-gradient(
+    180deg,
+    var(--surface-nav-hi),
+    var(--surface-nav-lo)
+  );
+  /* Solid fallback AFTER the gradient shorthand so the shorthand doesn't reset
        it to transparent — the opaque gradient layers over it, and content can't
        bleed through if linear-gradient is ever unsupported. */
-    background-color: var(--surface-nav);
-    box-shadow:
-      0 18px 46px var(--shadow),
-      0 0 0 1px rgba(255,255,255,0.04),
-      inset 0 1px 0 rgba(255,255,255,0.08);
-    transform: translateX(-50%);
-    backdrop-filter: blur(18px) saturate(1.2);
-    -webkit-backdrop-filter: blur(18px) saturate(1.2);
-  }
+  background-color: var(--surface-nav);
+  box-shadow:
+    0 18px 46px var(--shadow),
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  transform: translateX(-50%);
+  backdrop-filter: blur(18px) saturate(1.2);
+  -webkit-backdrop-filter: blur(18px) saturate(1.2);
+}
 
-  .bottom-nav button {
-    position: relative;
-    z-index: 1;
-    min-width: 0;
-    min-height: 54px;
-    display: grid;
-    place-items: center;
-    align-content: center;
-    gap: 4px;
-    overflow: hidden;
-    border: 1px solid transparent;
-    border-radius: 16px;
-    background: transparent;
-    color: var(--muted);
-    font-size: 10px;
-    font-weight: 640;
-    letter-spacing: 0.01em;
-    line-height: 1;
-    padding: 6px 2px 5px;
-    transition:
-      background-color var(--motion-fast) var(--motion-ease),
-      border-color var(--motion-fast) var(--motion-ease),
-      color var(--motion-fast) var(--motion-ease),
-      transform var(--motion-fast) var(--motion-ease);
-  }
+.bottom-nav button {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  min-height: 54px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  overflow: hidden;
+  border: 1px solid transparent;
+  border-radius: 16px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  padding: 6px 2px 5px;
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
 
-  .bottom-nav button i,
-  .bottom-nav button svg {
-    display: block;
-    width: 18px;
-    height: 18px;
-  }
+.bottom-nav button i,
+.bottom-nav button svg {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
 
-  .bottom-nav button i {
-    display: grid;
-    width: 30px;
-    height: 25px;
-    place-items: center;
-    font-style: normal;
-    line-height: 1;
-    border-radius: 12px;
-    background: var(--fill-soft);
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
-    transition:
-      background-color var(--motion-fast) var(--motion-ease),
-      box-shadow var(--motion-fast) var(--motion-ease),
-      transform var(--motion-fast) var(--motion-ease);
-  }
+/* v2 design: bare nav icons — no per-icon chip. Only the active BUTTON tints
+     (below); the icon wrapper is just a centering box. */
+.bottom-nav button i {
+  display: grid;
+  width: 30px;
+  height: 25px;
+  place-items: center;
+  font-style: normal;
+  line-height: 1;
+}
 
-  .bottom-nav button span {
-    display: block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.bottom-nav button span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  /* X2: reads --tab-accent (base.css) — replaced five hand-copied per-view
+/* X2: reads --tab-accent (base.css) — replaced five hand-copied per-view
      blocks and fixed Diag, whose override targeted the removed "signals". */
-  .bottom-nav button.is-active {
-    border-color: rgba(var(--tab-accent-rgb), 0.28);
-    background:
-      linear-gradient(180deg, rgba(var(--tab-accent-rgb), 0.17), rgba(var(--tab-accent-rgb), 0.06)),
-      var(--fill-soft);
-    color: var(--tab-accent-soft);
-    box-shadow:
-      inset 0 0 0 1px rgba(255,255,255,0.045),
-      0 7px 18px rgba(var(--tab-accent-rgb), 0.12);
-  }
+.bottom-nav button.is-active {
+  border-color: rgba(var(--tab-accent-rgb), 0.28);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--tab-accent-rgb), 0.17),
+      rgba(var(--tab-accent-rgb), 0.06)
+    ),
+    var(--fill-soft);
+  color: var(--tab-accent-soft);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 7px 18px rgba(var(--tab-accent-rgb), 0.12);
+}
 
-  .bottom-nav button.is-active i {
-    background:
-      radial-gradient(circle at 50% 25%, rgba(var(--tab-accent-rgb), 0.28), transparent 48%),
-      rgba(var(--tab-accent-rgb), 0.2);
-    box-shadow:
-      inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.24),
-      0 7px 18px rgba(var(--tab-accent-rgb), 0.14);
-  }
-
-  .bottom-nav button.is-active svg {
-    filter: drop-shadow(0 0 7px rgba(var(--tab-accent-rgb), 0.5));
-    /* Overshoot pop when a tab becomes active — .is-active toggling re-runs
+.bottom-nav button.is-active svg {
+  filter: drop-shadow(0 0 7px rgba(var(--tab-accent-rgb), 0.5));
+  /* Overshoot pop when a tab becomes active — .is-active toggling re-runs
        it; the global reduced-motion reset collapses it to instant. */
-    animation: nav-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  animation: nav-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes nav-pop {
+  0% {
+    transform: scale(0.9);
   }
 
-  @keyframes nav-pop {
-    0% {
-      transform: scale(0.9);
-    }
-
-    60% {
-      transform: scale(1.06);
-    }
-
-    100% {
-      transform: scale(1);
-    }
+  60% {
+    transform: scale(1.06);
   }
 
-  /* Saved-codes count on the Diag icon; red when a current/permanent
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Saved-codes count on the Diag icon; red when a current/permanent
      fault escalates it. */
-  .nav-badge[data-severity="fault"] {
-    background: var(--bad);
-    color: #fff;
+.nav-badge[data-severity="fault"] {
+  background: var(--bad);
+  color: #fff;
+}
+
+.nav-badge {
+  position: absolute;
+  top: -3px;
+  right: -7px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: var(--warn);
+  color: var(--on-volt);
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.bottom-nav button i {
+  position: relative;
+}
+
+.bottom-nav button:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .bottom-nav button:hover {
+    color: var(--text);
+    background: var(--fill-strong);
   }
 
-  .nav-badge {
-    position: absolute;
-    top: -3px;
-    right: -7px;
-    min-width: 15px;
-    height: 15px;
-    padding: 0 4px;
-    border-radius: 999px;
-    display: grid;
-    place-items: center;
-    background: var(--warn);
-    color: var(--on-volt);
-    font-size: 9.5px;
-    font-weight: 800;
-    letter-spacing: 0;
+  .bottom-nav button:hover i {
+    background: var(--fill-bold);
   }
+}
 
-  .bottom-nav button i {
-    position: relative;
+body.map-full-active {
+  overflow: hidden;
+}
+
+body.map-full-active .bottom-nav {
+  display: none;
+}
+
+@media (min-width: 640px) {
+  .detail-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
-
-  .bottom-nav button:active {
-    transform: translateY(1px) scale(0.98);
+  .button-grid {
+    grid-template-columns: repeat(6, 1fr);
   }
+}
 
-  @media (hover: hover) and (pointer: fine) {
-    .bottom-nav button:hover {
-      color: var(--text);
-      background: var(--fill-strong);
-    }
-
-    .bottom-nav button:hover i {
-      background: var(--fill-bold);
-    }
+/* Side padding is scoped below the rail breakpoint — once the nav becomes a
+     left rail (min-width: 900px), the .app no longer needs the wide inline pad. */
+@media (min-width: 640px) and (max-width: 899px) {
+  .app {
+    padding-inline: 18px;
   }
+}
 
-  body.map-full-active {
-    overflow: hidden;
+/* Extra bottom clearance for the floating bottom nav only applies while the
+     nav is on the bottom; above the rail breakpoint the nav is a side rail. */
+@media (min-height: 880px) and (max-width: 899px) {
+  .app {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
+}
 
-  body.map-full-active .bottom-nav {
+/* [C1] Narrow-viewport scrubber compaction: when the map scrubber is open the
+     bottom nav tightens and drops button labels to give the scrubber room. */
+@media (max-width: 899px) {
+  body.map-scrubber-active .bottom-nav {
+    padding: 5px;
+  }
+  body.map-scrubber-active .bottom-nav button {
+    min-height: var(--touch-min);
+  }
+  body.map-scrubber-active .bottom-nav button span {
     display: none;
   }
+}
 
-  @media (min-width: 640px) {
-    .detail-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .button-grid { grid-template-columns: repeat(6, 1fr); }
-  }
-
-  /* Side padding is scoped below the rail breakpoint — once the nav becomes a
-     left rail (min-width: 900px), the .app no longer needs the wide inline pad. */
-  @media (min-width: 640px) and (max-width: 899px) {
-    .app { padding-inline: 18px; }
-  }
-
-  /* Extra bottom clearance for the floating bottom nav only applies while the
-     nav is on the bottom; above the rail breakpoint the nav is a side rail. */
-  @media (min-height: 880px) and (max-width: 899px) {
-    .app {
-      padding-bottom: calc(112px + env(safe-area-inset-bottom));
-    }
-  }
-
-  /* [C1] Narrow-viewport scrubber compaction: when the map scrubber is open the
-     bottom nav tightens and drops button labels to give the scrubber room. */
-  @media (max-width: 899px) {
-    body.map-scrubber-active .bottom-nav { padding: 5px; }
-    body.map-scrubber-active .bottom-nav button { min-height: var(--touch-min); }
-    body.map-scrubber-active .bottom-nav button span { display: none; }
-  }
-
-  /* [E1] Wide-viewport layout: promote the bottom nav to a left rail and give
+/* [E1] Wide-viewport layout: promote the bottom nav to a left rail and give
      the single-column tabs a two-column working area. Placed after the base
      .bottom-nav rule so it layers additively. */
-  @media (min-width: 900px) {
-    .bottom-nav {
-      left: 12px; right: auto; top: 50%; bottom: auto;
-      transform: translateY(-50%);
-      width: 64px; max-width: 64px;
-      grid-template-columns: 1fr; grid-auto-rows: 1fr;
-      gap: 6px; border-radius: 20px;
-    }
-    .bottom-nav button { min-height: 56px; }
-    .bottom-nav button span { font-size: 8px; }
-    #view-insights, #view-diagnostics, #view-settings {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-      gap: 16px; align-items: start;
-    }
-    #view-diagnostics > :first-child,
-    #view-settings > :first-child,
-    #view-insights > .empty-state,
-    #view-insights > .insights-hero {
-      grid-column: 1 / -1;
-    }
-  }
-
-  @media (max-width: 390px) {
-    .ratio-card { grid-template-columns: 1fr; }
-    .state-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .connection-head { grid-template-columns: 1fr; }
-    .primary-action { width: 100%; }
-    .ring { margin-inline: auto; }
-    .dtc-action-row { grid-template-columns: 1fr; }
-    .dtc-status-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .dtc-item { grid-template-columns: 1fr; }
-    /* Single-column rows: a lone chevron line reads as clutter — the whole
-       row is still tappable. */
-    .dtc-item .dtc-chevron { display: none; }
-    .dtc-repeat-block b,
-    .dtc-repeat-block small { text-align: left; }
-    .bottom-nav {
-      gap: 3px;
-      bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px));
-      width: calc(100vw - 16px);
-      max-width: calc(100vw - 16px);
-      padding: 5px;
-      border-radius: 22px;
-    }
-    .bottom-nav button {
-      min-height: 50px;
-      border-radius: 14px;
-      font-size: 10px;
-      letter-spacing: 0;
-      padding-inline: 1px;
-    }
-    .bottom-nav button i {
-      width: 28px;
-      height: 24px;
-    }
-  }
-
-  @media (max-width: 340px) {
-    .bottom-nav button {
-      min-height: 47px;
-      gap: 3px;
-      font-size: 8px;
-      padding-inline: 1px;
-    }
-    .bottom-nav button span {
-      font-size: 8px;
-    }
-  }
-
-  .eff-scatter-card { padding: 14px 16px; }
-  .eff-scatter-card header { margin-bottom: 6px; }
-  .eff-scatter-card header h3 { margin: 4px 0 0; font-size: 15px; letter-spacing: -0.01em; }
-  .eff-scatter { margin-top: 6px; cursor: default; }
-  .eff-scatter svg { display: block; width: 100%; }
-  /* Segmented control to switch the chart style (bars / scatter / curve). */
-  .eff-view-switch {
-    display: inline-flex; gap: 2px; margin-top: 8px; padding: 2px;
-    border-radius: 999px; background: var(--fill-bold); border: 1px solid var(--line);
-  }
-  .eff-view-btn {
-    appearance: none; border: none; background: transparent; color: var(--muted);
-    font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px;
-    border-radius: 999px; cursor: pointer; min-height: var(--touch-min-dense);
-    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
-  }
-  .eff-view-btn.is-active {
-    background: var(--tab-accent);
-    color: var(--on-tab-accent);
-  }
-  .eff-view-btn:not(.is-active):hover { color: var(--text); }
-  /* "Hide outliers" toggle under the chart. */
-  .eff-outlier-row { display: flex; justify-content: flex-end; margin-top: 8px; }
-  .eff-outlier-toggle {
-    appearance: none; font: inherit; font-size: 12px; font-weight: 600;
-    color: var(--muted); background: transparent; cursor: pointer;
-    border: 1px solid var(--line-strong); border-radius: 999px;
-    padding: 6px 12px; min-height: var(--touch-min-dense);
-    transition: background-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
-  }
-  .eff-outlier-toggle::before {
-    content: "○ "; font-weight: 700;
-  }
-  .eff-outlier-toggle[data-on="true"] {
-    color: var(--text); border-color: var(--volt); background: var(--fill-bold);
-  }
-  .eff-outlier-toggle[data-on="true"]::before { content: "● "; color: var(--volt); }
-  .eff-scatter-stats {
-    display: grid; grid-template-columns: repeat(3, 1fr);
-    margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line);
-  }
-  .eff-scatter-stats div { padding: 0 8px; }
-  .eff-scatter-stats div + div { border-left: 1px solid var(--line); }
-  .eff-scatter-stats strong {
-    display: block; margin-top: 3px; font-size: 15px; font-variant-numeric: tabular-nums;
-  }
-
-  /* Per-trip detail sheet (M7). A modal panel overlaid on the Map view; the
-     focus trap (actions.ts) inerts the background while it's open. */
-  .trip-detail-sheet {
-    position: fixed;
-    left: 50%;
-    bottom: calc(112px + env(safe-area-inset-bottom));
-    transform: translateX(-50%);
-    width: min(680px, calc(100vw - 24px));
-    max-height: 78vh;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    z-index: 40;
-    padding: var(--card-pad-lg);
-    box-shadow: 0 16px 48px var(--shadow);
-  }
-
-  .trip-detail-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
-
-  .trip-detail-head h3 {
-    margin: 4px 0 0;
-  }
-
-  .trip-detail-close {
-    flex: 0 0 auto;
-  }
-
-  .trip-detail-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin: 14px 0;
-  }
-
-  .trip-detail-times {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
-  }
-
-  .trip-detail-stats .kicker,
-  .trip-detail-times .kicker {
-    display: block;
-    margin-bottom: 2px;
-  }
-
-  .trip-detail-stats strong,
-  .trip-detail-times strong {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* v2 trip-sheet additions: stops list + footer actions + speed line. */
-  .trip-detail-stops {
-    display: flex;
-    flex-direction: column;
+@media (min-width: 900px) {
+  .bottom-nav {
+    left: 12px;
+    right: auto;
+    top: 50%;
+    bottom: auto;
+    transform: translateY(-50%);
+    width: 64px;
+    max-width: 64px;
+    grid-template-columns: 1fr;
+    grid-auto-rows: 1fr;
     gap: 6px;
+    border-radius: 20px;
   }
-
-  .trip-detail-stop-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 40px;
-    padding: 6px 10px;
-    border-radius: 10px;
-    background: var(--surface-veil);
+  .bottom-nav button {
+    min-height: 56px;
   }
-
-  .trip-detail-stop-dot {
-    flex: 0 0 auto;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    border: 2px solid var(--warn);
-    background: rgba(var(--warn-rgb), 0.2);
+  .bottom-nav button span {
+    font-size: 8px;
   }
-
-  .trip-detail-stop-name {
-    flex: 1;
-    min-width: 0;
-    color: var(--text);
-    font-size: 12.5px;
+  #view-insights,
+  #view-diagnostics,
+  #view-settings {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
   }
-
-  .trip-detail-stop-row b {
-    color: var(--warn);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    font-variant-numeric: tabular-nums;
+  #view-diagnostics > :first-child,
+  #view-settings > :first-child,
+  #view-insights > .empty-state,
+  #view-insights > .insights-hero {
+    grid-column: 1 / -1;
   }
+}
 
-  .trip-detail-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 14px;
+@media (max-width: 390px) {
+  .ratio-card {
+    grid-template-columns: 1fr;
   }
-
-  .trip-detail-actions button {
-    flex: 1;
-    min-height: 48px;
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    background: var(--fill-soft);
-    color: var(--text);
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
+  .state-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .trip-detail-actions .confirm {
-    border: 0;
-    background: var(--map-accent);
-    color: var(--on-map-accent);
-    font-weight: 800;
+  .connection-head {
+    grid-template-columns: 1fr;
   }
-
-  .trip-detail-speed-svg {
-    display: block;
+  .primary-action {
     width: 100%;
-    height: 84px;
-    border-radius: 12px;
-    background: var(--surface-veil);
   }
-
-  .trip-detail-scatter-card {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line);
+  .ring {
+    margin-inline: auto;
   }
-
-  .trip-detail-scatter-card header h4 {
-    margin: 4px 0 0;
-    font-size: 14px;
+  .dtc-action-row {
+    grid-template-columns: 1fr;
   }
-
-  .trip-detail-scatter-svg {
-    display: block;
-    width: 100%;
-    height: auto;
-    margin-top: 8px;
+  .dtc-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  #realTripsCard {
-    min-width: 0;
-    padding: 12px 14px 14px;
-    overflow: visible;
+  .dtc-item {
+    grid-template-columns: 1fr;
   }
-
-  #realTripsCard header {
-    margin-bottom: 6px;
-  }
-
-  #realTripsCard .status-copy {
+  /* Single-column rows: a lone chevron line reads as clutter — the whole
+       row is still tappable. */
+  .dtc-item .dtc-chevron {
     display: none;
   }
-
-  .real-trip-strip {
-    min-width: 0;
-    max-width: 100%;
-    margin: 4px -4px 0;
-    padding: 2px 4px 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    overscroll-behavior-x: contain;
-    touch-action: pan-x;
+  .dtc-repeat-block b,
+  .dtc-repeat-block small {
+    text-align: left;
   }
-
-  #view-trips > * {
-    min-width: 0;
+  .bottom-nav {
+    gap: 3px;
+    bottom: max(8px, calc(env(safe-area-inset-bottom) + 8px));
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    padding: 5px;
+    border-radius: 22px;
   }
-
-  .real-trip-chip {
-    display: grid;
-    position: relative;
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 2px 10px;
-    min-width: min(264px, 82vw);
-    max-width: 300px;
-    padding: 11px 13px;
-    border-color: var(--line-strong);
-    background: var(--surface-chip);
+  .bottom-nav button {
+    min-height: 50px;
+    border-radius: 14px;
+    font-size: 10px;
+    letter-spacing: 0;
+    padding-inline: 1px;
   }
-
-  .real-trip-chip.is-active {
-    border-color: var(--volt);
-    background:
-      linear-gradient(135deg, rgba(var(--volt-rgb), 0.18), rgba(var(--volt-rgb), 0.04)),
-      var(--surface-chip);
-    box-shadow: 0 12px 24px rgba(var(--volt-rgb), 0.12);
+  .bottom-nav button i {
+    width: 28px;
+    height: 24px;
   }
+}
 
-  .real-trip-chip-copy {
-    min-width: 0;
+@media (max-width: 340px) {
+  .bottom-nav button {
+    min-height: 47px;
+    gap: 3px;
+    font-size: 8px;
+    padding-inline: 1px;
   }
-
-  .real-trip-chip-copy strong {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 14px;
+  .bottom-nav button span {
+    font-size: 8px;
   }
+}
 
-  .real-trip-chip-copy small {
-    display: block;
-    margin-top: 3px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10.5px;
-    color: var(--muted);
-  }
+.eff-scatter-card {
+  padding: 14px 16px;
+}
+.eff-scatter-card header {
+  margin-bottom: 6px;
+}
+.eff-scatter-card header h3 {
+  margin: 4px 0 0;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+.eff-scatter {
+  margin-top: 6px;
+  cursor: default;
+}
+.eff-scatter svg {
+  display: block;
+  width: 100%;
+}
+/* Segmented control to switch the chart style (bars / scatter / curve). */
+.eff-view-switch {
+  display: inline-flex;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--fill-bold);
+  border: 1px solid var(--line);
+}
+.eff-view-btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  min-height: var(--touch-min-dense);
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+.eff-view-btn.is-active {
+  background: var(--tab-accent);
+  color: var(--on-tab-accent);
+}
+.eff-view-btn:not(.is-active):hover {
+  color: var(--text);
+}
+/* "Hide outliers" toggle under the chart. */
+.eff-outlier-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+.eff-outlier-toggle {
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  padding: 6px 12px;
+  min-height: var(--touch-min-dense);
+  transition:
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease),
+    border-color var(--motion-fast) var(--motion-ease);
+}
+.eff-outlier-toggle::before {
+  content: "○ ";
+  font-weight: 700;
+}
+.eff-outlier-toggle[data-on="true"] {
+  color: var(--text);
+  border-color: var(--volt);
+  background: var(--fill-bold);
+}
+.eff-outlier-toggle[data-on="true"]::before {
+  content: "● ";
+  color: var(--volt);
+}
+.eff-scatter-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+.eff-scatter-stats div {
+  padding: 0 8px;
+}
+.eff-scatter-stats div + div {
+  border-left: 1px solid var(--line);
+}
+.eff-scatter-stats strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
 
-  .real-trip-chip .trip-route-state {
-    position: absolute;
-    top: 11px;
-    right: 11px;
-    z-index: 2;
-    background: var(--surface-chip);
-    backdrop-filter: blur(8px);
-  }
+/* Per-trip detail sheet (M7). A modal panel overlaid on the Map view; the
+     focus trap (actions.ts) inerts the background while it's open. */
+.trip-detail-sheet {
+  position: fixed;
+  left: 50%;
+  bottom: calc(112px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(680px, calc(100vw - 24px));
+  max-height: 78vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 40;
+  padding: var(--card-pad-lg);
+  box-shadow: 0 16px 48px var(--shadow);
+}
 
+.trip-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.trip-detail-head h3 {
+  margin: 4px 0 0;
+}
+
+.trip-detail-close {
+  flex: 0 0 auto;
+}
+
+.trip-detail-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.trip-detail-times {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.trip-detail-stats .kicker,
+.trip-detail-times .kicker {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.trip-detail-stats strong,
+.trip-detail-times strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* v2 trip-sheet additions: stops list + footer actions + speed line. */
+.trip-detail-stops {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trip-detail-stop-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--surface-veil);
+}
+
+.trip-detail-stop-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 2px solid var(--warn);
+  background: rgba(var(--warn-rgb), 0.2);
+}
+
+.trip-detail-stop-name {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  font-size: 12.5px;
+}
+
+.trip-detail-stop-row b {
+  color: var(--warn);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.trip-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.trip-detail-actions button {
+  flex: 1;
+  min-height: 48px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.trip-detail-actions .confirm {
+  border: 0;
+  background: var(--map-accent);
+  color: var(--on-map-accent);
+  font-weight: 800;
+}
+
+.trip-detail-speed-svg {
+  display: block;
+  width: 100%;
+  height: 84px;
+  border-radius: 12px;
+  background: var(--surface-veil);
+}
+
+.trip-detail-scatter-card {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.trip-detail-scatter-card header h4 {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+
+.trip-detail-scatter-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 8px;
+}
+
+#realTripsCard {
+  min-width: 0;
+  padding: 12px 14px 14px;
+  overflow: visible;
+}
+
+#realTripsCard header {
+  margin-bottom: 6px;
+}
+
+#realTripsCard .status-copy {
+  display: none;
+}
+
+.real-trip-strip {
+  min-width: 0;
+  max-width: 100%;
+  margin: 4px -4px 0;
+  padding: 2px 4px 8px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+}
+
+#view-trips > * {
+  min-width: 0;
+}
+
+.real-trip-chip {
+  display: grid;
+  position: relative;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+  min-width: min(264px, 82vw);
+  max-width: 300px;
+  padding: 11px 13px;
+  border-color: var(--line-strong);
+  background: var(--surface-chip);
+}
+
+.real-trip-chip.is-active {
+  border-color: var(--volt);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--volt-rgb), 0.18),
+      rgba(var(--volt-rgb), 0.04)
+    ),
+    var(--surface-chip);
+  box-shadow: 0 12px 24px rgba(var(--volt-rgb), 0.12);
+}
+
+.real-trip-chip-copy {
+  min-width: 0;
+}
+
+.real-trip-chip-copy strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.real-trip-chip-copy small {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.real-trip-chip .trip-route-state {
+  position: absolute;
+  top: 11px;
+  right: 11px;
+  z-index: 2;
+  background: var(--surface-chip);
+  backdrop-filter: blur(8px);
+}
+
+#insightStatsCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+}
+
+#insightStatsCard header {
+  margin: 0;
+}
+
+#insightStatsCard .state-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+#insightStatsCard .state-grid div {
+  min-width: 104px;
+  padding: 8px 12px;
+}
+
+#insightStatsCard .state-grid strong {
+  margin-top: 2px;
+  font-size: 16px;
+}
+
+@media (max-width: 520px) {
   #insightStatsCard {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 10px 14px;
+    align-items: stretch;
+    flex-direction: column;
   }
+}
 
-  #insightStatsCard header {
-    margin: 0;
-  }
+.scrub-chart,
+.scrub-track {
+  position: relative;
+  touch-action: none;
+  cursor: ew-resize;
+  user-select: none;
+}
 
-  #insightStatsCard .state-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 0;
-  }
+.scrub-chart svg,
+.scrub-track svg {
+  display: block;
+  width: 100%;
+}
 
-  #insightStatsCard .state-grid div {
-    min-width: 104px;
-    padding: 8px 12px;
-  }
+/* ===== 9. Insights / Signals SVG charts ===== */
 
-  #insightStatsCard .state-grid strong {
-    margin-top: 2px;
-    font-size: 16px;
-  }
-
-  @media (max-width: 520px) {
-    #insightStatsCard {
-      align-items: stretch;
-      flex-direction: column;
-    }
-  }
-
-  .scrub-chart,
-  .scrub-track {
-    position: relative;
-    touch-action: none;
-    cursor: ew-resize;
-    user-select: none;
-  }
-
-  .scrub-chart svg,
-  .scrub-track svg {
-    display: block;
-    width: 100%;
-  }
-
-  /* ===== 9. Insights / Signals SVG charts ===== */
-
-  /* Explicit heights: width:100% + viewBox alone collapses the SVG to 0px tall in
+/* Explicit heights: width:100% + viewBox alone collapses the SVG to 0px tall in
      some engines (the chart silently disappears). These match the fixed pixel
      heights the scrubber draws with (combo = 116, each detail track = 52), so the
      viewBox maps 1:1 with no distortion at any width. */
-  #scrubChart svg {
-    height: 116px;
-  }
+#scrubChart svg {
+  height: 116px;
+}
 
-  /* Map scrubber chart frame + blue playhead (ID-scoped so the Drive live-trace
+/* Map scrubber chart frame + blue playhead (ID-scoped so the Drive live-trace
      cursor stays white). */
-  #scrubChart {
-    border-radius: var(--radius-md);
-    background: var(--inset);
-    overflow: hidden;
-  }
+#scrubChart {
+  border-radius: var(--radius-md);
+  background: var(--inset);
+  overflow: hidden;
+}
 
-  #scrubCursor {
-    border-left-width: 2px;
-    border-left-color: var(--map-accent);
-    box-shadow: 0 0 10px rgba(var(--map-accent-rgb), 0.8);
-  }
+#scrubCursor {
+  border-left-width: 2px;
+  border-left-color: var(--map-accent);
+  box-shadow: 0 0 10px rgba(var(--map-accent-rgb), 0.8);
+}
 
-  #scrubCursor::before {
-    background: var(--map-accent);
-  }
+#scrubCursor::before {
+  background: var(--map-accent);
+}
 
-  #scrubStack .scrub-track svg {
-    height: 52px;
-  }
+#scrubStack .scrub-track svg {
+  height: 52px;
+}
 
-  /* Force monospace on the in-chart SVG <text> labels. The markup sets a
+/* Force monospace on the in-chart SVG <text> labels. The markup sets a
      font-family presentation attribute, but it loses to the inherited sans-serif
      body font once the SVG renders, so the labels came out in the wrong face. A
      real CSS rule wins the cascade. */
-  .scrub-chart svg text,
-  .scrub-track svg text {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  }
+.scrub-chart svg text,
+.scrub-track svg text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
 
-  .scrub-cursor {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 0;
-    border-left: 1.5px solid var(--text);
-    pointer-events: none;
-  }
+.scrub-cursor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1.5px solid var(--text);
+  pointer-events: none;
+}
 
-  .scrub-cursor::before {
-    content: "";
-    position: absolute;
-    top: -3px;
-    left: -4px;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--text);
-  }
+.scrub-cursor::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: -4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text);
+}
 
-  .scrub-readout {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    margin-top: 8px;
-    border-top: 1px solid var(--line);
-    background: var(--surface-chip-strong);
-    color: var(--text);
-  }
+.scrub-readout {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  margin-top: 8px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-chip-strong);
+  color: var(--text);
+}
 
-  /* v2: the readout glows softly while route playback runs, so the moving
+/* v2: the readout glows softly while route playback runs, so the moving
      numbers read as live rather than stale. */
-  .scrub-readout.is-playing {
-    background:
-      linear-gradient(180deg, rgba(var(--map-accent-rgb), 0.08), rgba(var(--map-accent-rgb), 0.02)),
-      var(--surface-chip-strong);
-    box-shadow: inset 0 0 0 1px rgba(var(--map-accent-rgb), 0.25);
-    transition: box-shadow 400ms var(--motion-ease), background 400ms var(--motion-ease);
-  }
+.scrub-readout.is-playing {
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--map-accent-rgb), 0.08),
+      rgba(var(--map-accent-rgb), 0.02)
+    ),
+    var(--surface-chip-strong);
+  box-shadow: inset 0 0 0 1px rgba(var(--map-accent-rgb), 0.25);
+  transition:
+    box-shadow 400ms var(--motion-ease),
+    background 400ms var(--motion-ease);
+}
 
-  /* v2: always-on elevation strip under the main scrub chart, sharing the
+/* v2: always-on elevation strip under the main scrub chart, sharing the
      scrub cursor + drag/keyboard behavior (scrubber.ts renders its SVG). */
-  .scrub-elev {
-    position: relative;
-    height: 52px;
-    margin-top: 6px;
-    border-radius: var(--radius-md);
-    background: var(--inset);
-    overflow: hidden;
-    touch-action: none;
-    cursor: ew-resize;
-    user-select: none;
-  }
+.scrub-elev {
+  position: relative;
+  height: 52px;
+  margin-top: 6px;
+  border-radius: var(--radius-md);
+  background: var(--inset);
+  overflow: hidden;
+  touch-action: none;
+  cursor: ew-resize;
+  user-select: none;
+}
 
-  .scrub-elev svg {
-    display: block;
-    width: 100%;
-    height: 52px;
-  }
+.scrub-elev svg {
+  display: block;
+  width: 100%;
+  height: 52px;
+}
 
-  .scrub-elev .scrub-elev-label {
-    position: absolute;
-    top: 4px;
-    left: 8px;
-    color: var(--soft);
-    font-size: 8.5px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    pointer-events: none;
-  }
+.scrub-elev .scrub-elev-label {
+  position: absolute;
+  top: 4px;
+  left: 8px;
+  color: var(--soft);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
 
-  .scrub-elev .scrub-cursor {
-    border-left-color: rgba(var(--mixed-rgb), 0.75);
-  }
+.scrub-elev .scrub-cursor {
+  border-left-color: rgba(var(--mixed-rgb), 0.75);
+}
 
-  .scrub-elev .scrub-cursor::before {
-    background: rgba(var(--mixed-rgb), 0.9);
-  }
+.scrub-elev .scrub-cursor::before {
+  background: rgba(var(--mixed-rgb), 0.9);
+}
 
-  /* ===== 10. "More signals" chip card ===== */
+/* ===== 10. "More signals" chip card ===== */
 
-  /* Enhanced "More signals" card: optional Volt signals. 3 columns gives the
+/* Enhanced "More signals" card: optional Volt signals. 3 columns gives the
      unit-bearing values room (4 columns clipped them and wrapped labels). It's a
      standalone panel, so it drops the readout's footer border-top, and the
      readout's single-row vertical dividers (which misalign once cells hide). */
-  .more-signals {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    border-top: none;
-    row-gap: 4px;
-  }
+/* v2 tile vocabulary: same bordered 14px tiles as the Drive signal grid, so
+     the enhanced signals read as more of the same system, not a second style. */
+.more-signals {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 0;
+  border-top: none;
+  background: transparent;
+  box-shadow: none;
+  padding: 0;
+  gap: 8px;
+}
 
-  .more-signals div + div {
-    border-left: none;
-  }
+/* .more-signals.scrub-readout (double class) outranks the shared
+     .scrub-readout cell/kicker/strong rules that follow in this file. */
+.more-signals.scrub-readout div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  min-height: 44px;
+  text-align: left;
+}
 
-  .more-signals.is-empty {
-    display: none;
-  }
+.more-signals.scrub-readout .kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
 
-  .scrub-readout div {
-    padding: 8px 4px;
-    min-width: 0;
-    text-align: center;
-  }
+.more-signals.scrub-readout .kicker[data-tone="volt"] {
+  color: var(--volt);
+}
+.more-signals.scrub-readout .kicker[data-tone="ev"] {
+  color: var(--ev);
+}
+.more-signals.scrub-readout .kicker[data-tone="warn"] {
+  color: var(--warn);
+}
+.more-signals.scrub-readout .kicker[data-tone="mixed"] {
+  color: var(--mixed);
+}
+.more-signals.scrub-readout .kicker[data-tone="accent"] {
+  color: var(--accent);
+}
 
-  .scrub-readout div + div {
-    border-left: 1px solid var(--line);
-  }
+.more-signals.scrub-readout strong {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  font-weight: 700;
+}
 
-  .scrub-readout .kicker {
-    color: var(--muted);
-    font-size: 9px;
-    letter-spacing: 0;
-  }
+.more-signals.is-empty {
+  display: none;
+}
 
-  .scrub-readout strong {
-    display: block;
-    margin-top: 3px;
-    font-family: inherit;
-    font-size: 14.5px;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.scrub-readout div {
+  padding: 8px 4px;
+  min-width: 0;
+  text-align: center;
+}
 
-  .scrub-readout .scrub-dim strong {
-    color: var(--soft);
-  }
+.scrub-readout div + div {
+  border-left: 1px solid var(--line);
+}
 
-  /* Map scrub readout: gapped inset chips with mono values; scoped to .scrubber
+.scrub-readout .kicker {
+  color: var(--muted);
+  font-size: 9px;
+  letter-spacing: 0;
+}
+
+.scrub-readout strong {
+  display: block;
+  margin-top: 3px;
+  font-family: inherit;
+  font-size: 14.5px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scrub-readout .scrub-dim strong {
+  color: var(--soft);
+}
+
+/* Map scrub readout: gapped inset chips with mono values; scoped to .scrubber
      so the Drive .live-readout is untouched. */
-  .scrubber .scrub-readout {
-    gap: 6px;
-    border-top: 0;
-    background: transparent;
-  }
+.scrubber .scrub-readout {
+  gap: 6px;
+  border-top: 0;
+  background: transparent;
+}
 
-  .scrubber .scrub-readout div {
-    padding: 7px 8px;
-    border-radius: var(--radius-input);
-    background: var(--inset);
-    text-align: left;
-  }
+.scrubber .scrub-readout div {
+  padding: 7px 8px;
+  border-radius: var(--radius-input);
+  background: var(--inset);
+  text-align: left;
+}
 
-  .scrubber .scrub-readout div + div {
-    border-left: 0;
-  }
+.scrubber .scrub-readout div + div {
+  border-left: 0;
+}
 
-  .scrubber .scrub-readout strong {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 13px;
-  }
+.scrubber .scrub-readout strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
 
-  .scrub-stack {
-    margin-top: 8px;
-    display: grid;
-    gap: 6px;
-  }
+.scrub-stack {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+}
 
-  .scrub-track {
-    min-height: 52px;
-    border-radius: 10px;
-    background: var(--fill-ghost);
-    overflow: hidden;
-  }
+.scrub-track {
+  min-height: 52px;
+  border-radius: 10px;
+  background: var(--fill-ghost);
+  overflow: hidden;
+}
 
-  .scrub-track-label {
-    position: absolute;
-    z-index: 1;
-    top: 6px;
-    left: 8px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: var(--surface-chip);
-    color: var(--soft);
-    font-size: 9px;
-    font-weight: 750;
-    letter-spacing: 0;
-    pointer-events: none;
-  }
+.scrub-track-label {
+  position: absolute;
+  z-index: 1;
+  top: 6px;
+  left: 8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--surface-chip);
+  color: var(--soft);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0;
+  pointer-events: none;
+}
 
-  .scrub-toggle {
-    margin-top: 10px;
-    min-height: var(--touch-min);
-    padding: 0 14px;
-    border: 1px solid var(--line-strong);
-    border-radius: 999px;
-    background: var(--fill);
-    color: var(--text);
-    font-size: 12px;
-    font-weight: 650;
-    cursor: pointer;
-  }
+.scrub-toggle {
+  margin-top: 10px;
+  min-height: var(--touch-min);
+  padding: 0 14px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
 
-  .map-drive-chips {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding: 2px 2px 4px;
-    -webkit-overflow-scrolling: touch;
-    scroll-snap-type: x proximity;
-    scroll-padding-left: 2px;
-    scrollbar-width: none;
-  }
+.map-drive-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 4px;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: x proximity;
+  scroll-padding-left: 2px;
+  scrollbar-width: none;
+}
 
-  .map-drive-chips::-webkit-scrollbar {
-    display: none;
-  }
+.map-drive-chips::-webkit-scrollbar {
+  display: none;
+}
 
-  /* Right-edge fade when there are more chips offscreen, so users can tell
+/* Right-edge fade when there are more chips offscreen, so users can tell
      the strip is scrollable. The :has check keeps it off when there's only
      one chip and nothing to scroll. */
-  .map-drive-chips:has(.map-drive-chip + .map-drive-chip + .map-drive-chip) {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
-  }
+.map-drive-chips:has(.map-drive-chip + .map-drive-chip + .map-drive-chip) {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    #000 calc(100% - 28px),
+    transparent
+  );
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
 
-  .map-drive-chip {
-    flex: 0 0 auto;
-    min-width: 134px;
-    padding: 10px 13px;
-    text-align: left;
-    border: 1px solid var(--line-strong);
-    border-radius: 14px;
-    background: var(--surface-chip-strong);
-    color: var(--text);
-    cursor: pointer;
-    scroll-snap-align: start;
-    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), transform var(--motion-fast) var(--motion-ease);
-  }
+/* v2 design chip: 150px min, lighter default border + chip surface. */
+.map-drive-chip {
+  flex: 0 0 auto;
+  min-width: 150px;
+  padding: 9px 12px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-chip);
+  color: var(--text);
+  cursor: pointer;
+  scroll-snap-align: start;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
 
-  .map-drive-chip:hover,
-  .map-drive-chip:focus-visible {
-    border-color: rgba(var(--map-accent-rgb), 0.55);
-  }
+.map-drive-chip:hover,
+.map-drive-chip:focus-visible {
+  border-color: rgba(var(--map-accent-rgb), 0.55);
+}
 
-  .map-drive-chip.is-active {
-    border-color: var(--map-accent);
-    background:
-      linear-gradient(180deg, rgba(var(--map-accent-rgb), 0.2), rgba(var(--map-accent-rgb), 0.08)),
-      var(--surface-chip-strong);
-    box-shadow: 0 6px 14px rgba(var(--map-accent-rgb), 0.18);
-  }
+.map-drive-chip.is-active {
+  border-color: var(--map-accent);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--map-accent-rgb), 0.2),
+      rgba(var(--map-accent-rgb), 0.08)
+    ),
+    var(--surface-chip-strong);
+  box-shadow: 0 6px 14px rgba(var(--map-accent-rgb), 0.18);
+}
 
-  .map-drive-chip.is-live {
-    border-color: rgba(var(--map-accent-rgb), 0.42);
-    background:
-      linear-gradient(180deg, rgba(var(--map-accent-rgb), 0.16), rgba(var(--map-accent-rgb), 0.055)),
-      var(--surface-chip-strong);
-  }
+.map-drive-chip.is-live {
+  border-color: rgba(var(--map-accent-rgb), 0.42);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--map-accent-rgb), 0.16),
+      rgba(var(--map-accent-rgb), 0.055)
+    ),
+    var(--surface-chip-strong);
+}
 
-  .map-drive-chip.is-active .dl {
-    color: var(--text);
-  }
+.map-drive-chip.is-active .dl {
+  color: var(--text);
+}
 
-  /* v2 chip anatomy: title row (drive name + time-of-day pill) above the
+/* v2 chip anatomy: title row (drive name + time-of-day pill) above the
      when line. The title carries the weight; the when line recedes. */
-  .map-drive-chip .dt {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    color: var(--text);
-    font-size: 12.5px;
-    font-weight: 750;
-    overflow: hidden;
-    white-space: nowrap;
-  }
+.map-drive-chip .dt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12.5px;
+  font-weight: 700;
+  overflow: hidden;
+  white-space: nowrap;
+}
 
-  .map-drive-chip .tod-pill {
-    flex: 0 0 auto;
-    padding: 2px 7px;
-    border-radius: 999px;
-    background: rgba(var(--warn-rgb), 0.12);
-    color: var(--warn);
-    font-size: 9px;
-    font-weight: 750;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
+.map-drive-chip .tod-pill {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(var(--warn-rgb), 0.12);
+  /* v2 design: soft amber (#ffd37f) for dawn/day pills. */
+  color: var(--warn-soft);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 
-  .map-drive-chip .tod-pill[data-tod="dusk"],
-  .map-drive-chip .tod-pill[data-tod="night"] {
-    background: rgba(var(--mixed-rgb), 0.14);
-    color: var(--mixed-soft);
-  }
+.map-drive-chip .tod-pill[data-tod="dusk"],
+.map-drive-chip .tod-pill[data-tod="night"] {
+  background: rgba(var(--mixed-rgb), 0.14);
+  color: var(--mixed-soft);
+}
 
-  .map-drive-chip .dl {
-    display: block;
-    margin-top: 2px;
-    color: var(--soft);
-    font-size: 10.5px;
-    font-weight: 500;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.map-drive-chip .dl {
+  display: block;
+  margin-top: 2px;
+  color: var(--soft);
+  font-size: 10.5px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  .map-drive-chip .dm {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 5px;
-    font-family: ui-monospace, monospace;
-    font-size: 11px;
-    color: var(--muted);
-  }
+.map-drive-chip .dm {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
 
-  .map-drive-chip .dm b {
-    color: var(--text);
-    font-weight: 700;
-  }
+.map-drive-chip .dm b {
+  color: var(--text);
+  font-weight: 700;
+}
 
-  .map-drive-chip .dm u {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    display: inline-block;
-  }
+.map-drive-chip .dm u {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
 
-  #realTripsList .real-trip-chip {
-    display: grid;
-    position: relative;
-    /* Compact two-column row: when/meta on the left, point/sample badge on the right. No reserved
+#realTripsList .real-trip-chip {
+  display: grid;
+  position: relative;
+  /* Compact two-column row: when/meta on the left, point/sample badge on the right. No reserved
        map area — the route renders in the large preview below, so a routeless drive is a small
        card, not a tall empty box. */
-    grid-template-columns: 1fr auto;
-    align-items: center;
-    gap: 2px 10px;
-    min-width: min(264px, 82vw);
-    max-width: 300px;
-    min-height: 0;
-    padding: 11px 13px;
-    border-color: var(--line-strong);
-    background: var(--surface-chip);
-  }
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 10px;
+  min-width: min(264px, 82vw);
+  max-width: 300px;
+  min-height: 0;
+  padding: 11px 13px;
+  border-color: var(--line-strong);
+  background: var(--surface-chip);
+}
 
-  #realTripsList .real-trip-chip .real-trip-chip-copy {
-    grid-column: 1;
-    min-width: 0;
-  }
+#realTripsList .real-trip-chip .real-trip-chip-copy {
+  grid-column: 1;
+  min-width: 0;
+}
 
-  #realTripsList .real-trip-chip .trip-route-state {
-    position: static;
-    grid-column: 2;
-    justify-self: end;
-    align-self: center;
-  }
+#realTripsList .real-trip-chip .trip-route-state {
+  position: static;
+  grid-column: 2;
+  justify-self: end;
+  align-self: center;
+}
 
-  #realTripsList .real-trip-chip.is-active {
-    border-color: var(--volt);
-    background:
-      linear-gradient(135deg, rgba(var(--volt-rgb), 0.18), rgba(var(--volt-rgb), 0.04)),
-      var(--surface-chip);
-    box-shadow: 0 12px 24px rgba(var(--volt-rgb), 0.12);
-  }
+#realTripsList .real-trip-chip.is-active {
+  border-color: var(--volt);
+  background:
+    linear-gradient(
+      135deg,
+      rgba(var(--volt-rgb), 0.18),
+      rgba(var(--volt-rgb), 0.04)
+    ),
+    var(--surface-chip);
+  box-shadow: 0 12px 24px rgba(var(--volt-rgb), 0.12);
+}
 
-  #realTripsList .trip-route-map {
-    min-height: 112px;
-  }
+#realTripsList .trip-route-map {
+  min-height: 112px;
+}
 
-  .scrub-toolbar {
-    display: flex;
-    gap: 8px;
-    margin-top: 10px;
-  }
+.scrub-toolbar {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
 
-  /* ===== 12. Drive-tab live cards & micro-charts ===== */
+/* ===== 12. Drive-tab live cards & micro-charts ===== */
 
-  /* Drive-tab polish ──────────────────────────────────────────────────────────
+/* Drive-tab polish ──────────────────────────────────────────────────────────
      Reuses .map-drive-chips / .scrub-chart / .scrub-readout vocabulary from the
      Map tab so the Drive screen feels like the same product. */
 
-  /* Persistent data-provenance badge (A2/A4/E4/H3): a slim, calm row that names
+/* Persistent data-provenance badge (A2/A4/E4/H3): a slim, calm row that names
      the data source (demo / live / offline / empty) with a colored dot, so the
      four states can never be confused. data-source drives the accent. */
-  /* Compact one-line chip (was a full-width two-line card): dot + label + sub
+/* Compact one-line chip (was a full-width two-line card): dot + label + sub
      share a row, and the chip hugs its content so it reads as a small tag above
      the gauges rather than a second header block. */
-  .drive-source-badge {
-    display: flex;
-    align-items: center;
-    justify-self: start;
-    max-width: 100%;
-    gap: 8px;
-    padding: 5px 12px 5px 10px;
-    border: 1px solid var(--line);
-    border-left: 3px solid var(--muted);
-    border-radius: 10px;
-    background: var(--surface-chip);
-  }
+.drive-source-badge {
+  display: flex;
+  align-items: center;
+  justify-self: start;
+  max-width: 100%;
+  gap: 8px;
+  padding: 5px 12px 5px 10px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--muted);
+  border-radius: 10px;
+  background: var(--surface-chip);
+}
 
-  .drive-source-dot {
-    flex: none;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--muted);
-  }
+.drive-source-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
 
-  .drive-source-text {
-    display: flex;
-    align-items: baseline;
-    gap: 7px;
-    min-width: 0;
-    line-height: 1.3;
-  }
+.drive-source-text {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  min-width: 0;
+  line-height: 1.3;
+}
 
-  .drive-source-badge strong {
-    flex: none;
-    font-size: 12px;
-    font-weight: 750;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
-  }
+.drive-source-badge strong {
+  flex: none;
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
 
-  .drive-source-badge small {
-    color: var(--soft);
-    font-size: 11px;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.drive-source-badge small {
+  color: var(--soft);
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  /* Same separator idiom as the topbar last-connected line. */
-  .drive-source-badge small::before {
-    content: "·";
-    margin-right: 6px;
-    opacity: 0.6;
-  }
+/* Same separator idiom as the topbar last-connected line. */
+.drive-source-badge small::before {
+  content: "·";
+  margin-right: 6px;
+  opacity: 0.6;
+}
 
-  .drive-source-badge[data-source="live"] {
-    border-left-color: var(--volt);
-  }
-  .drive-source-badge[data-source="live"] .drive-source-dot {
-    background: var(--volt);
-    box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.7);
-    animation: drive-source-pulse 1.8s ease-in-out infinite;
-  }
-  .drive-source-badge[data-source="demo"] {
-    border-left-color: var(--accent, #6ec6ff);
-  }
-  .drive-source-badge[data-source="demo"] .drive-source-dot {
-    background: var(--accent, #6ec6ff);
-    box-shadow: 0 0 8px rgba(110, 198, 255, 0.6);
-  }
-  .drive-source-badge[data-source="offline"] {
-    border-left-color: var(--warn);
-  }
-  .drive-source-badge[data-source="offline"] .drive-source-dot {
-    background: var(--warn);
-  }
-  .drive-source-badge[data-source="empty"] {
-    border-left-color: var(--line-strong);
-  }
+.drive-source-badge[data-source="live"] {
+  border-left-color: var(--volt);
+}
+.drive-source-badge[data-source="live"] .drive-source-dot {
+  background: var(--volt);
+  box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.7);
+  animation: drive-source-pulse 1.8s ease-in-out infinite;
+}
+.drive-source-badge[data-source="demo"] {
+  border-left-color: var(--accent, #6ec6ff);
+}
+.drive-source-badge[data-source="demo"] .drive-source-dot {
+  background: var(--accent, #6ec6ff);
+  box-shadow: 0 0 8px rgba(110, 198, 255, 0.6);
+}
+.drive-source-badge[data-source="offline"] {
+  border-left-color: var(--warn);
+}
+.drive-source-badge[data-source="offline"] .drive-source-dot {
+  background: var(--warn);
+}
+.drive-source-badge[data-source="empty"] {
+  border-left-color: var(--line-strong);
+}
 
-  @keyframes drive-source-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.45; }
+@keyframes drive-source-pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
+  50% {
+    opacity: 0.45;
+  }
+}
 
-  /* One-time live reveal (I1): the hero meters/trace fade+rise once, the first
+/* One-time live reveal (I1): the hero meters/trace fade+rise once, the first
      time real or demo samples arrive. Class is added once by drive.ts and never
      replays. Reduced-motion users get the end state with no animation. */
-  @media (prefers-reduced-motion: no-preference) {
-    .hero.is-first-sample .live-card,
-    .hero.is-first-sample .battery-strip {
-      animation: drive-first-sample 520ms var(--motion-ease, ease) both;
-    }
-    .hero.is-first-sample .battery-strip {
-      animation-delay: 90ms;
-    }
+@media (prefers-reduced-motion: no-preference) {
+  .hero.is-first-sample .live-card,
+  .hero.is-first-sample .battery-strip {
+    animation: drive-first-sample 520ms var(--motion-ease, ease) both;
   }
-
-  @keyframes drive-first-sample {
-    from {
-      opacity: 0.4;
-      transform: translateY(6px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+  .hero.is-first-sample .battery-strip {
+    animation-delay: 90ms;
   }
+}
 
-  /* Top session chip strip. Inherits the .map-drive-chips horizontal scroll-snap
+@keyframes drive-first-sample {
+  from {
+    opacity: 0.4;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Top session chip strip. Inherits the .map-drive-chips horizontal scroll-snap
      behavior; this rule just tightens the vertical rhythm and adds a recording
      pulse to the active chip. */
-  .drive-now-chips {
-    margin-bottom: 4px;
-  }
+.drive-now-chips {
+  margin-bottom: 4px;
+}
 
-  /* The live/recording state now consolidates into the topbar #driveRecording
+/* The live/recording state now consolidates into the topbar #driveRecording
      line, so this strip stays empty — collapse it (a .view grid item, empty, would
      otherwise leave a stray 12px gap above the hero). */
-  .drive-now-chips:empty {
-    display: none;
-  }
+.drive-now-chips:empty {
+  display: none;
+}
 
-  .drive-now-chip {
-    flex: 0 0 auto;
-    min-width: 158px;
-    padding: 10px 13px;
-    text-align: left;
-    border: 1px solid var(--line-strong);
-    border-radius: 14px;
-    background: var(--surface-chip);
-    color: var(--text);
-    scroll-snap-align: start;
-    transition: border-color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease);
-  }
+.drive-now-chip {
+  flex: 0 0 auto;
+  min-width: 158px;
+  padding: 10px 13px;
+  text-align: left;
+  border: 1px solid var(--line-strong);
+  border-radius: 14px;
+  background: var(--surface-chip);
+  color: var(--text);
+  scroll-snap-align: start;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease);
+}
 
-  .drive-now-chip .dl {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 750;
-  }
+.drive-now-chip .dl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 750;
+}
 
-  .drive-now-chip .dl u {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--soft);
-    box-shadow: 0 0 8px rgba(116, 117, 130, 0.6);
-  }
+.drive-now-chip .dl u {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--soft);
+  box-shadow: 0 0 8px rgba(116, 117, 130, 0.6);
+}
 
-  .drive-now-chip .dm {
-    display: flex;
-    gap: 8px;
-    margin-top: 5px;
-    font-family: ui-monospace, monospace;
-    font-size: 11px;
-    color: var(--muted);
-  }
+.drive-now-chip .dm {
+  display: flex;
+  gap: 8px;
+  margin-top: 5px;
+  font-family: ui-monospace, monospace;
+  font-size: 11px;
+  color: var(--muted);
+}
 
-  .drive-now-chip .dm b {
-    color: var(--text);
-    font-weight: 700;
-  }
+.drive-now-chip .dm b {
+  color: var(--text);
+  font-weight: 700;
+}
 
-  .drive-now-chip[data-tone="live"] {
-    border-color: var(--volt);
-    background: rgba(var(--volt-rgb), 0.18);
-    box-shadow: 0 6px 14px rgba(var(--volt-rgb), 0.18);
-  }
+.drive-now-chip[data-tone="live"] {
+  border-color: var(--volt);
+  background: rgba(var(--volt-rgb), 0.18);
+  box-shadow: 0 6px 14px rgba(var(--volt-rgb), 0.18);
+}
 
-  .drive-now-chip[data-tone="live"] .dl u {
-    background: var(--volt);
-    box-shadow: 0 0 10px rgba(var(--volt-rgb), 0.7);
-    animation: drive-chip-pulse var(--motion-pulse) var(--motion-ease-inout) infinite;
-  }
+.drive-now-chip[data-tone="live"] .dl u {
+  background: var(--volt);
+  box-shadow: 0 0 10px rgba(var(--volt-rgb), 0.7);
+  animation: drive-chip-pulse var(--motion-pulse) var(--motion-ease-inout)
+    infinite;
+}
 
-  .drive-now-chip[data-tone="ok"] .dl u {
-    background: var(--ok);
-    box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.55);
-  }
+.drive-now-chip[data-tone="ok"] .dl u {
+  background: var(--ok);
+  box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.55);
+}
 
-  .drive-now-chip[data-tone="demo"] {
-    border-color: rgba(var(--ev-rgb), 0.45);
-    background: rgba(var(--ev-rgb), 0.1);
-  }
+.drive-now-chip[data-tone="demo"] {
+  border-color: rgba(var(--ev-rgb), 0.45);
+  background: rgba(var(--ev-rgb), 0.1);
+}
 
-  .drive-now-chip[data-tone="demo"] .dl u {
-    background: var(--ev);
-    box-shadow: 0 0 8px rgba(var(--ev-rgb), 0.55);
-  }
+.drive-now-chip[data-tone="demo"] .dl u {
+  background: var(--ev);
+  box-shadow: 0 0 8px rgba(var(--ev-rgb), 0.55);
+}
 
-  /* "Last drive" chip is a button that jumps to Map; keep it visually quieter
+/* "Last drive" chip is a button that jumps to Map; keep it visually quieter
      than the live status chip but with the same shape. */
-  button.drive-now-chip {
-    cursor: pointer;
-    font: inherit;
-  }
+button.drive-now-chip {
+  cursor: pointer;
+  font: inherit;
+}
 
-  button.drive-now-chip:hover,
-  button.drive-now-chip:focus-visible {
-    border-color: rgba(var(--volt-rgb), 0.55);
-  }
+button.drive-now-chip:hover,
+button.drive-now-chip:focus-visible {
+  border-color: rgba(var(--volt-rgb), 0.55);
+}
 
-  @keyframes drive-chip-pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.55; transform: scale(0.78); }
+@keyframes drive-chip-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
   }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.78);
+  }
+}
 
-  /* Live trace charts inside the Drive tab. Same .scrub-chart styling, but
+/* Live trace charts inside the Drive tab. Same .scrub-chart styling, but
      these aren't draggable — disable the resize cursor + pointer events so
      pulling on them doesn't feel like a broken control. */
-  .live-trace-chart {
-    cursor: default;
-    touch-action: auto;
-    margin-top: 10px;
-    min-height: 86px;
-    user-select: text;
-  }
+.live-trace-chart {
+  cursor: default;
+  touch-action: auto;
+  margin-top: 10px;
+  min-height: 56px;
+  user-select: text;
+}
 
-  .live-trace-chart .scrub-cursor {
-    pointer-events: none;
-  }
+.live-trace-chart .scrub-cursor {
+  pointer-events: none;
+}
 
-  /* "Now" cursor pinned to the right edge — the live trace flows in from the
+/* "Now" cursor pinned to the right edge — the live trace flows in from the
      right, so the cursor marks the most recent sample. Animate left so newly
      arriving samples don't feel jumpy. */
-  .live-trace-cursor {
-    left: 100%;
-    transition: opacity var(--motion-fast) var(--motion-ease);
-  }
+.live-trace-cursor {
+  left: 100%;
+  transition: opacity var(--motion-fast) var(--motion-ease);
+}
 
-  .live-trace-cursor::before {
-    background: var(--volt);
-    box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.55);
-  }
+.live-trace-cursor::before {
+  background: var(--volt);
+  box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.55);
+}
 
-  /* Six-cell readout panel under the live card. Inherits .scrub-readout for
-     monospace tabular-nums + center-aligned values, then we add panel chrome. */
-  .live-readout {
-    margin: 0;
-    padding: 4px;
-    border-top: 0;
-    gap: 4px;
-    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
-  }
+/* v2 design driveTiles: six live signals as a 3-column grid of individually
+     bordered tiles (not one panel strip). The outer element drops its inherited
+     .scrub-readout/.panel chrome so each tile is its own card. */
+.live-readout {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 0;
+  background: transparent;
+  box-shadow: none;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 
-  /* Small-screen fallback: six columns get cramped under ~390px so wrap into 3. */
-  @media (max-width: 390px) {
-    .live-readout { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  }
+/* v2 design: the Drive tab shows exactly the design's card stack — the HV
+     pack V/A sub-row and the enhanced-signals card are app extras the design
+     doesn't have. The same readings stay available on Diagnostics → Live
+     signals, so nothing is lost, and the DOM/render logic stays intact. */
+#batteryPackReadout,
+#view-drive .more-signals {
+  display: none;
+}
 
-  /* Micro-charts row — power bars + SOC trace. */
+/* v2 design: the hero speed trace bleeds edge-to-edge of the card (negative
+     margins cancel the 20px card padding; the card's overflow:hidden clips it)
+     with no inset box chrome and no playback-style cursor. */
+#liveTraceChart {
+  margin: 10px -20px 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+#liveTraceChart .scrub-cursor {
+  display: none;
+}
+
+/* Micro-charts row — power bars + SOC trace. */
+.live-microcharts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 390px) {
   .live-microcharts {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
+    grid-template-columns: 1fr;
   }
+}
 
-  @media (max-width: 390px) {
-    .live-microcharts {
-      grid-template-columns: 1fr;
-    }
-  }
+.live-micro {
+  padding: 12px 14px;
+  /* v2 design: micro cards sit a step below full panels — 16px radius. */
+  border-radius: 16px;
+}
 
-  .live-micro {
-    padding: 12px 14px;
-  }
+/* v2 design: the micro chart sits bare in its card — no inset box chrome. */
+.live-micro .live-trace-chart {
+  background: transparent;
+  border-radius: 0;
+}
 
-  .live-micro .live-trace-chart {
-    min-height: 58px;
-  }
+.live-micro .live-trace-chart {
+  min-height: 58px;
+}
 
-  /* Empty micro-chart placeholder matches the populated trace height. */
-  .live-micro .live-chart-empty {
-    min-height: 58px;
-    padding: 8px;
-  }
+/* Empty micro-chart placeholder matches the populated trace height. */
+.live-micro .live-chart-empty {
+  min-height: 58px;
+  padding: 8px;
+}
 
-  .live-micro header {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 8px;
-  }
+.live-micro header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
 
-  /* Live current-value chip in the micro-card headers. Tone is set by
-     renderPowerMicroHeader / renderSocMicroHeader and drives the color so the
-     value reads as a fresh "right now" callout, not just a unit label. */
-  .live-micro .micro-tag {
-    padding: 2px 7px;
-    border-radius: 999px;
-    border: 1px solid transparent;
-    font-size: 11px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-    color: var(--muted);
-    background: var(--fill-soft);
-    transition: color var(--motion-fast) var(--motion-ease), background-color var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
-  }
+/* v2 design: the micro-card corner tag is a bare unit label ("kW" / "%"),
+     tinted per chart — not a live value chip. */
+.live-micro .micro-tag {
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  color: var(--muted);
+}
 
-  .live-micro .micro-tag[data-kind="power"][data-tone="drive"] {
-    color: var(--volt);
-    background: rgba(var(--volt-rgb), 0.12);
-    border-color: rgba(var(--volt-rgb), 0.4);
-  }
-  .live-micro .micro-tag[data-kind="power"][data-tone="regen"] {
-    color: var(--ev);
-    background: rgba(var(--ev-rgb), 0.12);
-    border-color: rgba(var(--ev-rgb), 0.4);
-  }
-  .live-micro .micro-tag[data-kind="power"][data-tone="coast"] {
-    color: var(--soft);
-    background: var(--fill-soft);
-  }
+.live-micro .micro-tag[data-kind="power"] {
+  color: var(--volt-soft-dim);
+}
 
-  .live-micro .micro-tag[data-kind="soc"][data-tone="ok"] {
-    color: var(--ok);
-    background: rgba(var(--ok-rgb), 0.12);
-    border-color: rgba(var(--ok-rgb), 0.4);
-  }
-  .live-micro .micro-tag[data-kind="soc"][data-tone="warn"] {
-    color: var(--warn);
-    background: rgba(var(--warn-rgb), 0.12);
-    border-color: rgba(var(--warn-rgb), 0.4);
-  }
-  /* soc idle: no override — one neutral idle chip for both charts. */
+.live-micro .micro-tag[data-kind="soc"] {
+  color: var(--ev-soft);
+}
 
-  /* Power kW value colored by drive/regen/coast — matches the existing power
-     meter fill so the value reads at a glance without having to read the
-     state pill on the right. */
-  .power-label strong {
-    color: var(--text);
-    transition: color var(--motion-fast) var(--motion-ease);
-  }
-  .power-block:has(.power-state[data-state="drive"]) .power-label strong,
-  .power-block:has(.power-state[data-state="regen"]) .power-label strong {
-    color: var(--hero-accent);
-  }
-  .power-block:has(.power-state[data-state="coast"]) .power-label strong {
-    color: var(--soft);
-  }
+/* Tone-chip variants removed (v2 design): the tag is a static unit label. */
 
-  /* The speed value's tight radial halo lives with the rest of .speed-row in
+/* v2 design: the power numeral stays plain text in every state — the state
+     word and the meter fill carry the drive/regen color. */
+.power-label strong {
+  color: var(--text);
+}
+
+/* The speed value's tight radial halo lives with the rest of .speed-row in
      components.css (this file used to override the geometry; consolidated). */
 
-  /* Speed-trace cap label sits in the SVG; this readout chip surfaces the
+/* Speed-trace cap label sits in the SVG; this readout chip surfaces the
      max + current cap below the chart in a more legible chip. Falls back
      gracefully because the field is updated only when samples exist. */
-  .live-trace-chart {
-    overflow: hidden;
-    border-radius: var(--radius-md);
-    background: var(--fill-ghost);
-  }
+.live-trace-chart {
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--fill-ghost);
+}
 
-  /* Waiting chart = skeleton shimmer bars + caption (v2 design), built by
+/* Waiting chart = skeleton shimmer bars + caption (v2 design), built by
      drive.ts#paintEmpty. Left-aligned column of three shimmer lines mimics an
      incoming trace instead of a bare "waiting" label. */
-  .live-chart-empty {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-    min-height: 86px;
-    padding: 8px 12px;
-    position: relative;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    user-select: none;
-  }
+.live-chart-empty {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  min-height: 58px;
+  padding: 8px 12px;
+  position: relative;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  user-select: none;
+}
 
+.chart-skel-bar {
+  display: block;
+  height: 9px;
+  border-radius: 6px;
+  background-image: linear-gradient(
+    100deg,
+    var(--fill-faint, rgba(255, 255, 255, 0.04)) 30%,
+    var(--fill-bold, rgba(255, 255, 255, 0.13)) 50%,
+    var(--fill-faint, rgba(255, 255, 255, 0.04)) 70%
+  );
+  background-size: 200% 100%;
+  animation: chart-skel-shimmer 1.5s linear infinite;
+}
+
+@keyframes chart-skel-shimmer {
+  from {
+    background-position: 180% 0;
+  }
+  to {
+    background-position: -180% 0;
+  }
+}
+
+.live-chart-empty small {
+  margin-top: 2px;
+  line-height: 1.3;
+}
+
+@media (prefers-reduced-motion: reduce) {
   .chart-skel-bar {
-    display: block;
-    height: 9px;
-    border-radius: 6px;
-    background-image: linear-gradient(
-      100deg,
-      var(--fill-faint, rgba(255, 255, 255, 0.04)) 30%,
-      var(--fill-bold, rgba(255, 255, 255, 0.13)) 50%,
-      var(--fill-faint, rgba(255, 255, 255, 0.04)) 70%
-    );
-    background-size: 200% 100%;
-    animation: chart-skel-shimmer 1.5s linear infinite;
+    animation: none;
   }
+}
 
-  @keyframes chart-skel-shimmer {
-    from {
-      background-position: 180% 0;
-    }
-    to {
-      background-position: -180% 0;
-    }
-  }
+.live-dom-chart {
+  position: relative;
+  min-height: 58px;
+  overflow: hidden;
+}
 
-  .live-chart-empty small {
-    margin-top: 2px;
-    line-height: 1.3;
-  }
+.live-power-zero,
+.live-soc-baseline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed var(--line-strong);
+}
 
-  @media (prefers-reduced-motion: reduce) {
-    .chart-skel-bar {
-      animation: none;
-    }
-  }
+.live-soc-baseline {
+  border-color: var(--line-soft);
+}
 
-  .live-dom-chart {
-    position: relative;
-    min-height: 86px;
-    overflow: hidden;
-  }
+.live-power-bar,
+.live-soc-segment,
+.live-soc-dot {
+  position: absolute;
+  display: block;
+}
 
-  .live-power-zero,
-  .live-soc-baseline {
-    position: absolute;
-    left: 0;
-    right: 0;
-    border-top: 1px dashed var(--line-strong);
-  }
+.live-power-bar {
+  min-height: 1px;
+  border-radius: 999px;
+  opacity: 0.86;
+}
 
-  .live-soc-baseline {
-    border-color: var(--line-soft);
-  }
+.live-power-bar.is-drive {
+  background: var(--volt);
+  box-shadow: 0 0 10px rgba(var(--volt-rgb), 0.22);
+}
 
-  .live-power-bar,
-  .live-soc-segment,
-  .live-soc-dot {
-    position: absolute;
-    display: block;
-  }
+.live-power-bar.is-regen {
+  background: var(--ev);
+  box-shadow: 0 0 10px rgba(var(--ev-rgb), 0.2);
+}
 
-  .live-power-bar {
-    min-height: 1px;
-    border-radius: 999px;
-    opacity: 0.86;
-  }
+.live-soc-segment {
+  height: 2px;
+  border-radius: 999px;
+  /* v2 design: the SOC session trace is EV green (#b8e63b), not purple. */
+  background: var(--ev);
+  box-shadow: none;
+  transform-origin: 0 50%;
+}
 
-  .live-power-bar.is-drive {
-    background: var(--volt);
-    box-shadow: 0 0 10px rgba(var(--volt-rgb), 0.22);
-  }
+.live-soc-dot {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  /* Matches the green SOC trace (v2 design). */
+  background: var(--ev-soft);
+}
 
-  .live-power-bar.is-regen {
-    background: var(--ev);
-    box-shadow: 0 0 10px rgba(var(--ev-rgb), 0.2);
-  }
+.live-trace-canvas {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
 
-  .live-soc-segment {
-    height: 2px;
-    border-radius: 999px;
-    background: var(--mixed);
-    box-shadow: 0 0 10px rgba(var(--mixed-rgb), 0.24);
-    transform-origin: 0 50%;
-  }
-
-  .live-soc-dot {
-    width: 5px;
-    height: 5px;
-    margin: -2.5px 0 0 -2.5px;
-    border-radius: 50%;
-    background: var(--mixed-soft);
-  }
-
-  .live-trace-canvas {
-    display: block;
-    width: 100%;
-    height: 96px;
-  }
-
-  /* Slight bump on the live-readout cells so values breathe — the 4px 0
+/* Slight bump on the live-readout cells so values breathe — the 4px 0
      baseline was too cramped on mid-density phones. No sibling hairlines here
      (unlike the base .scrub-readout): auto-fit wraps the six cells at narrow
      widths and cells can hide via [data-live-cell].is-empty, so any div + div
      divider lands on row-start cells. The 4px gap is the separator. */
-  .live-readout div {
-    padding: 8px 2px;
-    border-left: 0;
-  }
+/* Each signal is a bordered 14px tile, left-aligned (design tiles), min 44px. */
+.live-readout div {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-raised);
+  min-height: 44px;
+  text-align: left;
+}
 
-  [data-live-cell].is-empty {
-    display: none;
-  }
+[data-live-cell].is-empty {
+  display: none;
+}
 
-  .live-readout.is-empty {
-    display: none;
-  }
+.live-readout.is-empty {
+  display: none;
+}
 
-  .live-readout.is-empty::after {
-    content: none;
-  }
+.live-readout.is-empty::after {
+  content: none;
+}
 
-  .battery-pack-readout.is-empty {
-    display: none;
-  }
+.battery-pack-readout.is-empty {
+  display: none;
+}
 
-  /* First-run ("empty" source, drive.ts#renderDriveSourceBadge): one
+/* First-run ("empty" source, drive.ts#renderDriveSourceBadge): one
      page-level empty state replaces a screenful of dead placeholder tiles. */
-  .view.is-prelive .live-microcharts,
-  .view.is-prelive .trip-card,
-  .view.is-prelive .session-footer-btn {
-    display: none;
-  }
+.view.is-prelive .live-microcharts,
+.view.is-prelive .trip-card,
+.view.is-prelive .session-footer-btn {
+  display: none;
+}
 
-  .live-readout .kicker {
-    font-size: 9px;
-    letter-spacing: 0.05em;
-  }
-  .live-readout strong {
-    font-size: 17px;
-  }
+.live-readout .kicker {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+}
+/* Restore the per-signal tone tint the shared .scrub-readout muted rule
+     otherwise suppresses (design tints each tile label; RPM uses the softer
+     #ff9d6e-family orange, not full volt). */
+.live-readout .kicker[data-tone="volt"] {
+  color: var(--volt-soft-dim);
+}
+.live-readout .kicker[data-tone="ev"] {
+  color: var(--ev);
+}
+.live-readout .kicker[data-tone="warn"] {
+  color: var(--warn);
+}
+.live-readout .kicker[data-tone="mixed"] {
+  color: var(--mixed);
+}
+/* Monospace value, left-aligned in the tile (design ui-monospace 15px). */
+.live-readout strong {
+  margin-top: 3px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 15px;
+  font-weight: 700;
+}
 
-  /* ===== 13. Validation card ===== */
+/* ===== 13. Validation card ===== */
 
-  .validation-card > .validation-list {
-    margin-top: 12px;
-  }
+.validation-card > .validation-list {
+  margin-top: 12px;
+}
 
-  /* ===== 13b. Drive "This trip" card + session/health footer (v2) ===== */
+/* ===== 13b. Drive "This trip" card + session/health footer (v2) ===== */
 
-  .trip-card {
-    padding: var(--card-pad-tight);
-  }
+.trip-card {
+  /* v2 design card padding. */
+  padding: 16px 20px;
+}
 
-  .trip-stats {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-  }
+.trip-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
 
-  .trip-stats > div {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-  }
+.trip-stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
 
-  .trip-stats .kicker {
-    color: var(--soft);
-  }
+.trip-stats .kicker {
+  color: var(--soft);
+}
 
-  .trip-stats strong {
-    font-family: var(--font-display);
-    /* Scales with the viewport so "4.7 mi/kWh" fits its quarter-width column
+.trip-stats strong {
+  font-family: var(--font-display);
+  /* Scales with the viewport so "4.7 mi/kWh" fits its quarter-width column
        on a narrow phone instead of ellipsizing the unit away. */
-    font-size: clamp(14px, 4.4vw, 18px);
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    line-height: 1.1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+  font-size: clamp(14px, 4.4vw, 18px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  .trip-stats > div:last-child strong {
-    color: var(--ev-soft);
-  }
+.trip-stats > div:last-child strong {
+  color: var(--ev);
+}
 
-  /* The energy/cost footer keeps its .trip-energy-strip typography but loses
+/* The energy/cost footer keeps its .trip-energy-strip typography but loses
      the standalone-card chrome — it's a divider row inside the trip card. */
-  .trip-card-footer.trip-energy-strip {
-    margin-top: 12px;
-    padding: 12px 0 0;
-    border: 0;
-    border-top: 1px solid var(--line-soft);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-  }
+.trip-card-footer.trip-energy-strip {
+  margin-top: 12px;
+  padding: 12px 0 0;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
 
-  /* Slim tappable session/health row (v2): quiet chip chrome, dot + one line
+/* Slim tappable session/health row (v2): quiet chip chrome, dot + one line
      of session state, checks summary + chevron on the right. */
-  .session-footer-btn {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    width: 100%;
-    min-height: 48px;
-    padding: 0 16px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    background: var(--surface-chip);
-    box-shadow: none;
-    color: var(--muted);
-    font-family: inherit;
-    font-size: 12px;
-    text-align: left;
-    cursor: pointer;
-  }
+.session-footer-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 0 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--surface-chip);
+  box-shadow: none;
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
 
-  .session-footer-lead {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-  }
+.session-footer-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 
-  .session-footer-lead > span:last-child {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+.session-footer-lead > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  .session-footer-dot {
-    flex: none;
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--warn);
-    box-shadow: 0 0 8px var(--warn);
-  }
+.session-footer-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+}
 
-  .session-footer-dot[data-tone="ok"] {
-    background: var(--ok);
-    box-shadow: 0 0 8px var(--ok);
-  }
+.session-footer-dot[data-tone="ok"] {
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
 
-  .session-footer-health {
-    flex: none;
-    color: var(--soft);
-    font-weight: 600;
-    white-space: nowrap;
-  }
+.session-footer-health {
+  flex: none;
+  color: var(--soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
 
-  .diagnostic-compact-card {
-    padding: 12px 14px;
-  }
+.diagnostic-compact-card {
+  padding: 12px 14px;
+}
 
-  #reviewCard:not(.has-session) .review-grid {
-    display: none;
-  }
+#reviewCard:not(.has-session) .review-grid {
+  display: none;
+}
 
-  #reviewCard:not(.has-session) .warning-list {
-    margin-top: 8px;
-  }
+#reviewCard:not(.has-session) .warning-list {
+  margin-top: 8px;
+}
 
-  #dbCard .status-meta {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 8px;
-  }
+#dbCard .status-meta {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+  margin-top: 8px;
+}
 
-  #dbCard .status-meta div {
-    padding: 8px 10px;
-  }
+#dbCard .status-meta div {
+  padding: 8px 10px;
+}
 
-  #dbCard .status-meta strong {
-    margin-top: 3px;
-    font-size: 16px;
-  }
+#dbCard .status-meta strong {
+  margin-top: 3px;
+  font-size: 16px;
+}
 
-  #dbCard .status-meta div:nth-child(n+5) {
-    display: none;
-  }
+#dbCard .status-meta div:nth-child(n + 5) {
+  display: none;
+}
 
-  #dbCard #dbSessionList {
-    margin-top: 8px !important;
-  }
+#dbCard #dbSessionList {
+  margin-top: 8px !important;
+}
 
-  .db-backup-tools {
-    margin-top: 10px;
-    padding-top: 9px;
-    border-top: 1px solid var(--line);
-  }
+.db-backup-tools {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
 
-  .db-backup-tools summary {
-    cursor: pointer;
-    color: var(--muted);
-    font-size: 13px;
-  }
+.db-backup-tools summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
 
+.db-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.db-action-grid button {
+  min-height: 56px;
+}
+
+.db-action-grid .db-safe-action {
+  border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.3);
+  background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.07);
+  color: var(--view-accent, var(--ok-soft));
+}
+
+.db-action-grid .db-safe-action small {
+  color: var(--muted);
+}
+
+@media (min-width: 640px) {
+  .connection-actions,
   .db-action-grid {
-    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 390px) {
+  #dbCard .status-meta {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-top: 9px;
   }
+}
 
-  .db-action-grid button {
-    min-height: 56px;
-  }
+/* ===== 14. Settings footer ===== */
 
-  .db-action-grid .db-safe-action {
-    border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.3);
-    background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.07);
-    color: var(--view-accent, var(--ok-soft));
-  }
+/* Settings footer: app name + version (populated by telemetry.ts). */
+.app-version-footer {
+  text-align: center;
+  margin-top: 16px;
+  opacity: 0.6;
+}
 
-  .db-action-grid .db-safe-action small {
-    color: var(--muted);
-  }
+/* ===== 15. Light-scheme nav companion ===== */
 
-  @media (min-width: 640px) {
-    .connection-actions,
-    .db-action-grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-  }
-
-  @media (max-width: 390px) {
-    #dbCard .status-meta {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-  }
-
-  /* ===== 14. Settings footer ===== */
-
-  /* Settings footer: app name + version (populated by telemetry.ts). */
-  .app-version-footer {
-    text-align: center;
-    margin-top: 16px;
-    opacity: 0.6;
-  }
-
-  /* ===== 15. Light-scheme nav companion ===== */
-
-  /* Light-scheme companion for the floating nav. The nav surface/border/text
+/* Light-scheme companion for the floating nav. The nav surface/border/text
      now flow from the role tokens in base.css; this block only re-tints the
      glass gloss details (highlight shadows and the warm active gradient) that
      a token swap can't express. */
-  @media (prefers-color-scheme: light) {
-    .bottom-nav {
-      box-shadow:
-        0 12px 30px rgba(24,26,34,0.16),
-        0 0 0 1px rgba(15,18,28,0.08),
-        inset 0 1px 0 rgba(255,255,255,0.9);
-    }
-
-    .bottom-nav button i {
-      box-shadow: inset 0 0 0 1px rgba(0,0,0,0.05);
-    }
-
-    /* Same --tab-accent tokens as the dark nav (the old hardcoded oranges
-       left an orange pill under a blue Map glyph). */
-    .bottom-nav button.is-active {
-      border-color: rgba(var(--tab-accent-rgb), 0.3);
-      background:
-        linear-gradient(180deg, rgba(var(--tab-accent-rgb), 0.14), rgba(var(--tab-accent-rgb), 0.05)),
-        rgba(255,255,255,0.5);
-      box-shadow:
-        inset 0 0 0 1px rgba(0,0,0,0.04),
-        0 7px 18px rgba(var(--tab-accent-rgb), 0.14);
-    }
-
-    .bottom-nav button.is-active i {
-      background:
-        radial-gradient(circle at 50% 25%, rgba(var(--tab-accent-rgb), 0.18), transparent 48%),
-        rgba(var(--tab-accent-rgb), 0.12);
-      box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.22);
-    }
+@media (prefers-color-scheme: light) {
+  .bottom-nav {
+    box-shadow:
+      0 12px 30px rgba(24, 26, 34, 0.16),
+      0 0 0 1px rgba(15, 18, 28, 0.08),
+      inset 0 1px 0 rgba(255, 255, 255, 0.9);
   }
+
+  .bottom-nav button i {
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Same --tab-accent tokens as the dark nav (the old hardcoded oranges
+       left an orange pill under a blue Map glyph). */
+  .bottom-nav button.is-active {
+    border-color: rgba(var(--tab-accent-rgb), 0.3);
+    background:
+      linear-gradient(
+        180deg,
+        rgba(var(--tab-accent-rgb), 0.14),
+        rgba(var(--tab-accent-rgb), 0.05)
+      ),
+      rgba(255, 255, 255, 0.5);
+    box-shadow:
+      inset 0 0 0 1px rgba(0, 0, 0, 0.04),
+      0 7px 18px rgba(var(--tab-accent-rgb), 0.14);
+  }
+
+  .bottom-nav button.is-active i {
+    background:
+      radial-gradient(
+        circle at 50% 25%,
+        rgba(var(--tab-accent-rgb), 0.18),
+        transparent 48%
+      ),
+      rgba(var(--tab-accent-rgb), 0.12);
+    box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.22);
+  }
+}

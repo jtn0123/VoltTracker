@@ -804,7 +804,19 @@ interface VoltRestoreProgress {
     /** Calendar-month key + short label ("May ’26") for a timestamp (shared by the trend charts). */
     monthBucketKey(ms: number): { key: string; label: string; firstMs: number };
     /** Monthly bar chart shared by the charging (Battery tab) and driving (Insights) trends. */
-    buildMonthlyTrendSvg(labels: string[], values: number[], ariaLabel: string, host?: Element | null): SVGElement;
+    buildMonthlyTrendSvg(
+      labels: string[],
+      values: number[],
+      ariaLabel: string,
+      host?: Element | null,
+      opts?: {
+        colorVar?: string;
+        highlightIndex?: number;
+        showValues?: boolean;
+        valueFormat?: (v: number) => string;
+        dashEmpty?: boolean;
+      },
+    ): SVGElement;
 
     // ----- signals-panel.ts (split from the old panels.ts) -------------------
     updateEnhancedCapabilityUi(): void;

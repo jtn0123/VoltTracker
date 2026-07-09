@@ -63,7 +63,13 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // progress treatment, per-layer map legends, insights temp-vs-range scatter,
 // skeleton chart placeholders, and action-confirmation toasts. All eager
 // Drive/Charge-first chrome (CSS ships raw). ~3.6 KB headroom retained.
-def dashboardStartupBudgetBytes = 404_000L
+// 404k → 412k (v2 deep alignment, 2026-07-09): funds the full tab-by-tab
+// design match — cell-balance deviation heatmap + toggle, layered card
+// depth (--shadow-card), Drive/enhanced signal tile grids, segmented map
+// layer control, recovery-card tone borders, inset savings/session rows,
+// and the week-chart/eff-bars renderer options. Eager CSS ships raw.
+// ~3.6 KB headroom retained.
+def dashboardStartupBudgetBytes = 412_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 // 20k → 23.5k (v2 design handoff): screens-map.css gains the tapped-route

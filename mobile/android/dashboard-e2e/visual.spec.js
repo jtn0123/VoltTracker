@@ -90,11 +90,15 @@ test('insights — aggregate stats', async ({ page }) => {
   });
   await setView(page, 'insights');
 
-  // Semantic guard (v2): the extra lifetime stats fold into the lifetime
-  // sheet's second row — visible, populated, and screenshot-pinned.
-  const statsRow = page.locator('.insights-sheet .insights-sheet-more');
-  await expect(statsRow).toBeVisible();
+  // Semantic guard (v2): the design shows one lifetime stat row; the second
+  // row (Longest/GPS/Electric) stays in the DOM — still populated by the
+  // renderer — but is visually dropped, so pin the visible primary row.
+  const extraRow = page.locator('.insights-sheet .insights-sheet-more');
+  await expect(extraRow).toBeHidden();
   await expect(page.locator('#insightLongest')).toHaveText('34 mi');
+  const statsRow = page.locator('.insights-sheet .map-sheet-stats').first();
+  await expect(statsRow).toBeVisible();
+  await expect(page.locator('#insightTotalDistance')).toHaveText('300 mi');
   await expect(statsRow).toHaveScreenshot('insights-stats.png');
 });
 

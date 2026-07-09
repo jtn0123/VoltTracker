@@ -431,7 +431,18 @@ import { prefs, units } from "./prefs";
     const chart = el("thisWeekChart");
     if (chart) {
       const aria = mode === "eff" ? "Efficiency per day this week" : "Distance per day this week";
-      chart.replaceChildren(VD.buildMonthlyTrendSvg(WEEK_DAY_LABELS, values, aria, chart));
+      // v2 design week chart: green bars, today highlighted (others dimmed),
+      // per-day value labels, and dashed placeholders for no-drive days.
+      const todayIdx = (today.getDay() + 6) % 7;
+      chart.replaceChildren(
+        VD.buildMonthlyTrendSvg(WEEK_DAY_LABELS, values, aria, chart, {
+          colorVar: "--ev",
+          highlightIndex: todayIdx,
+          showValues: true,
+          valueFormat: (v: number) => (mode === "eff" ? v.toFixed(1) : String(Math.round(v))),
+          dashEmpty: true,
+        }),
+      );
     }
   }
 
@@ -743,16 +754,17 @@ import { prefs, units } from "./prefs";
   const GRADE_WHMI_PER_UNIT = 5200;
 
   // User-selectable chart styles for the efficiency-vs-speed card (persisted via
-  // prefs so the choice sticks across launches). "scatter" stays the default so
-  // the existing per-sample view is unchanged for anyone who never toggles.
+  // prefs so the choice sticks across launches). "bars" is the default per the
+  // v2 design (green per-bucket bars with the peak called out); a user's saved
+  // choice still wins.
   const EFF_CHART_VIEWS = ["bars", "scatter", "curve"] as const;
   type EffChartView = (typeof EFF_CHART_VIEWS)[number];
   type EffBucket = { mid: number; n: number; med: number; q1: number; q3: number };
   type EffPoint = { mph: number; eff: number; effFlat: number; grade: number; route: number };
 
   function scatterView(): EffChartView {
-    const v = prefs.get<string>("effChartView", "scatter");
-    return (EFF_CHART_VIEWS as readonly string[]).includes(v) ? (v as EffChartView) : "scatter";
+    const v = prefs.get<string>("effChartView", "bars");
+    return (EFF_CHART_VIEWS as readonly string[]).includes(v) ? (v as EffChartView) : "bars";
   }
 
   function quantileJs(values: number[], q: number): number {
@@ -933,7 +945,6 @@ import { prefs, units } from "./prefs";
     peak: EffBucket | undefined,
     xOf: (mph: number) => number,
     yS: (e: number) => number,
-    padT: number,
     colors: { accent: string; idleBar: string; idleWhisker: string; bg: string }
   ) {
     if (!peak) return;
@@ -944,18 +955,6 @@ import { prefs, units } from "./prefs";
     buckets.forEach((b) => {
       const cx = xOf(b.mid);
       const sweet = b.med >= thresh;
-      if (sweet) {
-        svg.append(
-          effNode("rect", {
-            x: (cx - fullW / 2).toFixed(1),
-            y: padT,
-            width: fullW.toFixed(1),
-            height: (y0 - padT).toFixed(1),
-            fill: colors.accent,
-            "fill-opacity": 0.08
-          })
-        );
-      }
       svg.append(
         effNode("rect", {
           x: (cx - bw / 2).toFixed(1),
@@ -977,7 +976,25 @@ import { prefs, units } from "./prefs";
         })
       );
     });
-    appendPeakMarker(svg, peak, peak.med, xOf, yS, colors.accent, colors.bg, "");
+    // v2 design: a dashed guide at the peak's level with a "peak X.X" callout,
+    // so the best bucket reads without hunting for the tallest bar.
+    const first = buckets[0];
+    const last = buckets[buckets.length - 1];
+    if (first && last) {
+      svg.append(
+        effNode("line", {
+          x1: (xOf(first.mid) - fullW / 2).toFixed(1),
+          x2: (xOf(last.mid) + fullW / 2).toFixed(1),
+          y1: yS(peak.med).toFixed(1),
+          y2: yS(peak.med).toFixed(1),
+          stroke: colors.accent,
+          "stroke-opacity": 0.45,
+          "stroke-width": 1,
+          "stroke-dasharray": "4 4"
+        })
+      );
+    }
+    appendPeakMarker(svg, peak, peak.med, xOf, yS, colors.accent, colors.bg, `peak ${peak.med.toFixed(1)}`);
   }
 
   // Curve view: a smoothed median curve over a confidence band, with no per-sample
@@ -1204,13 +1221,15 @@ import { prefs, units } from "./prefs";
       undefined
     );
     // SVG presentation attributes can't read CSS vars, so resolve the extra
-    // chrome tokens to literals here and pass them down.
-    const idleBar = token("--fill-bold", "rgba(255,255,255,0.16)");
+    // chrome tokens to literals here and pass them down. v2 design: non-peak
+    // bars are translucent green (the same family as the peak), not grey.
+    const evRgb = token("--ev-rgb", "184, 230, 59");
+    const idleBar = `rgba(${evRgb}, 0.28)`;
     const idleWhisker = token("--line-strong", "rgba(255,255,255,0.28)");
     const bgColor = token("--bg", "#07080c");
     const view = scatterView();
     if (view === "bars") {
-      renderBuckets(svg, buckets, peak, xOf, yS, padT, {
+      renderBuckets(svg, buckets, peak, xOf, yS, {
         accent: evColor,
         idleBar,
         idleWhisker,

@@ -1,4 +1,4 @@
-  /* ===========================================================================
+/* ===========================================================================
      components.css — reusable UI pieces (cards, chips, lists, meters, dialogs).
      Rendered in the Android WebView; colors come from the base.css token palette.
 
@@ -29,3493 +29,3608 @@
      (max-width: 620px).
      =========================================================================== */
 
-  /* ===== 1. Error banner & empty states ===== */
+/* ===== 1. Error banner & empty states ===== */
 
-  .error-banner .error-detail {
-    display: block;
-    margin-top: 3px;
-    max-height: 96px;
-    overflow: auto;
-    overscroll-behavior: contain;
-    word-break: break-word;
-    font-family: ui-monospace, Menlo, Consolas, monospace;
-  }
+.error-banner .error-detail {
+  display: block;
+  margin-top: 3px;
+  max-height: 96px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  word-break: break-word;
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+}
 
-  .error-banner button {
-    margin-left: auto;
-    min-height: var(--touch-min-dense);
-    flex: none;
-  }
+.error-banner button {
+  margin-left: auto;
+  min-height: var(--touch-min-dense);
+  flex: none;
+}
 
-  .demo-stop {
-    min-height: var(--touch-min-dense);
-    border-color: rgba(var(--bad-rgb), 0.34);
-    color: var(--bad-soft);
-    white-space: nowrap;
-  }
+.demo-stop {
+  min-height: var(--touch-min-dense);
+  border-color: rgba(var(--bad-rgb), 0.34);
+  color: var(--bad-soft);
+  white-space: nowrap;
+}
 
-  .empty-state {
-    padding: var(--card-pad-lg);
-  }
+.empty-state {
+  padding: var(--card-pad-lg);
+}
 
-  /* Numbered first-run guidance for sparse/empty tabs. Shown only while the
+/* Numbered first-run guidance for sparse/empty tabs. Shown only while the
      empty-state card is visible, so it fills the void without crowding the
      populated view. Badges pick up the active tab's accent. */
-  .empty-hints {
-    display: grid;
-    gap: 9px;
-    margin: 16px 0 2px;
-    padding: 0;
-    list-style: none;
-  }
+.empty-hints {
+  display: grid;
+  gap: 9px;
+  margin: 16px 0 2px;
+  padding: 0;
+  list-style: none;
+}
 
-  .empty-hints li {
-    display: grid;
-    grid-template-columns: 26px minmax(0, 1fr);
-    align-items: center;
-    gap: 11px;
-  }
+.empty-hints li {
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr);
+  align-items: center;
+  gap: 11px;
+}
 
-  .empty-hints b {
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
-    border-radius: 999px;
-    border: 1px solid var(--line);
-    background: var(--fill);
-    color: var(--text);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 12px;
-    font-weight: 800;
-  }
+.empty-hints b {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--fill);
+  color: var(--text);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
 
-  .empty-hints span {
-    color: var(--muted);
-    font-size: 12.5px;
-    line-height: 1.4;
-  }
+.empty-hints span {
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
 
-  /* Call-to-action button under the numbered hints (jumps to Settings). */
-  .empty-state .primary-action,
-  .empty-state .link-btn {
-    margin-top: 14px;
-  }
+/* Call-to-action button under the numbered hints (jumps to Settings). */
+.empty-state .primary-action,
+.empty-state .link-btn {
+  margin-top: 14px;
+}
 
-  /* Paired CTAs (connect + Demo / Testing) share one row and split the width;
+/* Paired CTAs (connect + Demo / Testing) share one row and split the width;
      the wrapper owns the top gap so the per-button margin doesn't double it. */
-  .empty-state-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 14px;
-  }
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
 
-  .empty-state-actions .primary-action,
-  .empty-state-actions .link-btn {
-    flex: 1 1 45%;
-    margin-top: 0;
-  }
+.empty-state-actions .primary-action,
+.empty-state-actions .link-btn {
+  flex: 1 1 45%;
+  margin-top: 0;
+}
 
-  body[data-active-view="charge"] .empty-hints b {
-    border-color: rgba(var(--ev-rgb), 0.34);
-    background: rgba(var(--ev-rgb), 0.1);
-    color: var(--ev-soft);
-  }
+body[data-active-view="charge"] .empty-hints b {
+  border-color: rgba(var(--ev-rgb), 0.34);
+  background: rgba(var(--ev-rgb), 0.1);
+  color: var(--ev-soft);
+}
 
-  body[data-active-view="drive"] .empty-hints b {
-    border-color: rgba(var(--volt-rgb), 0.34);
-    background: rgba(var(--volt-rgb), 0.1);
-    color: var(--volt-soft);
-  }
+body[data-active-view="drive"] .empty-hints b {
+  border-color: rgba(var(--volt-rgb), 0.34);
+  background: rgba(var(--volt-rgb), 0.1);
+  color: var(--volt-soft);
+}
 
-  body[data-active-view="insights"] .empty-hints b {
-    border-color: rgba(var(--mixed-rgb), 0.34);
-    background: rgba(var(--mixed-rgb), 0.1);
-    color: var(--mixed-soft);
-  }
+body[data-active-view="insights"] .empty-hints b {
+  border-color: rgba(var(--mixed-rgb), 0.34);
+  background: rgba(var(--mixed-rgb), 0.1);
+  color: var(--mixed-soft);
+}
 
-  .hero {
-    display: grid;
-    /* minmax(0, …) so no single live card's min-content can widen the whole stack
+.hero {
+  display: grid;
+  /* minmax(0, …) so no single live card's min-content can widen the whole stack
        beyond the viewport (same guard as .view). */
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--space-lg);
-  }
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-lg);
+}
 
-  .live-card {
-    padding: var(--card-pad-lg);
-    position: relative;
-    overflow: hidden;
-    /* X1 hero tier: chromeless — the cluster bleeds into the page. */
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
-    /* State-reactive accent (telemetry.ts sets data-power-state): the whole
+.live-card {
+  /* v2 design: 20px sides, 16px foot. */
+  padding: 20px 20px 16px;
+  position: relative;
+  overflow: hidden;
+  /* v2 design: the speed/power hero is a bordered card (matches the handoff
+       and the app's other panels), not chromeless. The layered shadow + top
+       inset highlight give it the design's depth. */
+  background: var(--surface-raised);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-card);
+  /* State-reactive accent (telemetry.ts sets data-power-state): the whole
        hero tints as one — orange drive, green regen, neutral otherwise. */
-    --hero-accent: var(--soft);
-    --hero-accent-rgb: 170, 170, 180;
-    --hero-accent-soft: var(--soft);
-  }
+  --hero-accent: var(--soft);
+  --hero-accent-rgb: 170, 170, 180;
+  --hero-accent-soft: var(--soft);
+}
 
-  /* Coast is LIVE (car moving, ~0 kW): warm desaturated tint. Gray is
+/* Coast is LIVE (car moving, ~0 kW): warm desaturated tint. Gray is
      reserved for idle/no-data. */
-  .live-card[data-power-state="coast"] {
-    --hero-accent: #c08a66;
-    --hero-accent-rgb: 192, 138, 102;
-    --hero-accent-soft: #e8c4a8;
-  }
+.live-card[data-power-state="coast"] {
+  --hero-accent: #c08a66;
+  --hero-accent-rgb: 192, 138, 102;
+  --hero-accent-soft: #e8c4a8;
+}
 
-  .live-card[data-power-state="drive"] {
-    --hero-accent: var(--volt);
-    --hero-accent-rgb: var(--volt-rgb);
-    --hero-accent-soft: var(--volt-soft);
-  }
+.live-card[data-power-state="drive"] {
+  --hero-accent: var(--volt);
+  --hero-accent-rgb: var(--volt-rgb);
+  --hero-accent-soft: var(--volt-soft);
+}
 
-  .live-card[data-power-state="regen"] {
-    --hero-accent: var(--ev);
-    --hero-accent-rgb: var(--ev-rgb);
-    --hero-accent-soft: var(--ev);
-  }
+.live-card[data-power-state="regen"] {
+  --hero-accent: var(--ev);
+  --hero-accent-rgb: var(--ev-rgb);
+  --hero-accent-soft: var(--ev);
+}
 
-  .live-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  .rate-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 0;
-    border: 0;
-    border-radius: 999px;
-    background: transparent;
-    color: var(--muted);
-    font-weight: 600;
-    font-size: 11px;
-    white-space: nowrap;
-  }
+/* Live-rate chip (v2 design): uppercase, tracked-out, and colored to match its
+     dot — green while live, dimmed while waiting, warn when stale (below). */
+.rate-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ok);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
-  .rate-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 8px var(--ok);
-  }
+.rate-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+}
 
-  /* ===== 2. Live-rate chip & telemetry readouts ===== */
+/* ===== 2. Live-rate chip & telemetry readouts ===== */
 
-  /* Live-rate chip states: default (live) keeps the green .rate-dot above.
+/* Live-rate chip states: default (live) keeps the green .rate-dot above.
      waiting dims the dot; stale recolors chip + dot to the warning tone. */
-  .rate-chip[data-state="waiting"] .rate-dot {
-    background: var(--soft);
-    box-shadow: none;
-  }
+.rate-chip[data-state="waiting"] {
+  color: var(--muted);
+}
 
-  .rate-chip[data-state="stale"] {
-    color: var(--warn);
-  }
+.rate-chip[data-state="waiting"] .rate-dot {
+  background: var(--soft);
+  box-shadow: none;
+}
 
-  .rate-chip[data-state="stale"] .rate-dot {
-    background: var(--warn);
-    box-shadow: 0 0 8px var(--warn);
-  }
+.rate-chip[data-state="stale"] {
+  color: var(--warn);
+}
 
-  .speed-row {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    align-items: flex-end;
-    /* Units hug the digits (flex-start) instead of floating at the far card
+.rate-chip[data-state="stale"] .rate-dot {
+  background: var(--warn);
+  box-shadow: 0 0 8px var(--warn);
+}
+
+.speed-row {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  /* Units hug the digits (flex-start) instead of floating at the far card
        edge — number and unit read as one value, not two stray fragments. */
-    justify-content: flex-start;
-    gap: 14px;
-    margin: 10px 0 16px;
-  }
+  justify-content: flex-start;
+  gap: 14px;
+  margin: 10px 0 16px;
+}
 
-  /* The fixed-position digit halo was removed — at 1-2 digits it read as a
+/* The fixed-position digit halo was removed — at 1-2 digits it read as a
      stray smudge beside the number. */
 
-  .speed-value {
-    flex: 0 1 auto;
-    font-size: clamp(88px, 27vw, 118px);
-    line-height: 0.82;
-    letter-spacing: -0.05em;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-  }
+.speed-value {
+  flex: 0 1 auto;
+  /* v2 design: 92px / 640 / -0.03em — a lighter display numeral than the old
+       800-weight slab. */
+  font-size: clamp(76px, 22vw, 92px);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-weight: 640;
+  font-variant-numeric: tabular-nums;
+}
 
-  .speed-units {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    flex-shrink: 0;
-    padding-bottom: 12px;
-  }
+.speed-units {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+}
 
-  .speed-unit-main {
-    color: var(--muted);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
+.speed-unit-main {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
 
-  .speed-unit-sub {
-    color: var(--soft);
-    font-size: 14px;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
+.speed-unit-sub {
+  color: var(--soft);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
-  .power-block {
-    margin-top: 20px;
-  }
+/* v2 design: the power block is divided from the trace by a hairline. */
+.power-block {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  .power-head {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    margin-bottom: 8px;
-  }
+.power-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
 
-  .power-label {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
+.power-label {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
 
-  .power-label strong {
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    font-variant-numeric: tabular-nums;
-    color: var(--hero-accent);
-    transition: color var(--motion-medium) var(--motion-ease);
-  }
+.power-label strong {
+  /* v2 design: 22px display numeral in plain text — the state word and the
+       meter fill carry the drive/regen color, not the number. */
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
 
-  .power-state {
-    color: var(--soft);
-    font-size: 11px;
-    font-weight: 640;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    /* Crossfade with the hero accent on drive/regen/coast flips. */
-    transition: color var(--motion-medium) var(--motion-ease);
-  }
+.power-state {
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  /* Crossfade with the hero accent on drive/regen/coast flips. */
+  transition: color var(--motion-medium) var(--motion-ease);
+}
 
-  .power-state[data-state="drive"],
-  .power-state[data-state="regen"] {
-    color: var(--hero-accent);
-  }
+/* Design tones: soft orange for drive, green for regen. */
+.power-state[data-state="drive"] {
+  color: var(--volt-soft-dim);
+}
 
-  .power-meter {
-    position: relative;
-    height: 8px;
-    border-radius: 999px;
-    background: var(--fill-bold);
-    overflow: hidden;
-  }
+.power-state[data-state="regen"] {
+  color: var(--ev);
+}
 
-  .power-zero {
-    position: absolute;
-    inset-block: -2px;
-    left: 50%;
-    width: 2px;
-    background: var(--line-marker);
-    transform: translateX(-1px);
-  }
+.power-meter {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  /* v2 design: a dark inset track, not a light fill. */
+  background: var(--inset-deep);
+  overflow: hidden;
+}
 
-  /* The fill spans the right half of the track and scales out from the center
+.power-zero {
+  position: absolute;
+  inset-block: -2px;
+  left: 50%;
+  width: 2px;
+  background: var(--line-marker);
+  transform: translateX(-1px);
+}
+
+/* The fill spans the right half of the track and scales out from the center
      zero-line: telemetry.ts drives `transform: scaleX(f)` (negative f mirrors
      it left for regen). Transform-only so the every-sample update animates on
      the compositor instead of re-laying-out the meter. */
-  .power-fill {
-    position: absolute;
-    inset-block: 0;
-    left: 50%;
-    width: 50%;
-    border-radius: 999px;
-    background:
-      linear-gradient(90deg, var(--hero-accent), rgba(var(--hero-accent-rgb), 0.6));
-    box-shadow: 0 0 16px rgba(var(--hero-accent-rgb), 0.4);
-    transform: scaleX(0);
-    transform-origin: left center;
-    /* box-shadow rides the accent glow so a drive→regen flip crossfades the
+.power-fill {
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 50%;
+  border-radius: 999px;
+  /* v2 design: flat state-colored fill, no gradient/glow. */
+  background: var(--hero-accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  /* box-shadow rides the accent glow so a drive→regen flip crossfades the
        halo with the fill instead of snapping it. */
-    transition:
-      transform var(--motion-medium) var(--motion-ease),
-      box-shadow var(--motion-medium) var(--motion-ease);
-  }
+  transition:
+    transform var(--motion-medium) var(--motion-ease),
+    box-shadow var(--motion-medium) var(--motion-ease);
+}
 
-  /* .is-regen needs no override — the hero accent already goes green. */
+/* .is-regen needs no override — the hero accent already goes green. */
 
-  .power-scale {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 6px;
-    /* Full-opacity --soft: the old extra opacity 0.7 multiplied the dimmest
+.power-scale {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  /* Full-opacity --soft: the old extra opacity 0.7 multiplied the dimmest
        text token below readable contrast at this 10px size. */
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 650;
-    letter-spacing: 0.05em;
-  }
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
 
-  .power-scale b {
-    font-weight: inherit;
-    font-variant-numeric: tabular-nums;
-  }
+.power-scale b {
+  font-weight: inherit;
+  font-variant-numeric: tabular-nums;
+}
 
-  .battery-strip {
-    padding: var(--card-pad);
-  }
+.battery-strip {
+  /* v2 design card padding. */
+  padding: 16px 20px;
+}
 
-  .battery-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.battery-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  .battery-soc {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    margin-top: 6px;
-  }
+.battery-soc {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 6px;
+}
 
-  .battery-soc strong {
-    font-size: 40px;
-    font-weight: 800;
-    line-height: 1;
-    letter-spacing: -0.03em;
-    font-variant-numeric: tabular-nums;
-  }
+.battery-soc strong {
+  /* v2 design: 30px — the SOC is a stat, not a second hero numeral. */
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
 
-  .battery-soc-sub {
-    font-size: 12px;
-    color: var(--soft);
-  }
+.battery-soc-sub {
+  font-size: 12px;
+  color: var(--soft);
+}
 
-  /* Two right-hand head columns (v2 design): Pack temp + Pack kW side by side. */
-  .battery-head-cols {
-    display: flex;
-    flex: none;
-    gap: 18px;
-  }
+/* Two right-hand head columns (v2 design): Pack temp + Pack kW side by side. */
+.battery-head-cols {
+  display: flex;
+  flex: none;
+  gap: 18px;
+}
 
-  .battery-temp {
-    flex: none;
-    text-align: right;
-  }
+.battery-temp {
+  flex: none;
+  text-align: right;
+}
 
-  .battery-temp strong {
-    display: block;
-    margin-top: 6px;
-    font-size: 20px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
+.battery-temp strong {
+  display: block;
+  margin-top: 6px;
+  /* v2 design: 16px side stats. */
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
 
-  .meter.battery-meter span {
-    background: var(--ev);
-    transition: background var(--motion-fast, 0.2s) var(--motion-ease, ease);
-  }
+.meter.battery-meter span {
+  /* v2 design: a two-stop green gradient reads as charge, not a flat bar. */
+  background: linear-gradient(90deg, #8fbf2e, var(--ev));
+  transition: background var(--motion-fast, 0.2s) var(--motion-ease, ease);
+}
 
-  /* SOC level coloring (data-level set in telemetry.ts): a near-empty pack reads
+/* SOC level coloring (data-level set in telemetry.ts): a near-empty pack reads
      amber/red instead of a full-green bar, so charge state is legible at a glance. */
-  .meter.battery-meter span[data-level="warn"] {
-    background: var(--warn);
-  }
+.meter.battery-meter span[data-level="warn"] {
+  background: var(--warn);
+}
 
-  .meter.battery-meter span[data-level="bad"] {
-    background: var(--bad);
-  }
+.meter.battery-meter span[data-level="bad"] {
+  background: var(--bad);
+}
 
-  /* ===== 3. Charge / SOC hero KPIs ===== */
+/* ===== 3. Charge / SOC hero KPIs ===== */
 
-  /* Three-up live readout under the SOC meter for the HV traction pack
+/* Three-up live readout under the SOC meter for the HV traction pack
      (pack voltage / current / power). Reuses the .scrub-readout grid look so
      it visually clusters with the other live-data tiles, but stays scoped to
      the battery-strip card. tabular-nums keeps the sign-prefixed values from
      jittering as the values update. */
-  .battery-pack-readout {
-    display: grid;
-    /* Two cells since Pack kW was promoted into the card head (v2 design). */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line-soft);
-  }
+.battery-pack-readout {
+  display: grid;
+  /* Two cells since Pack kW was promoted into the card head (v2 design). */
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  .battery-pack-readout > div {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
+.battery-pack-readout > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
-  .battery-pack-readout .kicker {
-    color: var(--soft);
-  }
+.battery-pack-readout .kicker {
+  color: var(--soft);
+}
 
-  .battery-pack-readout strong {
-    font-size: 16px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    line-height: 1;
-  }
+.battery-pack-readout strong {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
 
-  .mini, .metric, .list-card, .insight, .charge-kpi, .setting-row {
-    padding: var(--card-pad-tight);
-  }
+.mini,
+.metric,
+.list-card,
+.insight,
+.charge-kpi,
+.setting-row {
+  padding: var(--card-pad-tight);
+}
 
-  .mini strong,
-  .metric strong,
-  .charge-kpi strong {
-    display: block;
-    margin-top: 7px;
-    font-size: 32px;
-    font-weight: 760;
-    line-height: 1;
-    letter-spacing: -0.02em;
-  }
+.mini strong,
+.metric strong,
+.charge-kpi strong {
+  display: block;
+  margin-top: 7px;
+  font-size: 32px;
+  font-weight: 760;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
 
-  .mini.is-wide {
-    grid-column: 1 / -1;
-  }
+.mini.is-wide {
+  grid-column: 1 / -1;
+}
 
-  .mini small,
-  .metric small,
-  .charge-kpi small {
-    color: var(--muted);
-    font-size: 0.78em;
-    line-height: 1.35;
-  }
+.mini small,
+.metric small,
+.charge-kpi small {
+  color: var(--muted);
+  font-size: 0.78em;
+  line-height: 1.35;
+}
 
-  /* Quiet the Charge KPI two-line captions — recede without hiding (a11y). */
-  .charge-kpi small {
-    color: var(--soft);
-    font-size: 0.72em;
-    line-height: 1.3;
-  }
+/* Quiet the Charge KPI two-line captions — recede without hiding (a11y). */
+.charge-kpi small {
+  color: var(--soft);
+  font-size: 0.72em;
+  line-height: 1.3;
+}
 
-  /* The Status KPI renders a badge where the other charge KPIs render a bare
+/* v2 design: Charge KPI tiles are flat 14px tiles (no panel drop-shadow) with a
+     smaller 22px value — lighter than the app's shared 32px KPI scale. */
+.charge-kpi {
+  padding: 12px 14px;
+  border-radius: 14px;
+  box-shadow: none;
+}
+
+.charge-kpi strong {
+  margin-top: 4px;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Est. cost tints green once a rate/energy is known (design estCostColor). */
+.charge-kpi strong#chargeEnergyCost[data-state="recorded"] {
+  color: var(--ev-soft);
+}
+
+/* The Status KPI renders a badge where the other charge KPIs render a bare
      number; block-level + max-content keeps the pill on its own line so the
      caption below stays in place, matching the .charge-kpi strong layout. */
-  .charge-kpi .badge {
-    display: flex;
-    width: max-content;
-    max-width: 100%;
-    margin-top: 9px;
-    margin-bottom: 4px;
-  }
+.charge-kpi .badge {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  margin-top: 9px;
+  margin-bottom: 4px;
+}
 
-  /* HV-pack detail stats beneath the SOC ring on the Insights hero. An even
+/* HV-pack detail stats beneath the SOC ring on the Insights hero. An even
      grid (2×2 at this column's ~230px width) instead of flex-wrap, which left
      the fourth stat (Power) orphaned alone on its own row. */
-  .pack-stat-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-    gap: 10px 12px;
-    margin-top: 13px;
-  }
+.pack-stat-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 10px 12px;
+  margin-top: 13px;
+}
 
-  .pack-stat-row span {
-    display: block;
-    color: var(--soft);
-    font-size: 10px;
-    font-weight: 640;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
+.pack-stat-row span {
+  display: block;
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 
-  .pack-stat-row strong {
-    display: block;
-    margin-top: 3px;
-    font-size: 16px;
-    font-variant-numeric: tabular-nums;
-  }
+.pack-stat-row strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
 
-  /* ===== 4. Charge history list ===== */
+/* ===== 4. Charge history list ===== */
 
-  /* Per-session charge history. Green to match the Charge tab accent. */
-  .charge-session-list {
-    display: grid;
-    gap: 8px;
-    margin-top: 12px;
-  }
+/* Per-session charge history. Green to match the Charge tab accent. */
+.charge-session-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
 
-  /* Charge's signature: each session reads as an energy bar — a green fill
+/* Charge's signature: each session reads as an energy bar — a green fill
      that decays across the row instead of a bordered box. */
-  .charge-session-row {
-    position: relative;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    border-radius: 12px;
-    overflow: hidden;
-    background: var(--surface-veil);
-  }
+.charge-session-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  overflow: hidden;
+  /* v2 design: rows sit in the darker inset tone. */
+  background: var(--inset);
+}
 
-  /* Per-row energy bar: width is this charge's kWh relative to the biggest
+/* Per-row energy bar: width is this charge's kWh relative to the biggest
      charge in the list, so the history doubles as a bar chart. Sits under the
      text (absolute + relative children below). */
-  .charge-session-row .charge-kwh-bar {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    background: linear-gradient(90deg, rgba(var(--ev-rgb), 0.16), rgba(var(--ev-rgb), 0.02));
-    pointer-events: none;
-    transition: width var(--motion-medium) var(--motion-ease);
-  }
+.charge-session-row .charge-kwh-bar {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(var(--ev-rgb), 0.16),
+    rgba(var(--ev-rgb), 0.02)
+  );
+  pointer-events: none;
+  transition: width var(--motion-medium) var(--motion-ease);
+}
 
-  .charge-session-row > span,
-  .charge-session-row > b {
-    position: relative;
-  }
+.charge-session-row > span,
+.charge-session-row > b {
+  position: relative;
+}
 
-  .charge-session-row strong {
-    display: block;
-    overflow-wrap: anywhere;
-    font-size: 13px;
-  }
+.charge-session-row strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
 
-  .charge-session-row small {
-    display: block;
-    margin-top: 3px;
-    color: var(--muted);
-    /* 12px, not 11px: this line carries the substantive per-charge data
-       (SOC delta · kW · duration) — keep it at glance size. */
-    font-size: 12px;
-    line-height: 1.3;
-  }
+.charge-session-row small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  /* 12px, not 11px: this line carries the substantive per-charge data
+       (SOC delta · kW · duration) — keep it at glance size. Monospace + tabular
+       nums align the figures column-to-column (v2 design). */
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.3;
+}
 
-  .charge-session-row > b {
-    flex: 0 0 auto;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: rgba(var(--ev-rgb), 0.14);
-    color: var(--ev-soft);
-    font-size: 13px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
+.charge-session-row > b {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(var(--ev-rgb), 0.14);
+  color: var(--ev-soft);
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
-  /* In-progress (still plugged in) — brighter so it reads as live. */
-  .charge-session-row[data-charging="1"] {
-    border-color: rgba(var(--ev-rgb), 0.55);
-    background: rgba(var(--ev-rgb), 0.12);
-  }
+/* In-progress (still plugged in) — brighter so it reads as live. */
+.charge-session-row[data-charging="1"] {
+  border-color: rgba(var(--ev-rgb), 0.55);
+  background: rgba(var(--ev-rgb), 0.12);
+}
 
-  .charge-session-row[data-charging="1"] > b {
-    background: rgba(var(--ev-rgb), 0.24);
-  }
+.charge-session-row[data-charging="1"] > b {
+  background: rgba(var(--ev-rgb), 0.24);
+}
 
-  /* Latest drive's energy + estimated cost row (Drive tab, footer of the
+/* Latest drive's energy + estimated cost row (Drive tab, footer of the
      "This trip" card). One quiet row: label+figure left, cost/prompt right. */
-  .trip-energy-strip {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    padding: 12px 16px;
-    color: var(--muted);
-    font-size: 12px;
-  }
+.trip-energy-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 16px;
+  color: var(--muted);
+  font-size: 12px;
+}
 
-  .trip-energy-strip .trip-energy-label b {
-    color: var(--text);
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-  }
+.trip-energy-strip .trip-energy-label b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
 
-  .trip-energy-strip .trip-cost-value {
-    font-variant-numeric: tabular-nums;
-    font-weight: 700;
-  }
+.trip-energy-strip .trip-cost-value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
 
-  .trip-energy-strip .trip-cost-value[data-state="recorded"] {
-    color: var(--volt-soft);
-  }
+.trip-energy-strip .trip-cost-value[data-state="recorded"] {
+  color: var(--ev-soft);
+}
 
-  .trip-energy-strip .trip-cost-value[data-state="waiting"] {
-    color: var(--soft);
-  }
+.trip-energy-strip .trip-cost-value[data-state="waiting"] {
+  color: var(--soft);
+}
 
-  .trip-energy-strip .trip-cost-value:disabled {
-    cursor: default;
-    text-decoration: none;
-  }
+.trip-energy-strip .trip-cost-value:disabled {
+  cursor: default;
+  text-decoration: none;
+}
 
-  .metric header, .charge-kpi header {
-    display: flex;
-    justify-content: space-between;
-    gap: 8px;
-    color: var(--soft);
-    font-size: 10px;
-    font-weight: 640;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-  }
+.metric header,
+.charge-kpi header {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
 
-  .meter {
-    height: 3px;
-    margin-top: 10px;
-    border-radius: 999px;
-    background: var(--fill-active);
-    overflow: hidden;
-  }
+.meter {
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--fill-active);
+  overflow: hidden;
+}
 
-  /* The hero SOC strip stays a primary glance element, not a progress line. */
-  .meter.battery-meter {
-    height: 5px;
-  }
+/* The hero SOC strip stays a primary glance element, not a progress line. */
+.meter.battery-meter {
+  /* 6px per the design; track stays the theme-aware fill token. */
+  height: 6px;
+}
 
-  .meter span {
-    display: block;
-    height: 100%;
-    width: 0%;
-    border-radius: inherit;
-    background: var(--volt);
-    transition: width var(--motion-medium) var(--motion-ease);
-  }
+.meter span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: var(--volt);
+  transition: width var(--motion-medium) var(--motion-ease);
+}
 
-  .ratio-card {
-    display: grid;
-    grid-template-columns: 128px 1fr;
-    gap: 14px;
-    align-items: center;
-    padding: var(--card-pad-lg);
-  }
+.ratio-card {
+  display: grid;
+  grid-template-columns: 128px 1fr;
+  gap: 14px;
+  align-items: center;
+  padding: var(--card-pad-lg);
+}
 
-  /* Battery gauge (replaces the old SOC donut): an EV-appropriate cell that
+/* Battery gauge (replaces the old SOC donut): an EV-appropriate cell that
      fills from the bottom to --v% with a terminal nub up top, colored by charge
      level (green/amber/red via data-level). Keeps the #realPackRing element +
      --v contract storage-status.ts already drives. */
-  .ring {
-    position: relative;
-    flex: none;
-    width: 96px;
-    height: 156px;
-    margin-top: 8px; /* room for the terminal nub */
-    display: grid;
-    place-items: center;
-    border: 3px solid var(--line-strong);
-    border-radius: 12px;
-    background: var(--fill-bold);
-    --soc-fill: var(--ev);
-  }
+.ring {
+  position: relative;
+  flex: none;
+  width: 96px;
+  height: 156px;
+  margin-top: 8px; /* room for the terminal nub */
+  display: grid;
+  place-items: center;
+  border: 3px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--fill-bold);
+  --soc-fill: var(--ev);
+}
 
-  /* Terminal nub on top of the cell. */
-  .ring::before {
-    content: "";
-    position: absolute;
-    top: -9px;
-    left: 50%;
-    width: 36px;
-    height: 8px;
-    transform: translateX(-50%);
-    border-radius: 4px 4px 0 0;
-    background: var(--line-strong);
-  }
+/* Terminal nub on top of the cell. */
+.ring::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  width: 36px;
+  height: 8px;
+  transform: translateX(-50%);
+  border-radius: 4px 4px 0 0;
+  background: var(--line-strong);
+}
 
-  /* Charge fill, rising from the bottom to --v% of the inner height. */
-  .ring::after {
-    content: "";
-    position: absolute;
-    left: 3px;
-    right: 3px;
-    bottom: 3px;
-    height: calc((100% - 6px) * var(--v, 0) / 100);
-    border-radius: 6px;
-    background: var(--soc-fill);
-    /* Height 0.45s is a deliberate slow rise (charge filling a cell); the tone
+/* Charge fill, rising from the bottom to --v% of the inner height. */
+.ring::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  right: 3px;
+  bottom: 3px;
+  height: calc((100% - 6px) * var(--v, 0) / 100);
+  border-radius: 6px;
+  background: var(--soc-fill);
+  /* Height 0.45s is a deliberate slow rise (charge filling a cell); the tone
        change rides the standard medium token. */
-    transition:
-      height 0.45s var(--motion-ease, ease),
-      background-color var(--motion-medium) var(--motion-ease);
-  }
+  transition:
+    height 0.45s var(--motion-ease, ease),
+    background-color var(--motion-medium) var(--motion-ease);
+}
 
-  .ring[data-level="warn"] {
-    --soc-fill: var(--warn);
-  }
-  .ring[data-level="bad"] {
-    --soc-fill: var(--bad);
-  }
+.ring[data-level="warn"] {
+  --soc-fill: var(--warn);
+}
+.ring[data-level="bad"] {
+  --soc-fill: var(--bad);
+}
 
-  /* ===== 5. SOC gauge states ===== */
+/* ===== 5. SOC gauge states ===== */
 
-  /* Before the first SOC reading the gauge shows a neutral empty cell rather
+/* Before the first SOC reading the gauge shows a neutral empty cell rather
      than a coloured fill. */
-  .ring[data-state="waiting"]::after {
-    height: 0;
-  }
-  .ring[data-state="waiting"] strong {
-    color: var(--muted);
-  }
+.ring[data-state="waiting"]::after {
+  height: 0;
+}
+.ring[data-state="waiting"] strong {
+  color: var(--muted);
+}
 
-  .ring strong {
-    position: relative;
-    z-index: 1;
-    font-size: 34px;
-    font-variant-numeric: tabular-nums;
-    /* Doubled shadow: the single soft shadow left white ink at ~1.6:1 on the
+.ring strong {
+  position: relative;
+  z-index: 1;
+  font-size: 34px;
+  font-variant-numeric: tabular-nums;
+  /* Doubled shadow: the single soft shadow left white ink at ~1.6:1 on the
        bright charge fill in light mode. */
-    text-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.65),
-      0 0 8px rgba(0, 0, 0, 0.45);
-    /* Shadow is tuned for WHITE ink — pin it in both themes (light-mode
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.65),
+    0 0 8px rgba(0, 0, 0, 0.45);
+  /* Shadow is tuned for WHITE ink — pin it in both themes (light-mode
        --text under a dark glow smears). */
-    color: #fff;
-  }
+  color: #fff;
+}
 
-  .status-meta span {
-    display: block;
-    color: var(--soft);
-    font-size: 10px;
-    font-weight: 640;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-  }
+.status-meta span {
+  display: block;
+  color: var(--soft);
+  font-size: 10px;
+  font-weight: 640;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 
-  .status-card {
-    padding: var(--card-pad);
-  }
+.status-card {
+  padding: var(--card-pad);
+}
 
-  .status-head, .card-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.status-head,
+.card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  /* h2 for the outline, footnote scale for the eye. */
-  .status-head h2 {
-    font-size: 13px;
-    font-weight: 650;
-    color: var(--muted);
-    line-height: 1.15;
-  }
+/* h2 for the outline, footnote scale for the eye. */
+.status-head h2 {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--muted);
+  line-height: 1.15;
+}
 
-  /* ===== 6. Status meta & card headers ===== */
+/* ===== 6. Status meta & card headers ===== */
 
-  .status-meta {
-    display: grid;
-    /* minmax(0, …) lets the nowrap+ellipsis <strong> values actually truncate;
+.status-meta {
+  display: grid;
+  /* minmax(0, …) lets the nowrap+ellipsis <strong> values actually truncate;
        bare 1fr's auto minimum sized columns to the full adapter/PIDs text width,
        overflowing the card (and, before .view was guarded, the whole tab). */
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-    margin-top: 13px;
-  }
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 13px;
+}
 
-  /* Footnote tier: no chip boxes, no display-scale values. */
-  .status-meta div {
-    padding: 2px 0;
-  }
+/* Footnote tier: no chip boxes, no display-scale values. */
+.status-meta div {
+  padding: 2px 0;
+}
 
-  .status-meta strong {
-    display: block;
-    margin-top: 2px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--muted);
-    /* Wrap rather than truncate: "OBD adapter" clipped to "OBD ada…" on
+.status-meta strong {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  /* Wrap rather than truncate: "OBD adapter" clipped to "OBD ada…" on
        360px phones and adapter names are the one value worth reading whole. */
-    overflow-wrap: break-word;
-  }
+  overflow-wrap: break-word;
+}
 
-  .trace-card {
-    padding: var(--card-pad);
-  }
+.trace-card {
+  padding: var(--card-pad);
+}
 
-  canvas {
-    display: block;
-    width: 100%;
-    height: 116px;
-    margin-top: 12px;
-  }
+canvas {
+  display: block;
+  width: 100%;
+  height: 116px;
+  margin-top: 12px;
+}
 
-  .list-card header, .charge-card header, #insightStatsCard header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 14px;
-  }
+.list-card header,
+.charge-card header,
+#insightStatsCard header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
-  /* Map sheet header actions (M6 "Export all" + "Refresh"): keep both link-buttons together on the
+/* Map sheet header actions (M6 "Export all" + "Refresh"): keep both link-buttons together on the
      trailing edge without wrapping. */
-  .map-sheet-actions {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    flex: 0 0 auto;
-  }
+.map-sheet-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+}
 
-  /* .link-btn carries margin-inline-end: -9px for single-button headers; inside this grouped
+/* .link-btn carries margin-inline-end: -9px for single-button headers; inside this grouped
      container that negative margin would eat the 4px gap and overlap adjacent tap targets, so zero
      it — but keep it on the trailing button so the whole group still sits flush with the card edge. */
-  .map-sheet-actions .link-btn {
-    margin-inline-end: 0;
-  }
+.map-sheet-actions .link-btn {
+  margin-inline-end: 0;
+}
 
-  .map-sheet-actions .link-btn:last-child {
-    margin-inline-end: -9px;
-  }
+.map-sheet-actions .link-btn:last-child {
+  margin-inline-end: -9px;
+}
 
-  /* Inside flowing copy the 40px button otherwise inflates line pitch to
+/* Inside flowing copy the 40px button otherwise inflates line pitch to
      ~60px (Insights savings note); scoped so card-header layouts are
      untouched. */
-  .status-copy .link-btn {
-    margin-block: -8px;
-  }
+.status-copy .link-btn {
+  margin-block: -8px;
+}
 
-  .link-btn {
-    /* Padded so the tap target clears ~34px (was a 15px text-only hit area).
+.link-btn {
+  /* Padded so the tap target clears ~34px (was a 15px text-only hit area).
        margin-inline-end offsets the right padding so the label stays flush with
        the card's right edge. The card header is taller than this, so it doesn't
        grow the header. */
-    min-height: var(--touch-min-dense);
-    padding: 7px 9px;
-    margin-inline-end: -9px;
-    display: inline-flex;
-    align-items: center;
-    border: 0;
-    border-radius: 10px;
-    background: transparent;
-    color: var(--text);
-    font-size: 13px;
-    /* A header action must keep its intrinsic width and never wrap — otherwise a long title
+  min-height: var(--touch-min-dense);
+  padding: 7px 9px;
+  margin-inline-end: -9px;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  /* v2 design: links are the light-blue accent (#9bdcff), 700 — a distinct
+       "tappable" voice instead of plain body text. Token so light mode can
+       swap in a darker ink (base.css). */
+  color: var(--link, #9bdcff);
+  font-size: 12.5px;
+  font-weight: 700;
+  /* A header action must keep its intrinsic width and never wrap — otherwise a long title
        squeezes it to nothing and clips the label (e.g. the "map" link). Pairs with the
        min-width:0 on the title block below so the title yields instead. App-wide across tabs. */
-    flex: 0 0 auto;
-    white-space: nowrap;
-    transition: background-color var(--motion-fast) var(--motion-ease);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  transition: background-color var(--motion-fast) var(--motion-ease);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .link-btn:hover {
+    background: var(--fill-bold);
   }
+}
 
-  @media (hover: hover) and (pointer: fine) {
-    .link-btn:hover { background: var(--fill-bold); }
-  }
+.link-btn:active {
+  background: var(--fill-active);
+}
 
-  .link-btn:active { background: var(--fill-active); }
-
-  /* In every card header (list/charge cards and status/detail card-heads), let the leading
+/* In every card header (list/charge cards and status/detail card-heads), let the leading
      title block shrink so the trailing action stays fully visible instead of being clipped. */
-  .list-card header > :first-child,
-  .charge-card header > :first-child,
-  .status-head > :first-child,
-  .card-head > :first-child {
-    min-width: 0;
-  }
+.list-card header > :first-child,
+.charge-card header > :first-child,
+.status-head > :first-child,
+.card-head > :first-child {
+  min-width: 0;
+}
 
-  /* ===== 7. Interactive list rows ===== */
+/* ===== 7. Interactive list rows ===== */
 
-  /* Accessibility wrapper: gives interactive rows a role="listitem" parent
+/* Accessibility wrapper: gives interactive rows a role="listitem" parent
      inside role="list" containers without adding a layout box, so the visual
      grid/flex of the list is exactly as if the row were a direct child. */
-  .list-row-item {
-    display: contents;
-  }
+.list-row-item {
+  display: contents;
+}
 
-  .history-row {
-    width: 100%;
-    display: grid;
-    align-items: center;
-    gap: 10px;
-    min-height: 56px;
-    padding: 10px;
-    border: 0;
-    border-top: 1px solid var(--line-soft);
-    border-radius: 0;
-    background: transparent;
-    text-align: left;
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
+.history-row {
+  width: 100%;
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 10px;
+  border: 0;
+  border-top: 1px solid var(--line-soft);
+  border-radius: 0;
+  background: transparent;
+  text-align: left;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
 
-  .history-row.is-active {
-    background: rgba(var(--volt-rgb), 0.08);
-  }
+.history-row.is-active {
+  background: rgba(var(--volt-rgb), 0.08);
+}
 
-  .history-entry {
-    border-top: 1px solid var(--line-soft);
-  }
+.history-entry {
+  border-top: 1px solid var(--line-soft);
+}
 
-  .history-entry .history-row {
-    border-top: 0;
-  }
+.history-entry .history-row {
+  border-top: 0;
+}
 
-  .history-export {
-    display: flex;
-    gap: 8px;
-    padding: 0 10px 10px;
-    /* Wraps so the favorite + Details + Rename + GPX + CSV actions stay tappable
+.history-export {
+  display: flex;
+  gap: 8px;
+  padding: 0 10px 10px;
+  /* Wraps so the favorite + Details + Rename + GPX + CSV actions stay tappable
        on narrow WebView widths instead of squeezing below the touch target. */
-    flex-wrap: wrap;
-  }
+  flex-wrap: wrap;
+}
 
-  .history-export-btn {
-    flex: 1 1 30%;
-    min-height: var(--touch-min-dense);
-    padding: 6px 10px;
-    border: 1px solid var(--line-soft);
-    border-radius: 8px;
-    background: var(--fill-soft);
-    color: var(--text);
-    font-size: 13px;
-    font-weight: 600;
-  }
+.history-export-btn {
+  flex: 1 1 30%;
+  min-height: var(--touch-min-dense);
+  padding: 6px 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 600;
+}
 
-  .history-export-btn:active {
-    background: rgba(var(--volt-rgb), 0.12);
-  }
+.history-export-btn:active {
+  background: rgba(var(--volt-rgb), 0.12);
+}
 
-  /* Per-row favorite star (M4 favorites half). Compact (it's an icon, not a labelled action) and
+/* Per-row favorite star (M4 favorites half). Compact (it's an icon, not a labelled action) and
      gold when active so a favorited drive reads at a glance. */
-  .history-favorite-btn {
-    flex: 0 0 auto;
-    min-width: 36px;
-    padding-inline: 10px;
-    color: var(--muted);
-    font-size: 16px;
-    line-height: 1;
-  }
+.history-favorite-btn {
+  flex: 0 0 auto;
+  min-width: 36px;
+  padding-inline: 10px;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
 
-  .history-favorite-btn.is-favorite {
-    border-color: rgba(var(--warn-rgb), 0.4);
-    background: rgba(var(--warn-rgb), 0.12);
-    color: var(--warn, #ffb84a);
-  }
+.history-favorite-btn.is-favorite {
+  border-color: rgba(var(--warn-rgb), 0.4);
+  background: rgba(var(--warn-rgb), 0.12);
+  color: var(--warn, #ffb84a);
+}
 
-  .trip-route-spark {
-    display: block;
-    width: 100%;
-    height: 46px;
-    border-radius: 10px;
-    background: var(--fill-soft);
-    box-shadow: inset 0 0 0 1px var(--line-soft);
-  }
+.trip-route-spark {
+  display: block;
+  width: 100%;
+  height: 46px;
+  border-radius: 10px;
+  background: var(--fill-soft);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+}
 
-  .trip-route-map {
-    display: block;
-    width: 100%;
-    height: 100%;
-    min-height: 96px;
-    overflow: hidden;
-    border-radius: 10px;
-    background: var(--fill-soft);
-    box-shadow: inset 0 0 0 1px var(--line-soft);
-    pointer-events: none;
-  }
+.trip-route-map {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--fill-soft);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  pointer-events: none;
+}
 
-  .trip-route-map .leaflet-container,
-  .real-route-map .leaflet-container {
-    background: var(--surface-map);
-  }
+.trip-route-map .leaflet-container,
+.real-route-map .leaflet-container {
+  background: var(--surface-map);
+}
 
-  .trip-route-spark-halo,
-  .trip-route-spark-line {
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
+.trip-route-spark-halo,
+.trip-route-spark-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
 
-  .trip-route-spark-halo {
-    stroke: rgba(255, 255, 255, 0.35);
-    stroke-width: 5;
-  }
+.trip-route-spark-halo {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 5;
+}
 
-  .trip-route-spark-line {
-    stroke: var(--volt);
-    stroke-width: 2.5;
-  }
+.trip-route-spark-line {
+  stroke: var(--volt);
+  stroke-width: 2.5;
+}
 
-  .trip-route-spark-start {
-    fill: var(--ev);
-    stroke: rgba(255, 255, 255, 0.9);
-    stroke-width: 1.3;
-  }
+.trip-route-spark-start {
+  fill: var(--ev);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1.3;
+}
 
-  .trip-route-spark-end {
-    fill: var(--volt);
-    stroke: rgba(255, 255, 255, 0.9);
-    stroke-width: 1.3;
-  }
+.trip-route-spark-end {
+  fill: var(--volt);
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1.3;
+}
 
-  .trip-route-state {
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(var(--volt-rgb), 0.1);
-    font-size: 10px;
-    font-weight: 600;
-    line-height: 1.45;
-    color: var(--soft);
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
+.trip-route-state {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(var(--volt-rgb), 0.1);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: var(--soft);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
 
-  .review-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 9px;
-    margin-top: 12px;
-  }
+.review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+  margin-top: 12px;
+}
 
-  .review-grid div {
-    min-width: 0;
-    padding: 11px;
-    border-radius: var(--radius-md);
-    background: var(--fill);
-  }
+.review-grid div {
+  min-width: 0;
+  padding: 11px;
+  border-radius: var(--radius-md);
+  background: var(--fill);
+}
 
-  .review-grid span {
-    display: block;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
+.review-grid span {
+  display: block;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 
-  .review-grid strong {
-    display: block;
-    margin-top: 5px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 20px;
-  }
+.review-grid strong {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+}
 
-  /* Insights Vehicle stats → bare columns (scoped so Charge #reviewCard keeps
+/* Insights Vehicle stats → bare columns (scoped so Charge #reviewCard keeps
      its boxed tiles). */
-  #vehicleCard .review-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px 14px;
+#vehicleCard .review-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+
+#vehicleCard .review-grid div {
+  padding: 0;
+  background: none;
+  border-radius: 0;
+}
+
+#vehicleCard .review-grid strong {
+  margin-top: 3px;
+  font-size: 15px;
+}
+
+#vehicleVin {
+  font-size: 14px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+}
+
+.diagnostic-report-card {
+  padding: var(--card-pad);
+  /* v2 design: neutral card border (the orange tint clashed inside the
+       green-accented Diagnostics tab). */
+  border-color: var(--line);
+}
+
+.diagnostic-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.diagnostic-report-head h3 {
+  margin-top: 3px;
+}
+
+.dtc-action-row {
+  display: grid;
+  /* v2 design: the primary scan is wider than its quick-scan sibling. */
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dtc-action-row button {
+  min-width: 0;
+}
+
+.dtc-action-row .danger {
+  border-color: rgba(var(--bad-rgb), 0.34);
+  color: var(--bad-text);
+  background: rgba(var(--bad-rgb), 0.08);
+}
+
+/* v2 design: the DTC scan is a translucent green outline button (ghost), not a
+     solid fill — one filled primary per screen, and this row's real action is a
+     read, not a commit. */
+.dtc-action-row .scan {
+  border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.32);
+  background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.1);
+  color: var(--view-accent-soft, var(--ok-soft));
+  font-weight: 800;
+}
+
+/* Quick scan: a quiet sibling — subtle fill + full text tone (v2 design). */
+.dtc-action-row .scan-quick {
+  border-color: var(--line-strong);
+  background: var(--fill-soft);
+  color: var(--text);
+  font-weight: 700;
+}
+
+.dtc-action-row button:not(.scan):not(.scan-quick):not(.danger) {
+  color: var(--muted);
+}
+
+.dtc-secondary-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: -4px 0 10px;
+}
+
+.dtc-secondary-row .danger-link {
+  color: var(--bad-soft);
+}
+
+/* ===== 8. In-app DTC lookup (intro card) ===== */
+
+/* In-app DTC lookup (Insights → Check engine). */
+/* ── DTC scan narration (storage-status.ts startDtcScanProgress) ── */
+.dtc-scan-progress {
+  margin-top: 12px;
+  animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
+}
+
+.dtc-scan-phase-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--ok);
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.dtc-scan-phase {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.dtc-scan-phase .dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentcolor;
+  box-shadow: 0 0 8px currentcolor;
+  animation: dtc-scan-pulse 0.9s ease-in-out infinite;
+}
+
+@keyframes dtc-scan-pulse {
+  0%,
+  100% {
+    opacity: 1;
   }
 
-  #vehicleCard .review-grid div {
-    padding: 0;
-    background: none;
-    border-radius: 0;
+  50% {
+    opacity: 0.3;
   }
+}
 
-  #vehicleCard .review-grid strong {
-    margin-top: 3px;
-    font-size: 15px;
+.dtc-scan-bar {
+  height: 6px;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: var(--fill-active);
+  overflow: hidden;
+}
+
+.dtc-scan-bar span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #1f9c6c, var(--ok));
+  transition: width 120ms linear;
+}
+
+.dtc-scan-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dtc-scan-steps span {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
+
+.dtc-scan-steps span[data-step-state="active"] {
+  border-color: rgba(var(--ok-rgb), 0.9);
+  color: var(--ok-soft);
+}
+
+.dtc-scan-steps span[data-step-state="done"] {
+  border-color: rgba(var(--ok-rgb), 0.4);
+  color: var(--ok-soft);
+}
+
+/* ── DTC detail bottom sheet ── */
+#dtcDetailBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 214;
+  background: rgba(4, 5, 8, 0.6);
+  backdrop-filter: blur(4px);
+  animation: backdrop-fade 200ms ease both;
+}
+
+@keyframes backdrop-fade {
+  from {
+    opacity: 0;
   }
+}
 
-  #vehicleVin {
-    font-size: 14px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 0.04em;
+#dtcDetailSheet {
+  position: fixed;
+  z-index: 215;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: min(560px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 20px 20px 28px;
+  border: 1px solid var(--line-strong);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  background: var(--panel);
+  box-shadow: 0 -24px 64px rgba(0, 0, 0, 0.6);
+  animation: sheet-rise 320ms cubic-bezier(0.16, 0.84, 0.28, 1) both;
+}
+
+@keyframes sheet-rise {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(16px);
   }
+}
 
-  .diagnostic-report-card {
-    padding: var(--card-pad);
-    border-color: rgba(var(--volt-rgb), 0.2);
-  }
+#dtcDetailSheet .sheet-grip {
+  display: block;
+  width: 36px;
+  height: 4px;
+  margin: 0 auto 14px;
+  border-radius: 999px;
+  background: var(--fill-active);
+}
 
-  .diagnostic-report-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
+.dtc-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
 
-  .diagnostic-report-head h3 {
-    margin-top: 3px;
-  }
+.dtc-detail-head .dtc-code {
+  flex: 0 0 auto;
+  font-size: 16px;
+}
 
-  .dtc-action-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
-    margin-bottom: 12px;
-  }
+.dtc-detail-title-block {
+  flex: 1;
+  min-width: 0;
+}
 
-  .dtc-action-row button {
-    min-width: 0;
-  }
+.dtc-detail-title-block strong {
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+}
 
-  .dtc-action-row .danger {
-    border-color: rgba(var(--bad-rgb), 0.34);
-    color: var(--bad-text);
-    background: rgba(var(--bad-rgb), 0.08);
-  }
+.dtc-detail-title-block small {
+  color: var(--soft);
+  font-size: 11px;
+}
 
-  .dtc-action-row .scan {
-    border-color: transparent;
-    background: var(--view-accent, var(--volt));
-    color: var(--on-view-accent, var(--on-volt));
-    font-weight: 800;
-    box-shadow: 0 12px 28px rgba(var(--view-accent-rgb, var(--volt-rgb)), 0.18);
-  }
+.dtc-detail-head .dtc-sev {
+  flex: 0 0 auto;
+}
 
-  /* Quick scan: a quiet ghost sibling — one primary per action row. */
-  .dtc-action-row .scan-quick {
-    border-color: var(--line-strong);
-    background: transparent;
-    color: var(--muted);
-    font-weight: 700;
-  }
+.dtc-detail-plain {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
 
-  .dtc-action-row button:not(.scan):not(.scan-quick):not(.danger) {
-    color: var(--muted);
-  }
+.dtc-detail-causes {
+  margin-top: 14px;
+}
 
-  .dtc-secondary-row {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin: -4px 0 10px;
-  }
+.dtc-detail-causes ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
 
-  .dtc-secondary-row .danger-link {
-    color: var(--bad-soft);
-  }
+.dtc-detail-frame {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-veil);
+}
 
-  /* ===== 8. In-app DTC lookup (intro card) ===== */
+.dtc-detail-frame-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px 8px;
+  margin-top: 10px;
+}
 
-  /* In-app DTC lookup (Insights → Check engine). */
-  /* ── DTC scan narration (storage-status.ts startDtcScanProgress) ── */
-  .dtc-scan-progress {
-    margin-top: 12px;
-    animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
-  }
+.dtc-detail-frame-grid span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 
-  .dtc-scan-phase-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    color: var(--ok);
-    font-size: 11px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
+.dtc-detail-frame-grid small {
+  color: var(--soft);
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
 
-  .dtc-scan-phase {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    min-width: 0;
-  }
+.dtc-detail-frame-grid strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
 
-  .dtc-scan-phase .dot {
-    flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentcolor;
-    box-shadow: 0 0 8px currentcolor;
-    animation: dtc-scan-pulse 0.9s ease-in-out infinite;
-  }
+.dtc-detail-links {
+  margin-top: 14px;
+}
 
-  @keyframes dtc-scan-pulse {
-    0%,
-    100% {
-      opacity: 1;
-    }
+.dtc-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
 
-    50% {
-      opacity: 0.3;
-    }
-  }
+.dtc-detail-actions button {
+  flex: 1;
+  min-height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--fill-soft);
+  color: var(--text);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
 
-  .dtc-scan-bar {
-    height: 6px;
-    margin-top: 8px;
-    border-radius: 999px;
-    background: var(--fill-active);
-    overflow: hidden;
-  }
+.dtc-detail-actions .confirm {
+  border-color: rgba(var(--ok-rgb), 0.3);
+  background: rgba(var(--ok-rgb), 0.08);
+  color: var(--ok-soft);
+}
 
-  .dtc-scan-bar span {
-    display: block;
-    height: 100%;
-    width: 0%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, #1f9c6c, var(--ok));
-    transition: width 120ms linear;
-  }
+.dtc-lookup {
+  margin-bottom: 12px;
+}
 
-  .dtc-scan-steps {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-  }
+.dtc-lookup-field {
+  display: block;
+}
 
-  .dtc-scan-steps span {
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--line-strong);
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10.5px;
-    font-weight: 700;
-    transition: border-color var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
-  }
+.dtc-lookup-field .kicker {
+  display: block;
+  margin-bottom: 6px;
+}
 
-  .dtc-scan-steps span[data-step-state="active"] {
-    border-color: rgba(var(--ok-rgb), 0.9);
-    color: var(--ok-soft);
-  }
+.dtc-lookup-field input {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--fill-soft);
+  color: var(--text);
+  font-size: 15px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.04em;
+}
 
-  .dtc-scan-steps span[data-step-state="done"] {
-    border-color: rgba(var(--ok-rgb), 0.4);
-    color: var(--ok-soft);
-  }
+.dtc-lookup-result {
+  margin-top: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-veil);
+}
 
-  /* ── DTC detail bottom sheet ── */
-  #dtcDetailBackdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 214;
-    background: rgba(4, 5, 8, 0.6);
-    backdrop-filter: blur(4px);
-    animation: backdrop-fade 200ms ease both;
-  }
+.dtc-lookup-code {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+}
 
-  @keyframes backdrop-fade {
-    from {
-      opacity: 0;
-    }
-  }
+.dtc-lookup-sev {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  letter-spacing: 0;
+  background: var(--fill-bold);
+  color: var(--muted);
+}
 
-  #dtcDetailSheet {
-    position: fixed;
-    z-index: 215;
-    left: 50%;
-    bottom: 0;
-    transform: translateX(-50%);
-    width: min(560px, 100%);
-    max-height: 86vh;
-    overflow-y: auto;
-    box-sizing: border-box;
-    padding: 20px 20px 28px;
-    border: 1px solid var(--line-strong);
-    border-bottom: 0;
-    border-radius: 22px 22px 0 0;
-    background: var(--panel);
-    box-shadow: 0 -24px 64px rgba(0, 0, 0, 0.6);
-    animation: sheet-rise 320ms cubic-bezier(0.16, 0.84, 0.28, 1) both;
-  }
+.dtc-lookup-sev[data-severity="high"],
+.dtc-lookup-sev[data-severity="severe"] {
+  background: rgba(var(--bad-rgb), 0.16);
+  color: var(--bad-text);
+}
 
-  @keyframes sheet-rise {
-    from {
-      opacity: 0;
-      transform: translateX(-50%) translateY(16px);
-    }
-  }
+.dtc-lookup-sev[data-severity="medium"],
+.dtc-lookup-sev[data-severity="moderate"] {
+  background: rgba(var(--warn-rgb), 0.16);
+  color: var(--warn-soft);
+}
 
-  #dtcDetailSheet .sheet-grip {
-    display: block;
-    width: 36px;
-    height: 4px;
-    margin: 0 auto 14px;
-    border-radius: 999px;
-    background: var(--fill-active);
-  }
+.dtc-lookup-desc {
+  margin: 6px 0 0;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.4;
+}
 
-  .dtc-detail-head {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
+.dtc-lookup-causes-label {
+  display: block;
+  margin-top: 10px;
+}
 
-  .dtc-detail-head .dtc-code {
-    flex: 0 0 auto;
-    font-size: 16px;
-  }
+.dtc-lookup-causes {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 
-  .dtc-detail-title-block {
-    flex: 1;
-    min-width: 0;
-  }
+.dtc-lookup-web {
+  margin-top: 10px;
+}
 
-  .dtc-detail-title-block strong {
-    display: block;
-    font-size: 15px;
-    line-height: 1.25;
-  }
+/* ===== 9. Charge est-cost tile ===== */
 
-  .dtc-detail-title-block small {
-    color: var(--soft);
-    font-size: 11px;
-  }
-
-  .dtc-detail-head .dtc-sev {
-    flex: 0 0 auto;
-  }
-
-  .dtc-detail-plain {
-    margin: 14px 0 0;
-    color: var(--muted);
-    font-size: 13px;
-    line-height: 1.55;
-  }
-
-  .dtc-detail-causes {
-    margin-top: 14px;
-  }
-
-  .dtc-detail-causes ul {
-    margin: 8px 0 0;
-    padding-left: 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    color: var(--muted);
-    font-size: 12.5px;
-    line-height: 1.45;
-  }
-
-  .dtc-detail-frame {
-    margin-top: 16px;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    background: var(--surface-veil);
-  }
-
-  .dtc-detail-frame-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px 8px;
-    margin-top: 10px;
-  }
-
-  .dtc-detail-frame-grid span {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .dtc-detail-frame-grid small {
-    color: var(--soft);
-    font-size: 9.5px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-  }
-
-  .dtc-detail-frame-grid strong {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 13px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  .dtc-detail-links {
-    margin-top: 14px;
-  }
-
-  .dtc-detail-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-  }
-
-  .dtc-detail-actions button {
-    flex: 1;
-    min-height: 46px;
-    border: 1px solid var(--line-strong);
-    border-radius: 12px;
-    background: var(--fill-soft);
-    color: var(--text);
-    font-weight: 700;
-    font-size: 13px;
-    cursor: pointer;
-    font-family: inherit;
-  }
-
-  .dtc-detail-actions .confirm {
-    border-color: rgba(var(--ok-rgb), 0.3);
-    background: rgba(var(--ok-rgb), 0.08);
-    color: var(--ok-soft);
-  }
-
-  .dtc-lookup {
-    margin-bottom: 12px;
-  }
-
-  .dtc-lookup-field {
-    display: block;
-  }
-
-  .dtc-lookup-field .kicker {
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  .dtc-lookup-field input {
-    width: 100%;
-    box-sizing: border-box;
-    min-height: 44px;
-    padding: 10px 12px;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--fill-soft);
-    color: var(--text);
-    font-size: 15px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    letter-spacing: 0.04em;
-  }
-
-  .dtc-lookup-result {
-    margin-top: 10px;
-    padding: 12px;
-    border: 1px solid var(--line);
-    border-radius: var(--radius-md);
-    background: var(--surface-veil);
-  }
-
-  .dtc-lookup-code {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-weight: 800;
-    font-size: 16px;
-    letter-spacing: 0.04em;
-  }
-
-  .dtc-lookup-sev {
-    padding: 2px 8px;
-    border-radius: 999px;
-    font-family: inherit;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: capitalize;
-    letter-spacing: 0;
-    background: var(--fill-bold);
-    color: var(--muted);
-  }
-
-  .dtc-lookup-sev[data-severity="high"],
-  .dtc-lookup-sev[data-severity="severe"] {
-    background: rgba(var(--bad-rgb), 0.16);
-    color: var(--bad-text);
-  }
-
-  .dtc-lookup-sev[data-severity="medium"],
-  .dtc-lookup-sev[data-severity="moderate"] {
-    background: rgba(var(--warn-rgb), 0.16);
-    color: var(--warn-soft);
-  }
-
-  .dtc-lookup-desc {
-    margin: 6px 0 0;
-    color: var(--text);
-    font-size: 14px;
-    line-height: 1.4;
-  }
-
-  .dtc-lookup-causes-label {
-    display: block;
-    margin-top: 10px;
-  }
-
-  .dtc-lookup-causes {
-    margin: 4px 0 0;
-    padding-left: 18px;
-    color: var(--muted);
-    font-size: 13px;
-    line-height: 1.5;
-  }
-
-  .dtc-lookup-web {
-    margin-top: 10px;
-  }
-
-  /* ===== 9. Charge est-cost tile ===== */
-
-  /* Est. cost KPI tile (v2: the old energy/cost card folded into the KPI row +
+/* Est. cost KPI tile (v2: the old energy/cost card folded into the KPI row +
      the Recent-charges headline). */
-  #chargeEnergyCost {
-    color: var(--ok);
-  }
+#chargeEnergyCost {
+  color: var(--ok);
+}
 
-  #chargeEnergyHint {
-    margin: 4px 0 0;
-  }
+#chargeEnergyHint {
+  margin: 4px 0 0;
+}
 
-  .dtc-status-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
-  }
+.dtc-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
 
-  .dtc-status-grid div {
-    min-width: 0;
-    padding: 10px;
-    border-radius: var(--radius-md);
-  }
+.dtc-status-grid div {
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--radius-md);
+}
 
-  .dtc-status-grid div:first-child {
-    border-color: rgba(var(--volt-rgb), 0.18);
-    background: rgba(var(--volt-rgb), 0.08);
-  }
+.dtc-status-grid div:first-child {
+  /* Neutral primary cell (design counts are untinted); the old orange clashed
+       with the green Diagnostics accent. */
+  border-color: var(--line);
+  background: var(--fill-soft);
+}
 
-  .dtc-status-grid span {
-    display: block;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
+.dtc-status-grid span {
+  display: block;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 
-  .dtc-status-grid strong {
-    display: block;
-    margin-top: 6px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 20px;
-  }
+.dtc-status-grid strong {
+  display: block;
+  margin-top: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 20px;
+}
 
-  .warning-list,
-  .timeline-list,
-  .enhanced-next-list,
-  .pid-frame-list,
-  .enhanced-capability-list,
-  .dtc-list,
-  .real-insight-list {
-    display: grid;
-    gap: 8px;
-    margin-top: 12px;
-  }
+.warning-list,
+.timeline-list,
+.enhanced-next-list,
+.pid-frame-list,
+.enhanced-capability-list,
+.dtc-list,
+.real-insight-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
 
-  .signal-console {
-    padding: 12px 14px;
-    border-color: rgba(var(--ok-rgb), 0.18);
-    border-radius: 16px;
-    background:
-      linear-gradient(180deg, rgba(var(--ok-rgb), 0.055), transparent 42%),
-      var(--surface-raised);
-  }
+.signal-console {
+  padding: 12px 14px;
+  border-color: rgba(var(--ok-rgb), 0.18);
+  border-radius: 16px;
+  background:
+    linear-gradient(180deg, rgba(var(--ok-rgb), 0.055), transparent 42%),
+    var(--surface-raised);
+}
 
-  /* `header.` prefix raises specificity to beat `.list-card header`'s
+/* `header.` prefix raises specificity to beat `.list-card header`'s
      align-items:center, so the status pill tops-aligns with the title. */
-  header.signal-console-head {
-    align-items: flex-start;
-    gap: 12px;
-    padding-bottom: 13px;
-    border-bottom: 1px solid var(--line);
-  }
+header.signal-console-head {
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 13px;
+  border-bottom: 1px solid var(--line);
+}
 
-  .signal-console-title {
-    min-width: 0;
-  }
+.signal-console-title {
+  min-width: 0;
+}
 
-  .signal-console-head h2 {
-    margin-top: 3px;
-    font-size: 18px;
-    line-height: 1.1;
-  }
+.signal-console-head h2 {
+  margin-top: 3px;
+  font-size: 18px;
+  line-height: 1.1;
+}
 
-  .signal-console-sub {
-    display: block;
-    max-width: 46ch;
-    margin-top: 6px;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.42;
-  }
+.signal-console-sub {
+  display: block;
+  max-width: 46ch;
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.42;
+}
 
-  .signal-status-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    flex: 0 0 auto;
-    min-height: 28px;
-    padding: 0 11px;
-    border: 1px solid rgba(var(--ok-rgb), 0.3);
-    border-radius: 999px;
-    background: rgba(var(--ok-rgb), 0.1);
-    color: var(--ok-soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    white-space: nowrap;
-  }
+.signal-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 11px;
+  border: 1px solid rgba(var(--ok-rgb), 0.3);
+  border-radius: 999px;
+  background: rgba(var(--ok-rgb), 0.1);
+  color: var(--ok-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
 
-  .signal-status-pill::before {
-    content: "";
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--ok);
-    box-shadow: 0 0 10px rgba(var(--ok-rgb), 0.85);
-  }
+.signal-status-pill::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 10px rgba(var(--ok-rgb), 0.85);
+}
 
-  .signal-status-pill[data-state="blocked"] {
-    border-color: rgba(var(--bad-rgb), 0.34);
-    background: rgba(var(--bad-rgb), 0.12);
-    color: var(--bad-soft);
-  }
+.signal-status-pill[data-state="blocked"] {
+  border-color: rgba(var(--bad-rgb), 0.34);
+  background: rgba(var(--bad-rgb), 0.12);
+  color: var(--bad-soft);
+}
 
-  .signal-status-pill[data-state="blocked"]::before {
-    background: var(--bad);
-    box-shadow: 0 0 10px rgba(var(--bad-rgb), 0.8);
-  }
+.signal-status-pill[data-state="blocked"]::before {
+  background: var(--bad);
+  box-shadow: 0 0 10px rgba(var(--bad-rgb), 0.8);
+}
 
-  .signal-status-pill[data-state="idle"] {
-    border-color: rgba(var(--warn-rgb), 0.32);
-    background: rgba(var(--warn-rgb), 0.1);
-    color: var(--warn-soft);
-  }
+.signal-status-pill[data-state="idle"] {
+  border-color: rgba(var(--warn-rgb), 0.32);
+  background: rgba(var(--warn-rgb), 0.1);
+  color: var(--warn-soft);
+}
 
-  .signal-status-pill[data-state="idle"]::before {
-    background: var(--warn);
-    box-shadow: 0 0 10px rgba(var(--warn-rgb), 0.75);
-  }
+.signal-status-pill[data-state="idle"]::before {
+  background: var(--warn);
+  box-shadow: 0 0 10px rgba(var(--warn-rgb), 0.75);
+}
 
-  /* ===== 9b. Diagnostics recovery-first panel (A1/C3/E2/I2) ===== */
+/* ===== 9b. Diagnostics recovery-first panel (A1/C3/E2/I2) ===== */
 
-  /* Sits at the top of the Diagnostics tab. A plain-language status headline,
+/* Sits at the top of the Diagnostics tab. A plain-language status headline,
      next-best-action, adapter readiness, and ONE primary button — so a
      non-expert can recover before the signal/debug consoles below. Tone-driven
      left accent + status dot mirror the data-tone severity vocabulary. */
-  /* Diag's signature: a status monolith — thick tone stripe, display-scale
-     headline. */
-  .diag-recovery {
-    display: grid;
-    gap: 12px;
-    border-left: 6px solid var(--line-strong);
-  }
+/* v2 design: the whole card border carries the status tone (uniform 1px),
+     not a thick side stripe. */
+.diag-recovery {
+  display: grid;
+  gap: 12px;
+}
 
-  .diag-recovery__head {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-  }
+.diag-recovery__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
 
-  .diag-recovery__dot {
-    flex: none;
-    width: 12px;
-    height: 12px;
-    margin-top: 9px;
-    border-radius: 50%;
-    background: var(--muted);
-    box-shadow: 0 0 0 4px var(--fill-soft);
-  }
+.diag-recovery__dot {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  margin-top: 9px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 4px var(--fill-soft);
+}
 
-  .diag-recovery__headline {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
+.diag-recovery__headline {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
-  .diag-recovery__headline h2 {
-    margin: 2px 0 0;
-    font-size: 24px;
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    line-height: 1.2;
-  }
+.diag-recovery__headline h2 {
+  margin: 2px 0 0;
+  /* v2 design: 19px display headline. */
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
 
-  .diag-recovery__pill {
-    align-self: center;
-  }
+/* v2 design: the status pill is a plain outline chip — no fill, no inner dot
+     (the big tone dot on the left already carries the color). */
+.diag-recovery__pill {
+  align-self: center;
+  border-color: var(--line-strong);
+  background: transparent;
+}
 
-  .diag-recovery__next {
-    margin: 0;
-    color: var(--soft);
-    font-size: 13px;
-    line-height: 1.45;
-  }
+.diag-recovery__pill::before {
+  display: none;
+}
 
-  .diag-recovery__meta {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-top: 10px;
-    border-top: 1px solid var(--line);
-  }
+.diag-recovery__next {
+  margin: 0;
+  color: var(--soft);
+  font-size: 13px;
+  line-height: 1.45;
+}
 
-  .diag-recovery__meta div {
-    min-width: 0;
-    padding: 0 10px;
-  }
+.diag-recovery__meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
 
-  .diag-recovery__meta div:first-child {
-    padding-left: 0;
-  }
+.diag-recovery__meta div {
+  min-width: 0;
+  padding: 0 10px;
+}
 
-  .diag-recovery__meta div + div {
-    border-left: 1px solid var(--line);
-  }
+.diag-recovery__meta div:first-child {
+  padding-left: 0;
+}
 
-  .diag-recovery__meta strong {
-    display: block;
-    margin-top: 3px;
-    overflow: hidden;
-    font-size: 14px;
-    font-weight: 750;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+/* v2 design: the meta columns separate by gap alone — no vertical dividers. */
 
-  .diag-recovery__action {
-    width: 100%;
-  }
+.diag-recovery__meta strong {
+  display: block;
+  margin-top: 3px;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 750;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-  .diag-recovery[data-tone="ok"] {
-    border-left-color: var(--ok);
-  }
-  .diag-recovery[data-tone="ok"] .diag-recovery__dot {
-    background: var(--ok);
-    box-shadow: 0 0 0 4px rgba(var(--ok-rgb), 0.16);
-  }
-  .diag-recovery[data-tone="live"] {
-    border-left-color: var(--volt);
-  }
-  .diag-recovery[data-tone="live"] .diag-recovery__dot {
-    background: var(--volt);
-    box-shadow: 0 0 0 4px rgba(var(--volt-rgb), 0.18);
-  }
-  .diag-recovery[data-tone="warn"] {
-    border-left-color: var(--warn);
-  }
-  .diag-recovery[data-tone="warn"] .diag-recovery__dot {
-    background: var(--warn);
-    box-shadow: 0 0 0 4px rgba(var(--warn-rgb), 0.18);
-  }
-  .diag-recovery[data-tone="bad"] {
-    border-left-color: var(--bad);
-  }
-  .diag-recovery[data-tone="bad"] .diag-recovery__dot {
-    background: var(--bad);
-    box-shadow: 0 0 0 4px rgba(var(--bad-rgb), 0.2);
-  }
-  /* Demo speaks one color app-wide: purple. */
-  .diag-recovery[data-tone="demo"] {
-    border-left-color: var(--mixed);
-  }
-  .diag-recovery[data-tone="demo"] .diag-recovery__dot {
-    background: var(--mixed);
-    box-shadow: 0 0 0 4px rgba(var(--mixed-rgb), 0.18);
-  }
-  .diag-recovery[data-tone="demo"] .signal-status-pill {
-    border-color: rgba(var(--mixed-rgb), 0.4);
-    background: rgba(var(--mixed-rgb), 0.12);
-    color: var(--mixed-soft, var(--mixed));
-  }
+.diag-recovery__action {
+  width: 100%;
+}
 
-  /* ===== 10. Live-signals diagnostic list ===== */
+.diag-recovery[data-tone="ok"] {
+  border-color: rgba(var(--ok-rgb), 0.35);
+}
+.diag-recovery[data-tone="ok"] .diag-recovery__dot {
+  background: var(--ok);
+  box-shadow: 0 0 0 4px rgba(var(--ok-rgb), 0.16);
+}
+.diag-recovery[data-tone="live"] {
+  border-color: rgba(var(--volt-rgb), 0.35);
+}
+.diag-recovery[data-tone="live"] .diag-recovery__dot {
+  background: var(--volt);
+  box-shadow: 0 0 0 4px rgba(var(--volt-rgb), 0.18);
+}
+.diag-recovery[data-tone="warn"] {
+  border-color: rgba(var(--warn-rgb), 0.35);
+}
+.diag-recovery[data-tone="warn"] .diag-recovery__dot {
+  background: var(--warn);
+  box-shadow: 0 0 0 4px rgba(var(--warn-rgb), 0.18);
+}
+.diag-recovery[data-tone="bad"] {
+  border-color: rgba(var(--bad-rgb), 0.4);
+}
+.diag-recovery[data-tone="bad"] .diag-recovery__dot {
+  background: var(--bad);
+  box-shadow: 0 0 0 4px rgba(var(--bad-rgb), 0.2);
+}
+/* Demo speaks one color app-wide: purple. */
+.diag-recovery[data-tone="demo"] {
+  border-color: rgba(var(--mixed-rgb), 0.35);
+}
+.diag-recovery[data-tone="demo"] .diag-recovery__dot {
+  background: var(--mixed);
+  box-shadow: 0 0 0 4px rgba(var(--mixed-rgb), 0.18);
+}
+.diag-recovery[data-tone="demo"] .signal-status-pill {
+  border-color: rgba(var(--mixed-rgb), 0.4);
+  background: transparent;
+  color: var(--mixed-soft, var(--mixed));
+}
 
-  /* Live-signals diagnostic list: one row per polled metric with a status dot,
+/* ===== 10. Live-signals diagnostic list ===== */
+
+/* Live-signals diagnostic list: one row per polled metric with a status dot,
      value, and freshness. Green = reporting, dim = the car isn't answering. */
-  .live-signals-list {
-    margin-top: 10px;
-  }
+.live-signals-list {
+  margin-top: 10px;
+}
 
-  .live-signals-group {
-    margin: 14px 0 4px;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
+.live-signals-group {
+  margin: 14px 0 4px;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
 
-  .live-signals-group:first-child {
-    margin-top: 2px;
-  }
+.live-signals-group:first-child {
+  margin-top: 2px;
+}
 
-  .live-signal-row {
-    display: grid;
-    grid-template-columns: 1fr auto auto;
-    align-items: baseline;
-    gap: 10px;
-    padding: 7px 0;
-    border-top: 1px solid var(--line);
-  }
+.live-signal-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 0;
+  border-top: 1px solid var(--line);
+}
 
-  .live-signal-name {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    color: var(--text);
-    font-size: 13px;
-  }
+.live-signal-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+}
 
-  .live-signal-name::before {
-    content: "";
-    width: 8px;
-    height: 8px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    background: var(--ok, #35e6a0);
-    box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.6);
-  }
+.live-signal-name::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--ok, #35e6a0);
+  box-shadow: 0 0 8px rgba(var(--ok-rgb), 0.6);
+}
 
-  .live-signal-row[data-status="missing"] .live-signal-name {
-    color: var(--muted);
-  }
+.live-signal-row[data-status="missing"] .live-signal-name {
+  color: var(--muted);
+}
 
-  .live-signal-row[data-status="missing"] .live-signal-name::before {
-    background: var(--line-strong);
-    box-shadow: none;
-  }
+.live-signal-row[data-status="missing"] .live-signal-name::before {
+  background: var(--line-strong);
+  box-shadow: none;
+}
 
-  .live-signal-tag {
-    padding: 1px 6px;
-    border-radius: 999px;
-    background: var(--surface-overlay);
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-  }
+.live-signal-tag {
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--surface-overlay);
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
 
-  .live-signal-value {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 13px;
-    font-weight: 700;
-    white-space: nowrap;
-  }
+.live-signal-value {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 
-  .live-signal-row[data-status="missing"] .live-signal-value {
-    color: var(--muted);
-    font-weight: 600;
-  }
+.live-signal-row[data-status="missing"] .live-signal-value {
+  color: var(--muted);
+  font-weight: 600;
+}
 
-  .live-signal-age {
-    color: var(--soft);
-    font-size: 11px;
-    white-space: nowrap;
-  }
+.live-signal-age {
+  color: var(--soft);
+  font-size: 11px;
+  white-space: nowrap;
+}
 
-  .live-signals-filter {
-    margin: 10px 0 2px;
-  }
+.live-signals-filter {
+  margin: 10px 0 2px;
+}
 
-  /* ===== 11. Battery-tab cards (cell balance / cell map / SOH) ===== */
+/* ===== 11. Battery-tab cards (cell balance / cell map / SOH) ===== */
 
-  /* Shared layout for the Battery-tab cards (cell balance, SOH). These inherit
+/* Shared layout for the Battery-tab cards (cell balance, SOH). These inherit
      .panel, which carries no padding of its own, so give them the standard card
      padding — without it the header, chart, and stats sit flush against the
      card border. */
-  .cell-balance-card,
-  .soh-trend-card,
-  .live-charge-card {
-    margin-top: 12px;
-    padding: var(--card-pad);
-  }
+.cell-balance-card,
+.soh-trend-card,
+.live-charge-card {
+  margin-top: 12px;
+  padding: var(--card-pad);
+}
 
-  /* v2 charging hero: green-tinted card so an active charge reads as the
+/* v2 design: the battery-health trend is a quiet secondary sub-card — softer
+     surface, tighter 16px radius, no drop shadow — so it recedes below the
+     primary Charge cards. */
+.soh-trend-card {
+  border-radius: 16px;
+  background: var(--surface-veil);
+  box-shadow: none;
+}
+
+/* v2 charging hero: green-tinted card so an active charge reads as the
      tab's headline state at a glance. */
-  .live-charge-card {
-    border-color: rgba(var(--ev-rgb), 0.22);
-    background:
-      linear-gradient(160deg, rgba(var(--ev-rgb), 0.1), transparent 55%),
-      var(--surface-raised);
-  }
+.live-charge-card {
+  border-color: rgba(var(--ev-rgb), 0.22);
+  background:
+    linear-gradient(160deg, rgba(var(--ev-rgb), 0.1), transparent 55%),
+    var(--surface-raised);
+}
 
-  /* Motion: charging starting is a state change worth staging — the live
+/* Motion: charging starting is a state change worth staging — the live
      time-to-full hero settles in when the [hidden] attr clears rather than
      popping. Same enter vocabulary as the view switch. */
-  .live-charge-card:not([hidden]) {
-    animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
-  }
+.live-charge-card:not([hidden]) {
+  animation: view-enter var(--motion-enter) var(--motion-ease-out) both;
+}
 
-  .live-charge-sub {
-    margin: 4px 0 0;
-  }
+.live-charge-sub {
+  margin: 4px 0 0;
+}
 
-  /* v2 charge progress: green SOC-wide bar + from→to / target caption row. */
-  .live-charge-meter {
-    margin-top: 12px;
-  }
+/* v2 charge progress: green SOC-wide bar + from→to / target caption row. */
+.live-charge-meter {
+  margin-top: 12px;
+}
 
-  .live-charge-meter span {
-    background: var(--ev);
-  }
+.live-charge-meter span {
+  background: var(--ev);
+}
 
-  .live-charge-meter-row {
-    display: flex;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 6px;
-    color: var(--soft);
-    font-size: 11px;
-    font-variant-numeric: tabular-nums;
-  }
+.live-charge-meter-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 6px;
+  color: var(--soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
-  /* Inline cell-voltage map section inside the cell-balance card (v2): divider
+/* Inline cell-voltage map section inside the cell-balance card (v2): divider
      row instead of standalone-card chrome. */
-  .cell-grid-section {
-    margin-top: 14px;
-    padding-top: 12px;
-    border-top: 1px solid var(--line-soft);
-  }
+.cell-grid-section {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
 
-  /* Monthly trend cards (Charge monthly energy, Insights monthly distance /
+/* Monthly trend cards (Charge monthly energy, Insights monthly distance /
      temperature) — same story: .panel adds no padding, so their content bled to
      the border until this. */
-  .charge-cost-trend-card {
-    padding: var(--card-pad);
-  }
+.charge-cost-trend-card {
+  padding: 16px 20px;
+}
 
-  .cell-balance-head,
-  .cell-grid-head,
-  .soh-trend-head,
-  .charge-cost-trend-head,
-  .live-charge-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-  }
+.cell-balance-head,
+.cell-grid-head,
+.soh-trend-head,
+.charge-cost-trend-head,
+.live-charge-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 
-  /* Charge sub-card titles demoted so they read as sub-headings. */
-  .cell-balance-head h3,
-  .soh-trend-head h3 {
-    font-size: 15px;
-    font-weight: 650;
-  }
+/* Charge sub-card titles demoted so they read as sub-headings. */
+.cell-balance-head h3,
+.soh-trend-head h3 {
+  font-size: 15px;
+  font-weight: 650;
+}
 
-  .cell-balance-stats,
-  .soh-trend-stats,
-  .charge-cost-trend-stats,
-  .live-charge-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-  }
+.cell-balance-stats,
+.soh-trend-stats,
+.charge-cost-trend-stats,
+.live-charge-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
 
-  /* Cell-balance values are wide ("3.942 V · #12") — three-up on a narrow
+/* Cell-balance values are wide ("3.942 V · #12") — three-up on a narrow
      phone wrapped them mid-value. Two-up trades a row for whole readings. */
-  @media (max-width: 380px) {
-    .cell-balance-stats {
-      grid-template-columns: repeat(2, 1fr);
-    }
+@media (max-width: 380px) {
+  .cell-balance-stats {
+    grid-template-columns: repeat(2, 1fr);
   }
+}
 
-  .live-charge-stats {
-    margin-top: 12px;
-  }
+.live-charge-stats {
+  margin-top: 12px;
+}
 
-  .cell-balance-stats .kicker,
-  .soh-trend-stats .kicker,
-  .charge-cost-trend-stats .kicker,
-  .live-charge-stats .kicker {
-    display: block;
-    margin-bottom: 2px;
-  }
+.cell-balance-stats .kicker,
+.soh-trend-stats .kicker,
+.charge-cost-trend-stats .kicker,
+.live-charge-stats .kicker {
+  display: block;
+  margin-bottom: 2px;
+}
 
-  .cell-balance-stats strong,
-  .soh-trend-stats strong,
-  .charge-cost-trend-stats strong,
-  .live-charge-stats strong {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px;
-  }
+.cell-balance-stats strong,
+.soh-trend-stats strong,
+.charge-cost-trend-stats strong,
+.live-charge-stats strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+}
 
-  .live-charge-card .live-charge-head h3 {
-    color: var(--ok, var(--soft));
-  }
+/* v2 design: the live-charge ETA is a large default-colored headline; the green
+     accent lives only on the state chip/dot to its right, not the text. */
+.live-charge-card .live-charge-head h3 {
+  font-size: 22px;
+  color: var(--text);
+}
 
-  /* Editable charge-target field in the live-charge stats grid (M2). Styled to
+/* Editable charge-target field in the live-charge stats grid (M2). Styled to
      read like the adjacent monospace stat values, with a compact inline input. */
-  .live-charge-target-field {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 2px;
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 14px;
-  }
+.live-charge-target-field {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+}
 
-  .live-charge-target-field input {
-    width: 3.2em;
-    min-height: var(--touch-min-dense);
-    padding: 2px 4px;
-    border: 1px solid var(--line);
-    border-radius: 6px;
-    background: var(--surface-overlay);
-    color: inherit;
-    font: inherit;
-    text-align: right;
-  }
+.live-charge-target-field input {
+  width: 3.2em;
+  min-height: var(--touch-min-dense);
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-overlay);
+  color: inherit;
+  font: inherit;
+  text-align: right;
+}
 
-  .live-charge-target-hint {
-    margin-top: 8px;
-  }
+.live-charge-target-hint {
+  margin-top: 8px;
+}
 
-  /* 96-cell voltage map. */
-  .cell-grid {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 3px;
-    margin: 14px 0 10px;
-  }
+/* Battery cell balance (v2 handoff): a one-line spread summary, a pill toggle
+     that reveals the 96-group heatmap, and a min/max/Δ footer. */
+.cell-balance-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
 
-  .cell-grid-box {
-    aspect-ratio: 1 / 1;
-    border-radius: 3px;
-    background: var(--surface-overlay);
-    border: 1px solid var(--line);
-  }
+.cell-balance-copy {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
-  .cell-grid-box.is-unknown {
-    opacity: 0.35;
-  }
+/* EV-green pill toggle ("Read 96 cells" / "Hide cells"). */
+.cell-toggle-btn {
+  flex: 0 0 auto;
+  min-height: var(--touch-min, 44px);
+  padding: 0 14px;
+  border: 1px solid rgba(var(--ev-rgb), 0.3);
+  border-radius: 999px;
+  background: rgba(var(--ev-rgb), 0.08);
+  color: var(--ev-soft, var(--ev));
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
 
-  /* First full probe render sweeps the boxes in left→right (telemetry.ts sets
+.cell-toggle-btn:hover,
+.cell-toggle-btn:focus-visible {
+  background: rgba(var(--ev-rgb), 0.14);
+}
+
+/* 96-group voltage heatmap. Each box is a short bar tinted inline by
+     telemetry.ts from the group's deviation off the pack mean; unread/unknown
+     groups keep the faint default. */
+.cell-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 3px;
+  margin: 14px 0 10px;
+}
+
+.cell-grid-box {
+  height: 16px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.05);
+  transition: background 240ms ease;
+}
+
+/* First full-probe render sweeps the boxes in left→right (telemetry.ts sets
      a per-box animation-delay); `backwards` keeps each box hidden until its
      turn. Reduced-motion collapses it via the global reset. */
-  .cell-grid-box.cell-reveal {
-    animation: cell-reveal 260ms ease backwards;
-  }
+.cell-grid-box.cell-reveal {
+  animation: cell-reveal 260ms ease backwards;
+}
 
-  @keyframes cell-reveal {
-    from {
-      opacity: 0;
-      transform: scale(0.6);
-    }
+@keyframes cell-reveal {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
   }
+}
 
-  .cell-grid-box.is-min {
-    background: var(--map-accent);
-    border-color: var(--map-accent);
-  }
+/* min / max / Δ / note footer under the heatmap. */
+.cell-grid-foot {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
 
-  .cell-grid-box.is-max {
-    background: var(--volt);
-    border-color: var(--volt);
-  }
+.cell-grid-foot b {
+  color: var(--text);
+  font-weight: 700;
+}
 
-  /* Battery state-of-health trend chart (SVG line over time). */
-  .soh-trend-latest {
-    font-size: 24px;
-    font-weight: 760;
-    letter-spacing: -0.02em;
-    /* "--" breaks after the first hyphen when squeezed, rendering as two
+.cell-grid-note {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+/* Battery state-of-health trend chart (SVG line over time). */
+.soh-trend-latest {
+  font-size: 24px;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  /* "--" breaks after the first hyphen when squeezed, rendering as two
        stacked dashes; same guard for real values ("92%"). */
-    white-space: nowrap;
-  }
+  white-space: nowrap;
+}
 
-  .soh-trend-chart {
-    margin: 12px 0 14px;
-  }
+.soh-trend-chart {
+  margin: 12px 0 14px;
+}
 
-  .soh-trend-svg {
-    width: 100%;
-    height: auto;
-    display: block;
-    /* Health-band tint (set per data-soh in JS): a healthy pack trends calm
+.soh-trend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  /* Health-band tint (set per data-soh in JS): a healthy pack trends calm
        green, only warm/low packs go amber/red. Drives line, area, and dot. */
-    --soh-color: var(--ok);
-    --soh-rgb: 53, 230, 160;
-  }
+  --soh-color: var(--ok);
+  --soh-rgb: 53, 230, 160;
+}
 
-  .soh-trend-svg[data-soh="warn"] {
-    --soh-color: var(--warn);
-    --soh-rgb: 255, 184, 74;
-  }
+.soh-trend-svg[data-soh="warn"] {
+  --soh-color: var(--warn);
+  --soh-rgb: 255, 184, 74;
+}
 
-  .soh-trend-svg[data-soh="bad"] {
-    --soh-color: var(--bad);
-    --soh-rgb: 255, 107, 95;
-  }
+.soh-trend-svg[data-soh="bad"] {
+  --soh-color: var(--bad);
+  --soh-rgb: 255, 107, 95;
+}
 
-  .soh-area {
-    stroke: none;
-    fill: rgba(var(--soh-rgb), 0.14);
-  }
+.soh-area {
+  stroke: none;
+  fill: rgba(var(--soh-rgb), 0.14);
+}
 
-  .soh-grid {
-    stroke: var(--line);
-    stroke-width: 1;
-  }
+.soh-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
 
-  .soh-axis {
-    fill: var(--soft);
-    font-size: 9px;
-  }
+.soh-axis {
+  fill: var(--soft);
+  font-size: 9px;
+}
 
-  .soh-line {
-    fill: none;
-    stroke: var(--soh-color);
-    stroke-width: 2.2;
-    stroke-linejoin: round;
-    stroke-linecap: round;
-  }
+.soh-line {
+  fill: none;
+  stroke: var(--soh-color);
+  stroke-width: 2.2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
 
-  /* Monthly charging cost/energy trend chart (M5). SVG bar chart; bar fill and
+/* Monthly charging cost/energy trend chart (M5). SVG bar chart; bar fill and
      axis tones are resolved from tokens in JS so the chart stays legible in both
      themes (the SVG fill attr can't read a CSS var directly). */
-  .charge-cost-trend-latest {
-    font-size: 24px;
-    font-weight: 760;
-    letter-spacing: -0.02em;
-    white-space: nowrap;
-    color: var(--view-accent, var(--volt));
-  }
+.charge-cost-trend-latest {
+  font-size: 24px;
+  font-weight: 760;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  color: var(--view-accent, var(--volt));
+}
 
-  .charge-cost-trend-chart {
-    margin: 12px 0 14px;
-  }
+.charge-cost-trend-chart {
+  margin: 12px 0 14px;
+}
 
-  .charge-cost-trend-svg {
-    width: 100%;
-    height: auto;
-    display: block;
-  }
+.charge-cost-trend-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
 
-  .soh-dot {
-    fill: var(--soh-color);
-    stroke: var(--on-control);
-    stroke-width: 1.5;
-  }
+.soh-dot {
+  fill: var(--soh-color);
+  stroke: var(--on-control);
+  stroke-width: 1.5;
+}
 
-  /* Battery cell-balance graphic: a track showing where the lowest and highest
-     cell-group voltages sit, with the spread between them filled in. */
-  .cell-balance-card .badge[data-tone="ok"] {
-    border-color: rgba(var(--ok-rgb), 0.35);
-    background: rgba(var(--ok-rgb), 0.12);
-    color: var(--ok-soft);
-  }
+/* ===== 12. Signal console & probe-mode picker ===== */
 
-  .cell-balance-card .badge[data-tone="warn"] {
-    border-color: rgba(var(--warn-rgb), 0.35);
-    background: rgba(var(--warn-rgb), 0.12);
-    color: var(--warn-soft);
-  }
-
-  .cell-balance-card .badge[data-tone="bad"] {
-    border-color: rgba(var(--bad-rgb), 0.4);
-    background: rgba(var(--bad-rgb), 0.14);
-    color: var(--bad-soft);
-  }
-
-  .cell-balance-track {
-    position: relative;
-    height: 14px;
-    margin: 16px 0 18px;
-    border-radius: 999px;
-    background: var(--surface-overlay);
-    border: 1px solid var(--line);
-  }
-
-  .cell-balance-fill {
-    position: absolute;
-    top: -1px;
-    bottom: -1px;
-    border-radius: 999px;
-    /* Default/neutral fill; the parent graphic's data-tone (set in JS from the
-       mV spread) recolors it to convey balance health. */
-    background: linear-gradient(90deg, rgba(var(--map-accent-rgb), 0.5), rgba(var(--ok-rgb), 0.6));
-  }
-
-  .cell-balance-graphic[data-tone="ok"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(var(--ok-rgb), 0.4), rgba(var(--ok-rgb), 0.7));
-  }
-
-  .cell-balance-graphic[data-tone="warn"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(var(--warn-rgb), 0.4), rgba(var(--warn-rgb), 0.72));
-  }
-
-  .cell-balance-graphic[data-tone="bad"] .cell-balance-fill {
-    background: linear-gradient(90deg, rgba(var(--bad-rgb), 0.42), rgba(var(--bad-rgb), 0.74));
-  }
-
-  .cell-balance-marker {
-    position: absolute;
-    top: 50%;
-    width: 12px;
-    height: 12px;
-    transform: translate(-50%, -50%);
-    border-radius: 50%;
-    border: 2px solid var(--on-control);
-  }
-
-  .cell-balance-marker.is-min {
-    background: var(--map-accent);
-  }
-
-  .cell-balance-marker.is-max {
-    background: var(--volt);
-  }
-
-  /* ===== 12. Signal console & probe-mode picker ===== */
-
-  /* Quiet section dividers inside the signal console so the next-probe and
+/* Quiet section dividers inside the signal console so the next-probe and
      evidence lists read as distinct groups rather than one long scroll. */
-  .signal-section-label {
-    margin: 16px 0 -2px;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
+.signal-section-label {
+  margin: 16px 0 -2px;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
-  .signal-stage-panel {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-    margin-top: 12px;
-    padding: 12px;
-    border: 1px solid var(--line-soft);
-    border-radius: 8px;
-    background:
-      linear-gradient(180deg, var(--sheen-faint), transparent 64%),
-      var(--inset);
-  }
+.signal-stage-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, var(--sheen-faint), transparent 64%), var(--inset);
+}
 
-  .signal-stage-panel strong {
-    display: block;
-    margin-top: 3px;
-    font-size: 18px;
-  }
+.signal-stage-panel strong {
+  display: block;
+  margin-top: 3px;
+  font-size: 18px;
+}
 
-  .signal-stage-panel small {
-    display: block;
-    margin-top: 4px;
-    color: var(--muted);
-    line-height: 1.35;
-  }
+.signal-stage-panel small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  line-height: 1.35;
+}
 
-  /* Probe-mode picker: a 2x2 segmented control. Own styling (green accent) so
+/* Probe-mode picker: a 2x2 segmented control. Own styling (green accent) so
      it matches the Signals tab rather than inheriting the orange map layer pills.
 
      The selected-button tint is tokenized via --seg-accent-rgb / --seg-accent-soft
      (defaulting to the Signals green) so the same control can re-skin its active
      state per screen — see .pref-seg below, which retints it to the Settings amber
      so the chosen Units/Text-size button speaks the Settings color language. */
-  .signal-stage-tabs {
-    --seg-accent-rgb: 53, 230, 160;
-    --seg-accent-soft: var(--ok-soft);
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 6px;
-  }
+.signal-stage-tabs {
+  --seg-accent-rgb: 53, 230, 160;
+  --seg-accent-soft: var(--ok-soft);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+}
 
-  .signal-stage-tabs button {
-    min-height: 40px;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    border-radius: 10px;
-    background: var(--fill-soft);
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    font-weight: 740;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    transition:
-      border-color var(--motion-fast) var(--motion-ease),
-      background-color var(--motion-fast) var(--motion-ease),
-      color var(--motion-fast) var(--motion-ease);
-  }
+.signal-stage-tabs button {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  font-weight: 740;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    color var(--motion-fast) var(--motion-ease);
+}
 
-  .signal-stage-tabs button span {
-    pointer-events: none;
-  }
+.signal-stage-tabs button span {
+  pointer-events: none;
+}
 
-  @media (hover: hover) and (pointer: fine) {
-    .signal-stage-tabs button:hover {
-      border-color: rgba(var(--seg-accent-rgb), 0.26);
-      color: var(--text);
-    }
+@media (hover: hover) and (pointer: fine) {
+  .signal-stage-tabs button:hover {
+    border-color: rgba(var(--seg-accent-rgb), 0.26);
+    color: var(--text);
   }
+}
 
-  .signal-stage-tabs button.is-active {
-    border-color: rgba(var(--seg-accent-rgb), 0.42);
-    color: var(--seg-accent-soft);
-    background:
-      linear-gradient(180deg, rgba(var(--seg-accent-rgb), 0.18), rgba(var(--seg-accent-rgb), 0.06)),
-      var(--fill-soft);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.08),
-      0 6px 16px rgba(var(--seg-accent-rgb), 0.12);
-  }
+.signal-stage-tabs button.is-active {
+  border-color: rgba(var(--seg-accent-rgb), 0.42);
+  color: var(--seg-accent-soft);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--seg-accent-rgb), 0.18),
+      rgba(var(--seg-accent-rgb), 0.06)
+    ),
+    var(--fill-soft);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 16px rgba(var(--seg-accent-rgb), 0.12);
+}
 
-  /* Settings → Preferences reuses the segmented control for Units / Text-size.
+/* Settings → Preferences reuses the segmented control for Units / Text-size.
      Retint the active/hover accent to the Settings amber (the --warn family the
      Settings tab uses everywhere) so the selected option matches that screen's
      color language instead of reading as the Signals green. */
-  .pref-seg {
-    --seg-accent-rgb: 255, 184, 74;
-    --seg-accent-soft: var(--warn-soft);
+.pref-seg {
+  --seg-accent-rgb: 255, 184, 74;
+  --seg-accent-soft: var(--warn-soft);
+}
+
+/* Insights "This week" toggle: purple accent (the Insights tab color). */
+.week-mode-tabs {
+  --seg-accent-rgb: var(--mixed-rgb);
+  --seg-accent-soft: var(--mixed-soft);
+}
+
+/* v2 design: the Settings Units/Text-size and Insights week toggles are
+     sentence-case sans buttons, not the Signals monospace uppercase pills. */
+.pref-seg button,
+.week-mode-tabs button {
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.signal-stage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.signal-stage-actions .primary-action {
+  min-height: 44px;
+  border-radius: 999px;
+}
+
+/* Run-probe = the page's primary action, so it carries the tab's green fill. */
+.signal-probe-btn {
+  flex: 1 1 auto;
+  border-color: rgba(var(--ok-rgb), 0.45);
+  color: var(--on-ok);
+  background: linear-gradient(180deg, var(--ok-bright), var(--ok));
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.signal-ghost-btn {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .signal-ghost-btn:hover {
+    border-color: var(--line-strong);
+    color: var(--text);
   }
+}
 
-  .signal-stage-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-  }
+/* ===== 13. Scoreboard & status filter ===== */
 
-  .signal-stage-actions .primary-action {
-    min-height: 44px;
-    border-radius: 999px;
-  }
-
-  /* Run-probe = the page's primary action, so it carries the tab's green fill. */
-  .signal-probe-btn {
-    flex: 1 1 auto;
-    border-color: rgba(var(--ok-rgb), 0.45);
-    color: var(--on-ok);
-    background: linear-gradient(180deg, var(--ok-bright), var(--ok));
-    font-weight: 800;
-    letter-spacing: 0.01em;
-  }
-
-  .signal-ghost-btn {
-    min-height: 44px;
-    padding: 0 16px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--fill-soft);
-    color: var(--muted);
-    font-size: 12px;
-    font-weight: 700;
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .signal-ghost-btn:hover {
-      border-color: var(--line-strong);
-      color: var(--text);
-    }
-  }
-
-  /* ===== 13. Scoreboard & status filter ===== */
-
-  /* Scoreboard + status filter in one control: each tile shows a live count and
+/* Scoreboard + status filter in one control: each tile shows a live count and
      filters the evidence list when tapped. Replaces the old duplicated KPI strip
      and separate filter row. */
-  .signal-filter-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 7px;
-    margin-top: 14px;
+.signal-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+  margin-top: 14px;
+}
+
+.signal-filter-grid button {
+  display: grid;
+  gap: 2px;
+  min-height: 60px;
+  padding: 8px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--fill-ghost);
+  color: var(--muted);
+  text-align: center;
+  transition:
+    border-color var(--motion-fast) var(--motion-ease),
+    background-color var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
+}
+
+.signal-filter-grid button:active {
+  transform: translateY(1px);
+}
+
+.signal-filter-grid button b {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text);
+}
+
+.signal-filter-grid button span {
+  font-size: 10px;
+  font-weight: 740;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.signal-filter-grid button[data-status="confirmed"] b {
+  color: var(--ok-soft);
+}
+.signal-filter-grid button[data-status="candidate"] b {
+  color: var(--warn-soft);
+}
+.signal-filter-grid button[data-status="rejected"] b {
+  color: var(--bad-soft);
+}
+.signal-filter-grid button[data-status="deferred"] b {
+  color: var(--soft);
+}
+.signal-filter-grid button[data-status="tpms"] b {
+  color: var(--accent-soft);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .signal-filter-grid button:hover {
+    border-color: var(--line-strong);
+    background: var(--fill);
   }
+}
 
-  .signal-filter-grid button {
-    display: grid;
-    gap: 2px;
-    min-height: 60px;
-    padding: 8px 6px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    background: var(--fill-ghost);
-    color: var(--muted);
-    text-align: center;
-    transition:
-      border-color var(--motion-fast) var(--motion-ease),
-      background-color var(--motion-fast) var(--motion-ease),
-      transform var(--motion-fast) var(--motion-ease);
-  }
+.signal-filter-grid button.is-active {
+  border-color: rgba(var(--ok-rgb), 0.45);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(var(--ok-rgb), 0.14),
+      rgba(var(--ok-rgb), 0.04)
+    ),
+    var(--fill-soft);
+  color: var(--text);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.07),
+    0 6px 16px rgba(var(--ok-rgb), 0.1);
+}
 
-  .signal-filter-grid button:active {
-    transform: translateY(1px);
-  }
+.signal-filter-grid button.is-active span {
+  color: var(--ok-soft);
+}
 
-  .signal-filter-grid button b {
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 22px;
-    font-weight: 800;
-    line-height: 1;
-    color: var(--text);
-  }
-
-  .signal-filter-grid button span {
-    font-size: 10px;
-    font-weight: 740;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
-  }
-
-  .signal-filter-grid button[data-status="confirmed"] b { color: var(--ok-soft); }
-  .signal-filter-grid button[data-status="candidate"] b { color: var(--warn-soft); }
-  .signal-filter-grid button[data-status="rejected"] b { color: var(--bad-soft); }
-  .signal-filter-grid button[data-status="deferred"] b { color: var(--soft); }
-  .signal-filter-grid button[data-status="tpms"] b { color: var(--accent-soft); }
-
-  @media (hover: hover) and (pointer: fine) {
-    .signal-filter-grid button:hover {
-      border-color: var(--line-strong);
-      background: var(--fill);
-    }
-  }
-
-  .signal-filter-grid button.is-active {
-    border-color: rgba(var(--ok-rgb), 0.45);
-    background:
-      linear-gradient(180deg, rgba(var(--ok-rgb), 0.14), rgba(var(--ok-rgb), 0.04)),
-      var(--fill-soft);
-    color: var(--text);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.07),
-      0 6px 16px rgba(var(--ok-rgb), 0.1);
-  }
-
-  .signal-filter-grid button.is-active span {
-    color: var(--ok-soft);
-  }
-
-  /* The filter-grid active fill is still a hard-coded bright green (the stage-tabs
+/* The filter-grid active fill is still a hard-coded bright green (the stage-tabs
      above were tokenized via --seg-accent-rgb; this grid was not). On light, that
      bright green washes out, so retint the active state to a readable dark green. */
-  @media (prefers-color-scheme: light) {
-    .signal-filter-grid button.is-active {
-      border-color: rgba(4,120,87,0.55);
-      color: #04684b;
-      background: linear-gradient(180deg, rgba(4,120,87,0.16), rgba(4,120,87,0.06)), var(--fill-soft);
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.6), 0 4px 12px rgba(4,120,87,0.14);
-    }
-    .signal-filter-grid button.is-active span {
-      color: #04684b;
-    }
+@media (prefers-color-scheme: light) {
+  .signal-filter-grid button.is-active {
+    border-color: rgba(4, 120, 87, 0.55);
+    color: #04684b;
+    background:
+      linear-gradient(180deg, rgba(4, 120, 87, 0.16), rgba(4, 120, 87, 0.06)),
+      var(--fill-soft);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.6),
+      0 4px 12px rgba(4, 120, 87, 0.14);
   }
-
-  .warning-item,
-  .timeline-item,
-  .enhanced-next-item,
-  .pid-frame-item,
-  .enhanced-capability-item,
-  .dtc-item,
-  .real-insight-item {
-    min-width: 0;
-    padding: 10px;
-    border: 1px solid var(--line-soft);
-    border-radius: var(--radius-md);
-    background: var(--inset);
+  .signal-filter-grid button.is-active span {
+    color: #04684b;
   }
+}
 
-  .warning-item {
-    border-color: rgba(var(--warn-rgb), 0.24);
-    background: rgba(var(--warn-rgb), 0.08);
-  }
+.warning-item,
+.timeline-item,
+.enhanced-next-item,
+.pid-frame-item,
+.enhanced-capability-item,
+.dtc-item,
+.real-insight-item {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-md);
+  background: var(--inset);
+}
 
-  .enhanced-capability-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    align-items: start;
-    gap: 10px 12px;
-    padding: 12px;
-    border-radius: 12px;
-  }
+.warning-item {
+  border-color: rgba(var(--warn-rgb), 0.24);
+  background: rgba(var(--warn-rgb), 0.08);
+}
 
-  /* ===== 14. Signal evidence, capability & DTC-detail lists ===== */
+.enhanced-capability-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 10px 12px;
+  padding: 12px;
+  border-radius: 12px;
+}
 
-  /* Classification tags on each evidence row: category / stage / risk. */
-  .signal-chips {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin-top: 7px;
-  }
+/* ===== 14. Signal evidence, capability & DTC-detail lists ===== */
 
-  .signal-chip {
-    display: inline-flex;
-    align-items: center;
-    min-height: 20px;
-    padding: 0 8px;
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    background: var(--fill);
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: lowercase;
-    white-space: nowrap;
-  }
+/* Classification tags on each evidence row: category / stage / risk. */
+.signal-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 7px;
+}
 
-  .signal-chip[data-risk="low"],
-  .signal-chip[data-risk="safe"] {
-    border-color: rgba(var(--ok-rgb), 0.26);
-    color: var(--ok-soft);
-    background: rgba(var(--ok-rgb), 0.08);
-  }
+.signal-chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 20px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--fill);
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: lowercase;
+  white-space: nowrap;
+}
 
-  .signal-chip[data-risk="medium"] {
-    border-color: rgba(var(--warn-rgb), 0.26);
-    color: var(--warn-soft);
-    background: rgba(var(--warn-rgb), 0.08);
-  }
+.signal-chip[data-risk="low"],
+.signal-chip[data-risk="safe"] {
+  border-color: rgba(var(--ok-rgb), 0.26);
+  color: var(--ok-soft);
+  background: rgba(var(--ok-rgb), 0.08);
+}
 
-  .signal-chip[data-risk="high"] {
-    border-color: rgba(var(--bad-rgb), 0.28);
-    color: var(--bad-soft);
-    background: rgba(var(--bad-rgb), 0.08);
-  }
+.signal-chip[data-risk="medium"] {
+  border-color: rgba(var(--warn-rgb), 0.26);
+  color: var(--warn-soft);
+  background: rgba(var(--warn-rgb), 0.08);
+}
 
-  .enhanced-next-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+.signal-chip[data-risk="high"] {
+  border-color: rgba(var(--bad-rgb), 0.28);
+  color: var(--bad-soft);
+  background: rgba(var(--bad-rgb), 0.08);
+}
 
-  .enhanced-next-item {
-    border-style: dashed;
-    border-radius: 12px;
-    background: var(--fill-soft);
-  }
+.enhanced-next-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 
-  .signal-log-actions {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-    gap: 6px;
-  }
+.enhanced-next-item {
+  border-style: dashed;
+  border-radius: 12px;
+  background: var(--fill-soft);
+}
 
-  /* Repeated per evidence row — link-level quiet, not boxed buttons. */
-  .icon-link-btn {
-    min-height: var(--touch-min-dense);
-    padding: 0 8px;
-    border: 0;
-    border-radius: 8px;
-    color: var(--muted);
-    background: transparent;
-    font-size: 11.5px;
-    font-weight: 700;
-    text-decoration: underline;
-    text-underline-offset: 3px;
-    text-decoration-color: var(--line-strong);
-  }
+.signal-log-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
 
-  .icon-link-btn.danger {
-    color: var(--bad-soft);
-    background: transparent;
-  }
+/* Repeated per evidence row — link-level quiet, not boxed buttons. */
+.icon-link-btn {
+  min-height: var(--touch-min-dense);
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line-strong);
+}
 
-  .enhanced-capability-item > b {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-width: 74px;
-    padding: 5px 9px;
-    border: 1px solid var(--line-soft);
-    border-radius: 999px;
-    color: var(--muted);
-    background: var(--fill);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.06em;
-    text-align: center;
-    text-transform: uppercase;
-  }
+.icon-link-btn.danger {
+  color: var(--bad-soft);
+  background: transparent;
+}
 
-  .enhanced-capability-item > b::before {
-    content: "";
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: currentColor;
-    box-shadow: 0 0 8px currentColor;
-  }
+.enhanced-capability-item > b {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 74px;
+  padding: 5px 9px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--fill);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+}
 
-  .enhanced-capability-item[data-status="confirmed"] {
-    border-color: rgba(var(--ok-rgb), 0.24);
-    background: rgba(var(--ok-rgb), 0.055);
-  }
+.enhanced-capability-item > b::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
 
-  .enhanced-capability-item[data-status="confirmed"] > b {
-    border-color: rgba(var(--ok-rgb), 0.24);
-    color: var(--ok-soft);
-    background: rgba(var(--ok-rgb), 0.08);
-  }
+.enhanced-capability-item[data-status="confirmed"] {
+  border-color: rgba(var(--ok-rgb), 0.24);
+  background: rgba(var(--ok-rgb), 0.055);
+}
 
-  .enhanced-capability-item[data-status="rejected"] {
-    border-color: rgba(var(--bad-rgb), 0.18);
-  }
+.enhanced-capability-item[data-status="confirmed"] > b {
+  border-color: rgba(var(--ok-rgb), 0.24);
+  color: var(--ok-soft);
+  background: rgba(var(--ok-rgb), 0.08);
+}
 
-  .enhanced-capability-item[data-status="rejected"] > b {
-    border-color: rgba(var(--bad-rgb), 0.2);
-    color: var(--bad-soft);
-    background: rgba(var(--bad-rgb), 0.08);
-  }
+.enhanced-capability-item[data-status="rejected"] {
+  border-color: rgba(var(--bad-rgb), 0.18);
+}
 
-  .enhanced-capability-item[data-status="candidate"] > b {
-    border-color: rgba(var(--warn-rgb), 0.22);
-    color: var(--warn-soft);
-    background: rgba(var(--warn-rgb), 0.08);
-  }
+.enhanced-capability-item[data-status="rejected"] > b {
+  border-color: rgba(var(--bad-rgb), 0.2);
+  color: var(--bad-soft);
+  background: rgba(var(--bad-rgb), 0.08);
+}
 
-  .enhanced-capability-item[data-status="deferred"] {
-    border-style: dashed;
-  }
+.enhanced-capability-item[data-status="candidate"] > b {
+  border-color: rgba(var(--warn-rgb), 0.22);
+  color: var(--warn-soft);
+  background: rgba(var(--warn-rgb), 0.08);
+}
 
-  .pid-frame-item {
-    display: grid;
-    grid-template-columns: minmax(58px, auto) minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 9px;
-  }
+.enhanced-capability-item[data-status="deferred"] {
+  border-style: dashed;
+}
 
-  .dtc-item {
-    display: grid;
-    grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto auto;
-    align-items: start;
-    gap: 12px;
-    /* v2: the row opens the detail sheet (causes/freeze frame moved there). */
-    cursor: pointer;
-  }
+.pid-frame-item {
+  display: grid;
+  grid-template-columns: minmax(58px, auto) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
 
-  .dtc-item:focus-visible {
-    outline: 2px solid rgba(var(--map-accent-rgb), 0.7);
-    outline-offset: 2px;
-  }
+.dtc-item {
+  display: grid;
+  grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto auto;
+  align-items: start;
+  gap: 12px;
+  /* v2: the row opens the detail sheet (causes/freeze frame moved there). */
+  cursor: pointer;
+}
 
-  .dtc-item .dtc-chevron {
-    /* Pin to the last column: rows without a seen-count badge have only three
+.dtc-item:focus-visible {
+  outline: 2px solid rgba(var(--map-accent-rgb), 0.7);
+  outline-offset: 2px;
+}
+
+.dtc-item .dtc-chevron {
+  /* Pin to the last column: rows without a seen-count badge have only three
        children, and auto-placement would drop the chevron into the badge slot. */
-    grid-column: 4;
-    align-self: center;
-    color: var(--soft);
-    font-size: 16px;
-    line-height: 1;
-  }
+  grid-column: 4;
+  align-self: center;
+  color: var(--soft);
+  font-size: 16px;
+  line-height: 1;
+}
 
-  /* Rows cascade in 90ms apart after a scan (storage-status.ts sets the
+/* Rows cascade in 90ms apart after a scan (storage-status.ts sets the
      per-row delay); `backwards` holds each row until its turn. */
-  .dtc-item.dtc-item-enter {
-    animation: dtc-item-rise 380ms cubic-bezier(0.16, 0.84, 0.28, 1) backwards;
-  }
+.dtc-item.dtc-item-enter {
+  animation: dtc-item-rise 380ms cubic-bezier(0.16, 0.84, 0.28, 1) backwards;
+}
 
-  @keyframes dtc-item-rise {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
+@keyframes dtc-item-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
   }
+}
 
-  .dtc-empty-state {
-    padding: 12px;
-    border: 1px dashed var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--inset);
-  }
+.dtc-empty-state {
+  padding: 12px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--inset);
+}
 
-  .dtc-empty-state strong,
-  .dtc-empty-state small {
-    display: block;
-  }
+.dtc-empty-state strong,
+.dtc-empty-state small {
+  display: block;
+}
 
-  .dtc-empty-state small {
-    margin-top: 5px;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.35;
-  }
+.dtc-empty-state small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+}
 
-  .dtc-empty-wrap {
-    display: grid;
-    gap: 8px;
-  }
+.dtc-empty-wrap {
+  display: grid;
+  gap: 8px;
+}
 
-  .dtc-example-header {
-    margin-top: 4px;
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-  }
+.dtc-example-header {
+  margin-top: 4px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
 
-  .dtc-item[data-example="true"] {
-    opacity: 0.55;
-    border-style: dashed;
-  }
+.dtc-item[data-example="true"] {
+  opacity: 0.55;
+  border-style: dashed;
+}
 
-  .dtc-item[data-example="true"]::after {
-    content: "example";
-    grid-column: 1 / -1;
-    margin-top: 4px;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-  }
+.dtc-item[data-example="true"]::after {
+  content: "example";
+  grid-column: 1 / -1;
+  margin-top: 4px;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
 
-  .dtc-search {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--touch-min-dense);
-    margin-top: 6px;
-    padding: 7px 13px;
-    border: 1px solid rgba(var(--map-accent-rgb), 0.34);
-    border-radius: 999px;
-    background: rgba(var(--map-accent-rgb), 0.08);
-    color: var(--accent-soft);
-    font-size: 11px;
-    font-weight: 700;
-    text-decoration: none;
-  }
+.dtc-search {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch-min-dense);
+  margin-top: 6px;
+  padding: 7px 13px;
+  border: 1px solid rgba(var(--map-accent-rgb), 0.34);
+  border-radius: 999px;
+  background: rgba(var(--map-accent-rgb), 0.08);
+  color: var(--accent-soft);
+  font-size: 11px;
+  font-weight: 700;
+  text-decoration: none;
+}
 
-  .dtc-causes {
-    margin-top: 8px;
-    padding: 8px 10px;
-    border: 1px solid var(--line-soft);
-    border-left-width: 3px;
-    border-radius: 9px;
-    background: var(--fill-ghost);
-  }
+.dtc-causes {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line-soft);
+  border-left-width: 3px;
+  border-radius: 9px;
+  background: var(--fill-ghost);
+}
 
-  .dtc-causes-head {
-    display: block;
-    margin-bottom: 4px;
-    color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 10px;
-    font-weight: 760;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  }
+.dtc-causes-head {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+  font-weight: 760;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
 
-  .dtc-causes ul {
-    margin: 0;
-    padding-left: 16px;
-  }
+.dtc-causes ul {
+  margin: 0;
+  padding-left: 16px;
+}
 
-  .dtc-causes li {
-    margin: 1px 0;
-    color: var(--soft);
-    font-size: 11.5px;
-    line-height: 1.45;
-  }
+.dtc-causes li {
+  margin: 1px 0;
+  color: var(--soft);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
 
-  .dtc-item[data-severity="critical"] {
-    border-left-color: rgba(var(--bad-rgb), 0.6);
-    border-left-width: 3px;
-  }
+.dtc-item[data-severity="critical"] {
+  border-left-color: rgba(var(--bad-rgb), 0.6);
+  border-left-width: 3px;
+}
 
-  .dtc-item[data-severity="critical"] .dtc-causes {
-    border-left-color: rgba(var(--bad-rgb), 0.55);
-    background: rgba(var(--bad-rgb), 0.05);
-  }
+.dtc-item[data-severity="critical"] .dtc-causes {
+  border-left-color: rgba(var(--bad-rgb), 0.55);
+  background: rgba(var(--bad-rgb), 0.05);
+}
 
-  .dtc-item[data-severity="warning"] {
-    border-left-color: rgba(var(--warn-rgb), 0.5);
-    border-left-width: 3px;
-  }
+.dtc-item[data-severity="warning"] {
+  border-left-color: rgba(var(--warn-rgb), 0.5);
+  border-left-width: 3px;
+}
 
-  .dtc-item[data-severity="warning"] .dtc-causes {
-    border-left-color: rgba(var(--warn-rgb), 0.45);
-    background: rgba(var(--warn-rgb), 0.04);
-  }
+.dtc-item[data-severity="warning"] .dtc-causes {
+  border-left-color: rgba(var(--warn-rgb), 0.45);
+  background: rgba(var(--warn-rgb), 0.04);
+}
 
-  .dtc-item[data-severity="info"] .dtc-causes {
-    border-left-color: rgba(var(--map-accent-rgb), 0.4);
-    background: rgba(var(--map-accent-rgb), 0.04);
-  }
+.dtc-item[data-severity="info"] .dtc-causes {
+  border-left-color: rgba(var(--map-accent-rgb), 0.4);
+  background: rgba(var(--map-accent-rgb), 0.04);
+}
 
-  /* Per-code severity pill (next to the status label) + drivability line. */
-  .dtc-sev {
-    display: inline-block;
-    margin-top: 3px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    background: var(--fill-bold);
-    color: var(--muted);
-  }
+/* Per-code severity pill (next to the status label) + drivability line. */
+.dtc-sev {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--fill-bold);
+  color: var(--muted);
+}
 
-  .dtc-sev[data-severity="critical"] {
-    background: rgba(var(--bad-rgb), 0.16);
-    color: var(--bad-text);
-  }
+.dtc-sev[data-severity="critical"] {
+  background: rgba(var(--bad-rgb), 0.16);
+  color: var(--bad-text);
+}
 
-  .dtc-sev[data-severity="warning"] {
-    background: rgba(var(--warn-rgb), 0.16);
-    color: var(--warn-soft);
-  }
+.dtc-sev[data-severity="warning"] {
+  background: rgba(var(--warn-rgb), 0.16);
+  color: var(--warn-soft);
+}
 
-  .dtc-sev[data-severity="info"] {
-    background: rgba(var(--map-accent-rgb), 0.14);
-    color: var(--map-accent, var(--soft));
-  }
+.dtc-sev[data-severity="info"] {
+  background: rgba(var(--map-accent-rgb), 0.14);
+  color: var(--map-accent, var(--soft));
+}
 
-  /* Per-code clearability tag (M10): whether the Mode 04 clear can erase this
+/* Per-code clearability tag (M10): whether the Mode 04 clear can erase this
      code. Permanent codes are flagged so the report makes clear which codes the
      "Clear codes" button can actually turn off. */
-  .dtc-clearable {
-    display: inline-block;
-    margin-top: 3px;
-    padding: 1px 7px;
-    border-radius: 999px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
-    background: var(--fill-bold);
-    color: var(--muted);
-  }
+.dtc-clearable {
+  display: inline-block;
+  margin-top: 3px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: var(--fill-bold);
+  color: var(--muted);
+}
 
-  .dtc-clearable[data-clearable="no"] {
-    background: rgba(var(--warn-rgb), 0.16);
-    color: var(--warn-soft);
-  }
+.dtc-clearable[data-clearable="no"] {
+  background: rgba(var(--warn-rgb), 0.16);
+  color: var(--warn-soft);
+}
 
-  .dtc-drivability {
-    display: block;
-    margin-top: 3px;
-    font-size: 11.5px;
-    font-weight: 600;
-    color: var(--soft);
-  }
+.dtc-drivability {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--soft);
+}
 
-  .dtc-drivability[data-severity="critical"] {
-    color: var(--bad-text);
-  }
+.dtc-drivability[data-severity="critical"] {
+  color: var(--bad-text);
+}
 
-  .dtc-drivability[data-severity="warning"] {
-    color: var(--warn-soft);
-  }
+.dtc-drivability[data-severity="warning"] {
+  color: var(--warn-soft);
+}
 
-  .dtc-search:active {
-    background: rgba(var(--map-accent-rgb), 0.18);
-  }
+.dtc-search:active {
+  background: rgba(var(--map-accent-rgb), 0.18);
+}
 
-  .dtc-search:focus-visible {
-    outline: 2px solid var(--accent, #4cc4ff);
-    outline-offset: 2px;
-  }
+.dtc-search:focus-visible {
+  outline: 2px solid var(--accent, #4cc4ff);
+  outline-offset: 2px;
+}
 
-  .dtc-clear-warning {
-    margin-top: 4px;
-    padding: 12px;
-    border: 1px solid rgba(var(--bad-rgb), 0.34);
-    border-radius: var(--radius-md);
-    background: rgba(var(--bad-rgb), 0.07);
-    display: grid;
-    gap: 9px;
-  }
+.dtc-clear-warning {
+  margin-top: 4px;
+  padding: 12px;
+  border: 1px solid rgba(var(--bad-rgb), 0.34);
+  border-radius: var(--radius-md);
+  background: rgba(var(--bad-rgb), 0.07);
+  display: grid;
+  gap: 9px;
+}
 
-  .dtc-clear-warning strong {
-    font-size: 14px;
-    color: var(--bad-soft);
-  }
+.dtc-clear-warning strong {
+  font-size: 14px;
+  color: var(--bad-soft);
+}
 
-  .dtc-clear-warning p {
-    margin: 0;
-    color: var(--muted);
-    font-size: 12px;
-    line-height: 1.4;
-  }
+.dtc-clear-warning p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
-  .dtc-clear-prereq {
-    padding: 8px 10px;
-    border: 1px dashed rgba(var(--warn-rgb), 0.34);
-    border-radius: 10px;
-    background: rgba(var(--warn-rgb), 0.06);
-    color: var(--warn-soft) !important;
-  }
+.dtc-clear-prereq {
+  padding: 8px 10px;
+  border: 1px dashed rgba(var(--warn-rgb), 0.34);
+  border-radius: 10px;
+  background: rgba(var(--warn-rgb), 0.06);
+  color: var(--warn-soft) !important;
+}
 
-  /* Permanent-code caveat in the clear dialog (M10): mirrors the prereq callout
+/* Permanent-code caveat in the clear dialog (M10): mirrors the prereq callout
      styling but in the warning tone, since it tempers the clear's outcome. */
-  .dtc-clear-permanent-note {
-    padding: 8px 10px;
-    border: 1px solid rgba(var(--warn-rgb), 0.34);
-    border-radius: 10px;
-    background: rgba(var(--warn-rgb), 0.08);
-    color: var(--warn-soft) !important;
-    font-weight: 600;
-  }
+.dtc-clear-permanent-note {
+  padding: 8px 10px;
+  border: 1px solid rgba(var(--warn-rgb), 0.34);
+  border-radius: 10px;
+  background: rgba(var(--warn-rgb), 0.08);
+  color: var(--warn-soft) !important;
+  font-weight: 600;
+}
 
-  .dtc-clear-ack {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    padding: 8px 10px;
-    border-radius: 10px;
-    background: var(--inset-strong);
-    cursor: pointer;
-    font-size: 12px;
-    color: var(--soft);
-  }
+.dtc-clear-ack {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--inset-strong);
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--soft);
+}
 
-  .dtc-clear-ack input {
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
-    accent-color: var(--bad);
-  }
+.dtc-clear-ack input {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  accent-color: var(--bad);
+}
 
-  .dtc-clear-actions {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-  }
+.dtc-clear-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
 
-  .dtc-clear-actions .danger {
-    border-color: rgba(var(--bad-rgb), 0.5);
-    background: rgba(var(--bad-rgb), 0.18);
-    color: var(--bad-soft);
-    font-weight: 700;
-  }
+.dtc-clear-actions .danger {
+  border-color: rgba(var(--bad-rgb), 0.5);
+  background: rgba(var(--bad-rgb), 0.18);
+  color: var(--bad-soft);
+  font-weight: 700;
+}
 
-  .dtc-clear-actions .danger:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
+.dtc-clear-actions .danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
 
-  .dtc-item[data-status="pending"] {
-    border-color: rgba(var(--warn-rgb), 0.24);
-  }
+.dtc-item[data-status="pending"] {
+  border-color: rgba(var(--warn-rgb), 0.24);
+}
 
-  .dtc-item[data-status="permanent"] {
-    border-color: rgba(var(--bad-rgb), 0.3);
-  }
+.dtc-item[data-status="permanent"] {
+  border-color: rgba(var(--bad-rgb), 0.3);
+}
 
-  .dtc-item[data-status="freeze-frame"] {
-    border-color: rgba(var(--mixed-rgb), 0.28);
-  }
+.dtc-item[data-status="freeze-frame"] {
+  border-color: rgba(var(--mixed-rgb), 0.28);
+}
 
-  .timeline-item {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-  }
+.timeline-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
 
-  .timeline-item::before {
-    content: "";
-    width: 9px;
-    height: 9px;
-    margin-top: 4px;
-    border-radius: 50%;
-    background: var(--volt);
-    box-shadow: 0 0 12px rgba(var(--volt-rgb), 0.45);
-  }
+.timeline-item::before {
+  content: "";
+  width: 9px;
+  height: 9px;
+  margin-top: 4px;
+  border-radius: 50%;
+  background: var(--volt);
+  box-shadow: 0 0 12px rgba(var(--volt-rgb), 0.45);
+}
 
-  .pid-frame-item strong,
-  .enhanced-next-item strong,
-  .enhanced-capability-item strong,
-  .dtc-item strong,
-  .timeline-item strong,
-  .warning-item strong,
-  .real-insight-item strong {
-    display: block;
-    overflow-wrap: anywhere;
-    font-size: 13px;
-  }
+.pid-frame-item strong,
+.enhanced-next-item strong,
+.enhanced-capability-item strong,
+.dtc-item strong,
+.timeline-item strong,
+.warning-item strong,
+.real-insight-item strong {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
 
-  .pid-frame-item small,
-  .enhanced-next-item small,
-  .enhanced-capability-item small,
-  .dtc-item small,
-  .timeline-item small,
-  .warning-item small,
-  .real-insight-item small {
-    display: block;
-    margin-top: 3px;
-    color: var(--muted);
-    font-size: 11px;
-    line-height: 1.3;
-  }
+.pid-frame-item small,
+.enhanced-next-item small,
+.enhanced-capability-item small,
+.dtc-item small,
+.timeline-item small,
+.warning-item small,
+.real-insight-item small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
 
-  .pid-frame-item b {
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    white-space: nowrap;
-  }
+.pid-frame-item b {
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
 
-  .dtc-item b {
-    display: block;
-    color: var(--text);
-    font-size: 13px;
-    text-align: right;
-    white-space: nowrap;
-  }
+.dtc-item b {
+  display: block;
+  color: var(--text);
+  font-size: 13px;
+  text-align: right;
+  white-space: nowrap;
+}
 
-  .dtc-code-block,
-  .dtc-module-block,
-  .dtc-repeat-block {
-    min-width: 0;
-  }
+.dtc-code-block,
+.dtc-module-block,
+.dtc-repeat-block {
+  min-width: 0;
+}
 
-  .dtc-code {
-    display: inline-flex;
-    align-items: center;
-    min-height: 32px;
-    padding: 0 10px;
-    border-radius: 10px;
-    background: rgba(var(--volt-rgb), 0.13);
-    color: var(--volt);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 16px;
-    letter-spacing: 0.03em;
-  }
+.dtc-code {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 10px;
+  background: rgba(var(--volt-rgb), 0.13);
+  color: var(--volt);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 16px;
+  letter-spacing: 0.03em;
+}
 
-  .dtc-item[data-status="pending"] .dtc-code {
-    background: rgba(var(--warn-rgb), 0.13);
-    color: var(--warn);
-  }
+.dtc-item[data-status="pending"] .dtc-code {
+  background: rgba(var(--warn-rgb), 0.13);
+  color: var(--warn);
+}
 
-  .dtc-item[data-status="permanent"] .dtc-code {
-    background: rgba(var(--bad-rgb), 0.14);
-    color: var(--bad-soft);
-  }
+.dtc-item[data-status="permanent"] .dtc-code {
+  background: rgba(var(--bad-rgb), 0.14);
+  color: var(--bad-soft);
+}
 
-  .dtc-item[data-status="freeze-frame"] .dtc-code {
-    background: rgba(var(--mixed-rgb), 0.14);
-    color: var(--mixed);
-  }
+.dtc-item[data-status="freeze-frame"] .dtc-code {
+  background: rgba(var(--mixed-rgb), 0.14);
+  color: var(--mixed);
+}
 
-  .dtc-code-block b {
-    text-align: left;
-  }
+.dtc-code-block b {
+  text-align: left;
+}
 
-  .dtc-repeat-block b,
-  .dtc-repeat-block small {
-    text-align: right;
-  }
+.dtc-repeat-block b,
+.dtc-repeat-block small {
+  text-align: right;
+}
 
-  .history-row strong {
-    display: block;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font-size: 14px;
-  }
+.history-row strong {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+}
 
-  .history-row small {
-    display: block;
-    margin-top: 2px;
-    color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-  }
+.history-row small {
+  display: block;
+  margin-top: 2px;
+  color: var(--muted);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
 
-  /* ===== 15. Live-tile stale & in-flight spinners ===== */
+/* ===== 15. Live-tile stale & in-flight spinners ===== */
 
-  /* Live-tile stale indicator. Applied by telemetry.js when no fresh OBD
+/* Live-tile stale indicator. Applied by telemetry.js when no fresh OBD
      sample has arrived in the last ~3 s — fades the readout to half opacity so
      the user can tell the BT/adapter link has gone quiet without reading the
      status badge. */
-  .stale {
-    opacity: 0.5;
-    transition: opacity var(--motion-medium) var(--motion-ease);
-  }
+.stale {
+  opacity: 0.5;
+  transition: opacity var(--motion-medium) var(--motion-ease);
+}
 
-  /* In-flight indicator for bridge-triggering buttons. Combined with
+/* In-flight indicator for bridge-triggering buttons. Combined with
      `disabled`, this also blocks taps via pointer-events so a quick double-tap
      can't slip through a CSS-only feedback layer. */
-  button.busy {
-    opacity: 0.55;
-    pointer-events: none;
-    cursor: not-allowed;
-  }
+button.busy {
+  opacity: 0.55;
+  pointer-events: none;
+  cursor: not-allowed;
+}
 
-  /* Sustained in-flight feedback for the connect/scan primary action.
+/* Sustained in-flight feedback for the connect/scan primary action.
      telemetry.ts holds aria-busy="true" for as long as the adapter handshake
      runs (seconds on Bluetooth), where the 600ms .busy tap-cooldown above has
      long since cleared. A small leading spinner shows the wait is live instead
      of leaving "Connecting…" looking frozen. */
-  button[aria-busy="true"] {
-    position: relative;
-  }
+button[aria-busy="true"] {
+  position: relative;
+}
 
-  button[aria-busy="true"]::before {
-    content: "";
-    display: inline-block;
-    width: 0.85em;
-    height: 0.85em;
-    margin-right: 0.5em;
-    vertical-align: -0.1em;
-    border: 2px solid currentColor;
-    border-top-color: transparent;
-    border-radius: 50%;
-    opacity: 0.9;
-    animation: btn-busy-spin 0.7s linear infinite;
-  }
+button[aria-busy="true"]::before {
+  content: "";
+  display: inline-block;
+  width: 0.85em;
+  height: 0.85em;
+  margin-right: 0.5em;
+  vertical-align: -0.1em;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  opacity: 0.9;
+  animation: btn-busy-spin 0.7s linear infinite;
+}
 
-  @keyframes btn-busy-spin {
-    to {
-      transform: rotate(360deg);
-    }
+@keyframes btn-busy-spin {
+  to {
+    transform: rotate(360deg);
   }
+}
 
-  /* Reduced-motion users get no spinner — the "Connecting…"/"Scanning…" label
+/* Reduced-motion users get no spinner — the "Connecting…"/"Scanning…" label
      plus the disabled dim already convey the busy state without a spinner that
      can't animate (a frozen partial ring just reads as broken). */
-  @media (prefers-reduced-motion: reduce) {
-    button[aria-busy="true"]::before {
-      content: none;
-    }
+@media (prefers-reduced-motion: reduce) {
+  button[aria-busy="true"]::before {
+    content: none;
   }
+}
 
-  /* ===== 16. App dialogs ===== */
+/* ===== 16. App dialogs ===== */
 
-  .app-dialog {
-    position: fixed;
-    inset: 0;
-    z-index: 220;
-    display: grid;
-    place-items: center;
-    padding: 18px;
-  }
+.app-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
 
-  .app-dialog[hidden] {
-    display: none;
-  }
+.app-dialog[hidden] {
+  display: none;
+}
 
-  .app-dialog-backdrop {
-    position: absolute;
-    inset: 0;
-    background: var(--scrim);
-  }
+.app-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim);
+}
 
-  .app-dialog-card {
-    position: relative;
-    width: min(100%, 420px);
-    max-height: min(86vh, 620px);
-    overflow: auto;
-    overscroll-behavior: contain;
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--surface-modal);
-    color: var(--text);
-    box-shadow: 0 22px 70px var(--shadow);
-  }
+.app-dialog-card {
+  position: relative;
+  width: min(100%, 420px);
+  max-height: min(86vh, 620px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-modal);
+  color: var(--text);
+  box-shadow: 0 22px 70px var(--shadow);
+}
 
-  .app-dialog-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 12px;
-    padding: 18px 18px 8px;
-  }
+.app-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 18px 18px 8px;
+}
 
-  .app-dialog-title {
-    margin: 0;
-    font-size: 1.05rem;
-    line-height: 1.25;
-  }
+.app-dialog-title {
+  margin: 0;
+  font-size: 1.05rem;
+  line-height: 1.25;
+}
 
-  .app-dialog-close {
-    width: var(--touch-min);
-    min-height: var(--touch-min);
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--fill-bold);
-    color: inherit;
-    font-size: 1.35rem;
-    line-height: 1;
-  }
+.app-dialog-close {
+  width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--fill-bold);
+  color: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+}
 
-  .app-dialog-message {
-    margin: 0;
-    padding: 6px 18px 14px;
-    color: var(--muted);
-    line-height: 1.45;
-    white-space: pre-line;
-  }
+.app-dialog-message {
+  margin: 0;
+  padding: 6px 18px 14px;
+  color: var(--muted);
+  line-height: 1.45;
+  white-space: pre-line;
+}
 
-  .app-dialog-input-wrap {
-    display: grid;
-    gap: 8px;
-    padding: 0 18px 14px;
-    color: var(--muted);
-    font-size: 0.88rem;
-  }
+.app-dialog-input-wrap {
+  display: grid;
+  gap: 8px;
+  padding: 0 18px 14px;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
 
-  .app-dialog-input-wrap[hidden] {
-    display: none;
-  }
+.app-dialog-input-wrap[hidden] {
+  display: none;
+}
 
-  .app-dialog-input {
-    width: 100%;
-    min-height: var(--touch-min);
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--panel-3);
-    color: var(--text);
-    padding: 0 12px;
-    font: inherit;
-  }
+.app-dialog-input {
+  width: 100%;
+  min-height: var(--touch-min);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--panel-3);
+  color: var(--text);
+  padding: 0 12px;
+  font: inherit;
+}
 
-  .app-dialog-foot {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    padding: 14px 18px 18px;
-  }
+.app-dialog-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
 
-  .app-dialog-primary,
-  .app-dialog-secondary {
-    min-height: 40px;
-    border-radius: 8px;
-    padding: 0 14px;
-    font: inherit;
-    font-weight: 700;
-  }
+.app-dialog-primary,
+.app-dialog-secondary {
+  min-height: 40px;
+  border-radius: 8px;
+  padding: 0 14px;
+  font: inherit;
+  font-weight: 700;
+}
 
-  /* Accent tokens (not the old hardcoded #2f7fbc blue) so the primary action
+/* Accent tokens (not the old hardcoded #2f7fbc blue) so the primary action
      follows the light scheme and the high-contrast palette. */
-  .app-dialog-primary {
-    border: 1px solid rgba(var(--map-accent-rgb), 0.55);
-    background: var(--map-accent);
-    color: var(--on-map-accent);
+.app-dialog-primary {
+  border: 1px solid rgba(var(--map-accent-rgb), 0.55);
+  background: var(--map-accent);
+  color: var(--on-map-accent);
+}
+
+.app-dialog-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-dialog-secondary {
+  border: 1px solid var(--line-strong);
+  background: var(--fill-bold);
+  color: var(--muted);
+}
+
+/* ===== 17. Restore-progress overlay ===== */
+
+.restore-progress {
+  position: fixed;
+  inset: 0;
+  z-index: 230;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.restore-progress[hidden] {
+  display: none;
+}
+
+.restore-progress-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--scrim-strong);
+}
+
+.restore-progress-card {
+  position: relative;
+  width: min(100%, 480px);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-modal);
+  color: var(--text);
+  box-shadow: 0 26px 80px var(--shadow);
+  padding: 18px;
+}
+
+.restore-progress-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.restore-progress-kicker {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--accent-soft);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.restore-progress-title {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.25;
+}
+
+.restore-progress-close {
+  width: var(--touch-min);
+  min-height: var(--touch-min);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--fill-bold);
+  color: inherit;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.restore-progress-close[hidden] {
+  display: none;
+}
+
+.restore-progress-meter {
+  height: 8px;
+  margin: 18px 0 14px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--fill-active);
+}
+
+.restore-progress-meter span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--map-accent), var(--ok));
+  transform-origin: left center;
+  transition: width var(--motion-fast) var(--motion-ease);
+}
+
+.restore-progress[data-progress="indeterminate"][data-busy="true"]
+  .restore-progress-meter
+  span {
+  width: 42%;
+  animation: restore-progress-sweep var(--motion-sweep) var(--motion-ease-inout)
+    infinite;
+}
+
+.restore-progress[data-progress="determinate"] .restore-progress-meter span {
+  animation: none;
+  transform: translateX(0);
+}
+
+.restore-progress[data-tone="ok"] .restore-progress-meter span {
+  width: 100%;
+  animation: none;
+  transform: translateX(0);
+  background: var(--ok);
+}
+
+.restore-progress[data-tone="blocked"] .restore-progress-meter span {
+  width: 100%;
+  animation: none;
+  transform: translateX(0);
+  background: var(--bad);
+}
+
+.restore-progress-meta {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: center;
+  margin: -3px 0 12px;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.restore-progress-meta span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+#restoreProgressPhase {
+  color: var(--text);
+}
+
+#restoreProgressPercent,
+#restoreProgressEta {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: var(--fill);
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.restore-progress-detail {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.restore-progress-stats {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.restore-progress-note {
+  margin: 10px 0 0;
+  color: var(--soft);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+@keyframes restore-progress-sweep {
+  0% {
+    transform: translateX(-120%);
   }
-
-  .app-dialog-primary:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
+  50% {
+    transform: translateX(75%);
   }
-
-  .app-dialog-secondary {
-    border: 1px solid var(--line-strong);
-    background: var(--fill-bold);
-    color: var(--muted);
+  100% {
+    transform: translateX(260%);
   }
+}
 
-  /* ===== 17. Restore-progress overlay ===== */
-
-  .restore-progress {
-    position: fixed;
-    inset: 0;
-    z-index: 230;
-    display: grid;
-    place-items: center;
-    padding: 18px;
-  }
-
-  .restore-progress[hidden] {
-    display: none;
-  }
-
-  .restore-progress-backdrop {
-    position: absolute;
-    inset: 0;
-    background: var(--scrim-strong);
-  }
-
-  .restore-progress-card {
-    position: relative;
-    width: min(100%, 480px);
-    border: 1px solid var(--line-strong);
-    border-radius: var(--radius-md);
-    background: var(--surface-modal);
-    color: var(--text);
-    box-shadow: 0 26px 80px var(--shadow);
-    padding: 18px;
-  }
-
-  .restore-progress-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 14px;
-  }
-
-  .restore-progress-kicker {
-    display: block;
-    margin-bottom: 5px;
-    color: var(--accent-soft);
-    font-size: 0.72rem;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .restore-progress-title {
-    margin: 0;
-    font-size: 1.08rem;
-    line-height: 1.25;
-  }
-
-  .restore-progress-close {
-    width: var(--touch-min);
-    min-height: var(--touch-min);
-    border: 1px solid var(--line-strong);
-    border-radius: 8px;
-    background: var(--fill-bold);
-    color: inherit;
-    font-size: 1.35rem;
-    line-height: 1;
-  }
-
-  .restore-progress-close[hidden] {
-    display: none;
-  }
-
-  .restore-progress-meter {
-    height: 8px;
-    margin: 18px 0 14px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: var(--fill-active);
-  }
-
-  .restore-progress-meter span {
-    display: block;
-    width: 0;
-    height: 100%;
-    border-radius: inherit;
-    background: linear-gradient(90deg, var(--map-accent), var(--ok));
-    transform-origin: left center;
-    transition: width var(--motion-fast) var(--motion-ease);
-  }
-
-  .restore-progress[data-progress="indeterminate"][data-busy="true"] .restore-progress-meter span {
-    width: 42%;
-    animation: restore-progress-sweep var(--motion-sweep) var(--motion-ease-inout) infinite;
-  }
-
-  .restore-progress[data-progress="determinate"] .restore-progress-meter span {
-    animation: none;
-    transform: translateX(0);
-  }
-
-  .restore-progress[data-tone="ok"] .restore-progress-meter span {
-    width: 100%;
-    animation: none;
-    transform: translateX(0);
-    background: var(--ok);
-  }
-
-  .restore-progress[data-tone="blocked"] .restore-progress-meter span {
-    width: 100%;
-    animation: none;
-    transform: translateX(0);
-    background: var(--bad);
-  }
-
-  .restore-progress-meta {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto auto;
-    gap: 8px;
-    align-items: center;
-    margin: -3px 0 12px;
-    color: var(--muted);
-    font-size: 0.78rem;
-    font-weight: 700;
-  }
-
-  .restore-progress-meta span {
-    min-width: 0;
-    overflow-wrap: anywhere;
-  }
-
-  #restoreProgressPhase {
-    color: var(--text);
-  }
-
-  #restoreProgressPercent,
-  #restoreProgressEta {
-    border: 1px solid var(--line);
-    border-radius: 999px;
-    padding: 3px 7px;
-    background: var(--fill);
-    color: var(--muted);
-    white-space: nowrap;
-  }
-
-  .restore-progress-detail {
-    margin: 0;
-    color: var(--muted);
-    line-height: 1.45;
-  }
-
-  .restore-progress-stats {
-    margin: 8px 0 0;
-    color: var(--muted);
-    font-size: 0.86rem;
-    font-weight: 700;
-    line-height: 1.35;
-  }
-
-  .restore-progress-note {
-    margin: 10px 0 0;
-    color: var(--soft);
-    font-size: 0.85rem;
-    line-height: 1.4;
-  }
-
-  @keyframes restore-progress-sweep {
-    0% {
-      transform: translateX(-120%);
-    }
-    50% {
-      transform: translateX(75%);
-    }
-    100% {
-      transform: translateX(260%);
-    }
-  }
-
-  /* ===== 18. Responsive breakpoints =====
+/* ===== 18. Responsive breakpoints =====
      (Component-local media queries; see the hover/reduced-motion queries inline
      above. Not consolidated with screens.css breakpoints — that needs visual
      testing.) */
 
-  @media (max-width: 420px) {
-    .restore-progress-card {
-      padding: 16px;
-    }
-
-    .restore-progress-meta {
-      grid-template-columns: minmax(0, 1fr) auto;
-    }
-
-    #restoreProgressEta {
-      grid-column: 1 / -1;
-      justify-self: start;
-    }
+@media (max-width: 420px) {
+  .restore-progress-card {
+    padding: 16px;
   }
 
-  @media (min-width: 640px) {
-    .signal-stage-panel {
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-    }
-
-    .signal-stage-tabs {
-      grid-column: 1 / -1;
-    }
-
-    .signal-stage-actions {
-      justify-content: flex-end;
-    }
+  .restore-progress-meta {
+    grid-template-columns: minmax(0, 1fr) auto;
   }
 
-  @media (max-width: 620px) {
-    .enhanced-next-list {
-      grid-template-columns: 1fr;
-    }
-
-    .enhanced-capability-item {
-      grid-template-columns: minmax(0, 1fr);
-      align-items: stretch;
-    }
-
-    .enhanced-capability-item > b,
-    .signal-log-actions {
-      justify-content: flex-start;
-      text-align: left;
-    }
-
-    .enhanced-capability-item > b {
-      width: fit-content;
-    }
+  #restoreProgressEta {
+    grid-column: 1 / -1;
+    justify-self: start;
   }
+}
+
+@media (min-width: 640px) {
+  .signal-stage-panel {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .signal-stage-tabs {
+    grid-column: 1 / -1;
+  }
+
+  .signal-stage-actions {
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 620px) {
+  .enhanced-next-list {
+    grid-template-columns: 1fr;
+  }
+
+  .enhanced-capability-item {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
+  .enhanced-capability-item > b,
+  .signal-log-actions {
+    justify-content: flex-start;
+    text-align: left;
+  }
+
+  .enhanced-capability-item > b {
+    width: fit-content;
+  }
+}

@@ -164,10 +164,8 @@ test('renderDriveLive drives every live surface in one frame', async ({ page }) 
   await expect(page.locator('#powerBarsChart')).toHaveAttribute('data-chart-state', 'ready');
   await expect(page.locator('#socTraceChart')).toHaveAttribute('data-chart-state', 'ready');
 
-  // Micro-card headers reflect the live values + computed tone (SOC dropped 1.9% => warn).
-  await expect(page.locator('#powerMicroTag')).toContainText('kW');
-  await expect(page.locator('#powerMicroTag')).toHaveAttribute('data-tone', 'drive');
-  // SOC renders integer percent app-wide (76.5 → "77%"); the Δ keeps a decimal.
-  await expect(page.locator('#socMicroTag')).toContainText('77%');
-  await expect(page.locator('#socMicroTag')).toHaveAttribute('data-tone', 'warn');
+  // v2 design: the micro-card corner tags are static unit labels — a render
+  // pass must leave them as bare "kW" / "%" (values live in the hero above).
+  await expect(page.locator('#powerMicroTag')).toHaveText('kW');
+  await expect(page.locator('#socMicroTag')).toHaveText('%');
 });

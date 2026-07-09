@@ -2,10 +2,11 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 
-// 96-cell voltage map scaffold (telemetry.ts#renderCellGrid). Highlights the live
-// lowest/highest cell groups until a full per-cell probe is available, and renders
-// a full heatmap if telemetry ever carries a cellVoltages array.
-describe('cell voltage map', () => {
+// 96-group voltage heatmap (telemetry.ts#renderCellGrid), revealed by the
+// "Read 96 cells" toggle. Closed by default; seeds the live lowest/highest groups
+// until a full per-cell probe (a live cellVoltages array or a persisted snapshot)
+// tints every group by its deviation from the pack mean.
+describe('cell voltage heatmap', () => {
   beforeEach(async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
@@ -14,7 +15,7 @@ describe('cell voltage map', () => {
     await loadDashboard();
   });
 
-  it('renders a 96-cell grid highlighting the known lowest/highest cells', () => {
+  it('stays collapsed until the toggle opens it', () => {
     const VD = window.VoltDashboard;
     VD.updateTelemetry({
       source: 'obd',
@@ -28,96 +29,64 @@ describe('cell voltage map', () => {
     });
     VD.updateLiveUi();
 
-    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
-    expect(boxes).toHaveLength(96);
-    // Cells are 1-indexed; #12 and #80 are highlighted.
-    expect(boxes[11].classList.contains('is-min')).toBe(true);
-    expect(boxes[79].classList.contains('is-max')).toBe(true);
-    expect(boxes[0].classList.contains('is-unknown')).toBe(true);
-    expect(document.getElementById('cellGridBadge').textContent).toBe('2 of 96 known');
-    // The card article is visible when there is data to show.
-    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+    // Toggle is offered, but the heatmap section is hidden with no boxes rendered.
+    expect(document.getElementById('cellToggleBtn').hidden).toBe(false);
+    expect(document.getElementById('cellGridCard').hidden).toBe(true);
+    expect(document.getElementById('cellGrid').hidden).toBe(true);
+    expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(0);
   });
 
-  it('hides the whole card (not just the inner grid) when no cell data is known (C5)', () => {
+  it('reveals a 96-group heatmap seeding the known lowest/highest groups when opened', () => {
     const VD = window.VoltDashboard;
-    // Connected but the car reports no per-cell data and no lowest/highest groups yet.
-    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
-    VD.updateLiveUi();
-
-    const grid = document.getElementById('cellGrid');
-    expect(grid.querySelectorAll('.cell-grid-box')).toHaveLength(0);
-    expect(grid.hidden).toBe(true);
-    // The entire scaffold (header, badge, note) is hidden too — not a perpetual
-    // empty card.
-    expect(document.getElementById('cellGridCard').hidden).toBe(true);
-    expect(document.getElementById('cellGridBadge').textContent).toBe('awaiting probe');
-    expect(document.getElementById('cellGridNote').textContent).toContain('full per-cell probe');
-  });
-
-  it('re-shows the card once cell data arrives after an empty sample (C5)', () => {
-    const VD = window.VoltDashboard;
-    // First: no cell data → card hidden.
-    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
-    VD.updateLiveUi();
-    expect(document.getElementById('cellGridCard').hidden).toBe(true);
-
-    // Then: the car reports a lowest/highest group → card reappears.
     VD.updateTelemetry({
       source: 'obd',
       connected: true,
-      sampleCount: 2,
+      sampleCount: 1,
       updatedAt: Date.now(),
-      minCellNumber: 5,
-      maxCellNumber: 88,
-      minCellVoltage: 3.9,
+      minCellNumber: 12,
+      maxCellNumber: 80,
+      minCellVoltage: 3.95,
       maxCellVoltage: 4.0,
     });
     VD.updateLiveUi();
+    VD.setCellGridOpen(true);
+
+    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
+    expect(boxes).toHaveLength(96);
     expect(document.getElementById('cellGridCard').hidden).toBe(false);
     expect(document.getElementById('cellGrid').hidden).toBe(false);
-    expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(96);
+    // Only the two live groups (1-indexed #12, #80) are tinted; the rest are faint
+    // "awaiting probe" placeholders with no inline background.
+    expect(boxes[11].style.background).not.toBe('');
+    expect(boxes[79].style.background).not.toBe('');
+    expect(boxes[0].style.background).toBe('');
+    // Footer: min / max / Δ / "N of 96 read" while the full probe is pending.
+    expect(document.getElementById('cellGridMin').textContent).toBe('3.950 V');
+    expect(document.getElementById('cellGridMax').textContent).toBe('4.000 V');
+    expect(document.getElementById('cellGridDelta').textContent).toBe('50 mV');
+    expect(document.getElementById('cellGridNote').textContent).toBe('2 of 96 read');
+    // A spread past 14 mV paints the Δ amber.
+    expect(document.getElementById('cellGridDelta').style.color).toBe('var(--warn)');
+    // Opening the grid flips the toggle to its "Hide cells" / expanded state.
+    const toggle = document.getElementById('cellToggleBtn');
+    expect(toggle.textContent).toBe('Hide cells');
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
   });
 
-  it('renders the map from a persisted probe snapshot without live telemetry', () => {
+  it('keeps the heatmap hidden when opened but no cell data is known', () => {
     const VD = window.VoltDashboard;
-    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }));
-    VD.applyCellSnapshot({ capturedAtMs: Date.now() - 3600_000, cellCount: 96, cells });
+    VD.setCellGridOpen(true);
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now() });
+    VD.updateLiveUi();
 
-    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
-    expect(boxes).toHaveLength(96);
-    expect(boxes[0].style.backgroundColor).not.toBe('');
-    expect(document.getElementById('cellGridBadge').textContent).toBe('96 cells');
-    expect(document.getElementById('cellGridNote').textContent).toContain('cell probe');
-    expect(document.getElementById('cellGridCard').hidden).toBe(false);
-  });
-
-  it('renders a partial probe (a few unanswered cells) with unknown boxes and an honest badge', () => {
-    const VD = window.VoltDashboard;
-    // Cells 5, 41, 77 missing — still >= the 90-cell confidence floor.
-    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }))
-      .filter((c) => c.index !== 5 && c.index !== 41 && c.index !== 77);
-    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: cells.length, cells });
-
-    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
-    expect(boxes).toHaveLength(96);
-    expect(boxes[4].classList.contains('is-unknown')).toBe(true);
-    expect(boxes[5].style.backgroundColor).not.toBe('');
-    expect(document.getElementById('cellGridBadge').textContent).toBe('93 of 96 cells');
-  });
-
-  it('clears the stored map when the snapshot payload is empty (storage wiped)', () => {
-    const VD = window.VoltDashboard;
-    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 }));
-    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: 96, cells });
-    expect(document.getElementById('cellGridCard').hidden).toBe(false);
-
-    VD.applyCellSnapshot({});
     expect(document.getElementById('cellGridCard').hidden).toBe(true);
-    expect(document.getElementById('cellGridBadge').textContent).toBe('awaiting probe');
+    expect(document.getElementById('cellGrid').hidden).toBe(true);
+    expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(0);
+    // Losing all cell data also collapses the toggle back to its closed label.
+    expect(document.getElementById('cellToggleBtn').hidden).toBe(true);
   });
 
-  it('renders a full heatmap when per-cell voltages are present', () => {
+  it('renders a full deviation heatmap from live cellVoltages when opened', () => {
     const VD = window.VoltDashboard;
     const cellVoltages = Array.from({ length: 96 }, (_v, i) => 3.9 + (i % 8) * 0.01);
     VD.updateTelemetry({
@@ -128,13 +97,64 @@ describe('cell voltage map', () => {
       cellVoltages,
     });
     VD.updateLiveUi();
+    VD.setCellGridOpen(true);
 
     const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
     expect(boxes).toHaveLength(96);
-    // Full mode colors every cell by voltage (inline background-color set).
-    expect(boxes[0].style.backgroundColor).not.toBe('');
-    expect(document.getElementById('cellGridBadge').textContent).toBe('96 cells');
-    expect(document.getElementById('cellGridNote').textContent).toContain('latest cell probe');
+    // A full read (>= 90 known) tints every group by its deviation from the mean.
+    expect(boxes[0].style.background).not.toBe('');
+    expect(boxes[95].style.background).not.toBe('');
+    expect(document.getElementById('cellGridNote').textContent).toBe('full read');
     expect(document.getElementById('cellGridCard').hidden).toBe(false);
+  });
+
+  it('renders the heatmap from a persisted probe snapshot when opened', () => {
+    const VD = window.VoltDashboard;
+    VD.setCellGridOpen(true);
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }));
+    VD.applyCellSnapshot({ capturedAtMs: Date.now() - 3600_000, cellCount: 96, cells });
+
+    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
+    expect(boxes).toHaveLength(96);
+    expect(boxes[0].style.background).not.toBe('');
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+  });
+
+  it('renders a partial probe with placeholder groups for the cells that did not answer', () => {
+    const VD = window.VoltDashboard;
+    VD.setCellGridOpen(true);
+    // Cells 5, 41, 77 missing — still >= the 90-group confidence floor.
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }))
+      .filter((c) => c.index !== 5 && c.index !== 41 && c.index !== 77);
+    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: cells.length, cells });
+
+    const boxes = document.querySelectorAll('#cellGrid .cell-grid-box');
+    expect(boxes).toHaveLength(96);
+    expect(boxes[4].style.background).toBe(''); // group 5 — no answer
+    expect(boxes[5].style.background).not.toBe(''); // group 6 — answered
+  });
+
+  it('clears the heatmap when the snapshot payload is empty (storage wiped)', () => {
+    const VD = window.VoltDashboard;
+    VD.setCellGridOpen(true);
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 }));
+    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: 96, cells });
+    expect(document.getElementById('cellGridCard').hidden).toBe(false);
+
+    VD.applyCellSnapshot({});
+    expect(document.getElementById('cellGridCard').hidden).toBe(true);
+    expect(document.querySelectorAll('#cellGrid .cell-grid-box')).toHaveLength(0);
+  });
+
+  it('exposes the open state and full-read status to the toggle action', () => {
+    const VD = window.VoltDashboard;
+    expect(VD.isCellGridOpen()).toBe(false);
+    VD.setCellGridOpen(true);
+    expect(VD.isCellGridOpen()).toBe(true);
+
+    expect(VD.cellGridHasFull()).toBe(false);
+    const cells = Array.from({ length: 96 }, (_v, i) => ({ index: i + 1, voltage: 3.9 + (i % 8) * 0.01 }));
+    VD.applyCellSnapshot({ capturedAtMs: Date.now(), cellCount: 96, cells });
+    expect(VD.cellGridHasFull()).toBe(true);
   });
 });

@@ -24,29 +24,8 @@
       Plug in your Volt with the adapter connected and charging sessions will
       show up here automatically.
     </p>
-    <ol class="empty-hints" aria-label="How charge tracking works">
-      <li>
-        <b aria-hidden="true">1</b
-        ><span
-          >Connect the OBD adapter and keep the app open while the car
-          charges.</span
-        >
-      </li>
-      <li>
-        <b aria-hidden="true">2</b
-        ><span
-          >Each plug-in is detected automatically — there's no button to
-          press.</span
-        >
-      </li>
-      <li>
-        <b aria-hidden="true">3</b
-        ><span
-          >Sessions, peak power, and detection status fill in the cards
-          below.</span
-        >
-      </li>
-    </ol>
+    <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
+         actions — no numbered how-to list. -->
     <div class="empty-state-actions">
       <button type="button" class="link-btn" data-nav-jump="settings">
         Set up the adapter in Settings
@@ -141,19 +120,19 @@
        session count lives in the Recent-charges headline ("29.6 kWh across 4
        charges") and detection status in the source badge + live hero chip. -->
   <section class="charge-grid" aria-label="Charging summary">
+    <!-- v2 design: label + number only — no explainer captions on the first two
+         tiles (Est. cost keeps its caption because it doubles as the rate prompt). -->
     <article class="panel charge-kpi">
       <header><span>Plug-ins</span></header>
       <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
         >0</strong
       >
-      <small>Times the car looked plugged in</small>
     </article>
     <article class="panel charge-kpi">
       <header><span>Peak power</span></header>
       <strong id="realChargePower" aria-live="polite" aria-atomic="true"
         >--</strong
       >
-      <small>Peak charging power seen</small>
     </article>
     <article class="panel charge-kpi">
       <header><span>Est. cost</span></header>
@@ -194,78 +173,52 @@
     <div id="chargeSessionsList" class="charge-session-list"></div>
   </article>
 
-  <!-- Live battery cell balance — lowest/highest cell-group voltage, their spread
-       (the headline cell-health number), and which cells. Rendered live from
-       telemetry by telemetry.js#renderCellBalance. -->
+  <!-- Battery cell balance (v2 handoff): a one-line spread summary + a toggle that
+       reveals the full 96-group voltage heatmap (each group tinted by its deviation
+       from the pack mean) with a min/max/Δ footer. Rendered live from telemetry by
+       telemetry.ts#renderCellBalance / #renderCellGrid. The "Read 96 cells" toggle
+       fires the real per-cell probe (detailProbeLast("cells")) when no full read is
+       loaded yet, then hides/shows the heatmap on subsequent taps. -->
   <article id="cellBalanceCard" class="panel cell-balance-card">
     <header class="cell-balance-head">
       <div>
-        <span class="kicker">Battery cell balance</span>
-        <h2 id="cellBalanceTitle">No live cell data yet</h2>
+        <h2 id="cellBalanceTitle" class="cell-balance-title">
+          Battery cell balance
+        </h2>
+        <p id="cellBalanceCopy" class="cell-balance-copy">
+          No cell readings yet — connect while the car is awake.
+        </p>
       </div>
-      <div class="map-sheet-actions">
-        <span id="cellBalanceDelta" class="badge" data-tone="none">-- mV</span>
-        <!-- Runs the dedicated 96-cell voltage probe (detailProbeLast("cells")) against
-             the remembered adapter; the result fills the per-cell map card below. -->
-        <button type="button" class="link-btn" data-action="cellProbe">
-          Read all 96 cells
-        </button>
-      </div>
+      <button
+        type="button"
+        id="cellToggleBtn"
+        class="cell-toggle-btn"
+        data-action="cellToggle"
+        aria-expanded="false"
+        aria-controls="cellGridCard"
+        hidden
+      >
+        Read 96 cells
+      </button>
     </header>
-    <p id="cellBalanceEmpty" class="status-copy">
-      No cell readings yet — connect while the car is awake.
-    </p>
-    <div id="cellBalanceGraphic" class="cell-balance-graphic" hidden>
-      <div class="cell-balance-track" aria-hidden="true">
-        <span id="cellBalanceFill" class="cell-balance-fill"></span>
-        <span
-          id="cellBalanceMinMarker"
-          class="cell-balance-marker is-min"
-        ></span>
-        <span
-          id="cellBalanceMaxMarker"
-          class="cell-balance-marker is-max"
-        ></span>
-      </div>
-      <div class="cell-balance-stats">
-        <div>
-          <span class="kicker">Lowest cell</span>
-          <strong id="cellBalanceMin">--</strong>
-        </div>
-        <div>
-          <span class="kicker">Highest cell</span>
-          <strong id="cellBalanceMax">--</strong>
-        </div>
-        <div>
-          <span class="kicker">SOC variation</span>
-          <strong id="cellBalanceSoc">--</strong>
-        </div>
-      </div>
-    </div>
 
-    <!-- 96-cell voltage map, inline in the cell-balance card (v2 design: one
-         battery-cell card whose "Read all 96 cells" action reveals the grid).
-         Renders full per-cell data when telemetry carries a cellVoltages array;
-         otherwise highlights the live lowest/highest cell groups. Hidden until
-         there's cell data to show. See telemetry.ts#renderCellGrid. -->
+    <!-- 96-group voltage heatmap, revealed by the toggle above. Full per-cell data
+         when telemetry carries a cellVoltages array (or a stored probe snapshot);
+         otherwise the live lowest/highest groups are tinted and the rest read as
+         "awaiting probe" placeholders. See telemetry.ts#renderCellGrid. -->
     <div id="cellGridCard" class="cell-grid-section" hidden>
-      <header class="cell-grid-head">
-        <div>
-          <span class="kicker">Cell voltage map</span>
-          <h3 id="cellGridTitle">Per-cell voltage map</h3>
-        </div>
-        <span id="cellGridBadge" class="badge" data-tone="none">96 cells</span>
-      </header>
       <div
         id="cellGrid"
         class="cell-grid"
         role="img"
         aria-label="Battery cell voltage map"
       ></div>
-      <p id="cellGridNote" class="status-copy">
-        Connect to the car to highlight the lowest and highest cell groups; a
-        full per-cell probe fills in the complete map.
-      </p>
+      <div class="cell-grid-foot">
+        <span>min <b id="cellGridMin">--</b></span>
+        <span>max <b id="cellGridMax">--</b></span>
+        <span>&#916; <b id="cellGridDelta">--</b></span>
+        <span id="cellGridNote" class="cell-grid-note"></span>
+      </div>
     </div>
   </article>
 
