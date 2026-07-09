@@ -155,18 +155,11 @@ jobs:
           for name in flaky_cases:
               print(f"::warning title=Flaky unit test::{name} failed, then passed on retry")
           PY
-      # Spotless/Detekt/Lint run serially here ON PURPOSE rather than as parallel jobs:
-      # each step is fast on the JVM/Gradle/Node caches this job has already paid for,
-      # while separate jobs would each repeat checkout + JDK + Gradle setup (the
-      # expensive part) for a sub-minute check. Revisit only if one of these steps
-      # grows to dominate the job's wall-clock summary below.
-      - name: Spotless check
-        run: ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
-      - name: Detekt static analysis
-        # Correctness-leaning Kotlin rules (ktlint covers formatting); config in app/detekt.yml.
-        run: ./gradlew --no-daemon --configuration-cache :app:detekt
-      - name: Android Lint
-        run: ./gradlew --no-daemon --configuration-cache :app:lintDebug
+      # Spotless/Detekt/Lint moved to the parallel `static-analysis` job: together
+      # they had grown to ~2.5 min (Android Lint alone ~1.5 min) on this job's
+      # critical path, which made unit-tests the slowest required lane. The split
+      # trades one repeated checkout+JDK+Gradle setup (~1 min, paid in parallel)
+      # for ~2.5 min off the PR wall-clock.
       - name: Assemble debug APK
         run: ./gradlew --no-daemon --configuration-cache :app:assembleDebug
       - name: Verify generated dashboard is committed
@@ -301,6 +294,58 @@ jobs:
         with:
           name: performance-trend-snapshot
           path: mobile/android/build/reports/performance-trends/
+          if-no-files-found: ignore
+      - name: Report job wall-clock time
+        if: always()
+        working-directory: ${{ github.workspace }}
+        run: |
+          elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
+          echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
+
+  static-analysis:
+    # Spotless (ktlint) + Detekt + Android Lint, split out of unit-tests so the
+    # ~2.5 min of style/lint work runs in parallel with the test execution
+    # instead of extending the slowest required lane. Node is still needed:
+    # lintDebug compiles the app, and preBuild runs buildDashboardJs (esbuild).
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - name: Record job start time
+        # Runs before checkout, so the default working-directory does not exist yet.
+        working-directory: ${{ github.workspace }}
+        run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Validate Gradle wrapper
+        uses: gradle/actions/wrapper-validation@3f131e8634966bd73d06cc69884922b02e6faf92 # v6.2.0
+      - uses: actions/setup-java@1bcf9fb12cf4aa7d266a90ae39939e61372fe520 # v5.4.0
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: 'gradle'
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - name: Spotless check
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --configuration-cache :app:spotlessCheck
+      - name: Detekt static analysis
+        # Correctness-leaning Kotlin rules (ktlint covers formatting); config in app/detekt.yml.
+        run: ./gradlew --no-daemon --configuration-cache :app:detekt
+      - name: Android Lint
+        run: ./gradlew --no-daemon --configuration-cache :app:lintDebug
+      - name: Upload lint report
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-lint-report
+          path: mobile/android/app/build/reports/lint-results-debug.html
           if-no-files-found: ignore
       - name: Report job wall-clock time
         if: always()
@@ -753,6 +798,32 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      # AVD snapshot caching (android-emulator-runner's documented pattern): a
+      # cache miss boots the emulator once, cleanly, and saves a post-boot
+      # snapshot; every later run restores that snapshot instead of paying the
+      # multi-minute cold boot — which also shrinks the window for the
+      # boot-time adb flakes this job occasionally hits. Bump the key suffix to
+      # force a fresh AVD after emulator/system-image behavior changes.
+      - name: AVD snapshot cache
+        id: avd-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: avd-api34-google_apis-x86_64-pixel6-v1
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          force-avd-creation: false
+          # No -no-snapshot here: this boot exists to write the snapshot.
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
+          script: echo "Generated AVD snapshot for caching."
       - name: Launch app and assert the dashboard JS comes alive
         uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
         with:
@@ -760,7 +831,10 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
+          force-avd-creation: false
+          # -no-snapshot-save: restore the cached clean-boot snapshot read-only
+          # so test-session state never leaks into the cache.
+          emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator.
           script: |
@@ -792,6 +866,7 @@ jobs:
       [
         changes,
         unit-tests,
+        static-analysis,
         dashboard-tests,
         dashboard-e2e,
         dashboard-visual,
