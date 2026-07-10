@@ -577,7 +577,7 @@ import type { FocusTrap } from "./focus-trap";
     // Idempotency guard for the double-path described above: an identical status
     // signature seen within DEDUPE_WINDOW_MS is the second delivery of one event,
     // so skip the counting/edge logic (the first delivery already applied it).
-    const sig = stateName + " " + detail + " " + String(status.failureClass || "") + " " + String(Boolean(status.blocked));
+    const sig = stateName + "\u0000" + detail + "\u0000" + String(status.failureClass || "") + "\u0000" + String(Boolean(status.blocked));
     const now = Date.now();
     if (sig === lastCountedSig && now - lastCountedAt < DEDUPE_WINDOW_MS) {
       if (isOpen()) renderCompeting(status.competingApps);

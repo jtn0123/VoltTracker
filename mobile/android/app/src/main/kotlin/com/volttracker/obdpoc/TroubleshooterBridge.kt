@@ -86,7 +86,7 @@ class TroubleshooterBridge(
         }
         val pkg = packageName.lowercase(Locale.US)
         if (!CompetingAppDetector.KNOWN_OBD_PACKAGES.contains(pkg)) {
-            Log.w(MainActivity.TAG, "forceStopPackage rejected non-OBD package $pkg")
+            Log.w(AppPrefs.LOG_TAG, "forceStopPackage rejected non-OBD package $pkg")
             return false
         }
         try {
@@ -97,10 +97,10 @@ class TroubleshooterBridge(
         return try {
             val am = activity.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
             am.killBackgroundProcesses(pkg)
-            Log.i(MainActivity.TAG, "forceStopPackage: requested kill of $pkg")
+            Log.i(AppPrefs.LOG_TAG, "forceStopPackage: requested kill of $pkg")
             true
         } catch (ex: SecurityException) {
-            Log.w(MainActivity.TAG, "forceStopPackage denied for $pkg", ex)
+            Log.w(AppPrefs.LOG_TAG, "forceStopPackage denied for $pkg", ex)
             false
         }
     }
@@ -116,7 +116,7 @@ class TroubleshooterBridge(
             activity.startService(service)
         } catch (ex: RuntimeException) {
             // Service may have stopped between the JS click and the dispatch.
-            Log.w(MainActivity.TAG, "cancelRetry dispatch failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "cancelRetry dispatch failed", ex)
         }
     }
 
@@ -129,7 +129,7 @@ class TroubleshooterBridge(
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             activity.startActivity(intent)
         } catch (ex: Exception) {
-            Log.w(MainActivity.TAG, "openBluetoothSettings failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "openBluetoothSettings failed", ex)
             activity.publishStatus(
                 "blocked",
                 activity.getString(R.string.status_bt_settings_open_failed),
@@ -156,7 +156,7 @@ class TroubleshooterBridge(
                 arr.toString()
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "getRecentSessionsJson failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "getRecentSessionsJson failed", ex)
             "[]"
         }
 
@@ -176,7 +176,7 @@ class TroubleshooterBridge(
             }
             showDiagnosticsDisclosure(share)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "shareDiagnostics failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "shareDiagnostics failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
         }
     }
@@ -198,7 +198,7 @@ class TroubleshooterBridge(
             }
             showDiagnosticsDisclosure(share)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "shareDiagnosticsDigest failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "shareDiagnosticsDigest failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
         }
     }
@@ -207,7 +207,7 @@ class TroubleshooterBridge(
 
     fun showDiagnosticsDisclosure(share: Intent) {
         if (activity.isFinishing) {
-            Log.w(MainActivity.TAG, "diagnostics disclosure skipped; activity is finishing")
+            Log.w(AppPrefs.LOG_TAG, "diagnostics disclosure skipped; activity is finishing")
             return
         }
         try {
@@ -223,7 +223,7 @@ class TroubleshooterBridge(
                     activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
                 }.show()
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "showDiagnosticsDisclosure failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "showDiagnosticsDisclosure failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_disclosure_failed), true)
         }
     }
@@ -232,7 +232,7 @@ class TroubleshooterBridge(
         try {
             activity.startActivity(Intent.createChooser(share, activity.getString(R.string.chooser_share_diagnostics)))
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "launchDiagnosticsShare failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "launchDiagnosticsShare failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_share_failed), true)
         }
     }
@@ -329,7 +329,7 @@ class TroubleshooterBridge(
             val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
             nm?.cancel(ADAPTER_READY_NOTIFICATION_ID)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "adapter-ready notification cancel failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "adapter-ready notification cancel failed", ex)
         }
     }
 
@@ -347,7 +347,7 @@ class TroubleshooterBridge(
             ContextCompat.checkSelfPermission(activity, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            Log.i(MainActivity.TAG, "adapter-ready: POST_NOTIFICATIONS not granted, skipping notification")
+            Log.i(AppPrefs.LOG_TAG, "adapter-ready: POST_NOTIFICATIONS not granted, skipping notification")
             cancelAdapterReadyNotify()
             return
         }
@@ -385,7 +385,7 @@ class TroubleshooterBridge(
                 nm.notify(ADAPTER_READY_NOTIFICATION_ID, notification)
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "adapter-ready notification failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "adapter-ready notification failed", ex)
         }
         stopAdapterReadySchedule()
     }

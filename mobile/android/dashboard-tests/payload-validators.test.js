@@ -91,6 +91,33 @@ describe('payload validators', () => {
     expect(payloadWarns(warnSpy)).toEqual([]);
   });
 
+  it('covers array, telemetry, insights, and route callback shapes', () => {
+    VD.validatePayload('setTrips', {});
+    VD.validatePayload('setDevices', ['not-an-object-problem']);
+    VD.validatePayload('updateTelemetry', { speedKph: 'fast' });
+    VD.validatePayload('setInsights', { tripCount: 'many' });
+    VD.validatePayload('setTripRoute', { routeKey: 'r1', payload: [] });
+
+    expect(payloadWarns(warnSpy)).toEqual([
+      'payload check: setTrips payload is not an array (got object)',
+      'payload check: updateTelemetry.speedKph expected number, got string',
+      'payload check: setInsights.tripCount expected number, got string',
+      'payload check: setTripRoute.payload expected object, got array',
+    ]);
+  });
+
+  it('runs expanded checks from eager native callback setters', () => {
+    VD.setDevices(JSON.stringify({ address: 'not-an-array' }));
+    VD.updateTelemetry(JSON.stringify({ speedKph: 'fast' }));
+    VD.setBatterySohHistory(JSON.stringify({ soh: 92 }));
+
+    expect(payloadWarns(warnSpy)).toEqual([
+      'payload check: setDevices payload is not an array (got object)',
+      'payload check: updateTelemetry.speedKph expected number, got string',
+      'payload check: setBatterySohHistory payload is not an array (got object)',
+    ]);
+  });
+
   it('routes each warning once through bridge.logClientError for the rolling log', async () => {
     const bridge = createVoltBridgeFixture();
     const logSpy = vi.spyOn(bridge, 'logClientError');

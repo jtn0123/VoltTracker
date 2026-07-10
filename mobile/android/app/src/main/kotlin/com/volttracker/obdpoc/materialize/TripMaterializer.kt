@@ -442,9 +442,15 @@ object TripMaterializer {
             val previousPowerKw = prevPowerKw
             val previousAtMs = prevAtMs
             if (previousPowerKw != null && previousAtMs != null) {
-                val hours = (sample.capturedAtMs - previousAtMs) / 3_600_000.0
-                if (hours > 0.0) {
-                    energyKwh += ((previousPowerKw + powerKw) / 2.0) * hours
+                val segmentKwh =
+                    PackEnergyMath.trapezoidKwh(
+                        previousPowerKw,
+                        powerKw,
+                        previousAtMs,
+                        sample.capturedAtMs,
+                    )
+                if (segmentKwh != null) {
+                    energyKwh += segmentKwh
                     integrated += 1
                 }
             }
@@ -461,7 +467,7 @@ object TripMaterializer {
         val packVoltage = sample.packVoltage
         val packCurrentA = sample.packCurrentA
         return if (packVoltage != null && packCurrentA != null) {
-            packVoltage * packCurrentA / 1000.0
+            PackEnergyMath.dischargePowerKw(packVoltage, packCurrentA)
         } else {
             null
         }

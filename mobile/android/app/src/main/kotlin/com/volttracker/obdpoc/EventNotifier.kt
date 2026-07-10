@@ -35,7 +35,7 @@ open class EventNotifier(
     /** Posts the platform notification for [event]; a no-op (logged) when notifications are blocked. */
     open fun notify(event: EventNotificationDecider.Event) {
         if (!canPost()) {
-            Log.i(MainActivity.TAG, "event notification skipped: POST_NOTIFICATIONS not granted")
+            Log.i(AppPrefs.LOG_TAG, "event notification skipped: POST_NOTIFICATIONS not granted")
             return
         }
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -44,7 +44,7 @@ open class EventNotifier(
             ensureChannel(context)
             manager.notify(spec.notificationId, build(spec.title, spec.text))
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "event notification post failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "event notification post failed", ex)
         }
     }
 
@@ -261,7 +261,7 @@ open class EventNotifier(
             entryId: Long,
             serviceType: String,
         ): Int {
-            val hash = "$entryId $serviceType".hashCode()
+            val hash = "$entryId\u0000$serviceType".hashCode()
             return (hash % MAINTENANCE_ID_RANGE + MAINTENANCE_ID_RANGE) % MAINTENANCE_ID_RANGE
         }
     }

@@ -47,13 +47,12 @@ class ArchitectureBoundaryTest {
     @Test
     fun engineDoesNotReferenceDashboardBridgeOrWebViewApis() {
         val violations =
-            scanFilesForForbiddenReferences(
-                listOf(
-                    "ObdPollingEngine.kt",
-                    "ElmConnection.kt",
-                    "DiagnosticScanRunner.kt",
-                    "ClearDtcRunner.kt",
-                ),
+            scanProductionFilesForForbiddenReferences(
+                { name ->
+                    name.contains("Engine") ||
+                        name.endsWith("Runner.kt") ||
+                        name == "ElmConnection.kt"
+                },
                 FORBIDDEN_ENGINE_UI_REFERENCES,
             )
 
@@ -66,13 +65,37 @@ class ArchitectureBoundaryTest {
     @Test
     fun serviceLayerDoesNotCallWebViewApis() {
         val violations =
-            scanFilesForForbiddenReferences(
-                listOf("ObdService.kt", "ObdNotifications.kt", "PermissionGate.kt"),
+            scanProductionFilesForForbiddenReferences(
+                { name ->
+                    !name.startsWith("VoltBridge") &&
+                        (
+                            name.endsWith("Service.kt") ||
+                                name.endsWith("Notifications.kt") ||
+                                name.endsWith("PermissionGate.kt") ||
+                                name.endsWith("Worker.kt") ||
+                                name.endsWith("Recorder.kt")
+                        )
+                },
                 FORBIDDEN_SERVICE_WEBVIEW_REFERENCES,
             )
 
         assertTrue(
             "Service/WebView boundary violations:\n" + violations.joinToString("\n"),
+            violations.isEmpty(),
+        )
+    }
+
+    @Test
+    fun productionCodeUsesTheSharedLogTagWithoutDependingOnMainActivity() {
+        val violations =
+            scanProductionFilesForForbiddenReferences(
+                { true },
+                listOf("MainActivity.TAG"),
+            )
+
+        assertTrue(
+            "Shared logging must not couple background code to MainActivity:\n" +
+                violations.joinToString("\n"),
             violations.isEmpty(),
         )
     }
@@ -203,6 +226,32 @@ class ArchitectureBoundaryTest {
                     if (source.contains(forbidden)) {
                         violations.add(displayPath(path) + " references " + forbidden)
                     }
+                }
+            }
+            return violations
+        }
+
+        @Throws(IOException::class)
+        fun scanProductionFilesForForbiddenReferences(
+            includeName: (String) -> Boolean,
+            forbiddenReferences: List<String>,
+        ): List<String> {
+            val violations = ArrayList<String>()
+            for (sourceRoot in sourceRoots()) {
+                val packageRoot =
+                    sourceRoot.resolve("com").resolve("volttracker").resolve("obdpoc")
+                if (!Files.isDirectory(packageRoot)) continue
+                Files.walk(packageRoot).use { paths ->
+                    paths
+                        .filter { isSourceFile(it) && includeName(it.fileName.toString()) }
+                        .forEach { path ->
+                            val source = String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+                            for (forbidden in forbiddenReferences) {
+                                if (source.contains(forbidden)) {
+                                    violations.add(displayPath(path) + " references " + forbidden)
+                                }
+                            }
+                        }
                 }
             }
             return violations

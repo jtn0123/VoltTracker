@@ -14,6 +14,7 @@ import java.io.FileOutputStream
 import java.io.FileWriter
 import java.io.IOException
 import java.io.InputStream
+import java.io.InterruptedIOException
 import java.io.OutputStream
 import java.nio.charset.StandardCharsets
 import java.security.GeneralSecurityException
@@ -667,6 +668,11 @@ class DataBackup(
             val buffer = ByteArray(IO_BUFFER_BYTES)
             var total = 0L
             while (true) {
+                if (Thread.currentThread().isInterrupted) {
+                    throw InterruptedIOException("Backup copy interrupted").apply {
+                        bytesTransferred = total.coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+                    }
+                }
                 val read = input.read(buffer)
                 if (read <= 0) {
                     break

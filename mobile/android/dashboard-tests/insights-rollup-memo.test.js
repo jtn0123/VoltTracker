@@ -14,7 +14,7 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 describe('insights rollup memo (setStorage recompute storm)', () => {
   it('does not reload trips/insights rollups on an unchanged storage broadcast', async () => {
     const getInsights = vi.fn(() => JSON.stringify({ tripCount: 3, totalDistanceMeters: 5200 }));
-    const getTrips = vi.fn(() => JSON.stringify({ trips: [] }));
+    const getTrips = vi.fn(() => JSON.stringify([]));
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
@@ -41,7 +41,13 @@ describe('insights rollup memo (setStorage recompute storm)', () => {
     expect(getInsights.mock.calls.length).toBe(insightsBaseline);
     expect(getTrips.mock.calls.length).toBe(tripsBaseline);
 
-    // A real change (new trip + samples) reloads exactly once more.
+    // Live-sample churn alone does not change completed rollups.
+    VD.setStorage({ sampleCount: 25, locationSampleCount: 20, tripSegmentCount: 3, sessionCount: 1 });
+    await flush();
+    expect(getInsights.mock.calls.length).toBe(insightsBaseline);
+    expect(getTrips.mock.calls.length).toBe(tripsBaseline);
+
+    // A real completed-trip change reloads exactly once more.
     VD.setStorage({ sampleCount: 25, tripSegmentCount: 4, sessionCount: 1 });
     await flush();
     expect(getInsights.mock.calls.length).toBeGreaterThan(insightsBaseline);

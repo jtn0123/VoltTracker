@@ -115,8 +115,10 @@ class DashboardBroadcastCoordinator(
     private fun onTelemetryBroadcast(json: String) {
         seam.storeTelemetry(json)
         seam.markStorageSummaryDirty()
+        // updateTelemetry already carries the complete hot sample. Rebuilding and publishing a
+        // second app-state payload here duplicated JSON serialization and WebView evaluation on
+        // every poll; non-telemetry app state is published on status/lifecycle/permission changes.
         seam.callDashboard("updateTelemetry", json)
-        seam.publishAppState()
     }
 
     private fun onStatusBroadcast(json: String) {

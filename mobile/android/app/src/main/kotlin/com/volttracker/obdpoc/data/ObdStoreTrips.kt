@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import androidx.core.database.sqlite.transaction
+import com.volttracker.obdpoc.materialize.PackEnergyMath
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -527,13 +528,15 @@ class ObdStoreTrips(
                             if (!cursor.isNull(1)) {
                                 cursor.getDouble(1)
                             } else {
-                                cursor.getDouble(2) * cursor.getDouble(3) / 1000.0
+                                PackEnergyMath.dischargePowerKw(cursor.getDouble(2), cursor.getDouble(3))
+                                    ?: continue
                             }
                         val previousPowerKw = prevPowerKw
                         if (previousPowerKw != null) {
-                            val hours = (atMs - prevAtMs) / 3_600_000.0
-                            if (hours > 0.0) {
-                                energyKwh += ((previousPowerKw + powerKw) / 2.0) * hours
+                            val segmentKwh =
+                                PackEnergyMath.trapezoidKwh(previousPowerKw, powerKw, prevAtMs, atMs)
+                            if (segmentKwh != null) {
+                                energyKwh += segmentKwh
                                 integrated += 1
                             }
                         }

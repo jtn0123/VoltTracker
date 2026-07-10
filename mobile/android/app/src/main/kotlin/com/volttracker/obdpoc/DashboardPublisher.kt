@@ -43,7 +43,7 @@ class DashboardPublisher(
         jsonPayload: String?,
     ) {
         if (!ALLOWED_FUNCTIONS.contains(functionName)) {
-            Log.w(MainActivity.TAG, "callDashboard: refused unknown function name: $functionName")
+            Log.w(AppPrefs.LOG_TAG, "callDashboard: refused unknown function name: $functionName")
             return
         }
         val wv = webView ?: return

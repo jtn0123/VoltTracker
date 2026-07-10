@@ -22,6 +22,7 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.io.FileWriter
 import java.io.IOException
+import java.io.InterruptedIOException
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
@@ -731,6 +732,38 @@ class DataBackupTest {
         assertTrue(snapshots.all { it.phase == "Copying test" })
         source.delete()
         dest.delete()
+    }
+
+    @Test
+    fun copyFileStopsAtTheNextChunkWhenInterrupted() {
+        val context = RuntimeEnvironment.getApplication()
+        val source = File(context.cacheDir, "copy-interrupt-source.bin")
+        val dest = File(context.cacheDir, "copy-interrupt-dest.bin")
+        source.outputStream().use { out ->
+            val block = ByteArray(64 * 1024) { 0x5A }
+            repeat(32) { out.write(block) }
+        }
+        try {
+            var interrupted = false
+            try {
+                DataBackup.copyFile(
+                    source,
+                    dest,
+                    { snapshot ->
+                        if (snapshot.bytesDone > 0L) Thread.currentThread().interrupt()
+                    },
+                )
+            } catch (_: InterruptedIOException) {
+                interrupted = true
+            }
+
+            assertTrue("copy should surface interruption", interrupted)
+            assertTrue("interrupted copy must stop before the complete source", dest.length() < source.length())
+        } finally {
+            Thread.interrupted()
+            source.delete()
+            dest.delete()
+        }
     }
 
     @Test

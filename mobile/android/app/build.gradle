@@ -1,3 +1,5 @@
+import com.volttracker.build.DashboardHtmlAssembler
+
 plugins {
     // Kotlin is the language for Android production code. AGP 9.0+ has built-in Kotlin
     // support enabled by default, so no separate Kotlin plugin is applied. See CONTRIBUTING.md.
@@ -66,15 +68,24 @@ spotless {
 // running. python-semantic-release rewrites VERSION on every bumpable PR
 // merge — see .github/workflows/release.yml.
 //
-// versionCode comes from GITHUB_RUN_NUMBER on CI so the Play-style integer
-// version is monotonic per workflow. Local dev builds fall back to 1, which
-// is fine for fresh installs; Android may reject installing them over newer
-// release artifacts unless you explicitly allow downgrades and the signatures
-// match.
+// versionCode is derived from VERSION so every workflow rebuilding the same tag
+// produces the same install identity. The previous workflow-local run number
+// changed between release.yml and release-asset repair runs.
 def repoVersionFile = file("$rootDir/../../VERSION")
 def repoVersionName = repoVersionFile.exists() ? repoVersionFile.text.trim() : "0.0.0"
 def repoVersionSuffix = (System.getenv("GITHUB_SHA")?.take(7)) ?: "dev"
-def repoVersionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: "1").toInteger()
+def repoVersionParts = repoVersionName.split("\\.")
+if (repoVersionParts.length != 3 || !repoVersionParts.every { it ==~ /\d+/ }) {
+    throw new GradleException("VERSION must be numeric major.minor.patch; found '${repoVersionName}'")
+}
+def repoVersionNumbers = repoVersionParts.collect { it.toInteger() }
+if (repoVersionNumbers[1] > 999 || repoVersionNumbers[2] > 999) {
+    throw new GradleException("VERSION minor and patch must each fit in 0..999")
+}
+def repoVersionCode =
+        Math.addExact(
+                Math.addExact(Math.multiplyExact(repoVersionNumbers[0], 1_000_000), repoVersionNumbers[1] * 1_000),
+                repoVersionNumbers[2])
 def benchmarkDebugTarget =
         (findProperty("voltTrackerBenchmarkDebug")?.toString()?.toBoolean() ?: false) ||
                 gradle.startParameter.taskNames.any {
@@ -268,17 +279,7 @@ tasks.register("generateDashboardHtml") {
     inputs.dir(srcDir)
     outputs.file(outFile)
     doLast {
-        def sb = new StringBuilder()
-        new File(srcDir, "index.template.html").eachLine("UTF-8") { line ->
-            def m = (line =~ /^\s*<!-- include: (\S+) -->\s*$/)
-            if (m.find()) {
-                sb.append(new File(srcDir, m.group(1)).getText("UTF-8").replaceAll(/\s+$/, ""))
-            } else {
-                sb.append(line)
-            }
-            sb.append("\n")
-        }
-        outFile.setText(sb.toString().replaceAll(/\n+$/, "") + "\n", "UTF-8")
+        outFile.setText(DashboardHtmlAssembler.assemble(srcDir), "UTF-8")
     }
 }
 

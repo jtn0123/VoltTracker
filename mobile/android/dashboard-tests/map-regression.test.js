@@ -443,9 +443,19 @@ describe('map.ts — route selection regressions', () => {
         payload: { ok: false, error: 'native_request_failed', message: 'Could not read local data.' },
       }),
     );
+    const retryStartedAt = Date.now();
     VD.renderMap();
 
     expect(requestTripRoute).toHaveBeenCalledTimes(1);
+
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(retryStartedAt + 2_100);
+      VD.renderMap();
+      expect(requestTripRoute).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('keeps fetched route geometry across a structurally-identical trips reassignment', async () => {
@@ -499,6 +509,11 @@ describe('map.ts — route selection regressions', () => {
     expect(requestTripRoute).toHaveBeenCalledTimes(1);
     expect(document.getElementById('mapPointBadge').textContent).toBe('3 pts');
     expect(document.getElementById('mapEmpty').hidden).toBe(true);
+
+    // A geometry-relevant field change invalidates the fetched route.
+    VD.state.trips = [{ ...tripStub, distanceMeters: 6500 }];
+    VD.renderMap();
+    expect(requestTripRoute).toHaveBeenCalledTimes(2);
   });
 
   it('surfaces basemap tile failures with a retry affordance', () => {

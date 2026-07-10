@@ -123,8 +123,8 @@ export function createFocusTrap(rootEl: HTMLElement, opts: FocusTrapOptions = {}
       if (typeof rootEl.focus === "function") rootEl.focus();
       return;
     }
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
+    const first = focusable[0]!;
+    const last = focusable[focusable.length - 1]!;
     const active = document.activeElement;
     // If focus has escaped the trap entirely, pull it back to the appropriate
     // edge rather than letting Tab walk into the inert background.

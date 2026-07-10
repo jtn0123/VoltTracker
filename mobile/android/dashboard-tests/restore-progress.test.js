@@ -16,6 +16,11 @@ describe('restore progress overlay', () => {
     vi.useRealTimers();
   });
 
+  it('normalizes a null native payload instead of crashing the overlay callback', () => {
+    expect(() => window.VoltTrackerNative.setRestoreProgress('null')).not.toThrow();
+    expect(document.getElementById('restoreProgress').hidden).toBe(false);
+  });
+
   it('shows a non-dismissible modal while native restore work is busy', () => {
     window.VoltTrackerNative.setRestoreProgress(
       JSON.stringify({

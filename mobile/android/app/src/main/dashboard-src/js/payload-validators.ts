@@ -1,5 +1,5 @@
 // payload-validators.ts — warn-only runtime shape checks for the critical
-// native -> dashboard payloads (setStatus / setStorage / setAppState; shapes
+// native -> dashboard payloads (the VoltTrackerNative callback surface; shapes
 // documented in docs/bridge-abi.md). The native side and the dashboard drift
 // independently, and a renamed/mistyped field otherwise fails silently as a
 // "--" tile. Each setter's parse path calls VD.validatePayload(kind, parsed)
@@ -15,10 +15,11 @@ const VD = window.VoltDashboard;
 
 // expected `typeof`; "object" additionally rejects arrays.
 type FieldTypes = Record<string, string>;
-type PayloadSpec = { required: string[]; fields: FieldTypes };
+type PayloadSpec = { shape: "object" | "array"; required: string[]; fields: FieldTypes };
 
 const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
   setStatus: {
+    shape: "object",
     required: ["state"],
     fields: {
       state: "string",
@@ -30,6 +31,7 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
     }
   },
   setStorage: {
+    shape: "object",
     required: [],
     fields: {
       sessionCount: "number",
@@ -45,6 +47,7 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
     }
   },
   setAppState: {
+    shape: "object",
     required: [],
     fields: {
       app: "object",
@@ -56,6 +59,59 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
       lifecycle: "object",
       latestTelemetry: "object",
       storage: "object"
+    }
+  },
+  updateTelemetry: {
+    shape: "object",
+    required: [],
+    fields: {
+      source: "string",
+      sampleCount: "number",
+      updatedAt: "number",
+      speedKph: "number",
+      powerKw: "number",
+      soc: "number",
+      latitude: "number",
+      longitude: "number"
+    }
+  },
+  setDevices: { shape: "array", required: [], fields: {} },
+  setHistory: { shape: "array", required: [], fields: {} },
+  setTrips: { shape: "array", required: [], fields: {} },
+  setBatterySohHistory: { shape: "array", required: [], fields: {} },
+  setInsights: {
+    shape: "object",
+    required: [],
+    fields: {
+      tripCount: "number",
+      totalDistanceMeters: "number",
+      totalDriveMs: "number",
+      maxSpeedKph: "number",
+      longestTripMeters: "number",
+      gpsTripCount: "number"
+    }
+  },
+  setTripRoute: {
+    shape: "object",
+    required: ["routeKey", "payload"],
+    fields: { routeKey: "string", payload: "object" }
+  },
+  setCurrentSessionRoute: {
+    shape: "object",
+    required: [],
+    fields: { session: "object", points: "array", pointCount: "number" }
+  },
+  setRestoreProgress: {
+    shape: "object",
+    required: [],
+    fields: {
+      visible: "boolean",
+      busy: "boolean",
+      title: "string",
+      detail: "string",
+      phase: "string",
+      percent: "number",
+      operation: "string"
     }
   }
 };
@@ -89,6 +145,7 @@ function warnPayloadIssueOnce(key: string, message: string) {
 }
 
 function matchesExpectedType(value: unknown, expected: string) {
+  if (expected === "array") return Array.isArray(value);
   if (expected === "object") {
     return typeof value === "object" && !Array.isArray(value);
   }
@@ -99,18 +156,22 @@ function validatePayload(kind: string, payload: unknown) {
   try {
     const spec = PAYLOAD_SPECS[kind];
     if (!spec) return;
-    if (payload == null || typeof payload !== "object" || Array.isArray(payload)) {
+    const record =
+      payload != null && typeof payload === "object" && !Array.isArray(payload)
+        ? (payload as Record<string, unknown>)
+        : null;
+    // Native error envelopes ({ok:false, error}) flow through every async setter.
+    if (record?.ok === false) return;
+    const shapeMatches = spec.shape === "array" ? Array.isArray(payload) : record != null;
+    if (!shapeMatches) {
       warnPayloadIssueOnce(
-        kind + ":not-object",
-        "payload check: " + kind + " payload is not an object (got " +
+        kind + ":not-" + spec.shape,
+        "payload check: " + kind + " payload is not an " + spec.shape + " (got " +
           (Array.isArray(payload) ? "array" : typeof payload) + ")"
       );
       return;
     }
-    const record = payload as Record<string, unknown>;
-    // Native error envelopes ({ok:false, error}) flow through the same
-    // setters by design — they are not a shape violation.
-    if (record.ok === false) return;
+    if (!record) return;
     spec.required.forEach((field) => {
       if (record[field] == null) {
         warnPayloadIssueOnce(
@@ -123,6 +184,7 @@ function validatePayload(kind: string, payload: unknown) {
       const value = record[field];
       if (value == null) return;
       const expected = spec.fields[field];
+      if (!expected) return;
       if (!matchesExpectedType(value, expected)) {
         warnPayloadIssueOnce(
           kind + "." + field + ":" + typeof value,

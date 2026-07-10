@@ -12,6 +12,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import java.util.Random
 
 /**
  * Exercises [DatabaseMerger] against two independent real SQLite databases: id remapping, session
@@ -648,9 +649,78 @@ class DatabaseMergerTest {
         }
     }
 
+    @Test
+    fun progressFailureRollsBackEveryTableTouchedBeforeTheFault() {
+        insertVehicle(donor, "ROLLBACK-VEHICLE")
+        val donorSession = insertSession(donor, 10_000L)
+        insertTelemetry(donor, donorSession, 10_001L)
+
+        val result =
+            DatabaseMerger.merge(
+                live,
+                donor,
+                DatabaseMerger.ProgressListener { phase, _, _ ->
+                    if (phase == "Merging telemetry") {
+                        throw IllegalStateException("injected merge fault")
+                    }
+                },
+            )
+
+        assertFalse("an injected mid-transaction fault must fail the merge", result.ok)
+        assertEquals(0, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertEquals(0, count(live, VoltTrackerDb.TABLE_SESSIONS))
+        assertEquals(0, count(live, VoltTrackerDb.TABLE_TELEMETRY))
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun randomizedDuplicateSessionsAndTelemetryRemainIdempotent() {
+        val random = Random(MERGE_FUZZ_SEED)
+        repeat(40) {
+            val startedAt = random.nextInt(30).toLong() * 1_000L
+            val mode = if (random.nextBoolean()) "obd" else "scan"
+            val address = FUZZ_ADDRESSES[random.nextInt(FUZZ_ADDRESSES.size)]
+            val session = insertSession(live, startedAt, mode, address)
+            insertTelemetry(live, session, startedAt + random.nextInt(4))
+        }
+        repeat(160) {
+            val startedAt = random.nextInt(60).toLong() * 1_000L
+            val mode = if (random.nextBoolean()) "obd" else "scan"
+            val address = FUZZ_ADDRESSES[random.nextInt(FUZZ_ADDRESSES.size)]
+            val session = insertSession(donor, startedAt, mode, address)
+            repeat(1 + random.nextInt(3)) {
+                insertTelemetry(donor, session, startedAt + random.nextInt(8))
+            }
+        }
+
+        val first = DatabaseMerger.merge(live, donor)
+        assertTrue("first randomized merge failed: ${first.error}", first.ok)
+        assertForeignKeysIntact(live)
+        val sessionsAfterFirst = count(live, VoltTrackerDb.TABLE_SESSIONS)
+        val telemetryAfterFirst = count(live, VoltTrackerDb.TABLE_TELEMETRY)
+
+        val second = DatabaseMerger.merge(live, donor)
+
+        assertTrue("second randomized merge failed: ${second.error}", second.ok)
+        assertEquals(
+            "re-merging identical randomized sessions must be idempotent",
+            sessionsAfterFirst,
+            count(live, VoltTrackerDb.TABLE_SESSIONS),
+        )
+        assertEquals(
+            "re-merging identical randomized telemetry must be idempotent",
+            telemetryAfterFirst,
+            count(live, VoltTrackerDb.TABLE_TELEMETRY),
+        )
+        assertForeignKeysIntact(live)
+    }
+
     // ---- fixtures ---------------------------------------------------------------
 
     companion object {
+        private const val MERGE_FUZZ_SEED = 0x4D45524745L
+        private val FUZZ_ADDRESSES = arrayOf<String?>(null, "AA:AA:AA:AA:AA:AA", "BB:BB:BB:BB:BB:BB")
+
         private fun insertSession(
             db: SQLiteDatabase,
             startedAtMs: Long,

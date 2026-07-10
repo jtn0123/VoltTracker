@@ -739,8 +739,8 @@ interface VoltRestoreProgress {
     realViewMeta: Record<string, [string, string]>;
 
     // ----- payload-validators.ts ---------------------------------------------
-    /** Warn-only runtime shape check for the critical native payloads
-     *  (setStatus / setStorage / setAppState — see docs/bridge-abi.md). Never
+    /** Warn-only runtime shape check for native callback payloads
+     *  (see docs/bridge-abi.md). Never
      *  throws; logs one console.warn per distinct (kind, field, issue). */
     validatePayload(kind: string, payload: unknown): void;
 

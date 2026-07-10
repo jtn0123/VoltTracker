@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
 import { createVoltBridgeFixture } from './setup/voltbridge.fixture.js';
@@ -14,6 +14,8 @@ describe('battery SOH trend', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it('charts the SOH history and summary stats when readings exist', async () => {
     const t0 = Date.now() - 30 * DAY;
@@ -65,6 +67,25 @@ describe('battery SOH trend', () => {
     expect(document.getElementById('sohTrendCapacity').textContent).toBe('--');
   });
 
+  it('drops malformed native rows without breaking the dashboard callback', async () => {
+    const t0 = Date.now() - 10 * DAY;
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ getBatterySohHistory: () => '[]' }),
+    });
+    const history = [
+      null,
+      12,
+      'bad row',
+      [{ capturedAtMs: t0, sohPct: 1, capacityAh: 1 }],
+      { capturedAtMs: t0, sohPct: 96, capacityAh: 44.2 },
+      { capturedAtMs: t0 + 10 * DAY, sohPct: 95.5, capacityAh: 43.9 },
+    ];
+
+    expect(() => window.VoltTrackerNative.setBatterySohHistory(JSON.stringify(history))).not.toThrow();
+    expect(document.getElementById('sohTrendCount').textContent).toBe('2');
+    expect(document.getElementById('sohTrendLatest').textContent).toBe('95.5%');
+  });
+
   it('requests SOH history asynchronously when the native bridge supports it', async () => {
     const t0 = Date.now() - 10 * DAY;
     const history = [
@@ -92,6 +113,27 @@ describe('battery SOH trend', () => {
     expect(document.getElementById('sohTrendChart').hidden).toBe(false);
     expect(document.getElementById('sohTrendLatest').textContent).toBe('95.5%');
     expect(document.querySelector('#sohTrendChart .soh-line')).not.toBeNull();
+  });
+
+  it('releases a lost SOH callback and retries after the normal refresh interval', async () => {
+    const requestBatterySohHistory = vi.fn(() => true);
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ requestBatterySohHistory }),
+    });
+    const VD = window.VoltDashboard;
+    window.VoltTrackerNative.setBatterySohHistory('[]');
+    requestBatterySohHistory.mockClear();
+    vi.useFakeTimers();
+
+    VD.setStorage({ batterySnapshotCount: 1 });
+    VD.renderRealV2Ui();
+    expect(requestBatterySohHistory).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(30_000);
+    VD.renderRealV2Ui();
+
+    expect(requestBatterySohHistory).toHaveBeenCalledTimes(2);
   });
 
   it('shows the empty prompt until at least two readings exist', async () => {

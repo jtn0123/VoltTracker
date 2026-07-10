@@ -474,9 +474,9 @@ open class MainActivity :
     }
 
     override fun onDestroy() {
+        backupController?.dispose()
         backgroundExecutor.shutdownNow()
         troubleshooter?.shutdown()
-        backupController?.dispose()
         localStore?.close()
         localStore = null
         // Tear the WebView down explicitly. It holds the VoltBridge JS interface, which keeps a

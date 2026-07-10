@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.materialize.PackEnergyMath
+
 /**
  * Pure decision core for the event-notification feature (M1). It is fed live telemetry samples and
  * diagnostic-scan results and decides which notifications should fire, with no Android dependency so
@@ -277,10 +279,7 @@ class EventNotificationDecider(
         // carried voltage resets with the rest of the accumulator at the start of each charge.
         sample.packVoltage?.let { lastChargeVoltage = it }
         val v = lastChargeVoltage ?: return
-        var kw = -(v * c) / 1000.0
-        if (kw.isNaN() || kw.isInfinite()) {
-            return
-        }
+        var kw = PackEnergyMath.chargePowerKw(v, c) ?: return
         if (kw < 0.0) {
             kw = 0.0
         }
@@ -292,14 +291,14 @@ class EventNotificationDecider(
             prevChargeMs = sample.capturedAtMs
             return
         }
-        val hours = (sample.capturedAtMs - pMs) / 3_600_000.0
-        if (hours <= 0.0) {
+        val segmentKwh = PackEnergyMath.trapezoidKwh(pKw, kw, pMs, sample.capturedAtMs)
+        if (segmentKwh == null) {
             // Out-of-order or duplicate-timestamp sample: ignore it entirely and keep the existing
             // baseline. Rolling the baseline backward would double-count energy on the next in-order
             // sample, so we must not advance prevChargeKw/prevChargeMs here.
             return
         }
-        chargeEnergyKwh += ((pKw + kw) / 2.0) * hours
+        chargeEnergyKwh += segmentKwh
         prevChargeKw = kw
         prevChargeMs = sample.capturedAtMs
     }

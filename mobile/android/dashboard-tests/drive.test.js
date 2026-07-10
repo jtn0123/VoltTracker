@@ -217,6 +217,28 @@ describe('drive.ts', () => {
     expect(socHost.querySelector('svg')).toBeNull();
   });
 
+  it('redraws power and SOC charts when only a middle sample changes', () => {
+    const VD = window.VoltDashboard;
+    const powerHost = document.getElementById('powerBarsChart');
+    const socHost = document.getElementById('socTraceChart');
+    Object.defineProperty(powerHost, 'clientWidth', { configurable: true, value: 320 });
+    Object.defineProperty(socHost, 'clientWidth', { configurable: true, value: 320 });
+    VD.state.powerHistory = [4, 12, -3, 18];
+    VD.state.socHistory = [78.2, 78.1, 78.0, 77.9];
+    VD.drawLivePowerBars();
+    VD.drawLiveSocTrace();
+    const powerChart = powerHost.firstElementChild;
+    const socChart = socHost.firstElementChild;
+
+    VD.state.powerHistory = [4, 30, -3, 18];
+    VD.state.socHistory = [78.2, 75.0, 78.0, 77.9];
+    VD.drawLivePowerBars();
+    VD.drawLiveSocTrace();
+
+    expect(powerHost.firstElementChild).not.toBe(powerChart);
+    expect(socHost.firstElementChild).not.toBe(socChart);
+  });
+
   it('keeps the micro-card corner tags as static unit labels (v2 design)', () => {
     const VD = window.VoltDashboard;
     // The old live value/Δ chips were replaced by the design's bare "kW" / "%"

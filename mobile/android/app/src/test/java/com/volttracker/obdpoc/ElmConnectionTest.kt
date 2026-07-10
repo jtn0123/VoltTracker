@@ -10,8 +10,12 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.nio.charset.StandardCharsets
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.AtomicReference
 
 /** Drives [ElmConnection.transact] against in-memory streams — no Bluetooth needed. */
 class ElmConnectionTest {
@@ -48,6 +52,18 @@ class ElmConnectionTest {
 
         assertEquals("41 0C 1880\r", response)
         assertEquals(true, connection.lastTransactTruncated)
+    }
+
+    @Test
+    fun transactCapsAnUnterminatedAdapterResponse() {
+        val input = ReplyStream("A".repeat(80_000))
+        val out = TriggerOutputStream(input)
+        val connection = ElmConnection(input, out)
+
+        val response = connection.transact("010C", 5_000L) { true }
+
+        assertEquals(64 * 1024, response.length)
+        assertTrue("a response stopped by the safety ceiling is truncated", connection.lastTransactTruncated)
     }
 
     @Test
@@ -105,6 +121,52 @@ class ElmConnectionTest {
             2,
             clockReads.get(),
         )
+    }
+
+    @Test
+    fun interruptStopsAWaitingTransactionPromptly() {
+        val commandWritten = CountDownLatch(1)
+        val keepWaiting = AtomicBoolean(true)
+        val interruptedOnReturn = AtomicBoolean(false)
+        val failure = AtomicReference<Throwable?>()
+        val output =
+            object : ByteArrayOutputStream() {
+                override fun write(
+                    b: ByteArray,
+                    off: Int,
+                    len: Int,
+                ) {
+                    super.write(b, off, len)
+                    commandWritten.countDown()
+                }
+            }
+        val monotonicClock = ElmConnection.Clock { System.nanoTime() / 1_000_000L }
+        val connection = ElmConnection(ByteArrayInputStream(ByteArray(0)), output, monotonicClock)
+        val worker =
+            Thread {
+                try {
+                    connection.transact("010C", 10_000L, keepWaiting::get)
+                    interruptedOnReturn.set(Thread.currentThread().isInterrupted)
+                } catch (ex: Throwable) {
+                    failure.set(ex)
+                }
+            }
+        worker.isDaemon = true
+        worker.start()
+        assertTrue("transaction should write its command before waiting", commandWritten.await(1, TimeUnit.SECONDS))
+
+        worker.interrupt()
+        worker.join(500L)
+        val stoppedOnInterrupt = !worker.isAlive
+
+        // Always release a broken implementation so a failed assertion cannot leave a hot loop
+        // running for the remainder of the test process.
+        keepWaiting.set(false)
+        worker.join(1_000L)
+
+        failure.get()?.let { throw AssertionError("waiting transaction threw", it) }
+        assertTrue("interrupt must stop a waiting transaction promptly", stoppedOnInterrupt)
+        assertTrue("the interrupted status must be preserved for the caller", interruptedOnReturn.get())
     }
 
     @Test

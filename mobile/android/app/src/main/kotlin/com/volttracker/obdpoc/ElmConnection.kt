@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
+import android.os.SystemClock
 import androidx.annotation.VisibleForTesting
 import java.io.IOException
 import java.io.InputStream
@@ -22,7 +23,7 @@ open class ElmConnection
     constructor(
         private var input: InputStream? = null,
         private var output: OutputStream? = null,
-        private val clock: Clock = Clock { System.currentTimeMillis() },
+        private val clock: Clock = Clock { SystemClock.elapsedRealtime() },
         private val socketFactory: SocketFactory =
             SocketFactory { device, uuid ->
                 BluetoothElmSocket(device.createRfcommSocketToServiceRecord(uuid))
@@ -187,7 +188,9 @@ open class ElmConnection
                             break
                         }
                     } else {
-                        sleep(20)
+                        if (!sleep(20)) {
+                            break
+                        }
                     }
                 }
                 firstReadMs = maxOf(0L, clock.nowMs() - start)
@@ -218,9 +221,16 @@ open class ElmConnection
 
             val response = StringBuilder()
             val startMs = clock.nowMs()
-            val deadline = startMs + timeoutMs
+            val boundedTimeoutMs = maxOf(0L, timeoutMs)
+            val deadline =
+                if (boundedTimeoutMs > Long.MAX_VALUE - startMs) {
+                    Long.MAX_VALUE
+                } else {
+                    startMs + boundedTimeoutMs
+                }
             val buffer = ByteArray(128)
             var lastByteAtMs = startMs
+            var responseCapped = false
             while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
                 val available = inputStream.available()
                 if (available > 0) {
@@ -228,7 +238,16 @@ open class ElmConnection
                     if (read > 0) {
                         lastByteAtMs = clock.nowMs()
                         val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
-                        response.append(chunk)
+                        val remaining = MAX_RESPONSE_CHARS - response.length
+                        if (remaining <= 0) {
+                            responseCapped = true
+                            break
+                        }
+                        response.append(chunk, 0, minOf(chunk.length, remaining))
+                        if (chunk.length > remaining || response.length >= MAX_RESPONSE_CHARS) {
+                            responseCapped = true
+                            break
+                        }
                         if (chunk.indexOf('>') >= 0) {
                             break
                         }
@@ -241,14 +260,19 @@ open class ElmConnection
                     if (response.isNotEmpty() && clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS) {
                         break
                     }
-                    sleep(25)
+                    if (!sleep(25)) {
+                        break
+                    }
                 }
             }
             val text = response.toString()
             lastTransactTruncated =
-                text.isNotEmpty() &&
-                text.indexOf('>') < 0 &&
-                clock.nowMs() >= deadline
+                responseCapped ||
+                (
+                    text.isNotEmpty() &&
+                        text.indexOf('>') < 0 &&
+                        clock.nowMs() >= deadline
+                )
             return text
         }
 
@@ -259,7 +283,9 @@ open class ElmConnection
             input ?: return
             out.write(0x1B)
             out.flush()
-            sleep(settleMs)
+            if (!sleep(settleMs)) {
+                return
+            }
             drainInput()
         }
 
@@ -306,13 +332,18 @@ open class ElmConnection
             // just lets prompt-recovery start ~1 s+ sooner than waiting out the full command timeout.
             const val NO_PROMPT_QUIET_PERIOD_MS = 250L
 
-            fun sleep(millis: Long) {
+            // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
+            // Keep a single command response bounded so it cannot exhaust the app process heap.
+            const val MAX_RESPONSE_CHARS = 64 * 1024
+
+            fun sleep(millis: Long): Boolean =
                 try {
                     Thread.sleep(millis)
+                    true
                 } catch (ex: InterruptedException) {
                     Thread.currentThread().interrupt()
+                    false
                 }
-            }
         }
 
         private class BluetoothElmSocket(

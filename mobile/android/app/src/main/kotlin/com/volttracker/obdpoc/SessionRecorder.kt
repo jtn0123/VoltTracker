@@ -108,7 +108,7 @@ class SessionRecorder {
                         summaryStore.recordStart(startedAtMs, activeAdapterName, activeAddress)
                         summaryStartRecorded = true
                     } catch (ex: RuntimeException) {
-                        Log.w(MainActivity.TAG, "summaryStore.recordStart failed", ex)
+                        Log.w(AppPrefs.LOG_TAG, "summaryStore.recordStart failed", ex)
                     }
                 }
                 if (snapshotSource != null) {
@@ -118,12 +118,12 @@ class SessionRecorder {
                             logJson("system_snapshot", snapshot)
                         }
                     } catch (ex: RuntimeException) {
-                        Log.w(MainActivity.TAG, "system_snapshot capture failed", ex)
+                        Log.w(AppPrefs.LOG_TAG, "system_snapshot capture failed", ex)
                     }
                 }
             } catch (ex: RuntimeException) {
                 activeSessionId = 0L
-                Log.w(MainActivity.TAG, "SessionRecorder.startSession failed", ex)
+                Log.w(AppPrefs.LOG_TAG, "SessionRecorder.startSession failed", ex)
                 logEvent(
                     "session_start_error",
                     "reason",
@@ -173,7 +173,7 @@ class SessionRecorder {
                         failureClassFor(state, sessionFailureClass),
                     )
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "summaryStore.recordEnd failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "summaryStore.recordEnd failed", ex)
                 }
             }
             summaryStartRecorded = false
@@ -245,7 +245,7 @@ class SessionRecorder {
         try {
             store.materializeSession(sessionId, startedAtMs, closedAtMs)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "session materialization failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "session materialization failed", ex)
             try {
                 store.recordStatus(sessionId, "materialize_failure", ex.javaClass.simpleName, false, null)
             } catch (ignored: RuntimeException) {
@@ -407,11 +407,11 @@ class SessionRecorder {
     }
 
     /** Drains pending database writes and shuts both recording executors down. */
-    fun shutdown() {
+    fun shutdown(): ObdPersistenceWorker.ShutdownResult {
         synchronized(lock) {
             flushPendingPidObservationsLocked()
         }
-        worker.shutdown()
+        return worker.shutdown()
     }
 
     fun drainFailedTelemetryCount(): Long = worker.drainFailedTelemetryCount()

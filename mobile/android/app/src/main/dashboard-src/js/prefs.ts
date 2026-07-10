@@ -79,7 +79,7 @@
         /* fall through to memory */
       }
     }
-    return Object.prototype.hasOwnProperty.call(memoryFallback, key) ? memoryFallback[key] : null;
+    return Object.prototype.hasOwnProperty.call(memoryFallback, key) ? (memoryFallback[key] ?? null) : null;
   }
 
   function rawSet(key: string, serialized: string): void {
@@ -241,9 +241,9 @@
   // and a data-contrast="high" attr on :root (document.documentElement), both
   // swapping centralized CSS tokens (base.css). Loaded at boot so the chosen
   // size/contrast is in place before first paint.
-  const FONT_SCALE_CHOICES = [1, 1.25, 1.5];
-  const FONT_SCALE_MIN = FONT_SCALE_CHOICES[0];
-  const FONT_SCALE_MAX = FONT_SCALE_CHOICES[FONT_SCALE_CHOICES.length - 1];
+  const FONT_SCALE_CHOICES = [1, 1.25, 1.5] as const;
+  const FONT_SCALE_MIN = 1;
+  const FONT_SCALE_MAX = 1.5;
 
   function fontScale(): number {
     const raw = Number(get<number>("fontScale", 1));
@@ -412,7 +412,9 @@
     const to = from + direction;
     if (from < 0 || to < 0 || to >= cfg.length) return;
     const moved = cfg[from];
-    cfg[from] = cfg[to];
+    const displaced = cfg[to];
+    if (!moved || !displaced) return;
+    cfg[from] = displaced;
     cfg[to] = moved;
     persistTiles(cfg);
   }

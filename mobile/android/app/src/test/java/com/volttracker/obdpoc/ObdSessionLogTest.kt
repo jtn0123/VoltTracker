@@ -75,6 +75,50 @@ class ObdSessionLogTest {
     }
 
     @Test
+    fun telemetryWritesFlushAtTheBatchBoundary() {
+        val log = ObdSessionLog(dir)
+        log.open("obd")
+        val session = sessionFile(dir)!!
+
+        repeat(ObdSessionLog.TELEMETRY_FLUSH_BATCH_LINES - 1) { index ->
+            log.write("telemetry", JSONObject().put("sample", index))
+        }
+        assertEquals("ordinary telemetry should remain buffered below the batch limit", "", readAll(session))
+
+        log.write("telemetry", JSONObject().put("sample", ObdSessionLog.TELEMETRY_FLUSH_BATCH_LINES - 1))
+
+        assertEquals(ObdSessionLog.TELEMETRY_FLUSH_BATCH_LINES, session.readLines().size)
+        log.close()
+    }
+
+    @Test
+    fun lifecycleLineFlushesEarlierTelemetryImmediately() {
+        val log = ObdSessionLog(dir)
+        log.open("obd")
+        val session = sessionFile(dir)!!
+        log.write("telemetry", JSONObject().put("sample", 1))
+
+        log.write("event", JSONObject().put("event", "adapter_connected"))
+
+        val lines = session.readLines()
+        assertEquals(2, lines.size)
+        assertTrue(lines.last().contains("adapter_connected"))
+        log.close()
+    }
+
+    @Test
+    fun closeFlushesAPartialTelemetryBatch() {
+        val log = ObdSessionLog(dir)
+        log.open("obd")
+        val session = sessionFile(dir)!!
+        log.write("telemetry", JSONObject().put("sample", 1))
+
+        log.close()
+
+        assertEquals(1, session.readLines().size)
+    }
+
+    @Test
     fun writeBeforeOpenIsNoOp() {
         val log = ObdSessionLog(dir)
         // No open() — write must not throw and the directory must stay empty.

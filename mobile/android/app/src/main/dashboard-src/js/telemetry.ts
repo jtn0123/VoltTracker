@@ -14,6 +14,12 @@ import { initialTelemetryState } from "./telemetry-state";
   type LiveCellGroup = HTMLElement | Element | null;
   type ValidationTone = "ok" | "warn" | "bad";
 
+  function asPayloadRecord(value: unknown): PayloadRecord {
+    return value != null && typeof value === "object" && !Array.isArray(value)
+      ? value as PayloadRecord
+      : {};
+  }
+
   // Live-tile element ids that should pulse with a `.stale` class when the
   // adapter stops sending fresh samples (>3s since lastSampleAt). Derived at
   // boot from `[data-live-tile="true"]` so adding a tile to a partial is the
@@ -37,11 +43,15 @@ import { initialTelemetryState } from "./telemetry-state";
   const GPS_FIX_STALE_MS = 15000;
   // Below this duration, formatShortDuration shows one decimal (e.g. "1.5s").
   const SHORT_DURATION_DECIMAL_CUTOFF_MS = 10000;
+  const LIVE_ROUTE_HYDRATION_RETRY_MS = 5_000;
+  const LIVE_ROUTE_HYDRATION_MAX_ATTEMPTS = 3;
   let rateChipReconnectBound = false;
   // One-shot guard so we only ask the backend to rehydrate the live track once per
   // session activation (reset in resetTelemetry). Recovers the in-progress drive's
   // route after the WebView is torn down and recreated mid-drive.
   let liveRouteHydrated = false;
+  let liveRouteHydrationAttempts = 0;
+  let liveRouteHydrationRetryTimer: ReturnType<typeof setTimeout> | null = null;
   // Highest telemetry `updatedAt` observed so far. Native re-delivers the LAST
   // sample on every status broadcast, so setAppState must only treat a sample
   // as fresh when its updatedAt actually advances past this marker — otherwise
@@ -149,8 +159,9 @@ import { initialTelemetryState } from "./telemetry-state";
 
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
-    const status = VD.parsePayload<VoltStatus>(payload, {});
-    validatePayload("setStatus", status);
+    const parsed = VD.parsePayload<unknown>(payload, {});
+    validatePayload("setStatus", parsed);
+    const status = asPayloadRecord(parsed) as VoltStatus;
     state.status = status;
     const badge = el("stateBadge");
     const next = status.state || "idle";
@@ -174,8 +185,9 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setAppState(payload: unknown) {
-    const parsed = VD.parsePayload<VoltAppState>(payload, {});
-    validatePayload("setAppState", parsed);
+    const candidate = VD.parsePayload<unknown>(payload, {});
+    validatePayload("setAppState", candidate);
+    const parsed = asPayloadRecord(candidate) as VoltAppState;
     if (state.demoActive && state.demoPreviewAppState) {
       // Park the real app-state behind the demo preview (cross-module demo invariant).
       VD.setState({ realAppState: parsed });
@@ -252,6 +264,11 @@ import { initialTelemetryState } from "./telemetry-state";
     state.lastSampleAt = 0;
     lastSeenSampleUpdatedAt = 0;
     liveRouteHydrated = false;
+    liveRouteHydrationAttempts = 0;
+    if (liveRouteHydrationRetryTimer !== null) {
+      clearTimeout(liveRouteHydrationRetryTimer);
+      liveRouteHydrationRetryTimer = null;
+    }
     // The POWER bar auto-scale only ratchets up (40→80→120) during a drive; without
     // this reset a high-power drive leaves it over-scaled for the next gentle drive
     // until reload. Reset to the initial ceiling so each session re-scales from 40.
@@ -280,17 +297,29 @@ import { initialTelemetryState } from "./telemetry-state";
    * the map shows the real drive instead of a blank "new run". A genuinely fresh drive returns no
    * points, so this is a harmless no-op then. Guarded to run once per activation.
    */
-  function applyCurrentSessionRoutePayload(payload: unknown) {
+  function applyCurrentSessionRoutePayload(payload: unknown): boolean {
     let parsed: PayloadRecord;
     try {
-      parsed = VD.parsePayload(payload, {});
+      const candidate = VD.parsePayload<unknown>(payload, {});
+      validatePayload("setCurrentSessionRoute", candidate);
+      if (!Object.keys(asPayloadRecord(candidate)).length) {
+        armLiveRouteHydrationRetry();
+        return false;
+      }
+      parsed = asPayloadRecord(candidate);
     } catch (_err) {
-      return;
+      armLiveRouteHydrationRetry();
+      return false;
     }
     liveRouteHydrated = true;
+    if (parsed.ok === false && parsed.error) {
+      armLiveRouteHydrationRetry();
+      return false;
+    }
     const rawPoints = Array.isArray(parsed.points) ? parsed.points : [];
     const mapped: MapRoutePoint[] = [];
     for (const raw of rawPoints) {
+      if (raw == null || typeof raw !== "object" || Array.isArray(raw)) continue;
       const p = raw as PayloadRecord;
       const lat = Number(p.lat);
       const lng = Number(p.lng);
@@ -305,8 +334,16 @@ import { initialTelemetryState } from "./telemetry-state";
       if (Number.isFinite(soc)) point.soc = soc;
       mapped.push(point);
     }
-    if (!mapped.length) return;
-    state.liveRouteStartedAtMs = mapped[0].atMs;
+    if (!mapped.length) {
+      armLiveRouteHydrationRetry();
+      return false;
+    }
+    if (liveRouteHydrationRetryTimer !== null) {
+      clearTimeout(liveRouteHydrationRetryTimer);
+      liveRouteHydrationRetryTimer = null;
+    }
+    const firstPoint = mapped[0]!;
+    state.liveRouteStartedAtMs = firstPoint.atMs;
     state.selectedMapSessionId = LIVE_ROUTE_ID;
     // If the map module is already loaded, route through its setter so its module-local
     // liveRoutePoints reference is updated too — a bare `state.liveRoutePoints = mapped`
@@ -314,11 +351,32 @@ import { initialTelemetryState } from "./telemetry-state";
     // mid-drive route would never draw. When the map module isn't loaded yet, set state
     // directly; map.ts seeds its local from state.liveRoutePoints on load.
     if (typeof VD.setLiveRoutePoints === "function") {
-      VD.setLiveRoutePoints(mapped, mapped[0].atMs);
+      VD.setLiveRoutePoints(mapped, firstPoint.atMs);
     } else {
       state.liveRoutePoints = mapped;
     }
     if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
+    return true;
+  }
+
+  function armLiveRouteHydrationRetry() {
+    if (
+      liveRouteHydrationRetryTimer !== null ||
+      liveRouteHydrationAttempts >= LIVE_ROUTE_HYDRATION_MAX_ATTEMPTS
+    ) {
+      return;
+    }
+    liveRouteHydrationRetryTimer = setTimeout(() => {
+      liveRouteHydrationRetryTimer = null;
+      if (!isActiveStatus()) return;
+      const existing = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
+      if (existing.length) {
+        liveRouteHydrated = true;
+        return;
+      }
+      liveRouteHydrated = false;
+      hydrateLiveRouteIfActive();
+    }, LIVE_ROUTE_HYDRATION_RETRY_MS);
   }
 
   function hydrateLiveRouteIfActive() {
@@ -326,6 +384,10 @@ import { initialTelemetryState } from "./telemetry-state";
     const existing = Array.isArray(state.liveRoutePoints) ? state.liveRoutePoints : [];
     if (existing.length) {
       liveRouteHydrated = true;
+      if (liveRouteHydrationRetryTimer !== null) {
+        clearTimeout(liveRouteHydrationRetryTimer);
+        liveRouteHydrationRetryTimer = null;
+      }
       return;
     }
     if (
@@ -335,8 +397,10 @@ import { initialTelemetryState } from "./telemetry-state";
     ) {
       return;
     }
+    liveRouteHydrationAttempts += 1;
     if (typeof bridge.requestCurrentSessionRoute === "function" && bridge.requestCurrentSessionRoute()) {
       liveRouteHydrated = true;
+      armLiveRouteHydrationRetry();
       return;
     }
     if (typeof bridge.getCurrentSessionRoute === "function") {
@@ -567,7 +631,9 @@ import { initialTelemetryState } from "./telemetry-state";
   // renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
   function updateTelemetry(payload: unknown) {
-    const sample = VD.parsePayload(payload, {});
+    const parsed = VD.parsePayload<unknown>(payload, {});
+    validatePayload("updateTelemetry", parsed);
+    const sample = asPayloadRecord(parsed);
     const source = String(sample.source || "").toLowerCase();
     const isDemoSample = source.includes("demo");
     if (isDemoSample && !state.demoActive) VD.setDemoActive(true);
@@ -1479,7 +1545,7 @@ import { initialTelemetryState } from "./telemetry-state";
    * clears the stored map (storage was wiped).
    */
   function applyCellSnapshot(payload: unknown) {
-    const snap = VD.parsePayload<PayloadRecord>(payload, {});
+    const snap = asPayloadRecord(VD.parsePayload<unknown>(payload, {}));
     const rawCells = Array.isArray(snap.cells) ? (snap.cells as unknown[]) : [];
     const slots: Array<number | null> = new Array(CELL_GRID_COUNT).fill(null);
     for (const item of rawCells) {
@@ -1586,7 +1652,7 @@ import { initialTelemetryState } from "./telemetry-state";
       const v = slots[i];
       const box = document.createElement("span");
       box.className = "cell-grid-box";
-      if (v === null) {
+      if (v == null) {
         box.title = `Group ${i + 1}: awaiting probe`;
       } else {
         box.style.background = heat ? cellHeatColor(v, mean) : "rgba(var(--ev-rgb), 0.6)";

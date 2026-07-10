@@ -63,6 +63,35 @@ describe('live-route rehydration', () => {
     expect(VD.state.selectedMapSessionId).toBe('__live_current__');
   });
 
+  it('rejects malformed route roots and rows without breaking the native callback', async () => {
+    await loadDashboard({ bridge: createVoltBridgeFixture() });
+    const VD = window.VoltDashboard;
+
+    expect(() => window.VoltTrackerNative.setCurrentSessionRoute('null')).not.toThrow();
+    expect(() => window.VoltTrackerNative.setCurrentSessionRoute(JSON.stringify({
+      points: [null, '', [], { atMs: 1000, lat: 34.05, lng: -118.25 }],
+    }))).not.toThrow();
+    expect(VD.state.liveRoutePoints).toEqual([
+      expect.objectContaining({ atMs: 1000, lat: 34.05, lng: -118.25 }),
+    ]);
+  });
+
+  it('retries when an accepted async request never delivers its callback', async () => {
+    vi.useFakeTimers();
+    const requestCurrentSessionRoute = vi.fn(() => true);
+    await loadDashboard({
+      bridge: createVoltBridgeFixture({ requestCurrentSessionRoute }),
+    });
+    const VD = window.VoltDashboard;
+
+    VD.setStatus({ state: 'connected', detail: 'Live OBD data.' });
+    expect(requestCurrentSessionRoute).toHaveBeenCalledTimes(1);
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(requestCurrentSessionRoute).toHaveBeenCalledTimes(2);
+  });
+
   it('does not query the backend when no session is active', async () => {
     const getCurrentSessionRoute = vi.fn(() => '{}');
     await loadDashboard({ bridge: createVoltBridgeFixture({ getCurrentSessionRoute }) });

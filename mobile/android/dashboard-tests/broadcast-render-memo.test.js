@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { loadDashboard } from './setup/load-dashboard.js';
+import { prefs } from '../app/src/main/dashboard-src/js/prefs.ts';
 
 describe('storage-broadcast render memoization', () => {
   let VD;
@@ -45,6 +46,23 @@ describe('storage-broadcast render memoization', () => {
     VD.state.storage.latestReview.warnings = [{ title: 'Parser errors', detail: 'Bad frames' }];
     VD.updateReviewUi();
     expect(document.getElementById('reviewWarnings').firstElementChild).not.toBe(warnNode);
+  });
+
+  it('rebuilds unit-sensitive review output when units change', () => {
+    VD.setStorage({
+      latestReview: {
+        session: { id: 's1', mode: 'obd', adapterName: 'ELM327' },
+        maxSpeedKph: 100,
+        warnings: [{ title: 'GPS gaps', detail: 'Some gaps' }],
+      },
+    });
+    const imperial = document.getElementById('reviewMaxSpeed').textContent;
+
+    prefs.set('units', 'metric');
+    VD.updateReviewUi();
+
+    expect(document.getElementById('reviewMaxSpeed').textContent).not.toBe(imperial);
+    expect(document.getElementById('reviewMaxSpeed').textContent).toContain('km/h');
   });
 
   it('does not rebuild the pack-stat row on an unchanged battery snapshot', () => {

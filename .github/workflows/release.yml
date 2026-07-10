@@ -234,11 +234,6 @@ jobs:
       - name: Assemble release and debug APKs
         # The previous step fails when signing secrets are missing, so tagged
         # release builds must produce the stable-key signed app-release.apk.
-        env:
-          # versionCode wants a monotonic integer — release.yml's run number
-          # is separate from android.yml's, but debug and release sign
-          # differently so Android treats them as separate apps anyway.
-          GITHUB_RUN_NUMBER: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
           # The job checks out the tag after semantic-release creates it, so

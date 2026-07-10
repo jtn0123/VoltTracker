@@ -42,7 +42,7 @@ open class ObdLocalStore(
         reports = ObdStoreReports(helper, trips)
         maintenance = ObdStoreMaintenance(appContext, helper)
         writer = ObdStoreWriter(helper, ObdStoreSnapshots())
-        vehicles = ObdStoreVehicles(helper)
+        vehicles = ObdStoreVehicles(helper, VinKeyHasher(appContext))
         materialize = ObdStoreMaterialize(helper)
     }
 
@@ -603,6 +603,7 @@ open class ObdLocalStore(
         const val STATUS_COMPLETE: String = "complete"
         const val STATUS_ERROR: String = "error"
         const val STATUS_DISCONNECTED: String = "disconnected"
+        const val STATUS_INTERRUPTED: String = "interrupted"
 
         const val DEFAULT_RAW_RETENTION_DAYS: Int = ObdStoreMaintenance.DEFAULT_RAW_RETENTION_DAYS
     }

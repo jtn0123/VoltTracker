@@ -41,13 +41,7 @@ class DeviceCatalog(
             return devices.toString()
         }
 
-        val bonded: Set<BluetoothDevice> =
-            try {
-                adapter.bondedDevices
-            } catch (ex: SecurityException) {
-                Log.w(TAG, "Bluetooth bonded-device read denied", ex)
-                return devices.toString()
-            }
+        val bonded = bondedDevicesOrEmpty(adapter)
         val sorted = bonded.toMutableList()
         sorted.sortWith { left, right ->
             val leftIsCandidate = isLikelyObdDevice(left)
@@ -86,13 +80,7 @@ class DeviceCatalog(
             return candidates
         }
 
-        val sorted =
-            try {
-                adapter.bondedDevices.toMutableList()
-            } catch (ex: SecurityException) {
-                Log.w(TAG, "Bluetooth candidate read denied", ex)
-                return candidates
-            }
+        val sorted = bondedDevicesOrEmpty(adapter).toMutableList()
         sorted.sortWith { left, right ->
             safeName(left).lowercase(Locale.US).compareTo(safeName(right).lowercase(Locale.US))
         }
@@ -117,6 +105,18 @@ class DeviceCatalog(
         }
         return candidates
     }
+
+    @SuppressLint("MissingPermission")
+    private fun bondedDevicesOrEmpty(adapter: BluetoothAdapter): Set<BluetoothDevice> =
+        try {
+            // Android's platform type is declared non-null to Kotlin, but the Bluetooth service
+            // can transiently return null while it restarts. Treat that state like an empty scan
+            // so synchronous JavaScript bridge calls never inherit a framework NPE.
+            adapter.bondedDevices ?: emptySet()
+        } catch (ex: SecurityException) {
+            Log.w(TAG, "Bluetooth bonded-device read denied", ex)
+            emptySet()
+        }
 
     /**
      * Persists `address`/`name` as the last adapter and folds it into the remembered-device history.

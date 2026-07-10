@@ -3,8 +3,13 @@
 local.properties
 *.iml
 .idea/
-build/
-app/build/
+/build/
+/app/build/
+/buildSrc/build/
+# The shared Gradle helper package is literally named `build`; override the repo-level generic
+# `build/` ignore so clean clones receive its source instead of compiling only from a local cache.
+!buildSrc/src/main/groovy/com/volttracker/build/
+!buildSrc/src/main/groovy/com/volttracker/build/**
 field-logs/
 # Built dashboard JS bundle + source maps. Editable source is in
 # app/src/main/dashboard-src/js/; dashboard-tests/build.mjs (esbuild) compiles it

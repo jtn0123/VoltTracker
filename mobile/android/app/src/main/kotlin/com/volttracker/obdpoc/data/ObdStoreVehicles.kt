@@ -1,9 +1,6 @@
 package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
-import java.nio.charset.StandardCharsets
-import java.security.MessageDigest
-import java.security.NoSuchAlgorithmException
 import java.util.Calendar
 import java.util.Locale
 
@@ -13,13 +10,15 @@ import java.util.Locale
  */
 class ObdStoreVehicles(
     private val helper: VoltTrackerDb,
+    private val vinKeyHasher: VinKeyHasher,
 ) {
     fun upsertVehicleFromVin(vin: String?): Long {
         if (vin == null || vin.length != 17) {
             return 0L
         }
         val now = System.currentTimeMillis()
-        val hash = sha256Hex(vin)
+        val hash = vinKeyHasher.hash(vin)
+        val legacyHash = VinKeyHasher.legacyHash(vin)
         val last4 = vin.substring(13)
         val wmi = vin.substring(0, 3)
         val make = guessMakeFromWmi(wmi)
@@ -29,12 +28,16 @@ class ObdStoreVehicles(
         try {
             db
                 .rawQuery(
-                    "SELECT _id FROM ${VoltTrackerDb.TABLE_VEHICLES} WHERE vehicle_key = ?",
-                    arrayOf(hash),
+                    "SELECT _id, vehicle_key FROM ${VoltTrackerDb.TABLE_VEHICLES} WHERE vehicle_key IN (?, ?)",
+                    arrayOf(hash, legacyHash),
                 ).use { cursor ->
                     if (cursor.moveToFirst()) {
                         val existingId = cursor.getLong(0)
                         val update = ContentValues()
+                        if (cursor.getString(1) != hash) {
+                            update.put("vehicle_key", hash)
+                            update.put("vin_hash", hash)
+                        }
                         update.put("last_seen_ms", now)
                         update.put("updated_at_ms", now)
                         db.update(
@@ -68,20 +71,6 @@ class ObdStoreVehicles(
             return id
         } finally {
             db.endTransaction()
-        }
-    }
-
-    private fun sha256Hex(value: String): String {
-        try {
-            val digest = MessageDigest.getInstance("SHA-256")
-            val hashed = digest.digest(value.toByteArray(StandardCharsets.UTF_8))
-            val hex = StringBuilder(hashed.size * 2)
-            for (byte in hashed) {
-                hex.append(String.format(Locale.US, "%02x", byte))
-            }
-            return hex.toString()
-        } catch (ex: NoSuchAlgorithmException) {
-            throw IllegalStateException("SHA-256 unavailable", ex)
         }
     }
 

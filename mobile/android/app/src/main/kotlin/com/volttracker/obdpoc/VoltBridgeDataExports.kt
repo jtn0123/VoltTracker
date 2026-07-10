@@ -63,7 +63,7 @@ internal class VoltBridgeDataExports(
             try {
                 activity.localStore?.clearAllData()
             } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "clearStoredData failed", ex)
+                Log.w(AppPrefs.LOG_TAG, "clearStoredData failed", ex)
                 activity.runOnUiThread {
                     activity.publishStatus("blocked", "Could not clear the local OBD database.", true)
                 }
@@ -151,7 +151,7 @@ internal class VoltBridgeDataExports(
                 try {
                     activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "deleteDetailedSignalLog failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "deleteDetailedSignalLog failed", ex)
                     0
                 }
             activity.runOnUiThread {
@@ -232,7 +232,7 @@ internal class VoltBridgeDataExports(
                 try {
                     activity.localStore?.setTripLabel(cleanRouteKey, cleanLabel) == true
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "setTripLabel failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "setTripLabel failed", ex)
                     false
                 }
             activity.runOnUiThread {
@@ -272,7 +272,7 @@ internal class VoltBridgeDataExports(
                 try {
                     activity.localStore?.setTripFavorite(cleanRouteKey, favorite) == true
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "setTripFavorite failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "setTripFavorite failed", ex)
                     false
                 }
             activity.runOnUiThread {
@@ -301,7 +301,7 @@ internal class VoltBridgeDataExports(
             try {
                 JSONObject(bridgeSafe(json, BRIDGE_MAX_DETAIL_LEN))
             } catch (ex: org.json.JSONException) {
-                Log.w(MainActivity.TAG, "addMaintenanceEntry: bad JSON", ex)
+                Log.w(AppPrefs.LOG_TAG, "addMaintenanceEntry: bad JSON", ex)
                 JSONObject()
             }
         val type = bridgeSafe(parsed.optString("type", ""), BRIDGE_MAX_LABEL_LEN)
@@ -334,7 +334,7 @@ internal class VoltBridgeDataExports(
                         intervalMonths,
                     ) ?: -1L
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "addMaintenanceEntry failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "addMaintenanceEntry failed", ex)
                     -1L
                 }
             activity.runOnUiThread {
@@ -357,7 +357,7 @@ internal class VoltBridgeDataExports(
         return try {
             BridgeJsonResult.array(store.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS)).serialize()
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "getMaintenanceLog failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "getMaintenanceLog failed", ex)
             errorPayload("maintenance_log_failed", "Could not read the maintenance log.")
         }
     }
@@ -376,7 +376,7 @@ internal class VoltBridgeDataExports(
                 try {
                     activity.localStore?.deleteMaintenanceEntry(rowId) ?: 0
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "deleteMaintenanceEntry failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "deleteMaintenanceEntry failed", ex)
                     0
                 }
             activity.runOnUiThread {
@@ -396,7 +396,7 @@ internal class VoltBridgeDataExports(
                 try {
                     activity.localStore?.markTripNotTrip(routeKey) == true
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "markTripNotTrip failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "markTripNotTrip failed", ex)
                     false
                 }
             activity.runOnUiThread {

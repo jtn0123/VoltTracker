@@ -293,6 +293,7 @@ object ObdStoreSupport {
         if (ObdLocalStore.STATUS_COMPLETE == cleaned ||
             ObdLocalStore.STATUS_ERROR == cleaned ||
             ObdLocalStore.STATUS_DISCONNECTED == cleaned ||
+            ObdLocalStore.STATUS_INTERRUPTED == cleaned ||
             ObdLocalStore.STATUS_ACTIVE == cleaned
         ) {
             return cleaned

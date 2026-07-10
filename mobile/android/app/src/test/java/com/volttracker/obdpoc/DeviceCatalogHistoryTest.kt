@@ -228,6 +228,20 @@ class DeviceCatalogHistoryTest {
     }
 
     @Test
+    fun nullBondedDevicesDuringBluetoothRestartFailsSoft() {
+        grantConnectPermission()
+        val adapter = BluetoothAdapter.getDefaultAdapter()!!
+        // Android can transiently return null from this platform-typed API while the Bluetooth
+        // service restarts. Robolectric's Java shadow accepts that same framework state.
+        shadowOf(adapter).setBondedDevices(null)
+
+        assertEquals("[]", catalog.getBondedDevicesJson())
+        val last = catalog.getLastOrCandidateDevice()
+        assertEquals("", last.getString("address"))
+        assertEquals("", last.getString("name"))
+    }
+
+    @Test
     fun getBondedDevicesJsonLabelsAndOrdersObdCandidatesFirst() {
         grantConnectPermission()
         // Mix an OBD adapter with a non-OBD peripheral; the catalog should label each correctly

@@ -7,6 +7,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
 import { initialTelemetryState } from "./telemetry-state";
+import { validatePayload } from "./payload-validators";
 
   type DashboardData = {
     trips: unknown[];
@@ -41,6 +42,14 @@ import { initialTelemetryState } from "./telemetry-state";
     percent?: number | string;
     etaSeconds?: number | string;
   };
+
+  function isPlainRecord(value: unknown): value is Record<string, unknown> {
+    return value != null && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function isHistoryDevice(value: unknown): value is HistoryDevice {
+    return isPlainRecord(value);
+  }
 
   function installLegacyWebViewPolyfills() {
     const elementProto = typeof Element !== "undefined" ? Element.prototype : null;
@@ -151,7 +160,7 @@ import { initialTelemetryState } from "./telemetry-state";
     const message = String(detail || label || "Unknown error");
     // The banner gets a single readable line; the full detail (stack traces
     // included) still flows to logClientError below.
-    const display = message.split("\n")[0].slice(0, 140);
+    const display = (message.split("\n")[0] ?? "").slice(0, 140);
     const now = Date.now();
     const duplicate =
       display === lastErrorBannerText && now - lastErrorBannerAt < ERROR_BANNER_DEDUPE_MS;
@@ -381,7 +390,9 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setRestoreProgress(payload: unknown) {
-    const progress = VD.parsePayload<RestoreProgressPayload>(payload, {});
+    const parsed = VD.parsePayload<unknown>(payload, {});
+    validatePayload("setRestoreProgress", parsed);
+    const progress = (isPlainRecord(parsed) ? parsed : {}) as RestoreProgressPayload;
     if (progress.visible === false) {
       hideRestoreProgress();
       return;
@@ -433,6 +444,9 @@ import { initialTelemetryState } from "./telemetry-state";
     if (busy) document.body.dataset.restoreBusy = "true";
     else delete document.body.dataset.restoreBusy;
     if (!busy && tone === "ok") {
+      if (operation === "Restore" && typeof VD.invalidateFetchedRouteCache === "function") {
+        VD.invalidateFetchedRouteCache();
+      }
       restoreProgressHideTimer = setTimeout(hideRestoreProgress, RESTORE_DONE_HIDE_MS);
     }
     // Only arm the trap + move focus when the dialog first appears — native
@@ -1186,7 +1200,8 @@ import { initialTelemetryState } from "./telemetry-state";
       if (Math.abs(dx) < 64 || Math.abs(dy) > 48 || Math.abs(dx) < Math.abs(dy) * 1.6) return;
       const index = NAV_VIEW_ORDER.indexOf(state.view);
       const next = dx < 0 ? index + 1 : index - 1;
-      if (index >= 0 && next >= 0 && next < NAV_VIEW_ORDER.length) setView(NAV_VIEW_ORDER[next]);
+      const nextView = NAV_VIEW_ORDER[next];
+      if (index >= 0 && nextView) setView(nextView);
     },
     { passive: true }
   );
@@ -1265,6 +1280,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function updateViewHeading() {
     // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
     const meta = realViewMeta[String(state.view)] || realViewMeta.drive;
+    if (!meta) return;
     setText("screenKicker", meta[0]);
     setText("screenTitle", meta[1]);
     const icon = el("screenTitleIcon");
@@ -1347,7 +1363,8 @@ import { initialTelemetryState } from "./telemetry-state";
     // back to [] for a falsy/unparseable payload, so a payload that parses to a
     // non-array JSON value would reach .length/.forEach/.find and throw.
     const parsed = parsePayload(payload, []);
-    const devices = Array.isArray(parsed) ? parsed : [];
+    validatePayload("setDevices", parsed);
+    const devices: HistoryDevice[] = Array.isArray(parsed) ? parsed.filter(isHistoryDevice) : [];
     const select = el("deviceSelect") as HTMLSelectElement | null;
     const preferred = VD.getLastDevice();
     if (!select) return;
@@ -1383,7 +1400,10 @@ import { initialTelemetryState } from "./telemetry-state";
     const controller = new AbortController();
     historyController = controller;
     const parsed = parsePayload(payload, []);
-    state.deviceHistory = Array.isArray(parsed) ? parsed : [];
+    validatePayload("setHistory", parsed);
+    state.deviceHistory = Array.isArray(parsed)
+      ? parsed.filter(isHistoryDevice)
+      : [];
     const card = el("historyCard");
     const list = el("historyList");
     if (!card || !list) return;
@@ -1398,6 +1418,7 @@ import { initialTelemetryState } from "./telemetry-state";
     queryAll("[data-history-index]").forEach((button) => {
       button.addEventListener("click", () => {
         const device = state.deviceHistory[Number(button.dataset.historyIndex)];
+        if (!device) return;
         VD.selectDevice(device.address, device.name || "OBD adapter");
         VD.setStatus({ state: "ready", detail: `Selected ${device.name || device.address}.` });
       }, { signal: controller.signal });

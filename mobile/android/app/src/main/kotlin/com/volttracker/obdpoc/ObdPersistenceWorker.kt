@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicLong
  */
 class ObdPersistenceWorker(
     private val localStore: ObdLocalStore?,
+    private val shutdownDrainTimeoutMs: Long = TimeUnit.SECONDS.toMillis(SHUTDOWN_DRAIN_TIMEOUT_SECONDS),
+    private val shutdownForceTimeoutMs: Long = SHUTDOWN_FORCE_TIMEOUT_MS,
 ) {
     private val droppedTelemetryTasks = AtomicLong()
     private val failedTelemetryTasks = AtomicLong()
@@ -64,7 +66,7 @@ class ObdPersistenceWorker(
             }
             if (executor.queue.poll() != null) {
                 val dropped = droppedCount.incrementAndGet()
-                Log.w(MainActivity.TAG, "telemetry queue full; dropped oldest telemetry task #$dropped")
+                Log.w(AppPrefs.LOG_TAG, "telemetry queue full; dropped oldest telemetry task #$dropped")
             }
             executor.execute(r)
         }
@@ -82,12 +84,12 @@ class ObdPersistenceWorker(
                     task.run()
                 } catch (ex: RuntimeException) {
                     val failed = failedTelemetryTasks.incrementAndGet()
-                    Log.w(MainActivity.TAG, "telemetry persistence failed #$failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "telemetry persistence failed #$failed", ex)
                 }
             }
         } catch (ex: RejectedExecutionException) {
             val failed = failedTelemetryTasks.incrementAndGet()
-            Log.w(MainActivity.TAG, "telemetry persistence rejected #$failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "telemetry persistence rejected #$failed", ex)
         }
     }
 
@@ -102,16 +104,16 @@ class ObdPersistenceWorker(
                 try {
                     task.run()
                 } catch (ex: RuntimeException) {
-                    Log.e(MainActivity.TAG, "session lifecycle persist failed", ex)
+                    Log.e(AppPrefs.LOG_TAG, "session lifecycle persist failed", ex)
                     recordPersistFailure(sessionId, op, ex)
                 }
             }
         } catch (ex: RejectedExecutionException) {
-            Log.e(MainActivity.TAG, "lifecycle executor rejected $op; running inline", ex)
+            Log.e(AppPrefs.LOG_TAG, "lifecycle executor rejected $op; running inline", ex)
             try {
                 task.run()
             } catch (inner: RuntimeException) {
-                Log.e(MainActivity.TAG, "inline lifecycle fallback failed for $op", inner)
+                Log.e(AppPrefs.LOG_TAG, "inline lifecycle fallback failed for $op", inner)
                 recordPersistFailure(sessionId, op, inner)
             }
         }
@@ -131,9 +133,9 @@ class ObdPersistenceWorker(
         } catch (ex: InterruptedException) {
             Thread.currentThread().interrupt()
         } catch (ex: ExecutionException) {
-            Log.w(MainActivity.TAG, "telemetry drain marker failed", ex.cause)
+            Log.w(AppPrefs.LOG_TAG, "telemetry drain marker failed", ex.cause)
         } catch (ex: TimeoutException) {
-            Log.w(MainActivity.TAG, "telemetry drain timed out", ex)
+            Log.w(AppPrefs.LOG_TAG, "telemetry drain timed out", ex)
         }
     }
 
@@ -155,30 +157,64 @@ class ObdPersistenceWorker(
             }
             store.recordEvent(sessionId, "persist_failure", "", op, true, payload)
         } catch (ex: RuntimeException) {
-            Log.e(MainActivity.TAG, "recording persist_failure also failed", ex)
+            Log.e(AppPrefs.LOG_TAG, "recording persist_failure also failed", ex)
         }
     }
 
-    fun shutdown() {
-        val telemetry = telemetryExecutor ?: return
-        val lifecycle = lifecycleExecutor ?: return
+    data class ShutdownResult(
+        val telemetryTerminated: Boolean,
+        val lifecycleTerminated: Boolean,
+    ) {
+        val fullyTerminated: Boolean
+            get() = telemetryTerminated && lifecycleTerminated
+    }
+
+    fun shutdown(): ShutdownResult {
+        val telemetry = telemetryExecutor
+        val lifecycle = lifecycleExecutor
+        if (telemetry == null || lifecycle == null) return ShutdownResult(true, true)
         telemetry.shutdown()
         lifecycle.shutdown()
+        val telemetryTerminated = terminateExecutor("telemetry", telemetry)
+        val lifecycleTerminated = terminateExecutor("lifecycle", lifecycle)
+        return ShutdownResult(telemetryTerminated, lifecycleTerminated)
+    }
+
+    private fun terminateExecutor(
+        name: String,
+        executor: ExecutorService,
+    ): Boolean {
         try {
-            telemetry.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            if (executor.awaitTermination(shutdownDrainTimeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)) {
+                return true
+            }
+        } catch (ex: InterruptedException) {
+            executor.shutdownNow()
+            Thread.currentThread().interrupt()
+            Log.e(AppPrefs.LOG_TAG, "$name persistence shutdown interrupted", ex)
+            return executor.isTerminated
+        }
+        val discarded = executor.shutdownNow().size
+        Log.e(
+            AppPrefs.LOG_TAG,
+            "$name persistence shutdown timed out; interrupted worker and discarded $discarded queued tasks",
+        )
+        try {
+            if (executor.awaitTermination(shutdownForceTimeoutMs.coerceAtLeast(1L), TimeUnit.MILLISECONDS)) {
+                return true
+            }
         } catch (ex: InterruptedException) {
             Thread.currentThread().interrupt()
+            Log.e(AppPrefs.LOG_TAG, "$name persistence force-stop interrupted", ex)
         }
-        try {
-            lifecycle.awaitTermination(SHUTDOWN_DRAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        } catch (ex: InterruptedException) {
-            Thread.currentThread().interrupt()
-        }
+        Log.e(AppPrefs.LOG_TAG, "$name persistence worker is still alive after force-stop")
+        return executor.isTerminated
     }
 
     companion object {
         const val TELEMETRY_QUEUE_CAPACITY: Int = 2000
         const val SHUTDOWN_DRAIN_TIMEOUT_SECONDS: Long = 30L
+        const val SHUTDOWN_FORCE_TIMEOUT_MS: Long = 1_000L
         const val LIFECYCLE_QUEUE_CAPACITY: Int = 64
     }
 }

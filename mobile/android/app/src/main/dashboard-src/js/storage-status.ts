@@ -11,8 +11,10 @@ import { rateForCharger } from "./cost-model";
 import { el, setSvgAttrs } from "./core";
 import { setDataState } from "./dataset-state";
 import { createFocusTrap, type FocusTrap } from "./focus-trap";
+import { createNativeRequestGate } from "./native-request-gate";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
+import { storageRollupSignature } from "./render-signatures";
 
 (function () {
   "use strict";
@@ -21,7 +23,7 @@ import { prefs, units } from "./prefs";
   const state = VD.state;
   const bridge = VD.bridge;
   let storageDetailsScheduled = false;
-  let storageDetailsInFlight = false;
+  const storageDetailsRead = createNativeRequestGate(() => handleStorageDetailsFailure());
   let applyingStorageDetails = false;
   // Signature of the last storage summary that drove a lazy-rollup reload. Every
   // non-details broadcast used to invalidate the trips/insights rollups and
@@ -29,27 +31,6 @@ import { prefs, units } from "./prefs";
   // the summary was identical — and setStorage fires from setAppState on every
   // app-state push. Only reload when a rollup-relevant field actually changes.
   let lastRollupSig: string | null = null;
-
-  function rollupSignature(storage: VoltStorageSummary): string {
-    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
-    return [
-      Number(storage.sessionCount || 0),
-      Number(storage.sampleCount || 0),
-      Number(storage.tripSegmentCount || 0),
-      Number(storage.chargeSessionCount || 0),
-      Number(storage.batterySnapshotCount || 0),
-      Number(storage.locationSampleCount || 0),
-      routes.length,
-      routes
-        .map(
-          (r) =>
-            String((r.session || {}).id || "") +
-            ":" +
-            Number(r.pointCount || (Array.isArray(r.points) ? r.points.length : 0)),
-        )
-        .join("|"),
-    ].join(":");
-  }
 
   function invalidateLazyRollups() {
     state.tripsLoaded = false;
@@ -120,6 +101,18 @@ import { prefs, units } from "./prefs";
     );
   }
 
+  function handleStorageDetailsFailure() {
+    storageDetailsRead.complete();
+    reportNativeReadError(
+      {
+        ok: false,
+        error: "storage_details_failed",
+        message: "Could not read local storage details."
+      },
+      "Could not read local storage details."
+    );
+  }
+
   function scheduleStorageDetailsLoad() {
     if (
       !bridge ||
@@ -129,13 +122,13 @@ import { prefs, units } from "./prefs";
       return;
     }
     if (storageDetailsScheduled) return;
-    if (storageDetailsInFlight) return;
+    if (storageDetailsRead.pending) return;
     storageDetailsScheduled = true;
     const load = () => {
       storageDetailsScheduled = false;
       try {
         if (typeof bridge.requestStorageDetails === "function" && bridge.requestStorageDetails()) {
-          storageDetailsInFlight = true;
+          storageDetailsRead.begin();
           return;
         }
         if (typeof bridge.getStorageDetails !== "function") return;
@@ -144,15 +137,7 @@ import { prefs, units } from "./prefs";
             ? VD.callBridge("getStorageDetails")
             : bridge.getStorageDetails();
         if (payload == null) {
-          storageDetailsInFlight = false;
-          reportNativeReadError(
-            {
-              ok: false,
-              error: "storage_details_failed",
-              message: "Could not read local storage details."
-            },
-            "Could not read local storage details."
-          );
+          handleStorageDetailsFailure();
           return;
         }
         if (payload != null) {
@@ -165,15 +150,7 @@ import { prefs, units } from "./prefs";
         }
       } catch (_err) {
         storageDetailsScheduled = false;
-        storageDetailsInFlight = false;
-        reportNativeReadError(
-          {
-            ok: false,
-            error: "storage_details_failed",
-            message: "Could not read local storage details."
-          },
-          "Could not read local storage details."
-        );
+        handleStorageDetailsFailure();
       }
     };
     if (typeof window.requestIdleCallback === "function") {
@@ -190,7 +167,7 @@ import { prefs, units } from "./prefs";
       const err = parsed as VoltNativeError;
       reportNativeReadError(parsed, "Could not read local storage summary.");
       if (applyingStorageDetails || err.error === "storage_details_failed") {
-        storageDetailsInFlight = false;
+        storageDetailsRead.complete();
         return;
       }
       const storageError: VoltStorageSummary = { message: err.message || "" };
@@ -203,7 +180,7 @@ import { prefs, units } from "./prefs";
       return;
     }
     const isDetails = isStorageDetailsPayload(parsed);
-    if (isDetails) storageDetailsInFlight = false;
+    if (isDetails) storageDetailsRead.complete();
     const newRoutes =
       parsed && Array.isArray(parsed.recentRoutes) ? parsed.recentRoutes : [];
     if (state.demoActive && state.demoPreviewStorage) {
@@ -240,7 +217,7 @@ import { prefs, units } from "./prefs";
       // unchanged broadcast can safely skip this. loadMaintenanceLog stays on
       // every broadcast (its own render is memoized) so odometer/time-driven due
       // dates still refresh.
-      const rollupSig = rollupSignature(state.storage || {});
+      const rollupSig = storageRollupSignature(state.storage || {});
       if (rollupSig !== lastRollupSig) {
         lastRollupSig = rollupSig;
         invalidateLazyRollups();
@@ -649,6 +626,7 @@ import { prefs, units } from "./prefs";
       timeline,
       frames,
       review.latestHealth || null,
+      units.system(),
     ]);
     if (reviewSig === lastReviewSig) return;
     lastReviewSig = reviewSig;
@@ -891,22 +869,44 @@ import { prefs, units } from "./prefs";
   let sohLastRaw: string | null = null;
   let sohPoints: SohPoint[] = [];
   let sohDirty = true;
-  let sohReadInFlight = false;
+  const sohRead = createNativeRequestGate(() => handleSohReadFailure());
   // Battery-snapshot row count at the last fetch. When it changes (a new snapshot
   // landed, or storage was cleared) we refetch immediately instead of waiting out
   // the throttle, so the chart never shows stale history after a storage change.
   let sohLastCount = -1;
 
+  function handleSohReadFailure() {
+    sohRead.complete();
+    sohLastFetchMs = Date.now();
+    if (sohLastRaw === null) sohLastRaw = "[]";
+    reportNativeReadError(
+      {
+        ok: false,
+        error: "battery_soh_history_failed",
+        message: "Could not read battery health history."
+      },
+      "Could not read battery health history."
+    );
+  }
+
   function applyBatterySohHistory(payload: unknown) {
-    sohReadInFlight = false;
+    sohRead.complete();
     sohLastFetchMs = Date.now();
     sohLastCount = Number((state.storage || {}).batterySnapshotCount || 0);
     const raw = typeof payload === "string" ? payload : JSON.stringify(payload ?? []);
     if (raw === sohLastRaw) return;
     sohLastRaw = raw;
     const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
+    validatePayload("setBatterySohHistory", parsed);
     sohPoints = Array.isArray(parsed)
       ? parsed
+          // A warn-only schema validator must not let malformed native rows crash
+          // the entire dashboard. Keep only plain objects before dereferencing
+          // the fields below; arrays, nulls, and primitives are invalid rows.
+          .filter(
+            (row): row is Record<string, unknown> =>
+              row != null && typeof row === "object" && !Array.isArray(row),
+          )
           // Native emits JSON null for soh_pct / capacity_ah on rows that only
           // carry the other field; Number(null) === 0 would slip a spurious 0%
           // SOH (or "0.0 Ah") past the guards, so map those nulls to NaN and let
@@ -960,14 +960,14 @@ import { prefs, units } from "./prefs";
     // Tone the trend by the LATEST health band so a healthy pack reads calm
     // (green) instead of alarm-orange: a declining-but-fine ~90% battery is
     // normal. ok >= 85, warn 70-85, bad < 70 — colored via CSS off data-soh.
-    const latestSoh = ss[ss.length - 1];
+    const latestSoh = ss[ss.length - 1]!;
     const tone = latestSoh >= 85 ? "ok" : latestSoh >= 70 ? "warn" : "bad";
     const svg = make("svg", {
       viewBox: `0 0 ${w} ${h}`,
       class: "soh-trend-svg",
       "data-soh": tone,
       role: "img",
-      "aria-label": `Battery state of health trend, latest ${ss[ss.length - 1].toFixed(1)} percent`,
+      "aria-label": `Battery state of health trend, latest ${latestSoh.toFixed(1)} percent`,
     });
     for (const val of [yMax, (yMin + yMax) / 2, yMin]) {
       const y = yOf(val);
@@ -983,11 +983,12 @@ import { prefs, units } from "./prefs";
     // Soft area fill under the line (closed down to the plot baseline) so the
     // trend reads as a filled band, not a lone stroke. Drawn before the line.
     const baseY = (padT + plotH).toFixed(1);
-    const firstX = xOf(points[0].at).toFixed(1);
-    const lastX = xOf(points[points.length - 1].at).toFixed(1);
+    const firstPoint = points[0]!;
+    const last = points[points.length - 1]!;
+    const firstX = xOf(firstPoint.at).toFixed(1);
+    const lastX = xOf(last.at).toFixed(1);
     svg.appendChild(make("path", { d: `${d.trim()} L${lastX} ${baseY} L${firstX} ${baseY} Z`, class: "soh-area" }));
     svg.appendChild(make("path", { d: d.trim(), class: "soh-line" }));
-    const last = points[points.length - 1];
     svg.appendChild(make("circle", { cx: xOf(last.at).toFixed(1), cy: yOf(last.soh).toFixed(1), r: "3", class: "soh-dot" }));
     return svg;
   }
@@ -1005,14 +1006,14 @@ import { prefs, units } from "./prefs";
       bridge &&
       (typeof bridge.getBatterySohHistory === "function" ||
         typeof bridge.requestBatterySohHistory === "function") &&
-      !sohReadInFlight &&
+      !sohRead.pending &&
       (sohLastRaw === null || countChanged || now - sohLastFetchMs >= SOH_REFETCH_MS)
     ) {
       try {
         if (typeof bridge.requestBatterySohHistory === "function" && bridge.requestBatterySohHistory()) {
           sohLastFetchMs = now;
           sohLastCount = batteryCount;
-          sohReadInFlight = true;
+          sohRead.begin();
           return;
         }
         if (typeof bridge.getBatterySohHistory === "function") {
@@ -1023,16 +1024,7 @@ import { prefs, units } from "./prefs";
       } catch (_err) {
         sohLastFetchMs = now;
         sohLastCount = batteryCount;
-        if (sohLastRaw === null) sohLastRaw = "[]";
-        sohReadInFlight = false;
-        reportNativeReadError(
-          {
-            ok: false,
-            error: "battery_soh_history_failed",
-            message: "Could not read battery health history."
-          },
-          "Could not read battery health history."
-        );
+        handleSohReadFailure();
       }
     }
     // Nothing fetched/changed since the last DOM build — skip the rebuild.
@@ -1049,15 +1041,15 @@ import { prefs, units } from "./prefs";
     if (empty) empty.hidden = has;
     if (!has) {
       VD.setText("sohTrendTitle", "No battery-health readings yet");
-      if (latestEl) latestEl.textContent = points.length === 1 ? `${points[0].soh.toFixed(1)}%` : "--";
+      if (latestEl) latestEl.textContent = points.length === 1 ? `${points[0]!.soh.toFixed(1)}%` : "--";
       return;
     }
-    const latest = points[points.length - 1];
+    const latest = points[points.length - 1]!;
     VD.setText("sohTrendTitle", "Pack state-of-health over time");
     if (latestEl) latestEl.textContent = `${latest.soh.toFixed(1)}%`;
     VD.setText("sohTrendCapacity", Number.isFinite(latest.cap) ? `${latest.cap.toFixed(1)} Ah` : "--");
     VD.setText("sohTrendCount", String(points.length));
-    VD.setText("sohTrendSpan", sohSpanLabel(points[0].at, latest.at));
+    VD.setText("sohTrendSpan", sohSpanLabel(points[0]!.at, latest.at));
     if (chart) chart.replaceChildren(buildSohSvg(points));
   }
 
@@ -2251,15 +2243,15 @@ import { prefs, units } from "./prefs";
   let dtcScanPct = 0;
 
   function dtcScanStepIndex(pct: number): number {
-    if (pct >= DTC_SCAN_STEP_AT[2]) return 3;
-    if (pct >= DTC_SCAN_STEP_AT[1]) return 2;
-    if (pct >= DTC_SCAN_STEP_AT[0]) return 1;
+    if (pct >= DTC_SCAN_STEP_AT[2]!) return 3;
+    if (pct >= DTC_SCAN_STEP_AT[1]!) return 2;
+    if (pct >= DTC_SCAN_STEP_AT[0]!) return 1;
     return 0;
   }
 
   function paintDtcScanProgress(pct: number): void {
     const step = dtcScanStepIndex(pct);
-    VD.setText("dtcScanPhase", DTC_SCAN_PHASES[step]);
+    VD.setText("dtcScanPhase", DTC_SCAN_PHASES[step] ?? "Reading codes…");
     VD.setText("dtcScanPct", `${Math.round(pct)}%`);
     const fill = el("dtcScanBarFill");
     if (fill) fill.style.width = `${Math.round(pct)}%`;
@@ -2268,7 +2260,7 @@ import { prefs, units } from "./prefs";
       Array.from(steps.children).forEach((chip, i) => {
         const node = chip as HTMLElement;
         node.dataset.stepState = i < step ? "done" : i === step ? "active" : "todo";
-        const label = ["Modules", "Stored", "Pending", "Freeze"][i];
+        const label = ["Modules", "Stored", "Pending", "Freeze"][i] ?? "Step";
         node.textContent = i < step ? `✓ ${label}` : label;
       });
     }

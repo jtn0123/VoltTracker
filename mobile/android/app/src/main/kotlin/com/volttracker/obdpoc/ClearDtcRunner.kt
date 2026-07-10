@@ -83,7 +83,7 @@ class ClearDtcRunner(
             sample.put("clearDtcCode", code)
             sample.put("raw", safeForLog(raw))
         } catch (ex: JSONException) {
-            Log.w(MainActivity.TAG, "clear-dtc telemetry encode failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "clear-dtc telemetry encode failed", ex)
         }
         service.broadcastTelemetry(sample)
     }

@@ -267,6 +267,47 @@ class ObdPersistenceWorkerTest {
         }
     }
 
+    @Test
+    fun shutdownTimeoutInterruptsWorkerAndReportsIncompleteTermination() {
+        val store = newStore()
+        val worker =
+            ObdPersistenceWorker(
+                store,
+                shutdownDrainTimeoutMs = 20L,
+                shutdownForceTimeoutMs = 20L,
+            )
+        val entered = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        try {
+            worker.submitTelemetry {
+                entered.countDown()
+                while (release.count > 0L) {
+                    try {
+                        release.await()
+                    } catch (_: InterruptedException) {
+                        interrupted.countDown()
+                        // Simulate a native/SQLite call that does not honor interruption promptly.
+                    }
+                }
+            }
+            assertTrue("blocked worker should start", entered.await(AWAIT_MS, TimeUnit.MILLISECONDS))
+
+            val result = worker.shutdown()
+
+            assertTrue(
+                "timed-out shutdown must interrupt the worker",
+                interrupted.await(AWAIT_MS, TimeUnit.MILLISECONDS),
+            )
+            assertFalse("an interruption-ignoring worker must be reported as alive", result.telemetryTerminated)
+            assertTrue("idle lifecycle executor should terminate normally", result.lifecycleTerminated)
+            assertFalse("caller must not close SQLite after an incomplete drain", result.fullyTerminated)
+        } finally {
+            release.countDown()
+            store.close()
+        }
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     /**

@@ -29,6 +29,26 @@ internal fun bridgeSafe(
     return trimmed.substring(0, cut)
 }
 
+/** Bounds untrusted WebView text and removes characters that can forge extra logcat records. */
+internal fun bridgeLogSafe(
+    value: String?,
+    maxLen: Int,
+): String =
+    buildString {
+        for (character in bridgeSafe(value, maxLen)) {
+            append(
+                if (
+                    Character.isISOControl(character) ||
+                    Character.getType(character) == Character.FORMAT.toInt()
+                ) {
+                    '_'
+                } else {
+                    character
+                },
+            )
+        }
+    }
+
 internal fun validBridgeBluetoothAddress(address: String?): Boolean =
     address != null && BluetoothAdapter.checkBluetoothAddress(address.trim())
 

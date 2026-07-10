@@ -270,6 +270,25 @@ class VoltBridgeTest {
     }
 
     @Test
+    fun logClientErrorCannotInjectExtraLogLines() {
+        buildBridge().use { t ->
+            ShadowLog.clear()
+
+            t.bridge.logClientError("bad\nlabel", "first\r\nforged\u0000entry")
+
+            val item =
+                ShadowLog
+                    .getLogsForTag(MainActivity.TAG)
+                    .single { it.msg?.startsWith("dashboard client error") == true }
+            assertFalse(item.msg!!.contains('\n'))
+            assertFalse(item.msg!!.contains('\r'))
+            assertFalse(item.msg!!.contains('\u0000'))
+            assertTrue(item.msg!!.contains("bad_label"))
+            assertTrue(item.msg!!.contains("first__forged_entry"))
+        }
+    }
+
+    @Test
     fun connectAcceptsNullsWithoutThrowing() {
         buildBridge().use { t ->
             try {

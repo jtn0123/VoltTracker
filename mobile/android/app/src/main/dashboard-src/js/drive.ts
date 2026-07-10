@@ -21,6 +21,7 @@ import type { DataToneValue } from "./dataset-state";
 import { formatDuration } from "./telemetry";
 import { units } from "./prefs";
 import { t } from "./i18n";
+import { numberSeriesSignature } from "./render-signatures";
 
 const VD = window.VoltDashboard;
 const state = VD.state;
@@ -96,7 +97,7 @@ type ChartPoint = {
     const hex = color.trim();
     const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
     if (!m) return fallback;
-    const n = parseInt(m[1], 16);
+    const n = parseInt(m[1]!, 16);
     return `${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}`;
   }
 
@@ -463,7 +464,7 @@ type ChartPoint = {
     // Include the OLDEST sample: at the 60-sample cap the window scrolls while
     // length + newest value can stay identical (natives re-deliver a repeated
     // newest reading), so keying on those alone leaves the bars stale by one.
-    const sig = samples.length + ":" + (samples[0] ?? "") + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    const sig = numberSeriesSignature(samples, w);
     if (sig === lastPowerBarsSig) return;
     lastPowerBarsSig = sig;
     if (!samples.length) {
@@ -487,6 +488,7 @@ type ChartPoint = {
     const offset = w - samples.length * stride;
     for (let i = 0; i < samples.length; i += 1) {
       const v = samples[i];
+      if (v == null) continue;
       const x = offset + i * stride;
       const top = padT;
       const bottom = h - padB;
@@ -539,7 +541,7 @@ type ChartPoint = {
     // Include the OLDEST sample: at the 240-sample cap the window scrolls while
     // length + newest value can stay identical (a repeated newest reading), so
     // keying on those alone leaves the trace stale by one position.
-    const sig = samples.length + ":" + (samples[0] ?? "") + ":" + (samples[samples.length - 1] ?? "") + ":" + w;
+    const sig = numberSeriesSignature(samples, w);
     if (sig === lastSocTraceSig) return;
     lastSocTraceSig = sig;
     // The live value chip lives in the panel header so the chart body can stay
@@ -579,7 +581,7 @@ type ChartPoint = {
     }));
     const chart = domNode("div", "live-dom-chart live-soc-chart");
     chart.style.height = h + "px";
-    const startSoc = samples[0];
+    const startSoc = samples[0]!;
     const baselineY =
       padT + (1 - (startSoc - lo) / (hi - lo)) * (h - padT - padB);
     const baseline = domNode("span", "live-soc-baseline");

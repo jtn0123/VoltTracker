@@ -25,6 +25,7 @@ class BackupController(
     private var pendingRestorePassphrase: String? = null
     private var restorePickerInFlight = false
     private val backupShareInFlight = AtomicBoolean(false)
+    private val disposed = AtomicBoolean(false)
     private val restoreLog = LogcatMirror(RollingAppLog(File(activity.filesDir, "app-log")))
 
     /**
@@ -33,6 +34,7 @@ class BackupController(
      * lifetime; a later backup/restore that logs again simply reopens it lazily.
      */
     fun dispose() {
+        disposed.set(true)
         restoreLog.close()
     }
 
@@ -97,7 +99,7 @@ class BackupController(
     ) {
         if (activity.isFinishing) {
             // A dialog shown on a finishing Activity leaks the window; drop the request.
-            Log.w(MainActivity.TAG, "share disclosure skipped; activity is finishing")
+            Log.w(AppPrefs.LOG_TAG, "share disclosure skipped; activity is finishing")
             onFinishedWithoutConfirm.run()
             return
         }
@@ -115,7 +117,7 @@ class BackupController(
                     activity.publishStatus("ready", activity.getString(R.string.status_backup_cancelled), false)
                 }.show()
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "share disclosure dialog failed to show", ex)
+            Log.w(AppPrefs.LOG_TAG, "share disclosure dialog failed to show", ex)
             onFinishedWithoutConfirm.run()
             activity.publishStatus("blocked", activity.getString(R.string.status_backup_disclosure_failed), true)
         }
@@ -179,10 +181,15 @@ class BackupController(
                         dataBackup.buildBackupFile(activity.localStore, listener)
                     }
                 activity.runOnUiThread {
+                    if (disposed.get()) {
+                        DataBackup.deleteIfExists(backup)
+                        backupShareInFlight.set(false)
+                        return@runOnUiThread
+                    }
                     if (backup == null) {
                         // DataBackup logs the throwing phase internally; tie that to this UI failure.
                         Log.e(
-                            MainActivity.TAG,
+                            AppPrefs.LOG_TAG,
                             "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
                         )
                         showRestoreProgress(
@@ -240,7 +247,7 @@ class BackupController(
                         )
                         backupShareInFlight.set(false)
                     } catch (ex: RuntimeException) {
-                        Log.e(MainActivity.TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
+                        Log.e(AppPrefs.LOG_TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
                         showRestoreProgress(
                             activity.getString(R.string.progress_backup_failed_title),
                             activity.getString(R.string.status_share_sheet_failed),
@@ -363,6 +370,10 @@ class BackupController(
                     )
                 activity.runOnUiThread {
                     val staged = outcome.file
+                    if (disposed.get()) {
+                        DataBackup.deleteIfExists(staged)
+                        return@runOnUiThread
+                    }
                     if (!outcome.ok || staged == null) {
                         publishRestoreStageFailure(outcome)
                         return@runOnUiThread
@@ -394,7 +405,7 @@ class BackupController(
     private fun promptRestoreMode(staged: File) {
         if (activity.isFinishing) {
             // No window to show the dialog in; clean up the staged file instead of leaking it.
-            Log.w(MainActivity.TAG, "restore-mode dialog skipped; activity is finishing")
+            Log.w(AppPrefs.LOG_TAG, "restore-mode dialog skipped; activity is finishing")
             cancelStagedRestore(staged)
             return
         }
@@ -409,7 +420,7 @@ class BackupController(
                 .setOnCancelListener { cancelStagedRestore(staged) }
                 .show()
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "restore-mode dialog failed to show", ex)
+            Log.w(AppPrefs.LOG_TAG, "restore-mode dialog failed to show", ex)
             cancelStagedRestore(staged)
             activity.publishStatus("blocked", activity.getString(R.string.status_restore_options_failed), true)
         }
@@ -438,6 +449,7 @@ class BackupController(
                     )
                 val result = applyReplace(staged, progress)
                 activity.runOnUiThread {
+                    if (disposed.get()) return@runOnUiThread
                     if (result == RestoreResult.OK) {
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
@@ -487,6 +499,7 @@ class BackupController(
                     )
                 val outcome = applyMerge(staged, progress)
                 activity.runOnUiThread {
+                    if (disposed.get()) return@runOnUiThread
                     if (outcome.result == RestoreResult.OK) {
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
@@ -684,13 +697,14 @@ class BackupController(
             } else {
                 fields.entries.joinToString(prefix = " ") { (key, value) -> "$key=${OBDLog.format(value)}" }
             }
-        restoreLog.i(MainActivity.TAG, "backup_restore_$event$suffix")
+        restoreLog.i(AppPrefs.LOG_TAG, "backup_restore_$event$suffix")
     }
 
     private fun runBackground(
         unavailableMessage: String,
         task: Runnable,
     ): Boolean {
+        if (disposed.get()) return false
         val worker = executor
         if (worker == null) {
             activity.publishStatus("blocked", unavailableMessage, true)
@@ -747,6 +761,7 @@ class BackupController(
             rowsDone: Long = -1L,
             rowsTotal: Long = -1L,
         ) {
+            if (isCancelled()) return
             val now = System.currentTimeMillis()
             val percent = progressPercent(bytesDone, bytesTotal, rowsDone, rowsTotal)
             val complete = percent >= 100
@@ -759,6 +774,7 @@ class BackupController(
             lastPublishedAtMs = now
             val etaSeconds = estimateEtaSeconds(bytesDone, bytesTotal, rowsDone, rowsTotal, startedAtMs, now)
             activity.runOnUiThread {
+                if (isCancelled()) return@runOnUiThread
                 showRestoreProgress(
                     title,
                     detail ?: fallbackDetail,
@@ -785,6 +801,7 @@ class BackupController(
         progress: ProgressEmitter,
     ): MergeOutcome {
         try {
+            ensureActive()
             val store = activity.localStore
             if (store == null) {
                 return MergeOutcome(RestoreResult.OTHER, null)
@@ -792,10 +809,12 @@ class BackupController(
             if (!stopLoggingForRestore()) {
                 return MergeOutcome(RestoreResult.LOGGING_ACTIVE, null)
             }
+            ensureActive()
             val merged =
                 store.mergeFrom(
                     staged,
                     DatabaseMerger.ProgressListener { phase, rowsDone, rowsTotal ->
+                        ensureActive()
                         progress.onMergeProgress(phase, rowsDone, rowsTotal)
                     },
                 )
@@ -817,10 +836,12 @@ class BackupController(
         var restoreTemp: File? = null
         var restoreBackup: File? = null
         try {
+            ensureActive()
             val dbFile = activity.localStore?.getDatabaseFile() ?: return RestoreResult.OTHER
             if (!stopLoggingForRestore()) {
                 return RestoreResult.LOGGING_ACTIVE
             }
+            ensureActive()
             val activeStore = activity.localStore
             if (activeStore != null) {
                 activeStore.checkpoint()
@@ -838,6 +859,7 @@ class BackupController(
                 activity.getString(R.string.progress_phase_copying_backup),
                 activity.getString(R.string.progress_replace_worker_detail),
             )
+            ensureActive()
             DataBackup.deleteIfExists(File(dbFile.path + "-wal"))
             DataBackup.deleteIfExists(File(dbFile.path + "-shm"))
             if (dbFile.exists()) {
@@ -862,7 +884,7 @@ class BackupController(
             return RestoreResult.OK
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) {
-                if (activity.localStore == null) {
+                if (activity.localStore == null && !isCancelled()) {
                     try {
                         activity.localStore = ObdLocalStore(activity)
                     } catch (ignored: RuntimeException) {
@@ -880,6 +902,7 @@ class BackupController(
     }
 
     private fun stopLoggingForRestore(): Boolean {
+        if (isCancelled()) return false
         if (!activity.isLoggingActive()) {
             return true
         }
@@ -899,6 +922,14 @@ class BackupController(
         }
         return !activity.isLoggingActive()
     }
+
+    private fun isCancelled(): Boolean = disposed.get() || Thread.currentThread().isInterrupted
+
+    private fun ensureActive() {
+        if (isCancelled()) throw RestoreCancelledException()
+    }
+
+    private class RestoreCancelledException : RuntimeException("Restore cancelled during teardown")
 
     companion object {
         const val REQUEST_RESTORE = 4202
@@ -974,7 +1005,7 @@ class BackupController(
                 if (ex !is IOException && ex !is RuntimeException) {
                     throw ex
                 }
-                Log.w(MainActivity.TAG, "restoreOriginalDatabase failed; original DB may be gone", ex)
+                Log.w(AppPrefs.LOG_TAG, "restoreOriginalDatabase failed; original DB may be gone", ex)
             }
         }
     }

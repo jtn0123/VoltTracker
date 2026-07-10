@@ -100,7 +100,7 @@ class SetupGuideController(
             builder.show()
         } catch (ex: RuntimeException) {
             // Same contract as confirmBridgeAction: a dying Activity must not crash over a dialog.
-            Log.w(MainActivity.TAG, "setup guide dialog failed to show", ex)
+            Log.w(AppPrefs.LOG_TAG, "setup guide dialog failed to show", ex)
             currentStep = null
         }
     }

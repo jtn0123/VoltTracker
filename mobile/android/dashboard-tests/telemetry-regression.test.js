@@ -36,6 +36,17 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(VD.state.lastSampleAt).toBe(0);
   });
 
+  it('normalizes null object payloads at every telemetry state boundary', () => {
+    const VD = window.VoltDashboard;
+
+    expect(() => VD.setStatus('null')).not.toThrow();
+    expect(() => VD.setAppState('null')).not.toThrow();
+    expect(() => VD.updateTelemetry('null')).not.toThrow();
+    expect(VD.state.status).toEqual({});
+    expect(VD.state.appState).toEqual({});
+    expect(VD.state.telemetry).toEqual(expect.any(Object));
+  });
+
   it('resets live counters when a new real session restarts sample numbering', () => {
     const VD = window.VoltDashboard;
     VD.updateTelemetry({

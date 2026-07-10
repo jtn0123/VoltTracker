@@ -1677,7 +1677,7 @@ type SignalActions = {
 
   function maybeLoadTroubleshooterForStatus(payload: unknown) {
     if (typeof VD.ensureTroubleshooterModule !== "function") return;
-    const status = VD.parsePayload<VoltStatus>(payload, {});
+    const status = parseStatusPayload(payload);
     const stateName = String(status.state || "").toLowerCase();
     const detail = String(status.detail || "").toLowerCase();
     const hasFailureClass = Boolean(status.failureClass || status.blocked);
@@ -1695,9 +1695,14 @@ type SignalActions = {
       .catch(() => {});
   }
 
+  function parseStatusPayload(payload: unknown): VoltStatus {
+    const parsed = VD.parsePayload<VoltStatus>(payload, {});
+    return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  }
+
   const priorSetStatus = VD.setStatus;
   const statusWithTroubleshooterLoader = function (payload: unknown) {
-    const parsed = VD.parsePayload<VoltStatus>(payload, {});
+    const parsed = parseStatusPayload(payload);
     const result = priorSetStatus(parsed);
     maybeLoadTroubleshooterForStatus(payload);
     maybeResumePendingConnect(parsed);

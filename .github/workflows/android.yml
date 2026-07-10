@@ -811,7 +811,9 @@ jobs:
           path: |
             ~/.android/avd/*
             ~/.android/adb*
-          key: avd-api34-google_apis-x86_64-pixel6-v1
+          # Keep the snapshot tied to the phone profile below. Rotate the key whenever launch
+          # behavior changes so an older AVD configuration cannot mask the new setting.
+          key: avd-api34-google_apis-x86_64-pixel2-v5
       - name: Create AVD and generate snapshot for caching
         if: steps.avd-cache.outputs.cache-hit != 'true'
         uses: reactivecircus/android-emulator-runner@e89f39f1abbbd05b1113a29cf4db69e7540cae5a # v2.37.0
@@ -819,8 +821,11 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           force-avd-creation: false
+          # Pixel 2 keeps a real 1080 px phone/WebView surface while rendering 20% fewer pixels
+          # than Pixel 6. The API 34 image enforces a 2560 MiB guest even when lower memory is
+          # requested, so use the smaller surface instead of carrying an ineffective memory flag.
           # No -no-snapshot here: this boot exists to write the snapshot.
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: echo "Generated AVD snapshot for caching."
@@ -830,10 +835,10 @@ jobs:
           api-level: 34
           target: google_apis
           arch: x86_64
-          profile: pixel_6
+          profile: pixel_2
           force-avd-creation: false
-          # -no-snapshot-save: restore the cached clean-boot snapshot read-only
-          # so test-session state never leaks into the cache.
+          # -no-snapshot-save restores the cached clean-boot snapshot read-only so test-session
+          # state never leaks into the cache.
           emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator.

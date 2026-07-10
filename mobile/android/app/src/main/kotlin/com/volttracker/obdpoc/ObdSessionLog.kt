@@ -20,6 +20,8 @@ class ObdSessionLog(
     private var writer: BufferedWriter? = null
     private var file: File? = null
     private var lastFailure: String? = null
+    private var bufferedTelemetryLines = 0
+    private var lastFlushAtMs = 0L
 
     /** Opens a fresh `session-<ts>-<mode>.jsonl`. Leaves the log closed on failure. */
     @Synchronized
@@ -39,6 +41,8 @@ class ObdSessionLog(
             writer = BufferedWriter(OutputStreamWriter(fos, StandardCharsets.UTF_8))
             file = pending
             lastFailure = null
+            bufferedTelemetryLines = 0
+            lastFlushAtMs = System.currentTimeMillis()
             writeLatestPointer(pending)
         } catch (ex: IOException) {
             noteFailure("open_failed", ex)
@@ -88,7 +92,18 @@ class ObdSessionLog(
             file?.let { line.put("file", it.name) }
             currentWriter.write(line.toString())
             currentWriter.newLine()
-            currentWriter.flush()
+            val now = System.currentTimeMillis()
+            if (type == "telemetry" && !durable) bufferedTelemetryLines += 1
+            val shouldFlush =
+                durable ||
+                    type != "telemetry" ||
+                    bufferedTelemetryLines >= TELEMETRY_FLUSH_BATCH_LINES ||
+                    now - lastFlushAtMs >= TELEMETRY_FLUSH_MAX_DELAY_MS
+            if (shouldFlush) {
+                currentWriter.flush()
+                bufferedTelemetryLines = 0
+                lastFlushAtMs = now
+            }
             var syncFailedThisCall = false
             var syncSucceededThisCall = false
             if (durable) {
@@ -100,12 +115,13 @@ class ObdSessionLog(
                     noteFailure("sync_failed", ignored)
                 }
             }
-            // The line landed, so clear any prior failure — but a stale "sync_failed" may only be
-            // cleared by a later durable write whose own sync just succeeded; a plain buffered write
-            // proves nothing about fsync health and must not mask the earlier durability failure.
+            // A successful flush clears a prior failure — but a stale "sync_failed" may only be
+            // cleared by a later durable write whose own sync just succeeded. An unflushed
+            // telemetry write proves nothing about disk health and must not mask either failure.
             // (And never clear when THIS call's own fsync just failed — its noteFailure must stand.)
             val staleFailureIsSyncRelated = lastFailure?.startsWith("sync_failed") == true
             if (lastFailure != null &&
+                shouldFlush &&
                 !syncFailedThisCall &&
                 (!staleFailureIsSyncRelated || syncSucceededThisCall)
             ) {
@@ -145,6 +161,8 @@ class ObdSessionLog(
         writer = null
         fos = null
         file = null
+        bufferedTelemetryLines = 0
+        lastFlushAtMs = 0L
     }
 
     private fun writeLatestPointer(logFile: File) {
@@ -166,5 +184,10 @@ class ObdSessionLog(
         val detail = if (ex == null) stage else "$stage: ${ex.javaClass.simpleName}: ${ex.message}"
         lastFailure = detail
         OBDLog.warn("ObdSessionLog", detail)
+    }
+
+    companion object {
+        const val TELEMETRY_FLUSH_BATCH_LINES: Int = 8
+        const val TELEMETRY_FLUSH_MAX_DELAY_MS: Long = 5_000L
     }
 }

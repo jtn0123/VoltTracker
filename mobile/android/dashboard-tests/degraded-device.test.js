@@ -38,6 +38,32 @@ describe('degraded device — missing native bridge', () => {
     expect(() => native.setHistory([])).not.toThrow();
   });
 
+  it('drops malformed history rows instead of crashing the native callback', async () => {
+    await loadDashboard({ withBridge: false });
+    const native = window.VoltTrackerNative;
+
+    expect(() => native.setHistory(JSON.stringify([null, '', [], { address: 'AA:BB' }]))).not.toThrow();
+    expect(document.querySelectorAll('#historyList [data-history-index]')).toHaveLength(1);
+  });
+
+  it('drops malformed device rows instead of crashing the native callback', async () => {
+    await loadDashboard({ withBridge: false });
+
+    expect(() => window.VoltTrackerNative.setDevices(JSON.stringify(['bad', null, [], {
+      address: 'AA:BB',
+      name: 'Valid adapter',
+    }]))).not.toThrow();
+    expect(Array.from(document.querySelectorAll('#deviceSelect option')).map((option) => option.value)).toEqual([
+      'AA:BB',
+    ]);
+  });
+
+  it('normalizes a null native status payload to an empty status', async () => {
+    await loadDashboard({ withBridge: false });
+
+    expect(() => window.VoltTrackerNative.setStatus('null')).not.toThrow();
+  });
+
   it('switching to every view with no bridge does not throw', async () => {
     await loadDashboard({ withBridge: false, extras: ['map.js'] });
     const VD = window.VoltDashboard;

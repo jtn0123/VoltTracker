@@ -15,6 +15,7 @@ import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdSessionRecovery
 import com.volttracker.obdpoc.location.LocationManagerTracker
 import com.volttracker.obdpoc.location.LocationTracker
 import com.volttracker.obdpoc.widget.WidgetUpdater
@@ -164,7 +165,12 @@ open class ObdService :
 
     override fun onCreate() {
         super.onCreate()
-        localStore = ObdLocalStore(this)
+        val openedStore = ObdLocalStore(this)
+        val recoveredSessions = ObdSessionRecovery.recover(this)
+        if (recoveredSessions > 0) {
+            Log.w(AppPrefs.LOG_TAG, "recovered $recoveredSessions sessions interrupted by process death")
+        }
+        localStore = openedStore
         locationTracker = LocationManagerTracker(this)
         notifications = ObdNotifications(this)
         notifications.createChannel()
@@ -305,8 +311,14 @@ open class ObdService :
         executor.shutdownNow()
         competingAppExecutor.shutdownNow()
         telemetrySideEffectExecutor.shutdownNow()
-        recorder.shutdown()
-        localStore?.close()
+        val persistenceShutdown = recorder.shutdown()
+        if (persistenceShutdown.fullyTerminated) {
+            localStore?.close()
+        } else {
+            // A worker that ignored interruption may still be inside a SQLite call. Leaking the
+            // handle until process teardown is safer than closing it underneath that late write.
+            Log.e(AppPrefs.LOG_TAG, "persistence workers survived service teardown; leaving SQLite open")
+        }
         localStore = null
         // Detach the app-log mirror before releasing its handle so any late OBDLog call becomes a
         // no-op rather than lazily reopening the writer we're about to close.
@@ -328,7 +340,7 @@ open class ObdService :
             eventCoordinator?.maybeRunAutoDtcScan(engineRef)
         } catch (ex: RuntimeException) {
             // A notification/auto-scan failure must never break the live session.
-            Log.w(MainActivity.TAG, "auto DTC scan failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "auto DTC scan failed", ex)
         }
     }
 
@@ -336,7 +348,7 @@ open class ObdService :
         try {
             eventCoordinator?.onTelemetry(payload)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "event notification dispatch failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "event notification dispatch failed", ex)
         }
     }
 
@@ -413,11 +425,11 @@ open class ObdService :
                 try {
                     detectorRef.refresh()
                 } catch (ex: RuntimeException) {
-                    Log.w(MainActivity.TAG, "competing-app refresh failed", ex)
+                    Log.w(AppPrefs.LOG_TAG, "competing-app refresh failed", ex)
                 }
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "competing-app refresh rejected", ex)
+            Log.w(AppPrefs.LOG_TAG, "competing-app refresh rejected", ex)
         }
     }
 
@@ -469,7 +481,7 @@ open class ObdService :
             eventCoordinator?.onSessionStart()
         } catch (ex: RuntimeException) {
             // A notification session-start hook failure must never abort session startup.
-            Log.w(MainActivity.TAG, "event notification session-start hook failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "event notification session-start hook failed", ex)
         }
         openSessionLog(request.mode, request.address)
         if (request.startLocationTracking) {
@@ -480,7 +492,7 @@ open class ObdService :
         try {
             activeTask = executor.submit { runSessionTask(token, request.runner) }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "session task submit failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "session task submit failed", ex)
             broadcastStatus("error", getString(R.string.status_worker_start_failed), true)
             stopCurrentSession(null)
             ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
@@ -560,7 +572,7 @@ open class ObdService :
             sessionWakeLock = lock
             recorder.logEvent("wake_lock_acquired", "mode", mode)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "session wake lock acquire failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "session wake lock acquire failed", ex)
         }
     }
 
@@ -572,7 +584,7 @@ open class ObdService :
                 lock.release()
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "session wake lock release failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "session wake lock release failed", ex)
         }
     }
 
@@ -627,7 +639,7 @@ open class ObdService :
                 maybePostEventNotifications(payload)
             }
         } catch (ex: RejectedExecutionException) {
-            Log.w(MainActivity.TAG, "event notification enqueue failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "event notification enqueue failed", ex)
         }
     }
 
@@ -654,7 +666,7 @@ open class ObdService :
             )
         } catch (ex: RejectedExecutionException) {
             widgetTelemetryScheduled.set(false)
-            Log.w(MainActivity.TAG, "widget telemetry enqueue failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "widget telemetry enqueue failed", ex)
         }
     }
 
@@ -666,7 +678,7 @@ open class ObdService :
             widgetUpdater?.onTelemetry(payload)
         } catch (ex: RuntimeException) {
             // The widget snapshot is best-effort and must never break the live telemetry path.
-            Log.w(MainActivity.TAG, "widget telemetry hook failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "widget telemetry hook failed", ex)
         }
     }
 
@@ -674,7 +686,7 @@ open class ObdService :
         try {
             widgetUpdater?.onStatus(state)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "widget status hook failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "widget status hook failed", ex)
         }
     }
 
@@ -755,7 +767,7 @@ open class ObdService :
         where: String,
         ex: RuntimeException,
     ) {
-        Log.w(MainActivity.TAG, "$where refused", ex)
+        Log.w(AppPrefs.LOG_TAG, "$where refused", ex)
         foregroundServiceActive = false
         activeForegroundServiceType = 0
     }
@@ -793,11 +805,11 @@ open class ObdService :
                 hasLocationPermission().toString(),
             )
         } catch (ex: SecurityException) {
-            Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex)
+            Log.w(AppPrefs.LOG_TAG, "reevaluateForegroundServiceType refused", ex)
         } catch (ex: IllegalStateException) {
             // See startForegroundSession: API 31+ ForegroundServiceStartNotAllowedException.
             // The session keeps its existing foreground type; only the upgrade is skipped.
-            Log.w(MainActivity.TAG, "reevaluateForegroundServiceType refused", ex)
+            Log.w(AppPrefs.LOG_TAG, "reevaluateForegroundServiceType refused", ex)
         }
     }
 

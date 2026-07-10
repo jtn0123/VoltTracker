@@ -17,6 +17,7 @@ import {
   savingsPrefsReady
 } from "./cost-model";
 import { haversineMetersJs, numOrNaN } from "./map-route-utils";
+import { createNativeRequestGate } from "./native-request-gate";
 import { prefs, units } from "./prefs";
 
 (function () {
@@ -28,12 +29,13 @@ import { prefs, units } from "./prefs";
   const el = VD.el;
   const setSvgAttrs = VD.setSvgAttrs;
   const FORCE_LAZY_READ = true;
-  let tripsReadInFlight = false;
-  let insightsReadInFlight = false;
+  const tripsRead = createNativeRequestGate(() => handleTripsBridgeFailure());
+  const insightsRead = createNativeRequestGate(() => handleInsightsBridgeFailure());
 
   function applyTripsPayload(payload: unknown) {
-    tripsReadInFlight = false;
+    tripsRead.complete();
     const parsed = VD.parsePayload<VoltTrip[]>(payload, []);
+    VD.validatePayload("setTrips", parsed);
     if (VD.isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       VD.reportNativeReadError(parsed, "Could not read logged trips.");
@@ -56,7 +58,7 @@ import { prefs, units } from "./prefs";
   }
 
   function handleTripsBridgeFailure() {
-    tripsReadInFlight = false;
+    tripsRead.complete();
     VD.reportNativeReadError(
       {
         ok: false,
@@ -73,16 +75,16 @@ import { prefs, units } from "./prefs";
 
   function loadTrips(force = false) {
     if (!force && state.tripsLoaded) return;
-    if (!force && tripsReadInFlight) return;
+    if (!force && tripsRead.pending) return;
     try {
       if (bridge && typeof bridge.requestTrips === "function" && bridge.requestTrips()) {
-        tripsReadInFlight = true;
+        tripsRead.begin();
         return;
       }
       if (bridge && typeof bridge.getTrips === "function") {
         applyTripsPayload(bridge.getTrips());
       } else {
-        tripsReadInFlight = false;
+        tripsRead.complete();
         state.tripsLoaded = true;
       }
     } catch (_err) {
@@ -91,8 +93,9 @@ import { prefs, units } from "./prefs";
   }
 
   function applyInsightsPayload(payload: unknown) {
-    insightsReadInFlight = false;
+    insightsRead.complete();
     const parsed = VD.parsePayload<VoltInsights>(payload, {});
+    VD.validatePayload("setInsights", parsed);
     if (VD.isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
@@ -113,7 +116,7 @@ import { prefs, units } from "./prefs";
   }
 
   function handleInsightsBridgeFailure() {
-    insightsReadInFlight = false;
+    insightsRead.complete();
     VD.reportNativeReadError(
       {
         ok: false,
@@ -135,16 +138,16 @@ import { prefs, units } from "./prefs";
       renderInsightScatter();
       return;
     }
-    if (!force && insightsReadInFlight) return;
+    if (!force && insightsRead.pending) return;
     try {
       if (bridge && typeof bridge.requestInsights === "function" && bridge.requestInsights()) {
-        insightsReadInFlight = true;
+        insightsRead.begin();
         return;
       }
       if (bridge && typeof bridge.getInsights === "function") {
         applyInsightsPayload(bridge.getInsights());
       } else {
-        insightsReadInFlight = false;
+        insightsRead.complete();
         state.insightsLoaded = true;
         renderInsightStats();
         renderInsightScatter();
@@ -376,7 +379,7 @@ import { prefs, units } from "./prefs";
       // mid-week can't push an evening drive into the next column.
       const when = new Date(at);
       const idx = (when.getDay() + 6) % 7;
-      const day = days[idx];
+      const day = days[idx]!;
       day.miles += meters / 1609.344;
       day.trips += 1;
       const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
@@ -549,10 +552,12 @@ import { prefs, units } from "./prefs";
   // negative, derives it from the haversine distance between the neighboring
   // points over their elapsed time. Shared by enrichRouteEff and the scatter.
   function pointMph(pts: VoltRoutePoint[], i: number) {
-    let mps = Number(pts[i].speedMps);
+    const current = pts[i];
+    if (!current) return 0;
+    let mps = Number(current.speedMps);
     if (!Number.isFinite(mps) || mps < 0) {
-      const a = pts[Math.max(0, i - 1)];
-      const b = pts[Math.min(pts.length - 1, i + 1)];
+      const a = pts[Math.max(0, i - 1)]!;
+      const b = pts[Math.min(pts.length - 1, i + 1)]!;
       const dt = Math.max(1, (Number(b.atMs) - Number(a.atMs)) / 1000);
       mps = haversineMetersJs(a.lat, a.lng, b.lat, b.lng) / dt;
     }
@@ -699,13 +704,14 @@ import { prefs, units } from "./prefs";
     if (pts.length < 2 || track.length < 2) return;
     route._effDone = true;
     const powerAt = (atMs: number) => {
-      if (atMs <= track[0].atMs) return Number(track[0].powerKw);
-      const last = track[track.length - 1];
+      const first = track[0]!;
+      if (atMs <= first.atMs) return Number(first.powerKw);
+      const last = track[track.length - 1]!;
       if (atMs >= last.atMs) return Number(last.powerKw);
       for (let i = 1; i < track.length; i += 1) {
-        if (track[i].atMs >= atMs) {
-          const a = track[i - 1];
-          const b = track[i];
+        const b = track[i]!;
+        if (b.atMs >= atMs) {
+          const a = track[i - 1]!;
           const t = (atMs - a.atMs) / ((b.atMs - a.atMs) || 1);
           return Number(a.powerKw) + (Number(b.powerKw) - Number(a.powerKw)) * t;
         }
@@ -720,28 +726,30 @@ import { prefs, units } from "./prefs";
     // mapEffColor `eff == null` branch in map.js), making downhill / regen runs visibly
     // distinct from drive efficiency.
     const whmiInst = pts.map((p, i) => {
-      if (mphArr[i] <= 4) return NaN;
+      const mph = mphArr[i] ?? 0;
+      if (mph <= 4) return NaN;
       const kW = powerAt(Number(p.atMs));
       if (!Number.isFinite(kW)) return NaN;
       if (kW <= 0) return NaN;
-      return (kW * 1000) / mphArr[i];
+      return (kW * 1000) / mph;
     });
     for (let i = 0; i < pts.length; i += 1) {
       let s = 0;
       let c = 0;
       for (let k = -8; k <= 8; k += 1) {
         const j = i + k;
-        if (j >= 0 && j < pts.length && Number.isFinite(whmiInst[j])) {
-          s += whmiInst[j];
+        const whmiSample = whmiInst[j];
+        if (j >= 0 && j < pts.length && whmiSample != null && Number.isFinite(whmiSample)) {
+          s += whmiSample;
           c += 1;
         }
       }
       if (!c) {
-        pts[i].eff = null;
+        pts[i]!.eff = null;
         continue;
       }
       const whmi = s / c;
-      pts[i].eff = Math.max(0.8, Math.min(6.5, 1000 / whmi));
+      pts[i]!.eff = Math.max(0.8, Math.min(6.5, 1000 / whmi));
     }
   }
 
@@ -773,7 +781,9 @@ import { prefs, units } from "./prefs";
     const pos = (a.length - 1) * q;
     const lo = Math.floor(pos);
     const hi = Math.ceil(pos);
-    return a[lo] + (a[hi] - a[lo]) * (pos - lo);
+    const low = a[lo]!;
+    const high = a[hi]!;
+    return low + (high - low) * (pos - lo);
   }
 
   function hideOutliers(): boolean {
@@ -794,6 +804,7 @@ import { prefs, units } from "./prefs";
     const fence: Record<number, { lo: number; hi: number }> = {};
     Object.keys(groups).forEach((k) => {
       const arr = groups[Number(k)];
+      if (!arr) return;
       if (arr.length < 4) return;
       const q1 = quantileJs(arr, 0.25);
       const q3 = quantileJs(arr, 0.75);
@@ -812,7 +823,7 @@ import { prefs, units } from "./prefs";
     return vals.map((v, i) => {
       const a = vals[Math.max(0, i - 1)];
       const c = vals[Math.min(vals.length - 1, i + 1)];
-      return (a + v + c) / 3;
+      return ((a ?? v) + v + (c ?? v)) / 3;
     });
   }
 
@@ -851,7 +862,7 @@ import { prefs, units } from "./prefs";
   ): string {
     let d = "";
     buckets.forEach((b, i) => {
-      d += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(series[i]).toFixed(1)} `;
+      d += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(series[i] ?? 0).toFixed(1)} `;
     });
     return d;
   }
@@ -892,11 +903,12 @@ import { prefs, units } from "./prefs";
     if (buckets.length < 2) return;
     let top = "";
     buckets.forEach((b, i) => {
-      top += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(q3s[i]).toFixed(1)} `;
+      top += `${i ? "L" : "M"}${xOf(b.mid).toFixed(1)} ${yS(q3s[i] ?? b.q3).toFixed(1)} `;
     });
     let bot = "";
     for (let i = buckets.length - 1; i >= 0; i -= 1) {
-      bot += `L${xOf(buckets[i].mid).toFixed(1)} ${yS(q1s[i]).toFixed(1)} `;
+      const bucket = buckets[i]!;
+      bot += `L${xOf(bucket.mid).toFixed(1)} ${yS(q1s[i] ?? bucket.q1).toFixed(1)} `;
     }
     svg.append(effNode("path", { d: `${top}${bot}Z`, fill, "fill-opacity": opacity, stroke: "none" }));
   }
@@ -1024,7 +1036,7 @@ import { prefs, units } from "./prefs";
       })
     );
     const peakIdx = buckets.findIndex((b) => b.mid === peak.mid);
-    appendPeakMarker(svg, peak, peakIdx >= 0 ? meds[peakIdx] : peak.med, xOf, yS, accent, bg, "");
+    appendPeakMarker(svg, peak, peakIdx >= 0 ? (meds[peakIdx] ?? peak.med) : peak.med, xOf, yS, accent, bg, "");
   }
 
   function renderInsightScatter() {
@@ -1045,12 +1057,13 @@ import { prefs, units } from "./prefs";
       enrichRouteEff(route);
       const pts = (route && route.points) || [];
       for (let i = 0; i < pts.length; i += 1) {
+        const point = pts[i]!;
         // enrichRouteEff sets eff = null for all-regen/idle windows (no positive
         // drive sample in range) even when the point has real highway speed.
         // Number(null) === 0 slips past the isFinite guard, then whmi = 1000/0 =
         // Infinity clamps to a false 0.8 mi/kWh dot — drop nulls before coercing.
-        if (pts[i].eff == null) continue;
-        const eff = Number(pts[i].eff);
+        if (point.eff == null) continue;
+        const eff = Number(point.eff);
         if (!Number.isFinite(eff)) continue;
         // enrichRouteEff clamps efficiency to a 6.5 ceiling; those saturated
         // coasting/regen-tail samples otherwise pile into a solid false row along
@@ -1071,12 +1084,14 @@ import { prefs, units } from "./prefs";
         let grade = 0;
         const gStart = Math.max(0, i - 8);
         const gEnd = Math.min(pts.length - 1, i + 8);
-        const altStart = numOrNaN(pts[gStart].altM);
-        const altEnd = numOrNaN(pts[gEnd].altM);
+        const altStart = numOrNaN(pts[gStart]!.altM);
+        const altEnd = numOrNaN(pts[gEnd]!.altM);
         if (gEnd > gStart && Number.isFinite(altStart) && Number.isFinite(altEnd)) {
           let horiz = 0;
           for (let j = gStart + 1; j <= gEnd; j += 1) {
-            const seg = haversineMetersJs(pts[j - 1].lat, pts[j - 1].lng, pts[j].lat, pts[j].lng);
+            const previous = pts[j - 1]!;
+            const current = pts[j]!;
+            const seg = haversineMetersJs(previous.lat, previous.lng, current.lat, current.lng);
             if (Number.isFinite(seg)) horiz += seg;
           }
           horiz = Math.max(8, horiz);
@@ -1206,6 +1221,7 @@ import { prefs, units } from "./prefs";
     const buckets: EffBucket[] = Object.keys(grouped)
       .map((k) => {
         const arr = grouped[Number(k)];
+        if (!arr) return { mid: Number(k) * 10 + 5, n: 0, med: 0, q1: 0, q3: 0 };
         return {
           mid: Number(k) * 10 + 5,
           n: arr.length,

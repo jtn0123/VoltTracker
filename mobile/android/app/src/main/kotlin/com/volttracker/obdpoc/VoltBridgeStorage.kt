@@ -70,13 +70,13 @@ internal class VoltBridgeStorage(
                         try {
                             readPayload()
                         } catch (ex: RuntimeException) {
-                            Log.w(MainActivity.TAG, "async bridge read failed for $callbackName", ex)
+                            Log.w(AppPrefs.LOG_TAG, "async bridge read failed for $callbackName", ex)
                             errorPayload("native_request_failed", "Could not read local data.")
                         }
                     try {
                         activity.publishDashboardPayload(callbackName, payload)
                     } catch (ex: RuntimeException) {
-                        Log.w(MainActivity.TAG, "async bridge publish failed for $callbackName", ex)
+                        Log.w(AppPrefs.LOG_TAG, "async bridge publish failed for $callbackName", ex)
                     }
                 },
             )

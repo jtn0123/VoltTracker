@@ -214,7 +214,7 @@ class TripExportController(
         try {
             store.projections().chargeSessionsForExport(MAX_CHARGE_SESSIONS)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "charge-sessions export read failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "charge-sessions export read failed", ex)
             org.json.JSONArray()
         }
 
@@ -225,7 +225,7 @@ class TripExportController(
         try {
             store.recordAllTripsExport("csv_charges", export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "charge-sessions export recordExport failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "charge-sessions export recordExport failed", ex)
         }
     }
 
@@ -233,7 +233,7 @@ class TripExportController(
         try {
             store.getAllTripsForExportJson(MAX_ALL_TRIPS, ALL_TRIPS_POINT_LIMIT)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "all-trips export read failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "all-trips export read failed", ex)
             org.json.JSONArray()
         }
 
@@ -253,7 +253,7 @@ class TripExportController(
         try {
             store.recordAllTripsExport("csv_all", export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "all-trips export recordExport failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "all-trips export recordExport failed", ex)
         }
     }
 
@@ -264,7 +264,7 @@ class TripExportController(
         try {
             store.getTripRouteJson(routeKey)
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "trip export route read failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "trip export route read failed", ex)
             null
         }
 
@@ -277,7 +277,7 @@ class TripExportController(
             store.recordExport(routeKey, export.format.key, export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
             // Recording is best-effort bookkeeping; never let it sink the share.
-            Log.w(MainActivity.TAG, "trip export recordExport failed", ex)
+            Log.w(AppPrefs.LOG_TAG, "trip export recordExport failed", ex)
         }
     }
 
@@ -292,7 +292,7 @@ class TripExportController(
                 )
                 host.publishStatus("ready", context.getString(readyMessageRes), false)
             } catch (ex: RuntimeException) {
-                Log.w(MainActivity.TAG, "trip export share launch failed", ex)
+                Log.w(AppPrefs.LOG_TAG, "trip export share launch failed", ex)
                 host.publishStatus("blocked", context.getString(R.string.status_trip_export_share_failed), true)
             }
         }

@@ -284,7 +284,8 @@ class LiveSampleReaderParseFailureTest {
     }
 
     private fun eventPayloads(event: String): List<JSONObject> {
-        // The session log flushes after every line, so the .jsonl is readable without closing it.
+        // Event lines flush immediately (and also flush any telemetry batch), so the .jsonl is
+        // readable without closing it.
         val logFile =
             logDir.listFiles()?.firstOrNull { it.name.endsWith(".jsonl") }
                 ?: return emptyList()

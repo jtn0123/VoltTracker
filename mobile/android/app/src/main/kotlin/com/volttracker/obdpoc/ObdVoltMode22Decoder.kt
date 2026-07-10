@@ -7,7 +7,6 @@ import com.volttracker.obdpoc.ObdProtocol.TEMP_C_RANGE
 import com.volttracker.obdpoc.ObdProtocol.bounded
 import com.volttracker.obdpoc.ObdProtocol.mode22Payload
 import com.volttracker.obdpoc.ObdProtocol.value
-import java.util.Locale
 
 /**
  * GM/Volt manufacturer-specific Mode-22 PID decoder, extracted from [ObdProtocol]. Owns the
@@ -166,8 +165,8 @@ internal object ObdVoltMode22Decoder {
                 ?.let {
                     value("HV battery capacity fallback", it, "Ah", 2)
                 }
-            "224329" -> return cellVoltageValue(response, cleanCommand, "minimum cell voltage", VOLT_CELL_VOLTAGE_SCALE)
-            "22432B" -> return cellVoltageValue(response, cleanCommand, "maximum cell voltage", VOLT_CELL_VOLTAGE_SCALE)
+            "224329" -> return ObdVoltCellVoltageDecoder.aggregate(response, cleanCommand, "minimum cell voltage", true)
+            "22432B" -> return ObdVoltCellVoltageDecoder.aggregate(response, cleanCommand, "maximum cell voltage", true)
             "22432A" -> return voltByteValue(response, cleanCommand, 1.0, 0.0)
                 ?.let { bounded(it, CELL_NUMBER_RANGE) }
                 ?.let {
@@ -328,7 +327,12 @@ internal object ObdVoltMode22Decoder {
                 }
             "2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1" ->
                 return cellSectionTemperatureValue(response, cleanCommand)
-            "22C218" -> return cellVoltageValue(response, cleanCommand, "average cell voltage")
+            "22C218" -> return ObdVoltCellVoltageDecoder.aggregate(
+                response,
+                cleanCommand,
+                "average cell voltage",
+                false,
+            )
             "2240D4" -> return voltWordValue(response, cleanCommand, 20.0, true)
                 ?.let { bounded(it, CURRENT_A_RANGE) }
                 ?.let {
@@ -376,7 +380,7 @@ internal object ObdVoltMode22Decoder {
                 value("outside air temperature filtered", it, "deg C", 1)
             }
         }
-        if (isCellVoltageProbe(cleanCommand)) {
+        if (ObdVoltCellVoltageDecoder.isProbe(cleanCommand)) {
             return parseCellVoltage(cleanCommand, response)
         }
         return null
@@ -395,14 +399,7 @@ internal object ObdVoltMode22Decoder {
     internal fun parseCellVoltage(
         cleanCommand: String,
         response: String?,
-    ): ParsedPidValue? {
-        if (!isCellVoltageProbe(cleanCommand)) {
-            return null
-        }
-        val name = cellVoltageProbeName(cleanCommand)
-        return cellVoltageValue(response, cleanCommand, name)
-            ?: cellVoltageValue(response, cleanCommand, name, VOLT_CELL_VOLTAGE_SCALE)
-    }
+    ): ParsedPidValue? = ObdVoltCellVoltageDecoder.parseProbe(cleanCommand, response)
 
     private fun voltByteValue(
         response: String?,
@@ -460,32 +457,6 @@ internal object ObdVoltMode22Decoder {
         return word * 100.0 / 65535.0
     }
 
-    // Gen2 Volt BECM cell-voltage scale for the aggregate min/max DIDs (224329 / 22432B). The old
-    // 5/65535 value was a Bolt placeholder that put every real Volt read at ~0.44 V, so min/max cell
-    // voltage (and the derived cell-balance view) decoded to null on every sample. A 0-5 V cell over
-    // the full 16-bit range would answer ~0xBD6F for 3.7 V, but this BECM answers ~0x1700 -- under 10%
-    // of the range. Field-calibrated to 1/1600 V/count against a pack-voltage/96 anchor (N=118 paired
-    // field samples; 95-97% of reads land in 3.0-4.2 V). Cell imbalance (max-min) is near-invariant to
-    // small scale error, and CELL_VOLTAGE_RANGE still drops decode garbage. See pid-validation-2026-06-03.md.
-    private const val VOLT_CELL_VOLTAGE_SCALE = 1.0 / 1600.0
-
-    // Legacy scale still used by the unvalidated average (22C218) and individual cell-voltage probes,
-    // for which we have no field anchor yet (and the probe DIDs answer at a different magnitude). Kept
-    // separate so the validated min/max fix doesn't ship an unvalidated change to those paths.
-    private const val LEGACY_CELL_VOLTAGE_SCALE = 5.0 / 65535.0
-
-    private fun cellVoltageValue(
-        response: String?,
-        command: String?,
-        name: String,
-        scale: Double = LEGACY_CELL_VOLTAGE_SCALE,
-    ): ParsedPidValue? =
-        voltWordLinearValue(response, command, scale, 0.0, false)
-            ?.let { bounded(it, CELL_VOLTAGE_RANGE) }
-            ?.let {
-                value(name, it, "V", 3)
-            }
-
     private fun cellSectionTemperatureValue(
         response: String?,
         command: String,
@@ -506,40 +477,6 @@ internal object ObdVoltMode22Decoder {
             "2240E1" -> 6
             else -> 0
         }
-
-    private fun isCellVoltageProbe(command: String): Boolean {
-        val did = mode22Did(command) ?: return false
-        return did in 0x4181..0x41E0 || did in 0x4200..0x4240
-    }
-
-    private fun cellVoltageProbeName(command: String): String {
-        val did = mode22Did(command) ?: return "cell voltage"
-        // The two tail ranges are ALTERNATE encodings of the same physical cells 32-96 — a car
-        // answers exactly one of them (CellVoltageProbeRunner picks the layout by whether the
-        // Bolt-contiguous 0x41A0 responds), so e.g. 0x41A0 and 0x4200 both meaning "cell 32" is
-        // intentional, not a collision.
-        val cellIndex =
-            if (did in 0x4181..0x41E0) {
-                did - 0x4180
-            } else if (did in 0x4200..0x4240) {
-                did - 0x4200 + 32
-            } else {
-                0
-            }
-        return if (cellIndex > 0) "cell $cellIndex voltage" else "cell voltage"
-    }
-
-    private fun mode22Did(command: String?): Int? {
-        val clean = command?.trim()?.uppercase(Locale.US)?.replace(Regex("[^0-9A-F]"), "") ?: return null
-        if (!clean.startsWith("22") || clean.length < 6) {
-            return null
-        }
-        return try {
-            clean.substring(2, 6).toInt(16)
-        } catch (ex: NumberFormatException) {
-            null
-        }
-    }
 
     private fun chargeModeValue(
         response: String?,
@@ -620,7 +557,6 @@ internal object ObdVoltMode22Decoder {
     // cell below 3.0 V is exactly what long-term tracking exists to surface, so these floors sit
     // at physically-possible rather than healthy values.
     private val CAPACITY_AH_RANGE = Range(10.0, 60.0)
-    private val CELL_VOLTAGE_RANGE = Range(1.5, 4.5)
     private val CELL_NUMBER_RANGE = Range(1.0, 96.0)
     private val PERCENT_RANGE = Range(0.0, 100.0)
     private val PACK_RESISTANCE_RANGE = Range(0.0, 10_000.0)

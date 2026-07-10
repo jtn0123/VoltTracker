@@ -75,14 +75,14 @@ object WebViewBootstrap {
                         "dashboard console: ${message.message()} " +
                             "(${message.sourceId()}:${message.lineNumber()})"
                     when (message.messageLevel()) {
-                        ConsoleMessage.MessageLevel.ERROR -> Log.e(MainActivity.TAG, line)
-                        ConsoleMessage.MessageLevel.WARNING -> Log.w(MainActivity.TAG, line)
+                        ConsoleMessage.MessageLevel.ERROR -> Log.e(AppPrefs.LOG_TAG, line)
+                        ConsoleMessage.MessageLevel.WARNING -> Log.w(AppPrefs.LOG_TAG, line)
                         ConsoleMessage.MessageLevel.DEBUG ->
-                            if (BuildConfig.DEBUG) Log.d(MainActivity.TAG, line)
+                            if (BuildConfig.DEBUG) Log.d(AppPrefs.LOG_TAG, line)
                         ConsoleMessage.MessageLevel.TIP,
                         ConsoleMessage.MessageLevel.LOG,
                         null,
-                        -> if (BuildConfig.DEBUG) Log.i(MainActivity.TAG, line)
+                        -> if (BuildConfig.DEBUG) Log.i(AppPrefs.LOG_TAG, line)
                     }
                     return true
                 }
@@ -144,7 +144,7 @@ object WebViewBootstrap {
         if (url != null && url.startsWith(DASHBOARD_ORIGIN)) {
             return false
         }
-        Log.w(MainActivity.TAG, "Blocked off-origin WebView navigation: $url")
+        Log.w(AppPrefs.LOG_TAG, "Blocked off-origin WebView navigation: $url")
         return true
     }
 }

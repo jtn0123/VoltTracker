@@ -9,7 +9,7 @@ package com.volttracker.obdpoc
  * [FILE] is the single `MODE_PRIVATE` SharedPreferences file the app multiplexes by key prefix
  * (widget snapshot, notification settings, auto-connect — see [com.volttracker.obdpoc.PrefsKeyOwnership]).
  * [LOG_TAG] is the shared logcat tag. [MainActivity] keeps deprecated aliases that forward here so the
- * existing `MainActivity.PREFS`/`MainActivity.TAG` call sites stay compiling.
+ * existing `MainActivity.PREFS`/`AppPrefs.LOG_TAG` call sites stay compiling.
  */
 object AppPrefs {
     /** The shared `MODE_PRIVATE` SharedPreferences filename. */

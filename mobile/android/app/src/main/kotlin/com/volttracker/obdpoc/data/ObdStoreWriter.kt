@@ -138,7 +138,12 @@ class ObdStoreWriter(
 
     private fun checkpointWalPassive() {
         try {
-            helper.writableDatabase.execSQL("PRAGMA wal_checkpoint(PASSIVE)")
+            // wal_checkpoint returns a result row (busy, log, checkpointed), so Android rejects
+            // it through execSQL. Consume that row through rawQuery even though this best-effort
+            // checkpoint does not otherwise need the values.
+            helper.writableDatabase.rawQuery("PRAGMA wal_checkpoint(PASSIVE)", null).use {
+                it.moveToFirst()
+            }
             walCheckpointFailureStreak = 0
         } catch (ex: RuntimeException) {
             // Best-effort bound for very long sessions; regular maintenance still truncates. A

@@ -291,10 +291,7 @@ object ChargeSessionMaterializer {
             if (v == null || c == null) {
                 continue
             }
-            val kw = -(v * c) / 1000.0
-            if (kw.isNaN() || kw.isInfinite()) {
-                continue
-            }
+            val kw = PackEnergyMath.chargePowerKw(v, c) ?: continue
             if (kw <= 0.0) {
                 continue
             }
@@ -322,10 +319,7 @@ object ChargeSessionMaterializer {
             // across a current-only sample rather than dropping it from the integral (B2).
             s.packVoltage?.let { lastV = it }
             val v = lastV ?: continue
-            var kw = -(v * c) / 1000.0
-            if (kw.isNaN() || kw.isInfinite()) {
-                continue
-            }
+            var kw = PackEnergyMath.chargePowerKw(v, c) ?: continue
             // Clip negative (discharge) samples to 0 so a brief discharge dip inside an otherwise-
             // plugged window doesn't subtract from the integrated charge total.
             if (kw < 0.0) {
@@ -334,9 +328,9 @@ object ChargeSessionMaterializer {
             val pKw = prevKw
             val pMs = prevMs
             if (pKw != null && pMs != null) {
-                val hours = (s.capturedAtMs - pMs) / 3_600_000.0
-                if (hours > 0.0) {
-                    energyKwh += ((pKw + kw) / 2.0) * hours
+                val segmentKwh = PackEnergyMath.trapezoidKwh(pKw, kw, pMs, s.capturedAtMs)
+                if (segmentKwh != null) {
+                    energyKwh += segmentKwh
                     integrated += 1
                 }
             }

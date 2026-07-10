@@ -41,7 +41,7 @@ internal class VoltBridgeDiagnostics(
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 activity.startActivity(intent)
             } catch (ex: Exception) {
-                Log.w(MainActivity.TAG, "openExternalSearch failed", ex)
+                Log.w(AppPrefs.LOG_TAG, "openExternalSearch failed", ex)
                 activity.publishStatus("blocked", "Could not open the browser for DTC lookup.", true)
             }
         }

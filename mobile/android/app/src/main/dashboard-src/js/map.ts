@@ -23,6 +23,8 @@ import {
   sessionForRoute
 } from "./map-session-list";
 import type { MapSessionFilter } from "./map-session-list";
+import { loadStylesheetWithRetry } from "./lazy-styles";
+import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signatures";
 
   const VD = window.VoltDashboard;
   const state = VD.state;
@@ -35,25 +37,10 @@ import type { MapSessionFilter } from "./map-session-list";
   // loads (well before the first renderMap()), so neither costs the Drive-first
   // startup path. `VD.mapStylesReady` resolves once screens-map.css has applied;
   // requestMapRender() awaits it so the map never paints unstyled (no FOUC).
-  VD.mapStylesReady = (function ensureMapStyles(): Promise<void> {
-    const sheets = ["lib/leaflet/leaflet.css", "css/screens-map.css"];
-    const loads: Array<Promise<void>> = [];
-    for (const href of sheets) {
-      if (document.querySelector(`link[href="${href}"]`)) continue;
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      loads.push(
-        new Promise<void>((resolve) => {
-          // Resolve on load OR error — a missing/blocked sheet must not hang render.
-          link.addEventListener("load", () => resolve(), { once: true });
-          link.addEventListener("error", () => resolve(), { once: true });
-        }),
-      );
-      document.head.appendChild(link);
-    }
-    return Promise.all(loads).then(() => undefined);
-  })();
+  VD.mapStylesReady = Promise.all([
+    loadStylesheetWithRetry("lib/leaflet/leaflet.css"),
+    loadStylesheetWithRetry("css/screens-map.css"),
+  ]).then(() => undefined);
 
   type MapStop = {
     lat: number;
@@ -763,7 +750,9 @@ import type { MapSessionFilter } from "./map-session-list";
   // a restore/merge/hide can never serve stale geometry.
   const fetchedRouteCache = new Map<string, MapRoute>();
   const pendingRouteFetches = new Set<string>();
+  const failedRouteFetchAt = new Map<string, number>();
   let fetchedRouteCacheTripsSig: string | null = null;
+  const ROUTE_FETCH_RETRY_MS = 2_000;
 
   // Content signature over the geometry-relevant trip fields only. applyTripsPayload
   // reassigns state.trips to a brand-new array on every load, and non-details
@@ -775,21 +764,7 @@ import type { MapSessionFilter } from "./map-session-list";
   // protection (a restore/merge/hide still busts it) without per-broadcast churn.
   function tripsGeometrySignature(): string {
     const trips = Array.isArray(state.trips) ? state.trips : [];
-    return (
-      trips.length +
-      "|" +
-      trips
-        .map((entry) => {
-          const trip = (entry || {}) as Record<string, unknown>;
-          const id = trip.id == null ? "" : String(trip.id);
-          const points = Number(trip.pointCount) || 0;
-          const hasRoute = trip.hasRoute === false ? 0 : 1;
-          const start = Number(trip.startedAtMs) || 0;
-          const end = Number(trip.endedAtMs) || 0;
-          return `${id}:${points}:${hasRoute}:${start}:${end}`;
-        })
-        .join("|")
-    );
+    return `${trips.length}|${tripGeometrySignature(trips)}`;
   }
 
   function syncRouteCacheWithTrips() {
@@ -798,21 +773,32 @@ import type { MapSessionFilter } from "./map-session-list";
       fetchedRouteCacheTripsSig = sig;
       fetchedRouteCache.clear();
       pendingRouteFetches.clear();
+      failedRouteFetchAt.clear();
     }
+  }
+
+  function invalidateFetchedRouteCache() {
+    fetchedRouteCacheTripsSig = null;
+    fetchedRouteCache.clear();
+    pendingRouteFetches.clear();
+    failedRouteFetchAt.clear();
   }
 
   function applyTripRoutePayload(payload: unknown) {
     const wrapped = VD.parsePayload<Record<string, unknown>>(payload, {});
+    VD.validatePayload("setTripRoute", wrapped);
     const id = wrapped.routeKey == null ? "" : String(wrapped.routeKey);
     if (!id) return;
     pendingRouteFetches.delete(id);
     const parsed = VD.parsePayload<MapRoute>(wrapped.payload, {});
-    const existing = fetchedRouteCache.get(id);
-    const resolved =
-      parsed && Array.isArray(parsed.points) && parsed.points.length >= 2
-        ? parsed
-        : existing || ({ session: { id }, points: [], pointCount: 0 } as MapRoute);
-    fetchedRouteCache.set(id, resolved);
+    if (parsed && Array.isArray(parsed.points) && parsed.points.length >= 2) {
+      fetchedRouteCache.set(id, parsed);
+      failedRouteFetchAt.delete(id);
+    } else {
+      // A transient native read failure must not become a permanent empty route.
+      fetchedRouteCache.delete(id);
+      failedRouteFetchAt.set(id, Date.now());
+    }
     VD.renderMapIfLoaded();
   }
 
@@ -827,13 +813,14 @@ import type { MapSessionFilter } from "./map-session-list";
     if (Number(route.pointCount || 0) < 2) return route;
     const cached = fetchedRouteCache.get(id);
     if (cached) return cached;
+    const lastFailure = failedRouteFetchAt.get(id);
+    if (lastFailure != null && Date.now() - lastFailure < ROUTE_FETCH_RETRY_MS) return route;
     if (
       bridge &&
       typeof bridge.requestTripRoute === "function" &&
       !pendingRouteFetches.has(id)
     ) {
       pendingRouteFetches.add(id);
-      fetchedRouteCache.set(id, route);
       try {
         if (bridge.requestTripRoute(id)) {
           return route;
@@ -842,9 +829,11 @@ import type { MapSessionFilter } from "./map-session-list";
         // Fall back to the synchronous bridge path below.
       }
       pendingRouteFetches.delete(id);
-      fetchedRouteCache.delete(id);
     }
-    if (!bridge || typeof bridge.getTripRoute !== "function") return route;
+    if (!bridge || typeof bridge.getTripRoute !== "function") {
+      failedRouteFetchAt.set(id, Date.now());
+      return route;
+    }
     let fetched: MapRoute | null = null;
     try {
       fetched = VD.parsePayload<MapRoute>(bridge.getTripRoute(id), {});
@@ -853,7 +842,12 @@ import type { MapSessionFilter } from "./map-session-list";
     }
     const resolved =
       fetched && Array.isArray(fetched.points) && fetched.points.length >= 2 ? fetched : route;
-    fetchedRouteCache.set(id, resolved);
+    if (resolved === route) {
+      failedRouteFetchAt.set(id, Date.now());
+    } else {
+      fetchedRouteCache.set(id, resolved);
+      failedRouteFetchAt.delete(id);
+    }
     return resolved;
   }
 
@@ -1068,7 +1062,13 @@ import type { MapSessionFilter } from "./map-session-list";
     // fast-path above and are excluded (staticDrawKey === null).
     const staticDrawKey = isLiveRoute
       ? null
-      : [routeFitKey(routeSession, drawable), layer, hasRoute ? 1 : 0, effDrawSignature(drawable)].join("|");
+      : staticRouteDrawSignature(
+          routeFitKey(routeSession, drawable),
+          layer,
+          hasRoute,
+          effDrawSignature(drawable),
+          VD.units.system(),
+        );
     if (staticDrawKey !== null) {
       if (staticDrawKey === lastStaticDrawKey) return;
       lastStaticDrawKey = staticDrawKey;
@@ -2040,9 +2040,10 @@ import type { MapSessionFilter } from "./map-session-list";
     if (routes.length) {
       const selected = routes.find((route: MapRoute) => String((route.session || {}).id || "") === String(state.selectedMapSessionId || ""));
       if (selected) return selected;
-      const firstId = (routes[0].session || {}).id;
+      const firstRoute = routes[0]!;
+      const firstId = (firstRoute.session || {}).id;
       state.selectedMapSessionId = firstId == null ? null : String(firstId);
-      return routes[0];
+      return firstRoute;
     }
     return storage.latestRoute || {};
   }
@@ -2483,7 +2484,7 @@ import type { MapSessionFilter } from "./map-session-list";
         chargeSessionCount: sampleCharges.length,
         chargingHintCount: 6,
         maxPowerKw: 7.2,
-        latest: sampleCharges[0],
+        latest: sampleCharges[0] ?? null,
         recentSessions: sampleCharges
       },
       batterySummary: { snapshotCount: 1, cellSnapshotCount: 0, latestBatterySnapshot: sampleBattery },
@@ -2634,7 +2635,8 @@ import type { MapSessionFilter } from "./map-session-list";
     setMapFollowLive,
     loadSampleData,
     loadDemoScenario,
-    setTripRoute: applyTripRoutePayload
+    setTripRoute: applyTripRoutePayload,
+    invalidateFetchedRouteCache
   });
 
 export {};

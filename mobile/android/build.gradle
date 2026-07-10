@@ -1,3 +1,5 @@
+import com.volttracker.build.DashboardHtmlAssembler
+
 plugins {
     // AGP and Spotless versions live in gradle/libs.versions.toml (the single source of truth).
     // Kotlin needs no plugin here: AGP 9.0+ compiles Kotlin via its built-in support.
@@ -296,6 +298,8 @@ tasks.register("buildDashboardJs", Exec) {
     commandLine "npm", "run", "build"
     inputs.dir(file("app/src/main/dashboard-src/js"))
     inputs.file(file("${dashboardTestsDir}/build.mjs"))
+    inputs.file(file("${dashboardTestsDir}/package.json"))
+    inputs.file(file("${dashboardTestsDir}/package-lock.json"))
     outputs.dir(file("app/src/main/assets/dashboard/js"))
     outputs.dir(file("app/src/main/assets/dashboard/lib/leaflet"))
 }
@@ -370,17 +374,7 @@ tasks.register("verifyGeneratedDashboardClean") {
     inputs.dir(srcDir)
     outputs.dir(reportDir)
     doLast {
-        def sb = new StringBuilder()
-        new File(srcDir, "index.template.html").eachLine("UTF-8") { line ->
-            def m = (line =~ /^\s*<!-- include: (\S+) -->\s*$/)
-            if (m.find()) {
-                sb.append(new File(srcDir, m.group(1)).getText("UTF-8").replaceAll(/\s+$/, ""))
-            } else {
-                sb.append(line)
-            }
-            sb.append("\n")
-        }
-        def expected = sb.toString().replaceAll(/\n+$/, "") + "\n"
+        def expected = DashboardHtmlAssembler.assemble(srcDir)
         def current = outFile.exists() ? outFile.getText("UTF-8") : ""
         if (current != expected) {
             reportDir.mkdirs()
@@ -487,6 +481,33 @@ tasks.register("verifyNoMigrationSourceStragglers") {
     }
 }
 
+def nulCheckedSourceFiles = fileTree(file("app/src")) {
+    include "**/*.kt"
+    include "**/*.java"
+    include "**/*.ts"
+    include "**/*.js"
+    include "**/*.html"
+    include "**/*.css"
+    include "**/*.xml"
+    exclude "**/build/**"
+    exclude "main/assets/dashboard/**"
+}
+
+tasks.register("verifyNoNulSourceBytes") {
+    description = "Fails when editable app/test source contains a literal NUL byte."
+    inputs.files(nulCheckedSourceFiles)
+    doLast {
+        def offenders = nulCheckedSourceFiles.files.findAll { source ->
+            source.bytes.any { value -> value == 0 }
+        }.sort()
+        if (!offenders.empty) {
+            throw new GradleException(
+                    "Source files must use escaped NUL literals (for example \\u0000), not raw bytes; found: " +
+                            offenders.collect { it.path }.join(", "))
+        }
+    }
+}
+
 tasks.register("privacyScan", Exec) {
     description = "Fails when tracked files contain unallowlisted VIN, GPS route, or private device endpoint data."
     dependsOn("buildDashboardJs", ":app:generateDashboardHtml")
@@ -548,6 +569,7 @@ tasks.register("verifyActiveApp") {
             "verifyDashboardBundleSize",
             "privacyScan",
             "verifyPerformanceTooling",
+            "verifyNoNulSourceBytes",
             "verifyNoMigrationSourceStragglers",
             "verifyGeneratedDashboardClean")
 }
@@ -650,6 +672,7 @@ subprojects {
                     rootProject.tasks.named("dashboardLint"),
                     rootProject.tasks.named("dashboardTypecheck"),
                     rootProject.tasks.named("verifyDashboardBundleSize"),
+                    rootProject.tasks.named("verifyNoNulSourceBytes"),
                     rootProject.tasks.named("verifyNoMigrationSourceStragglers"),
                     rootProject.tasks.named("verifyGeneratedDashboardClean"))
         }

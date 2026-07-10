@@ -646,7 +646,7 @@ function installTelemetryObserver() {
   VD.updateTelemetry = wrap(VD.updateTelemetry as StatusHandler | undefined) as typeof VD.updateTelemetry;
   if (window.VoltTrackerNative) {
     window.VoltTrackerNative.updateTelemetry =
-      wrap(window.VoltTrackerNative.updateTelemetry as StatusHandler | undefined) as typeof window.VoltTrackerNative.updateTelemetry;
+      wrap(window.VoltTrackerNative.updateTelemetry as StatusHandler | undefined) as StatusHandler;
   }
 }
 

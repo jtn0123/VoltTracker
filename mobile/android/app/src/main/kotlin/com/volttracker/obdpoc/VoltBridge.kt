@@ -310,8 +310,8 @@ class VoltBridge(
         val suffix = if (dropped > 0) " (suppressed $dropped over-rate calls)" else ""
         Log.e(
             AppPrefs.LOG_TAG,
-            "dashboard client error [${bridgeSafe(label, BRIDGE_MAX_LABEL_LEN)}]: " +
-                "${bridgeSafe(detail, BRIDGE_MAX_DETAIL_LEN)}$suffix",
+            "dashboard client error [${bridgeLogSafe(label, BRIDGE_MAX_LABEL_LEN)}]: " +
+                "${bridgeLogSafe(detail, BRIDGE_MAX_DETAIL_LEN)}$suffix",
         )
     }
 

@@ -173,7 +173,7 @@ open class ObdPollingEngine(
                 }
             }
         } catch (ex: RuntimeException) {
-            Log.w(MainActivity.TAG, "OBD loop runtime failure for ${service.activeName} after $sampleCount samples", ex)
+            Log.w(AppPrefs.LOG_TAG, "OBD loop runtime failure for ${service.activeName} after $sampleCount samples", ex)
             service.recorder.logError("connection_failure", ex)
             service.broadcastStatus("error", ObdElmDecode.friendlyConnectionMessage(ex), true)
             service.stopSelf()
@@ -357,7 +357,7 @@ open class ObdPollingEngine(
         ex: IOException,
     ) {
         Log.w(
-            MainActivity.TAG,
+            AppPrefs.LOG_TAG,
             "OBD reconnect exhausted for ${service.activeName} after " +
                 "${ObdProbes.MAX_RECONNECT_ATTEMPTS} attempts, $sampleCount samples logged",
             ex,

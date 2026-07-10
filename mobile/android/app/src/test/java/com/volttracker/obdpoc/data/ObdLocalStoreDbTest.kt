@@ -15,7 +15,10 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import java.io.File
+import java.nio.charset.StandardCharsets
+import java.security.MessageDigest
 
 /**
  * Exercises the real SQLite data layer via Robolectric: writes, the on-read trip and insight
@@ -68,6 +71,54 @@ class ObdLocalStoreDbTest {
         assertNotNull(session)
         assertEquals(ObdLocalStore.STATUS_COMPLETE, session!!.status)
         assertTrue("finishSession(status) should stamp an end time", session.endedAtMs > 0L)
+    }
+
+    @Test
+    fun finishSessionRunsPassiveWalCheckpointThroughTheQueryApi() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        ShadowLog.clear()
+
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE)
+
+        val checkpointWarnings =
+            ShadowLog.getLogsForTag("VoltTracker").filter {
+                it.msg.startsWith("wal_checkpoint(PASSIVE) failed")
+            }
+        assertTrue(
+            "wal_checkpoint returns a row and must not be sent through execSQL",
+            checkpointWarnings.isEmpty(),
+        )
+    }
+
+    @Test
+    fun recoverInterruptedSessionsUsesLastPersistedTimeAndIsIdempotent() {
+        val crashedWithSamples = store.startSession("obd", "00:11", "Adapter", 1_000L)
+        store.recordTelemetry(crashedWithSamples, sample(41, 1510, 34.05, -118.25, 3_500L))
+        val crashedEmpty = store.startSession("scan", "00:22", "Adapter", 5_000L)
+        val completed = store.startSession("obd", "00:33", "Adapter", 6_000L)
+        store.finishSession(completed, ObdLocalStore.STATUS_COMPLETE, 7_000L, "")
+
+        assertEquals(2, ObdSessionRecovery.recover(RuntimeEnvironment.getApplication(), 10_000L))
+
+        val sampled = store.getSession(crashedWithSamples)!!
+        assertEquals(ObdLocalStore.STATUS_INTERRUPTED, sampled.status)
+        assertEquals(3_500L, sampled.endedAtMs)
+        val empty = store.getSession(crashedEmpty)!!
+        assertEquals(ObdLocalStore.STATUS_INTERRUPTED, empty.status)
+        assertEquals(5_000L, empty.endedAtMs)
+        val untouched = store.getSession(completed)!!
+        assertEquals(ObdLocalStore.STATUS_COMPLETE, untouched.status)
+        assertEquals(7_000L, untouched.endedAtMs)
+        assertEquals(
+            "recovery should not rewrite finalized rows",
+            0,
+            ObdSessionRecovery.recover(RuntimeEnvironment.getApplication(), 20_000L),
+        )
+        assertEquals(
+            "no recovered row may remain the current live route",
+            0,
+            store.getCurrentSessionRouteJson().length(),
+        )
     }
 
     @Test
@@ -985,6 +1036,30 @@ class ObdLocalStoreDbTest {
             1L,
             StorageSummaryJson.build(store.getStorageSummaryRecord()).optLong("vehicleCount"),
         )
+    }
+
+    @Test
+    fun upsertVehicleFromVinDoesNotStoreAnEnumerableUnsaltedHash() {
+        val vin = "1G1ZD5ST8JF" + "202020"
+        store.upsertVehicleFromVin(vin)
+        store.checkpoint()
+
+        val legacyHash =
+            MessageDigest
+                .getInstance("SHA-256")
+                .digest(vin.toByteArray(StandardCharsets.UTF_8))
+                .joinToString(separator = "") { "%02x".format(it) }
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db.rawQuery("SELECT vehicle_key, vin_hash FROM ${VoltTrackerDb.TABLE_VEHICLES}", null).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals(64, cursor.getString(0).length)
+                assertEquals(cursor.getString(0), cursor.getString(1))
+                assertFalse(
+                    "VIN hash must be keyed so public VIN lists cannot enumerate it",
+                    cursor.getString(0) == legacyHash,
+                )
+            }
+        }
     }
 
     @Test
