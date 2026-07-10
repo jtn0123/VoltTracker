@@ -60,6 +60,7 @@
     <string name="notification_channel_description">Shows while Volt Tracker is connected to an OBD adapter.</string>
     <string name="notification_logging_foreground">Logging while app is open</string>
     <string name="notification_logging_background">Background logging active</string>
+    <string name="notification_action_disconnect">Disconnect</string>
     <string name="foreground_connecting">Connecting to %1$s</string>
     <string name="foreground_scanning">Scanning %1$s</string>
     <string name="foreground_detail_probe">Detail Probe (%1$s) on %2$s</string>
@@ -87,6 +88,11 @@
     <string name="notification_high_temp_text">Pack temperature reached %1$s°C (alert at %2$s°C).</string>
     <string name="notification_maintenance_due_title">Maintenance overdue</string>
     <string name="notification_maintenance_due_text">%1$s is overdue by %2$s. Tap to review your maintenance log.</string>
+    <string name="notification_trip_summary_title">Drive saved</string>
+    <string name="notification_trip_summary_text">%1$s mi · %2$s mi/kWh. Tap to review the drive.</string>
+    <string name="notification_trip_summary_text_no_efficiency">%1$s mi saved. Tap to review the drive.</string>
+    <string name="notification_trip_summary_channel_name">Saved-drive summaries</string>
+    <string name="notification_trip_summary_channel_description">Optional quiet receipts after a meaningful drive is saved.</string>
 
     <!-- Event-notification + auto-scan settings status copy -->
     <string name="status_event_prefs_not_ready">Notification settings are not ready yet.</string>
@@ -135,11 +141,12 @@
     <string name="status_stop_logging_before_backup">Stop logging before creating a backup.</string>
     <string name="status_backup_worker_failed">Could not start the backup worker.</string>
     <string name="status_backup_already_running">Backup already in progress.</string>
+    <string name="status_database_operation_running">Backup or restore is in progress. Start logging after it finishes.</string>
     <!-- The character count is a fixed minimum (always > 1), so no plural form is needed. -->
     <string name="status_passphrase_minimum" tools:ignore="PluralsCandidate">Enter a backup passphrase with at least %1$d characters.</string>
     <string name="dialog_backup_disclosure_title">Share Volt Tracker backup</string>
     <!-- The character count is a fixed minimum (always > 1), so no plural form is needed. -->
-    <string name="backup_disclosure_message" tools:ignore="PluralsCandidate">This backup is a full copy of Volt Tracker\'s on-device database and contains:\n• Raw OBD session logs and telemetry\n• Precise GPS coordinates from your trips\n• Bluetooth adapter addresses\n• Redacted VIN and vehicle records if your car shared them\n\nEncrypted backups are protected by your passphrase; plaintext backups are not.\nUse a strong, unique passphrase with at least %1$d characters. Volt Tracker cannot recover it if it is lost.\nOnly share with people you trust.</string>
+    <string name="backup_disclosure_message" tools:ignore="PluralsCandidate">This backup is a full copy of Volt Tracker\'s on-device database and contains:\n• Raw OBD session logs and telemetry\n• Precise GPS coordinates from your trips\n• Bluetooth adapter addresses\n• Display, alert, and driving preferences\n• Redacted VIN and vehicle records if your car shared them\n\nEncrypted backups are protected by your passphrase; plaintext backups are not.\nUse a strong, unique passphrase with at least %1$d characters. Volt Tracker cannot recover it if it is lost.\nOnly share with people you trust.</string>
     <string name="status_backup_cancelled">Backup cancelled.</string>
     <string name="status_backup_disclosure_failed">Could not show the backup disclosure.</string>
     <string name="status_preparing_backup">Preparing data backup…</string>

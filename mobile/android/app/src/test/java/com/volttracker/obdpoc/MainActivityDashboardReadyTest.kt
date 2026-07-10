@@ -224,6 +224,75 @@ class MainActivityDashboardReadyTest {
         )
     }
 
+    @Test
+    fun resumePublishesTheNewestServiceTelemetryInsteadOfThePreBackgroundSample() {
+        val serviceController = Robolectric.buildService(ObdService::class.java).create()
+        val service = serviceController.get()
+        try {
+            launchResumed()
+            activity.onDashboardReady()
+            settleMainLooper()
+            val now = System.currentTimeMillis()
+
+            service.broadcastStatus("connected", "Polling live OBD data.", false)
+            service.broadcastTelemetry(
+                JSONObject()
+                    .put("source", "obd")
+                    .put("connected", true)
+                    .put("updatedAt", now - 300_000L)
+                    .put("speedKph", 112),
+            )
+            settleMainLooper()
+            assertEquals("precondition: the foreground dashboard saw the highway sample", 112, latestSpeedKph())
+
+            controller.pause()
+            service.broadcastTelemetry(
+                JSONObject()
+                    .put("source", "obd")
+                    .put("connected", true)
+                    .put("updatedAt", now)
+                    .put("speedKph", 32),
+            )
+            service.broadcastStatus("scanning", "Refreshing live vehicle state.", false)
+            settleMainLooper()
+            assertEquals("the paused Activity snapshot remains the last visible sample", 112, latestSpeedKph())
+            assertEquals("the paused Activity status remains the last visible state", "connected", latestSessionState())
+
+            controller.resume()
+            settleMainLooper()
+
+            assertEquals(
+                "resume must hydrate the latest sample collected by the foreground service",
+                32,
+                latestSpeedKph(),
+            )
+            assertEquals(
+                "resume must hydrate status transitions that happened in the background too",
+                "scanning",
+                latestSessionState(),
+            )
+            val resumedScript = shadowOf(checkNotNull(activity.webViewForTest())).getLastEvaluatedJavascript()
+            assertTrue(
+                "a fresh resumed sample must advance every live dashboard surface through updateTelemetry; " +
+                    "last script=$resumedScript",
+                resumedScript?.contains("window.VoltTrackerNative.updateTelemetry(") == true &&
+                    resumedScript.contains("\\\"speedKph\\\":32"),
+            )
+        } finally {
+            serviceController.destroy()
+        }
+    }
+
+    private fun latestSpeedKph(): Int =
+        JSONObject(activity.getAppStateJson())
+            .getJSONObject("latestTelemetry")
+            .getInt("speedKph")
+
+    private fun latestSessionState(): String =
+        JSONObject(activity.getAppStateJson())
+            .getJSONObject("session")
+            .getString("state")
+
     private fun sendObdBroadcast(
         action: String,
         payload: JSONObject,
@@ -265,6 +334,10 @@ class MainActivityDashboardReadyTest {
         }
 
         override fun publishStorageSummary() {
+            storageSummaryPublishCount += 1
+        }
+
+        override fun publishStorageSummaryThrottled() {
             storageSummaryPublishCount += 1
         }
 

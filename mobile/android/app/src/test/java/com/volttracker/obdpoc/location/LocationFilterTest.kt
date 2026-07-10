@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.location
 
 import com.volttracker.obdpoc.location.LocationFilter.Decision
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Exercises every accept/reject rule in [LocationFilter]. */
@@ -25,10 +26,49 @@ class LocationFilterTest {
     }
 
     @Test
+    fun nonFiniteOrOutOfRangeFixesAreRejected() {
+        val malformed =
+            listOf(
+                doubleArrayOf(Double.NaN, LNG),
+                doubleArrayOf(Double.POSITIVE_INFINITY, LNG),
+                doubleArrayOf(91.0, LNG),
+                doubleArrayOf(LAT, 181.0),
+                doubleArrayOf(0.0, 0.0),
+            )
+        for ((lat, lng) in malformed) {
+            val decision = LocationFilter().evaluate(lat, lng, 5f, T0, "gps", T0)
+            assertTrue("invalid fix ($lat,$lng) must not be stored", decision != Decision.ACCEPT)
+        }
+
+        val nanAccuracy = LocationFilter().evaluate(LAT, LNG, Float.NaN, T0, "gps", T0)
+        assertTrue("NaN accuracy must not bypass the accuracy gate", nanAccuracy != Decision.ACCEPT)
+    }
+
+    @Test
     fun staleFixIsRejected() {
         val f = LocationFilter()
         // fix timestamp is 20 s older than "now"
         assertEquals(Decision.REJECT_STALE, f.evaluate(LAT, LNG, 5f, T0 - 20_000L, "gps", T0))
+    }
+
+    @Test
+    fun implausiblyFutureFixIsRejected() {
+        val f = LocationFilter()
+        // A bad provider timestamp must not become the reference point and disable later jump checks.
+        assertEquals(Decision.REJECT_STALE, f.evaluate(LAT, LNG, 5f, T0 + 20_000L, "gps", T0))
+    }
+
+    @Test
+    fun outOfOrderFixCannotBypassTheJumpGate() {
+        val f = LocationFilter()
+        assertEquals(Decision.ACCEPT, f.evaluate(LAT, LNG, 5f, T0, "gps", T0))
+
+        // This cached fix is recent relative to now, but older than the accepted reference point.
+        // Accepting it would make dt negative and let a 5.5 km teleport bypass the speed check.
+        assertEquals(
+            Decision.REJECT_STALE,
+            f.evaluate(LAT + 0.05, LNG, 5f, T0 - 1_000L, "gps", T0 + 1_000L),
+        )
     }
 
     @Test

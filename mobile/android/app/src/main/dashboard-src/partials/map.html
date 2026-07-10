@@ -1,13 +1,18 @@
 <section id="view-map" class="view" data-view="map">
   <!-- role="group": an aria-label on a bare div is dropped by most screen
        readers; the role makes the "Pick a logged drive" name land. -->
-  <div
-    id="mapDriveChips"
-    class="map-drive-chips"
-    data-noswipe="true"
-    role="group"
-    aria-label="Pick a logged drive"
-  ></div>
+  <div class="map-drive-picker">
+    <div
+      id="mapDriveChips"
+      class="map-drive-chips"
+      data-noswipe="true"
+      role="group"
+      aria-label="Pick a logged drive"
+    ></div>
+    <button type="button" id="mapAllDrivesBtn" class="map-all-drives-btn">
+      All drives
+    </button>
+  </div>
 
   <article id="mapCard" class="panel map-card">
     <div id="mapFrame" class="map-frame" data-layer="eff" data-noswipe="true">
@@ -169,7 +174,13 @@
           permission enabled. The route will draw here from on-device SQLite
           samples.</span
         >
-        <button type="button" class="link-btn" data-nav-jump="settings">
+        <button
+          type="button"
+          class="link-btn"
+          data-nav-jump="settings"
+          data-settings-target="settingsConnection"
+          data-settings-focus="permissionBtn"
+        >
           Check permissions in Settings
         </button>
       </div>
@@ -270,6 +281,31 @@
     tabindex="-1"
     hidden
   >
+    <div id="tripReceipt" class="trip-receipt" role="status" hidden>
+      <div>
+        <span class="kicker">Saved successfully</span>
+        <strong>Your drive is safely in local history.</strong>
+      </div>
+      <div
+        class="trip-receipt-actions"
+        role="group"
+        aria-label="Saved drive actions"
+      >
+        <button type="button" id="tripReceiptName" data-trip-rename="">
+          Name
+        </button>
+        <button
+          type="button"
+          id="tripReceiptFavorite"
+          data-trip-favorite=""
+          data-trip-favorite-state="0"
+        >
+          Favorite
+        </button>
+        <button type="button" data-action="shareTripCard">Share</button>
+        <button type="button" data-action="closeTripDetail">Done</button>
+      </div>
+    </div>
     <header class="trip-detail-head">
       <div>
         <span class="kicker">Drive detail</span>
@@ -431,14 +467,24 @@
            works, it just isn't advertised as a copy line.) -->
       <header>
         <span class="kicker">Recorded drives</span>
-        <button
-          type="button"
-          class="link-btn"
-          data-action="exportAllTripsCsv"
-          id="exportAllTripsBtn"
-        >
-          Export CSV
-        </button>
+        <span class="recorded-drives-head-actions">
+          <button
+            type="button"
+            class="link-btn"
+            data-action="exportAllTripsCsv"
+            id="exportAllTripsBtn"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            class="link-btn"
+            id="mapSessionListCloseBtn"
+            aria-label="Close all recorded drives"
+          >
+            Close
+          </button>
+        </span>
       </header>
       <!-- Trip list search / sort / favorites filter (M4). Client-side over the
            already-loaded routes; map.ts reads these and re-renders the list. -->

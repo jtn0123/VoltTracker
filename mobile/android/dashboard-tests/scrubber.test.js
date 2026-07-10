@@ -195,6 +195,32 @@ describe('scrubber.ts', () => {
     }
   });
 
+  it('exposes pointer and playback activity so compact navigation can yield', () => {
+    const VD = window.VoltDashboard;
+    VD.renderScrubber(withGappyRoute());
+    const chart = document.getElementById('scrubChart');
+    chart.setPointerCapture = vi.fn();
+    const down = new window.Event('pointerdown', { bubbles: true });
+    Object.defineProperties(down, {
+      pointerId: { value: 1 },
+      clientX: { value: 20 },
+    });
+
+    chart.dispatchEvent(down);
+    expect(document.body.classList.contains('map-scrubber-interacting')).toBe(true);
+    chart.dispatchEvent(new window.Event('pointerup', { bubbles: true }));
+    expect(document.body.classList.contains('map-scrubber-interacting')).toBe(false);
+
+    const rafSpy = vi.spyOn(window, 'requestAnimationFrame').mockReturnValue(1);
+    const cancelSpy = vi.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {});
+    document.getElementById('scrubPlay').click();
+    expect(document.body.classList.contains('map-scrubber-playing')).toBe(true);
+    VD.hideScrubber();
+    expect(document.body.classList.contains('map-scrubber-playing')).toBe(false);
+    rafSpy.mockRestore();
+    cancelSpy.mockRestore();
+  });
+
   it('the play button is inert with no route loaded (stays on Play)', () => {
     const VD = window.VoltDashboard;
     VD.hideScrubber(); // ensure no route

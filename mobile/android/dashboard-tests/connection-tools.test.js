@@ -22,6 +22,7 @@ describe('connection-tools toggles and buttons', () => {
     delete window.VoltTrackerNative;
     delete window.VoltTrackerAndroid;
     bridge = createVoltBridgeFixture({
+      getLastDevice: vi.fn(() => '{"address":"AA:BB:CC:DD:EE:FF","name":"Volt OBD"}'),
       setChargeCompleteNotify: vi.fn(),
       setNewDtcNotify: vi.fn(),
       setLowSocNotify: vi.fn(),
@@ -34,8 +35,14 @@ describe('connection-tools toggles and buttons', () => {
       shareDiagnosticsDigest: vi.fn(),
       scheduleAdapterReadyNotify: vi.fn(),
       cancelAdapterReadyNotify: vi.fn(),
+      setKeepScreenAwake: vi.fn(),
+      setTripSummaryNotify: vi.fn(),
+      getDashboardExperienceState: vi.fn(
+        () => '{"keepScreenAwake":true,"tripSummary":false}',
+      ),
     });
     await loadDashboard({ bridge });
+    window.VoltDashboard.setView('settings');
   });
 
   it('charge-complete and new-DTC toggles write through their bridge setters', () => {
@@ -91,6 +98,25 @@ describe('connection-tools toggles and buttons', () => {
     expect(bridge.setMaintenanceDueNotify).toHaveBeenLastCalledWith(false);
   });
 
+  it('end-of-drive recap toggle writes through its native preference', () => {
+    const toggle = document.getElementById('notifyTripSummaryToggle');
+    expect(toggle).toBeTruthy();
+    toggle.checked = true;
+    fire(toggle, 'change');
+    expect(bridge.setTripSummaryNotify).toHaveBeenCalledWith(true);
+    expect(document.getElementById('eventNotifyStatus').textContent).toMatch(/recaps on/i);
+  });
+
+  it('keep-awake control reflects native state and toggles the window policy', () => {
+    const toggle = document.getElementById('keepScreenAwakeToggle');
+    expect(toggle.textContent).toBe('On');
+    expect(toggle.getAttribute('aria-pressed')).toBe('true');
+    toggle.click();
+    expect(bridge.setKeepScreenAwake).toHaveBeenCalledWith(false);
+    expect(toggle.textContent).toBe('Off');
+    expect(document.getElementById('drivingDisplayStatus').textContent).toMatch(/timeout restored/i);
+  });
+
   it('auto-connect toggle writes the enabled flag', () => {
     const toggle = document.getElementById('autoConnectToggle');
     toggle.checked = false;
@@ -107,6 +133,25 @@ describe('connection-tools toggles and buttons', () => {
 
     document.getElementById('sendAiDigestBtn')?.click();
     expect(bridge.shareDiagnosticsDigest).toHaveBeenCalled();
+  });
+
+  it('disables Test connection until an adapter has been remembered', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const noAdapterBridge = createVoltBridgeFixture({
+      getLastDevice: vi.fn(() => '{}'),
+      getAutoConnectState: vi.fn(() => '{"enabled":true,"available":false}'),
+      startTestConnection: vi.fn(),
+    });
+    await loadDashboard({ bridge: noAdapterBridge });
+    window.VoltDashboard.setView('settings');
+    const button = document.getElementById('testConnectionBtn');
+    expect(button.disabled).toBe(true);
+    expect(document.getElementById('testConnectionStatus').textContent).toMatch(/connect or remember/i);
+    button.click();
+    expect(noAdapterBridge.startTestConnection).not.toHaveBeenCalled();
   });
 
   it('notify-when-ready schedules when enabled', () => {

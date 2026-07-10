@@ -183,7 +183,7 @@ describe('actions-storage.ts — confirm/prompt cancel paths', () => {
     actions.shareEncryptedBackup(null);
     enterAppDialogInput('hunter2');
     await clickConfirm();
-    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('hunter2');
+    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('hunter2', expect.any(String));
   });
 
   it('shareBackup() reports a blocked status when the native share throws', async () => {

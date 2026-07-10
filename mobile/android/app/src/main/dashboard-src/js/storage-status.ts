@@ -265,14 +265,49 @@ import { storageRollupSignature } from "./render-signatures";
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
-    VD.updateEnhancedCapabilityUi();
+    // Detailed-signal rendering is an Advanced-only lazy chunk. Storage still
+    // updates every tab before that chunk exists, so treat its renderer as an
+    // optional subscriber; opening Advanced immediately renders the latest
+    // stored state through prefs.ts.
+    if (typeof VD.updateEnhancedCapabilityUi === "function") VD.updateEnhancedCapabilityUi();
     if (!recent.length) {
       list?.replaceChildren(buildStatusCopy("Connect or scan to create local SQLite rows. Preview data stays isolated in the sandbox."));
       updateReviewUi();
       return;
     }
-    list?.replaceChildren(...recent.map(buildRecentSessionRow));
+    if (list) renderRecentSessionWindow(list, recent);
     updateReviewUi();
+  }
+
+  const RECENT_SESSION_INITIAL_LIMIT = 50;
+  const RECENT_SESSION_PAGE_SIZE = 50;
+
+  function renderRecentSessionWindow(
+    list: HTMLElement,
+    recent: VoltRecentSession[],
+    requestedLimit = Number(list.dataset.sessionLimit || RECENT_SESSION_INITIAL_LIMIT),
+  ) {
+    const limit = Math.min(recent.length, Math.max(RECENT_SESSION_INITIAL_LIMIT, requestedLimit));
+    list.dataset.sessionLimit = String(limit);
+    const nodes: HTMLElement[] = recent.slice(0, limit).map(buildRecentSessionRow);
+    if (limit < recent.length) {
+      const more = document.createElement("div");
+      more.className = "history-more";
+      const copy = buildStatusCopy(`Showing ${limit} of ${recent.length} sessions.`);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "history-export-btn";
+      button.dataset.sessionMore = "true";
+      button.textContent = "Show 50 more";
+      button.addEventListener("click", () => {
+        renderRecentSessionWindow(list, recent, limit + RECENT_SESSION_PAGE_SIZE);
+        const next = list.querySelector<HTMLElement>("[data-session-more='true']");
+        (next || list.querySelector<HTMLElement>(".history-row:last-of-type"))?.focus();
+      });
+      more.append(copy, button);
+      nodes.push(more);
+    }
+    list.replaceChildren(...nodes);
   }
 
   // ---- Row builders: prefer document.createElement + textContent over
@@ -1036,6 +1071,7 @@ import { storageRollupSignature } from "./render-signatures";
     const stats = el("sohTrendStats");
     const empty = el("sohTrendEmpty");
     const latestEl = el("sohTrendLatest");
+    card.hidden = !has;
     if (chart) chart.hidden = !has;
     if (stats) stats.hidden = !has;
     if (empty) empty.hidden = has;
@@ -1130,6 +1166,7 @@ import { storageRollupSignature } from "./render-signatures";
     const latest = latestInsightReading(storage);
     toggleHidden("appEmptyState", hasRows);
     toggleHidden("chargeEmptyState", hasCharge);
+    toggleHidden("chargeSummaryGrid", !hasCharge);
     toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
@@ -1466,6 +1503,7 @@ import { storageRollupSignature } from "./render-signatures";
     setMaintFormError("");
     setMaintFieldHint("maintOdometerInput", "maintOdometerHint", "");
     setMaintFieldHint("maintIntervalKmInput", "maintIntervalKmHint", "");
+    setMaintFieldHint("maintIntervalMonthsInput", "maintIntervalMonthsHint", "");
   }
 
   // Reads the inline form and forwards a JSON payload to native. Type is required; odometer, note,
@@ -1500,9 +1538,19 @@ import { storageRollupSignature } from "./render-signatures";
     const interval = parseOdometerKm((el("maintIntervalKmInput") as HTMLInputElement | null)?.value || "");
     if (interval.invalid) setMaintFieldHint("maintIntervalKmInput", "maintIntervalKmHint", "Enter a number above 0.");
     else if (interval.km != null) payload.intervalKm = interval.km;
-    if (odo.invalid || interval.invalid) return;
-    const months = Math.round(Number(String((el("maintIntervalMonthsInput") as HTMLInputElement | null)?.value || "").trim()));
-    if (Number.isFinite(months) && months > 0) payload.intervalMonths = months;
+    const monthsText = String((el("maintIntervalMonthsInput") as HTMLInputElement | null)?.value || "").trim();
+    const months = Number(monthsText);
+    const monthsInvalid = Boolean(monthsText) && (!Number.isFinite(months) || months <= 0 || !Number.isInteger(months));
+    if (monthsInvalid) {
+      setMaintFieldHint(
+        "maintIntervalMonthsInput",
+        "maintIntervalMonthsHint",
+        "Enter a positive whole number of months.",
+      );
+    } else if (monthsText) {
+      payload.intervalMonths = months;
+    }
+    if (odo.invalid || interval.invalid || monthsInvalid) return;
     try {
       bridge.addMaintenanceEntry(JSON.stringify(payload));
     } catch (err) {

@@ -129,6 +129,20 @@ class EventNotificationCoordinatorTest {
     }
 
     @Test
+    fun indeterminateScanPayloadLeavesThePriorBaselineIntact() {
+        eventPrefs.setLastScanDtcCodes(listOf("P0AA6"))
+        val coord = coordinator()
+        val scan =
+            JSONObject()
+                .put("source", "scan")
+                .put("dtcScanValid", false)
+                .put("dtcCodes", JSONArray())
+
+        assertTrue(coord.onTelemetry(scan).isEmpty())
+        assertEquals(setOf("P0AA6"), eventPrefs.lastScanDtcCodes())
+    }
+
+    @Test
     fun sessionRestartResetsChargeAndThresholdState() {
         eventPrefs.setLowSocEnabled(true)
         eventPrefs.setLowSocThresholdPct(20.0)
@@ -320,12 +334,10 @@ class EventNotificationCoordinatorTest {
         // ~7.1 kWh rather than the zero it would get if the missing timestamp collapsed the interval.
         val coord = coordinator()
         // updatedAt omitted entirely -> optLong default 0 -> nowMs() fallback. Need >= MIN_CHARGE_SAMPLES.
-        now = 0L
-        coord.onTelemetry(chargingSampleNoTimestamp())
-        now = 1_800_000L
-        coord.onTelemetry(chargingSampleNoTimestamp())
-        now = 3_600_000L
-        coord.onTelemetry(chargingSampleNoTimestamp())
+        for (minute in 0..60) {
+            now = minute * 60_000L
+            coord.onTelemetry(chargingSampleNoTimestamp())
+        }
         // Charge ends.
         now = 3_660_000L
         val ended = JSONObject()
@@ -410,8 +422,9 @@ class EventNotificationCoordinatorTest {
     ) : EventNotifier(context) {
         val posted: MutableList<EventNotificationDecider.Event> = ArrayList()
 
-        override fun notify(event: EventNotificationDecider.Event) {
+        override fun notify(event: EventNotificationDecider.Event): Boolean {
             posted.add(event)
+            return true
         }
     }
 

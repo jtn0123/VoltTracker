@@ -28,6 +28,8 @@ export type SavingsInputs = {
   gasPricePerGal: number;
   /** Electricity rate, $/kWh. */
   pricePerKwh: number;
+  /** Logged energy for the same distance. Preferred when finite and positive. */
+  energyKwh?: number;
 };
 
 export type SavingsResult = {
@@ -37,6 +39,7 @@ export type SavingsResult = {
   evCost: number;
   /** gasCost - evCost; negative when electricity was pricier than the gas. */
   savings: number;
+  energySource: "logged" | "estimated";
 };
 
 /** True when every pref the savings math needs is set to a usable value. The
@@ -56,9 +59,10 @@ export function savingsPrefsReady(
 export function computeSavingsVsGas(inputs: SavingsInputs): SavingsResult {
   const miles = inputs.meters / METERS_PER_MILE;
   const gasCost = (miles / inputs.mpg) * inputs.gasPricePerGal;
-  const evEnergyKwh = miles / ASSUMED_VOLT_MI_PER_KWH;
+  const hasLoggedEnergy = Number.isFinite(inputs.energyKwh) && Number(inputs.energyKwh) > 0;
+  const evEnergyKwh = hasLoggedEnergy ? Number(inputs.energyKwh) : miles / ASSUMED_VOLT_MI_PER_KWH;
   const evCost = evEnergyKwh * inputs.pricePerKwh;
-  return { gasCost, evCost, savings: gasCost - evCost };
+  return { gasCost, evCost, savings: gasCost - evCost, energySource: hasLoggedEnergy ? "logged" : "estimated" };
 }
 
 /** Format a signed dollar amount as the dashboard does elsewhere: a leading

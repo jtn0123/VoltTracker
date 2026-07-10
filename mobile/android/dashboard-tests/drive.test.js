@@ -10,7 +10,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 // REQUIRED_DOM via the loader's extraDom option.
 const DRIVE_EXTRA_DOM = `
   <div id="driveNowChips"></div>
-  <div id="driveRecording" hidden><span class="top-recording__dot"></span><strong id="driveRecordingLabel">Recording</strong><small id="driveRecordingMeta"></small></div>
+  <div id="driveRecording" hidden><span class="settings-recording__dot"></span><strong id="driveRecordingLabel">Recording</strong><small id="driveRecordingMeta"></small></div>
   <button id="topDemoInfo" hidden><strong>Demo / Testing</strong><small id="topDemoMeta">sample data</small></button>
   <div id="liveTraceChart"><canvas id="liveTraceCanvas"></canvas><div class="scrub-cursor live-trace-cursor"></div></div>
   <div id="powerBarsChart"></div>
@@ -83,14 +83,14 @@ describe('drive.ts', () => {
       session: { state: 'connected', sampleCount: 0 },
     };
     VD.renderDriveNowChips();
-    // The recording state consolidates into the topbar #driveRecording line;
+    // The recording state consolidates into the Settings #driveRecording footer;
     // idle keeps it hidden and the retired strip empty.
     const rec = document.getElementById('driveRecording');
     expect(rec.hidden).toBe(true);
     expect(document.getElementById('driveNowChips').children.length).toBe(0);
   });
 
-  it('shows the "Recording" header line when an active session has live evidence', () => {
+  it('shows the Settings "Recording" footer when an active session has live evidence', () => {
     const VD = window.VoltDashboard;
     VD.state.appState = {
       adapter: { connected: true, name: 'OBDLink MX+' },

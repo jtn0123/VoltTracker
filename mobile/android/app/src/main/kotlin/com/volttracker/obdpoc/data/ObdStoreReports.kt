@@ -421,7 +421,7 @@ class ObdStoreReports(
                 if (!cursor.moveToFirst()) {
                     return null
                 }
-                return cursor.getDouble(0)
+                return cursor.getDouble(0).takeIf { it.isFinite() }
             }
     }
 
@@ -429,6 +429,11 @@ class ObdStoreReports(
         limit: Int,
         pointLimit: Int,
     ): JSONArray = safeArray { ObdStoreRouteProjection.recentRoutes(helper.readableDatabase, limit, pointLimit) }
+
+    fun tripsPageJson(
+        limit: Int,
+        offset: Int,
+    ): JSONArray = trips.tripsJson(limit, offset)
 
     /**
      * Trips bundled for the bulk all-trips CSV export (M6). Reuses [ObdStoreTrips.tripsJson] for the
@@ -442,12 +447,24 @@ class ObdStoreReports(
     fun allTripsForExportJson(
         tripLimit: Int,
         pointLimit: Int,
-    ): JSONArray =
-        safeArray {
+    ): JSONArray = allTripsForExportJson(tripLimit, pointLimit, 0)
+
+    fun allTripsForExportJson(
+        tripLimit: Int,
+        pointLimit: Int,
+        offset: Int,
+    ): JSONArray = allTripsForExportPageJson(tripLimit, pointLimit, offset).optJSONArray("items") ?: JSONArray()
+
+    fun allTripsForExportPageJson(
+        tripLimit: Int,
+        pointLimit: Int,
+        offset: Int,
+    ): JSONObject =
+        try {
             val out = JSONArray()
-            val trips = trips.tripsJson(tripLimit)
-            for (i in 0 until trips.length()) {
-                val trip = trips.optJSONObject(i) ?: continue
+            val page = trips.tripsJson(tripLimit, offset)
+            for (i in 0 until page.length()) {
+                val trip = page.optJSONObject(i) ?: continue
                 val routeKey = trip.optString("id", "")
                 if (routeKey.isEmpty()) {
                     continue
@@ -464,7 +481,9 @@ class ObdStoreReports(
                         .put("route", route),
                 )
             }
-            out
+            JSONObject().put("items", out).put("scanned", page.length())
+        } catch (ignored: JSONException) {
+            JSONObject().put("items", JSONArray()).put("scanned", 0)
         }
 
     private fun boundedTripRouteJson(

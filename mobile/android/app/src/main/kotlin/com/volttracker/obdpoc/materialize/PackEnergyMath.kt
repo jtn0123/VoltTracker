@@ -4,6 +4,9 @@ package com.volttracker.obdpoc.materialize
 internal object PackEnergyMath {
     private const val MILLIS_PER_HOUR = 3_600_000.0
 
+    /** Never infer continuous power across a multi-sample adapter or persistence outage. */
+    const val MAX_INTEGRATION_GAP_MS: Long = 2L * 60_000L
+
     fun dischargePowerKw(
         packVoltage: Double,
         packCurrentA: Double,
@@ -21,7 +24,7 @@ internal object PackEnergyMath {
         currentAtMs: Long,
     ): Double? {
         val elapsedMs = currentAtMs - previousAtMs
-        if (elapsedMs <= 0L) return null
+        if (elapsedMs <= 0L || elapsedMs > MAX_INTEGRATION_GAP_MS) return null
         return finiteOrNull(((previousPowerKw + currentPowerKw) / 2.0) * (elapsedMs / MILLIS_PER_HOUR))
     }
 

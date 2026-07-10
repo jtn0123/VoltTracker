@@ -23,6 +23,8 @@ import { fileURLToPath } from "node:url";
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SRC = resolve(HERE, "../app/src/main/dashboard-src/js");
 const OUT = resolve(HERE, "../app/src/main/assets/dashboard/js");
+const CSS_SRC = resolve(HERE, "../app/src/main/dashboard-src/css");
+const CSS_OUT = resolve(HERE, "../app/src/main/assets/dashboard/css");
 const LEAFLET_SRC = resolve(HERE, "node_modules/leaflet/dist");
 const LEAFLET_OUT = resolve(HERE, "../app/src/main/assets/dashboard/lib/leaflet");
 const LEAFLET_ASSETS = [
@@ -34,6 +36,7 @@ const LEAFLET_ASSETS = [
   "images/marker-icon-2x.png",
   "images/marker-shadow.png",
 ];
+const LAZY_CSS = ["screens-map.css", "troubleshooter.css"];
 
 function copyAssetTree(srcRoot, outRoot, files) {
   for (const file of files) {
@@ -63,6 +66,22 @@ for (const f of readdirSync(OUT)) {
 rmSync(LEAFLET_OUT, { recursive: true, force: true });
 copyAssetTree(LEAFLET_SRC, LEAFLET_OUT, LEAFLET_ASSETS);
 
+// Lazy styles keep readable sources beside the TypeScript and ship minified.
+// These two files are loaded only when Map/troubleshooting is opened, so keeping
+// their generated output small restores real budget headroom without charging
+// the Drive-first startup path.
+mkdirSync(CSS_OUT, { recursive: true });
+for (const file of LAZY_CSS) {
+  await build({
+    entryPoints: [resolve(CSS_SRC, file)],
+    outfile: resolve(CSS_OUT, file),
+    bundle: false,
+    minify: true,
+    legalComments: "none",
+    logLevel: "info",
+  });
+}
+
 // Keep this order in sync with index.template.html (and script-order.test.js).
 // storage-status / signals-panel are the eager pieces split from the old panels.ts
 // god-module (C2). insights-panel is lazy now: it owns trips/insights rollups and
@@ -72,13 +91,10 @@ const EAGER = [
   "core",
   "payload-validators",
   "storage-status",
-  "signals-panel",
-  "scrubber",
   "drive",
   "telemetry",
   "actions",
   "connection-status",
-  "connection-tools",
 ];
 
 const LAZY = [
@@ -91,6 +107,9 @@ const LAZY = [
   "actions-storage",
   "actions-signals",
   "actions-demo",
+  "signals-panel",
+  "connection-tools",
+  "scrubber",
 ];
 
 function sourceFor(name) {

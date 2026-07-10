@@ -13,8 +13,9 @@ class PackEnergyMathTest {
     }
 
     @Test
-    fun trapezoidRejectsNonForwardTimeAndIntegratesOneHour() {
-        assertEquals(3.0, PackEnergyMath.trapezoidKwh(2.0, 4.0, 0L, 3_600_000L)!!, 0.0001)
+    fun trapezoidRejectsNonForwardTimeAndLongTelemetryOutages() {
+        assertEquals(0.05, PackEnergyMath.trapezoidKwh(2.0, 4.0, 0L, 60_000L)!!, 0.0001)
+        assertNull(PackEnergyMath.trapezoidKwh(2.0, 4.0, 0L, 3_600_000L))
         assertNull(PackEnergyMath.trapezoidKwh(2.0, 4.0, 10L, 10L))
     }
 

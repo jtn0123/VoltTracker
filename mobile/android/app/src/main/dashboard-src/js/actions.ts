@@ -544,6 +544,34 @@ type SignalActions = {
     withBusy(button, () => callBridgeAction("connectLast", [], "Could not reconnect to the last adapter."));
   }
 
+  function smartConnect(button?: BusyButton | null) {
+    const permissions = (state.appState && state.appState.permissions) || {};
+    if (bridge && permissions.bluetoothPermission === false) {
+      explainMissingAdapter(false, true);
+      return;
+    }
+    const selected = typeof VD.getSelectedDevice === "function" ? VD.getSelectedDevice() : null;
+    if (selected && String(selected.address || "").trim()) {
+      connectSelected(false, button);
+      return;
+    }
+    const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
+    if (last && String(last.address || "").trim()) {
+      connectLastAdapter(button);
+      return;
+    }
+    // No safe connection target exists yet. Take the user to the exact setup
+    // control, refresh the paired list, and explain the blocker there.
+    VD.setView("settings");
+    refreshDevices();
+    window.setTimeout(() => {
+      VD.scrollToSettingsSection?.("settingsConnection");
+      const select = el("deviceSelect") as HTMLSelectElement | null;
+      if (select && !select.disabled) select.focus({ preventScroll: true });
+    }, 80);
+    explainMissingAdapter(false, true);
+  }
+
   function handleAction(action: string | undefined, button: BusyButton | null = null) {
     // Actions are mutually exclusive, so stop at the first match instead of
     // re-testing every branch. (tpmsScan/detailProbe both route to the same
@@ -566,6 +594,7 @@ type SignalActions = {
       case "cellProbe": cellProbeLast(button); return;
       case "cellToggle": toggleCellGrid(button); return;
       case "connect": connectSelected(false, button); return;
+      case "smartConnect": smartConnect(button); return;
       case "demo": startDemo(); return;
       case "stopDemo": stopDemo(); return;
       case "stop": stopAll(); return;
@@ -820,6 +849,16 @@ type SignalActions = {
     callBridgeAction("markTripNotTrip", [clean], "Could not hide this drive from Trips.");
   }
 
+  function onTripNotTripClick(event: Event) {
+    const target = event.target as Element | null;
+    const button = target && (target.closest("[data-trip-not-trip]") as HTMLElement | null);
+    if (!button) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressNextMapClick = true;
+    markMapSessionNotTrip(button.dataset.tripNotTrip);
+  }
+
   function onMapSessionPointerDown(event: Event) {
     const button = mapSessionButtonFromEvent(event);
     if (!button) return;
@@ -967,6 +1006,7 @@ type SignalActions = {
     event.stopPropagation();
     suppressNextMapClick = true;
     const routeKey = String(button.dataset.tripDetail || "").trim();
+    state.tripReceiptMode = false;
     if (!routeKey) return;
     openTripDetail(routeKey);
   }
@@ -1043,6 +1083,7 @@ type SignalActions = {
       }
     }
     tripDetailOpenerKey = null;
+    state.tripReceiptMode = false;
   }
 
   // ---- M4 trip-list search / sort / favorites controls ---------------------
@@ -1381,7 +1422,21 @@ type SignalActions = {
       const target = event.target as Element | null;
       const button = target && (target.closest("[data-nav-jump]") as HTMLElement | null);
       if (!button) return;
+      if (button.closest("#tripDetailSheet")) closeTripDetail();
       VD.setView(button.dataset.navJump ?? "");
+      const sectionId = button.dataset.settingsTarget;
+      const focusId = button.dataset.settingsFocus;
+      if (sectionId) {
+        window.setTimeout(() => {
+          VD.scrollToSettingsSection?.(sectionId);
+          if (focusId) {
+            const focusTarget = el(focusId) as HTMLElement | null;
+            window.setTimeout(() => {
+              if (focusTarget) focusTarget.focus({ preventScroll: true });
+            }, 260);
+          }
+        }, 80);
+      }
       button.blur();
     }, opts);
     document.querySelectorAll("[data-action]").forEach((node) => {
@@ -1440,6 +1495,7 @@ type SignalActions = {
       button.addEventListener("click", () => {
         // The [data-map-layer] selector guarantees the attribute is present.
         state.mapLayer = button.dataset.mapLayer as string;
+        VD.prefs.set("mapLayer", state.mapLayer);
         button.blur();
         void VD.requestMapRender()
           .then(() => {
@@ -1468,9 +1524,12 @@ type SignalActions = {
     bindListenerGuarded("mapSessionList", "click", onTripDetailClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripRenameClick, opts);
     bindListenerGuarded("mapSessionList", "click", onTripExportClick, opts);
+    bindListenerGuarded("mapSessionList", "click", onTripNotTripClick, opts);
     // The trip-detail sheet's "Export drive CSV" reuses the same delegated
     // handler; the sheet button carries the same data-trip-export contract.
     bindListenerGuarded("tripDetailSheet", "click", onTripExportClick, opts);
+    bindListenerGuarded("tripDetailSheet", "click", onTripRenameClick, opts);
+    bindListenerGuarded("tripDetailSheet", "click", onTripFavoriteClick, opts);
     bindListenerGuarded("mapSessionList", "click", onSessionClick, opts);
     // Per-entry "Remove" on a maintenance row (M5) — the list is re-rendered dynamically, so
     // delegate off the stable container.
@@ -1493,6 +1552,40 @@ type SignalActions = {
     bindListenerGuarded("mapDriveChips", "pointerup", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapDriveChips", "pointerleave", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapDriveChips", "pointercancel", onMapSessionPointerEnd, opts);
+    bindListenerGuarded("mapAllDrivesBtn", "click", () => {
+      state.mapBrowserOpen = true;
+      if (typeof VD.loadAllTrips === "function") VD.loadAllTrips();
+      const browser = document.querySelector<HTMLElement>("#view-map .map-layout");
+      if (browser) {
+        browser.hidden = false;
+        browser.classList.add("is-open");
+      }
+      void VD.requestMapRender().catch(() => {});
+      const search = el("mapSessionSearch") as HTMLInputElement | null;
+      if (!search) return;
+      window.requestAnimationFrame(() => {
+        search.scrollIntoView({ behavior: "smooth", block: "center" });
+        window.setTimeout(() => search.focus({ preventScroll: true }), 220);
+      });
+    }, opts);
+    bindListenerGuarded("mapSessionListCloseBtn", "click", () => {
+      state.mapBrowserOpen = false;
+      const browser = document.querySelector<HTMLElement>("#view-map .map-layout");
+      if (browser) browser.hidden = true;
+      browser?.classList.remove("is-open");
+      void VD.requestMapRender().catch(() => {});
+      window.setTimeout(() => (el("mapAllDrivesBtn") as HTMLElement | null)?.focus(), 0);
+    }, opts);
+    bindListenerGuarded("tripUndoBtn", "click", () => {
+      const undo = el("tripUndoToast") as HTMLElement | null;
+      const routeKey = String(undo?.dataset.routeKey || "").trim();
+      if (!routeKey || !bridge || typeof bridge.restoreTrip !== "function") {
+        VD.showToast?.("This drive could not be restored", true);
+        return;
+      }
+      undo!.hidden = true;
+      callBridgeAction("restoreTrip", [routeKey], "Could not restore this drive.");
+    }, opts);
     bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
     bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
@@ -1650,6 +1743,21 @@ type SignalActions = {
 
   // Android side calls into VoltTrackerNative.* on the WebView — this surface
   // is the ABI and must keep its exact shape.
+  let tripUndoTimer = 0;
+  const showTripUndo = (payload: unknown) => {
+    const parsed = VD.parsePayload<Record<string, unknown>>(payload, {});
+    const routeKey = String(parsed.routeKey || "").trim();
+    const undo = el("tripUndoToast") as HTMLElement | null;
+    if (!routeKey || !undo) return;
+    undo.dataset.routeKey = routeKey;
+    undo.hidden = false;
+    window.clearTimeout(tripUndoTimer);
+    tripUndoTimer = window.setTimeout(() => {
+      undo.hidden = true;
+      delete undo.dataset.routeKey;
+    }, 7000);
+  };
+
   window.VoltTrackerNative = {
     setDevices: VD.setDevices,
     setHistory: VD.setHistory,
@@ -1657,6 +1765,9 @@ type SignalActions = {
     setStorage: VD.setStorage,
     setTrips: (payload: unknown) => {
       if (typeof VD.setTrips === "function") VD.setTrips(payload);
+    },
+    setTripsPage: (payload: unknown) => {
+      if (typeof VD.setTripsPage === "function") VD.setTripsPage(payload);
     },
     setInsights: (payload: unknown) => {
       if (typeof VD.setInsights === "function") VD.setInsights(payload);
@@ -1672,7 +1783,20 @@ type SignalActions = {
     },
     setAppState: VD.setAppState,
     setRestoreProgress: VD.setRestoreProgress,
-    updateTelemetry: VD.updateTelemetry
+    updateTelemetry: VD.updateTelemetry,
+    showToast: (message: unknown) => VD.showToast?.(message),
+    showTripUndo,
+    setBackupReceipt: (payload: unknown) => VD.setBackupReceipt?.(payload),
+    applyRestoredPreferences: (payload: unknown) => {
+      if (VD.prefs.restoreFromBackup(payload)) VD.showToast?.("Backup settings restored");
+    },
+    openTrip: (routeKey: unknown) => {
+      if (typeof VD.openTripFromNative === "function") VD.openTripFromNative(String(routeKey || ""));
+    },
+    openTripReceipt: (routeKey: unknown) => {
+      if (typeof VD.openTripFromNative === "function") VD.openTripFromNative(String(routeKey || ""), true);
+    },
+    restoreView: (view: unknown) => VD.setView(String(view || "drive"))
   };
 
   function maybeLoadTroubleshooterForStatus(payload: unknown) {

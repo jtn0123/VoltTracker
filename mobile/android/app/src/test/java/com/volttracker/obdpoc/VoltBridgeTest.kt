@@ -134,11 +134,25 @@ class VoltBridgeTest {
 
     @Test
     fun encryptedBackupMethodsTakePassphraseString() {
-        for (name in arrayOf("shareEncryptedBackup", "restoreEncryptedBackup")) {
-            val method = VoltBridge::class.java.getMethod(name, String::class.java)
-            assertEquals(Void.TYPE, method.returnType)
-            assertNotNull(method.getAnnotation(JavascriptInterface::class.java))
-        }
+        val share =
+            VoltBridge::class.java.getMethod(
+                "shareEncryptedBackup",
+                String::class.java,
+                String::class.java,
+            )
+        assertEquals(Void.TYPE, share.returnType)
+        assertNotNull(share.getAnnotation(JavascriptInterface::class.java))
+
+        val restore = VoltBridge::class.java.getMethod("restoreEncryptedBackup", String::class.java)
+        assertEquals(Void.TYPE, restore.returnType)
+        assertNotNull(restore.getAnnotation(JavascriptInterface::class.java))
+    }
+
+    @Test
+    fun backupShareCarriesVersionedDashboardPreferences() {
+        val method = VoltBridge::class.java.getMethod("shareBackup", String::class.java)
+        assertEquals(Void.TYPE, method.returnType)
+        assertNotNull(method.getAnnotation(JavascriptInterface::class.java))
     }
 
     @Test
@@ -155,6 +169,7 @@ class VoltBridgeTest {
             "exportDetailedSignalLogs",
             "getTrips",
             "getInsights",
+            "getDashboardExperienceState",
         )
         ) {
             val method = VoltBridge::class.java.getMethod(getter)
@@ -188,7 +203,6 @@ class VoltBridgeTest {
         arrayOf(
             "requestPermissions",
             "refreshDevices",
-            "shareBackup",
             "restoreBackup",
             "clearStoredData",
             "connectLast",
@@ -348,6 +362,10 @@ class VoltBridgeTest {
                 "getDeviceHistory",
                 "getAutoConnectState",
                 "setAutoConnectEnabled",
+                "getDashboardExperienceState",
+                "setKeepScreenAwake",
+                "setTripSummaryNotify",
+                "setActiveDashboardView",
                 // M1 event notifications + M3 auto-scan settings.
                 "getEventNotificationState",
                 "setChargeCompleteNotify",
@@ -369,11 +387,13 @@ class VoltBridgeTest {
                 "restoreBackup",
                 "restoreEncryptedBackup",
                 "getTrips",
+                "getTripsPage",
                 "getInsights",
                 "getTripRoute",
                 "getCurrentSessionRoute",
                 "getBatterySohHistory",
                 "requestTrips",
+                "requestTripsPage",
                 "requestInsights",
                 "requestTripRoute",
                 "requestCurrentSessionRoute",
@@ -394,6 +414,7 @@ class VoltBridgeTest {
                 "shareTripCard",
                 "deleteDetailedSignalLog",
                 "markTripNotTrip",
+                "restoreTrip",
                 "setTripLabel",
                 "setTripFavorite",
                 "addMaintenanceEntry",

@@ -899,6 +899,9 @@ pre {
     0 0 0 1px rgba(255, 255, 255, 0.04),
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
   transform: translateX(-50%);
+  transition:
+    opacity var(--motion-fast) var(--motion-ease),
+    transform var(--motion-fast) var(--motion-ease);
   backdrop-filter: blur(18px) saturate(1.2);
   -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
@@ -1063,9 +1066,9 @@ body.map-full-active .bottom-nav {
 
 /* Extra bottom clearance for the floating bottom nav only applies while the
      nav is on the bottom; above the rail breakpoint the nav is a side rail. */
-@media (min-height: 880px) and (max-width: 899px) {
+@media (max-width: 899px) {
   .app {
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-bottom: calc(var(--nav-safe) + 28px);
   }
 }
 
@@ -1080,6 +1083,17 @@ body.map-full-active .bottom-nav {
   }
   body.map-scrubber-active .bottom-nav button span {
     display: none;
+  }
+  body.map-scrubber-interacting .bottom-nav,
+  body.map-scrubber-playing .bottom-nav {
+    opacity: 0;
+    pointer-events: none;
+    transform: translate(-50%, calc(100% + 24px));
+  }
+  body.map-scrubber-nav-peek .bottom-nav {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%);
   }
 }
 
@@ -1118,6 +1132,26 @@ body.map-full-active .bottom-nav {
   #view-insights > .empty-state,
   #view-insights > .insights-hero {
     grid-column: 1 / -1;
+  }
+  #view-insights {
+    grid-template-areas:
+      "hero hero"
+      "lifetime charts"
+      "vehicle charts";
+  }
+  #view-insights > .insights-hero {
+    grid-area: hero;
+  }
+  #view-insights > .insights-sheet {
+    grid-area: lifetime;
+  }
+  #view-insights > .map-layout {
+    grid-area: charts;
+    display: grid;
+    gap: 16px;
+  }
+  #view-insights > #vehicleCard {
+    grid-area: vehicle;
   }
 }
 
@@ -2591,7 +2625,8 @@ button.drive-now-chip:focus-visible {
      page-level empty state replaces a screenful of dead placeholder tiles. */
 .view.is-prelive .live-microcharts,
 .view.is-prelive .trip-card,
-.view.is-prelive .session-footer-btn {
+.view.is-prelive .session-footer-btn,
+.view.is-prelive > .hero {
   display: none;
 }
 

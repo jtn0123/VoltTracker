@@ -31,6 +31,7 @@
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />
+    <link rel="stylesheet" href="css/workflows.css" />
     <!-- Proactive adapter-tool styles. troubleshooter.css is injected on demand by its lazy chunk
          (troubleshooter.ts) since the recovery modal only shows on a connection error. -->
     <link rel="stylesheet" href="css/status-tools.css" />
@@ -46,6 +47,16 @@
       aria-live="polite"
       hidden
     ></div>
+    <div
+      id="tripUndoToast"
+      class="status-toast status-undo"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span>Drive hidden. Raw data was kept.</span>
+      <button type="button" id="tripUndoBtn">Undo</button>
+    </div>
     <!-- include: partials/troubleshooter.html -->
     <!-- include: partials/app-dialog.html -->
     <!-- include: partials/restore-progress.html -->

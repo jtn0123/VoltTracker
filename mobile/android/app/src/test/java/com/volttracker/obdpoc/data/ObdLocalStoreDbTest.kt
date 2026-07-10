@@ -152,6 +152,37 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun nonFiniteTelemetryIsNeitherCountedNorPersisted() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        assertEquals(
+            -1L,
+            store.recordTelemetry(id, JSONObject().put("soc", "Infinity")),
+        )
+
+        val rowId =
+            store.recordTelemetry(
+                id,
+                JSONObject()
+                    .put("speedKph", 42)
+                    .put("soc", "Infinity")
+                    .put("batteryTemp", "-Infinity"),
+            )
+        assertTrue(rowId > 0L)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT soc, battery_temp FROM telemetry_samples WHERE _id = ?",
+                    arrayOf(rowId.toString()),
+                ).use {
+                    assertTrue(it.moveToFirst())
+                    assertTrue(it.isNull(0))
+                    assertTrue(it.isNull(1))
+                }
+        }
+    }
+
+    @Test
     fun nullTelemetryIsRejectedWithoutCountingSamples() {
         val id = store.startSession("obd", "00:11", "Adapter")
 
@@ -713,6 +744,24 @@ class ObdLocalStoreDbTest {
         assertEquals(3, route.optInt("pointCount"))
         // ~0.02 deg of latitude is a little over 2 km
         assertTrue("route should span ~2 km", route.optDouble("distanceMeters") > 2000)
+    }
+
+    @Test
+    fun invalidRestoredLocationValuesDoNotBreakRouteProjection() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        // The normal recorder filters these values, but a restored/current-schema database may
+        // contain them. Route JSON must remain readable instead of throwing on Infinity or
+        // emitting an impossible latitude.
+        locationSample(id, 1000L, 34.05, -118.25, Double.POSITIVE_INFINITY)
+        locationSample(id, 2000L, 91.0, -118.25, 5.0)
+        locationSample(id, 3000L, 34.06, -118.25, 5.0)
+
+        val route = store.getTripRouteJson(id)
+        val points = route.getJSONArray("points")
+        assertEquals(2, points.length())
+        assertTrue(points.getJSONObject(0).isNull("accuracyM"))
+        assertEquals(34.05, points.getJSONObject(0).getDouble("lat"), 0.0)
+        assertEquals(34.06, points.getJSONObject(1).getDouble("lat"), 0.0)
     }
 
     @Test

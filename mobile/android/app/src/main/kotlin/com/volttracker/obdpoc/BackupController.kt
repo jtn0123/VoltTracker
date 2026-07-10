@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import androidx.core.content.FileProvider
+import androidx.core.content.edit
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
+import org.json.JSONObject
 import java.io.File
 import java.io.IOException
 import java.util.concurrent.ExecutorService
@@ -56,7 +58,7 @@ class BackupController(
         OTHER,
     }
 
-    fun launchShare() {
+    fun launchShare(dashboardPreferencesJson: String? = null) {
         if (activity.isLoggingActive()) {
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
             return
@@ -66,12 +68,15 @@ class BackupController(
             return
         }
         showShareDisclosure(
-            onConfirmed = { performBackupAndShare() },
+            onConfirmed = { performBackupAndShare(dashboardPreferencesJson) },
             onFinishedWithoutConfirm = { backupShareInFlight.set(false) },
         )
     }
 
-    fun launchEncryptedShare(passphrase: String?) {
+    fun launchEncryptedShare(
+        passphrase: String?,
+        dashboardPreferencesJson: String? = null,
+    ) {
         if (!DataBackup.hasMinimumPassphrase(passphrase)) {
             activity.publishStatus("blocked", minimumPassphraseMessage(), true)
             return
@@ -85,7 +90,7 @@ class BackupController(
             return
         }
         showShareDisclosure(
-            onConfirmed = { performBackupAndShare(true, passphrase) },
+            onConfirmed = { performBackupAndShare(true, passphrase, dashboardPreferencesJson) },
             onFinishedWithoutConfirm = { backupShareInFlight.set(false) },
         )
     }
@@ -123,15 +128,30 @@ class BackupController(
         }
     }
 
-    private fun performBackupAndShare() {
-        performBackupAndShare(false, null)
+    private fun performBackupAndShare(dashboardPreferencesJson: String?) {
+        performBackupAndShare(false, null, dashboardPreferencesJson)
     }
 
     private fun performBackupAndShare(
         encrypted: Boolean,
         passphrase: String?,
+        dashboardPreferencesJson: String?,
     ) {
         if (activity.isLoggingActive()) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
+            backupShareInFlight.set(false)
+            return
+        }
+        val databaseLease = DatabaseOperationLease.tryAcquire(OPERATION_BACKUP)
+        if (databaseLease == null) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_database_operation_running), true)
+            backupShareInFlight.set(false)
+            return
+        }
+        // Close the check/acquire race: a session that started just before the lease won must finish
+        // being observed here; starts after acquisition are rejected by Activity + Service.
+        if (activity.isLoggingActive()) {
+            databaseLease.close()
             activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
             backupShareInFlight.set(false)
             return
@@ -175,10 +195,23 @@ class BackupController(
                         progress.onDataBackupProgress(snapshot)
                     }
                 val backup =
-                    if (encrypted) {
-                        dataBackup.buildEncryptedBackupFile(activity.localStore, passphrase, listener)
-                    } else {
-                        dataBackup.buildBackupFile(activity.localStore, listener)
+                    try {
+                        if (encrypted) {
+                            dataBackup.buildEncryptedBackupFile(
+                                activity.localStore,
+                                passphrase,
+                                dashboardPreferencesJson = dashboardPreferencesJson,
+                                progress = listener,
+                            )
+                        } else {
+                            dataBackup.buildBackupFile(
+                                activity.localStore,
+                                dashboardPreferencesJson = dashboardPreferencesJson,
+                                progress = listener,
+                            )
+                        }
+                    } finally {
+                        databaseLease.close()
                     }
                 activity.runOnUiThread {
                     if (disposed.get()) {
@@ -223,6 +256,24 @@ class BackupController(
                         activity.startActivity(
                             Intent.createChooser(share, activity.getString(R.string.chooser_backup)),
                         )
+                        val completedAtMs = System.currentTimeMillis()
+                        val tripCount =
+                            try {
+                                JSONObject(activity.getStorageSummaryJson()).optInt("tripSegmentCount", 0)
+                            } catch (_: RuntimeException) {
+                                0
+                            }
+                        activity.getSharedPreferences(AppPrefs.FILE, Activity.MODE_PRIVATE).edit {
+                            putLong(PREF_LAST_BACKUP_AT_MS, completedAtMs)
+                            putInt(PREF_LAST_BACKUP_TRIPS, tripCount)
+                        }
+                        activity.publishDashboardPayload(
+                            "setBackupReceipt",
+                            JSONObject()
+                                .put("lastBackupAtMs", completedAtMs)
+                                .put("lastBackupTrips", tripCount)
+                                .toString(),
+                        )
                         showRestoreProgress(
                             activity.getString(R.string.progress_backup_ready_title),
                             activity.getString(
@@ -261,6 +312,7 @@ class BackupController(
                 }
             }
         if (!started) {
+            databaseLease.close()
             showRestoreProgress(
                 activity.getString(R.string.progress_backup_failed_title),
                 activity.getString(R.string.status_backup_worker_failed),
@@ -447,10 +499,13 @@ class BackupController(
                         activity.getString(R.string.progress_replace_worker_detail),
                         OPERATION_RESTORE,
                     )
+                val settingsManifest = dataBackup.readSettingsManifest(staged)
+                dataBackup.removeSettingsManifest(staged)
                 val result = applyReplace(staged, progress)
                 activity.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
                     if (result == RestoreResult.OK) {
+                        applyRestoredSettings(settingsManifest)
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
                         showRestoreProgress(
@@ -497,10 +552,13 @@ class BackupController(
                         activity.getString(R.string.progress_merge_worker_detail),
                         OPERATION_RESTORE,
                     )
+                val settingsManifest = dataBackup.readSettingsManifest(staged)
+                dataBackup.removeSettingsManifest(staged)
                 val outcome = applyMerge(staged, progress)
                 activity.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
                     if (outcome.result == RestoreResult.OK) {
+                        applyRestoredSettings(settingsManifest)
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
                         val mergeMessage = outcome.message ?: activity.getString(R.string.merge_default_message)
@@ -559,6 +617,15 @@ class BackupController(
         )
         logRestore("apply_failed", mapOf("result" to result.name))
         activity.publishStatus("blocked", message, true)
+    }
+
+    private fun applyRestoredSettings(manifest: org.json.JSONObject?) {
+        if (manifest == null) return
+        dataBackup.applyNativeSettings(manifest)
+        activity.publishDashboardPayload(
+            "applyRestoredPreferences",
+            dataBackup.dashboardSettingsJson(manifest),
+        )
     }
 
     private fun publishRestoreStageFailure(outcome: DataBackup.RestoreStageOutcome) {
@@ -800,6 +867,9 @@ class BackupController(
         staged: File,
         progress: ProgressEmitter,
     ): MergeOutcome {
+        val databaseLease =
+            DatabaseOperationLease.tryAcquire(OPERATION_RESTORE)
+                ?: return MergeOutcome(RestoreResult.OTHER, null)
         try {
             ensureActive()
             val store = activity.localStore
@@ -825,6 +895,7 @@ class BackupController(
         } catch (ex: RuntimeException) {
             return MergeOutcome(RestoreResult.OTHER, null)
         } finally {
+            databaseLease.close()
             DataBackup.deleteIfExists(staged)
         }
     }
@@ -835,6 +906,8 @@ class BackupController(
     ): RestoreResult {
         var restoreTemp: File? = null
         var restoreBackup: File? = null
+        var preserveRestoreBackup = false
+        val databaseLease = DatabaseOperationLease.tryAcquire(OPERATION_RESTORE) ?: return RestoreResult.OTHER
         try {
             ensureActive()
             val dbFile = activity.localStore?.getDatabaseFile() ?: return RestoreResult.OTHER
@@ -844,7 +917,10 @@ class BackupController(
             ensureActive()
             val activeStore = activity.localStore
             if (activeStore != null) {
-                activeStore.checkpoint()
+                if (!activeStore.checkpoint()) {
+                    Log.w(AppPrefs.LOG_TAG, "replace restore aborted: live WAL checkpoint stayed incomplete")
+                    return RestoreResult.OTHER
+                }
                 activeStore.close()
                 activity.localStore = null
             }
@@ -868,23 +944,24 @@ class BackupController(
             try {
                 DataBackup.renameFile(restoreTemp, dbFile)
             } catch (ex: IOException) {
-                restoreOriginalDatabase(dbFile, restoreBackup)
+                preserveRestoreBackup = !restoreOriginalDatabase(dbFile, restoreBackup)
                 throw ex
             } catch (ex: RuntimeException) {
-                restoreOriginalDatabase(dbFile, restoreBackup)
+                preserveRestoreBackup = !restoreOriginalDatabase(dbFile, restoreBackup)
                 throw ex
             }
             try {
                 activity.localStore = ObdLocalStore(activity)
             } catch (ex: RuntimeException) {
-                restoreOriginalDatabase(dbFile, restoreBackup)
-                activity.localStore = ObdLocalStore(activity)
+                val rolledBack = restoreOriginalDatabase(dbFile, restoreBackup)
+                preserveRestoreBackup = !rolledBack
+                if (rolledBack) activity.localStore = ObdLocalStore(activity)
                 throw ex
             }
             return RestoreResult.OK
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) {
-                if (activity.localStore == null && !isCancelled()) {
+                if (activity.localStore == null && !isCancelled() && !preserveRestoreBackup) {
                     try {
                         activity.localStore = ObdLocalStore(activity)
                     } catch (ignored: RuntimeException) {
@@ -895,8 +972,13 @@ class BackupController(
             }
             throw ex
         } finally {
+            databaseLease.close()
             DataBackup.deleteIfExists(restoreTemp)
-            DataBackup.deleteIfExists(restoreBackup)
+            if (shouldDeleteRestoreSafetyCopy(preserveRestoreBackup)) {
+                DataBackup.deleteIfExists(restoreBackup)
+            } else {
+                Log.e(AppPrefs.LOG_TAG, "preserving restore safety copy after rollback failure: $restoreBackup")
+            }
             DataBackup.deleteIfExists(staged)
         }
     }
@@ -932,6 +1014,8 @@ class BackupController(
     private class RestoreCancelledException : RuntimeException("Restore cancelled during teardown")
 
     companion object {
+        const val PREF_LAST_BACKUP_AT_MS = "last_successful_backup_at_ms"
+        const val PREF_LAST_BACKUP_TRIPS = "last_successful_backup_trip_count"
         const val REQUEST_RESTORE = 4202
         private const val KEY_RESTORE_PICKER_IN_FLIGHT = "volttracker.restore_picker_in_flight"
         private const val OPERATION_BACKUP = "backup"
@@ -989,23 +1073,27 @@ class BackupController(
             return ceil(remainingMs / 1000.0).toLong().coerceAtLeast(1L)
         }
 
+        internal fun shouldDeleteRestoreSafetyCopy(rollbackFailed: Boolean): Boolean = !rollbackFailed
+
         private fun restoreOriginalDatabase(
             dbFile: File,
             restoreBackup: File?,
-        ) {
+        ): Boolean {
             if (restoreBackup == null || !restoreBackup.exists()) {
-                return
+                return true
             }
             try {
                 DataBackup.deleteIfExists(dbFile)
                 DataBackup.renameFile(restoreBackup, dbFile)
                 DataBackup.deleteIfExists(File(dbFile.path + "-wal"))
                 DataBackup.deleteIfExists(File(dbFile.path + "-shm"))
+                return true
             } catch (ex: Exception) {
                 if (ex !is IOException && ex !is RuntimeException) {
                     throw ex
                 }
                 Log.w(AppPrefs.LOG_TAG, "restoreOriginalDatabase failed; original DB may be gone", ex)
+                return false
             }
         }
     }

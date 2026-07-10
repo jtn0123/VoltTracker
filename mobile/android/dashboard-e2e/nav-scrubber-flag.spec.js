@@ -37,3 +37,42 @@ test('map-scrubber-active never sticks on non-map views after an off-map render 
   });
   expect(labelHidden).toBe(false);
 });
+
+for (const viewport of [
+  { width: 360, height: 640 },
+  { width: 412, height: 915 },
+]) {
+  test(`route playback yields the bottom thumb zone at ${viewport.width}x${viewport.height}`, async ({
+    page,
+  }) => {
+    await page.setViewportSize(viewport);
+    await openDashboard(page, { fixedTime: FIXED });
+    await loadDemoScenario(page, 'power-user');
+    await setView(page, 'map');
+
+    const scrubber = page.locator('#scrubber');
+    const nav = page.locator('.bottom-nav');
+    await expect(scrubber).toBeVisible();
+
+    const measured = await nav.evaluate((node) => ({
+      actual: Math.ceil(node.getBoundingClientRect().height),
+      reserved: Math.round(
+        Number.parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')),
+      ),
+    }));
+    expect(measured.reserved).toBe(measured.actual);
+
+    await page.locator('#scrubPlay').click();
+    await expect(nav).toHaveCSS('pointer-events', 'none');
+    await expect(nav).toHaveCSS('opacity', '0');
+
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await page.evaluate(() => window.scrollBy(0, -80));
+    await expect(nav).toHaveCSS('pointer-events', 'auto');
+    await expect(nav).toHaveCSS('opacity', '1');
+
+    await page.locator('#scrubPlay').evaluate((button) => button.click());
+    await expect(nav).toHaveCSS('pointer-events', 'auto');
+    await expect(nav).toHaveCSS('opacity', '1');
+  });
+}

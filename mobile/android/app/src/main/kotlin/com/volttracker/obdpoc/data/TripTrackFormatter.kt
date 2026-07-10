@@ -145,9 +145,12 @@ object TripTrackFormatter {
      * projection. Returns just the header when there are no trips/points. The trip label is CSV-quoted
      * (it is free user text and may contain commas/quotes/newlines); the trip id is a safe route key.
      */
-    fun toAllTripsCsv(trips: JSONArray): String {
+    fun toAllTripsCsv(
+        trips: JSONArray,
+        includeHeader: Boolean = true,
+    ): String {
         val builder = StringBuilder(CSV_INITIAL_CAPACITY)
-        builder.append(ALL_TRIPS_CSV_HEADER).append('\n')
+        if (includeHeader) builder.append(ALL_TRIPS_CSV_HEADER).append('\n')
         for (t in 0 until trips.length()) {
             val trip = trips.optJSONObject(t) ?: continue
             val tripId = csvField(trip.optString("tripId", ""))

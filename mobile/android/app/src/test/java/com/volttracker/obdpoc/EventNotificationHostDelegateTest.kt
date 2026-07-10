@@ -98,6 +98,26 @@ class EventNotificationHostDelegateTest {
         assertEquals(7, appStatePublishes)
     }
 
+    @Test
+    fun enablingAnAlertRequestsMissingAndroidNotificationPermission() {
+        var permissionRequests = 0
+        val delegate =
+            EventNotificationHostDelegate(
+                prefs = { eventPrefs },
+                publishStatus = { _, _, _ -> },
+                publishAppState = {},
+                notReadyMessage = { "not ready" },
+                hasNotificationPermission = { false },
+                ensureNotificationPermission = { permissionRequests += 1 },
+            )
+
+        assertFalse(JSONObject(delegate.getEventNotificationStateJson()).getBoolean("notificationsGranted"))
+        delegate.setLowSocEnabled(true, 18.0)
+        delegate.setLowSocEnabled(false, 18.0)
+
+        assertEquals("only enabling requests the runtime grant", 1, permissionRequests)
+    }
+
     private fun readyDelegate(publishAppState: () -> Unit = {}): EventNotificationHostDelegate =
         EventNotificationHostDelegate(
             prefs = { eventPrefs },

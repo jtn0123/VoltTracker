@@ -277,6 +277,22 @@ describe('per-trip detail sheet (M7)', () => {
       expect(note.textContent).toContain('3.5 mi/kWh');
     });
 
+    it('uses the trip rollup energy when it is logged', () => {
+      const data = driveStorage({ distanceMeters: 18000 });
+      data.trips[0].energyKwh = 2;
+      VD.state.trips = data.trips;
+      VD.state.storage = data.storage;
+      VD.prefs.set('mpg', 30);
+      VD.prefs.set('gasPricePerGal', 4);
+      VD.prefs.set('pricePerKwh', 0.25);
+      VD.renderMap();
+      VD.openTripDetail(data.trips[0].id);
+
+      expect(document.getElementById('tripDetailCost').textContent).toBe('$0.50');
+      expect(document.getElementById('tripDetailCostNote').textContent).toContain('Logged energy');
+      expect(document.getElementById('tripDetailCostNote').textContent).not.toContain('assumes 3.5');
+    });
+
     it('builds the prompt with createElement only (no markup injection)', () => {
       const id = seed();
       VD.openTripDetail(id);

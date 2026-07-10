@@ -15,6 +15,7 @@ const NATIVE_METHODS = [
   'setStatus',
   'setStorage',
   'setTrips',
+  'setTripsPage',
   'setInsights',
   'setTripRoute',
   'setCurrentSessionRoute',
@@ -22,6 +23,13 @@ const NATIVE_METHODS = [
   'setAppState',
   'setRestoreProgress',
   'updateTelemetry',
+  'showToast',
+  'showTripUndo',
+  'setBackupReceipt',
+  'applyRestoredPreferences',
+  'openTrip',
+  'openTripReceipt',
+  'restoreView',
 ];
 
 function afterStartupReadyFrame() {

@@ -9,6 +9,8 @@ import java.util.Locale
 object ObdTripExclusions {
     const val EVENT_KIND: String = "trip_hidden"
     const val REASON_NOT_TRIP: String = "manual_not_trip"
+    const val STATE_HIDDEN: String = "hidden"
+    const val STATE_RESTORED: String = "restored"
 
     @JvmStatic
     fun canonicalRouteKey(raw: String?): String? {
@@ -44,18 +46,20 @@ object ObdTripExclusions {
         }
         val placeholders = sessionIds.joinToString(",") { "?" }
         val args = arrayOf(EVENT_KIND, *sessionIds.map { it.toString() }.toTypedArray())
-        val hidden = HashSet<String>()
+        val latest = LinkedHashMap<String, String>()
         db
             .rawQuery(
-                "SELECT detail FROM ${VoltTrackerDb.TABLE_EVENTS} " +
-                    "WHERE kind = ? AND session_id IN ($placeholders) AND detail IS NOT NULL",
+                "SELECT state, detail FROM ${VoltTrackerDb.TABLE_EVENTS} " +
+                    "WHERE kind = ? AND session_id IN ($placeholders) AND detail IS NOT NULL " +
+                    "ORDER BY occurred_at_ms ASC, _id ASC",
                 args,
             ).use { cursor ->
                 while (cursor.moveToNext()) {
-                    canonicalRouteKey(cursor.getString(0))?.let(hidden::add)
+                    val state = cursor.getString(0)
+                    canonicalRouteKey(cursor.getString(1))?.let { latest[it] = state }
                 }
             }
-        return hidden
+        return latest.filterValues { it != STATE_RESTORED }.keys
     }
 
     @JvmStatic
@@ -72,11 +76,12 @@ object ObdTripExclusions {
         val sessionId = canonical.substringBefore(":")
         db
             .rawQuery(
-                "SELECT 1 FROM ${VoltTrackerDb.TABLE_EVENTS} " +
-                    "WHERE session_id = ? AND kind = ? AND detail = ? LIMIT 1",
+                "SELECT state FROM ${VoltTrackerDb.TABLE_EVENTS} " +
+                    "WHERE session_id = ? AND kind = ? AND detail = ? " +
+                    "ORDER BY occurred_at_ms DESC, _id DESC LIMIT 1",
                 arrayOf(sessionId, EVENT_KIND, canonical),
             ).use { cursor ->
-                return cursor.moveToFirst()
+                return cursor.moveToFirst() && cursor.getString(0) != STATE_RESTORED
             }
     }
 }

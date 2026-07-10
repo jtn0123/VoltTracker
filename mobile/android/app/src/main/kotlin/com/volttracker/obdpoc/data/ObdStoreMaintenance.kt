@@ -41,24 +41,47 @@ class ObdStoreMaintenance(
         }
         val cutoffMs = System.currentTimeMillis() - keepDays * 86_400_000L
         val db = helper.writableDatabase
-        // Sessions whose raw rows are about to be pruned: only their trip rollups / list cache /
-        // segments become stale, so cache invalidation below is scoped to them instead of the old
-        // global flush (which forced every session's trips to recompute on the next read).
+        // Finalized history is durable: build compact trip + charge summaries before removing the
+        // raw samples they depend on. User-authored review events are retained below as metadata.
+        ObdStoreTrips(helper).materializeFinalizedSessionsBefore(cutoffMs)
+        ObdStoreChargeSummary.materializeFinalizedSessionsBefore(db, cutoffMs)
+
+        // Only active sessions become stale when an old raw tail is pruned. Finalized summaries,
+        // list rows, segments, and charge contributions must survive retention indefinitely.
         val affectedSessions = LinkedHashSet<Long>()
-        collectAffectedSessions(db, VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms", cutoffMs, affectedSessions)
-        collectAffectedSessions(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "captured_at_ms", cutoffMs, affectedSessions)
-        collectAffectedSessions(db, VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms", cutoffMs, affectedSessions)
-        collectAffectedSessions(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs, affectedSessions)
+        collectAffectedActiveSessions(db, VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms", cutoffMs, affectedSessions)
+        collectAffectedActiveSessions(
+            db,
+            VoltTrackerDb.TABLE_LOCATION_SAMPLES,
+            "captured_at_ms",
+            cutoffMs,
+            affectedSessions,
+        )
+        collectAffectedActiveSessions(db, VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms", cutoffMs, affectedSessions)
+        collectAffectedActiveSessions(
+            db,
+            VoltTrackerDb.TABLE_PID_OBSERVATIONS,
+            "observed_at_ms",
+            cutoffMs,
+            affectedSessions,
+        )
         var deleted = 0
         deleted += deleteInBatches(db, VoltTrackerDb.TABLE_TELEMETRY, "captured_at_ms", cutoffMs)
         deleted += deleteInBatches(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES, "captured_at_ms", cutoffMs)
-        deleted += deleteInBatches(db, VoltTrackerDb.TABLE_EVENTS, "occurred_at_ms", cutoffMs)
+        deleted +=
+            deleteInBatches(
+                db,
+                VoltTrackerDb.TABLE_EVENTS,
+                "occurred_at_ms",
+                cutoffMs,
+                "kind NOT IN ('trip_label','trip_favorite','trip_hidden')",
+            )
         deleted += deleteInBatches(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs)
         invalidateTripCachesForSessions(db, affectedSessions)
         return deleted
     }
 
-    private fun collectAffectedSessions(
+    private fun collectAffectedActiveSessions(
         db: SQLiteDatabase,
         table: String,
         timeColumn: String,
@@ -67,7 +90,10 @@ class ObdStoreMaintenance(
     ) {
         db
             .rawQuery(
-                "SELECT DISTINCT session_id FROM $table WHERE $timeColumn < ? AND session_id IS NOT NULL",
+                "SELECT DISTINCT x.session_id FROM $table x " +
+                    "JOIN ${VoltTrackerDb.TABLE_SESSIONS} s ON s._id = x.session_id " +
+                    "WHERE x.$timeColumn < ? AND x.session_id IS NOT NULL " +
+                    "AND COALESCE(s.ended_at_ms, 0) <= 0",
                 arrayOf(cutoffMs.toString()),
             ).use { cursor ->
                 while (cursor.moveToNext()) {
@@ -87,11 +113,14 @@ class ObdStoreMaintenance(
         table: String,
         timeColumn: String,
         cutoffMs: Long,
+        extraWhere: String? = null,
     ): Int {
+        val predicate =
+            if (extraWhere.isNullOrBlank()) "$timeColumn < ?" else "$timeColumn < ? AND ($extraWhere)"
         val statement =
             db.compileStatement(
                 "DELETE FROM $table WHERE rowid IN " +
-                    "(SELECT rowid FROM $table WHERE $timeColumn < ? LIMIT $PRUNE_DELETE_BATCH)",
+                    "(SELECT rowid FROM $table WHERE $predicate LIMIT $PRUNE_DELETE_BATCH)",
             )
         var total = 0
         statement.use {
@@ -129,18 +158,47 @@ class ObdStoreMaintenance(
         }
     }
 
-    fun checkpoint() {
+    fun checkpoint(): Boolean {
+        repeat(CHECKPOINT_ATTEMPTS) { attempt ->
+            if (checkpointOnce()) return true
+            if (attempt + 1 < CHECKPOINT_ATTEMPTS) {
+                try {
+                    Thread.sleep(CHECKPOINT_RETRY_MS)
+                } catch (ex: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    return false
+                }
+            }
+        }
+        return false
+    }
+
+    private fun checkpointOnce(): Boolean =
         try {
-            // wal_checkpoint returns a result row (busy, log, checkpointed), so it must go
-            // through rawQuery — execSQL rejects statements that return data, which made the
-            // old execSQL version land in the catch below and skip the checkpoint entirely.
-            helper.writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use {
-                it.moveToFirst()
+            // wal_checkpoint returns (busy, log, checkpointed). A busy result is not itself fatal:
+            // if checkpointed == log, every committed frame is already in the main file and a copy
+            // is complete even though TRUNCATE could not reset the WAL. Any smaller count is unsafe.
+            helper.writableDatabase.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { cursor ->
+                if (!cursor.moveToFirst() || cursor.columnCount < 3) {
+                    Log.w(TAG, "wal_checkpoint(TRUNCATE) returned no usable status row")
+                    return@use false
+                }
+                val busy = cursor.getInt(0)
+                val logFrames = cursor.getInt(1)
+                val checkpointedFrames = cursor.getInt(2)
+                val complete = checkpointCoversWal(logFrames, checkpointedFrames)
+                if (!complete) {
+                    Log.w(
+                        TAG,
+                        "wal_checkpoint(TRUNCATE) incomplete: busy=$busy log=$logFrames checkpointed=$checkpointedFrames",
+                    )
+                }
+                complete
             }
         } catch (ex: RuntimeException) {
-            Log.w(TAG, "wal_checkpoint(TRUNCATE) failed; backup uses current file", ex)
+            Log.w(TAG, "wal_checkpoint(TRUNCATE) failed; main database file may be stale", ex)
+            false
         }
-    }
 
     /** Outcome of a `PRAGMA quick_check`: [ok] plus a bounded list of problem strings. */
     data class IntegrityResult(
@@ -183,7 +241,8 @@ class ObdStoreMaintenance(
      * return to the OS through an explicit `VACUUM`. That rewrite is expensive, so it only
      * runs when `PRAGMA freelist_count` says more than [freePageThreshold] pages (~4 KiB
      * each) are reclaimable. The WAL is checkpointed first so the rewrite covers every
-     * committed page (wal_checkpoint returns a result row, so it must go through rawQuery).
+     * committed page. If a live reader prevents that checkpoint from completing, VACUUM is
+     * deferred rather than operating on an incomplete main-file snapshot.
      * VACUUM cannot run inside a transaction; this skips (and never throws) in that case.
      *
      * @return true when a VACUUM actually ran.
@@ -202,7 +261,10 @@ class ObdStoreMaintenance(
             if (freePages <= freePageThreshold) {
                 return false
             }
-            db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+            if (!checkpoint()) {
+                Log.w(TAG, "vacuumIfNeeded deferred: WAL checkpoint stayed incomplete")
+                return false
+            }
             db.execSQL("VACUUM")
             Log.i(TAG, "VACUUM reclaimed $freePages free pages")
             true
@@ -256,6 +318,14 @@ class ObdStoreMaintenance(
 
     companion object {
         private const val TAG = "VoltTracker"
+        private const val CHECKPOINT_ATTEMPTS = 3
+        private const val CHECKPOINT_RETRY_MS = 25L
+
+        @JvmStatic
+        internal fun checkpointCoversWal(
+            logFrames: Int,
+            checkpointedFrames: Int,
+        ): Boolean = logFrames <= 0 || checkpointedFrames >= logFrames
 
         /** Default retention for raw telemetry/location/event rows: 60 days. */
         const val DEFAULT_RAW_RETENTION_DAYS: Int = 60

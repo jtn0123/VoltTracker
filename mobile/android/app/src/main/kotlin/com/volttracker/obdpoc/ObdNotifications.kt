@@ -29,13 +29,28 @@ class ObdNotifications(
                 // adapter-ready notification in TroubleshooterBridge.
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val pendingIntent = PendingIntent.getActivity(context, 0, open, PendingIntent.FLAG_IMMUTABLE)
+        val disconnect =
+            Intent(context, ObdService::class.java)
+                .setAction(ObdService.ACTION_DISCONNECT)
+                .setPackage(context.packageName)
+        val disconnectIntent =
+            PendingIntent.getService(
+                context,
+                DISCONNECT_REQUEST_CODE,
+                disconnect,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
         return builder
             .setSmallIcon(R.drawable.ic_stat_obd)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(text)
             .setContentIntent(pendingIntent)
-            .setOngoing(true)
+            .addAction(
+                R.drawable.ic_stat_obd,
+                context.getString(R.string.notification_action_disconnect),
+                disconnectIntent,
+            ).setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
     }
@@ -49,6 +64,7 @@ class ObdNotifications(
     companion object {
         const val NOTIFICATION_ID: Int = 4207
         const val CHANNEL_ID: String = "volt_obd_connection"
+        private const val DISCONNECT_REQUEST_CODE = 4208
 
         @JvmStatic
         fun ensureChannel(ctx: Context?) {

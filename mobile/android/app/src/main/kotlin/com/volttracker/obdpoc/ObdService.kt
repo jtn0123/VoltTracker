@@ -76,6 +76,7 @@ open class ObdService :
     // Nullable + guarded: created in onCreate so test subclasses that drive broadcast* directly
     // without onCreate (or before it) simply skip the widget hook instead of crashing.
     private var widgetUpdater: WidgetUpdater? = null
+    private var tripSummaryNotifier: TripSummaryNotifier? = null
     private val latestWidgetTelemetry = AtomicReference<JSONObject?>()
     private val widgetTelemetryScheduled = AtomicBoolean(false)
     private val coalescedWidgetTelemetryCount = AtomicLong()
@@ -165,6 +166,9 @@ open class ObdService :
 
     override fun onCreate() {
         super.onCreate()
+        // A service instance owns one live session stream. Clear any process-local snapshot left by
+        // a previous stopped instance before this one starts publishing authoritative values.
+        LiveDashboardSnapshot.reset()
         val openedStore = ObdLocalStore(this)
         val recoveredSessions = ObdSessionRecovery.recover(this)
         if (recoveredSessions > 0) {
@@ -175,6 +179,9 @@ open class ObdService :
         notifications = ObdNotifications(this)
         notifications.createChannel()
         eventCoordinator = createEventCoordinator()
+        val sharedPrefs = getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        val eventPrefs = EventNotificationPrefs(sharedPrefs)
+        tripSummaryNotifier = TripSummaryNotifier(this) { eventPrefs.tripSummaryEnabled() }
         widgetUpdater = createWidgetUpdater()
         rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
         OBDLog.mirror(rollingAppLog)
@@ -185,9 +192,9 @@ open class ObdService :
                 ObdSessionLog(File(filesDir, "obd-logs")),
                 localStore,
                 summaryStore,
-            ) {
-                SystemSnapshot.collect(this, summaryStore)
-            }
+                { SystemSnapshot.collect(this, summaryStore) },
+                { store, sessionId -> tripSummaryNotifier?.notifyMaterializedTrip(store, sessionId) },
+            )
         engine = createPollingEngine()
         sdpProbe = SdpProbe(this)
         bluetoothObservability = BluetoothStateReporter(this, sdpProbe)
@@ -235,6 +242,11 @@ open class ObdService :
         flags: Int,
         startId: Int,
     ): Int {
+        if (isSessionStartAction(intent?.action) && DatabaseOperationLease.isHeld()) {
+            broadcastStatus("blocked", getString(R.string.status_database_operation_running), true)
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_DISCONNECT -> {
                 stopCurrentSession(getString(R.string.status_disconnected))
@@ -630,6 +642,9 @@ open class ObdService :
         recorder.persistTelemetry(payload)
         enqueueEventNotifications(payload)
         enqueueWidgetTelemetry(payload)
+        // Record before broadcasting: the Activity deliberately stops receiving broadcasts while
+        // backgrounded, but can pull this last value synchronously as soon as it resumes.
+        LiveDashboardSnapshot.recordTelemetry(payload)
         broadcast(BROADCAST_TELEMETRY, payload)
     }
 
@@ -724,6 +739,7 @@ open class ObdService :
         recorder.logJson("status", payload)
         recorder.persistStatus(state, detail, blocked, payload)
         maybeUpdateWidgetStatus(state)
+        LiveDashboardSnapshot.recordStatus(payload)
         broadcast(BROADCAST_STATUS, payload)
     }
 
@@ -927,6 +943,14 @@ open class ObdService :
 
         @JvmStatic
         fun hasActiveSession(): Boolean = SESSION_ACTIVE.get()
+
+        @JvmStatic
+        fun isSessionStartAction(action: String?): Boolean =
+            action == ACTION_CONNECT ||
+                action == ACTION_SCAN ||
+                action == ACTION_TPMS_SCAN ||
+                action == ACTION_CLEAR_DTC ||
+                action == ACTION_DEMO
 
         @JvmStatic
         fun adapterNameFrom(intent: Intent?): String {

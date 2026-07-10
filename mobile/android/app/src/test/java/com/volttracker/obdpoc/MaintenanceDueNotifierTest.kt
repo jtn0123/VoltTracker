@@ -46,6 +46,7 @@ class MaintenanceDueNotifierTest {
         val odometerKm: Double? = null,
         var notified: Set<String> = emptySet(),
         val nowMs: Long,
+        val postSucceeds: Boolean = true,
     ) {
         val isEnabled = enabled
         val posted = ArrayList<EventNotificationDecider.Event>()
@@ -58,7 +59,10 @@ class MaintenanceDueNotifierTest {
                 readLatestOdometerKm = { odometerKm },
                 readNotifiedSignatures = { notified },
                 persistNotifiedSignatures = { persisted = it },
-                notify = { posted.add(it) },
+                notify = {
+                    posted.add(it)
+                    postSucceeds
+                },
                 now = { nowMs },
             )
     }
@@ -114,6 +118,21 @@ class MaintenanceDueNotifierTest {
         assertEquals(0, fired)
         assertTrue(h.posted.isEmpty())
         assertEquals("no new crossing -> no persist write", null, h.persisted)
+    }
+
+    @Test
+    fun failedPlatformPostDoesNotConsumeTheReminderSignature() {
+        val h =
+            Harness(
+                log = logOf(row(7L, "Oil change", odometerKm = 10_000.0, intervalKm = 12_000.0)),
+                odometerKm = 23_000.0,
+                nowMs = now,
+                postSucceeds = false,
+            )
+
+        assertEquals(0, h.notifier().checkOnAppOpen())
+        assertEquals(1, h.posted.size)
+        assertEquals("a skipped notification must remain retryable", null, h.persisted)
     }
 
     @Test

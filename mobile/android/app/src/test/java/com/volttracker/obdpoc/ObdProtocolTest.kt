@@ -32,6 +32,19 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun mode01TextDiagnosticsCannotMasqueradeAsHexPayloadBytes() {
+        // Keeping only the A-F letters from "NO DATA" manufactures a fake DA byte after the
+        // truncated marker, which used to decode as a plausible 218 km/h reading.
+        assertNull(ObdProtocol.parseSpeedKph("41 0D\rNO DATA\r>"))
+        assertFalse(
+            ObdProtocol.responseContainsAllMode01Pids(
+                "41 0D\rNO DATA\r41 0C 18 80\r>",
+                listOf("0D", "0C"),
+            ),
+        )
+    }
+
+    @Test
     fun rpmDecodesQuarterCounts() {
         // 410C1880 -> (0x18*256 + 0x80)/4 = 6272/4 = 1568 rpm (engine idling, session 7).
         assertEquals(1568f, ObdProtocol.parseRpm("410C1880")!!, 0.01f)
@@ -146,6 +159,19 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun adapterVoltageDecodesWhenCloneIgnoresEchoOff() {
+        // Some ELM clones keep echoing the command even after ATE0. The command itself ends in V,
+        // so a parser that stops at the first V sees "ATRV" and misses the real reading below it.
+        assertEquals(14.3f, ObdProtocol.parseVoltage("ATRV\r14.3V\r>")!!, 0.001f)
+        assertEquals(12.6, ObdProtocol.parseKnownValue("ATRV", "ATRV\r12.6V\r>")!!.valueNumeric!!, 0.001)
+    }
+
+    @Test
+    fun adapterVoltageDoesNotJoinDigitsAcrossResponseLines() {
+        assertEquals(4.3f, ObdProtocol.parseVoltage("1\r4.3V\r>")!!, 0.001f)
+    }
+
+    @Test
     fun implausibleAdapterVoltageIsRejected() {
         assertNull(ObdProtocol.parseVoltage("999.0V"))
         assertNull(ObdProtocol.parseKnownValue("ATRV", "999.0V"))
@@ -194,6 +220,13 @@ class ObdProtocolTest {
         assertNull(ObdProtocol.parseKnownValue("222429", "6224297FFF"))
         assertNull(ObdProtocol.parseKnownValue("222414", "6224147FFF"))
         assertNull(ObdProtocol.parseKnownValue("22434F", "62434FFF"))
+    }
+
+    @Test
+    fun mode22TextDiagnosticsCannotMasqueradeAsPayloadBytes() {
+        // A truncated positive marker followed by "BUS ERROR" used to retain its B/E letters and
+        // manufacture a plausible 150 C battery-temperature reading from a response with no byte.
+        assertNull(ObdProtocol.parseKnownValue("22434F", "62 43 4F\rBUS ERROR\r>"))
     }
 
     @Test

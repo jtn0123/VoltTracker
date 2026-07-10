@@ -83,7 +83,7 @@ class DiagnosticScanRunner(
             "standard-diagnostics",
             if (full) "generic DTC and freeze-frame probes" else "generic DTC probes",
         )
-        collectDtcCodes("03", probeCommand("03", 3500, raw))
+        val dtcScanValid = collectDtcCodes("03", probeCommand("03", 3500, raw))
         // Mode 07 (pending) and 0A (permanent) are still probed so SessionRecorder persists them
         // per-command for display, but only Mode 03 (stored) codes feed the notification-facing
         // `dtcCodes` set. That baseline must match AutoDtcScanRunner's Mode-03-only on-connect scan
@@ -120,6 +120,7 @@ class DiagnosticScanRunner(
             sample.put("updatedAt", System.currentTimeMillis())
             engine.appendLocation(sample)
             sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
+            sample.put("dtcScanValid", dtcScanValid)
             sample.put("scanProfile", profile.wireName)
             sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
         } catch (_: JSONException) {
@@ -231,7 +232,10 @@ class DiagnosticScanRunner(
     private fun collectDtcCodes(
         command: String,
         response: String,
-    ) {
+    ): Boolean {
+        if (!ObdProtocol.hasPositiveDiagnosticResponse(command, response)) {
+            return false
+        }
         val parsed = ObdProtocol.parseDiagnosticTroubleCodes(command, response, "7DF")
         for (dtc in parsed) {
             val code = dtc.code.trim().uppercase()
@@ -239,5 +243,6 @@ class DiagnosticScanRunner(
                 dtcCodes.add(code)
             }
         }
+        return true
     }
 }

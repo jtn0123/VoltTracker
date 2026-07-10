@@ -7,7 +7,19 @@ test.beforeEach(async ({ page }) => {
   await setView(page, 'diagnostics');
 });
 
+async function showAdvancedDiagnostics(page) {
+  await page.locator('[data-diagnostics-mode="advanced"]').click();
+  const state = await page.evaluate(() => ({
+    mode: window.VoltDashboard.prefs.get('diagnosticsMode', 'missing'),
+    canApply: typeof window.VoltDashboard.applyDiagnosticsMode === 'function',
+    hidden: document.getElementById('enhancedCard').hidden,
+  }));
+  expect(state).toEqual({ mode: 'advanced', canApply: true, hidden: false });
+  await expect(page.locator('#enhancedCard')).toBeVisible();
+}
+
 test('Run probe with no adapter mirrors blocked feedback into the card badge', async ({ page }) => {
+  await showAdvancedDiagnostics(page);
   await page.locator('#detailProbeBtn').click();
 
   await expect(page.locator('#stateText')).toHaveText('blocked');
@@ -17,6 +29,7 @@ test('Run probe with no adapter mirrors blocked feedback into the card badge', a
 });
 
 test('Export logs downloads a JSON file and reports success', async ({ page }) => {
+  await showAdvancedDiagnostics(page);
   const downloadPromise = page.waitForEvent('download');
   await page.locator('#exportSignalLogsBtn').click();
   const download = await downloadPromise;
@@ -26,6 +39,7 @@ test('Export logs downloads a JSON file and reports success', async ({ page }) =
 });
 
 test('Start Demo / Testing visibly starts the sandbox from Diagnostics', async ({ page }) => {
+  await showAdvancedDiagnostics(page);
   await page.locator('details.sandbox-tools').evaluate((node) => {
     node.open = true;
   });

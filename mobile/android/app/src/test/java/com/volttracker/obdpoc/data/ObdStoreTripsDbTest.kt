@@ -111,6 +111,25 @@ class ObdStoreTripsDbTest {
     }
 
     @Test
+    fun tripMileageUsesEveryStoredPointInsteadOfSimplifiedDisplayGeometry() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        val baseLat = 34.05
+        val baseLng = -118.25
+        for (i in 0 until 400) {
+            // A sub-12 m zigzag is intentionally invisible to the map simplifier, but still adds
+            // real travelled distance that must survive in trip, efficiency, and lifetime totals.
+            val lat = baseLat + i * 0.000005
+            val lng = baseLng + if (i % 2 == 0) -0.00004 else 0.00004
+            store.recordTelemetry(id, gpsSample(40, lat, lng, 1_000L + i * 1_000L))
+        }
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 401_000L, "")
+
+        val trip = store.getTripsJson(40).getJSONObject(0)
+        assertTrue("raw zigzag distance should remain several kilometres", trip.getDouble("distanceMeters") > 2_500.0)
+        assertTrue("the display polyline should still be simplified", trip.getInt("pointCount") < 100)
+    }
+
+    @Test
     fun tripCarriesIntegratedEnergyAndEvShare() {
         val id = store.startSession("obd", "00:11", "Adapter")
         // 20 kW steady over 2 s of EV driving, then 40 kW over 2 s on gas:
@@ -128,7 +147,31 @@ class ObdStoreTripsDbTest {
         assertEquals(0.05, trip.getDouble("energyKwh"), 0.001)
         // Speed-weighted EV share: equal speeds, 2 EV vs 2 gas samples → 0.5.
         assertEquals(0.5, trip.getDouble("evShare"), 0.001)
-        assertEquals(50.0, store.getInsightsJson().getDouble("electricDrivingPct"), 0.001)
+        val insights = store.getInsightsJson()
+        assertEquals(50.0, insights.getDouble("electricDrivingPct"), 0.001)
+        assertEquals(0.05, insights.getDouble("loggedEnergyKwh"), 0.001)
+        assertEquals(trip.getDouble("distanceMeters"), insights.getDouble("loggedEnergyDistanceMeters"), 0.1)
+    }
+
+    @Test
+    fun lifetimeEnergyIsNotLimitedByTheRecentTripsReadCap() {
+        repeat(2) { index ->
+            val start = 1_000_000L + index * 100_000L
+            val id = store.startSession("obd", "00:11", "Adapter", start)
+            store.recordTelemetry(id, poweredSample(40, 34.05, -118.25, start, 20.0, "driving_ev"))
+            store.recordTelemetry(id, poweredSample(40, 34.06, -118.25, start + 60_000L, 20.0, "driving_ev"))
+            store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, start + 61_000L, "")
+        }
+
+        assertEquals("UI read is intentionally bounded", 1, store.getTripsJson(1).length())
+        val insights = store.getInsightsJson()
+        assertEquals(
+            "both drives contribute to lifetime energy",
+            2.0 / 3.0,
+            insights.getDouble("loggedEnergyKwh"),
+            0.001,
+        )
+        assertTrue(insights.getDouble("loggedEnergyDistanceMeters") > 2_000.0)
     }
 
     @Test
@@ -200,9 +243,13 @@ class ObdStoreTripsDbTest {
                 .getJSONObject("session")
                 .getString("id")
 
-        assertTrue(store.markTripNotTrip(routeKey))
+        assertTrue(store.setTripHidden(routeKey, true))
         assertEquals(0, store.getTripsJson(40).length())
         assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
+
+        assertTrue(store.setTripHidden(routeKey, false))
+        assertEquals(1, store.getTripsJson(40).length())
+        assertEquals(1, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
     }
 
     // ---- M4 trip labels ------------------------------------------------------------
@@ -311,7 +358,7 @@ class ObdStoreTripsDbTest {
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
         assertTrue(store.setTripLabel(routeKey, "Commute home"))
 
-        val bundle = store.getAllTripsForExportJson(40, 500)
+        val bundle = store.projections().allTripsForExport(40, 500)
         assertEquals("one trip in the bundle", 1, bundle.length())
         val item = bundle.getJSONObject(0)
         assertEquals(routeKey, item.getString("tripId"))
@@ -322,7 +369,7 @@ class ObdStoreTripsDbTest {
 
     @Test
     fun allTripsForExportIsEmptyWhenNoTrips() {
-        assertEquals(0, store.getAllTripsForExportJson(40, 500).length())
+        assertEquals(0, store.projections().allTripsForExport(40, 500).length())
     }
 
     @Test
@@ -345,7 +392,7 @@ class ObdStoreTripsDbTest {
         assertEquals(startMs + 13 * minuteMs, newest.optLong("startedAtMs"))
         assertEquals(2, store.getRecentRoutesJson(8, 500).length())
 
-        assertTrue(store.markTripNotTrip(newest.getString("id")))
+        assertTrue(store.setTripHidden(newest.getString("id"), true))
 
         assertEquals(1, store.getTripsJson(40).length())
         val routesAfter = store.getRecentRoutesJson(8, 500)

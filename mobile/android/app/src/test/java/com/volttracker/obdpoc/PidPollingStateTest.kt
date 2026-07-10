@@ -79,6 +79,25 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun transientNoDataKeepsTheLastGoodCarryForwardValue() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+
+        nowMs += 1_000L
+        engine.responses["010D"] = "NO DATA\r>"
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+
+        assertEquals(
+            "a transient miss must not replace a still-fresh good frame",
+            "41 0D 28\r>",
+            state.lastRaw("010D"),
+        )
+        assertEquals("attempt freshness still reflects the latest poll", 0L, state.staleMsFor("010D", nowMs))
+    }
+
+    @Test
     fun staleCarryForwardValueIsDroppedPastTheCeiling() {
         var nowMs = 1_000L
         state.setClockForTesting { nowMs }
@@ -442,6 +461,20 @@ class PidPollingStateTest {
         state.runScheduledPolls(specs("015C"), StringBuilder())
         nowMs += 1_000L
         assertEquals("silent cycles keep the idle clock running", 6_000L, state.msSinceLastLiveData())
+    }
+
+    @Test
+    fun elmErrorFramesDoNotRefreshTheLiveDataClock() {
+        var nowMs = 10_000L
+        state.setClockForTesting { nowMs }
+        state.reset()
+        nowMs += 5_000L
+        engine.responses["010D"] = "CAN ERROR\r>"
+
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+
+        assertEquals("adapter error text is not fresh vehicle data", 5_000L, state.msSinceLastLiveData())
+        assertFalse("an adapter error must not retire the PID as unsupported", state.isCommandDisabled("010D"))
     }
 
     // ---- helpers --------------------------------------------------------------------

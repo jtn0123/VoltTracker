@@ -56,10 +56,27 @@
       id="diagRecoveryAction"
       class="primary primary-action diag-recovery__action"
       data-nav-jump="settings"
+      data-settings-target="settingsConnection"
+      data-settings-focus="connectBtn"
     >
       Open connection settings
     </button>
   </article>
+
+  <nav class="diagnostics-mode-nav" aria-label="Diagnostics detail level">
+    <button
+      type="button"
+      data-diagnostics-mode="basic"
+      class="is-active"
+      aria-pressed="true"
+    >
+      Basic
+    </button>
+    <button type="button" data-diagnostics-mode="advanced" aria-pressed="false">
+      Advanced
+    </button>
+    <small id="diagnosticsModeHint">Recovery, car codes, and data health</small>
+  </nav>
 
   <!-- X3: the car-code (DTC) scanner lives here with the rest of vehicle
        health — it was buried mid-Insights between lifetime stats and charts,
@@ -214,7 +231,12 @@
 
   <!-- v2 design: the Demo/Testing card ships expanded (open is set by core.ts at
        boot — a static open attribute trips a jsdom parse bug in the test DOM). -->
-  <details class="sandbox-tools" aria-label="Demo / Testing controls">
+  <details
+    class="sandbox-tools"
+    aria-label="Demo / Testing controls"
+    data-diagnostics-expert
+    hidden
+  >
     <summary aria-label="Toggle the Demo / Testing controls">
       Demo / Testing
     </summary>
@@ -341,7 +363,12 @@
 
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->
-  <article id="liveSignalsCard" class="panel list-card">
+  <article
+    id="liveSignalsCard"
+    class="panel list-card"
+    data-diagnostics-expert
+    hidden
+  >
     <header class="signal-console-head">
       <div class="signal-console-title">
         <span class="kicker">Live signals</span>
@@ -381,7 +408,12 @@
     <div id="liveSignalsList" class="live-signals-list"></div>
   </article>
 
-  <article id="enhancedCard" class="panel list-card signal-console">
+  <article
+    id="enhancedCard"
+    class="panel list-card signal-console"
+    data-diagnostics-expert
+    hidden
+  >
     <header class="signal-console-head">
       <div class="signal-console-title">
         <span class="kicker">Enhanced discovery</span>
@@ -511,7 +543,12 @@
   </article>
 
   <!-- Heavy debug cards collapsed by default so the tab opens compact. -->
-  <details class="diag-advanced" id="sessionReviewDetails">
+  <details
+    class="diag-advanced"
+    id="sessionReviewDetails"
+    data-diagnostics-expert
+    hidden
+  >
     <summary>
       <span class="diag-advanced-label">
         <span class="kicker">Session review &amp; debug logs</span>

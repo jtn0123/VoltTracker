@@ -291,6 +291,9 @@ interface VoltInsights {
   gpsTripCount?: number;
   /** Lifetime "% of driving on electric" (0..100); null until classified driving exists. */
   electricDrivingPct?: number | null;
+  /** Whole-history positive drive energy and the distance it covers. */
+  loggedEnergyKwh?: number;
+  loggedEnergyDistanceMeters?: number;
   [key: string]: unknown;
 }
 
@@ -427,6 +430,8 @@ interface DashboardState {
   mapLayer: string;
   mapRemoteTilesEnabled: boolean;
   mapFull: boolean;
+  mapBrowserOpen: boolean;
+  tripReceiptMode: boolean;
   liveSignalsFilter: string;
   mapFollowLive: boolean;
   selectedMapSessionId: string | null;
@@ -645,7 +650,11 @@ interface VoltRestoreProgress {
       get<T>(key: string, fallback: T): T;
       set(key: string, value: unknown): void;
       subscribe(key: string, callback: (value: unknown) => void): () => void;
+      exportForBackup(): string;
+      restoreFromBackup(payload: unknown): boolean;
     };
+    selectDrivePreset(preset: "focus" | "detailed"): void;
+    scrollToSettingsSection(id: string): boolean;
     /** Unit-aware formatters driven by the `units` preference (imperial|metric).
      *  Inputs are SI-ish (speed km/h, distance km/m/mi, temp °C, eff mi/kWh). */
     units: {
@@ -706,7 +715,9 @@ interface VoltRestoreProgress {
     scrollAppBy(deltaY: number): void;
     canScrollApp(): boolean;
     setView(view: string): void;
+    openTripFromNative(routeKey: string, receipt?: boolean): void;
     formatRowCount(count: unknown): string;
+    setBackupReceipt(payload: unknown): void;
     updateViewHeading(): void;
     setDemoActive(active: boolean, detail?: string): void;
     clearDemoTelemetry(): void;
@@ -717,6 +728,9 @@ interface VoltRestoreProgress {
     pendingLazyLoads(): Promise<unknown[]>;
     dtcDataLoaded(): boolean;
     ensureInsightsModule(): Promise<VoltDashboard>;
+    ensureSignalsModule(): Promise<VoltDashboard>;
+    hydrateConnectionTools(): boolean;
+    ensureConnectionToolsModule(): Promise<VoltDashboard>;
     ensureMapModule(): Promise<VoltDashboard>;
     requestMapRender(): Promise<VoltDashboard>;
     renderMapIfLoaded(): void;
@@ -726,6 +740,8 @@ interface VoltRestoreProgress {
     /** Connection-tools module: (re)bind the proactive-tools buttons under a fresh
      *  AbortController so actions.resetListeners() can re-arm them alongside the rest of the UI. */
     bindConnectionTools?(): void;
+    refreshConnectionToolsAvailability?(): void;
+    applyDiagnosticsMode?(): void;
     ensureTroubleshooterModule(): Promise<VoltDashboard>;
     dtcSearchUrl(code: string): string;
     setDevices(payload: unknown): void;
@@ -826,6 +842,8 @@ interface VoltRestoreProgress {
     /** Data-loader only (the Trips tab was removed): populates state.trips for
      *  Insights/map and surfaces read errors via the global status. */
     loadTrips(force?: boolean): void;
+    loadAllTrips(): void;
+    setTripsPage(payload: unknown): void;
     loadInsights(force?: boolean): void;
     forceLazyStorageRead?: boolean;
     renderInsightStats(): void;
@@ -911,11 +929,13 @@ interface VoltRestoreProgress {
     requestStorageDetails(): boolean;
     exportDebugBundle(): string;
     getTrips(): string;
+    getTripsPage(offset: number): string;
     getInsights(): string;
     getTripRoute(sessionId: string): string;
     getCurrentSessionRoute(): string;
     getBatterySohHistory(): string;
     requestTrips(): boolean;
+    requestTripsPage(offset: number): boolean;
     requestInsights(): boolean;
     requestTripRoute(sessionId: string): boolean;
     requestCurrentSessionRoute(): boolean;
@@ -941,13 +961,14 @@ interface VoltRestoreProgress {
     shareTripCard(cardJson: string): string;
     deleteDetailedSignalLog(id: string): void;
     markTripNotTrip(routeKey: string): void;
+    restoreTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;
     setTripFavorite(routeKey: string, favorite: boolean): void;
     addMaintenanceEntry(json: string): void;
     getMaintenanceLog(): string;
     deleteMaintenanceEntry(id: string): void;
-    shareBackup(): void;
-    shareEncryptedBackup(passphrase: string): void;
+    shareBackup(dashboardPreferencesJson?: string): void;
+    shareEncryptedBackup(passphrase: string, dashboardPreferencesJson?: string): void;
     restoreBackup(): void;
     restoreEncryptedBackup(passphrase: string): void;
     clearStoredData(): void;
@@ -960,6 +981,10 @@ interface VoltRestoreProgress {
     setChargeTargetSoc(targetPct: number): void;
     setAutoScanOnConnect(enabled: boolean): void;
     setMaintenanceDueNotify(enabled: boolean): void;
+    getDashboardExperienceState(): string;
+    setKeepScreenAwake(enabled: boolean): void;
+    setTripSummaryNotify(enabled: boolean): void;
+    setActiveDashboardView(view: string): void;
     connectLast(): void;
     scanLast(): void;
     quickScanLast(): void;

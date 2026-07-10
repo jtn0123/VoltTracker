@@ -226,6 +226,45 @@ class MaterializerIntegrationDbTest {
     }
 
     @Test
+    fun readLocationSamplesRejectInvalidRestoredCoordinatesAndOptionalNumbers() {
+        val store = this.store!!
+        val sessionId = store.startSession("obd", "AA:BB", "Adapter", T_BASE)
+        store.recordLocationSample(
+            sessionId,
+            T_BASE + 1000L,
+            "gps",
+            34.05,
+            -118.25,
+            Double.POSITIVE_INFINITY,
+            null,
+            Double.POSITIVE_INFINITY,
+            null,
+            null,
+            null,
+        )
+        store.recordLocationSample(
+            sessionId,
+            T_BASE + 2000L,
+            "gps",
+            91.0,
+            -118.25,
+            5.0,
+            null,
+            null,
+            null,
+            null,
+            null,
+        )
+
+        val samples = store.readLocationSamples(sessionId)
+
+        assertEquals(1, samples.size)
+        assertEquals(34.05, samples.single().latitude, 0.0)
+        assertEquals(null, samples.single().accuracyM)
+        assertEquals(null, samples.single().speedMps)
+    }
+
+    @Test
     fun readPidObservationsReturnOldestFirstWithNullableNumericValues() {
         val store = this.store!!
         val sessionId = store.startSession("obd", "AA:BB", "Adapter", T_BASE)

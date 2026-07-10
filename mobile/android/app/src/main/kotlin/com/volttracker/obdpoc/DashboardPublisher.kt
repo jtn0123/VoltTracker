@@ -77,12 +77,20 @@ class DashboardPublisher(
                 "setHistory",
                 "setStorage",
                 "setTrips",
+                "setTripsPage",
                 "setInsights",
                 "setTripRoute",
                 "setCurrentSessionRoute",
                 "setBatterySohHistory",
                 "setAppState",
                 "setRestoreProgress",
+                "showToast",
+                "showTripUndo",
+                "applyRestoredPreferences",
+                "openTrip",
+                "openTripReceipt",
+                "restoreView",
+                "setBackupReceipt",
             )
     }
 }

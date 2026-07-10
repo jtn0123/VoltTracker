@@ -98,6 +98,17 @@ describe('selector / partial contract', () => {
     expect(absent).toEqual([]);
   });
 
+  it('keeps live recording progress at the bottom of Settings, outside the topbar', () => {
+    const document = new DOMParser().parseFromString(html, 'text/html');
+    const recording = document.getElementById('driveRecording');
+    const preferences = document.getElementById('view-preferences');
+
+    expect(recording).not.toBeNull();
+    expect(recording.closest('.topbar')).toBeNull();
+    expect(recording.parentElement).toBe(preferences);
+    expect(preferences.lastElementChild).toBe(recording);
+  });
+
   it('keeps the runtime-created allowlist honest (no stale entries)', () => {
     // An allowlist entry that is ALSO declared in a partial is dead weight and
     // hides a real contract; flag it so the list can't rot.

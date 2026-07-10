@@ -77,8 +77,8 @@ class TripExportController(
     /**
      * Bulk all-trips export (M6): reads every logged trip's route, serializes them into one combined
      * CSV (a leading trip-id/label column then per-sample rows), records the export, launches the
-     * share sheet, and returns the bridge JSON result. Bounded by [MAX_ALL_TRIPS] trips and
-     * [ALL_TRIPS_POINT_LIMIT] samples/trip so a huge history can't blow up memory or the share file.
+     * share sheet, and returns the bridge JSON result. History is read/written in bounded pages;
+     * [ALL_TRIPS_POINT_LIMIT] caps only each route's display-resolution samples.
      * Synchronous build (so the returned byte/point count is honest); only the chooser launch hops to
      * the UI thread. Reached via [exportAndShare] with the [ALL_TRIPS_FORMAT] sentinel.
      */
@@ -86,14 +86,29 @@ class TripExportController(
         val store =
             host.localStore?.takeIf { it.isOpen }
                 ?: return error("storage_unavailable", "Local storage is not ready.")
-        val trips = readAllTrips(store)
-        val pointCount = totalPointCount(trips)
-        if (trips.length() == 0 || pointCount <= 0) {
-            return error("empty_route", context.getString(R.string.status_all_trips_export_empty))
-        }
-        val export =
-            TripExportShareIntent.writeAllTripsCsv(context, trips, pointCount)
-                ?: return error("export_failed", "Could not write the all-trips CSV file.")
+        var offset = 0
+        var exhausted = false
+        val bulk =
+            TripExportShareIntent.writeAllTripsCsvPages(context) {
+                if (exhausted) return@writeAllTripsCsvPages null
+                while (true) {
+                    val page = readAllTripsPage(store, offset)
+                    val scanned = page.optInt("scanned", 0)
+                    val items = page.optJSONArray("items") ?: org.json.JSONArray()
+                    if (scanned <= 0) {
+                        exhausted = true
+                        return@writeAllTripsCsvPages null
+                    }
+                    offset += scanned
+                    exhausted = scanned < ALL_TRIPS_PAGE_SIZE
+                    if (items.length() > 0) return@writeAllTripsCsvPages items
+                    if (exhausted) return@writeAllTripsCsvPages null
+                }
+                @Suppress("UNREACHABLE_CODE")
+                null
+            }
+                ?: return error("empty_route", context.getString(R.string.status_all_trips_export_empty))
+        val export = bulk.export
         recordAllTripsExport(store, export)
         val shareIntent =
             TripExportShareIntent.buildShareIntent(context, export)
@@ -104,7 +119,7 @@ class TripExportController(
             .put("format", "csv")
             .put("fileName", export.name)
             .put("bytes", export.bytes)
-            .put("tripCount", trips.length())
+            .put("tripCount", bulk.tripCount)
             .put("pointCount", export.pointCount)
             .toString()
     }
@@ -229,22 +244,16 @@ class TripExportController(
         }
     }
 
-    private fun readAllTrips(store: ObdLocalStore): org.json.JSONArray =
+    private fun readAllTripsPage(
+        store: ObdLocalStore,
+        offset: Int,
+    ): JSONObject =
         try {
-            store.getAllTripsForExportJson(MAX_ALL_TRIPS, ALL_TRIPS_POINT_LIMIT)
+            store.projections().allTripsForExportPage(ALL_TRIPS_PAGE_SIZE, ALL_TRIPS_POINT_LIMIT, offset)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "all-trips export read failed", ex)
-            org.json.JSONArray()
+            JSONObject().put("items", org.json.JSONArray()).put("scanned", 0)
         }
-
-    private fun totalPointCount(trips: org.json.JSONArray): Int {
-        var total = 0
-        for (i in 0 until trips.length()) {
-            val route = trips.optJSONObject(i)?.optJSONObject("route") ?: continue
-            total += TripTrackFormatter.pointCount(route)
-        }
-        return total
-    }
 
     private fun recordAllTripsExport(
         store: ObdLocalStore,
@@ -341,8 +350,8 @@ class TripExportController(
         /** Per-string cap for card title/subtitle/stat text (they render onto the image only). */
         const val CARD_TEXT_MAX = 64
 
-        /** Bulk-export bound: most-recent N trips, so a huge history can't blow up memory/file size. */
-        const val MAX_ALL_TRIPS = 500
+        /** Bounded read/write page for complete all-history export. */
+        const val ALL_TRIPS_PAGE_SIZE = 120
 
         /** Charge-export bound: most-recent N charge sessions, mirroring [MAX_ALL_TRIPS]. */
         const val MAX_CHARGE_SESSIONS = 500

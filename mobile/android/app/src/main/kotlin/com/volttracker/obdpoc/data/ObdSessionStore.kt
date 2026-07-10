@@ -148,7 +148,8 @@ interface ObdSessionStore : Closeable {
 
     fun clearAllData()
 
-    fun checkpoint()
+    /** Returns true only when the main database file contains every committed WAL frame. */
+    fun checkpoint(): Boolean
 
     fun pruneRawDataOlderThan(keepDays: Int): Int
 

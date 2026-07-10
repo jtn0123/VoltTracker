@@ -41,11 +41,12 @@ function seedSessions(count) {
   );
 }
 
-test(`a ${SESSION_COUNT}-session list renders fully`, async ({ page }) => {
+test(`a ${SESSION_COUNT}-session list is windowed and fully reachable`, async ({ page }) => {
   const pageErrors = [];
   page.on('pageerror', (err) => pageErrors.push(err && err.message ? err.message : String(err)));
   await openDashboard(page);
   await setView(page, 'diagnostics');
+  await page.locator('[data-diagnostics-mode="advanced"]').click();
   await page.evaluate(seedSessions, SESSION_COUNT);
   // The session list lives inside the "Session review & debug logs" disclosure — open it (same
   // approach as interactions.spec.js) so the layout/visibility assertions below see the rows.
@@ -55,13 +56,19 @@ test(`a ${SESSION_COUNT}-session list renders fully`, async ({ page }) => {
     });
   });
 
-  // Every row rendered — the list has no truncation cap.
-  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(SESSION_COUNT);
+  // Keep the DOM bounded, while preserving the complete count and an explicit
+  // route to the tail.
+  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(50);
   await expect(page.locator('#dbSessionCount')).toHaveText(String(SESSION_COUNT));
 
   // First and last rows carry real content (not empty shells).
-  const rows = page.locator('#dbSessionList .history-row');
+  let rows = page.locator('#dbSessionList .history-row');
   await expect(rows.first()).toContainText('drive · OBDLink MX+ #250');
+  for (let expected = 100; expected <= SESSION_COUNT; expected += 50) {
+    await page.locator('#dbSessionList [data-session-more="true"]').click();
+    await expect(page.locator('#dbSessionList .history-row')).toHaveCount(expected);
+  }
+  rows = page.locator('#dbSessionList .history-row');
   await expect(rows.last()).toContainText('drive · OBDLink MX+ #1');
 
   // The tail of the list is actually reachable + laid out in the real scroll container.
@@ -80,7 +87,7 @@ test('the page stays responsive with the big list in the DOM', async ({ page }) 
   await openDashboard(page);
   await setView(page, 'diagnostics');
   await page.evaluate(seedSessions, SESSION_COUNT);
-  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(SESSION_COUNT);
+  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(50);
 
   // Tab switches still complete with 250 rows in the DOM (Playwright's expect timeout is the
   // responsiveness budget — a wedged main thread fails these).
@@ -100,10 +107,10 @@ test('the page stays responsive with the big list in the DOM', async ({ page }) 
   expect(rafOk, 'requestAnimationFrame should still be serviced quickly').toBe(true);
 
   // No error surfaced: the status line is not blocked/failed and a re-render of the same large
-  // payload keeps the list intact.
+  // payload keeps the bounded window intact.
   await expect(page.locator('#stateText')).not.toHaveText(/blocked|failed/);
   await page.evaluate(seedSessions, SESSION_COUNT);
-  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(SESSION_COUNT);
+  await expect(page.locator('#dbSessionList .history-row')).toHaveCount(50);
 
   expect(pageErrors).toEqual([]);
 });

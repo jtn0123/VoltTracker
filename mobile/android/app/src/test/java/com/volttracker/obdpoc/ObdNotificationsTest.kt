@@ -44,4 +44,18 @@ class ObdNotificationsTest {
             open.flags and Intent.FLAG_ACTIVITY_CLEAR_TOP != 0,
         )
     }
+
+    @Test
+    fun disconnectActionStopsTheForegroundSessionWithoutOpeningTheApp() {
+        val context = RuntimeEnvironment.getApplication()
+
+        val notification = ObdNotifications(context).build("Background logging active")
+
+        assertEquals("one direct session action should be exposed", 1, notification.actions.size)
+        val action = notification.actions.single()
+        assertEquals(context.getString(R.string.notification_action_disconnect), action.title.toString())
+        val intent = shadowOf(action.actionIntent).savedIntent
+        assertEquals(ComponentName(context, ObdService::class.java), intent.component)
+        assertEquals(ObdService.ACTION_DISCONNECT, intent.action)
+    }
 }

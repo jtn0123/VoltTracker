@@ -288,10 +288,21 @@ function buildExportActions(routeKey: string, currentLabel = "", favorite = fals
     buildFavoriteButton(clean, favorite),
     buildDetailButton(clean),
     buildRenameButton(clean, currentLabel),
+    buildNotTripButton(clean),
     buildExportButton(clean, "gpx", "Export GPX"),
     buildExportButton(clean, "csv", "Export CSV"),
   );
   return row;
+}
+
+function buildNotTripButton(routeKey: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "history-export-btn history-not-trip-btn";
+  button.dataset.tripNotTrip = routeKey;
+  button.title = "Hide this route from drives without deleting its raw data.";
+  button.textContent = "Not a trip";
+  return button;
 }
 
 // The per-row "Details" affordance (M7). A distinct action from select / rename /

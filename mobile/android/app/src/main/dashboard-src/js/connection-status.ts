@@ -373,6 +373,7 @@ function adapterNameForRecovery(): string {
 type StatusRow = [string, string];
 
 const ACTIVE_TRIP_STATES = ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"];
+const GLOBAL_STALE_THRESHOLD_MS = 3000;
 
 let popoverDismiss: AbortController | null = null;
 // Contains Tab within the popover and restores focus to the opening badge on close.
@@ -439,14 +440,49 @@ function connectionRows(status: VoltStatus): StatusRow[] {
         : t("status.logging.waitingForData"))
     : t("status.logging.notLogging");
   const last = lastRealSession();
+  const sampleAt = sampleTimestampMs();
 
   return [
     ["Adapter", address ? `${adapterName} (${address})` : adapterName],
     ["Bluetooth", bluetoothSummary(app.permissions || {}, status)],
     ["Logging", logging],
+    ["Last sample", sampleAt > 0 ? formatRelative(sampleAt) : "Waiting for first sample"],
     ["GPS", gpsText(gps.state)],
     ["Last connected", last ? `${last.adapter || t("status.adapter.fallbackName")} · ${formatRelative(last.endMs || last.startMs)}` : ""]
   ];
+}
+
+function sampleTimestampMs(): number {
+  const state = dashboardState();
+  const telemetry = state.telemetry || {};
+  const payloadTime = Number(telemetry.updatedAt || 0);
+  if (Number.isFinite(payloadTime) && payloadTime > 0) return payloadTime;
+  const receivedTime = Number(state.lastSampleAt || 0);
+  return Number.isFinite(receivedTime) && receivedTime > 0 ? receivedTime : 0;
+}
+
+function renderGlobalFreshness() {
+  const state = dashboardState();
+  const status = state.status || {};
+  const stateName = String(status.state || "idle");
+  const active = Boolean(state.demoActive) || ACTIVE_TRIP_STATES.includes(stateName.toLowerCase());
+  const sampleAt = sampleTimestampMs();
+  const ageMs = sampleAt > 0 ? Math.max(0, Date.now() - sampleAt) : 0;
+  const freshness = !active ? "idle" : sampleAt <= 0 ? "waiting" : ageMs > GLOBAL_STALE_THRESHOLD_MS ? "stale" : "fresh";
+  const badge = el("stateBadge");
+  if (badge) {
+    badge.dataset.freshness = freshness;
+    const suffix = freshness === "stale" ? " · stale" : freshness === "waiting" ? " · waiting" : "";
+    const text = el("stateText");
+    if (text) text.textContent = stateName + suffix;
+    badge.setAttribute(
+      "aria-label",
+      freshness === "stale"
+        ? `Connection status: ${stateName}. Last sample ${formatRelative(sampleAt)}.`
+        : `Connection status: ${stateName}.`,
+    );
+  }
+  renderStatusPopover();
 }
 
 function tripRows(status: VoltStatus): StatusRow[] {
@@ -629,6 +665,7 @@ function installTelemetryObserver() {
       }
       try {
         renderStatusPopover();
+        renderGlobalFreshness();
         // The recovery panel changes meaningfully only on status broadcasts
         // (handled in noteStatus). Re-rendering it on EVERY telemetry sample put
         // state-derivation + DOM lookups on the hot enqueue path and blew the
@@ -662,6 +699,8 @@ if (typeof window.requestIdleCallback === "function") {
 installStatusObserver();
 installTelemetryObserver();
 bindStatusPopover();
+renderGlobalFreshness();
+window.setInterval(renderGlobalFreshness, 1000);
 // Initial paint so Diagnostics opens with a recovery summary even before the
 // first status broadcast (mirrors renderLastConnected's idle-defer).
 renderDiagnosticsRecovery();

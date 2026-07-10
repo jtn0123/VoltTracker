@@ -37,6 +37,7 @@ open class MainActivity :
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val publishAppStateCommand: () -> Unit = { callDashboard("setAppState", getAppStateJson()) }
     private var isActivityResumed = false
     private var postReadyDashboardRefreshPending = false
     private val postReadyDashboardRefreshRunnable =
@@ -49,18 +50,19 @@ open class MainActivity :
         }
 
     // System Back handling lives in DashboardBackPressCallback; see its KDoc.
-    private val backCallback = DashboardBackPressCallback({ webView }, { exitToBackground() })
+    private val backCallback =
+        DashboardBackPressCallback(
+            { webView },
+            {
+                if (!moveTaskToBack(true)) finish()
+            },
+        )
 
     // Default Back when the dashboard has nothing to dismiss. evaluateJavascript is async so the
     // press is already consumed by the time we decide; onBackPressedDispatcher.onBackPressed()
     // only re-runs registered callbacks (it does NOT perform the OS finish), so we background the
     // app ourselves. moveTaskToBack keeps the live Activity/WebView and state alive (like Home);
     // finish() is the fallback if this somehow isn't the task root.
-    private fun exitToBackground() {
-        if (!moveTaskToBack(true)) {
-            finish()
-        }
-    }
 
     private var prefs: SharedPreferences? = null
 
@@ -107,6 +109,17 @@ open class MainActivity :
 
     private var autoConnectController: AutoConnectController? = null
     private var eventNotificationPrefs: EventNotificationPrefs? = null
+    private var restoredDashboardView: String? = null
+    private val dashboardExperienceHost by lazy {
+        DashboardExperienceHostDelegate(
+            activity = this,
+            prefs = { prefs },
+            loggingActive = { isLoggingActive() },
+            publishAppState = publishAppStateCommand,
+            hasNotificationPermission = { permissionGate?.hasNotifications() == true },
+            ensureNotificationPermission = { requirePermissionGate().ensureNotifications() },
+        )
+    }
 
     // Backs the EventNotificationCommands seam (M1/M3 settings). Kept off the Activity body so the
     // six toggle handlers don't swell MainActivity's surface; reads the prefs lazily because they
@@ -115,8 +128,10 @@ open class MainActivity :
         EventNotificationHostDelegate(
             prefs = { eventNotificationPrefs },
             publishStatus = { state, detail, blocked -> publishStatus(state, detail, blocked) },
-            publishAppState = { publishAppState() },
+            publishAppState = publishAppStateCommand,
             notReadyMessage = { getString(R.string.status_event_prefs_not_ready) },
+            hasNotificationPermission = { permissionGate?.hasNotifications() == true },
+            ensureNotificationPermission = { requirePermissionGate().ensureNotifications() },
         )
     private var restoreFilePicker: ActivityResultLauncher<Intent>? = null
     private var permissionRequester: ActivityResultLauncher<Array<String>>? = null
@@ -142,6 +157,22 @@ open class MainActivity :
     private val lastStatus = JsonSnapshot()
 
     private val lastStorage = JsonSnapshot()
+    private val liveDashboardStatePublisher =
+        LiveDashboardStatePublisher(
+            storeTelemetry = lastTelemetry::set,
+            storeStatus = lastStatus::set,
+            publishStatus = { callDashboard("setStatus", it.toString()) },
+            publishAppState = publishAppStateCommand,
+            publishTelemetry = { callDashboard("updateTelemetry", it.toString()) },
+        )
+    private val dashboardResumeCatchUp = DashboardResumeCatchUp { callDashboard("showToast", it) }
+    private val dashboardTripDeepLink =
+        DashboardTripDeepLink(
+            isDashboardReady = { dashboardPublisher?.isPageReady() == true },
+            publishTrip = { routeKey, receipt ->
+                callDashboard(if (receipt) "openTripReceipt" else "openTrip", routeKey)
+            },
+        )
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
 
@@ -155,6 +186,7 @@ open class MainActivity :
 
                 override fun storeStatus(json: String): String {
                     lastStatus.setFromString(json)
+                    dashboardExperienceHost.onLoggingStateChanged()
                     return lastStatus.get().optString("state", "")
                 }
 
@@ -171,7 +203,7 @@ open class MainActivity :
 
                 override fun isDashboardReady(): Boolean = dashboardPublisher?.isPageReady() == true
 
-                override fun publishAppState() = this@MainActivity.publishAppState()
+                override fun publishAppState() = publishAppStateCommand()
 
                 override fun onAdapterStatusForReadyNotify(status: JSONObject) =
                     this@MainActivity.onAdapterStatusForReadyNotify(status)
@@ -274,11 +306,16 @@ open class MainActivity :
     override fun onCreate(savedInstanceState: Bundle?) {
         StartupTrace.mark("activity_on_create_start")
         super.onCreate(savedInstanceState)
+        dashboardTripDeepLink.capture(intent)
         restoreFilePicker =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult(), this::onRestoreFilePicked)
         permissionRequester =
             registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { onPermissionsResult() }
         prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
+        restoredDashboardView = savedInstanceState?.getString(STATE_DASHBOARD_VIEW)
+        if (restoredDashboardView != null) {
+            dashboardExperienceHost.restoreActiveView(restoredDashboardView)
+        }
         val activityPrefs = checkNotNull(prefs)
         deviceCatalog = DeviceCatalog(this, activityPrefs)
         autoConnectController = AutoConnectController(activityPrefs, requireDeviceCatalog())
@@ -364,6 +401,10 @@ open class MainActivity :
             return
         }
         publisher.setPageReady(true)
+        restoredDashboardView?.let { view ->
+            callDashboard("restoreView", DashboardExperienceHostDelegate.normalizeView(view))
+            restoredDashboardView = null
+        }
         webView?.contentDescription = DASHBOARD_READY_DESCRIPTION
         StartupTrace.mark("dashboard_ready_content_description")
         StartupTrace.mark("dashboard_ready_post_work_scheduled")
@@ -377,21 +418,27 @@ open class MainActivity :
         StartupTrace.mark("dashboard_ready_post_work_start")
         publishDeviceList()
         publishStorageSummary()
-        publishAppState()
-        if (isLoggingActive()) {
-            callDashboard("setStatus", lastStatus.get().toString())
-        } else if (localStore == null) {
+        dashboardResumeCatchUp.publish(liveDashboardStatePublisher.publish())
+        if (!isLoggingActive() && localStore == null) {
             // The store failed to open in onCreate; say so instead of claiming "viewing local
             // data" with no data behind it.
             publishStatus("blocked", getString(R.string.status_local_store_unavailable), true)
-        } else {
+        } else if (!isLoggingActive()) {
             publishStatus("ready", getString(R.string.status_viewing_local_data), false)
         }
         maybeAutoConnect(AutoConnectController.TRIGGER_DASHBOARD_READY, null)
         // Auto-show the guided setup walkthrough once for a genuinely fresh install (decision in
         // OnboardingFlow; completion is persisted there, so it shows at most once).
         setupGuideController.maybeAutoShow()
+        dashboardTripDeepLink.publishPending()
         StartupTrace.mark("dashboard_ready_post_work_end")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        dashboardTripDeepLink.capture(intent)
+        dashboardTripDeepLink.publishPending()
     }
 
     // Guided first-run setup walkthrough (M7). The staged-dialog body and step cursor live in the
@@ -426,6 +473,7 @@ open class MainActivity :
 
     override fun onSaveInstanceState(outState: Bundle) {
         backupController?.saveState(outState)
+        outState.putString(STATE_DASHBOARD_VIEW, dashboardExperienceHost.activeViewForSave())
         super.onSaveInstanceState(outState)
     }
 
@@ -437,10 +485,11 @@ open class MainActivity :
         // frame (the "black screen on resume" report). Paired with onPause()'s onPause() below.
         webView?.onResume()
         broadcastCoordinator.register(this)
+        dashboardExperienceHost.onResume()
         if (dashboardPublisher?.isPageReady() == true) {
             publishDeviceList()
             publishStorageSummary()
-            publishAppState()
+            dashboardResumeCatchUp.publish(liveDashboardStatePublisher.publish())
         } else {
             StartupTrace.mark("resume_dashboard_publish_skipped_not_ready")
         }
@@ -462,6 +511,8 @@ open class MainActivity :
     }
 
     override fun onPause() {
+        dashboardResumeCatchUp.recordPause(lastTelemetry.get())
+        dashboardExperienceHost.onPause()
         reportAppVisibility(false)
         isActivityResumed = false
         mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
@@ -475,10 +526,13 @@ open class MainActivity :
 
     override fun onDestroy() {
         backupController?.dispose()
+        val storeToClose = localStore
+        // Detach first so late bridge callbacks cannot acquire the handle while teardown drains the
+        // worker. A task already using the captured store is allowed to finish before it is closed.
+        localStore = null
         backgroundExecutor.shutdownNow()
         troubleshooter?.shutdown()
-        localStore?.close()
-        localStore = null
+        ActivityStoreTeardown.closeWhenExecutorStops(backgroundExecutor, storeToClose)
         // Tear the WebView down explicitly. It holds the VoltBridge JS interface, which keeps a
         // strong reference back to this Activity; without destroy()/removeJavascriptInterface the
         // WebView (and the whole Activity graph + native chromium resources) leaks every time the
@@ -519,7 +573,7 @@ open class MainActivity :
     open fun onPermissionsResult() {
         if (setupGuideController.isActive()) {
             publishDeviceList()
-            publishAppState()
+            publishAppStateCommand()
             setupGuideController.resumeAfterPermissionResult()
             return
         }
@@ -568,7 +622,8 @@ open class MainActivity :
             )
         callDashboard("setStatus", payload.toString())
         lastStatus.set(payload)
-        publishAppState()
+        dashboardExperienceHost.onLoggingStateChanged()
+        publishAppStateCommand()
     }
 
     override fun publishRestoreProgress(
@@ -626,6 +681,10 @@ open class MainActivity :
         name: String?,
         detailStage: String?,
     ) {
+        if (ObdService.isSessionStartAction(action) && DatabaseOperationLease.isHeld()) {
+            publishStatus("blocked", getString(R.string.status_database_operation_running), true)
+            return
+        }
         // The demo session is a synthetic telemetry loop (ObdService.startDemoSession runs with a
         // null address and no Bluetooth socket), so it must NOT be gated behind Bluetooth
         // permission/adapter/enabled checks. Gating it forced a fresh user who taps "Demo" to
@@ -834,10 +893,6 @@ open class MainActivity :
     override fun isLoggingActive(): Boolean =
         MainActivityUtils.isConnectedState(lastStatus.get().optString("state", "")) || ObdService.hasActiveSession()
 
-    private fun publishAppState() {
-        callDashboard("setAppState", getAppStateJson())
-    }
-
     override fun getAppStateJson(): String {
         val catalog = requireDeviceCatalog()
         val gate = requirePermissionGate()
@@ -873,7 +928,7 @@ open class MainActivity :
         } else {
             publishStatus("ready", getString(R.string.status_autoconnect_disabled), false)
         }
-        publishAppState()
+        publishAppStateCommand()
     }
 
     // The event-notification + auto-scan toggle cluster (M1/M3) is exposed as one accessor rather
@@ -881,6 +936,8 @@ open class MainActivity :
     // and the delegate holds every body. This is the A1/I3 fix for MainActivity's growth-by-override
     // — the file gains the cluster with a single member instead of one forward per toggle.
     override fun eventNotifications(): EventNotificationCommands = eventNotificationHost
+
+    override fun dashboardExperience(): DashboardExperienceCommands = dashboardExperienceHost
 
     private fun maybeAutoConnect(
         trigger: String,
@@ -917,6 +974,9 @@ open class MainActivity :
     }
 
     companion object {
+        const val EXTRA_OPEN_TRIP = "com.volttracker.obdpoc.extra.OPEN_TRIP"
+        const val EXTRA_OPEN_TRIP_RECEIPT = "com.volttracker.obdpoc.extra.OPEN_TRIP_RECEIPT"
+
         /** Shared logcat tag. Canonical home is [AppPrefs.LOG_TAG]; kept here as a compatibility alias. */
         const val TAG = AppPrefs.LOG_TAG
 
@@ -934,6 +994,7 @@ open class MainActivity :
 
         /** Stable UiAutomator signal used by the startup Macrobenchmark. */
         const val DASHBOARD_READY_DESCRIPTION = "VoltTracker dashboard ready"
+        private const val STATE_DASHBOARD_VIEW = "dashboard_active_view"
         private const val POST_READY_REFRESH_DELAY_MS = 650L
 
         /**

@@ -23,7 +23,12 @@ class ObdStoreTrips(
      */
     private val activeTripCache = HashMap<String, CachedTrip>()
 
-    fun tripsJson(limit: Int): JSONArray {
+    fun tripsJson(limit: Int): JSONArray = tripsJson(limit, 0)
+
+    fun tripsJson(
+        limit: Int,
+        offset: Int,
+    ): JSONArray {
         val payload = JSONArray()
         // Writable: ensureRollupsAndCollectActive backfills the rollup + trip-list caches.
         val db = helper.writableDatabase
@@ -32,7 +37,9 @@ class ObdStoreTrips(
             // Finalized sessions are served from trip_list_cache (top-N by recency, no per-session
             // recomputation). Active (not-yet-finalized) sessions aren't cached, so compute them
             // live — there are only a handful in flight, so this stays bounded.
-            val active = ensureRollupsAndCollectActive(db)
+            val safeOffset = maxOf(0, offset)
+            val safeLimit = maxOf(1, limit)
+            val active = ensureRollupsAndCollectActive(db, safeOffset + safeLimit)
             for (session in active) {
                 allTrips.addAll(tripJsons(db, session))
             }
@@ -40,7 +47,7 @@ class ObdStoreTrips(
                 .rawQuery(
                     "SELECT trip_json FROM ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}" +
                         " ORDER BY ended_at_ms DESC LIMIT ?",
-                    arrayOf(limit.toString()),
+                    arrayOf((safeOffset + safeLimit).toString()),
                 ).use { cursor ->
                     while (cursor.moveToNext()) {
                         val parsed =
@@ -57,8 +64,8 @@ class ObdStoreTrips(
                 java.lang.Long.compare(right.optLong("endedAtMs", 0L), left.optLong("endedAtMs", 0L))
             }
             applyLabels(db, allTrips)
-            var i = 0
-            while (i < allTrips.size && payload.length() < limit) {
+            var i = safeOffset
+            while (i < allTrips.size && payload.length() < safeLimit) {
                 payload.put(allTrips[i])
                 i++
             }
@@ -125,7 +132,13 @@ class ObdStoreTrips(
             startedAtMs = points.getJSONObject(0).optLong("atMs", startedAtMs)
             endedAtMs = points.getJSONObject(points.length() - 1).optLong("atMs", endedAtMs)
         }
-        val distanceMeters = ObdStoreSupport.distanceMeters(points)
+        val distanceMeters =
+            ObdStoreRouteProjection.rawRouteDistanceMeters(
+                db,
+                session.id,
+                window.startedAtMs,
+                window.endedAtMs,
+            )
         val maxSpeed = maxIntForWindowBoxed(db, "speed_kph", session.id, window)
         if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
             return null
@@ -223,10 +236,34 @@ class ObdStoreTrips(
             )
             payload.put("locationSampleCount", ObdStoreSupport.countRows(db, VoltTrackerDb.TABLE_LOCATION_SAMPLES))
             payload.put("electricDrivingPct", lifetimeElectricDrivingPctBoxed(db, activeTrips) ?: JSONObject.NULL)
+            val lifetimeEnergy = lifetimeEnergyAggregate(db, activeTrips)
+            payload.put("loggedEnergyKwh", lifetimeEnergy.energyKwh)
+            payload.put("loggedEnergyDistanceMeters", lifetimeEnergy.distanceMeters)
         } catch (ignored: JSONException) {
             // Local numeric/string values are safe.
         }
         return payload
+    }
+
+    /** Whole-history energy coverage, independent of the bounded recent-trip dashboard payload. */
+    private fun lifetimeEnergyAggregate(
+        db: SQLiteDatabase,
+        activeTrips: List<JSONObject>,
+    ): LifetimeEnergyAggregate {
+        val aggregate = LifetimeEnergyAggregate()
+        db
+            .rawQuery("SELECT trip_json FROM ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE}", null)
+            .use { cursor ->
+                while (cursor.moveToNext()) {
+                    try {
+                        aggregate.add(JSONObject(cursor.getString(0)))
+                    } catch (ex: JSONException) {
+                        Log.w(TAG, "skipping corrupt cached trip while aggregating lifetime energy", ex)
+                    }
+                }
+            }
+        for (trip in activeTrips) aggregate.add(trip)
+        return aggregate
     }
 
     @Throws(JSONException::class)
@@ -284,15 +321,54 @@ class ObdStoreTrips(
         db.delete(VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS, "session_id = ?", arrayOf(sessionId.toString()))
     }
 
-    private fun ensureRollupsAndCollectActive(db: SQLiteDatabase): List<ObdSessionRecord> {
+    /**
+     * Materializes durable trip/list summaries for finalized sessions whose raw rows are about to
+     * cross retention. This must run before raw deletion: otherwise a drive that was never opened
+     * in the dashboard could lose the only rows from which its compact history can be built.
+     */
+    internal fun materializeFinalizedSessionsBefore(cutoffMs: Long) {
+        val db = helper.writableDatabase
+        db
+            .rawQuery(
+                "SELECT s.* FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
+                    "LEFT JOIN ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS} r ON r.session_id = s._id " +
+                    "WHERE s.mode = ? AND s.ended_at_ms > 0 AND s.ended_at_ms < ? " +
+                    "AND (r.session_id IS NULL OR r.rollup_version < ?) ORDER BY s.started_at_ms ASC",
+                arrayOf(ObdLocalStore.MODE_OBD, cutoffMs.toString(), ROLLUP_CACHE_VERSION.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    insertRollup(db, ObdStoreSupport.readSession(cursor))
+                }
+            }
+    }
+
+    internal fun materializeFinalizedSession(sessionId: Long) {
+        val db = helper.writableDatabase
+        db
+            .rawQuery(
+                "SELECT * FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE _id = ? AND ended_at_ms > 0 LIMIT 1",
+                arrayOf(sessionId.toString()),
+            ).use { cursor ->
+                if (cursor.moveToFirst()) insertRollup(db, ObdStoreSupport.readSession(cursor))
+            }
+    }
+
+    private fun ensureRollupsAndCollectActive(
+        db: SQLiteDatabase,
+        maxFinalizedBackfills: Int = Int.MAX_VALUE,
+    ): List<ObdSessionRecord> {
         val active = ArrayList<ObdSessionRecord>()
         db
             .rawQuery(
                 "SELECT s.* FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
                     "LEFT JOIN ${VoltTrackerDb.TABLE_SESSION_TRIP_ROLLUPS}" +
                     " r ON r.session_id = s._id WHERE s.mode = ? AND (s.ended_at_ms <= 0 OR r.session_id IS NULL" +
-                    " OR r.rollup_version < ?) ORDER BY s.started_at_ms DESC",
-                arrayOf(ObdLocalStore.MODE_OBD, ROLLUP_CACHE_VERSION.toString()),
+                    " OR r.rollup_version < ?) ORDER BY s.started_at_ms DESC LIMIT ?",
+                arrayOf(
+                    ObdLocalStore.MODE_OBD,
+                    ROLLUP_CACHE_VERSION.toString(),
+                    maxOf(1, maxFinalizedBackfills).toString(),
+                ),
             ).use { cursor ->
                 while (cursor.moveToNext()) {
                     val session = ObdStoreSupport.readSession(cursor)
@@ -426,6 +502,20 @@ class ObdStoreTrips(
             if (startedAt > 0) {
                 firstAt = if (firstAt == 0L) startedAt else minOf(firstAt, startedAt)
                 lastAt = maxOf(lastAt, startedAt)
+            }
+        }
+    }
+
+    private class LifetimeEnergyAggregate {
+        var energyKwh = 0.0
+        var distanceMeters = 0.0
+
+        fun add(trip: JSONObject) {
+            val energy = if (trip.isNull("energyKwh")) Double.NaN else trip.optDouble("energyKwh", Double.NaN)
+            val distance = trip.optDouble("distanceMeters", Double.NaN)
+            if (energy.isFinite() && energy > 0.0 && distance.isFinite() && distance > 0.0) {
+                energyKwh += energy
+                distanceMeters += distance
             }
         }
     }

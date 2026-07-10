@@ -36,14 +36,24 @@ class DashboardStorageReader(
 
     fun tripsJson(): String = trips().serialize()
 
-    internal fun trips(): BridgeJsonResult {
+    fun tripsPageJson(offset: Int): String = tripsPage(offset).serialize()
+
+    internal fun trips(): BridgeJsonResult = tripsPage(0)
+
+    internal fun tripsPage(offset: Int): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
             // Rows come from the trip-list cache (no per-session recomputation) and are
             // small metadata objects, so a deep window is cheap. The map's session list
             // is fed from these beyond the storage summary's few detailed recentRoutes,
             // so this limit decides how many weeks of drives stay reachable there.
-            BridgeJsonResult.array(store.getTripsJson(TRIP_LIST_LIMIT))
+            BridgeJsonResult.array(
+                if (offset <= 0) {
+                    store.getTripsJson(TRIP_LIST_LIMIT)
+                } else {
+                    store.projections().tripsPage(TRIP_LIST_LIMIT, offset)
+                },
+            )
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getTripsJson failed", ex)
             BridgeJsonResult.error("trips_read_failed", "Could not read logged trips.")

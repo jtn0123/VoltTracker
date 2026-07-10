@@ -229,6 +229,26 @@ class DataBackupTest {
     }
 
     @Test
+    fun backupBuildersRefuseToCopyWhenWalCheckpointCannotFinish() {
+        val context = RuntimeEnvironment.getApplication()
+        val store = BusyCheckpointStore(context)
+        try {
+            store.clearAllData()
+
+            assertNull(
+                "a backup must fail rather than silently omit uncheckpointed WAL rows",
+                DataBackup(context).buildBackupFile(store),
+            )
+            assertNull(
+                "an encrypted backup must fail rather than silently omit uncheckpointed WAL rows",
+                DataBackup(context).buildEncryptedBackupFile(store, "hunter22"),
+            )
+        } finally {
+            store.close()
+        }
+    }
+
+    @Test
     fun backupBuildersReturnNullForNullStoreOrUnavailableBackupDir() {
         val context = RuntimeEnvironment.getApplication()
         val backup = DataBackup(context)
@@ -882,9 +902,8 @@ class DataBackupTest {
     private class MissingDatabaseFileStore(
         private val appContext: Context,
     ) : ObdLocalStore(appContext) {
-        override fun checkpoint() {
-            // Do not create or checkpoint the real DB; this fake is for backup-file absence.
-        }
+        // Do not create or checkpoint the real DB; this fake is for backup-file absence.
+        override fun checkpoint(): Boolean = true
 
         override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
             ObdStoreMaintenance.IntegrityResult(true, emptyList())
@@ -897,9 +916,8 @@ class DataBackupTest {
     ) : ObdLocalStore(appContext) {
         val fakeDatabaseFile: File = File(appContext.cacheDir, "directory-db-${System.nanoTime()}.db")
 
-        override fun checkpoint() {
-            // The unreadable path is a directory, so copying/encrypting it must fail cleanly.
-        }
+        // The unreadable path is a directory, so copying/encrypting it must fail cleanly.
+        override fun checkpoint(): Boolean = true
 
         override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
             ObdStoreMaintenance.IntegrityResult(true, emptyList())
@@ -908,6 +926,13 @@ class DataBackupTest {
             fakeDatabaseFile.mkdirs()
             return fakeDatabaseFile
         }
+    }
+
+    /** Store fake for a busy WAL checkpoint that leaves committed frames outside the main file. */
+    private class BusyCheckpointStore(
+        appContext: Context,
+    ) : ObdLocalStore(appContext) {
+        override fun checkpoint(): Boolean = false
     }
 
     companion object {

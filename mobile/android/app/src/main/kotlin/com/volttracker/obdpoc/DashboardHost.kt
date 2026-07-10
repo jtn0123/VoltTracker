@@ -67,6 +67,30 @@ interface AutoConnectCommands {
     fun setAutoConnectEnabledFromBridge(enabled: Boolean)
 }
 
+/** Native-owned UI preferences that change Android window/notification behavior. */
+interface DashboardExperienceCommands {
+    fun getDashboardExperienceStateJson(): String
+
+    fun setKeepScreenAwakeEnabled(enabled: Boolean)
+
+    fun setTripSummaryEnabled(enabled: Boolean)
+
+    fun setActiveDashboardView(view: String?)
+
+    companion object {
+        val NONE: DashboardExperienceCommands =
+            object : DashboardExperienceCommands {
+                override fun getDashboardExperienceStateJson(): String = "{}"
+
+                override fun setKeepScreenAwakeEnabled(enabled: Boolean) = Unit
+
+                override fun setTripSummaryEnabled(enabled: Boolean) = Unit
+
+                override fun setActiveDashboardView(view: String?) = Unit
+            }
+    }
+}
+
 /**
  * User-controlled, native-owned event-notification + auto-scan settings (M1 + M3). The dashboard
  * reads the current toggle state and flips each toggle through the bridge, mirroring auto-connect.
@@ -195,6 +219,8 @@ interface SessionDataReader {
 
     fun getTripsJson(): String
 
+    fun getTripsPageJson(offset: Int): String = DashboardStorageReader { localStore }.tripsPageJson(offset)
+
     fun getInsightsJson(): String
 
     fun getTripRouteJson(routeKey: String?): String
@@ -265,4 +291,6 @@ interface DashboardHost :
      * and the Activity exposes the cluster with a single member.
      */
     fun eventNotifications(): EventNotificationCommands
+
+    fun dashboardExperience(): DashboardExperienceCommands = DashboardExperienceCommands.NONE
 }

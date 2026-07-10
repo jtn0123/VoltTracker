@@ -149,7 +149,69 @@
   // { prefs } from "./prefs" instead of reading window.VoltDashboard.prefs at
   // runtime. The VD.prefs assignment is retained because the unit suite and any
   // future late-binding consumers still read it off the global.
-  export const prefs = { get, set, subscribe };
+  const BACKUP_PREF_KEYS = [
+    "units",
+    "pricePerKwh",
+    "publicPricePerKwh",
+    "mpg",
+    "gasPricePerGal",
+    "chargeTargetSoc",
+    "fontScale",
+    "highContrast",
+    "quietTelemetry",
+    "driveTiles",
+    "driveTilesDetailedBackup",
+    "drivePreset",
+    "diagnosticsMode",
+    "weekChartMode",
+    "effChartView",
+    "effHideOutliers",
+    "mapLayer",
+    "mapDetailsExpanded",
+  ] as const;
+
+  function exportForBackup(): string {
+    const preferences: Record<string, unknown> = {};
+    BACKUP_PREF_KEYS.forEach((key) => {
+      const raw = rawGet(key);
+      if (raw == null) return;
+      try {
+        preferences[key] = JSON.parse(raw);
+      } catch (_err) {
+        /* a corrupt preference is omitted instead of poisoning the backup */
+      }
+    });
+    return JSON.stringify({ schemaVersion: 1, preferences });
+  }
+
+  function restoreFromBackup(payload: unknown): boolean {
+    let parsed: unknown = payload;
+    if (typeof parsed === "string") {
+      try {
+        parsed = JSON.parse(parsed);
+      } catch (_err) {
+        return false;
+      }
+    }
+    if (!parsed || typeof parsed !== "object") return false;
+    const root = parsed as Record<string, unknown>;
+    const incoming = root.preferences;
+    if (!incoming || typeof incoming !== "object") return false;
+    const values = incoming as Record<string, unknown>;
+    BACKUP_PREF_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(values, key)) set(key, values[key]);
+    });
+    applyUnitsAttr();
+    syncUnitButtons();
+    applyAccessibilityAttrs();
+    syncAccessibilityControls();
+    applyDriveTiles();
+    renderTilesEditor();
+    rerenderForUnits();
+    return true;
+  }
+
+  export const prefs = { get, set, subscribe, exportForBackup, restoreFromBackup };
   VD.prefs = prefs;
 
   // ----- units --------------------------------------------------------------
@@ -255,6 +317,49 @@
     return get<boolean>("highContrast", false);
   }
 
+  function quietTelemetry(): boolean {
+    return get<boolean>("quietTelemetry", true);
+  }
+
+  function diagnosticsMode(): "basic" | "advanced" {
+    return get<string>("diagnosticsMode", "basic") === "advanced" ? "advanced" : "basic";
+  }
+
+  function applyDiagnosticsMode(): void {
+    const advanced = diagnosticsMode() === "advanced";
+    document.querySelectorAll<HTMLElement>("[data-diagnostics-expert]").forEach((node) => {
+      node.hidden = !advanced;
+    });
+    document.querySelectorAll<HTMLElement>("[data-diagnostics-mode]").forEach((button) => {
+      const active = button.dataset.diagnosticsMode === diagnosticsMode();
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+    const hint = document.getElementById("diagnosticsModeHint");
+    if (hint) {
+      hint.textContent = advanced
+        ? "Live signals, enhanced probes, demo, and raw session tools"
+        : "Recovery, car codes, and data health";
+    }
+    if (advanced) {
+      if (typeof VD.ensureSignalsModule === "function") {
+        void VD.ensureSignalsModule()
+          .then(() => {
+            if (typeof VD.updateEnhancedCapabilityUi === "function") VD.updateEnhancedCapabilityUi();
+          })
+          .catch(() => {});
+      }
+      try {
+        if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
+        if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
+      } catch (_err) {
+        /* the next telemetry/storage render will fill the newly visible tools */
+      }
+    }
+  }
+
+  VD.applyDiagnosticsMode = applyDiagnosticsMode;
+
   // Snap an arbitrary stored scale to the nearest offered choice so the
   // segmented control always has exactly one active button.
   function nearestFontScaleChoice(value: number): number {
@@ -270,6 +375,10 @@
       root.style.setProperty("--font-scale", String(fontScale()));
       if (highContrast()) root.setAttribute("data-contrast", "high");
       else root.removeAttribute("data-contrast");
+      root.dataset.drivePreset = drivePreset();
+      document.querySelectorAll<HTMLElement>("[data-live-telemetry]").forEach((node) => {
+        node.setAttribute("aria-live", quietTelemetry() ? "off" : "polite");
+      });
     } catch (_err) {
       /* no-op: a missing documentElement (non-DOM host) leaves defaults intact */
     }
@@ -301,6 +410,18 @@
       toggle.setAttribute("aria-label", `High-contrast theme is ${on ? "on" : "off"}`);
       toggle.textContent = on ? "On" : "Off";
     }
+    const quietToggle = document.querySelector<HTMLElement>("[data-pref-quiet-telemetry]");
+    if (quietToggle) {
+      const on = quietTelemetry();
+      quietToggle.dataset.on = String(on);
+      quietToggle.setAttribute("aria-pressed", String(on));
+      quietToggle.textContent = on ? "On" : "Off";
+    }
+    document.querySelectorAll<HTMLElement>("button[data-drive-preset]").forEach((button) => {
+      const active = button.dataset.drivePreset === drivePreset();
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
   }
 
 
@@ -317,6 +438,11 @@
     { key: "load", label: "Load" },
     { key: "gps", label: "GPS" }
   ];
+  type DrivePreset = "focus" | "detailed";
+
+  function drivePreset(): DrivePreset {
+    return get<string>("drivePreset", "detailed") === "focus" ? "focus" : "detailed";
+  }
 
   function tileLabel(key: string): string {
     const found = DRIVE_TILES.find((tile) => tile.key === key);
@@ -400,6 +526,84 @@
     set("driveTiles", cfg);
     applyDriveTiles();
     renderTilesEditor();
+    applyDiagnosticsMode();
+  }
+
+  function selectDrivePreset(next: DrivePreset): void {
+    const current = drivePreset();
+    if (next === "focus") {
+      if (current !== "focus") set("driveTilesDetailedBackup", tilesConfig());
+      const focusKeys = new Set(["rpm", "aux12v", "gps"]);
+      persistTiles(DRIVE_TILES.map((tile) => ({ key: tile.key, on: focusKeys.has(tile.key) })));
+    } else {
+      const saved = get<TileConfig[]>("driveTilesDetailedBackup", []);
+      if (Array.isArray(saved) && saved.length) persistTiles(saved);
+      else persistTiles(DRIVE_TILES.map((tile) => ({ key: tile.key, on: true })));
+    }
+    set("drivePreset", next);
+    applyAccessibilityAttrs();
+    syncAccessibilityControls();
+    toast(next === "focus" ? "Drive Focus on" : "Detailed Drive view restored");
+  }
+
+  VD.selectDrivePreset = selectDrivePreset;
+
+  function scrollToSettingsSection(id: string): boolean {
+    const section = document.getElementById(id);
+    if (!section) return false;
+    section.setAttribute("tabindex", "-1");
+    settingsScrollSpyHoldUntil = Date.now() + 800;
+    setActiveSettingsSection(id);
+    if (typeof section.scrollIntoView === "function") {
+      section.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    window.setTimeout(() => section.focus({ preventScroll: true }), 220);
+    return true;
+  }
+
+  VD.scrollToSettingsSection = scrollToSettingsSection;
+
+  function setActiveSettingsSection(id: string): void {
+    const nav = document.querySelector<HTMLElement>(".settings-section-nav");
+    if (!nav) return;
+    nav.querySelectorAll<HTMLButtonElement>("button[data-settings-target]").forEach((button) => {
+      const active = button.dataset.settingsTarget === id;
+      button.classList.toggle("is-active", active);
+      if (active) {
+        button.setAttribute("aria-current", "location");
+        if (typeof button.scrollIntoView === "function") {
+          button.scrollIntoView({ block: "nearest", inline: "center" });
+        }
+      } else {
+        button.removeAttribute("aria-current");
+      }
+    });
+  }
+
+  let settingsScrollSpyQueued = false;
+  let settingsScrollSpyHoldUntil = 0;
+  function updateSettingsScrollSpy(): void {
+    settingsScrollSpyQueued = false;
+    if (Date.now() < settingsScrollSpyHoldUntil) return;
+    if (document.body.dataset.activeView !== "settings") return;
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>(".settings-section-nav [data-settings-target]"));
+    const sections = buttons
+      .map((button) => document.getElementById(button.dataset.settingsTarget || ""))
+      .filter((section): section is HTMLElement => Boolean(section && !section.hidden));
+    if (!sections.length) return;
+    const anchor = Math.max(96, window.innerHeight * 0.22);
+    let current = sections[0]!;
+    for (const section of sections) {
+      if (section.getBoundingClientRect().top <= anchor) current = section;
+      else break;
+    }
+    setActiveSettingsSection(current.id);
+  }
+
+  function queueSettingsScrollSpy(): void {
+    if (settingsScrollSpyQueued) return;
+    settingsScrollSpyQueued = true;
+    window.requestAnimationFrame(updateSettingsScrollSpy);
   }
 
   function toggleTile(key: string): void {
@@ -448,6 +652,42 @@
       /* no-op */
     }
     window.scrollTo({ top: scrollY, behavior: "auto" });
+  }
+
+  function syncChargeTargetPresets(): void {
+    const current = Math.round(get<number>("chargeTargetSoc", 100));
+    document.querySelectorAll<HTMLButtonElement>("button[data-charge-target]").forEach((button) => {
+      const raw = button.dataset.chargeTarget || "";
+      const active = raw === "other"
+        ? ![80, 90, 100].includes(current)
+        : Number(raw) === current;
+      button.classList.toggle("is-active", active);
+      button.setAttribute("aria-pressed", String(active));
+    });
+  }
+
+  function commitChargeTarget(value: number, announce = false): void {
+    const clamped = Math.min(100, Math.max(50, Math.round(value)));
+    set("chargeTargetSoc", clamped);
+    ["prefChargeTargetInput", "liveChargeTargetInput"].forEach((id) => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input) input.value = String(clamped);
+    });
+    try {
+      const bridge = window.VoltTrackerAndroid;
+      if (bridge && typeof bridge.setChargeTargetSoc === "function") {
+        bridge.setChargeTargetSoc(clamped);
+      }
+    } catch (_err) {
+      /* bridge absent in browser preview / older host — pref still drives the ETA */
+    }
+    try {
+      if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
+    } catch (_err) {
+      /* no-op */
+    }
+    syncChargeTargetPresets();
+    if (announce) toast(`Charge target saved at ${clamped}%`);
   }
 
   // Finds (or lazily creates) the transient hint node that bindNumericPref uses to
@@ -618,26 +858,19 @@
     const chargeTargetOptions = {
       defaultValue: 100,
       rangeUnit: "%",
-      onCommit: (value: number) => {
-        try {
-          const bridge = window.VoltTrackerAndroid;
-          if (bridge && typeof bridge.setChargeTargetSoc === "function") {
-            bridge.setChargeTargetSoc(value);
-          }
-        } catch (_err) {
-          /* bridge absent in browser preview / older host — pref still drives the ETA */
-        }
-        // Re-render the live-charge card immediately so the ETA/target reflect the edit.
-        try {
-          if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
-        } catch (_err) {
-          /* no-op */
-        }
-      },
+      onCommit: (value: number) => commitChargeTarget(value),
     };
     bindNumericPref("prefChargeTargetInput", "chargeTargetSoc", 50, 100, chargeTargetOptions);
     bindNumericPref("liveChargeTargetInput", "chargeTargetSoc", 50, 100, chargeTargetOptions);
-    // Install the delegated preferences click handler at most once per document.
+    subscribe("chargeTargetSoc", syncChargeTargetPresets);
+    syncChargeTargetPresets();
+    setActiveSettingsSection("settingsConnection");
+    window.addEventListener("scroll", queueSettingsScrollSpy, { passive: true });
+    window.addEventListener("resize", queueSettingsScrollSpy, { passive: true });
+  }
+
+  function bindPreferencesClickHandler(): void {
+    // Install the static preferences click handlers at most once per document.
     // Production loads prefs once, but the guard keeps a stray double-load (or a
     // re-imported test module) from stacking a second toggle listener — which
     // would double-fire the high-contrast toggle and cancel itself out. The flag
@@ -645,9 +878,23 @@
     const doc = document as Document & { __voltPrefsClickBound?: boolean };
     if (doc.__voltPrefsClickBound) return;
     doc.__voltPrefsClickBound = true;
-    document.addEventListener("click", (event) => {
+    const handleClick = (event: Event) => {
       const target = event.target instanceof Element ? event.target : null;
       if (!target) return;
+      const chargeTargetButton = target.closest<HTMLElement>("button[data-charge-target]");
+      if (chargeTargetButton) {
+        const raw = chargeTargetButton.dataset.chargeTarget || "";
+        if (raw === "other") {
+          const input = document.getElementById(chargeTargetButton.dataset.chargeTargetInput || "") as HTMLInputElement | null;
+          if (input) {
+            input.focus();
+            input.select();
+          }
+        } else {
+          commitChargeTarget(Number(raw), true);
+        }
+        return;
+      }
       const unitBtn = target.closest("[data-pref-units]");
       if (unitBtn) {
         const metric = unitBtn.getAttribute("data-pref-units") === "metric";
@@ -683,9 +930,48 @@
         applyAccessibilityAttrs();
         syncAccessibilityControls();
         toast(highContrast() ? "High contrast on" : "High contrast off");
+        return;
       }
-    });
+      const quietBtn = target.closest("[data-pref-quiet-telemetry]");
+      if (quietBtn) {
+        set("quietTelemetry", !quietTelemetry());
+        applyAccessibilityAttrs();
+        syncAccessibilityControls();
+        toast(quietTelemetry() ? "Quiet live data on" : "Live values will be announced");
+        return;
+      }
+      // :root also carries data-drive-preset for CSS. Restrict this lookup to
+      // the actual controls or every click resolves to <html> and returns here
+      // before the Diagnostics/Settings actions can run.
+      const presetBtn = target.closest<HTMLElement>("button[data-drive-preset]");
+      if (presetBtn) {
+        selectDrivePreset(presetBtn.dataset.drivePreset === "focus" ? "focus" : "detailed");
+        return;
+      }
+      const diagnosticsBtn = target.closest<HTMLElement>("button[data-diagnostics-mode]");
+      if (diagnosticsBtn) {
+        set("diagnosticsMode", diagnosticsBtn.dataset.diagnosticsMode === "advanced" ? "advanced" : "basic");
+        applyDiagnosticsMode();
+        toast(diagnosticsMode() === "advanced" ? "Advanced diagnostics shown" : "Basic diagnostics shown");
+        return;
+      }
+      const settingsButton = target.closest<HTMLElement>("button[data-settings-target]:not([data-nav-jump])");
+      if (settingsButton) {
+        const id = settingsButton.dataset.settingsTarget || "";
+        scrollToSettingsSection(id);
+      }
+    };
+    // Capture before the dashboard's broad action delegates. A few nested
+    // settings surfaces intentionally stop bubbling so their row action does
+    // not also fire; preference controls must remain independent of that.
+    document.addEventListener("click", handleClick, true);
   }
+
+  // The bundle is loaded after the full body, so delegated clicks can bind
+  // immediately. Initial value hydration may still wait for DOMContentLoaded.
+  // Keeping those lifecycles separate prevents a late/missed ready event from
+  // leaving visible preference controls inert.
+  bindPreferencesClickHandler();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootPrefsUi);

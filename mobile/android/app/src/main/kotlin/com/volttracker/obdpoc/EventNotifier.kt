@@ -32,19 +32,21 @@ open class EventNotifier(
         ensureChannel(context)
     }
 
-    /** Posts the platform notification for [event]; a no-op (logged) when notifications are blocked. */
-    open fun notify(event: EventNotificationDecider.Event) {
+    /** Posts [event] and reports whether it reached NotificationManager. */
+    open fun notify(event: EventNotificationDecider.Event): Boolean {
         if (!canPost()) {
             Log.i(AppPrefs.LOG_TAG, "event notification skipped: POST_NOTIFICATIONS not granted")
-            return
+            return false
         }
-        val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        val spec = describe(event) ?: return
-        try {
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        val spec = describe(event) ?: return false
+        return try {
             ensureChannel(context)
             manager.notify(spec.notificationId, build(spec.title, spec.text))
+            true
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "event notification post failed", ex)
+            false
         }
     }
 

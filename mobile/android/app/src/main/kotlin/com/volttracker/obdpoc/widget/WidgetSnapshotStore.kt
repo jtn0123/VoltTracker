@@ -51,8 +51,8 @@ class WidgetSnapshotStore(
         }
 
     /**
-     * Persists [snapshot] and reports whether the *display* changed (so the caller can decide whether
-     * to nudge the widget to redraw).
+     * Persists [snapshot] and reports whether the display changed or its relative freshness label is
+     * due for a redraw (so the caller can decide whether to nudge the widget to redraw).
      *
      * The freshness timestamp ([WidgetSnapshot.lastSampleAtMs], falling back to [updatedAtMs]) is
      * bumped on EVERY call — even an identical sample — so the "updated Xm ago" line keeps advancing
@@ -67,12 +67,20 @@ class WidgetSnapshotStore(
             val current = read()
             val sampleAt = snapshot.freshnessAtMs()
             if (sameDisplayFields(current, snapshot) && current.hasData()) {
-                // No display change: bump only the freshness timestamp (cheap single-key write) so the
-                // widget stays "fresh" without a redraw.
+                val lastRedrawAt = prefs.getLong(KEY_LAST_REDRAW_AT, current.updatedAtMs)
+                val refreshFreshness =
+                    sampleAt > 0L && sampleAt - lastRedrawAt >= FRESHNESS_REDRAW_INTERVAL_MS
+                // No display-field change: keep the sample clock current and periodically redraw so
+                // the already-rendered "updated … ago" text cannot remain frozen indefinitely.
                 if (sampleAt > current.lastSampleAtMs) {
-                    prefs.edit { putLong(KEY_LAST_SAMPLE_AT, sampleAt) }
+                    prefs.edit {
+                        putLong(KEY_LAST_SAMPLE_AT, sampleAt)
+                        if (refreshFreshness) {
+                            putLong(KEY_LAST_REDRAW_AT, sampleAt)
+                        }
+                    }
                 }
-                return false
+                return refreshFreshness
             }
             prefs.edit {
                 putInt(KEY_SOC, snapshot.socPct)
@@ -81,6 +89,7 @@ class WidgetSnapshotStore(
                 putString(KEY_VEHICLE_STATE, snapshot.vehicleState)
                 putLong(KEY_UPDATED_AT, snapshot.updatedAtMs)
                 putLong(KEY_LAST_SAMPLE_AT, sampleAt)
+                putLong(KEY_LAST_REDRAW_AT, maxOf(snapshot.updatedAtMs, sampleAt))
             }
             true
         } catch (ex: RuntimeException) {
@@ -109,5 +118,10 @@ class WidgetSnapshotStore(
 
         /** Last SAMPLE arrival time (bumped every sample); drives the freshness/stale signal. */
         private const val KEY_LAST_SAMPLE_AT = "widget_snapshot_last_sample_at"
+
+        /** Last requested widget redraw, used to advance relative freshness copy at a bounded rate. */
+        private const val KEY_LAST_REDRAW_AT = "widget_snapshot_last_redraw_at"
+
+        internal const val FRESHNESS_REDRAW_INTERVAL_MS = 60_000L
     }
 }

@@ -124,21 +124,35 @@ object ObdProtocol {
         if (response == null || pidHex == null || pidHex.isEmpty()) {
             return false
         }
-        val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
+        val lines = adapterHexLines(response)
+        var lineIndex = 0
         var cursor = 0
         for (pid in pidHex) {
             val cleanPid = (pid ?: "").uppercase(Locale.US)
             val marker = "41$cleanPid"
-            val index = hex.indexOf(marker, cursor)
-            if (index < 0) {
-                return false
-            }
             val expectedBytes = mode01PayloadBytes(cleanPid)
-            val dataStart = index + marker.length
-            if (hex.length < dataStart + expectedBytes * 2) {
+            var found = false
+            while (lineIndex < lines.size && !found) {
+                val line = lines[lineIndex]
+                var index = line.indexOf(marker, cursor)
+                while (index >= 0) {
+                    val dataStart = index + marker.length
+                    val dataEnd = dataStart + expectedBytes * 2
+                    if (line.length >= dataEnd) {
+                        cursor = dataEnd
+                        found = true
+                        break
+                    }
+                    index = line.indexOf(marker, index + marker.length)
+                }
+                if (!found) {
+                    lineIndex++
+                    cursor = 0
+                }
+            }
+            if (!found) {
                 return false
             }
-            cursor = dataStart + expectedBytes * 2
         }
         return true
     }
@@ -150,29 +164,36 @@ object ObdProtocol {
         }
         val cleaned =
             response
-                .replace(">", "")
-                .replace("\r", "")
-                .replace("\n", "")
+                .replace(">", " ")
                 .trim()
                 .uppercase(Locale.US)
-        val end = cleaned.indexOf('V')
-        if (end < 0) {
-            return null
-        }
-        var start = end - 1
-        while (start >= 0) {
-            val c = cleaned[start]
-            if ((c in '0'..'9') || c == '.') {
-                start--
-            } else {
-                break
+        // Clones sometimes ignore ATE0 and return "ATRV\r14.2V\r>". ATRV itself contains a V,
+        // so scan every V-terminated token until a plausible numeric reading is found instead of
+        // stopping at the echoed command's V.
+        var end = cleaned.indexOf('V')
+        while (end >= 0) {
+            var start = end - 1
+            while (start >= 0) {
+                val c = cleaned[start]
+                if ((c in '0'..'9') || c == '.') {
+                    start--
+                } else {
+                    break
+                }
             }
+            val parsed =
+                try {
+                    cleaned.substring(start + 1, end).toFloat()
+                } catch (ex: NumberFormatException) {
+                    null
+                }
+            val bounded = parsed?.let { boundedFloat(it, AUX_VOLTAGE_RANGE) }
+            if (bounded != null) {
+                return bounded
+            }
+            end = cleaned.indexOf('V', end + 1)
         }
-        return try {
-            boundedFloat(cleaned.substring(start + 1, end).toFloat(), AUX_VOLTAGE_RANGE)
-        } catch (ex: NumberFormatException) {
-            null
-        }
+        return null
     }
 
     @JvmStatic
@@ -425,21 +446,34 @@ object ObdProtocol {
         if (response == null) {
             return null
         }
-        val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
         val marker = "41${pid.uppercase(Locale.US)}"
-        val index = hex.indexOf(marker)
-        if (index < 0) {
-            return null
+        for (line in adapterHexLines(response)) {
+            var index = line.indexOf(marker)
+            while (index >= 0) {
+                val dataStart = index + marker.length
+                if (line.length >= dataStart + expectedBytes * 2) {
+                    return IntArray(expectedBytes) { i ->
+                        val offset = dataStart + i * 2
+                        line.substring(offset, offset + 2).toInt(16)
+                    }
+                }
+                index = line.indexOf(marker, index + marker.length)
+            }
         }
-        val dataStart = index + marker.length
-        if (hex.length < dataStart + expectedBytes * 2) {
-            return null
-        }
-        return IntArray(expectedBytes) { i ->
-            val offset = dataStart + i * 2
-            hex.substring(offset, offset + 2).toInt(16)
-        }
+        return null
     }
+
+    /**
+     * Extracts real hexadecimal tokens without retaining the A-F letters inside adapter prose such
+     * as `NO DATA` or `SEARCHING`. Lines stay separate so a truncated frame cannot borrow payload
+     * bytes from the next response line.
+     */
+    private fun adapterHexLines(response: String): List<String> =
+        response
+            .uppercase(Locale.US)
+            .split(Regex("[\\r\\n]+"))
+            .map { line -> HEX_TOKEN.findAll(line).joinToString("") { it.value } }
+            .filter { it.isNotEmpty() }
 
     private fun positiveDtcMarker(command: String?): String? =
         when (command?.trim()?.uppercase(Locale.US) ?: "") {
@@ -449,6 +483,20 @@ object ObdProtocol {
             "0202" -> "4202"
             else -> null
         }
+
+    /** True only when a DTC command received a structurally positive reply, including `43 00`. */
+    @JvmStatic
+    fun hasPositiveDiagnosticResponse(
+        command: String?,
+        response: String?,
+    ): Boolean {
+        val marker = positiveDtcMarker(command) ?: return false
+        val lines = elmSegmentedHex(response)?.let(::listOf) ?: response?.let(::adapterHexLines).orEmpty()
+        return lines.any { line ->
+            val markerAt = line.indexOf(marker)
+            markerAt >= 0 && line.length >= markerAt + marker.length + 2
+        }
+    }
 
     private fun dtcStatusForCommand(command: String?): String =
         when (command?.trim()?.uppercase(Locale.US) ?: "") {
@@ -701,7 +749,7 @@ object ObdProtocol {
             return null
         }
         val body = cleanCommand.substring(2)
-        val hex = response.uppercase(Locale.US).replace(Regex("[^0-9A-F]"), "")
+        val hex = adapterHexLines(response).joinToString("")
         // Preferred: the full echoed DID, reading all following bytes (the all-zeros sentinel check
         // in isBenignSentinelResponse needs the whole payload, so this path stays unbounded). The
         // >2-byte fallback below is BOUNDED: some ECUs echo only the leading 2-byte DID (dropping the
@@ -774,6 +822,7 @@ object ObdProtocol {
     ): String = String.format(Locale.US, "%.${decimals}f", value)
 
     private val NON_HEX = Regex("[^0-9A-F]")
+    private val HEX_TOKEN = Regex("(?<![0-9A-Z])[0-9A-F]+(?![0-9A-Z])")
 
     /** Upper bound on bytes read via the mode-22 short-marker fallback (see mode22Payload). */
     private const val MODE22_FALLBACK_MAX_BYTES = 8

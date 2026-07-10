@@ -98,6 +98,25 @@ describe('insights estimated savings vs gas', () => {
     expect(note).toContain('3.5 mi/kWh');
   });
 
+  it('uses whole-history native energy even when the recent trip list is capped', async () => {
+    const miles = 100;
+    const getInsights = vi.fn(() => JSON.stringify({
+      tripCount: 500,
+      totalDistanceMeters: miles * 1609.344,
+      loggedEnergyKwh: 20,
+      loggedEnergyDistanceMeters: miles * 1609.344,
+    }));
+    await loadWithInsights(getInsights);
+    window.VoltDashboard.state.trips = [{ distanceMeters: 1609.344, energyKwh: 100 }];
+    window.VoltDashboard.prefs.set('mpg', 25);
+    window.VoltDashboard.prefs.set('gasPricePerGal', 4);
+    window.VoltDashboard.prefs.set('pricePerKwh', 0.2);
+
+    window.VoltDashboard.renderInsightStats();
+
+    expect(document.getElementById('insightSavings').textContent).toBe('$12.00');
+  });
+
   it('hides the savings row when there is no logged distance', async () => {
     const getInsights = vi.fn(() => JSON.stringify({ tripCount: 0, totalDistanceMeters: 0 }));
     await loadWithInsights(getInsights);

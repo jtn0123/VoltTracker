@@ -105,10 +105,16 @@ object ChargeSessionMaterializer {
             val plugged = isPluggedSample(sample)
             if (plugged != PluggedReason.NOT_PLUGGED) {
                 if (currentRun.isNotEmpty()) {
-                    val hadTransientBreak = pendingBreakStartMs != null
+                    val breakStartMs = pendingBreakStartMs
+                    val hadTransientBreak = breakStartMs != null
+                    // With sparse telemetry there may be only one breaking row. Re-check the break
+                    // duration when charging resumes; otherwise a multi-minute drive is treated as
+                    // a one-sample blip and two physical charges are stitched together.
+                    val sustainedBreak =
+                        breakStartMs != null && sample.capturedAtMs - breakStartMs > Tunables.BREAK_DEBOUNCE_MS
                     pendingBreakStartMs = null
                     val gap = sample.capturedAtMs - currentRun[currentRun.size - 1].capturedAtMs
-                    if (gap > Tunables.SPLIT_GAP_MS) {
+                    if (gap > Tunables.SPLIT_GAP_MS || sustainedBreak) {
                         // This boundary is a SPLIT, not an interruption — so don't count the pending
                         // transient break against the run being closed. Finalize with the flag state
                         // as of ITS OWN samples; the incoming sample's evidence belongs to the run
@@ -180,15 +186,17 @@ object ChargeSessionMaterializer {
         val packCurrent = sample.packCurrentA
         val speed = sample.speedKph
         val strongCharging =
-            packCurrent != null && packCurrent <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD
-        val clearlyMoving = speed != null && speed > Tunables.STATIONARY_SPEED_KPH
+            packCurrent != null &&
+                packCurrent.isFinite() &&
+                packCurrent <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD
+        val clearlyMoving = speed != null && speed.isFinite() && speed > Tunables.STATIONARY_SPEED_KPH
         if (clearlyMoving) {
             return PluggedReason.NOT_PLUGGED
         }
         if (strongCharging) {
             return PluggedReason.PACK_CURRENT
         }
-        if (speed == null) {
+        if (speed == null || !speed.isFinite()) {
             // Without a strong pack-current signal AND without a speed reading, we cannot
             // distinguish stationary-plugged from moving-with-regen — be conservative.
             return PluggedReason.NOT_PLUGGED
@@ -199,7 +207,7 @@ object ChargeSessionMaterializer {
             return PluggedReason.NOT_PLUGGED
         }
         val voltage = sample.adapterVoltage
-        if (voltage != null && voltage > Tunables.PLUGGED_VOLTAGE_THRESHOLD) {
+        if (voltage != null && voltage.isFinite() && voltage > Tunables.PLUGGED_VOLTAGE_THRESHOLD) {
             return PluggedReason.AUX_VOLTAGE
         }
         return PluggedReason.NOT_PLUGGED
@@ -210,15 +218,15 @@ object ChargeSessionMaterializer {
             return false
         }
         val speed = sample.speedKph
-        if (speed != null && speed > Tunables.STATIONARY_SPEED_KPH) {
+        if (speed != null && speed.isFinite() && speed > Tunables.STATIONARY_SPEED_KPH) {
             return true
         }
         val packCurrent = sample.packCurrentA
-        if (packCurrent != null && packCurrent > Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD) {
+        if (packCurrent != null && packCurrent.isFinite() && packCurrent > Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD) {
             return true
         }
         val power = sample.powerKw
-        return power != null && power > 1.0
+        return power != null && power.isFinite() && power > 1.0
     }
 
     private fun finalizeRun(
@@ -239,8 +247,8 @@ object ChargeSessionMaterializer {
         if (durationMs < Tunables.MIN_DURATION_MS) {
             return null
         }
-        val voltageStart = run[0].adapterVoltage
-        val voltageEnd = run[run.size - 1].adapterVoltage
+        val voltageStart = run[0].adapterVoltage?.takeIf { it.isFinite() }
+        val voltageEnd = run[run.size - 1].adapterVoltage?.takeIf { it.isFinite() }
         val confidence = if (usedPackCurrent) Confidence.OBSERVED else Confidence.WEAK
         return ChargeSession(
             startedAtMs,

@@ -18,7 +18,7 @@ class ObdStoreVehicles(
         }
         val now = System.currentTimeMillis()
         val hash = vinKeyHasher.hash(vin)
-        val legacyHash = VinKeyHasher.legacyHash(vin)
+        val candidateHashes = (vinKeyHasher.hashCandidates(vin) + VinKeyHasher.legacyHash(vin)).distinct()
         val last4 = vin.substring(13)
         val wmi = vin.substring(0, 3)
         val make = guessMakeFromWmi(wmi)
@@ -26,30 +26,43 @@ class ObdStoreVehicles(
         val db = helper.writableDatabase
         db.beginTransaction()
         try {
+            val matches = ArrayList<Pair<Long, String>>()
+            val placeholders = candidateHashes.joinToString(",") { "?" }
             db
                 .rawQuery(
-                    "SELECT _id, vehicle_key FROM ${VoltTrackerDb.TABLE_VEHICLES} WHERE vehicle_key IN (?, ?)",
-                    arrayOf(hash, legacyHash),
+                    "SELECT _id, vehicle_key FROM ${VoltTrackerDb.TABLE_VEHICLES} " +
+                        "WHERE vehicle_key IN ($placeholders)",
+                    candidateHashes.toTypedArray(),
                 ).use { cursor ->
-                    if (cursor.moveToFirst()) {
-                        val existingId = cursor.getLong(0)
-                        val update = ContentValues()
-                        if (cursor.getString(1) != hash) {
-                            update.put("vehicle_key", hash)
-                            update.put("vin_hash", hash)
-                        }
-                        update.put("last_seen_ms", now)
-                        update.put("updated_at_ms", now)
-                        db.update(
-                            VoltTrackerDb.TABLE_VEHICLES,
-                            update,
-                            "_id = ?",
-                            arrayOf(existingId.toString()),
-                        )
-                        db.setTransactionSuccessful()
-                        return existingId
-                    }
+                    while (cursor.moveToNext()) matches.add(cursor.getLong(0) to cursor.getString(1))
                 }
+            if (matches.isNotEmpty()) {
+                // Prefer the row already keyed by this install. A merged backup can contain the
+                // same VIN keyed with a donor secret; consolidate every dependent row before
+                // deleting that duplicate and normalizing to the local primary key.
+                val preferred = matches.firstOrNull { it.second == hash } ?: matches.first()
+                for (duplicate in matches.filter { it.first != preferred.first }) {
+                    remapVehicleReferences(db, duplicate.first, preferred.first)
+                    db.delete(
+                        VoltTrackerDb.TABLE_VEHICLES,
+                        "_id = ?",
+                        arrayOf(duplicate.first.toString()),
+                    )
+                }
+                val update = ContentValues()
+                update.put("vehicle_key", hash)
+                update.put("vin_hash", hash)
+                update.put("last_seen_ms", now)
+                update.put("updated_at_ms", now)
+                db.update(
+                    VoltTrackerDb.TABLE_VEHICLES,
+                    update,
+                    "_id = ?",
+                    arrayOf(preferred.first.toString()),
+                )
+                db.setTransactionSuccessful()
+                return preferred.first
+            }
             val values = ContentValues()
             values.put("vehicle_key", hash)
             values.put("vin_redacted", last4)
@@ -71,6 +84,17 @@ class ObdStoreVehicles(
             return id
         } finally {
             db.endTransaction()
+        }
+    }
+
+    private fun remapVehicleReferences(
+        db: android.database.sqlite.SQLiteDatabase,
+        fromVehicleId: Long,
+        toVehicleId: Long,
+    ) {
+        val values = ContentValues().apply { put("vehicle_id", toVehicleId) }
+        for (table in VEHICLE_REFERENCE_TABLES) {
+            db.update(table, values, "vehicle_id = ?", arrayOf(fromVehicleId.toString()))
         }
     }
 
@@ -112,5 +136,16 @@ class ObdStoreVehicles(
             baseYear += 30
         }
         return baseYear
+    }
+
+    private companion object {
+        val VEHICLE_REFERENCE_TABLES =
+            arrayOf(
+                VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
+                VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+                VoltTrackerDb.TABLE_CHARGE_SESSIONS,
+                VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS,
+                VoltTrackerDb.TABLE_EXPORTS,
+            )
     }
 }

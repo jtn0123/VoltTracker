@@ -75,6 +75,10 @@ class DashboardPublisherTest {
                 "setTripRoute",
                 "setCurrentSessionRoute",
                 "setBatterySohHistory",
+                "showTripUndo",
+                "setBackupReceipt",
+                "openTripReceipt",
+                "restoreView",
             )
         for (functionName in callbacks) {
             publisher.publish(functionName, "{\"ok\":true}")

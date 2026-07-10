@@ -30,6 +30,14 @@ class AutoDtcScanRunnerTest {
     }
 
     @Test
+    fun elmErrorReplyIsIncompleteAndCannotMasqueradeAsACleanScan() {
+        val result = AutoDtcScanRunner(FakeEngine("CAN ERROR\r>")).readGenericDtcScan()
+
+        assertFalse(result.completed)
+        assertTrue(result.codes.isEmpty())
+    }
+
+    @Test
     fun readGenericDtcCodesReturnsOnlyCodesForCompatibilityCaller() {
         val engine = FakeEngine("43 01 C0 73 00 00\r>")
 

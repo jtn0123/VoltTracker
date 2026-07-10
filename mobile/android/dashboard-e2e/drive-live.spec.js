@@ -149,10 +149,13 @@ test('renderDriveLive drives every live surface in one frame', async ({ page }) 
     VD.renderDriveLive();
   });
 
-  // Recording state consolidates into the topbar #driveRecording line under the
-  // connection pill (not a full-width strip above the hero).
+  // Recording state stays out of the topbar and lives at the true bottom of
+  // Settings (not as a full-width strip above the Drive hero).
+  await setView(page, 'settings');
   const rec = page.locator('#driveRecording');
   await expect(rec).toBeVisible();
+  await expect(rec.locator('xpath=ancestor::*[contains(@class, "topbar")]')).toHaveCount(0);
+  await expect(page.locator('#view-preferences > :last-child')).toHaveId('driveRecording');
   await expect(rec).toHaveAttribute('data-tone', 'live');
   await expect(rec).toContainText('Recording');
   await expect(rec).toContainText('64 samples');
@@ -160,6 +163,7 @@ test('renderDriveLive drives every live surface in one frame', async ({ page }) 
   await expect(page.locator('#driveNowChips .drive-now-chip')).toHaveCount(0);
 
   // All three charts ready in the same frame.
+  await setView(page, 'drive');
   await expect(page.locator('#liveTraceChart')).toHaveAttribute('data-trace-state', 'ready');
   await expect(page.locator('#powerBarsChart')).toHaveAttribute('data-chart-state', 'ready');
   await expect(page.locator('#socTraceChart')).toHaveAttribute('data-chart-state', 'ready');

@@ -31,6 +31,9 @@ import { prefs, units } from "./prefs";
   const FORCE_LAZY_READ = true;
   const tripsRead = createNativeRequestGate(() => handleTripsBridgeFailure());
   const insightsRead = createNativeRequestGate(() => handleInsightsBridgeFailure());
+  const TRIPS_PAGE_SIZE = 120;
+  let allTripsLoading = false;
+  let allTripsLoaded = false;
 
   function applyTripsPayload(payload: unknown) {
     tripsRead.complete();
@@ -50,11 +53,54 @@ import { prefs, units } from "./prefs";
       state.tripsLoaded = true;
       state.tripsReadError = null;
       state.trips = Array.isArray(parsed) ? parsed : [];
+      allTripsLoaded = state.trips.length < TRIPS_PAGE_SIZE;
     }
     VD.renderMapIfLoaded();
     renderDriveTrend();
     renderTempEfficiency();
     renderThisWeek();
+  }
+
+  function applyTripsPagePayload(payload: unknown) {
+    allTripsLoading = false;
+    const parsed = VD.parsePayload<VoltTrip[]>(payload, []);
+    VD.validatePayload("setTrips", parsed);
+    if (VD.isNativeError(parsed)) {
+      VD.reportNativeReadError(parsed, "Could not load older drives.");
+      return;
+    }
+    const page = Array.isArray(parsed) ? parsed : [];
+    const current = Array.isArray(state.trips) ? state.trips : [];
+    const byId = new Map(current.map((trip) => [String(trip.id || ""), trip]));
+    for (const trip of page) byId.set(String(trip.id || ""), trip);
+    state.trips = Array.from(byId.values()).sort(
+      (a, b) => Number(b.endedAtMs || 0) - Number(a.endedAtMs || 0)
+    );
+    allTripsLoaded = page.length < TRIPS_PAGE_SIZE || state.trips.length === current.length;
+    VD.renderMapIfLoaded();
+    if (!allTripsLoaded) window.setTimeout(loadAllTrips, 0);
+  }
+
+  /** Progressively loads every older drive only after the user opens the All drives browser. */
+  function loadAllTrips() {
+    if (allTripsLoaded || allTripsLoading || state.demoActive) return;
+    const offset = Array.isArray(state.trips) ? state.trips.length : 0;
+    allTripsLoading = true;
+    try {
+      if (bridge && typeof bridge.requestTripsPage === "function" && bridge.requestTripsPage(offset)) return;
+      if (bridge && typeof bridge.getTripsPage === "function") {
+        applyTripsPagePayload(bridge.getTripsPage(offset));
+      } else {
+        allTripsLoading = false;
+        allTripsLoaded = true;
+      }
+    } catch (_err) {
+      allTripsLoading = false;
+      VD.reportNativeReadError(
+        { ok: false, error: "trips_page_read_failed", message: "Could not load older drives." },
+        "Could not load older drives."
+      );
+    }
   }
 
   function handleTripsBridgeFailure() {
@@ -589,6 +635,8 @@ import { prefs, units } from "./prefs";
     link.type = "button";
     link.className = "link-btn";
     link.dataset.navJump = "settings";
+    link.dataset.settingsTarget = "settingsDisplay";
+    link.dataset.settingsFocus = "pricePerKwhInput";
     link.textContent = "Open Settings";
     note.replaceChildren(text, link);
   }
@@ -630,11 +678,20 @@ import { prefs, units } from "./prefs";
       setSavingsNotePrompt();
       return;
     }
-    const { savings } = computeSavingsVsGas({
+    // Native computes these from the whole durable trip cache. state.trips is intentionally a
+    // bounded recent list for UI responsiveness and must never silently cap lifetime savings.
+    const loggedEnergyKwh = Number(insights.loggedEnergyKwh || 0);
+    const loggedDistanceMeters = Number(insights.loggedEnergyDistanceMeters || 0);
+    const unloggedMeters = Math.max(0, meters - loggedDistanceMeters);
+    const blendedEnergyKwh = loggedEnergyKwh > 0
+      ? loggedEnergyKwh + (unloggedMeters / 1609.344) / ASSUMED_VOLT_MI_PER_KWH
+      : undefined;
+    const { savings, energySource } = computeSavingsVsGas({
       meters,
       mpg,
       gasPricePerGal: gasPrice,
-      pricePerKwh
+      pricePerKwh,
+      ...(blendedEnergyKwh !== undefined ? { energyKwh: blendedEnergyKwh } : {})
     });
     row.hidden = false;
     // Show the magnitude; a leading "-" would read as "you spent more" only when
@@ -644,7 +701,9 @@ import { prefs, units } from "./prefs";
       // Route the efficiency assumption through units.efficiencyText so a metric
       // user reads "5.6 km/kWh" to match the km/kWh charts/headlines on this tab,
       // not a hardcoded "3.5 mi/kWh". (mpg / $/gal stay as the gas-comparison inputs.)
-      `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${units.efficiencyText(ASSUMED_VOLT_MI_PER_KWH)}`
+      energySource === "logged"
+        ? `Uses logged energy where available · remaining distance assumes ${units.efficiencyText(ASSUMED_VOLT_MI_PER_KWH)}`
+        : `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${units.efficiencyText(ASSUMED_VOLT_MI_PER_KWH)}`
     );
   }
 
@@ -1408,8 +1467,10 @@ import { prefs, units } from "./prefs";
     // Insights lifetime totals + map.ts) and surfaces read errors via the global
     // status. The Trips tab and all its rendering were removed.
     loadTrips,
+    loadAllTrips,
     loadInsights,
     setTrips: applyTripsPayload,
+    setTripsPage: applyTripsPagePayload,
     setInsights: applyInsightsPayload,
     forceLazyStorageRead: FORCE_LAZY_READ,
     renderInsightStats,

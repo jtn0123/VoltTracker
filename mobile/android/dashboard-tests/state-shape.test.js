@@ -22,6 +22,8 @@ const REQUIRED_STATE_KEYS = [
   'demoActive',
   'mapLayer',
   'mapFull',
+  'mapBrowserOpen',
+  'tripReceiptMode',
   'mapRemoteTilesEnabled',
   'selectedMapSessionId',
   'liveRouteStartedAtMs',
@@ -85,6 +87,8 @@ describe('window.VoltDashboard.state shape', () => {
     // the user can still tap Routes / Heat / Stops in the layer tabs.
     expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
+    expect(state.mapBrowserOpen).toBe(false);
+    expect(state.tripReceiptMode).toBe(false);
     expect(state.mapRemoteTilesEnabled).toBe(true);
     expect(state.liveRouteStartedAtMs).toBe(null);
     expect(Array.isArray(state.liveRoutePoints)).toBe(true);

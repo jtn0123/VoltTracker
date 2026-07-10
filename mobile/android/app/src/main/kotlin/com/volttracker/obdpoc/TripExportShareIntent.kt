@@ -54,6 +54,11 @@ object TripExportShareIntent {
         val bytes: Long get() = file.length()
     }
 
+    class AllTripsExportFile(
+        val export: TripExportFile,
+        val tripCount: Int,
+    )
+
     private const val TAG = "TripExportShareIntent"
     private const val SUBDIR = "trip-exports"
 
@@ -123,6 +128,46 @@ object TripExportShareIntent {
             if (file.exists() && !file.delete()) {
                 Log.w(TAG, "could not delete partial all-trips export: $file")
             }
+            null
+        }
+    }
+
+    /**
+     * Writes a complete history one bounded page at a time. [nextPage] returns null when exhausted,
+     * keeping memory proportional to one page even for years of drives.
+     */
+    fun writeAllTripsCsvPages(
+        ctx: Context,
+        nextPage: () -> JSONArray?,
+    ): AllTripsExportFile? {
+        val outDir = prepareOutDir(ctx) ?: return null
+        val file = File(outDir, allTripsFileName())
+        var pointCount = 0
+        var tripCount = 0
+        var firstPage = true
+        return try {
+            file.bufferedWriter(Charsets.UTF_8).use { writer ->
+                while (true) {
+                    val page = nextPage() ?: break
+                    if (page.length() == 0) break
+                    writer.write(TripTrackFormatter.toAllTripsCsv(page, includeHeader = firstPage))
+                    firstPage = false
+                    tripCount += page.length()
+                    for (i in 0 until page.length()) {
+                        val route = page.optJSONObject(i)?.optJSONObject("route") ?: continue
+                        pointCount += TripTrackFormatter.pointCount(route)
+                    }
+                }
+            }
+            if (pointCount <= 0) {
+                file.delete()
+                null
+            } else {
+                AllTripsExportFile(TripExportFile(file, Format.CSV, pointCount), tripCount)
+            }
+        } catch (ex: IOException) {
+            Log.e(TAG, "paged all-trips export write failed", ex)
+            if (file.exists() && !file.delete()) Log.w(TAG, "could not delete partial trip export: $file")
             null
         }
     }

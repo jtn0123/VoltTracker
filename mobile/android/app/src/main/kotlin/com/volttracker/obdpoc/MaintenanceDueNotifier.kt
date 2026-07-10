@@ -21,7 +21,7 @@ class MaintenanceDueNotifier(
     private val readLatestOdometerKm: () -> Double?,
     private val readNotifiedSignatures: () -> Set<String>,
     private val persistNotifiedSignatures: (Set<String>) -> Unit,
-    private val notify: (EventNotificationDecider.Event) -> Unit,
+    private val notify: (EventNotificationDecider.Event) -> Boolean,
     private val now: () -> Long = { System.currentTimeMillis() },
     private val evaluator: MaintenanceDueEvaluator = MaintenanceDueEvaluator(),
 ) {
@@ -44,21 +44,27 @@ class MaintenanceDueNotifier(
         if (due.isEmpty()) {
             return 0
         }
+        val delivered = ArrayList<MaintenanceDueEvaluator.DueResult>()
         for (result in due) {
-            notify(
-                EventNotificationDecider.Event.MaintenanceDue(
-                    result.entry.id,
-                    result.entry.type,
-                    result.tripped,
-                    result.overdueMagnitude,
-                ),
-            )
+            if (notify(
+                    EventNotificationDecider.Event.MaintenanceDue(
+                        result.entry.id,
+                        result.entry.type,
+                        result.tripped,
+                        result.overdueMagnitude,
+                    ),
+                )
+            ) {
+                delivered.add(result)
+            }
         }
         // Union the freshly-fired signatures into the persisted set so each crossing stays quiet on
         // the next app-open. Pruning to live entry ids is unnecessary: a deleted/re-logged entry gets
         // a new id, so its stale signature can never match a future crossing and is harmless.
-        persistNotifiedSignatures(alreadyNotified + due.map { it.signature })
-        return due.size
+        if (delivered.isNotEmpty()) {
+            persistNotifiedSignatures(alreadyNotified + delivered.map { it.signature })
+        }
+        return delivered.size
     }
 
     private fun parseEntries(log: JSONArray?): List<MaintenanceDueEvaluator.Entry> {
@@ -96,7 +102,7 @@ class MaintenanceDueNotifier(
                 return null
             }
             val value = row.optDouble(key, Double.NaN)
-            return if (value.isNaN()) null else value
+            return value.takeIf { it.isFinite() }
         }
 
         private fun optIntOrNull(

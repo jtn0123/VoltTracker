@@ -35,6 +35,9 @@ describe('live-route rehydration', () => {
     expect(VD.state.liveRoutePoints[1].speedKph).toBeCloseTo(12 * 3.6, 5);
     expect(VD.state.selectedMapSessionId).toBe('__live_current__');
     expect(VD.state.liveRouteStartedAtMs).toBe(1000);
+    expect(VD.state.sessionDistanceM).toBeGreaterThan(1000);
+    expect(VD.state.sessionLastLat).toBe(34.06);
+    expect(VD.state.sessionLastLng).toBe(-118.26);
   });
 
   it('requests the live route asynchronously when the native bridge supports it', async () => {

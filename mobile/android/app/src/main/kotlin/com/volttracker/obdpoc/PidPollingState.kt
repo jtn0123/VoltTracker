@@ -148,13 +148,13 @@ class PidPollingState(
         if (due.isEmpty()) {
             return
         }
-        // (command -> wasNoData) for every PID actually issued this cycle; feeds the negative-PID
+        // (command -> outcome) for every PID actually issued this cycle; feeds the negative-PID
         // cache once the whole cycle is known (so a single live read can shield the rest).
-        val outcomes = ArrayList<Pair<String, Boolean>>()
+        val outcomes = ArrayList<Pair<String, PollOutcome>>()
         val batchedTier1 = tryBatchTier1Mode01(due, rawThisCycle)
         if (batchedTier1) {
             // A successful batch means every batched PID returned data.
-            PidSchedule.MODE_01_BATCH_COMMANDS.forEach { outcomes.add(it to false) }
+            PidSchedule.MODE_01_BATCH_COMMANDS.forEach { outcomes.add(it to PollOutcome.LIVE) }
         }
         val specsByHeader = groupByHeader(due)
         var switched = false
@@ -183,7 +183,7 @@ class PidPollingState(
                 }
             val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
             if (batchedExtra) {
-                extraBatch.forEach { outcomes.add(it.command to false) }
+                extraBatch.forEach { outcomes.add(it.command to PollOutcome.LIVE) }
             }
             for (spec in headerSpecs) {
                 if (
@@ -199,9 +199,12 @@ class PidPollingState(
                 val response = engine.sendRecoverableCommand(spec.command, 1500)
                 appendRawTo(rawThisCycle, spec.command, response)
                 val now = clock.nowMs()
-                putLastRaw(spec.command, response, now)
                 lastPolledAtMsByCommand[spec.command] = now
-                outcomes.add(spec.command to ObdElmDecode.isNoDataResponse(response))
+                val outcome = classifyOutcome(response)
+                if (outcome == PollOutcome.LIVE) {
+                    putLastRaw(spec.command, response, now)
+                }
+                outcomes.add(spec.command to outcome)
             }
         }
         if (switched) {
@@ -217,17 +220,20 @@ class PidPollingState(
      * PID is ever disabled during a bus-wide outage. [PidSchedule.isConditional] PIDs (charger etc.)
      * are exempt because they legitimately go NO-DATA outside their vehicle mode.
      */
-    private fun applyNoDataCache(outcomes: List<Pair<String, Boolean>>) {
+    private fun applyNoDataCache(outcomes: List<Pair<String, PollOutcome>>) {
         if (outcomes.isEmpty()) {
             return
         }
-        val anyLive = outcomes.any { !it.second }
+        val anyLive = outcomes.any { it.second == PollOutcome.LIVE }
         if (anyLive) {
             lastLiveDataAtMs = clock.nowMs()
         }
-        for ((command, noData) in outcomes) {
-            if (!noData) {
+        for ((command, outcome) in outcomes) {
+            if (outcome == PollOutcome.LIVE) {
                 consecutiveNoDataByCommand.remove(command)
+                continue
+            }
+            if (outcome == PollOutcome.ERROR) {
                 continue
             }
             if (!anyLive || PidSchedule.isConditional(command)) {
@@ -245,6 +251,19 @@ class PidPollingState(
                 )
             }
         }
+    }
+
+    private fun classifyOutcome(response: String): PollOutcome =
+        when {
+            ObdElmDecode.isNoDataResponse(response) -> PollOutcome.NO_DATA
+            ObdElmDecode.isElmErrorResponse(response) -> PollOutcome.ERROR
+            else -> PollOutcome.LIVE
+        }
+
+    private enum class PollOutcome {
+        LIVE,
+        NO_DATA,
+        ERROR,
     }
 
     /** Milliseconds since the most recent cycle that returned any fresh PID value. */

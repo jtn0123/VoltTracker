@@ -39,6 +39,20 @@ describe('cost-model savings math', () => {
     expect(tenTrips.evCost).toBeCloseTo(oneTrip.evCost * 10, 6);
   });
 
+  it('prefers logged energy over the distance assumption', () => {
+    const meters = 100 * METERS_PER_MILE;
+    const result = computeSavingsVsGas({
+      meters,
+      mpg: 30,
+      gasPricePerGal: 4,
+      pricePerKwh: 0.2,
+      energyKwh: 20,
+    });
+    expect(result.evCost).toBeCloseTo(4, 6);
+    expect(result.energySource).toBe('logged');
+    expect(result.evCost).not.toBeCloseTo((100 / ASSUMED_VOLT_MI_PER_KWH) * 0.2, 6);
+  });
+
   it('returns negative savings when electricity is pricier than the gas it replaced', () => {
     const { savings } = computeSavingsVsGas({
       meters: 100 * METERS_PER_MILE,

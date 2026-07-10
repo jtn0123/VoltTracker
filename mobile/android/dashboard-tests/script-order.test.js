@@ -27,13 +27,10 @@ const EXPECTED_EAGER_ORDER = [
   // owners (storage-status / telemetry) handle their first native payload.
   'payload-validators',
   'storage-status',
-  'signals-panel',
-  'scrubber',
   'drive',
   'telemetry',
   'actions',
   'connection-status',
-  'connection-tools',
 ];
 
 function firstPartyScripts(html) {
@@ -102,6 +99,9 @@ describe('dashboard production script bundle', () => {
       'actions-storage',
       'actions-signals',
       'actions-demo',
+      'signals-panel',
+      'connection-tools',
+      'scrubber',
     ]);
   });
 

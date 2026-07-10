@@ -1,11 +1,28 @@
 <section id="view-settings" class="view" data-view="settings">
+  <nav
+    class="settings-section-nav"
+    aria-label="Settings sections"
+    data-noswipe="true"
+  >
+    <button type="button" data-settings-target="settingsConnection">
+      Connection
+    </button>
+    <button type="button" data-settings-target="connectionToolsPanel">
+      Alerts
+    </button>
+    <button type="button" data-settings-target="settingsDisplay">
+      Display
+    </button>
+    <button type="button" data-settings-target="settingsDrive">Drive</button>
+    <button type="button" data-settings-target="settingsData">Data</button>
+  </nav>
   <!--
     Connection / setup is the setup-critical control, so it leads the Settings
     tab and carries the dominant visual weight (B3). Backup/restore and other
     lower-frequency data tools are demoted below it (`.settings-secondary`) so a
     first-run user reaches "connect my car" before backup tooling.
   -->
-  <article class="panel connect-card">
+  <article id="settingsConnection" class="panel connect-card">
     <div class="connection-head">
       <div>
         <div class="kicker">Connection</div>

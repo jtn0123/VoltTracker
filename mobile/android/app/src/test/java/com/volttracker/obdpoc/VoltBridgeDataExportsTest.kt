@@ -380,6 +380,19 @@ class VoltBridgeDataExportsTest {
         assertTrue(activity.lastStatusBlocked)
     }
 
+    @Test
+    fun restoreTripRefreshesStorageAndConfirmsSuccess() {
+        activity.store.restoreTripReturn = true
+
+        dataExports.restoreTrip("12:1000:2000")
+        drain()
+
+        assertEquals("12:1000:2000", activity.store.lastRestoredTripRouteKey)
+        assertEquals("ready", activity.lastStatusState)
+        assertFalse(activity.lastStatusBlocked)
+        assertTrue(activity.storageSummaryCalls > 0)
+    }
+
     // ---- setTripLabel (M4) -------------------------------------------------------------------
 
     @Test
@@ -663,6 +676,24 @@ class VoltBridgeDataExportsTest {
     }
 
     @Test
+    fun addMaintenanceEntryDoesNotTruncateFractionalMonthIntervals() {
+        activity.store.addMaintenanceReturn = 5L
+
+        dataExports.addMaintenanceEntry(
+            JSONObject()
+                .put("type", "Brake inspection")
+                .put("intervalMonths", 1.5)
+                .toString(),
+        )
+        drain()
+
+        assertNull(
+            "a fractional month must be rejected, not silently truncated to one",
+            activity.store.lastMaintenanceIntervalMonths,
+        )
+    }
+
+    @Test
     fun addMaintenanceEntryReportsBlockedWhenStoreThrows() {
         activity.store.throwAddMaintenance = true
 
@@ -854,6 +885,8 @@ class VoltBridgeDataExportsTest {
         var markTripReturn = false
         var throwMarkTrip = false
         var lastMarkedTripRouteKey: String? = null
+        var restoreTripReturn = false
+        var lastRestoredTripRouteKey: String? = null
 
         var setTripLabelReturn = false
         var throwSetTripLabel = false
@@ -910,12 +943,19 @@ class VoltBridgeDataExportsTest {
             return bulkExport
         }
 
-        override fun markTripNotTrip(routeKey: String?): Boolean {
-            lastMarkedTripRouteKey = routeKey
-            if (throwMarkTrip) {
-                throw IllegalStateException("mark failed")
+        override fun setTripHidden(
+            routeKey: String?,
+            hidden: Boolean,
+        ): Boolean {
+            if (hidden) {
+                lastMarkedTripRouteKey = routeKey
+                if (throwMarkTrip) {
+                    throw IllegalStateException("mark failed")
+                }
+                return markTripReturn
             }
-            return markTripReturn
+            lastRestoredTripRouteKey = routeKey
+            return restoreTripReturn
         }
 
         override fun setTripLabel(

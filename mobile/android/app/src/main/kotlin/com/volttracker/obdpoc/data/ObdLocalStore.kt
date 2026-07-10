@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data
 
 import android.content.Context
+import android.util.Log
 import com.volttracker.obdpoc.materialize.ChargeSession
 import com.volttracker.obdpoc.materialize.ChargeSessionMaterializer
 import com.volttracker.obdpoc.materialize.LocationSample
@@ -64,6 +65,7 @@ open class ObdLocalStore(
         status: String?,
     ) {
         writer.finishSession(sessionId, status)
+        materializeFinalizedHistory(sessionId)
     }
 
     open override fun finishSession(
@@ -73,6 +75,7 @@ open class ObdLocalStore(
         supportedPids: String?,
     ) {
         writer.finishSession(sessionId, status, endedAtMs, supportedPids)
+        materializeFinalizedHistory(sessionId)
     }
 
     open override fun finalizeSession(
@@ -97,6 +100,18 @@ open class ObdLocalStore(
             sampleCount,
             lastEventDetail,
         )
+        materializeFinalizedHistory(sessionId)
+    }
+
+    private fun materializeFinalizedHistory(sessionId: Long) {
+        try {
+            trips.materializeFinalizedSession(sessionId)
+            ObdStoreChargeSummary.materializeFinalizedSession(helper.writableDatabase, sessionId)
+        } catch (ex: RuntimeException) {
+            // Session finalization itself already committed. A missed projection is recoverable via
+            // bounded lazy backfill, so never turn a completed drive into a logging failure.
+            Log.w("VoltTracker", "deferred history materialization for session $sessionId", ex)
+        }
     }
 
     open override fun recordTelemetry(
@@ -311,6 +326,22 @@ open class ObdLocalStore(
          * energyKwh, confidence }`. `TripTrackFormatter.toChargeSessionsCsv` turns it into one CSV.
          */
         open fun chargeSessionsForExport(limit: Int): JSONArray = requireReports().chargeSessionsForExportJson(limit)
+
+        open fun tripsPage(
+            limit: Int,
+            offset: Int,
+        ): JSONArray = requireReports().tripsPageJson(limit, offset)
+
+        open fun allTripsForExport(
+            tripLimit: Int,
+            pointLimit: Int,
+        ): JSONArray = requireReports().allTripsForExportJson(tripLimit, pointLimit)
+
+        open fun allTripsForExportPage(
+            tripLimit: Int,
+            pointLimit: Int,
+            offset: Int,
+        ): JSONObject = requireReports().allTripsForExportPageJson(tripLimit, pointLimit, offset)
     }
 
     open override fun getRecentSessionsJson(limit: Int): JSONArray = reports.recentSessionsJson(limit)
@@ -345,16 +376,6 @@ open class ObdLocalStore(
     open fun getTripRouteJson(sessionId: Long): JSONObject = reports.tripRouteJson(sessionId)
 
     open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
-
-    /**
-     * Trips bundled for the bulk all-trips CSV export (M6): each element `{ tripId, label, route }`.
-     * Bounded by [tripLimit] trips and [pointLimit] samples/trip. See
-     * [ObdStoreReports.allTripsForExportJson].
-     */
-    open fun getAllTripsForExportJson(
-        tripLimit: Int,
-        pointLimit: Int,
-    ): JSONArray = reports.allTripsForExportJson(tripLimit, pointLimit)
 
     /**
      * Records a completed per-trip GPX/CSV export into the `exports` table (one row per share).
@@ -485,16 +506,22 @@ open class ObdLocalStore(
         return true
     }
 
-    open fun markTripNotTrip(routeKey: String?): Boolean {
+    open fun setTripHidden(
+        routeKey: String?,
+        hidden: Boolean,
+    ): Boolean {
         val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
         val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
         writer.recordEvent(
             parsed.sessionId,
             ObdTripExclusions.EVENT_KIND,
-            "hidden",
+            if (hidden) ObdTripExclusions.STATE_HIDDEN else ObdTripExclusions.STATE_RESTORED,
             canonical,
             false,
-            ObdTripExclusions.eventPayload(canonical, ObdTripExclusions.REASON_NOT_TRIP),
+            ObdTripExclusions.eventPayload(
+                canonical,
+                if (hidden) ObdTripExclusions.REASON_NOT_TRIP else "manual_restore",
+            ),
         )
         trips.invalidateSessionTripCache(parsed.sessionId)
         return true
@@ -560,9 +587,7 @@ open class ObdLocalStore(
 
     open override fun getDatabaseFile(): File = maintenance.getDatabaseFile()
 
-    open override fun checkpoint() {
-        maintenance.checkpoint()
-    }
+    open override fun checkpoint(): Boolean = maintenance.checkpoint()
 
     open fun mergeFrom(
         donorDbFile: File?,

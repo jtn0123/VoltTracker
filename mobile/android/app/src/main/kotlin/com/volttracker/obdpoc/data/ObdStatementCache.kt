@@ -146,7 +146,10 @@ class ObdStatementCache : Closeable {
             key: String,
         ) {
             if (sample.has(key) && !sample.isNull(key)) {
-                stmt.bindLong(index, sample.optInt(key).toLong())
+                val value = sample.optDouble(key, Double.NaN)
+                if (value.isFinite() && value in Int.MIN_VALUE.toDouble()..Int.MAX_VALUE.toDouble()) {
+                    stmt.bindLong(index, value.toInt().toLong())
+                }
             }
         }
 
@@ -157,7 +160,10 @@ class ObdStatementCache : Closeable {
             key: String,
         ) {
             if (sample.has(key) && !sample.isNull(key)) {
-                stmt.bindLong(index, sample.optLong(key))
+                val value = sample.optDouble(key, Double.NaN)
+                if (value.isFinite() && value in Long.MIN_VALUE.toDouble()..Long.MAX_VALUE.toDouble()) {
+                    stmt.bindLong(index, value.toLong())
+                }
             }
         }
 
@@ -168,7 +174,10 @@ class ObdStatementCache : Closeable {
             key: String,
         ) {
             if (sample.has(key) && !sample.isNull(key)) {
-                stmt.bindDouble(index, sample.optDouble(key))
+                val value = sample.optDouble(key, Double.NaN)
+                if (value.isFinite()) {
+                    stmt.bindDouble(index, value)
+                }
             }
         }
 

@@ -72,6 +72,9 @@ class EventNotificationCoordinator(
     }
 
     private fun handleScanPayload(payload: JSONObject): List<EventNotificationDecider.Event> {
+        if (payload.has("dtcScanValid") && !payload.optBoolean("dtcScanValid", false)) {
+            return emptyList()
+        }
         val arr = payload.optJSONArray("dtcCodes") ?: return emptyList()
         // Pass raw strings through; Decider.normalizeCodes does the canonical trim + drop-empties.
         val codes = ArrayList<String>(arr.length())
@@ -163,7 +166,7 @@ class EventNotificationCoordinator(
                 return null
             }
             val value = payload.optDouble(key, Double.NaN)
-            return if (value.isNaN()) null else value
+            return value.takeIf { it.isFinite() }
         }
     }
 }

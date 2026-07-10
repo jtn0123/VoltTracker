@@ -101,6 +101,25 @@ class VoltBridge(
     }
 
     @JavascriptInterface
+    fun getDashboardExperienceState(): String = activity.dashboardExperience().getDashboardExperienceStateJson()
+
+    @JavascriptInterface
+    fun setKeepScreenAwake(enabled: Boolean) {
+        activity.runOnUiThread { activity.dashboardExperience().setKeepScreenAwakeEnabled(enabled) }
+    }
+
+    @JavascriptInterface
+    fun setTripSummaryNotify(enabled: Boolean) {
+        activity.runOnUiThread { activity.dashboardExperience().setTripSummaryEnabled(enabled) }
+    }
+
+    @JavascriptInterface
+    fun setActiveDashboardView(view: String?) {
+        val clean = bridgeSafe(view, BRIDGE_MAX_LABEL_LEN)
+        activity.runOnUiThread { activity.dashboardExperience().setActiveDashboardView(clean) }
+    }
+
+    @JavascriptInterface
     fun getStorageSummary(): String = storage.getStorageSummary()
 
     @JavascriptInterface
@@ -116,12 +135,15 @@ class VoltBridge(
     fun exportDebugBundle(): String = dataExports.exportDebugBundle()
 
     @JavascriptInterface
-    fun shareBackup() {
-        dataExports.shareBackup()
+    fun shareBackup(dashboardPreferencesJson: String?) {
+        dataExports.shareBackup(dashboardPreferencesJson)
     }
 
     @JavascriptInterface
-    fun shareEncryptedBackup(passphrase: String?) = dataExports.shareEncryptedBackup(passphrase)
+    fun shareEncryptedBackup(
+        passphrase: String?,
+        dashboardPreferencesJson: String?,
+    ) = dataExports.shareEncryptedBackup(passphrase, dashboardPreferencesJson)
 
     @JavascriptInterface
     fun restoreBackup() {
@@ -135,10 +157,16 @@ class VoltBridge(
     fun getTrips(): String = storage.getTrips()
 
     @JavascriptInterface
+    fun getTripsPage(offset: Int): String = storage.getTripsPage(offset)
+
+    @JavascriptInterface
     fun getInsights(): String = storage.getInsights()
 
     @JavascriptInterface
     fun requestTrips(): Boolean = storage.requestTrips()
+
+    @JavascriptInterface
+    fun requestTripsPage(offset: Int): Boolean = storage.requestTripsPage(offset)
 
     @JavascriptInterface
     fun requestInsights(): Boolean = storage.requestInsights()
@@ -252,6 +280,11 @@ class VoltBridge(
     @JavascriptInterface
     fun markTripNotTrip(routeKey: String?) {
         dataExports.markTripNotTrip(routeKey)
+    }
+
+    @JavascriptInterface
+    fun restoreTrip(routeKey: String?) {
+        dataExports.restoreTrip(routeKey)
     }
 
     /** Sets or clears (empty/null label) the user label for a stored trip (M4). */

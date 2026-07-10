@@ -7,6 +7,9 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Regression guard for the startup/teardown race that surfaced repeatedly in the emulator smoke:
@@ -47,5 +50,39 @@ class MainActivityTeardownTest {
         activity.runOnBackground {}
 
         assertTrue("late runOnBackground was dropped without crashing", true)
+    }
+
+    @Test
+    fun storeStaysOpenUntilInterruptedBackgroundWorkActuallyStops() {
+        val controller: ActivityController<MainActivity> =
+            Robolectric.buildActivity(MainActivity::class.java).create()
+        val activity = controller.get()
+        val store = checkNotNull(activity.localStore)
+        val started = CountDownLatch(1)
+        val interrupted = CountDownLatch(1)
+        val inspectStore = CountDownLatch(1)
+        val finished = CountDownLatch(1)
+        val storeWasOpen = AtomicBoolean(false)
+        activity.runOnBackground {
+            started.countDown()
+            try {
+                CountDownLatch(1).await()
+            } catch (_: InterruptedException) {
+                interrupted.countDown()
+                inspectStore.await(2, TimeUnit.SECONDS)
+                storeWasOpen.set(store.isOpen)
+            } finally {
+                finished.countDown()
+            }
+        }
+        assertTrue("background task must start", started.await(2, TimeUnit.SECONDS))
+
+        controller.destroy()
+        assertTrue("destroy must interrupt the worker", interrupted.await(2, TimeUnit.SECONDS))
+        inspectStore.countDown()
+        assertTrue("worker must finish", finished.await(2, TimeUnit.SECONDS))
+
+        assertTrue("SQLite must not close underneath a still-running background task", storeWasOpen.get())
+        if (store.isOpen) store.close()
     }
 }

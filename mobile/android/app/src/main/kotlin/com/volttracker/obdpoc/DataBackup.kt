@@ -191,6 +191,7 @@ class DataBackup(
 
     fun buildBackupFile(
         store: ObdLocalStore?,
+        dashboardPreferencesJson: String? = null,
         progress: ProgressListener? = null,
     ): File? {
         if (store == null) {
@@ -203,7 +204,10 @@ class DataBackup(
                     "Making the latest database writes safe to copy.",
                 ),
             )
-            store.checkpoint()
+            if (!store.checkpoint()) {
+                Log.w(TAG, "Backup aborted: committed WAL frames could not be checkpointed safely")
+                return null
+            }
             warnIfIntegrityCheckFails(store, progress)
             val source = store.getDatabaseFile()
             if (!source.exists()) {
@@ -222,6 +226,7 @@ class DataBackup(
                 "Writing backup",
                 "Copying your on-phone Volt Tracker data.",
             )
+            BackupSettingsManifest.embed(context, dest, dashboardPreferencesJson)
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) null else throw ex
@@ -231,6 +236,7 @@ class DataBackup(
     fun buildEncryptedBackupFile(
         store: ObdLocalStore?,
         passphrase: String?,
+        dashboardPreferencesJson: String? = null,
         progress: ProgressListener? = null,
     ): File? {
         if (store == null || !hasMinimumPassphrase(passphrase)) {
@@ -243,7 +249,10 @@ class DataBackup(
                     "Making the latest database writes safe to encrypt.",
                 ),
             )
-            store.checkpoint()
+            if (!store.checkpoint()) {
+                Log.w(TAG, "Encrypted backup aborted: committed WAL frames could not be checkpointed safely")
+                return null
+            }
             warnIfIntegrityCheckFails(store, progress)
             val source = store.getDatabaseFile()
             if (!source.exists()) {
@@ -255,6 +264,8 @@ class DataBackup(
             }
             clearOldBackups(dir)
             val dest = File(dir, backupFileName("vtdb"))
+            val prepared = File(dir, "${dest.name}.prepared.db")
+            deleteIfExists(prepared)
             progress?.onProgress(
                 ProgressSnapshot(
                     "Encrypting backup",
@@ -263,7 +274,13 @@ class DataBackup(
                     bytesTotal = source.length(),
                 ),
             )
-            BackupCrypto.encryptFile(source, dest, requireNotNull(passphrase))
+            copyFile(source, prepared)
+            BackupSettingsManifest.embed(context, prepared, dashboardPreferencesJson)
+            try {
+                BackupCrypto.encryptFile(prepared, dest, requireNotNull(passphrase))
+            } finally {
+                deleteIfExists(prepared)
+            }
             progress?.onProgress(
                 ProgressSnapshot(
                     "Encrypting backup",
@@ -277,6 +294,16 @@ class DataBackup(
             if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) null else throw ex
         }
     }
+
+    fun readSettingsManifest(databaseFile: File?): JSONObject? = BackupSettingsManifest.read(databaseFile)
+
+    fun removeSettingsManifest(databaseFile: File?): Boolean = BackupSettingsManifest.remove(databaseFile)
+
+    fun applyNativeSettings(manifest: JSONObject?) {
+        BackupSettingsManifest.applyNative(context, manifest)
+    }
+
+    fun dashboardSettingsJson(manifest: JSONObject?): String = BackupSettingsManifest.dashboardPreferences(manifest)
 
     /**
      * Pre-export integrity gate: runs `PRAGMA quick_check` (never throws) and, when the live

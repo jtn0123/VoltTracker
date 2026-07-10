@@ -20,6 +20,20 @@ class ChargeSessionMaterializerTest {
     }
 
     @Test
+    fun nonFiniteSignalsCannotManufactureAChargeSession() {
+        val invalidCurrent = StubData()
+        val invalidVoltage = StubData()
+        for (i in 0..3) {
+            val atMs = T_BASE + i * ONE_MINUTE_MS
+            invalidCurrent.telemetry.add(telWithPackCurrent(atMs, 0.0, Double.NEGATIVE_INFINITY))
+            invalidVoltage.telemetry.add(tel(atMs, Double.POSITIVE_INFINITY, 0.0))
+        }
+
+        assertTrue(ChargeSessionMaterializer.materialize(input(), invalidCurrent).isEmpty())
+        assertTrue(ChargeSessionMaterializer.materialize(input(), invalidVoltage).isEmpty())
+    }
+
+    @Test
     fun continuousHighVoltageStationaryBecomesOneCharge() {
         // 10 minutes of plugged samples: voltage 14.2, speed 0.
         val data = StubData()
@@ -259,6 +273,27 @@ class ChargeSessionMaterializerTest {
         // The charge before the drive ends at the last plugged sample, not mid-drive.
         assertEquals(T_BASE + 6 * ONE_MINUTE_MS, sessions[0].endedAtMs)
         assertEquals(T_BASE + 14 * ONE_MINUTE_MS, sessions[1].startedAtMs)
+    }
+
+    @Test
+    fun sparseSustainedDriveStillSplitsChargesOnResume() {
+        // A sparse stream may carry only one driving sample between charges. The break still lasted
+        // five minutes by the time charging resumes, so it is sustained; checking duration only when
+        // another driving row arrives incorrectly stitches both physical charges together.
+        val data = StubData()
+        for (i in 0..2) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+        data.telemetry.add(tel(T_BASE + 5 * ONE_MINUTE_MS, 12.2, 45.0))
+        for (i in 10..12) {
+            data.telemetry.add(tel(T_BASE + i * ONE_MINUTE_MS, 14.2, 0.0))
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals("a five-minute drive must split two physical charges", 2, sessions.size)
+        assertEquals(T_BASE + 2 * ONE_MINUTE_MS, sessions[0].endedAtMs)
+        assertEquals(T_BASE + 10 * ONE_MINUTE_MS, sessions[1].startedAtMs)
     }
 
     @Test

@@ -53,6 +53,15 @@ class PermissionGateTest {
     }
 
     @Test
+    fun enablingAnAlertRequestsOnlyNotificationPermission() {
+        val activity = Robolectric.buildActivity(Activity::class.java).setup().get()
+        var requested: Array<String>? = null
+
+        assertFalse(PermissionGate(activity) { requested = it }.ensureNotifications())
+        assertArrayEquals(arrayOf(Manifest.permission.POST_NOTIFICATIONS), requested)
+    }
+
+    @Test
     fun permissionResultMentionsLocationWhenOnlyBluetoothWasGranted() {
         val activity = Robolectric.buildActivity(HarnessActivity::class.java).create().get()
         shadowOf(activity)

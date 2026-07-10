@@ -31,6 +31,17 @@ class PermissionGate(
     /** Backward-compatible alias for tests and callers that name the connect-only behavior. */
     fun ensureConnectionGranted(): Boolean = ensureConnectPermissions()
 
+    /** Requests Android 13+ notification permission at the moment an alert is enabled. */
+    fun ensureNotifications(): Boolean {
+        val missing = mutableListOf<String>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            !granted(Manifest.permission.POST_NOTIFICATIONS)
+        ) {
+            missing += Manifest.permission.POST_NOTIFICATIONS
+        }
+        return requestMissing(missing)
+    }
+
     /** Requests optional feature permissions from the dashboard permissions button. */
     fun ensureGranted(): Boolean {
         val missing = mutableListOf<String>()

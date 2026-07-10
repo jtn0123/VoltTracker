@@ -170,6 +170,9 @@ class BackupControllerShareTest {
             "post-share status should confirm the backup is ready, got: " + activity.lastDetail,
             activity.lastDetail!!.contains("Backup ready"),
         )
+        val prefs = activity.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        assertTrue(prefs.getLong(BackupController.PREF_LAST_BACKUP_AT_MS, 0L) > 0L)
+        assertTrue(prefs.contains(BackupController.PREF_LAST_BACKUP_TRIPS))
     }
 
     @Test

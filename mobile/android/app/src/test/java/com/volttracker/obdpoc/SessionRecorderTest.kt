@@ -693,6 +693,29 @@ class SessionRecorderTest {
         assertEquals("OBDLink MX+", recent[0].adapter)
     }
 
+    @Test
+    fun completionListenerRunsOnlyAfterRealSessionMaterializes() {
+        val store = RecordingStore()
+        val completedSession = AtomicLong(0L)
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-completion-${System.nanoTime()}")
+        logsDir.mkdirs()
+        val recorder =
+            SessionRecorder(
+                Any(),
+                ObdSessionLog(logsDir),
+                store,
+                null,
+                null,
+                SessionRecorder.SessionCompletionListener { _, sessionId -> completedSession.set(sessionId) },
+            )
+
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "OBDLink", 1_000L)
+        recorder.closeSession("complete", "saved", "0100", 2)
+        recorder.shutdown()
+
+        assertEquals(SESSION_ID, completedSession.get())
+    }
+
     /**
      * Storage-failure sessions are exactly the ones the troubleshooter needs summaries for: when
      * the per-session `.jsonl` fails to open (the recorder logs "session_log_unavailable"), the

@@ -239,6 +239,25 @@ class TripExportControllerTest {
     }
 
     @Test
+    fun allTripsExportContinuesPastTheFirstHistoryPage() {
+        val second = JSONArray().put(sampleAllTrips().getJSONObject(0))
+        host.store =
+            FakeStore(context).apply {
+                allTripPages =
+                    mapOf(
+                        0 to JSONObject().put("items", sampleAllTrips()).put("scanned", 120),
+                        120 to JSONObject().put("items", second).put("scanned", 1),
+                    )
+            }
+
+        val result = parse(controller.exportAndShare(null, "csv_all"))
+
+        assertTrue(result.optBoolean("ok"))
+        assertEquals("both pages are included", 3, result.optInt("tripCount"))
+        assertEquals("5 first-page points plus 3 second-page points", 8, result.optInt("pointCount"))
+    }
+
+    @Test
     fun allTripsExportWithMissingStoreReturnsStorageUnavailable() {
         host.store = null
         val result = parse(controller.exportAndShare(null, "  CSV_ALL  "))
@@ -460,6 +479,7 @@ class TripExportControllerTest {
         var openValue = true
         var route: JSONObject = sampleRoute()
         var allTrips: JSONArray = JSONArray()
+        var allTripPages: Map<Int, JSONObject>? = null
         var chargeRows: JSONArray = JSONArray()
         var routeReadThrows = false
         var recordExportThrows = false
@@ -475,17 +495,23 @@ class TripExportControllerTest {
             return route
         }
 
-        override fun getAllTripsForExportJson(
-            tripLimit: Int,
-            pointLimit: Int,
-        ): JSONArray = allTrips
-
         // Serve canned charge rows without standing up a real DB: the charge export reads through the
         // projections() sub-accessor (ObdLocalStore is at the detekt function ceiling), so the fake
         // returns a StoreProjections subclass that overrides only chargeSessionsForExport.
         override fun projections(): StoreProjections =
             object : StoreProjections() {
                 override fun chargeSessionsForExport(limit: Int): JSONArray = chargeRows
+
+                override fun allTripsForExportPage(
+                    tripLimit: Int,
+                    pointLimit: Int,
+                    offset: Int,
+                ): JSONObject =
+                    allTripPages?.get(offset) ?: if (offset == 0) {
+                        JSONObject().put("items", allTrips).put("scanned", allTrips.length())
+                    } else {
+                        JSONObject().put("items", JSONArray()).put("scanned", 0)
+                    }
             }
 
         override fun recordExport(

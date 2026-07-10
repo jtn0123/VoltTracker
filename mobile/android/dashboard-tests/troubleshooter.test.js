@@ -571,6 +571,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
       cancelAdapterReadyNotify: vi.fn(),
     });
     await freshLoad(bridge);
+    window.VoltDashboard.setView('settings');
   });
 
   afterEach(() => {
@@ -656,6 +657,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
       getAutoConnectState,
       setAutoConnectEnabled: vi.fn(),
     }));
+    window.VoltDashboard.setView('settings');
     const toggle = document.getElementById('autoConnectToggle');
     const status = document.getElementById('autoConnectStatus');
     expect(status.textContent).toMatch(/Old Adapter/);
@@ -677,6 +679,7 @@ describe('connection-tools.ts — proactive adapter checks', () => {
       ),
       setAutoConnectEnabled: vi.fn(),
     }));
+    window.VoltDashboard.setView('settings');
     const status = document.getElementById('autoConnectStatus');
     expect(status.textContent).toMatch(/cooling down/i);
     expect(status.textContent).toMatch(/12s/);

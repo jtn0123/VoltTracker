@@ -50,7 +50,7 @@ object ObdStoreRouteProjection {
         payload.put("session", sessionJson)
         payload.put("points", points)
         payload.put("pointCount", points.length())
-        payload.put("distanceMeters", ObdStoreSupport.distanceMeters(points))
+        payload.put("distanceMeters", rawRouteDistanceMeters(db, session.id, windowStartMs, windowEndMs))
         payload.put("bounds", ObdStoreSupport.boundsFor(points))
         payload.put(
             "socTrack",
@@ -319,6 +319,72 @@ object ObdStoreRouteProjection {
             }
     }
 
+    /**
+     * Computes mileage from every accepted stored point. Geometry sent to the dashboard is bounded
+     * and simplified for rendering, but display optimization must never become the source of truth
+     * for trip distance, efficiency, or lifetime totals.
+     */
+    internal fun rawRouteDistanceMeters(
+        db: SQLiteDatabase,
+        sessionId: Long,
+        windowStartMs: Long?,
+        windowEndMs: Long?,
+    ): Double {
+        val bounded = windowStartMs != null && windowEndMs != null
+        val where =
+            if (bounded) {
+                "session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ?"
+            } else {
+                "session_id = ?"
+            }
+        val args =
+            if (bounded) {
+                arrayOf(sessionId.toString(), windowStartMs.toString(), windowEndMs.toString())
+            } else {
+                arrayOf(sessionId.toString())
+            }
+        val telemetryWhere = "$where AND latitude IS NOT NULL AND longitude IS NOT NULL"
+        val totals = routePointTotals(db, where, telemetryWhere, args)
+        val table =
+            if (totals.location > 0L && totals.location >= totals.telemetry) {
+                VoltTrackerDb.TABLE_LOCATION_SAMPLES
+            } else {
+                VoltTrackerDb.TABLE_TELEMETRY
+            }
+        val selectedWhere = if (table == VoltTrackerDb.TABLE_TELEMETRY) telemetryWhere else where
+        var total = 0.0
+        var previousLat: Double? = null
+        var previousLng: Double? = null
+        db
+            .query(
+                table,
+                arrayOf("latitude", "longitude"),
+                selectedWhere,
+                args,
+                null,
+                null,
+                "captured_at_ms ASC, _id ASC",
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val lat = cursor.getDouble(0)
+                    val lng = cursor.getDouble(1)
+                    if (!ObdStoreSupport.validLatLng(lat, lng)) {
+                        previousLat = null
+                        previousLng = null
+                        continue
+                    }
+                    val priorLat = previousLat
+                    val priorLng = previousLng
+                    if (priorLat != null && priorLng != null) {
+                        total += ObdStoreSupport.haversineMeters(priorLat, priorLng, lat, lng)
+                    }
+                    previousLat = lat
+                    previousLng = lng
+                }
+            }
+        return total
+    }
+
     @Throws(JSONException::class)
     private fun downsampledRoutePoints(
         db: SQLiteDatabase,
@@ -342,7 +408,7 @@ object ObdStoreRouteProjection {
         cursor.use { cursor ->
             var idx = 0L
             while (cursor.moveToNext()) {
-                val item = buildRoutePointItem(cursor, fromLocationSamples)
+                val item = buildRoutePointItem(cursor, fromLocationSamples) ?: continue
                 if (total > target && stride > 1L) {
                     points.put(item)
                     continue
@@ -394,11 +460,16 @@ object ObdStoreRouteProjection {
     private fun buildRoutePointItem(
         cursor: Cursor,
         fromLocationSamples: Boolean,
-    ): JSONObject {
+    ): JSONObject? {
+        val latitude = cursor.getDouble(cursor.getColumnIndexOrThrow("latitude"))
+        val longitude = cursor.getDouble(cursor.getColumnIndexOrThrow("longitude"))
+        if (!ObdStoreSupport.validLatLng(latitude, longitude)) {
+            return null
+        }
         val item = JSONObject()
         item.put("atMs", cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")))
-        item.put("lat", cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")))
-        item.put("lng", cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")))
+        item.put("lat", latitude)
+        item.put("lng", longitude)
         item.put("accuracyM", jsonNumberOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "accuracy_m")))
         item.put("bearingDeg", jsonNumberOrNull(ObdStoreSupport.nullableDoubleBoxed(cursor, "bearing_deg")))
         if (fromLocationSamples) {
@@ -411,7 +482,7 @@ object ObdStoreRouteProjection {
         return item
     }
 
-    private fun jsonNumberOrNull(value: Number?): Any = value ?: JSONObject.NULL
+    private fun jsonNumberOrNull(value: Number?): Any = value?.takeIf { it.toDouble().isFinite() } ?: JSONObject.NULL
 
     @Throws(JSONException::class)
     private fun scalarTrackForSessionJson(

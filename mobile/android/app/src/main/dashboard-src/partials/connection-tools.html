@@ -9,226 +9,251 @@
   class="view connection-tools"
   data-view="settings"
 >
-  <article class="panel connection-tools__panel" id="connectionToolsPanel">
-    <header class="connection-tools__head">
-      <div>
-        <span class="kicker">Connection tools</span>
-        <h2>Proactive adapter checks</h2>
-      </div>
-    </header>
+  <div id="connectionToolsMount">
+    <template id="connectionToolsTemplate">
+      <article class="panel connection-tools__panel" id="connectionToolsPanel">
+        <header class="connection-tools__head">
+          <div>
+            <span class="kicker">Connection tools</span>
+            <h2>Proactive adapter checks</h2>
+          </div>
+        </header>
 
-    <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
+        <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
          reading lands and only visible when the value is below roughly 12.2 V. -->
-    <p
-      id="lowVoltageHint"
-      class="connection-tools__hint"
-      data-tone="warn"
-      role="status"
-      aria-live="polite"
-      hidden
-    >
-      Battery voltage looks low. Start the car before the next probe.
-    </p>
+        <p
+          id="lowVoltageHint"
+          class="connection-tools__hint"
+          data-tone="warn"
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          Battery voltage looks low. Start the car before the next probe.
+        </p>
 
-    <div class="connection-tools__actions">
-      <!-- One-shot probe against the last-known adapter; results surface via status. -->
-      <!-- Quiet secondary: Connect (in the card above) is the tab's primary
+        <div class="connection-tools__actions">
+          <!-- One-shot probe against the last-known adapter; results surface via status. -->
+          <!-- Quiet secondary: Connect (in the card above) is the tab's primary
            action — a filled "Test connection" out-shouted it. -->
-      <button
-        type="button"
-        id="testConnectionBtn"
-        class="connection-tools__btn"
-        data-action="test-connection"
-      >
-        Test connection
-      </button>
-      <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
-      <button
-        type="button"
-        id="sendDiagnosticsBtn"
-        class="connection-tools__btn"
-      >
-        Send diagnostics
-      </button>
-    </div>
+          <button
+            type="button"
+            id="testConnectionBtn"
+            class="connection-tools__btn"
+            data-action="test-connection"
+          >
+            Test connection
+          </button>
+          <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
+          <button
+            type="button"
+            id="sendDiagnosticsBtn"
+            class="connection-tools__btn"
+          >
+            Send diagnostics
+          </button>
+        </div>
+        <small
+          id="testConnectionStatus"
+          class="status-copy"
+          role="status"
+          aria-live="polite"
+        ></small>
 
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="autoConnectTitle"
-    >
-      <legend id="autoConnectTitle" class="kicker">Auto-connect</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="autoConnectToggle"
-            type="checkbox"
-            data-action="auto-connect"
-          />
-          <span>Connect when last adapter is seen</span>
-        </label>
-      </div>
-      <small
-        id="autoConnectStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      >
-        Uses the last adapter and Bluetooth connection events. It does not run
-        Bluetooth discovery.
-      </small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="autoConnectTitle"
+        >
+          <legend id="autoConnectTitle" class="kicker">Auto-connect</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="autoConnectToggle"
+                type="checkbox"
+                data-action="auto-connect"
+              />
+              <span>Connect when last adapter is seen</span>
+            </label>
+          </div>
+          <small
+            id="autoConnectStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          >
+            Uses the last adapter and Bluetooth connection events. It does not
+            run Bluetooth discovery.
+          </small>
+        </fieldset>
 
-    <!-- Notify-when-ready toggle. Picks how long to keep probing in the
+        <!-- Notify-when-ready toggle. Picks how long to keep probing in the
          background; the bridge clamps the minutes to [1, 30] and we mirror that
          in the UI. -->
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="notifyWhenReadyTitle"
-    >
-      <legend id="notifyWhenReadyTitle" class="kicker">
-        Notify when adapter is ready
-      </legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyWhenReadyToggle"
-            type="checkbox"
-            data-action="notify-when-ready"
-          />
-          <span>Keep checking in the background</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">For</span>
-          <select id="notifyWhenReadyMinutes">
-            <option value="5">5 min</option>
-            <option value="10" selected>10 min</option>
-            <option value="15">15 min</option>
-            <option value="30">30 min</option>
-          </select>
-        </label>
-      </div>
-      <small
-        id="notifyWhenReadyStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      >
-        Probes the last-used adapter every 30s and posts a notification when it
-        responds.
-      </small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="notifyWhenReadyTitle"
+        >
+          <legend id="notifyWhenReadyTitle" class="kicker">
+            Notify when adapter is ready
+          </legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyWhenReadyToggle"
+                type="checkbox"
+                data-action="notify-when-ready"
+              />
+              <span>Keep checking in the background</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">For</span>
+              <select id="notifyWhenReadyMinutes">
+                <option value="5">5 min</option>
+                <option value="10" selected>10 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </label>
+          </div>
+          <small
+            id="notifyWhenReadyStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          >
+            Probes the last-used adapter every 30s and posts a notification when
+            it responds.
+          </small>
+        </fieldset>
 
-    <!-- Event notifications (M1) + auto-scan on connect (M3). Native-owned settings
+        <!-- Event notifications (M1) + auto-scan on connect (M3). Native-owned settings
          reached via the bridge; thresholds are clamped on the Android side. -->
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="eventNotifyTitle"
-    >
-      <legend id="eventNotifyTitle" class="kicker">Alerts</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyChargeCompleteToggle"
-            type="checkbox"
-            data-action="notify-charge-complete"
-          />
-          <span>Notify when charging completes</span>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyNewDtcToggle"
-            type="checkbox"
-            data-action="notify-new-dtc"
-          />
-          <span>Notify when a new car code is found</span>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyLowSocToggle"
-            type="checkbox"
-            data-action="notify-low-soc"
-          />
-          <span>Notify when the battery is low</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">Below</span>
-          <select id="notifyLowSocThreshold">
-            <option value="10">10%</option>
-            <option value="15">15%</option>
-            <option value="20" selected>20%</option>
-            <option value="30">30%</option>
-          </select>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyHighTempToggle"
-            type="checkbox"
-            data-action="notify-high-temp"
-          />
-          <span>Notify when pack temperature is high</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">Above</span>
-          <select id="notifyHighTempThreshold">
-            <option value="40">40&deg;C</option>
-            <option value="45" selected>45&deg;C</option>
-            <option value="50">50&deg;C</option>
-            <option value="55">55&deg;C</option>
-          </select>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyMaintenanceDueToggle"
-            type="checkbox"
-            data-action="notify-maintenance-due"
-          />
-          <span>Notify when maintenance is overdue</span>
-        </label>
-      </div>
-      <small class="status-copy">
-        Battery alerts need notification permission and fire once each time a
-        reading crosses the threshold. The maintenance alert fires once when a
-        tracked service first goes overdue.
-      </small>
-      <small
-        id="eventNotifyStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      ></small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="eventNotifyTitle"
+        >
+          <legend id="eventNotifyTitle" class="kicker">Alerts</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyChargeCompleteToggle"
+                type="checkbox"
+                data-action="notify-charge-complete"
+              />
+              <span>Notify when charging completes</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyNewDtcToggle"
+                type="checkbox"
+                data-action="notify-new-dtc"
+              />
+              <span>Notify when a new car code is found</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyLowSocToggle"
+                type="checkbox"
+                data-action="notify-low-soc"
+              />
+              <span>Notify when the battery is low</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">Below</span>
+              <select id="notifyLowSocThreshold">
+                <option value="10">10%</option>
+                <option value="15">15%</option>
+                <option value="20" selected>20%</option>
+                <option value="30">30%</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyHighTempToggle"
+                type="checkbox"
+                data-action="notify-high-temp"
+              />
+              <span>Notify when pack temperature is high</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">Above</span>
+              <select id="notifyHighTempThreshold">
+                <option value="40">40&deg;C</option>
+                <option value="45" selected>45&deg;C</option>
+                <option value="50">50&deg;C</option>
+                <option value="55">55&deg;C</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyMaintenanceDueToggle"
+                type="checkbox"
+                data-action="notify-maintenance-due"
+              />
+              <span>Notify when maintenance is overdue</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyTripSummaryToggle"
+                type="checkbox"
+                data-action="notify-trip-summary"
+              />
+              <span>Send an end-of-drive recap</span>
+            </label>
+          </div>
+          <small class="status-copy">
+            Battery alerts need notification permission and fire once each time
+            a reading crosses the threshold. The maintenance alert fires once
+            when a tracked service first goes overdue. Drive recaps post only
+            after a real trip is safely saved.
+          </small>
+          <small
+            id="eventNotifyStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          ></small>
+        </fieldset>
 
-    <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
-    <fieldset class="connection-tools__notify" aria-labelledby="autoScanTitle">
-      <legend id="autoScanTitle" class="kicker">Auto-scan for codes</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="autoScanOnConnectToggle"
-            type="checkbox"
-            data-action="auto-scan-on-connect"
-          />
-          <span>Scan for codes on connect</span>
-        </label>
-      </div>
-      <small class="status-copy">
-        Runs one background Mode 03 scan shortly after connecting (at most once
-        per drive). New codes feed the diagnostic-code notification above.
-      </small>
-      <small
-        id="autoScanStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      ></small>
-    </fieldset>
-  </article>
+        <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="autoScanTitle"
+        >
+          <legend id="autoScanTitle" class="kicker">Auto-scan for codes</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="autoScanOnConnectToggle"
+                type="checkbox"
+                data-action="auto-scan-on-connect"
+              />
+              <span>Scan for codes on connect</span>
+            </label>
+          </div>
+          <small class="status-copy">
+            Runs one background Mode 03 scan shortly after connecting (at most
+            once per drive). New codes feed the diagnostic-code notification
+            above.
+          </small>
+          <small
+            id="autoScanStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          ></small>
+        </fieldset>
+      </article>
+    </template>
+  </div>
 </section>

@@ -66,6 +66,8 @@ class EventNotificationPrefs(
     fun maintenanceDueEnabled(): Boolean =
         prefs.getBoolean(PREF_MAINTENANCE_DUE_ENABLED, DEFAULT_MAINTENANCE_DUE_ENABLED)
 
+    fun tripSummaryEnabled(): Boolean = prefs.getBoolean(DashboardExperienceHostDelegate.PREF_TRIP_SUMMARY, false)
+
     fun setChargeCompleteEnabled(enabled: Boolean) = putBool(PREF_CHARGE_COMPLETE_ENABLED, enabled)
 
     fun setNewDtcEnabled(enabled: Boolean) = putBool(PREF_NEW_DTC_ENABLED, enabled)
@@ -94,6 +96,10 @@ class EventNotificationPrefs(
     // bump would needlessly invalidate that cache.
     fun setMaintenanceDueEnabled(enabled: Boolean) {
         prefs.edit { putBoolean(PREF_MAINTENANCE_DUE_ENABLED, enabled) }
+    }
+
+    fun setTripSummaryEnabled(enabled: Boolean) {
+        prefs.edit { putBoolean(DashboardExperienceHostDelegate.PREF_TRIP_SUMMARY, enabled) }
     }
 
     /** Epoch millis of the last completed auto-scan, or 0 when none has run. */
@@ -194,6 +200,7 @@ class EventNotificationPrefs(
             payload.put("targetSocPct", targetSocPct())
             payload.put("autoScanOnConnect", autoScanOnConnectEnabled())
             payload.put("maintenanceDue", maintenanceDueEnabled())
+            payload.put("tripSummary", tripSummaryEnabled())
         } catch (_: JSONException) {
             // Local values are safe.
         }

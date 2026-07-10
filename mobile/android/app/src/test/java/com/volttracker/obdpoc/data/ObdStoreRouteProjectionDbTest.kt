@@ -107,6 +107,38 @@ class ObdStoreRouteProjectionDbTest {
         )
     }
 
+    @Test
+    fun routeDistanceUsesRawAcceptedPointsInsteadOfDisplaySimplification() {
+        val count = 400
+        val sessionId = insertSession(db, FIRST_AT_MS)
+        for (i in 0 until count) {
+            val latitude = 34.05 + if (i % 2 == 0) -0.000045 else 0.000045
+            val longitude = -118.25 + i * 0.000045
+            insertGpsTelemetry(db, sessionId, FIRST_AT_MS + i * INTERVAL_MS, latitude, longitude, null)
+        }
+        val session =
+            ObdSessionRecord(
+                sessionId,
+                ObdLocalStore.MODE_OBD,
+                "00:11",
+                "Adapter",
+                FIRST_AT_MS,
+                FIRST_AT_MS + count * INTERVAL_MS,
+                "complete",
+                "",
+                count,
+                FIRST_AT_MS + (count - 1) * INTERVAL_MS,
+            )
+
+        val route = ObdStoreRouteProjection.routeForSession(db, session, 500)
+
+        assertTrue("display geometry should still be simplified", route.getJSONArray("points").length() < 20)
+        assertTrue(
+            "distance must retain the real zig-zag path instead of measuring its display chord",
+            route.getDouble("distanceMeters") > 3_500.0,
+        )
+    }
+
     private companion object {
         private const val DB_NAME = "route-projection-test.db"
 

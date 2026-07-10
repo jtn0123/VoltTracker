@@ -3,7 +3,7 @@
   the Settings tab. Wiring + persistence live in prefs.ts.
 -->
 <section id="view-preferences" class="view" data-view="settings">
-  <article class="panel pref-card">
+  <article id="settingsDisplay" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Display</span>
@@ -142,10 +142,92 @@
         />
         <span>%</span>
       </label>
+      <div
+        class="charge-target-presets pref-charge-target-presets"
+        role="group"
+        aria-label="Common charge targets"
+      >
+        <button
+          type="button"
+          data-charge-target="80"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          80%
+        </button>
+        <button
+          type="button"
+          data-charge-target="90"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          90%
+        </button>
+        <button
+          type="button"
+          data-charge-target="100"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          100%
+        </button>
+        <button
+          type="button"
+          data-charge-target="other"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          Other
+        </button>
+      </div>
     </div>
   </article>
 
-  <article class="panel pref-card">
+  <article id="drivingDisplayCard" class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Driving display</span>
+        <h3>Live-screen behavior</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Keep screen awake while live</strong>
+        <small>Only while Drive or Map is open and the app is in front</small>
+      </div>
+      <button
+        type="button"
+        id="keepScreenAwakeToggle"
+        class="tile-toggle pref-toggle"
+        data-on="false"
+        aria-pressed="false"
+      >
+        Off
+      </button>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Quiet live data</strong>
+        <small
+          >TalkBack announces status changes instead of every gauge tick</small
+        >
+      </div>
+      <button
+        type="button"
+        id="quietTelemetryToggle"
+        class="tile-toggle pref-toggle"
+        data-pref-quiet-telemetry
+        data-on="true"
+        aria-pressed="true"
+      >
+        On
+      </button>
+    </div>
+    <small
+      id="drivingDisplayStatus"
+      class="status-copy"
+      role="status"
+      aria-live="polite"
+    ></small>
+  </article>
+
+  <article id="settingsAccessibility" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Accessibility</span>
@@ -204,7 +286,7 @@
          every toggle. -->
   </article>
 
-  <article class="panel pref-card">
+  <article id="settingsDrive" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Drive tiles</span>
@@ -215,6 +297,18 @@
       Show, hide, and reorder the live signal tiles on the Drive tab.
     </p>
     <div
+      class="drive-preset-row"
+      role="group"
+      aria-label="Drive display preset"
+    >
+      <button type="button" data-drive-preset="focus" aria-pressed="false">
+        Drive Focus
+      </button>
+      <button type="button" data-drive-preset="detailed" aria-pressed="true">
+        Detailed
+      </button>
+    </div>
+    <div
       id="driveTilesEditor"
       class="tiles-editor"
       aria-label="Drive tile layout"
@@ -224,7 +318,10 @@
   <!-- Moved from partials/settings.html: backup/restore is a low-frequency
        data tool, so it sits at the end of the Settings tab instead of between
        the connect card and the connection tools. -->
-  <article class="panel list-card settings-data-card settings-secondary">
+  <article
+    id="settingsData"
+    class="panel list-card settings-data-card settings-secondary"
+  >
     <header>
       <div>
         <span class="kicker">Backup &amp; restore</span>
@@ -237,7 +334,11 @@
     <p class="status-copy">
       Encrypted backup is safest. When you restore a file you can choose to
       merge it into your current data (duplicate trips are skipped) or replace
-      everything on this phone.
+      everything on this phone. Backups also carry your display, alert, and
+      driving preferences so a restore feels like the same app.
+    </p>
+    <p id="lastBackupReceipt" class="backup-receipt" role="status">
+      No successful backup recorded on this phone yet.
     </p>
     <div
       class="db-action-grid"
@@ -274,4 +375,23 @@
   <p id="appVersionFooter" class="status-copy app-version-footer">
     Volt Tracker
   </p>
+
+  <!--
+    Live recording progress belongs at the quiet end of Settings, not in the
+    already-dense title row. drive.ts#renderDriveNowChips fills the label/meta
+    and toggles [hidden] only while a real adapter session is active.
+    aria-hidden: the values repaint about once per second, while the stable
+    announced connection state remains in the top-bar pill/status popover.
+  -->
+  <div
+    id="driveRecording"
+    class="settings-recording"
+    data-tone="live"
+    aria-hidden="true"
+    hidden
+  >
+    <span class="settings-recording__dot" aria-hidden="true"></span>
+    <strong id="driveRecordingLabel">Recording</strong>
+    <small id="driveRecordingMeta"></small>
+  </div>
 </section>

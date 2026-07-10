@@ -1,6 +1,4 @@
-import { el } from "./core";
 import { haversineMetersJs } from "./map-route-utils";
-import { units } from "./prefs";
 
   // Route scrubber for the Map tab. Drag through a logged drive to inspect
   // speed / elevation / grade / battery / efficiency at each point. Fed by
@@ -9,6 +7,8 @@ import { units } from "./prefs";
   // VD.enrichRouteEff once telemetry_samples.power_kw is available).
 
   const VD = window.VoltDashboard;
+  const el = VD.el;
+  const units = VD.units;
 
   type ScrubPoint = {
     lat: number;
@@ -111,7 +111,7 @@ import { units } from "./prefs";
   }
   let scrubData: ScrubPoint[] = [];
   let scrubFrac = 0.5;
-  let scrubExpanded = false;
+  let scrubExpanded = VD.prefs.get<boolean>("mapDetailsExpanded", false);
   let scrubHasElev = false;
   let scrubHasSoc = false;
   let scrubHasEff = false;
@@ -708,11 +708,15 @@ import { units } from "./prefs";
     };
     elc.addEventListener("pointerdown", (ev) => {
       elc.setPointerCapture(ev.pointerId);
+      document.body.classList.add("map-scrubber-interacting");
       move(ev);
     });
     elc.addEventListener("pointermove", (ev) => {
       if (ev.buttons) move(ev);
     });
+    const endInteraction = () => document.body.classList.remove("map-scrubber-interacting");
+    elc.addEventListener("pointerup", endInteraction);
+    elc.addEventListener("pointercancel", endInteraction);
     // Keyboard + screen-reader access: expose the main chart as a slider so
     // arrow keys step the scrub fraction (pointer users drag; both funnel
     // through setScrubCursor). Stack tracks stay plain draggable strips.
@@ -758,6 +762,11 @@ import { units } from "./prefs";
     const node = el("scrubber");
     if (node) node.hidden = true;
     document.body.classList.remove("map-scrubber-active");
+    document.body.classList.remove(
+      "map-scrubber-interacting",
+      "map-scrubber-playing",
+      "map-scrubber-nav-peek"
+    );
     if (scrubMarker && scrubMap) {
       scrubMap.removeLayer(scrubMarker);
       scrubMarker = null;
@@ -851,8 +860,13 @@ import { units } from "./prefs";
   // Bind toggle once on first script load.
   const toggle = el("scrubToggle");
   if (toggle) {
+    toggle.setAttribute("aria-expanded", scrubExpanded ? "true" : "false");
+    toggle.textContent = scrubExpanded ? "Hide details" : "Details";
+    const initialStack = el("scrubStack");
+    if (initialStack) initialStack.hidden = !scrubExpanded;
     toggle.addEventListener("click", () => {
       scrubExpanded = !scrubExpanded;
+      VD.prefs.set("mapDetailsExpanded", scrubExpanded);
       toggle.setAttribute("aria-expanded", scrubExpanded ? "true" : "false");
       toggle.textContent = scrubExpanded ? "Hide details" : "Details";
       const stack = el("scrubStack");
@@ -895,6 +909,7 @@ import { units } from "./prefs";
   function stopScrubPlay() {
     if (scrubAnim) cancelAnimationFrame(scrubAnim);
     scrubAnim = null;
+    document.body.classList.remove("map-scrubber-playing", "map-scrubber-nav-peek");
     setScrubAnimMode(false);
     el("scrubReadout")?.classList.remove("is-playing");
     if (playBtn) {
@@ -912,6 +927,8 @@ import { units } from "./prefs";
         return;
       }
       playBtn.textContent = STOP_LABEL;
+      document.body.classList.remove("map-scrubber-nav-peek");
+      document.body.classList.add("map-scrubber-playing");
       playBtn.setAttribute("aria-label", "Stop route playback");
       setScrubAnimMode(true);
       // Readout cells glow while playing so the live numbers read as active.
@@ -931,6 +948,28 @@ import { units } from "./prefs";
       scrubAnim = requestAnimationFrame(step);
     });
   }
+
+  // Playback owns the bottom thumb zone, but an intentional upward scroll is
+  // also a familiar request for navigation. Briefly reveal the nav on that
+  // gesture, then yield the space back to playback without stopping it.
+  let scrubLastScrollY = window.scrollY;
+  let scrubNavPeekTimer: ReturnType<typeof setTimeout> | null = null;
+  window.addEventListener("scroll", () => {
+    const nextScrollY = window.scrollY;
+    const delta = nextScrollY - scrubLastScrollY;
+    scrubLastScrollY = nextScrollY;
+    if (!document.body.classList.contains("map-scrubber-playing")) return;
+    if (delta < -8) {
+      document.body.classList.add("map-scrubber-nav-peek");
+      if (scrubNavPeekTimer) clearTimeout(scrubNavPeekTimer);
+      scrubNavPeekTimer = setTimeout(() => {
+        document.body.classList.remove("map-scrubber-nav-peek");
+        scrubNavPeekTimer = null;
+      }, 1400);
+    } else if (delta > 8) {
+      document.body.classList.remove("map-scrubber-nav-peek");
+    }
+  }, { passive: true });
 
   let scrubResizeTimer: ReturnType<typeof setTimeout> | null = null;
   window.addEventListener("resize", () => {

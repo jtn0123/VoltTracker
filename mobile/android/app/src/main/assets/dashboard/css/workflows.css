@@ -1,0 +1,190 @@
+/* Workflow-level UI: progressive disclosure, repeat-use navigation, accessibility
+   presets, and designed empty-state disclosure. Kept separate from components.css
+   so daily-use behavior has one clear owner. */
+.drive-preset-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.drive-preset-row button {
+  min-height: var(--touch-min);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  background: var(--fill-soft);
+  color: var(--muted);
+}
+
+.drive-preset-row button.is-active {
+  border-color: rgba(var(--tab-accent-rgb), 0.5);
+  background: rgba(var(--tab-accent-rgb), 0.14);
+  color: var(--text);
+}
+
+:root[data-drive-preset="focus"] #view-drive .live-microcharts,
+:root[data-drive-preset="focus"] #view-drive #moreSignals {
+  display: none;
+}
+
+:root[data-drive-preset="focus"] #view-drive .speed-value {
+  font-size: clamp(76px, 24vw, 112px);
+}
+
+:root[data-drive-preset="focus"] #view-drive .live-card,
+:root[data-drive-preset="focus"] #view-drive .battery-strip {
+  padding-block: 22px;
+}
+
+.diagnostics-mode-nav {
+  position: sticky;
+  top: 8px;
+  z-index: 12;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface-overlay);
+  box-shadow: 0 10px 28px var(--shadow-soft);
+  backdrop-filter: blur(16px);
+}
+
+.diagnostics-mode-nav button {
+  min-height: var(--touch-min);
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.diagnostics-mode-nav button.is-active {
+  border-color: rgba(var(--tab-accent-rgb), 0.42);
+  background: rgba(var(--tab-accent-rgb), 0.14);
+  color: var(--text);
+}
+
+.diagnostics-mode-nav small {
+  grid-column: 1 / -1;
+  padding: 0 8px 4px;
+  color: var(--soft);
+  text-align: center;
+}
+
+#view-diagnostics [data-diagnostics-expert] {
+  box-shadow: none;
+}
+
+.settings-section-nav {
+  position: sticky;
+  top: 8px;
+  z-index: 12;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 16px;
+  background: var(--surface-overlay);
+  box-shadow: 0 10px 28px var(--shadow-soft);
+  scrollbar-width: none;
+  backdrop-filter: blur(16px);
+  scroll-padding-inline: 22px;
+  -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
+}
+
+.settings-section-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.settings-section-nav button {
+  min-width: max-content;
+  min-height: var(--touch-min);
+  padding-inline: 14px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--fill-soft);
+  color: var(--muted);
+}
+
+.settings-section-nav button.is-active,
+.settings-section-nav button[aria-current="location"] {
+  background: rgba(var(--tab-accent-rgb), 0.18);
+  color: var(--tab-accent-soft);
+  box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.28);
+}
+
+.settings-section-nav button:last-child {
+  margin-right: 14px;
+}
+
+[data-view="settings"] article:focus {
+  outline: 2px solid var(--tab-accent);
+  outline-offset: 3px;
+}
+
+.empty-preview {
+  margin-top: 14px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 10px;
+  color: var(--soft);
+}
+
+.empty-preview summary {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  color: var(--tab-accent-soft);
+  cursor: pointer;
+}
+
+.charge-target-presets {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.charge-target-presets button {
+  min-height: var(--touch-min);
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.charge-target-presets button.is-active,
+.charge-target-presets button[aria-pressed="true"] {
+  border-color: rgba(var(--tab-accent-rgb), 0.42);
+  background: rgba(var(--tab-accent-rgb), 0.16);
+  color: var(--tab-accent-soft);
+}
+
+.pref-charge-target-presets {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.backup-receipt {
+  margin: 10px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--fill-soft);
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.backup-receipt[data-state="saved"] {
+  border-color: rgba(var(--ok-rgb), 0.3);
+  color: var(--ok-soft);
+}
+
+.empty-preview p {
+  margin: 4px 0 0;
+}

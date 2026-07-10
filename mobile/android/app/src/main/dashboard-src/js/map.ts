@@ -597,11 +597,14 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();
     renderMapListsIfChanged(routes);
     updateFollowButton();
-    // Hide the Recorded Sessions card when the chip strip already covers
-    // every drive. It re-appears with its empty-state message when there are
-    // no logged drives yet (so the user sees the "no route" prompt).
+    // The compact chip strip is the default when routes exist. "All drives"
+    // explicitly opens this searchable browser and it stays open across storage
+    // refreshes until the user closes it.
     const sessionsCard = document.querySelector("#view-map .map-layout") as HTMLElement | null;
-    if (sessionsCard) sessionsCard.hidden = routes.length > 0;
+    if (sessionsCard) {
+      sessionsCard.hidden = routes.length > 0 && !state.mapBrowserOpen;
+      sessionsCard.classList.toggle("is-open", Boolean(state.mapBrowserOpen));
+    }
   }
 
   // Chip date formatter: "Today 2:51 AM" / "Yesterday 6:54 PM" / "Sat 9:15 AM" /
@@ -951,13 +954,21 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
   // existing [data-map-session] handler in actions.ts.
   function renderMapDriveChips(routes: MapRoute[]) {
     const wrap = el("mapDriveChips");
+    const allButton = el("mapAllDrivesBtn") as HTMLButtonElement | null;
     if (!wrap) return;
     if (!routes.length) {
       wrap.replaceChildren();
       wrap.hidden = true;
+      if (allButton) allButton.hidden = true;
       return;
     }
     wrap.hidden = false;
+    if (allButton) {
+      const storedCount = routes.filter((route) => !routeIsLive(route)).length;
+      allButton.hidden = storedCount === 0;
+      allButton.textContent = `All drives (${storedCount})`;
+      allButton.setAttribute("aria-label", `Browse all ${storedCount} recorded drives`);
+    }
     const selId = String(state.selectedMapSessionId || "");
     const chips = routes.map((route) => {
       if (typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
@@ -1872,7 +1883,7 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
   //   • distance but prefs unset   → rows hidden, a tap-through prompt to Settings
   //   • distance + all prefs set   → the estimated cost + savings figures + note
   // XSS-safe throughout (textContent / createElement only).
-  function renderTripDetailCost(stats: TripDriveStats): void {
+  function renderTripDetailCost(stats: TripDriveStats, routeKey: string): void {
     const costRow = el("tripDetailCostRow");
     const savingsRow = el("tripDetailSavingsRow");
     const note = el("tripDetailCostNote");
@@ -1909,16 +1920,21 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
         link.type = "button";
         link.className = "link-btn";
         link.dataset.navJump = "settings";
+        link.dataset.settingsTarget = "settingsDisplay";
+        link.dataset.settingsFocus = "pricePerKwhInput";
         link.textContent = "Open Settings";
         note.replaceChildren(text, link);
       }
       return;
     }
-    const { evCost, savings } = computeSavingsVsGas({
+    const trip = tripRowForKey(routeKey);
+    const energyKwh = trip && Number(trip.energyKwh) > 0 ? Number(trip.energyKwh) : undefined;
+    const { evCost, savings, energySource } = computeSavingsVsGas({
       meters,
       mpg,
       gasPricePerGal: gasPrice,
-      pricePerKwh
+      pricePerKwh,
+      ...(energyKwh !== undefined ? { energyKwh } : {})
     });
     setHidden(costRow, false);
     setHidden(savingsRow, false);
@@ -1927,7 +1943,9 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
     if (note) {
       note.replaceChildren(
         document.createTextNode(
-          `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
+          energySource === "logged"
+            ? `Logged energy · compared with a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal`
+            : `Estimated vs a ${Math.round(mpg)} mpg car at $${gasPrice.toFixed(2)}/gal · assumes ${ASSUMED_VOLT_MI_PER_KWH} mi/kWh`
         )
       );
     }
@@ -1996,9 +2014,25 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
     const route = routeForKey(routeKey);
     if (!route) return false;
     tripDetailRouteKey = routeKey;
+    const receipt = el("tripReceipt");
+    if (receipt) receipt.hidden = !Boolean(state.tripReceiptMode);
     const session = sessionForRoute(route);
     const stats = tripDriveStats(route);
     const label = typeof session.label === "string" ? session.label.trim() : "";
+    const receiptName = el("tripReceiptName") as HTMLButtonElement | null;
+    if (receiptName) {
+      receiptName.dataset.tripRename = routeKey;
+      receiptName.dataset.tripRenameLabel = label;
+      receiptName.textContent = label ? "Rename" : "Name";
+    }
+    const receiptFavorite = el("tripReceiptFavorite") as HTMLButtonElement | null;
+    if (receiptFavorite) {
+      const favorite = Boolean(session.favorite === true);
+      receiptFavorite.dataset.tripFavorite = routeKey;
+      receiptFavorite.dataset.tripFavoriteState = favorite ? "1" : "0";
+      receiptFavorite.textContent = favorite ? "Favorited" : "Favorite";
+      receiptFavorite.setAttribute("aria-pressed", String(favorite));
+    }
     const fallback = `${session.mode || "Drive"} · ${session.adapterName || "OBD adapter"}`;
     VD.setText("tripDetailTitle", label || fallback);
     VD.setText("tripDetailSub", label ? fallback : "");
@@ -2009,7 +2043,7 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
     VD.setText("tripDetailAvgSpeed", avg.value > 0 ? `${avg.value} ${avg.unit}` : "--");
     VD.setText("tripDetailMaxSpeed", stats.maxKph > 0 ? VD.units.speedText(stats.maxKph) : "--");
     VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
-    renderTripDetailCost(stats);
+    renderTripDetailCost(stats, routeKey);
     VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
     VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
     VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");

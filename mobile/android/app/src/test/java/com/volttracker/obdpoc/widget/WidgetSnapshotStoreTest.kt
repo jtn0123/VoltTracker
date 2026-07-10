@@ -80,7 +80,7 @@ class WidgetSnapshotStoreTest {
     }
 
     @Test
-    fun identicalSampleStillBumpsFreshnessWithoutRedraw() {
+    fun identicalSampleBumpsFreshnessAndRequestsAPeriodicFreshnessRedraw() {
         // B7: a steady (flat-but-live) sample must keep the freshness ticking even though the display
         // is unchanged and no redraw is requested, so the widget is not wrongly flagged stale.
         val first =
@@ -95,11 +95,30 @@ class WidgetSnapshotStoreTest {
         assertTrue(store.writeIfChanged(first))
 
         val laterIdenticalSample = first.copy(updatedAtMs = 2_000L, lastSampleAtMs = 900_000L)
-        assertFalse("identical display = no redraw", store.writeIfChanged(laterIdenticalSample))
+        assertTrue("freshness text is redrawn after the refresh interval", store.writeIfChanged(laterIdenticalSample))
 
         val reloaded = store.read()
         assertEquals("change time stays put (no display change)", 1_000L, reloaded.updatedAtMs)
         assertEquals("freshness advances to the latest sample", 900_000L, reloaded.lastSampleAtMs)
+    }
+
+    @Test
+    fun identicalSampleWithinFreshnessIntervalDoesNotRedraw() {
+        val first =
+            WidgetSnapshot(
+                50,
+                charging = true,
+                connected = true,
+                vehicleState = "charging",
+                updatedAtMs = 1_000L,
+                lastSampleAtMs = 1_000L,
+            )
+        assertTrue(store.writeIfChanged(first))
+
+        assertFalse(
+            "the 1 Hz telemetry stream must not redraw the widget every sample",
+            store.writeIfChanged(first.copy(updatedAtMs = 30_000L, lastSampleAtMs = 30_000L)),
+        )
     }
 
     @Test

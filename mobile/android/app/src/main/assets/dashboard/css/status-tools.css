@@ -28,6 +28,28 @@
   text-align: center;
 }
 
+.status-undo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-right: 8px;
+}
+
+.status-undo[hidden] {
+  display: none;
+}
+
+.status-undo button {
+  min-width: var(--touch-min);
+  min-height: var(--touch-min);
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(var(--tab-accent-rgb), 0.2);
+  color: var(--tab-accent-soft);
+  font-weight: 800;
+}
+
 @media (min-width: 900px) {
   .status-toast {
     bottom: 24px;
@@ -207,11 +229,12 @@
   text-overflow: ellipsis;
 }
 
-/* Very narrow phones: keep the adapter name / demo label, drop the meta — the
-   full details are one tap away in the status popover. */
-@media (max-width: 389px) {
-  .connection-status__line small {
-    display: none;
+/* Phone headers get one status summary, not an adapter/demo line plus a second
+   state pill fighting the title for space. The state pill remains the tap target
+   and the existing popover carries the adapter, sample age, and trip details. */
+@media (max-width: 430px) {
+  .top-status > .connection-status__line {
+    display: none !important;
   }
 }
 

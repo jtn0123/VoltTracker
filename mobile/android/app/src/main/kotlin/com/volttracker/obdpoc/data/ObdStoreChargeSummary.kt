@@ -14,6 +14,63 @@ import org.json.JSONObject
  * [SQLiteDatabase] handle, so this carries no instance state of its own.
  */
 internal object ObdStoreChargeSummary {
+    internal fun materializeFinalizedSession(
+        db: SQLiteDatabase,
+        sessionId: Long,
+    ) {
+        db
+            .rawQuery(
+                "SELECT * FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE _id = ? AND ended_at_ms > 0 " +
+                    "AND EXISTS (SELECT 1 FROM ${VoltTrackerDb.TABLE_TELEMETRY} t " +
+                    "WHERE t.session_id = ? AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}) LIMIT 1",
+                arrayOf(sessionId.toString(), sessionId.toString()),
+            ).use { cursor ->
+                if (!cursor.moveToFirst()) return
+                val session = ObdStoreSupport.readSession(cursor)
+                writeChargeRollup(
+                    db,
+                    sessionId,
+                    SessionChargeContribution(
+                        computeWithinSessionRows(db, session),
+                        computeBoundaries(db, session),
+                    ),
+                )
+            }
+    }
+
+    /** Builds durable inferred-charge/SOC-boundary summaries before retention removes raw rows. */
+    internal fun materializeFinalizedSessionsBefore(
+        db: SQLiteDatabase,
+        cutoffMs: Long,
+    ) {
+        val sessions = ArrayList<ObdSessionRecord>()
+        db
+            .rawQuery(
+                "SELECT s.* FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
+                    "LEFT JOIN ${VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS} r ON r.session_id = s._id " +
+                    "WHERE s.mode = ? AND s.ended_at_ms > 0 AND s.ended_at_ms < ? " +
+                    "AND (r.session_id IS NULL OR r.rollup_version < ?) " +
+                    "AND EXISTS (SELECT 1 FROM ${VoltTrackerDb.TABLE_TELEMETRY} t " +
+                    "WHERE t.session_id = s._id AND ${ObdStoreSupport.USEFUL_TELEMETRY_WHERE}) " +
+                    "ORDER BY s.started_at_ms ASC",
+                arrayOf(ObdLocalStore.MODE_OBD, cutoffMs.toString(), CHARGE_ROLLUP_CACHE_VERSION.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    sessions.add(ObdStoreSupport.readSession(cursor))
+                }
+            }
+        for (session in sessions) {
+            writeChargeRollup(
+                db,
+                session.id,
+                SessionChargeContribution(
+                    computeWithinSessionRows(db, session),
+                    computeBoundaries(db, session),
+                ),
+            )
+        }
+    }
+
     @Throws(JSONException::class)
     fun summaryJson(db: SQLiteDatabase): JSONObject {
         val rows = chargeSummaryRows(db)
@@ -326,7 +383,13 @@ internal object ObdStoreChargeSummary {
                     window.startedAtMs,
                     window.endedAtMs,
                 )
-            val distanceMeters = ObdStoreSupport.distanceMeters(points)
+            val distanceMeters =
+                ObdStoreRouteProjection.rawRouteDistanceMeters(
+                    db,
+                    session.id,
+                    window.startedAtMs,
+                    window.endedAtMs,
+                )
             val maxSpeed = ObdSessionClassifier.maxSpeedKphForWindow(db, session.id, window)
             if (!ObdSessionClassifier.isMeaningfulTrip(points.length(), distanceMeters, maxSpeed)) {
                 continue

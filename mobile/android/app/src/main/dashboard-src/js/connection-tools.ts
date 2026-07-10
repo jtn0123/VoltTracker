@@ -77,6 +77,27 @@ let autoConnectCooldownTimer = 0;
 // freshly-bound button. Tracked at module scope and cleared at the top of bindConnectionTools().
 let testConnTimer = 0;
 const diagnosticsTimers: number[] = [];
+let cachedAutoConnectState: Record<string, unknown> = {};
+
+function hasRememberedAdapter(): boolean {
+  if (cachedAutoConnectState.available === true || String(cachedAutoConnectState.lastAddress || "").trim()) return true;
+  const last = parseBridgeJson(safeCall("getLastDevice"));
+  return Boolean(String(last.address || "").trim());
+}
+
+function refreshConnectionToolsAvailability() {
+  const btn = el("testConnectionBtn") as HTMLButtonElement | null;
+  const status = el("testConnectionStatus");
+  if (!btn || isBusy(btn)) return;
+  const available = hasRememberedAdapter();
+  btn.disabled = !available;
+  btn.setAttribute("aria-disabled", String(!available));
+  if (status) {
+    status.textContent = available
+      ? "Uses the last adapter for a short one-shot probe."
+      : "Connect or remember an adapter above before running a test.";
+  }
+}
 
 // Paints the status line; while a cooldown is counting down it re-polls the bridge
 // once a second so the remaining seconds tick toward zero (then stops).
@@ -96,6 +117,7 @@ function bindAutoConnect(opts?: AddEventListenerOptions) {
   const toggle = el("autoConnectToggle") as HTMLInputElement | null;
   if (!toggle) return;
   const state = parseBridgeJson(safeCall("getAutoConnectState"));
+  cachedAutoConnectState = state;
   toggle.checked = state.enabled !== false;
   applyAutoConnectStatus(state);
   toggle.addEventListener("change", () => {
@@ -115,6 +137,7 @@ function bindAutoConnect(opts?: AddEventListenerOptions) {
 function bindTestConnection(opts?: AddEventListenerOptions) {
   const btn = el("testConnectionBtn") as HTMLButtonElement | null;
   if (!btn) return;
+  refreshConnectionToolsAvailability();
   btn.addEventListener("click", () => {
     if (isBusy(btn)) return;
     const original = btn.textContent;
@@ -127,6 +150,8 @@ function bindTestConnection(opts?: AddEventListenerOptions) {
     }, 25_500);
   }, opts);
 }
+
+VD.refreshConnectionToolsAvailability = refreshConnectionToolsAvailability;
 
 // Send-diagnostics button. Two bindings - primary in connection-tools
 // and a mirror in the settings panel - funnel into the same bridge call.
@@ -250,25 +275,33 @@ function announceStatus(id: string, message: string) {
 // Every change also confirms itself in an aria-live status line (eventNotifyStatus / autoScanStatus).
 function bindEventNotifications(opts?: AddEventListenerOptions) {
   const state = parseBridgeJson(safeCall("getEventNotificationState"));
+  const experience = parseBridgeJson(safeCall("getDashboardExperienceState"));
   const onOff = (checked: boolean) => (checked ? "on" : "off");
-  bindBoolToggle("notifyChargeCompleteToggle", state.chargeComplete !== false, (checked) => {
+  const notificationsGranted = state.notificationsGranted !== false;
+  const alertStatus = (label: string, checked: boolean) =>
+    checked && !notificationsGranted
+      ? `${label} selected. Allow notifications in the Android prompt to receive it.`
+      : `${label} ${onOff(checked)}.`;
+  bindBoolToggle("notifyChargeCompleteToggle", notificationsGranted && state.chargeComplete !== false, (checked) => {
     safeCall("setChargeCompleteNotify", checked);
-    announceStatus("eventNotifyStatus", "Charge-complete alerts " + onOff(checked) + ".");
+    announceStatus("eventNotifyStatus", alertStatus("Charge-complete alerts", checked));
   }, opts);
-  bindBoolToggle("notifyNewDtcToggle", state.newDtc !== false, (checked) => {
+  bindBoolToggle("notifyNewDtcToggle", notificationsGranted && state.newDtc !== false, (checked) => {
     safeCall("setNewDtcNotify", checked);
-    announceStatus("eventNotifyStatus", "New diagnostic-code alerts " + onOff(checked) + ".");
+    announceStatus("eventNotifyStatus", alertStatus("New diagnostic-code alerts", checked));
   }, opts);
   bindThresholdToggle(
     "notifyLowSocToggle",
     "notifyLowSocThreshold",
-    state.lowSoc === true,
+    notificationsGranted && state.lowSoc === true,
     Number(state.lowSocThresholdPct) || 20,
     (checked, value) => {
       safeCall("setLowSocNotify", checked, value);
       announceStatus(
         "eventNotifyStatus",
-        checked
+        checked && !notificationsGranted
+          ? "Low-battery alert selected. Allow notifications in the Android prompt to receive it."
+          : checked
           ? "Low-battery threshold set to " + value + "%."
           : "Low-battery alerts off.",
       );
@@ -278,26 +311,54 @@ function bindEventNotifications(opts?: AddEventListenerOptions) {
   bindThresholdToggle(
     "notifyHighTempToggle",
     "notifyHighTempThreshold",
-    state.highPackTemp === true,
+    notificationsGranted && state.highPackTemp === true,
     Number(state.highPackTempThresholdC) || 45,
     (checked, value) => {
       safeCall("setHighPackTempNotify", checked, value);
       announceStatus(
         "eventNotifyStatus",
-        checked
+        checked && !notificationsGranted
+          ? "High-temperature alert selected. Allow notifications in the Android prompt to receive it."
+          : checked
           ? "High-temperature threshold set to " + value + "°C."
           : "High-temperature alerts off.",
       );
     },
     opts,
   );
-  bindBoolToggle("notifyMaintenanceDueToggle", state.maintenanceDue === true, (checked) => {
+  bindBoolToggle("notifyMaintenanceDueToggle", notificationsGranted && state.maintenanceDue === true, (checked) => {
     safeCall("setMaintenanceDueNotify", checked);
-    announceStatus("eventNotifyStatus", "Maintenance-overdue alerts " + onOff(checked) + ".");
+    announceStatus("eventNotifyStatus", alertStatus("Maintenance-overdue alerts", checked));
+  }, opts);
+  bindBoolToggle("notifyTripSummaryToggle", notificationsGranted && experience.tripSummary === true, (checked) => {
+    safeCall("setTripSummaryNotify", checked);
+    announceStatus("eventNotifyStatus", alertStatus("End-of-drive recaps", checked));
   }, opts);
   bindBoolToggle("autoScanOnConnectToggle", state.autoScanOnConnect === true, (checked) => {
     safeCall("setAutoScanOnConnect", checked);
     announceStatus("autoScanStatus", "Auto-scan on connect " + onOff(checked) + ".");
+  }, opts);
+}
+
+function bindDrivingDisplay(opts?: AddEventListenerOptions) {
+  const state = parseBridgeJson(safeCall("getDashboardExperienceState"));
+  VD.setBackupReceipt?.(state);
+  const toggle = el("keepScreenAwakeToggle") as HTMLButtonElement | null;
+  if (!toggle) return;
+  const render = (enabled: boolean) => {
+    toggle.dataset.on = String(enabled);
+    toggle.setAttribute("aria-pressed", String(enabled));
+    toggle.textContent = enabled ? "On" : "Off";
+  };
+  render(state.keepScreenAwake === true);
+  toggle.addEventListener("click", () => {
+    const enabled = toggle.getAttribute("aria-pressed") !== "true";
+    render(enabled);
+    safeCall("setKeepScreenAwake", enabled);
+    announceStatus(
+      "drivingDisplayStatus",
+      enabled ? "Screen stays awake on live Drive and Map." : "Normal screen timeout restored.",
+    );
   }, opts);
 }
 
@@ -355,12 +416,13 @@ function bindConnectionTools() {
   window.clearTimeout(autoConnectCooldownTimer);
   autoConnectCooldownTimer = 0;
   const opts: AddEventListenerOptions = { signal: connectionToolsController.signal };
+  bindAutoConnect(opts);
   bindTestConnection(opts);
   bindSendDiagnostics(opts);
   bindSendAiDigest(opts);
-  bindAutoConnect(opts);
   bindNotifyWhenReady(opts);
   bindEventNotifications(opts);
+  bindDrivingDisplay(opts);
 }
 
 bindConnectionTools();

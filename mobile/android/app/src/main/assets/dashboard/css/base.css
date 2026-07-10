@@ -19,7 +19,7 @@
     /* Touch-target + floating-nav layout tokens. --nav-safe already folds in
        env(safe-area-inset-bottom); never re-add env() where --nav-safe is used. */
     --touch-min: 44px;
-    --touch-min-dense: 40px;
+    --touch-min-dense: 44px;
     --nav-h: 68px;
     --nav-gap: 10px;
     --nav-safe: calc(var(--nav-h) + var(--nav-gap) + env(safe-area-inset-bottom));
@@ -518,26 +518,29 @@
     flex: 1 1 auto;
   }
 
-  /* Live recording line: its own row under .top-main, flush-right beneath the
-     connection pill, so the session progress reads as one cluster with the
-     adapter/state above it (drive.ts toggles [hidden]). The meta shrinks +
-     ellipsizes first on narrow phones; the label never truncates. */
-  .top-recording {
+  /* Live recording line: a quiet footer at the true end of Settings. Keeping
+     the fast-changing trip counters out of .topbar leaves the title/status row
+     stable while the adapter is streaming. The meta still shrinks first on
+     narrow phones; the label never truncates. */
+  .settings-recording {
     display: flex;
     align-items: baseline;
-    justify-content: flex-end;
+    justify-content: center;
     gap: 6px;
-    margin-top: 5px;
+    min-width: 0;
+    margin: 2px 0 0;
+    padding: 10px 12px 2px;
+    border-top: 1px solid var(--line);
     color: var(--muted);
     font-size: 12px;
     line-height: 1.1;
   }
 
-  .top-recording[hidden] {
+  .settings-recording[hidden] {
     display: none;
   }
 
-  .top-recording__dot {
+  .settings-recording__dot {
     flex: none;
     align-self: center;
     width: 7px;
@@ -548,13 +551,13 @@
     animation: drive-chip-pulse var(--motion-pulse) var(--motion-ease-inout) infinite;
   }
 
-  .top-recording strong {
+  .settings-recording strong {
     flex: none;
     font-weight: 700;
     color: var(--text);
   }
 
-  .top-recording small {
+  .settings-recording small {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -563,7 +566,7 @@
     font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   }
 
-  .top-recording small::before {
+  .settings-recording small::before {
     content: "·";
     margin-right: 6px;
     opacity: 0.6;
@@ -836,6 +839,16 @@
   #stateBadge[data-state="idle"] .dot {
     background: var(--soft);
     color: var(--soft);
+  }
+
+  #stateBadge[data-freshness="stale"] {
+    border-color: rgba(var(--warn-rgb), 0.58);
+    color: var(--warn);
+  }
+
+  #stateBadge[data-freshness="stale"] .dot {
+    background: var(--warn);
+    color: var(--warn);
   }
 
   button.badge {

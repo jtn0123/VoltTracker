@@ -33,6 +33,10 @@ describe('map.ts — route selection regressions', () => {
 
     expect(VD.state.selectedMapSessionId).toBe('new-route');
     expect(document.querySelector('[data-map-session="new-route"]').classList.contains('is-active')).toBe(true);
+    const allDrives = document.getElementById('mapAllDrivesBtn');
+    expect(allDrives.hidden).toBe(false);
+    expect(allDrives.textContent).toBe('All drives (1)');
+    expect(allDrives.getAttribute('aria-label')).toBe('Browse all 1 recorded drives');
   });
 
   it('promotes live GPS samples to a selectable current map session', () => {
@@ -564,6 +568,34 @@ describe('map.ts — route selection regressions', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('exposes Not a trip visibly and restores it from the native Undo receipt', async () => {
+    const markTripNotTrip = vi.fn();
+    const restoreTrip = vi.fn();
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    await loadDashboard({ bridge: createVoltBridgeFixture({ markTripNotTrip, restoreTrip }) });
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+    VD.state.storage = {
+      recentRoutes: [{
+        session: { id: '42:1000:2000', startedAtMs: 1000, endedAtMs: 2000 },
+        points: [{ lat: 34.05, lng: -118.25, atMs: 1000 }, { lat: 34.16, lng: -118.32, atMs: 2000 }],
+        distanceMeters: 1000,
+      }],
+    };
+    VD.renderMap();
+
+    document.querySelector('[data-trip-not-trip="42:1000:2000"]').click();
+    expect(markTripNotTrip).toHaveBeenCalledWith('42:1000:2000');
+    window.VoltTrackerNative.showTripUndo('{"routeKey":"42:1000:2000"}');
+    expect(document.getElementById('tripUndoToast').hidden).toBe(false);
+    document.getElementById('tripUndoBtn').click();
+    expect(restoreTrip).toHaveBeenCalledWith('42:1000:2000');
+    expect(document.getElementById('tripUndoToast').hidden).toBe(true);
   });
 
   it('marks a route only once when the WebView contextmenu fires during a long-press', async () => {

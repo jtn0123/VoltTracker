@@ -17,6 +17,8 @@ internal class VoltBridgeStorage(
 
     fun getTrips(): String = activity.getTripsJson()
 
+    fun getTripsPage(offset: Int): String = activity.getTripsPageJson(maxOf(0, offset))
+
     fun getInsights(): String = activity.getInsightsJson()
 
     fun getTripRoute(routeKeyOrSessionId: String?): String =
@@ -31,6 +33,8 @@ internal class VoltBridgeStorage(
     fun requestStorageDetails(): Boolean = request("setStorage") { getStorageDetails() }
 
     fun requestTrips(): Boolean = request("setTrips") { getTrips() }
+
+    fun requestTripsPage(offset: Int): Boolean = request("setTripsPage") { getTripsPage(offset) }
 
     fun requestInsights(): Boolean = request("setInsights") { getInsights() }
 

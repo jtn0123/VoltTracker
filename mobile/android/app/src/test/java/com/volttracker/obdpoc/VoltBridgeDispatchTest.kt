@@ -1308,7 +1308,10 @@ class VoltBridgeDispatchTest {
             return bulkExport
         }
 
-        override fun markTripNotTrip(routeKey: String?): Boolean {
+        override fun setTripHidden(
+            routeKey: String?,
+            hidden: Boolean,
+        ): Boolean {
             lastMarkedTripRouteKey = routeKey
             return markTripReturn
         }

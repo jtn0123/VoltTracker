@@ -229,4 +229,18 @@ describe('connection-status.ts — status popover', () => {
     expect(document.getElementById('statusPopoverStateText').textContent).toBe('connecting');
     expect(document.getElementById('statusPopoverDetail').textContent).toBe('Connecting to OBDLink...');
   });
+
+  it('surfaces stale sample freshness in the global badge and status details', async () => {
+    const VD = await loadWithSessions();
+    const staleAt = Date.now() - 10_000;
+    window.VoltTrackerNative.setStatus({ state: 'connected', detail: 'Polling live OBD data.', bluetoothReady: true });
+    window.VoltTrackerNative.updateTelemetry({ source: 'obd', sampleCount: 5, speedKph: 32, updatedAt: staleAt });
+
+    expect(document.getElementById('stateBadge').dataset.freshness).toBe('stale');
+    expect(document.getElementById('stateText').textContent).toContain('stale');
+    badge().click();
+    expect(document.getElementById('statusPopoverConnection').textContent).toContain('Last sample');
+    expect(document.getElementById('statusPopoverConnection').textContent).toMatch(/ago/);
+    expect(VD.state.telemetry.speedKph).toBe(32);
+  });
 });

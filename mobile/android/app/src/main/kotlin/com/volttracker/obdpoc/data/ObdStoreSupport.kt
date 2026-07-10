@@ -312,24 +312,29 @@ object ObdStoreSupport {
         if (sample == null || sample.length() == 0) {
             return false
         }
-        return sample.has("speedKph") ||
-            sample.has("rpm") ||
-            sample.has("coolantC") ||
-            sample.has("loadPct") ||
-            sample.has("throttlePct") ||
-            sample.has("packVoltage") ||
-            sample.has("packCurrentA") ||
-            sample.has("voltage") ||
-            sample.has("latitude") ||
-            sample.has("longitude") ||
-            sample.has("soc") ||
-            sample.has("batteryTemp") ||
-            sample.has("capacityAh") ||
-            sample.has("sohPct") ||
-            sample.has("powerKw") ||
+        return hasFiniteNumber(sample, "speedKph") ||
+            hasFiniteNumber(sample, "rpm") ||
+            hasFiniteNumber(sample, "coolantC") ||
+            hasFiniteNumber(sample, "loadPct") ||
+            hasFiniteNumber(sample, "throttlePct") ||
+            hasFiniteNumber(sample, "packVoltage") ||
+            hasFiniteNumber(sample, "packCurrentA") ||
+            hasFiniteNumber(sample, "voltage") ||
+            hasFiniteNumber(sample, "latitude") ||
+            hasFiniteNumber(sample, "longitude") ||
+            hasFiniteNumber(sample, "soc") ||
+            hasFiniteNumber(sample, "batteryTemp") ||
+            hasFiniteNumber(sample, "capacityAh") ||
+            hasFiniteNumber(sample, "sohPct") ||
+            hasFiniteNumber(sample, "powerKw") ||
             sample.has("clearDtcOk") ||
             sample.has("clearDtcCode")
     }
+
+    private fun hasFiniteNumber(
+        sample: JSONObject,
+        key: String,
+    ): Boolean = sample.has(key) && !sample.isNull(key) && sample.optDouble(key, Double.NaN).isFinite()
 
     @JvmStatic
     fun clean(value: String?): String = value?.trim() ?: ""
@@ -606,12 +611,12 @@ object ObdStoreSupport {
         var previous: JSONObject? = null
         for (i in 0 until points.length()) {
             val point = points.getJSONObject(i)
-            if (!hasFiniteLatLng(point)) {
+            if (!hasValidLatLng(point)) {
                 previous = point
                 continue
             }
             val prior = previous
-            if (prior != null && hasFiniteLatLng(prior)) {
+            if (prior != null && hasValidLatLng(prior)) {
                 total +=
                     haversineMeters(
                         prior.optDouble("lat"),
@@ -625,11 +630,17 @@ object ObdStoreSupport {
         return total
     }
 
-    private fun hasFiniteLatLng(point: JSONObject): Boolean {
+    private fun hasValidLatLng(point: JSONObject): Boolean {
         val lat = point.optDouble("lat")
         val lng = point.optDouble("lng")
-        return !lat.isNaN() && !lng.isNaN()
+        return validLatLng(lat, lng)
     }
+
+    @JvmStatic
+    internal fun validLatLng(
+        lat: Double,
+        lng: Double,
+    ): Boolean = lat.isFinite() && lng.isFinite() && lat in -90.0..90.0 && lng in -180.0..180.0
 
     @JvmStatic
     @Throws(JSONException::class)
@@ -647,7 +658,7 @@ object ObdStoreSupport {
             val point = points.getJSONObject(i)
             val lat = point.optDouble("lat")
             val lng = point.optDouble("lng")
-            if (lat.isNaN() || lng.isNaN()) {
+            if (!validLatLng(lat, lng)) {
                 continue
             }
             sawFinite = true

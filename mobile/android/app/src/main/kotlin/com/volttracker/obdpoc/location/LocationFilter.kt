@@ -7,8 +7,9 @@ import java.util.Locale
  * route point. Has no Android dependencies so it is unit-testable on the JVM.
  *
  * Rejection rules, applied in order:
+ *  - non-finite/out-of-range coordinates or non-finite accuracy
  *  - accuracy worse than `maxAccuracyM`
- *  - a fix whose own timestamp is older than `staleFixMs` (a cached/replayed fix)
+ *  - future, stale, or out-of-order provider timestamps
  *  - a coarse `network` fix that arrives while GPS fixes are still fresh
  *  - a physically impossible jump from the last accepted point
  *
@@ -25,6 +26,7 @@ class LocationFilter(
     enum class Decision {
         ACCEPT,
         REJECT_ACCURACY,
+        REJECT_INVALID,
         REJECT_STALE,
         REJECT_PROVIDER,
         REJECT_JUMP,
@@ -59,11 +61,21 @@ class LocationFilter(
         provider: String?,
         nowMs: Long,
     ): Decision {
+        if (!validCoordinates(lat, lng) || !accuracyM.isFinite()) {
+            return reject(Decision.REJECT_INVALID)
+        }
         if (accuracyM > 0f && accuracyM > maxAccuracyM) {
             return reject(Decision.REJECT_ACCURACY)
         }
-        if (fixTimeMs > 0L && nowMs - fixTimeMs > staleFixMs) {
-            return reject(Decision.REJECT_STALE)
+        if (fixTimeMs > 0L) {
+            // A provider timestamp from the future poisons the next dt calculation; an older fix
+            // arriving after an accepted one makes dt <= 0 and used to bypass the jump gate.
+            if (fixTimeMs > nowMs || nowMs - fixTimeMs > staleFixMs.coerceAtLeast(0L)) {
+                return reject(Decision.REJECT_STALE)
+            }
+            if (hasLast && fixTimeMs <= lastFixMs) {
+                return reject(Decision.REJECT_STALE)
+            }
         }
         val network = isNetworkProvider(provider)
         if (network && lastGpsAcceptMs > 0L && nowMs - lastGpsAcceptMs <= networkSuppressMs) {
@@ -131,6 +143,16 @@ class LocationFilter(
         @JvmStatic
         fun isNetworkProvider(provider: String?): Boolean =
             provider != null && provider.lowercase(Locale.US).contains("network")
+
+        private fun validCoordinates(
+            lat: Double,
+            lng: Double,
+        ): Boolean =
+            lat.isFinite() &&
+                lng.isFinite() &&
+                lat in -90.0..90.0 &&
+                lng in -180.0..180.0 &&
+                !(lat == 0.0 && lng == 0.0)
 
         @JvmStatic
         fun haversineMeters(

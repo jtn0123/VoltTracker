@@ -27,13 +27,26 @@
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
     <div class="empty-state-actions">
-      <button type="button" class="link-btn" data-nav-jump="settings">
+      <button
+        type="button"
+        class="link-btn"
+        data-nav-jump="settings"
+        data-settings-target="settingsConnection"
+        data-settings-focus="deviceSelect"
+      >
         Set up the adapter in Settings
       </button>
       <button type="button" class="demo link-btn" data-action="demo">
         Preview with Demo / Testing
       </button>
     </div>
+    <details class="empty-preview">
+      <summary>What will appear here?</summary>
+      <p>
+        Plug-ins, peak charging power, estimated cost, battery-cell balance, and
+        long-term pack-health trends unlock as each kind of reading is recorded.
+      </p>
+    </details>
   </article>
   <!-- aria-live sits on the individual value clusters below (each KPI number and
        the status badge), each aria-atomic="true", instead of a card-wide
@@ -50,7 +63,12 @@
        the clusters that actually change: the ETA + power head, and each live value.
        Mirrors the Drive hero fix (drive.html). -->
   <article id="liveChargeCard" class="panel live-charge-card" hidden>
-    <header class="live-charge-head" aria-live="polite" aria-atomic="true">
+    <header
+      class="live-charge-head"
+      aria-live="polite"
+      aria-atomic="true"
+      data-live-telemetry
+    >
       <div>
         <span class="kicker">Charging now</span>
         <h3 id="liveChargeEta">Estimating time to full…</h3>
@@ -80,13 +98,21 @@
     <div class="live-charge-stats">
       <div>
         <span class="kicker">State of charge</span>
-        <strong id="liveChargeSoc" aria-live="polite" aria-atomic="true"
+        <strong
+          id="liveChargeSoc"
+          aria-live="polite"
+          aria-atomic="true"
+          data-live-telemetry
           >--</strong
         >
       </div>
       <div>
         <span class="kicker">Energy remaining</span>
-        <strong id="liveChargeRemaining" aria-live="polite" aria-atomic="true"
+        <strong
+          id="liveChargeRemaining"
+          aria-live="polite"
+          aria-atomic="true"
+          data-live-telemetry
           >--</strong
         >
       </div>
@@ -107,6 +133,40 @@
         </label>
       </div>
     </div>
+    <div
+      class="charge-target-presets"
+      role="group"
+      aria-label="Common charge targets"
+    >
+      <button
+        type="button"
+        data-charge-target="80"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        80%
+      </button>
+      <button
+        type="button"
+        data-charge-target="90"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        90%
+      </button>
+      <button
+        type="button"
+        data-charge-target="100"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        100%
+      </button>
+      <button
+        type="button"
+        data-charge-target="other"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        Other
+      </button>
+    </div>
     <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
       If notifications are on, you'll get an alert when the battery reaches this
       target.
@@ -119,7 +179,12 @@
   <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
        session count lives in the Recent-charges headline ("29.6 kWh across 4
        charges") and detection status in the source badge + live hero chip. -->
-  <section class="charge-grid" aria-label="Charging summary">
+  <section
+    id="chargeSummaryGrid"
+    class="charge-grid"
+    aria-label="Charging summary"
+    hidden
+  >
     <!-- v2 design: label + number only — no explainer captions on the first two
          tiles (Est. cost keeps its caption because it doubles as the rate prompt). -->
     <article class="panel charge-kpi">
@@ -179,7 +244,7 @@
        telemetry.ts#renderCellBalance / #renderCellGrid. The "Read 96 cells" toggle
        fires the real per-cell probe (detailProbeLast("cells")) when no full read is
        loaded yet, then hides/shows the heatmap on subsequent taps. -->
-  <article id="cellBalanceCard" class="panel cell-balance-card">
+  <article id="cellBalanceCard" class="panel cell-balance-card" hidden>
     <header class="cell-balance-head">
       <div>
         <h2 id="cellBalanceTitle" class="cell-balance-title">
@@ -224,7 +289,7 @@
 
   <!-- Battery state-of-health trend. Fed by bridge.getBatterySohHistory() from the
        battery_snapshots table; renders via storage-status.ts#renderBatterySohTrend. -->
-  <article id="sohTrendCard" class="panel soh-trend-card">
+  <article id="sohTrendCard" class="panel soh-trend-card" hidden>
     <header class="soh-trend-head">
       <div>
         <span class="kicker">Battery health trend</span>

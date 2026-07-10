@@ -14,10 +14,31 @@ import { initialTelemetryState } from "./telemetry-state";
   type LiveCellGroup = HTMLElement | Element | null;
   type ValidationTone = "ok" | "warn" | "bad";
 
+  // Native live samples are authoritative snapshots, not partial patches. A field disappears when
+  // its PID ages out or a location fix is no longer current; carrying the prior JS value across that
+  // omission is how an old road speed could remain visible after foreground catch-up. Metadata and
+  // forward-compatible unknown keys still merge normally, while every known sensor field is cleared
+  // before the new sample is applied.
+  const AUTHORITATIVE_READING_KEYS = [
+    "speedKph", "speedRejectedKph", "rpm", "voltage", "coolantC", "loadPct", "throttlePct",
+    "soc", "batteryTemp", "powerKw", "powerKwStaleMs", "packVoltage", "packCurrentA",
+    "packEnergyKwh", "chargerPowerKw", "capacityAh", "sohPct", "cellBalanceMv", "odometerMiles",
+    "minCellVoltage", "maxCellVoltage", "minCellNumber", "maxCellNumber", "socVariationPct", "cellVoltages",
+    "latitude", "longitude", "accuracyM", "gpsSpeedMps", "bearingDeg", "locationAgeMs",
+    "locationProvider", "chargeTransitionHint", "vehicleState", "vehicleStateConfidence",
+    "vehicleStateReasons", "throttleSource", "vin"
+  ] as const;
+
   function asPayloadRecord(value: unknown): PayloadRecord {
     return value != null && typeof value === "object" && !Array.isArray(value)
       ? value as PayloadRecord
       : {};
+  }
+
+  function applyAuthoritativeSample(current: VoltTelemetry, sample: PayloadRecord): VoltTelemetry {
+    const next: PayloadRecord = { ...current };
+    for (const key of AUTHORITATIVE_READING_KEYS) next[key] = null;
+    return { ...next, ...sample } as VoltTelemetry;
   }
 
   // Live-tile element ids that should pulse with a `.stale` class when the
@@ -200,7 +221,7 @@ import { initialTelemetryState } from "./telemetry-state";
     state.appState = parsed;
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
-      state.telemetry = { ...state.telemetry, ...nextTelemetry };
+      state.telemetry = applyAuthoritativeSample(state.telemetry, nextTelemetry);
       // Status broadcasts re-deliver the last sample verbatim; only an
       // updatedAt that advances counts as freshness, and we stamp the sample's
       // own clock (the same wall clock updateTelemetry's Date.now() uses on
@@ -343,6 +364,16 @@ import { initialTelemetryState } from "./telemetry-state";
       liveRouteHydrationRetryTimer = null;
     }
     const firstPoint = mapped[0]!;
+    let recoveredDistanceM = 0;
+    for (let i = 1; i < mapped.length; i += 1) {
+      const previous = mapped[i - 1]!;
+      const current = mapped[i]!;
+      recoveredDistanceM += haversineMetersJs(previous.lat, previous.lng, current.lat, current.lng);
+    }
+    const lastPoint = mapped[mapped.length - 1]!;
+    state.sessionDistanceM = recoveredDistanceM;
+    state.sessionLastLat = lastPoint.lat;
+    state.sessionLastLng = lastPoint.lng;
     state.liveRouteStartedAtMs = firstPoint.atMs;
     state.selectedMapSessionId = LIVE_ROUTE_ID;
     // If the map module is already loaded, route through its setter so its module-local
@@ -443,6 +474,9 @@ import { initialTelemetryState } from "./telemetry-state";
       ["connected", "connecting", "initializing", "scanning", "demo"].includes(statusName);
     const sessionState = session.state || status.state || "idle";
     const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
+    if (typeof VD.refreshConnectionToolsAvailability === "function") {
+      VD.refreshConnectionToolsAvailability();
+    }
 
     VD.setText("adapterSummary", adapterName);
     VD.setText(
@@ -653,7 +687,7 @@ import { initialTelemetryState } from "./telemetry-state";
     ) {
       resetTelemetry();
     }
-    state.telemetry = { ...state.telemetry, ...sample };
+    state.telemetry = applyAuthoritativeSample(state.telemetry, sample);
     state.lastSampleAt = Date.now();
     // Record the sample's own timestamp so a later status broadcast that
     // re-delivers this exact sample (setAppState) is not mistaken for a fresh
@@ -1345,7 +1379,8 @@ import { initialTelemetryState } from "./telemetry-state";
     lastCellBalanceSig = sig;
     const minV = Number(t.minCellVoltage);
     const maxV = Number(t.maxCellVoltage);
-    const has = Number.isFinite(minV) && Number.isFinite(maxV);
+    const has = t.minCellVoltage != null && t.maxCellVoltage != null &&
+      Number.isFinite(minV) && Number.isFinite(maxV);
     const toggle = el("cellToggleBtn");
     if (!has) {
       VD.setText("cellBalanceCopy", "No cell readings yet — connect while the car is awake.");
@@ -1355,7 +1390,8 @@ import { initialTelemetryState } from "./telemetry-state";
       cellGridOpen = false;
       return;
     }
-    const mv = Number.isFinite(Number(t.cellBalanceMv))
+    card.hidden = false;
+    const mv = t.cellBalanceMv != null && Number.isFinite(Number(t.cellBalanceMv))
       ? Number(t.cellBalanceMv)
       : Math.round((maxV - minV) * 1000);
     const tone = cellBalanceTone(mv);
@@ -1677,7 +1713,7 @@ import { initialTelemetryState } from "./telemetry-state";
     VD.setText(
       "cellGridNote",
       full
-        ? Number.isFinite(minCell)
+        ? t.minCellNumber != null && Number.isFinite(minCell)
           ? `group ${minCell} runs low`
           : "full read"
         : `${known.length} of ${CELL_GRID_COUNT} read`,

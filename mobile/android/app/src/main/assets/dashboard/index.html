@@ -31,6 +31,7 @@
     <link rel="stylesheet" href="css/base.css" />
     <link rel="stylesheet" href="css/components.css" />
     <link rel="stylesheet" href="css/screens.css" />
+    <link rel="stylesheet" href="css/workflows.css" />
     <!-- Proactive adapter-tool styles. troubleshooter.css is injected on demand by its lazy chunk
          (troubleshooter.ts) since the recovery modal only shows on a connection error. -->
     <link rel="stylesheet" href="css/status-tools.css" />
@@ -85,6 +86,16 @@
       aria-live="polite"
       hidden
     ></div>
+    <div
+      id="tripUndoToast"
+      class="status-toast status-undo"
+      role="status"
+      aria-live="polite"
+      hidden
+    >
+      <span>Drive hidden. Raw data was kept.</span>
+      <button type="button" id="tripUndoBtn">Undo</button>
+    </div>
 <!--
   Connection troubleshooter modal.
 
@@ -451,27 +462,6 @@
     </div>
   </div>
   <!--
-    Live recording line (connected state): the session progress
-    (samples · runtime · distance) consolidates HERE, on its own row beneath
-    the top-right connection cluster, instead of a full-width now-chip + a
-    "Live car data" banner above the hero. drive.ts#renderDriveNowChips fills
-    the label/meta and toggles [hidden]; the adapter name + state pill stay on
-    the row above. Mirrors how #topDemoInfo carries demo state in this header.
-    aria-hidden: it repaints ~1 Hz, so the announced state lives in the pill /
-    status popover (same choice the old now-chip made).
-  -->
-  <div
-    id="driveRecording"
-    class="top-recording"
-    data-tone="live"
-    aria-hidden="true"
-    hidden
-  >
-    <span class="top-recording__dot" aria-hidden="true"></span>
-    <strong id="driveRecordingLabel">Recording</strong>
-    <small id="driveRecordingMeta"></small>
-  </div>
-  <!--
     Status popover: tap target is the state badge (and the last-connected line).
     Static shell only — connection-status.ts fills the state pill, detail copy,
     and the connection/trip rows on every open and live update.
@@ -553,7 +543,7 @@
       <button
         type="button"
         class="primary primary-action"
-        data-nav-jump="settings"
+        data-action="smartConnect"
       >
         Connect adapter
       </button>
@@ -561,6 +551,13 @@
         Try demo
       </button>
     </div>
+    <details class="empty-preview drive-empty-preview">
+      <summary>What will appear here?</summary>
+      <p>
+        Live speed, electric and engine power, battery state, trip efficiency,
+        and data-health checks appear automatically with the first fresh sample.
+      </p>
+    </details>
   </article>
 
   <section class="hero">
@@ -585,6 +582,7 @@
         role="meter"
         aria-label="Vehicle speed"
         aria-live="polite"
+        data-live-telemetry
         aria-atomic="true"
         aria-valuemin="0"
         aria-valuemax="120"
@@ -610,7 +608,12 @@
         <div class="scrub-cursor live-trace-cursor"></div>
       </div>
 
-      <div class="power-block" aria-live="polite" aria-atomic="true">
+      <div
+        class="power-block"
+        aria-live="polite"
+        aria-atomic="true"
+        data-live-telemetry
+      >
         <div class="power-head">
           <div class="power-label">
             <span class="kicker">Power</span>
@@ -649,7 +652,12 @@
          The pack values surface the raw 300+ V traction-pack readings polled
          from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
     <article class="panel battery-strip">
-      <div class="battery-head" aria-live="polite" aria-atomic="true">
+      <div
+        class="battery-head"
+        aria-live="polite"
+        aria-atomic="true"
+        data-live-telemetry
+      >
         <div>
           <div class="kicker">HV Battery</div>
           <div class="battery-soc">
@@ -861,6 +869,8 @@
         class="link-btn trip-cost-value"
         id="tripCostValue"
         data-nav-jump="settings"
+        data-settings-target="settingsDisplay"
+        data-settings-focus="pricePerKwhInput"
         data-state="unset"
       >
         set rate for cost
@@ -896,13 +906,18 @@
 <section id="view-map" class="view" data-view="map">
   <!-- role="group": an aria-label on a bare div is dropped by most screen
        readers; the role makes the "Pick a logged drive" name land. -->
-  <div
-    id="mapDriveChips"
-    class="map-drive-chips"
-    data-noswipe="true"
-    role="group"
-    aria-label="Pick a logged drive"
-  ></div>
+  <div class="map-drive-picker">
+    <div
+      id="mapDriveChips"
+      class="map-drive-chips"
+      data-noswipe="true"
+      role="group"
+      aria-label="Pick a logged drive"
+    ></div>
+    <button type="button" id="mapAllDrivesBtn" class="map-all-drives-btn">
+      All drives
+    </button>
+  </div>
 
   <article id="mapCard" class="panel map-card">
     <div id="mapFrame" class="map-frame" data-layer="eff" data-noswipe="true">
@@ -1064,7 +1079,13 @@
           permission enabled. The route will draw here from on-device SQLite
           samples.</span
         >
-        <button type="button" class="link-btn" data-nav-jump="settings">
+        <button
+          type="button"
+          class="link-btn"
+          data-nav-jump="settings"
+          data-settings-target="settingsConnection"
+          data-settings-focus="permissionBtn"
+        >
           Check permissions in Settings
         </button>
       </div>
@@ -1165,6 +1186,31 @@
     tabindex="-1"
     hidden
   >
+    <div id="tripReceipt" class="trip-receipt" role="status" hidden>
+      <div>
+        <span class="kicker">Saved successfully</span>
+        <strong>Your drive is safely in local history.</strong>
+      </div>
+      <div
+        class="trip-receipt-actions"
+        role="group"
+        aria-label="Saved drive actions"
+      >
+        <button type="button" id="tripReceiptName" data-trip-rename="">
+          Name
+        </button>
+        <button
+          type="button"
+          id="tripReceiptFavorite"
+          data-trip-favorite=""
+          data-trip-favorite-state="0"
+        >
+          Favorite
+        </button>
+        <button type="button" data-action="shareTripCard">Share</button>
+        <button type="button" data-action="closeTripDetail">Done</button>
+      </div>
+    </div>
     <header class="trip-detail-head">
       <div>
         <span class="kicker">Drive detail</span>
@@ -1326,14 +1372,24 @@
            works, it just isn't advertised as a copy line.) -->
       <header>
         <span class="kicker">Recorded drives</span>
-        <button
-          type="button"
-          class="link-btn"
-          data-action="exportAllTripsCsv"
-          id="exportAllTripsBtn"
-        >
-          Export CSV
-        </button>
+        <span class="recorded-drives-head-actions">
+          <button
+            type="button"
+            class="link-btn"
+            data-action="exportAllTripsCsv"
+            id="exportAllTripsBtn"
+          >
+            Export CSV
+          </button>
+          <button
+            type="button"
+            class="link-btn"
+            id="mapSessionListCloseBtn"
+            aria-label="Close all recorded drives"
+          >
+            Close
+          </button>
+        </span>
       </header>
       <!-- Trip list search / sort / favorites filter (M4). Client-side over the
            already-loaded routes; map.ts reads these and re-renders the list. -->
@@ -1425,13 +1481,26 @@
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
     <div class="empty-state-actions">
-      <button type="button" class="link-btn" data-nav-jump="settings">
+      <button
+        type="button"
+        class="link-btn"
+        data-nav-jump="settings"
+        data-settings-target="settingsConnection"
+        data-settings-focus="deviceSelect"
+      >
         Set up the adapter in Settings
       </button>
       <button type="button" class="demo link-btn" data-action="demo">
         Preview with Demo / Testing
       </button>
     </div>
+    <details class="empty-preview">
+      <summary>What will appear here?</summary>
+      <p>
+        Plug-ins, peak charging power, estimated cost, battery-cell balance, and
+        long-term pack-health trends unlock as each kind of reading is recorded.
+      </p>
+    </details>
   </article>
   <!-- aria-live sits on the individual value clusters below (each KPI number and
        the status badge), each aria-atomic="true", instead of a card-wide
@@ -1448,7 +1517,12 @@
        the clusters that actually change: the ETA + power head, and each live value.
        Mirrors the Drive hero fix (drive.html). -->
   <article id="liveChargeCard" class="panel live-charge-card" hidden>
-    <header class="live-charge-head" aria-live="polite" aria-atomic="true">
+    <header
+      class="live-charge-head"
+      aria-live="polite"
+      aria-atomic="true"
+      data-live-telemetry
+    >
       <div>
         <span class="kicker">Charging now</span>
         <h3 id="liveChargeEta">Estimating time to full…</h3>
@@ -1478,13 +1552,21 @@
     <div class="live-charge-stats">
       <div>
         <span class="kicker">State of charge</span>
-        <strong id="liveChargeSoc" aria-live="polite" aria-atomic="true"
+        <strong
+          id="liveChargeSoc"
+          aria-live="polite"
+          aria-atomic="true"
+          data-live-telemetry
           >--</strong
         >
       </div>
       <div>
         <span class="kicker">Energy remaining</span>
-        <strong id="liveChargeRemaining" aria-live="polite" aria-atomic="true"
+        <strong
+          id="liveChargeRemaining"
+          aria-live="polite"
+          aria-atomic="true"
+          data-live-telemetry
           >--</strong
         >
       </div>
@@ -1505,6 +1587,40 @@
         </label>
       </div>
     </div>
+    <div
+      class="charge-target-presets"
+      role="group"
+      aria-label="Common charge targets"
+    >
+      <button
+        type="button"
+        data-charge-target="80"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        80%
+      </button>
+      <button
+        type="button"
+        data-charge-target="90"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        90%
+      </button>
+      <button
+        type="button"
+        data-charge-target="100"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        100%
+      </button>
+      <button
+        type="button"
+        data-charge-target="other"
+        data-charge-target-input="liveChargeTargetInput"
+      >
+        Other
+      </button>
+    </div>
     <p id="liveChargeTargetHint" class="status-copy live-charge-target-hint">
       If notifications are on, you'll get an alert when the battery reaches this
       target.
@@ -1517,7 +1633,12 @@
   <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
        session count lives in the Recent-charges headline ("29.6 kWh across 4
        charges") and detection status in the source badge + live hero chip. -->
-  <section class="charge-grid" aria-label="Charging summary">
+  <section
+    id="chargeSummaryGrid"
+    class="charge-grid"
+    aria-label="Charging summary"
+    hidden
+  >
     <!-- v2 design: label + number only — no explainer captions on the first two
          tiles (Est. cost keeps its caption because it doubles as the rate prompt). -->
     <article class="panel charge-kpi">
@@ -1577,7 +1698,7 @@
        telemetry.ts#renderCellBalance / #renderCellGrid. The "Read 96 cells" toggle
        fires the real per-cell probe (detailProbeLast("cells")) when no full read is
        loaded yet, then hides/shows the heatmap on subsequent taps. -->
-  <article id="cellBalanceCard" class="panel cell-balance-card">
+  <article id="cellBalanceCard" class="panel cell-balance-card" hidden>
     <header class="cell-balance-head">
       <div>
         <h2 id="cellBalanceTitle" class="cell-balance-title">
@@ -1622,7 +1743,7 @@
 
   <!-- Battery state-of-health trend. Fed by bridge.getBatterySohHistory() from the
        battery_snapshots table; renders via storage-status.ts#renderBatterySohTrend. -->
-  <article id="sohTrendCard" class="panel soh-trend-card">
+  <article id="sohTrendCard" class="panel soh-trend-card" hidden>
     <header class="soh-trend-head">
       <div>
         <span class="kicker">Battery health trend</span>
@@ -2078,7 +2199,14 @@
             min="0"
             step="1"
             placeholder="optional"
+            aria-describedby="maintIntervalMonthsHint"
           />
+          <small
+            id="maintIntervalMonthsHint"
+            class="maint-field-hint"
+            role="alert"
+            hidden
+          ></small>
         </label>
       </div>
       <p
@@ -2099,13 +2227,30 @@
   </article>
 </section>
 <section id="view-settings" class="view" data-view="settings">
+  <nav
+    class="settings-section-nav"
+    aria-label="Settings sections"
+    data-noswipe="true"
+  >
+    <button type="button" data-settings-target="settingsConnection">
+      Connection
+    </button>
+    <button type="button" data-settings-target="connectionToolsPanel">
+      Alerts
+    </button>
+    <button type="button" data-settings-target="settingsDisplay">
+      Display
+    </button>
+    <button type="button" data-settings-target="settingsDrive">Drive</button>
+    <button type="button" data-settings-target="settingsData">Data</button>
+  </nav>
   <!--
     Connection / setup is the setup-critical control, so it leads the Settings
     tab and carries the dominant visual weight (B3). Backup/restore and other
     lower-frequency data tools are demoted below it (`.settings-secondary`) so a
     first-run user reaches "connect my car" before backup tooling.
   -->
-  <article class="panel connect-card">
+  <article id="settingsConnection" class="panel connect-card">
     <div class="connection-head">
       <div>
         <div class="kicker">Connection</div>
@@ -2210,235 +2355,260 @@
   class="view connection-tools"
   data-view="settings"
 >
-  <article class="panel connection-tools__panel" id="connectionToolsPanel">
-    <header class="connection-tools__head">
-      <div>
-        <span class="kicker">Connection tools</span>
-        <h2>Proactive adapter checks</h2>
-      </div>
-    </header>
+  <div id="connectionToolsMount">
+    <template id="connectionToolsTemplate">
+      <article class="panel connection-tools__panel" id="connectionToolsPanel">
+        <header class="connection-tools__head">
+          <div>
+            <span class="kicker">Connection tools</span>
+            <h2>Proactive adapter checks</h2>
+          </div>
+        </header>
 
-    <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
+        <!-- Low-voltage hint, populated from status.lastVoltage. Hidden until a
          reading lands and only visible when the value is below roughly 12.2 V. -->
-    <p
-      id="lowVoltageHint"
-      class="connection-tools__hint"
-      data-tone="warn"
-      role="status"
-      aria-live="polite"
-      hidden
-    >
-      Battery voltage looks low. Start the car before the next probe.
-    </p>
+        <p
+          id="lowVoltageHint"
+          class="connection-tools__hint"
+          data-tone="warn"
+          role="status"
+          aria-live="polite"
+          hidden
+        >
+          Battery voltage looks low. Start the car before the next probe.
+        </p>
 
-    <div class="connection-tools__actions">
-      <!-- One-shot probe against the last-known adapter; results surface via status. -->
-      <!-- Quiet secondary: Connect (in the card above) is the tab's primary
+        <div class="connection-tools__actions">
+          <!-- One-shot probe against the last-known adapter; results surface via status. -->
+          <!-- Quiet secondary: Connect (in the card above) is the tab's primary
            action — a filled "Test connection" out-shouted it. -->
-      <button
-        type="button"
-        id="testConnectionBtn"
-        class="connection-tools__btn"
-        data-action="test-connection"
-      >
-        Test connection
-      </button>
-      <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
-      <button
-        type="button"
-        id="sendDiagnosticsBtn"
-        class="connection-tools__btn"
-      >
-        Send diagnostics
-      </button>
-    </div>
+          <button
+            type="button"
+            id="testConnectionBtn"
+            class="connection-tools__btn"
+            data-action="test-connection"
+          >
+            Test connection
+          </button>
+          <!-- Diagnostics share. Native code builds the zip and launches the share intent. -->
+          <button
+            type="button"
+            id="sendDiagnosticsBtn"
+            class="connection-tools__btn"
+          >
+            Send diagnostics
+          </button>
+        </div>
+        <small
+          id="testConnectionStatus"
+          class="status-copy"
+          role="status"
+          aria-live="polite"
+        ></small>
 
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="autoConnectTitle"
-    >
-      <legend id="autoConnectTitle" class="kicker">Auto-connect</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="autoConnectToggle"
-            type="checkbox"
-            data-action="auto-connect"
-          />
-          <span>Connect when last adapter is seen</span>
-        </label>
-      </div>
-      <small
-        id="autoConnectStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      >
-        Uses the last adapter and Bluetooth connection events. It does not run
-        Bluetooth discovery.
-      </small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="autoConnectTitle"
+        >
+          <legend id="autoConnectTitle" class="kicker">Auto-connect</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="autoConnectToggle"
+                type="checkbox"
+                data-action="auto-connect"
+              />
+              <span>Connect when last adapter is seen</span>
+            </label>
+          </div>
+          <small
+            id="autoConnectStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          >
+            Uses the last adapter and Bluetooth connection events. It does not
+            run Bluetooth discovery.
+          </small>
+        </fieldset>
 
-    <!-- Notify-when-ready toggle. Picks how long to keep probing in the
+        <!-- Notify-when-ready toggle. Picks how long to keep probing in the
          background; the bridge clamps the minutes to [1, 30] and we mirror that
          in the UI. -->
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="notifyWhenReadyTitle"
-    >
-      <legend id="notifyWhenReadyTitle" class="kicker">
-        Notify when adapter is ready
-      </legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyWhenReadyToggle"
-            type="checkbox"
-            data-action="notify-when-ready"
-          />
-          <span>Keep checking in the background</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">For</span>
-          <select id="notifyWhenReadyMinutes">
-            <option value="5">5 min</option>
-            <option value="10" selected>10 min</option>
-            <option value="15">15 min</option>
-            <option value="30">30 min</option>
-          </select>
-        </label>
-      </div>
-      <small
-        id="notifyWhenReadyStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      >
-        Probes the last-used adapter every 30s and posts a notification when it
-        responds.
-      </small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="notifyWhenReadyTitle"
+        >
+          <legend id="notifyWhenReadyTitle" class="kicker">
+            Notify when adapter is ready
+          </legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyWhenReadyToggle"
+                type="checkbox"
+                data-action="notify-when-ready"
+              />
+              <span>Keep checking in the background</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">For</span>
+              <select id="notifyWhenReadyMinutes">
+                <option value="5">5 min</option>
+                <option value="10" selected>10 min</option>
+                <option value="15">15 min</option>
+                <option value="30">30 min</option>
+              </select>
+            </label>
+          </div>
+          <small
+            id="notifyWhenReadyStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          >
+            Probes the last-used adapter every 30s and posts a notification when
+            it responds.
+          </small>
+        </fieldset>
 
-    <!-- Event notifications (M1) + auto-scan on connect (M3). Native-owned settings
+        <!-- Event notifications (M1) + auto-scan on connect (M3). Native-owned settings
          reached via the bridge; thresholds are clamped on the Android side. -->
-    <fieldset
-      class="connection-tools__notify"
-      aria-labelledby="eventNotifyTitle"
-    >
-      <legend id="eventNotifyTitle" class="kicker">Alerts</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyChargeCompleteToggle"
-            type="checkbox"
-            data-action="notify-charge-complete"
-          />
-          <span>Notify when charging completes</span>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyNewDtcToggle"
-            type="checkbox"
-            data-action="notify-new-dtc"
-          />
-          <span>Notify when a new car code is found</span>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyLowSocToggle"
-            type="checkbox"
-            data-action="notify-low-soc"
-          />
-          <span>Notify when the battery is low</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">Below</span>
-          <select id="notifyLowSocThreshold">
-            <option value="10">10%</option>
-            <option value="15">15%</option>
-            <option value="20" selected>20%</option>
-            <option value="30">30%</option>
-          </select>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyHighTempToggle"
-            type="checkbox"
-            data-action="notify-high-temp"
-          />
-          <span>Notify when pack temperature is high</span>
-        </label>
-        <label class="connection-tools__notify-mins">
-          <span class="kicker">Above</span>
-          <select id="notifyHighTempThreshold">
-            <option value="40">40&deg;C</option>
-            <option value="45" selected>45&deg;C</option>
-            <option value="50">50&deg;C</option>
-            <option value="55">55&deg;C</option>
-          </select>
-        </label>
-      </div>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="notifyMaintenanceDueToggle"
-            type="checkbox"
-            data-action="notify-maintenance-due"
-          />
-          <span>Notify when maintenance is overdue</span>
-        </label>
-      </div>
-      <small class="status-copy">
-        Battery alerts need notification permission and fire once each time a
-        reading crosses the threshold. The maintenance alert fires once when a
-        tracked service first goes overdue.
-      </small>
-      <small
-        id="eventNotifyStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      ></small>
-    </fieldset>
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="eventNotifyTitle"
+        >
+          <legend id="eventNotifyTitle" class="kicker">Alerts</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyChargeCompleteToggle"
+                type="checkbox"
+                data-action="notify-charge-complete"
+              />
+              <span>Notify when charging completes</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyNewDtcToggle"
+                type="checkbox"
+                data-action="notify-new-dtc"
+              />
+              <span>Notify when a new car code is found</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyLowSocToggle"
+                type="checkbox"
+                data-action="notify-low-soc"
+              />
+              <span>Notify when the battery is low</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">Below</span>
+              <select id="notifyLowSocThreshold">
+                <option value="10">10%</option>
+                <option value="15">15%</option>
+                <option value="20" selected>20%</option>
+                <option value="30">30%</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyHighTempToggle"
+                type="checkbox"
+                data-action="notify-high-temp"
+              />
+              <span>Notify when pack temperature is high</span>
+            </label>
+            <label class="connection-tools__notify-mins">
+              <span class="kicker">Above</span>
+              <select id="notifyHighTempThreshold">
+                <option value="40">40&deg;C</option>
+                <option value="45" selected>45&deg;C</option>
+                <option value="50">50&deg;C</option>
+                <option value="55">55&deg;C</option>
+              </select>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyMaintenanceDueToggle"
+                type="checkbox"
+                data-action="notify-maintenance-due"
+              />
+              <span>Notify when maintenance is overdue</span>
+            </label>
+          </div>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="notifyTripSummaryToggle"
+                type="checkbox"
+                data-action="notify-trip-summary"
+              />
+              <span>Send an end-of-drive recap</span>
+            </label>
+          </div>
+          <small class="status-copy">
+            Battery alerts need notification permission and fire once each time
+            a reading crosses the threshold. The maintenance alert fires once
+            when a tracked service first goes overdue. Drive recaps post only
+            after a real trip is safely saved.
+          </small>
+          <small
+            id="eventNotifyStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          ></small>
+        </fieldset>
 
-    <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
-    <fieldset class="connection-tools__notify" aria-labelledby="autoScanTitle">
-      <legend id="autoScanTitle" class="kicker">Auto-scan for codes</legend>
-      <div class="connection-tools__notify-row">
-        <label class="connection-tools__notify-toggle">
-          <input
-            id="autoScanOnConnectToggle"
-            type="checkbox"
-            data-action="auto-scan-on-connect"
-          />
-          <span>Scan for codes on connect</span>
-        </label>
-      </div>
-      <small class="status-copy">
-        Runs one background Mode 03 scan shortly after connecting (at most once
-        per drive). New codes feed the diagnostic-code notification above.
-      </small>
-      <small
-        id="autoScanStatus"
-        class="status-copy"
-        role="status"
-        aria-live="polite"
-      ></small>
-    </fieldset>
-  </article>
+        <!-- Auto-scan for diagnostic codes shortly after a successful connect (M3). -->
+        <fieldset
+          class="connection-tools__notify"
+          aria-labelledby="autoScanTitle"
+        >
+          <legend id="autoScanTitle" class="kicker">Auto-scan for codes</legend>
+          <div class="connection-tools__notify-row">
+            <label class="connection-tools__notify-toggle">
+              <input
+                id="autoScanOnConnectToggle"
+                type="checkbox"
+                data-action="auto-scan-on-connect"
+              />
+              <span>Scan for codes on connect</span>
+            </label>
+          </div>
+          <small class="status-copy">
+            Runs one background Mode 03 scan shortly after connecting (at most
+            once per drive). New codes feed the diagnostic-code notification
+            above.
+          </small>
+          <small
+            id="autoScanStatus"
+            class="status-copy"
+            role="status"
+            aria-live="polite"
+          ></small>
+        </fieldset>
+      </article>
+    </template>
+  </div>
 </section>
 <!--
   Preferences — display-layer settings (units, electricity rate). Sits first on
   the Settings tab. Wiring + persistence live in prefs.ts.
 -->
 <section id="view-preferences" class="view" data-view="settings">
-  <article class="panel pref-card">
+  <article id="settingsDisplay" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Display</span>
@@ -2577,10 +2747,92 @@
         />
         <span>%</span>
       </label>
+      <div
+        class="charge-target-presets pref-charge-target-presets"
+        role="group"
+        aria-label="Common charge targets"
+      >
+        <button
+          type="button"
+          data-charge-target="80"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          80%
+        </button>
+        <button
+          type="button"
+          data-charge-target="90"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          90%
+        </button>
+        <button
+          type="button"
+          data-charge-target="100"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          100%
+        </button>
+        <button
+          type="button"
+          data-charge-target="other"
+          data-charge-target-input="prefChargeTargetInput"
+        >
+          Other
+        </button>
+      </div>
     </div>
   </article>
 
-  <article class="panel pref-card">
+  <article id="drivingDisplayCard" class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Driving display</span>
+        <h3>Live-screen behavior</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Keep screen awake while live</strong>
+        <small>Only while Drive or Map is open and the app is in front</small>
+      </div>
+      <button
+        type="button"
+        id="keepScreenAwakeToggle"
+        class="tile-toggle pref-toggle"
+        data-on="false"
+        aria-pressed="false"
+      >
+        Off
+      </button>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Quiet live data</strong>
+        <small
+          >TalkBack announces status changes instead of every gauge tick</small
+        >
+      </div>
+      <button
+        type="button"
+        id="quietTelemetryToggle"
+        class="tile-toggle pref-toggle"
+        data-pref-quiet-telemetry
+        data-on="true"
+        aria-pressed="true"
+      >
+        On
+      </button>
+    </div>
+    <small
+      id="drivingDisplayStatus"
+      class="status-copy"
+      role="status"
+      aria-live="polite"
+    ></small>
+  </article>
+
+  <article id="settingsAccessibility" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Accessibility</span>
@@ -2639,7 +2891,7 @@
          every toggle. -->
   </article>
 
-  <article class="panel pref-card">
+  <article id="settingsDrive" class="panel pref-card">
     <div class="card-head">
       <div>
         <span class="kicker">Drive tiles</span>
@@ -2650,6 +2902,18 @@
       Show, hide, and reorder the live signal tiles on the Drive tab.
     </p>
     <div
+      class="drive-preset-row"
+      role="group"
+      aria-label="Drive display preset"
+    >
+      <button type="button" data-drive-preset="focus" aria-pressed="false">
+        Drive Focus
+      </button>
+      <button type="button" data-drive-preset="detailed" aria-pressed="true">
+        Detailed
+      </button>
+    </div>
+    <div
       id="driveTilesEditor"
       class="tiles-editor"
       aria-label="Drive tile layout"
@@ -2659,7 +2923,10 @@
   <!-- Moved from partials/settings.html: backup/restore is a low-frequency
        data tool, so it sits at the end of the Settings tab instead of between
        the connect card and the connection tools. -->
-  <article class="panel list-card settings-data-card settings-secondary">
+  <article
+    id="settingsData"
+    class="panel list-card settings-data-card settings-secondary"
+  >
     <header>
       <div>
         <span class="kicker">Backup &amp; restore</span>
@@ -2672,7 +2939,11 @@
     <p class="status-copy">
       Encrypted backup is safest. When you restore a file you can choose to
       merge it into your current data (duplicate trips are skipped) or replace
-      everything on this phone.
+      everything on this phone. Backups also carry your display, alert, and
+      driving preferences so a restore feels like the same app.
+    </p>
+    <p id="lastBackupReceipt" class="backup-receipt" role="status">
+      No successful backup recorded on this phone yet.
     </p>
     <div
       class="db-action-grid"
@@ -2709,6 +2980,25 @@
   <p id="appVersionFooter" class="status-copy app-version-footer">
     Volt Tracker
   </p>
+
+  <!--
+    Live recording progress belongs at the quiet end of Settings, not in the
+    already-dense title row. drive.ts#renderDriveNowChips fills the label/meta
+    and toggles [hidden] only while a real adapter session is active.
+    aria-hidden: the values repaint about once per second, while the stable
+    announced connection state remains in the top-bar pill/status popover.
+  -->
+  <div
+    id="driveRecording"
+    class="settings-recording"
+    data-tone="live"
+    aria-hidden="true"
+    hidden
+  >
+    <span class="settings-recording__dot" aria-hidden="true"></span>
+    <strong id="driveRecordingLabel">Recording</strong>
+    <small id="driveRecordingMeta"></small>
+  </div>
 </section>
 <!--
   Diagnostics tab — its own top-level view (promoted out of the former in-Settings
@@ -2768,10 +3058,27 @@
       id="diagRecoveryAction"
       class="primary primary-action diag-recovery__action"
       data-nav-jump="settings"
+      data-settings-target="settingsConnection"
+      data-settings-focus="connectBtn"
     >
       Open connection settings
     </button>
   </article>
+
+  <nav class="diagnostics-mode-nav" aria-label="Diagnostics detail level">
+    <button
+      type="button"
+      data-diagnostics-mode="basic"
+      class="is-active"
+      aria-pressed="true"
+    >
+      Basic
+    </button>
+    <button type="button" data-diagnostics-mode="advanced" aria-pressed="false">
+      Advanced
+    </button>
+    <small id="diagnosticsModeHint">Recovery, car codes, and data health</small>
+  </nav>
 
   <!-- X3: the car-code (DTC) scanner lives here with the rest of vehicle
        health — it was buried mid-Insights between lifetime stats and charts,
@@ -2926,7 +3233,12 @@
 
   <!-- v2 design: the Demo/Testing card ships expanded (open is set by core.ts at
        boot — a static open attribute trips a jsdom parse bug in the test DOM). -->
-  <details class="sandbox-tools" aria-label="Demo / Testing controls">
+  <details
+    class="sandbox-tools"
+    aria-label="Demo / Testing controls"
+    data-diagnostics-expert
+    hidden
+  >
     <summary aria-label="Toggle the Demo / Testing controls">
       Demo / Testing
     </summary>
@@ -3053,7 +3365,12 @@
 
   <!-- Detailed Signals — enhanced PID discovery (tire pressure, battery
        internals, hidden PIDs). Rendered by signals-panel.js. -->
-  <article id="liveSignalsCard" class="panel list-card">
+  <article
+    id="liveSignalsCard"
+    class="panel list-card"
+    data-diagnostics-expert
+    hidden
+  >
     <header class="signal-console-head">
       <div class="signal-console-title">
         <span class="kicker">Live signals</span>
@@ -3093,7 +3410,12 @@
     <div id="liveSignalsList" class="live-signals-list"></div>
   </article>
 
-  <article id="enhancedCard" class="panel list-card signal-console">
+  <article
+    id="enhancedCard"
+    class="panel list-card signal-console"
+    data-diagnostics-expert
+    hidden
+  >
     <header class="signal-console-head">
       <div class="signal-console-title">
         <span class="kicker">Enhanced discovery</span>
@@ -3223,7 +3545,12 @@
   </article>
 
   <!-- Heavy debug cards collapsed by default so the tab opens compact. -->
-  <details class="diag-advanced" id="sessionReviewDetails">
+  <details
+    class="diag-advanced"
+    id="sessionReviewDetails"
+    data-diagnostics-expert
+    hidden
+  >
     <summary>
       <span class="diag-advanced-label">
         <span class="kicker">Session review &amp; debug logs</span>

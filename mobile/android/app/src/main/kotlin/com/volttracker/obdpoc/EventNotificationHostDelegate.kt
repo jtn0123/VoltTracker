@@ -15,21 +15,27 @@ class EventNotificationHostDelegate(
     private val publishStatus: (String, String, Boolean) -> Unit,
     private val publishAppState: () -> Unit,
     private val notReadyMessage: () -> String,
+    private val hasNotificationPermission: () -> Boolean = { true },
+    private val ensureNotificationPermission: () -> Unit = {},
 ) : EventNotificationCommands {
     override fun getEventNotificationStateJson(): String =
-        prefs()?.stateJson()
-            ?: MainActivityUtils
-                .errorPayload("event_notifications_unavailable", "Notification settings are not ready.")
+        prefs()?.let {
+            org.json
+                .JSONObject(it.stateJson())
+                .put("notificationsGranted", hasNotificationPermission())
                 .toString()
+        } ?: MainActivityUtils
+            .errorPayload("event_notifications_unavailable", "Notification settings are not ready.")
+            .toString()
 
-    override fun setChargeCompleteEnabled(enabled: Boolean) = update { it.setChargeCompleteEnabled(enabled) }
+    override fun setChargeCompleteEnabled(enabled: Boolean) = update(enabled) { it.setChargeCompleteEnabled(enabled) }
 
-    override fun setNewDtcEnabled(enabled: Boolean) = update { it.setNewDtcEnabled(enabled) }
+    override fun setNewDtcEnabled(enabled: Boolean) = update(enabled) { it.setNewDtcEnabled(enabled) }
 
     override fun setLowSocEnabled(
         enabled: Boolean,
         thresholdPct: Double,
-    ) = update {
+    ) = update(enabled) {
         it.setLowSocEnabled(enabled)
         it.setLowSocThresholdPct(thresholdPct)
     }
@@ -37,24 +43,31 @@ class EventNotificationHostDelegate(
     override fun setHighPackTempEnabled(
         enabled: Boolean,
         thresholdC: Double,
-    ) = update {
+    ) = update(enabled) {
         it.setHighPackTempEnabled(enabled)
         it.setHighPackTempThresholdC(thresholdC)
     }
 
-    override fun setChargeTargetSoc(targetPct: Double) = update { it.setTargetSocPct(targetPct) }
+    override fun setChargeTargetSoc(targetPct: Double) = update(false) { it.setTargetSocPct(targetPct) }
 
-    override fun setAutoScanOnConnectEnabled(enabled: Boolean) = update { it.setAutoScanOnConnectEnabled(enabled) }
+    override fun setAutoScanOnConnectEnabled(enabled: Boolean) =
+        update(false) { it.setAutoScanOnConnectEnabled(enabled) }
 
-    override fun setMaintenanceDueEnabled(enabled: Boolean) = update { it.setMaintenanceDueEnabled(enabled) }
+    override fun setMaintenanceDueEnabled(enabled: Boolean) = update(enabled) { it.setMaintenanceDueEnabled(enabled) }
 
-    private inline fun update(mutate: (EventNotificationPrefs) -> Unit) {
+    private inline fun update(
+        requestsNotification: Boolean,
+        mutate: (EventNotificationPrefs) -> Unit,
+    ) {
         val current = prefs()
         if (current == null) {
             publishStatus("blocked", notReadyMessage(), true)
             return
         }
         mutate(current)
+        if (requestsNotification && !hasNotificationPermission()) {
+            ensureNotificationPermission()
+        }
         publishAppState()
     }
 }

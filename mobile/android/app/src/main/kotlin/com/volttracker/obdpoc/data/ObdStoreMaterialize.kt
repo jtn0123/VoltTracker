@@ -30,11 +30,16 @@ class ObdStoreMaterialize(
                 "captured_at_ms ASC",
             ).use { cursor ->
                 while (cursor.moveToNext()) {
+                    val latitude = cursor.getDouble(cursor.getColumnIndexOrThrow("latitude"))
+                    val longitude = cursor.getDouble(cursor.getColumnIndexOrThrow("longitude"))
+                    if (!ObdStoreSupport.validLatLng(latitude, longitude)) {
+                        continue
+                    }
                     rows.add(
                         LocationSample(
                             cursor.getLong(cursor.getColumnIndexOrThrow("captured_at_ms")),
-                            cursor.getDouble(cursor.getColumnIndexOrThrow("latitude")),
-                            cursor.getDouble(cursor.getColumnIndexOrThrow("longitude")),
+                            latitude,
+                            longitude,
                             nullableDouble(cursor, "speed_mps"),
                             nullableFloat(cursor, "accuracy_m"),
                         ),
@@ -216,7 +221,7 @@ class ObdStoreMaterialize(
         column: String,
     ): Double? {
         val index = cursor.getColumnIndexOrThrow(column)
-        return if (cursor.isNull(index)) null else cursor.getDouble(index)
+        return if (cursor.isNull(index)) null else cursor.getDouble(index).takeIf { it.isFinite() }
     }
 
     private fun nullableInt(
@@ -232,6 +237,6 @@ class ObdStoreMaterialize(
         column: String,
     ): Float? {
         val index = cursor.getColumnIndexOrThrow(column)
-        return if (cursor.isNull(index)) null else cursor.getFloat(index)
+        return if (cursor.isNull(index)) null else cursor.getFloat(index).takeIf { it.isFinite() }
     }
 }

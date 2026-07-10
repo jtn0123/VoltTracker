@@ -113,12 +113,18 @@ class MaintenanceDueEvaluator {
     ): Trip? {
         val intervalKm = entry.intervalKm ?: return null
         val loggedOdo = entry.odometerKm ?: return null
-        if (intervalKm <= 0.0 || loggedOdo <= 0.0 || odometerKm == null) {
+        if (!intervalKm.isFinite() ||
+            !loggedOdo.isFinite() ||
+            intervalKm <= 0.0 ||
+            loggedOdo <= 0.0 ||
+            odometerKm == null ||
+            !odometerKm.isFinite()
+        ) {
             return null
         }
         val dueAtKm = loggedOdo + intervalKm
         val remainingKm = dueAtKm - odometerKm
-        if (remainingKm > 0.0) {
+        if (!remainingKm.isFinite() || remainingKm > 0.0) {
             return null
         }
         return Trip(Interval.KM, abs(remainingKm))

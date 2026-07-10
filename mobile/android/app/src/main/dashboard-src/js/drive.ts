@@ -193,16 +193,17 @@ type ChartPoint = {
     const host = el("driveNowChips");
     const rec = el("driveRecording");
     // During a demo the topbar carries the Demo / Testing line + purple pill, so
-    // neither the strip nor the recording line repeats it.
+    // neither the strip nor the Settings recording footer repeats it.
     if (state.demoActive) {
       if (host) host.replaceChildren();
       if (rec) rec.hidden = true;
       return;
     }
     // A live session (Recording / Connecting / Waiting) consolidates into the
-    // slim #driveRecording line beneath the top-right connection pill — not a
-    // full-width strip above the hero. Idle / "ready · remembered" is already the
-    // top-bar pill + last-connected line's job, so nothing shows then.
+    // slim #driveRecording line at the bottom of Settings — not the crowded
+    // topbar or a full-width strip above the Drive hero. Idle / "ready ·
+    // remembered" is already the top-bar pill + last-connected line's job, so
+    // nothing shows then.
     const live = deriveLiveChip();
     const showLive = Boolean(live && live.tone !== "idle" && live.tone !== "ok");
     if (rec) {
@@ -295,12 +296,12 @@ type ChartPoint = {
     apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
     apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
 
-    // The topbar carries the live state on EVERY tab: the "demo" pill +
-    // Demo / Testing line during a preview, or the adapter/"connected" pill +
-    // the #driveRecording line while connected. A full-width source banner under
-    // the header then just repeats it — so hide both badges for demo AND live and
-    // let the header be the single source of truth. Offline/empty (not connected)
-    // keep the banner as their per-tab provenance marker.
+    // The topbar carries the stable live state on every tab: the "demo" pill +
+    // Demo / Testing line during a preview, or the adapter/"connected" pill while
+    // connected. Settings adds the fast-changing #driveRecording progress at its
+    // bottom. A full-width source banner still repeats that connection truth, so
+    // hide both badges for demo AND live. Offline/empty (not connected) keep the
+    // banner as their per-tab provenance marker.
     const headerCarriesState = src.kind === "demo" || src.kind === "live";
     const driveBadge = el("driveSourceBadge");
     if (driveBadge) driveBadge.hidden = headerCarriesState;

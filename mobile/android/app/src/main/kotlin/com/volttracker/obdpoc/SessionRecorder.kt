@@ -16,6 +16,7 @@ class SessionRecorder {
     private val summaryStore: SessionSummaryStore?
     private val snapshotSource: SystemSnapshotSource?
     private val worker: ObdPersistenceWorker
+    private val completionListener: SessionCompletionListener?
 
     // Read off-lock from the persist* hot path (persistStatus is reachable on the MAIN thread via
     // ObdService's ACTION_CANCEL_RETRY broadcast) while written under `lock` on the poll thread.
@@ -49,7 +50,7 @@ class SessionRecorder {
         lock: Any,
         sessionLog: ObdSessionLog,
         localStore: ObdLocalStore?,
-    ) : this(lock, sessionLog, localStore, null, null)
+    ) : this(lock, sessionLog, localStore, null, null, null)
 
     constructor(
         lock: Any,
@@ -57,18 +58,35 @@ class SessionRecorder {
         localStore: ObdLocalStore?,
         summaryStore: SessionSummaryStore?,
         snapshotSource: SystemSnapshotSource?,
+    ) : this(lock, sessionLog, localStore, summaryStore, snapshotSource, null)
+
+    constructor(
+        lock: Any,
+        sessionLog: ObdSessionLog,
+        localStore: ObdLocalStore?,
+        summaryStore: SessionSummaryStore?,
+        snapshotSource: SystemSnapshotSource?,
+        completionListener: SessionCompletionListener?,
     ) {
         this.lock = lock
         this.sessionLog = sessionLog
         this.localStore = localStore
         this.summaryStore = summaryStore
         this.snapshotSource = snapshotSource
+        this.completionListener = completionListener
         worker = ObdPersistenceWorker(localStore)
     }
 
     /** Snapshot supplier so [ObdService] can hand the Android context in. */
     fun interface SystemSnapshotSource {
         fun collect(): JSONObject?
+    }
+
+    fun interface SessionCompletionListener {
+        fun onMaterialized(
+            store: ObdLocalStore,
+            sessionId: Long,
+        )
     }
 
     fun activeSessionId(): Long = activeSessionId
@@ -244,6 +262,7 @@ class SessionRecorder {
         }
         try {
             store.materializeSession(sessionId, startedAtMs, closedAtMs)
+            completionListener?.onMaterialized(store, sessionId)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "session materialization failed", ex)
             try {

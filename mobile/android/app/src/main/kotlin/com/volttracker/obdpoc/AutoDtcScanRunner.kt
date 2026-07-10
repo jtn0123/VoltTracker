@@ -43,11 +43,14 @@ class AutoDtcScanRunner(
             } catch (_: RuntimeException) {
                 return ScanResult(completed = false, codes = emptyList())
             }
+        if (!ObdProtocol.hasPositiveDiagnosticResponse("03", response)) {
+            return ScanResult(completed = false, codes = emptyList())
+        }
         val codes =
             try {
                 extractCodes(response)
             } catch (_: RuntimeException) {
-                emptyList()
+                return ScanResult(completed = false, codes = emptyList())
             }
         return ScanResult(completed = true, codes = codes)
     }

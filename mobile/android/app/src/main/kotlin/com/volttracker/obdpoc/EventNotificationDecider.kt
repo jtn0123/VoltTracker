@@ -137,6 +137,7 @@ class EventNotificationDecider(
     private var prevChargeKw: Double? = null
     private var prevChargeMs: Long? = null
     private var lastChargeVoltage: Double? = null
+    private var lastChargingAtMs = 0L
 
     // Last SOC seen while charging, so the charging->idle transition can tell a finished charge
     // (at/near target -> ChargeComplete) from an interrupted one (well below target -> M3).
@@ -207,12 +208,23 @@ class EventNotificationDecider(
         val isCharging = isChargingSample(sample)
         if (isCharging) {
             charging = true
+            lastChargingAtMs = maxOf(lastChargingAtMs, sample.capturedAtMs)
             chargeSamples += 1
             accumulateChargeEnergy(sample)
             evaluateTargetReached(sample)?.let { events.add(it) }
             return
         }
         if (!charging) {
+            return
+        }
+        // Missing current at a stationary sample is UNKNOWN, not a charge-end transition. Even a
+        // definite non-charging reading must be separated from the last positive charging evidence
+        // long enough to outlive an ordinary PID dropout; the persisted materializer uses the same
+        // one-minute break confidence window.
+        val hasChargeEndEvidence =
+            sample.packCurrentA?.takeIf { it.isFinite() }?.let { it >= -CHARGING_PACK_CURRENT_A_THRESHOLD } == true ||
+                sample.speedKph?.takeIf { it.isFinite() }?.let { it > STATIONARY_SPEED_KPH } == true
+        if (!hasChargeEndEvidence || sample.capturedAtMs - lastChargingAtMs < CHARGE_END_DEBOUNCE_MS) {
             return
         }
         // Transition charging -> not-charging: a charge just ended.
@@ -249,7 +261,7 @@ class EventNotificationDecider(
      */
     private fun evaluateTargetReached(sample: Sample): Event? {
         val soc = sample.socPct
-        if (soc == null || soc.isNaN()) {
+        if (soc == null || !soc.isFinite()) {
             return null
         }
         lastChargingSocPct = soc
@@ -310,6 +322,7 @@ class EventNotificationDecider(
         prevChargeKw = null
         prevChargeMs = null
         lastChargeVoltage = null
+        lastChargingAtMs = 0L
         lastChargingSocPct = null
         maxChargingSocPct = null
         targetSocArmed = true
@@ -320,7 +333,7 @@ class EventNotificationDecider(
             return null
         }
         val soc = sample.socPct ?: return null
-        if (soc.isNaN()) {
+        if (!soc.isFinite()) {
             return null
         }
         val threshold = settings.lowSocThresholdPct
@@ -343,7 +356,7 @@ class EventNotificationDecider(
             return null
         }
         val temp = sample.packTempC ?: return null
-        if (temp.isNaN()) {
+        if (!temp.isFinite()) {
             return null
         }
         val threshold = settings.highPackTempThresholdC
@@ -369,6 +382,9 @@ class EventNotificationDecider(
 
         /** Minimum charging samples before a charge-complete notification is trusted. */
         const val MIN_CHARGE_SAMPLES = 3
+
+        /** Minimum separation from the last charging sample before an end alert is trusted. */
+        const val CHARGE_END_DEBOUNCE_MS: Long = 60_000L
 
         /** SOC must recover this far above the threshold before the low-SOC alert re-arms. */
         const val SOC_HYSTERESIS_PCT = 3.0
@@ -409,11 +425,11 @@ class EventNotificationDecider(
          */
         private fun isChargingSample(sample: Sample): Boolean {
             val speed = sample.speedKph
-            if (speed != null && speed > STATIONARY_SPEED_KPH) {
+            if (speed != null && (!speed.isFinite() || speed > STATIONARY_SPEED_KPH)) {
                 return false
             }
             val packCurrent = sample.packCurrentA ?: return false
-            return packCurrent <= -CHARGING_PACK_CURRENT_A_THRESHOLD
+            return packCurrent.isFinite() && packCurrent <= -CHARGING_PACK_CURRENT_A_THRESHOLD
         }
 
         private fun normalizeCodes(codes: Collection<String>): List<String> {

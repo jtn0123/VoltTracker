@@ -30,6 +30,13 @@ object ObdElmDecode {
         return cleaned.none { it in '0'..'9' || it in 'A'..'F' }
     }
 
+    /** True for adapter/transport status text that contains no usable ECU payload. */
+    @JvmStatic
+    fun isElmErrorResponse(response: String?): Boolean {
+        val cleaned = (response ?: "").uppercase(Locale.US)
+        return ELM_ERROR_MARKERS.any(cleaned::contains)
+    }
+
     @JvmStatic
     fun appendRaw(
         raw: String,
@@ -54,6 +61,18 @@ object ObdElmDecode {
 
     private fun isVinCommand(command: String?): Boolean =
         command != null && command.trim().uppercase(Locale.US) == "0902"
+
+    private val ELM_ERROR_MARKERS =
+        arrayOf(
+            "CAN ERROR",
+            "BUS ERROR",
+            "DATA ERROR",
+            "BUFFER FULL",
+            "STOPPED",
+            "UNABLE TO CONNECT",
+            "FB ERROR",
+            "LV RESET",
+        )
 
     @JvmStatic
     fun pidForCommand(command: String?): String {

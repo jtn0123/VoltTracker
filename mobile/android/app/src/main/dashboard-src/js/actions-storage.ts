@@ -120,7 +120,7 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
         return;
       }
       try {
-        withBusy(button, () => bridge.shareBackup());
+        withBusy(button, () => bridge.shareBackup(dashboardPreferencesForBackup()));
       } catch (err) {
         const detail = "Could not start backup share.";
         VD.setStatus({ state: "blocked", detail });
@@ -146,13 +146,24 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
         return;
       }
       try {
-        withBusy(button, () => bridge.shareEncryptedBackup(passphrase));
+        withBusy(button, () => bridge.shareEncryptedBackup(passphrase, dashboardPreferencesForBackup()));
       } catch (err) {
         const detail = "Could not start encrypted backup share.";
         VD.setStatus({ state: "blocked", detail });
         logBridgeFailure(bridge, "share_encrypted_backup_failed", detail, err);
       }
     });
+  }
+
+  // Backup existed before preference manifests did. Keep the secondary action
+  // chunk compatible with older/minimal dashboard hosts (including recovery
+  // shells) by exporting an empty, versioned manifest when prefs has not been
+  // registered instead of aborting the database backup entirely.
+  function dashboardPreferencesForBackup(): string {
+    const prefs = VD.prefs as VoltDashboard["prefs"] | undefined;
+    return prefs && typeof prefs.exportForBackup === "function"
+      ? prefs.exportForBackup()
+      : '{"schemaVersion":1,"preferences":{}}';
   }
 
   function restoreBackup(button?: BusyButton | null) {

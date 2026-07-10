@@ -479,7 +479,7 @@ describe('actions.ts — bridge dispatch', () => {
     expect(appDialog().hidden).toBe(false);
     enterAppDialogInput('secret-pass');
     await clickAppDialogConfirm();
-    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass');
+    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass', expect.any(String));
   });
 
   it('previewDtcCodes() lazy-loads dictionaries before staging examples', async () => {

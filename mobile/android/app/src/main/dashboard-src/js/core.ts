@@ -142,6 +142,8 @@ import { validatePayload } from "./payload-validators";
   let insightsModulePromise: Promise<VoltDashboard> | null = null;
   let mapModulePromise: Promise<VoltDashboard> | null = null;
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
+  let signalsModulePromise: Promise<VoltDashboard> | null = null;
+  let connectionToolsModulePromise: Promise<VoltDashboard> | null = null;
 
   // Error-banner dedupe: an error storm (e.g. a reconnect loop, or a render
   // error repeating once per telemetry tick) calls reportClientError with the
@@ -730,6 +732,7 @@ import { validatePayload } from "./payload-validators";
     if (mapModuleLoaded()) return Promise.resolve(VD);
     if (!mapModulePromise) {
       mapModulePromise = ensureLeafletRuntime()
+        .then(() => loadDashboardScript("js/scrubber.js"))
         .then(() => loadDashboardScript("js/map.js"))
         .then(() => {
           if (!mapModuleLoaded() || typeof VD.renderMap !== "function") {
@@ -769,6 +772,29 @@ import { validatePayload } from "./payload-validators";
     return insightsModulePromise;
   }
 
+  function signalsModuleLoaded() {
+    return typeof VD.updateEnhancedCapabilityUi === "function" && typeof VD.setEnhancedBadge === "function";
+  }
+
+  function ensureSignalsModule() {
+    if (signalsModuleLoaded()) return Promise.resolve(VD);
+    if (!signalsModulePromise) {
+      signalsModulePromise = loadDashboardScript("js/signals-panel.js")
+        .then(() => {
+          if (!signalsModuleLoaded()) {
+            throw new Error("Signals script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          signalsModulePromise = null;
+          reportClientError("signals.load", err && err.message);
+          throw err;
+        });
+    }
+    return signalsModulePromise;
+  }
+
   /**
    * Harness seam: settles once every in-flight lazy-chunk load (DTC data, map,
    * troubleshooter) has run its success/failure handlers — including the async
@@ -780,6 +806,8 @@ import { validatePayload } from "./payload-validators";
     const pending: Array<Promise<unknown>> = [];
     if (dtcDataPromise) pending.push(dtcDataPromise.catch(() => undefined));
     if (insightsModulePromise) pending.push(insightsModulePromise.catch(() => undefined));
+    if (signalsModulePromise) pending.push(signalsModulePromise.catch(() => undefined));
+    if (connectionToolsModulePromise) pending.push(connectionToolsModulePromise.catch(() => undefined));
     if (leafletRuntimePromise) pending.push(leafletRuntimePromise.catch(() => undefined));
     if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
     if (troubleshooterModulePromise) {
@@ -866,9 +894,16 @@ import { validatePayload } from "./payload-validators";
     demoSessions: null,
     appState: {},
     demoActive: false,
-    mapLayer: "eff",
+    mapLayer: ["routes", "heat", "stops", "eff"].includes(VD.prefs.get<string>("mapLayer", "eff"))
+      ? VD.prefs.get<string>("mapLayer", "eff")
+      : "eff",
     mapRemoteTilesEnabled: true,
     mapFull: false,
+    // The chip strip is the compact default. "All drives" opens the searchable
+    // recorded-drive browser explicitly; keeping that intent in state prevents a
+    // storage refresh from hiding the destination again while it is in use.
+    mapBrowserOpen: false,
+    tripReceiptMode: false,
     // Live-signals panel filter: "reporting" (default — only PIDs the car is
     // answering), "all", or "missing" (only PIDs it isn't answering) — see
     // telemetry.ts#renderLiveSignals.
@@ -1050,6 +1085,28 @@ import { validatePayload } from "./payload-validators";
     return Math.max(root.scrollHeight, bodyHeight) > window.innerHeight + 2;
   }
 
+  // Keep the page's bottom clearance tied to the nav that is actually on
+  // screen. The Map scrubber compacts that nav, and font/device differences can
+  // shift its rendered height, so a fixed CSS estimate is needlessly fragile.
+  // The wide layout uses a side rail and intentionally keeps the CSS fallback.
+  function syncBottomNavHeight() {
+    const nav = document.querySelector<HTMLElement>(".bottom-nav");
+    const root = document.documentElement;
+    if (!nav || window.innerWidth >= 900) {
+      root.style.removeProperty("--nav-h");
+      return;
+    }
+    const height = Math.ceil(nav.getBoundingClientRect().height);
+    if (height > 0) root.style.setProperty("--nav-h", `${height}px`);
+  }
+
+  const bottomNav = document.querySelector<HTMLElement>(".bottom-nav");
+  syncBottomNavHeight();
+  window.addEventListener("resize", syncBottomNavHeight, { passive: true });
+  if (bottomNav && typeof ResizeObserver === "function") {
+    new ResizeObserver(syncBottomNavHeight).observe(bottomNav);
+  }
+
   function startupMark(name: string) {
     const bridge = VD.bridge;
     if (bridge && typeof bridge.startupMark === "function") {
@@ -1079,6 +1136,40 @@ import { validatePayload } from "./payload-validators";
     return cachedNavNodes || (cachedNavNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
   }
 
+  function hydrateConnectionTools(): boolean {
+    const mount = el("connectionToolsMount");
+    const template = el("connectionToolsTemplate") as HTMLTemplateElement | null;
+    if (!mount || !template) return false;
+    if (!el("connectionToolsPanel")) mount.appendChild(template.content.cloneNode(true));
+    if (typeof VD.bindConnectionTools === "function") {
+      VD.bindConnectionTools();
+    } else {
+      void ensureConnectionToolsModule().catch(() => {});
+    }
+    return true;
+  }
+
+  function ensureConnectionToolsModule(): Promise<VoltDashboard> {
+    if (typeof VD.bindConnectionTools === "function") return Promise.resolve(VD);
+    if (!connectionToolsModulePromise) {
+      connectionToolsModulePromise = loadDashboardScript("js/connection-tools.js")
+        .then(() => {
+          if (typeof VD.bindConnectionTools !== "function") {
+            throw new Error("Connection tools loaded without registering their binder.");
+          }
+          VD.bindConnectionTools();
+          return VD;
+        })
+        .catch((err) => {
+          connectionToolsModulePromise = null;
+          reportClientError("connectionTools.load", err && err.message);
+          VD.showToast?.("Connection tools failed to load", true);
+          throw err;
+        });
+    }
+    return connectionToolsModulePromise;
+  }
+
   // "5738 rows" overflowed the Settings state chip into "5738 r…" — compact
   // thousands ("5.7k rows") keep the figure readable at chip width. Zero rows
   // reads as the chip's old idle label.
@@ -1092,6 +1183,28 @@ import { validatePayload } from "./payload-validators";
     return `${label} ${n === 1 ? "row" : "rows"}`;
   }
 
+  function setBackupReceipt(payload: unknown): void {
+    const parsed = parsePayload(payload, {}) as Record<string, unknown>;
+    const atMs = Number(parsed.lastBackupAtMs || 0);
+    const trips = Math.max(0, Number(parsed.lastBackupTrips || 0));
+    const node = el("lastBackupReceipt");
+    if (!node) return;
+    if (!(atMs > 0)) {
+      node.textContent = "No successful backup recorded on this phone yet.";
+      node.dataset.state = "empty";
+      return;
+    }
+    const date = new Date(atMs).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit"
+    });
+    node.textContent = `Backup prepared ${date} · ${trips} drive${trips === 1 ? "" : "s"}`;
+    node.dataset.state = "saved";
+  }
+
   // Tab order for directional transitions and swipe navigation — matches the
   // bottom-nav left→right order, not the DOM order of the view sections
   // (Settings' section sits before Diagnostics' in the markup).
@@ -1102,6 +1215,7 @@ import { validatePayload } from "./payload-validators";
     // would deactivate every section and leave a blank screen with no way
     // back — fall back to Drive instead of rendering nothing.
     if (!viewNodes().some((node) => node.dataset.view === view)) view = "drive";
+    if (view === "settings") hydrateConnectionTools();
     startupMark("tab:" + view + ":start");
     // Slide the incoming view from the side it lives on (nav order), so tab
     // changes read as lateral movement. First paint keeps the plain rise.
@@ -1113,6 +1227,13 @@ import { validatePayload } from "./payload-validators";
       delete document.body.dataset.vtDir;
     }
     state.view = view;
+    if (VD.bridge && typeof VD.bridge.setActiveDashboardView === "function") {
+      try {
+        VD.bridge.setActiveDashboardView(view);
+      } catch (_err) {
+        /* an older native host simply does not receive view-aware window policy */
+      }
+    }
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
@@ -1150,6 +1271,32 @@ import { validatePayload } from "./payload-validators";
     scrollAppToTop();
     startupMark("tab:" + view + ":end");
     afterNextPaint(() => startupMark("tab:" + view + ":paint"));
+  }
+
+  function openTripFromNative(routeKey: string, receipt = false) {
+    const clean = String(routeKey || "").trim();
+    if (!clean) return;
+    state.selectedMapSessionId = clean;
+    state.tripReceiptMode = receipt;
+    setView("map");
+    void ensureMapModule()
+      .then(() => {
+        if (typeof VD.loadTrips === "function") VD.loadTrips();
+        if (VD.bridge && typeof VD.bridge.requestTripRoute === "function") {
+          try {
+            VD.bridge.requestTripRoute(clean);
+          } catch (_err) {
+            /* the trips payload may already contain enough route data */
+          }
+        }
+        return VD.requestMapRender();
+      })
+      .then(() => {
+        window.setTimeout(() => {
+          if (typeof VD.openTripDetail === "function") VD.openTripDetail(clean);
+        }, 120);
+      })
+      .catch(() => VD.showToast?.("The saved drive could not be opened", true));
   }
 
   // ── Swipe between tabs ──────────────────────────────────────────────────
@@ -1374,6 +1521,9 @@ import { validatePayload } from "./payload-validators";
       opt.value = "";
       opt.textContent = "No paired adapters found";
       select.append(opt);
+      if (typeof VD.refreshConnectionToolsAvailability === "function") {
+        VD.refreshConnectionToolsAvailability();
+      }
       return;
     }
     devices.forEach((device: HistoryDevice) => {
@@ -1390,6 +1540,9 @@ import { validatePayload } from "./payload-validators";
     } else {
       const likely = devices.find((device: HistoryDevice) => device.obdCandidate);
       if (likely) select.value = String(likely.address || "");
+    }
+    if (typeof VD.refreshConnectionToolsAvailability === "function") {
+      VD.refreshConnectionToolsAvailability();
     }
   }
 
@@ -1462,7 +1615,9 @@ import { validatePayload } from "./payload-validators";
     scrollAppBy,
     canScrollApp,
     setView,
+    openTripFromNative,
     formatRowCount,
+    setBackupReceipt,
     handleAndroidBack,
     updateViewHeading,
     setDemoActive,
@@ -1472,6 +1627,9 @@ import { validatePayload } from "./payload-validators";
     ensureDtcData,
     dtcDataLoaded,
     ensureInsightsModule,
+    ensureSignalsModule,
+    hydrateConnectionTools,
+    ensureConnectionToolsModule,
     ensureMapModule,
     pendingLazyLoads,
     requestMapRender,
@@ -1482,5 +1640,6 @@ import { validatePayload } from "./payload-validators";
     setHistory,
     realViewMeta
   });
+  if (typeof VD.applyDiagnosticsMode === "function") VD.applyDiagnosticsMode();
 
 export {};

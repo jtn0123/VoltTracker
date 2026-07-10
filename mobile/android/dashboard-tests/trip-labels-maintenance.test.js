@@ -384,6 +384,22 @@ describe('M5 — maintenance log', () => {
     expect(payload.type).toBe('Coolant flush');
   });
 
+  it.each(['-2', '1.5'])(
+    'Add entry rejects an invalid month interval (%s) instead of silently dropping or rounding it',
+    async (intervalMonths) => {
+      const addMaintenanceEntry = vi.fn();
+      await loadWithMaintenance(() => '[]', { addMaintenanceEntry });
+      window.VoltDashboard.setStorage({});
+
+      fillMaintenanceForm({ type: 'Coolant flush', intervalMonths });
+
+      expect(addMaintenanceEntry).not.toHaveBeenCalled();
+      expect(document.getElementById('maintenanceForm').hidden).toBe(false);
+      expect(document.getElementById('maintIntervalMonthsInput').getAttribute('aria-invalid')).toBe('true');
+      expect(document.getElementById('maintIntervalMonthsHint').textContent).toContain('whole number');
+    },
+  );
+
   it('Add entry aborts without a bridge call when type and note are blank', async () => {
     const addMaintenanceEntry = vi.fn();
     await loadWithMaintenance(() => '[]', { addMaintenanceEntry });

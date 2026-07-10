@@ -42,14 +42,13 @@ class EventNotificationDeciderTest {
     @Test
     fun chargeCompleteFiresOnceWithIntegratedEnergyWhenChargingEnds() {
         val decider = EventNotificationDecider(settings())
-        // Steady ~7.1 kW (-20 A into a 355 V pack) for one hour, three samples.
-        assertTrue(decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0)).isEmpty())
-        assertTrue(
-            decider.onSample(sample(1_800_000L, packCurrentA = -20.0, packVoltage = 355.0)).isEmpty(),
-        )
-        assertTrue(
-            decider.onSample(sample(3_600_000L, packCurrentA = -20.0, packVoltage = 355.0)).isEmpty(),
-        )
+        // Steady ~7.1 kW (-20 A into a 355 V pack) for one hour at a realistic one-minute
+        // persistence cadence. Sparse multi-minute outages are deliberately not extrapolated.
+        for (minute in 0..60) {
+            assertTrue(
+                decider.onSample(sample(minute * 60_000L, packCurrentA = -20.0, packVoltage = 355.0)).isEmpty(),
+            )
+        }
 
         // Charge ends: car starts moving / discharges.
         val events = decider.onSample(sample(3_660_000L, packCurrentA = 5.0, speedKph = 30.0))
@@ -81,6 +80,20 @@ class EventNotificationDeciderTest {
         val events = decider.onSample(sample(60_000L, packCurrentA = 1.0, speedKph = 10.0))
 
         assertTrue("a one-sample blip is not a real charge", events.isEmpty())
+    }
+
+    @Test
+    fun briefMissingCurrentSampleDoesNotEndAnEstablishedCharge() {
+        val decider = EventNotificationDecider(settings())
+        decider.onSample(sample(0L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 50.0))
+        decider.onSample(sample(1_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 50.1))
+        decider.onSample(sample(2_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 50.2))
+
+        val missing = decider.onSample(sample(3_000L, packCurrentA = null, packVoltage = null, socPct = 50.2))
+        val resumed = decider.onSample(sample(4_000L, packCurrentA = -20.0, packVoltage = 355.0, socPct = 50.3))
+
+        assertTrue("an unknown sample is not proof that charging ended", missing.isEmpty())
+        assertTrue("resuming immediately must continue the same charge", resumed.isEmpty())
     }
 
     @Test
@@ -316,6 +329,29 @@ class EventNotificationDeciderTest {
     fun lowSocSuppressedWhenToggleOff() {
         val decider = EventNotificationDecider(settings(lowSoc = false, lowSocThreshold = 20.0))
         assertTrue(decider.onSample(sample(0L, socPct = 5.0)).isEmpty())
+    }
+
+    @Test
+    fun nonFiniteTelemetryCannotTriggerThresholdOrChargingEvents() {
+        val decider =
+            EventNotificationDecider(
+                settings(lowSoc = true, highTemp = true, targetSoc = 80.0),
+            )
+
+        repeat(EventNotificationDecider.MIN_CHARGE_SAMPLES + 1) { index ->
+            val events =
+                decider.onSample(
+                    sample(
+                        index.toLong(),
+                        packCurrentA = Double.NEGATIVE_INFINITY,
+                        packVoltage = Double.POSITIVE_INFINITY,
+                        speedKph = Double.NEGATIVE_INFINITY,
+                        socPct = Double.NEGATIVE_INFINITY,
+                        packTempC = Double.POSITIVE_INFINITY,
+                    ),
+                )
+            assertTrue("non-finite telemetry must be ignored", events.isEmpty())
+        }
     }
 
     // ---- high pack temp threshold ------------------------------------------------------

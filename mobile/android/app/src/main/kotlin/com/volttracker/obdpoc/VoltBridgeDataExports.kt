@@ -14,14 +14,19 @@ internal class VoltBridgeDataExports(
             stateProvider.getStorageSummaryJson(),
         )
 
-    fun shareBackup() {
-        activity.runOnUiThread(stateProvider.requireBackupController()::launchShare)
+    fun shareBackup(dashboardPreferencesJson: String? = null) {
+        val preferences = dashboardPreferencesJson?.take(MAX_BACKUP_PREFERENCES_CHARS)
+        activity.runOnUiThread { stateProvider.requireBackupController().launchShare(preferences) }
     }
 
-    fun shareEncryptedBackup(passphrase: String?) {
+    fun shareEncryptedBackup(
+        passphrase: String?,
+        dashboardPreferencesJson: String? = null,
+    ) {
         val cleanPassphrase = bridgeSafe(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
+        val preferences = dashboardPreferencesJson?.take(MAX_BACKUP_PREFERENCES_CHARS)
         activity.runOnUiThread {
-            stateProvider.requireBackupController().launchEncryptedShare(cleanPassphrase)
+            stateProvider.requireBackupController().launchEncryptedShare(cleanPassphrase, preferences)
         }
     }
 
@@ -184,6 +189,23 @@ internal class VoltBridgeDataExports(
             null
         }
 
+    /** Reads a positive whole-number Int without optInt's silent fractional truncation. */
+    private fun optPositiveWholeInt(
+        parsed: JSONObject,
+        key: String,
+    ): Int? {
+        if (!parsed.has(key) || parsed.isNull(key)) return null
+        val numeric =
+            when (val raw = parsed.opt(key)) {
+                is Number -> raw.toDouble()
+                is String -> raw.toDoubleOrNull()
+                else -> null
+            } ?: return null
+        return numeric
+            .takeIf { it.isFinite() && it > 0.0 && it <= Int.MAX_VALUE.toDouble() && it % 1.0 == 0.0 }
+            ?.toInt()
+    }
+
     private fun errorPayload(
         error: String,
         message: String,
@@ -203,6 +225,33 @@ internal class VoltBridgeDataExports(
             "Mark not trip",
         ) {
             markTripNotTripConfirmed(cleanRouteKey)
+        }
+    }
+
+    fun restoreTrip(routeKey: String?) {
+        val cleanRouteKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
+        if (cleanRouteKey.isEmpty()) {
+            activity.runOnUiThread {
+                activity.publishActionConfirmation("blocked", "Choose a hidden trip to restore.", true)
+            }
+            return
+        }
+        activity.runOnBackground {
+            val changed =
+                try {
+                    activity.localStore?.setTripHidden(cleanRouteKey, false) == true
+                } catch (ex: RuntimeException) {
+                    Log.w(AppPrefs.LOG_TAG, "restoreTrip failed", ex)
+                    false
+                }
+            activity.runOnUiThread {
+                activity.publishStorageSummary()
+                activity.publishActionConfirmation(
+                    if (changed) "ready" else "blocked",
+                    if (changed) "Drive restored." else "That drive could not be restored.",
+                    !changed,
+                )
+            }
         }
     }
 
@@ -315,12 +364,7 @@ internal class VoltBridgeDataExports(
         val odometerKm = optPositiveFiniteDouble(parsed, "odometerKm")
         // Interval > 0 only (a non-positive interval can never come "due"); non-finite is rejected.
         val intervalKm = optPositiveFiniteDouble(parsed, "intervalKm")?.takeIf { it > 0.0 }
-        val intervalMonths =
-            if (parsed.has("intervalMonths") && !parsed.isNull("intervalMonths")) {
-                parsed.optInt("intervalMonths", 0).takeIf { it > 0 }
-            } else {
-                null
-            }
+        val intervalMonths = optPositiveWholeInt(parsed, "intervalMonths")
         val createdAtMs = parsed.optLong("date", 0L).takeIf { it > 0L } ?: System.currentTimeMillis()
         activity.runOnBackground {
             val id =
@@ -394,13 +438,19 @@ internal class VoltBridgeDataExports(
         activity.runOnBackground {
             val changed =
                 try {
-                    activity.localStore?.markTripNotTrip(routeKey) == true
+                    activity.localStore?.setTripHidden(routeKey, true) == true
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "markTripNotTrip failed", ex)
                     false
                 }
             activity.runOnUiThread {
                 activity.publishStorageSummary()
+                if (changed) {
+                    activity.publishDashboardPayload(
+                        "showTripUndo",
+                        JSONObject().put("routeKey", routeKey).toString(),
+                    )
+                }
                 activity.publishActionConfirmation(
                     if (changed) "ready" else "blocked",
                     if (changed) {
@@ -417,5 +467,6 @@ internal class VoltBridgeDataExports(
     private companion object {
         /** Cap on maintenance rows returned to the dashboard in one read. */
         const val MAX_MAINTENANCE_ROWS = 200
+        const val MAX_BACKUP_PREFERENCES_CHARS = 64 * 1024
     }
 }

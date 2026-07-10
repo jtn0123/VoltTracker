@@ -51,7 +51,7 @@
       <button
         type="button"
         class="primary primary-action"
-        data-nav-jump="settings"
+        data-action="smartConnect"
       >
         Connect adapter
       </button>
@@ -59,6 +59,13 @@
         Try demo
       </button>
     </div>
+    <details class="empty-preview drive-empty-preview">
+      <summary>What will appear here?</summary>
+      <p>
+        Live speed, electric and engine power, battery state, trip efficiency,
+        and data-health checks appear automatically with the first fresh sample.
+      </p>
+    </details>
   </article>
 
   <section class="hero">
@@ -83,6 +90,7 @@
         role="meter"
         aria-label="Vehicle speed"
         aria-live="polite"
+        data-live-telemetry
         aria-atomic="true"
         aria-valuemin="0"
         aria-valuemax="120"
@@ -108,7 +116,12 @@
         <div class="scrub-cursor live-trace-cursor"></div>
       </div>
 
-      <div class="power-block" aria-live="polite" aria-atomic="true">
+      <div
+        class="power-block"
+        aria-live="polite"
+        aria-atomic="true"
+        data-live-telemetry
+      >
         <div class="power-head">
           <div class="power-label">
             <span class="kicker">Power</span>
@@ -147,7 +160,12 @@
          The pack values surface the raw 300+ V traction-pack readings polled
          from mode-22 PIDs 222429 / 222414 (instead of just the powerKw aggregate). -->
     <article class="panel battery-strip">
-      <div class="battery-head" aria-live="polite" aria-atomic="true">
+      <div
+        class="battery-head"
+        aria-live="polite"
+        aria-atomic="true"
+        data-live-telemetry
+      >
         <div>
           <div class="kicker">HV Battery</div>
           <div class="battery-soc">
@@ -359,6 +377,8 @@
         class="link-btn trip-cost-value"
         id="tripCostValue"
         data-nav-jump="settings"
+        data-settings-target="settingsDisplay"
+        data-settings-focus="pricePerKwhInput"
         data-state="unset"
       >
         set rate for cost

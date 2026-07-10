@@ -54,10 +54,24 @@ test('settings exposes connection actions without expanding a disclosure', async
   await expect(page.locator('#disconnectBtn')).toHaveCount(0);
 });
 
+test('Drive Focus and Settings section shortcuts remain independently clickable', async ({ page }) => {
+  await openDashboard(page);
+  await setView(page, 'settings');
+
+  await page.locator('button[data-drive-preset="focus"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-drive-preset', 'focus');
+  await page.locator('button[data-drive-preset="detailed"]').click();
+  await expect(page.locator('html')).toHaveAttribute('data-drive-preset', 'detailed');
+
+  await page.locator('button[data-settings-target="settingsData"]').click();
+  await expect(page.locator('#settingsData')).toBeFocused();
+});
+
 test('Start/Stop demo toggles demo state and calls the bridge', async ({ page }) => {
   await openDashboard(page);
   // The demo sandbox lives in Diagnostics — make it active so the controls are clickable.
   await setView(page, 'diagnostics');
+  await page.locator('[data-diagnostics-mode="advanced"]').click();
   await page.evaluate(() => {
     window.__demoCalls = 0;
     window.VoltTrackerAndroid.demo = () => {

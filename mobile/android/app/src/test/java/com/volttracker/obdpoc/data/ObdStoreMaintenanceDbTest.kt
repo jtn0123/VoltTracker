@@ -123,9 +123,17 @@ class ObdStoreMaintenanceDbTest {
         val walFile = context.getDatabasePath("checkpoint.db-wal")
         assertTrue("setup: writes should have produced WAL frames", walFile.length() > 0L)
 
-        maintenance.checkpoint()
+        assertTrue(maintenance.checkpoint())
 
         assertEquals("checkpoint(TRUNCATE) must empty the WAL", 0L, walFile.length())
+    }
+
+    @Test
+    fun checkpointStatusRequiresEveryWalFrameInMainFile() {
+        assertFalse(ObdStoreMaintenance.checkpointCoversWal(1, 0))
+        assertFalse(ObdStoreMaintenance.checkpointCoversWal(20, 19))
+        assertTrue(ObdStoreMaintenance.checkpointCoversWal(0, 0))
+        assertTrue(ObdStoreMaintenance.checkpointCoversWal(20, 20))
     }
 
     // ---- pruneRawDataOlderThan ---------------------------------------------------------
@@ -150,9 +158,9 @@ class ObdStoreMaintenanceDbTest {
     }
 
     @Test
-    fun pruneInvalidatesTripCachesOnlyForAffectedSessions() {
-        // Rollup/trip-cache invalidation is scoped to the sessions whose raw rows were pruned;
-        // an untouched session keeps its cached rollup instead of being flushed globally.
+    fun prunePreservesFinalizedTripHistoryAfterRawRowsAgeOut() {
+        // Compact history is the durable record once raw rows cross retention. Both the affected
+        // old drive and an untouched recent drive must keep their finalized rollups.
         val (maintenance, helper) = maintenanceFor("prune-scoped.db")
         val db = helper.writableDatabase
         val oldSession = insertSession(db)
@@ -165,8 +173,46 @@ class ObdStoreMaintenanceDbTest {
 
         assertEquals(5, maintenance.pruneRawDataOlderThan(30))
 
-        assertEquals(0L, countRollupsFor(db, oldSession))
+        assertEquals(1L, countRollupsFor(db, oldSession))
         assertEquals(1L, countRollupsFor(db, recentSession))
+    }
+
+    @Test
+    fun pruneInvalidatesOnlyAnAffectedActiveSession() {
+        val (maintenance, helper) = maintenanceFor("prune-active.db")
+        val db = helper.writableDatabase
+        val activeSession = insertActiveSession(db)
+        val oldMs = System.currentTimeMillis() - 100L * 86_400_000L
+        insertBulkTelemetry(db, activeSession, 2, oldMs)
+        insertRollup(db, activeSession)
+
+        assertEquals(2, maintenance.pruneRawDataOlderThan(30))
+        assertEquals(0L, countRollupsFor(db, activeSession))
+    }
+
+    @Test
+    fun pruneKeepsUserTripMetadataWhileRemovingOldRuntimeEvents() {
+        val (maintenance, helper) = maintenanceFor("prune-event-metadata.db")
+        val db = helper.writableDatabase
+        val sessionId = insertSession(db)
+        val oldMs = System.currentTimeMillis() - 100L * 86_400_000L
+        for (kind in listOf("trip_label", "trip_favorite", "trip_hidden", "adapter_status")) {
+            val values = ContentValues()
+            values.put("session_id", sessionId)
+            values.put("occurred_at_ms", oldMs)
+            values.put("kind", kind)
+            values.put("payload", "{}")
+            db.insertOrThrow(VoltTrackerDb.TABLE_EVENTS, null, values)
+        }
+
+        assertEquals("only the runtime event is raw retention data", 1, maintenance.pruneRawDataOlderThan(30))
+        db
+            .rawQuery("SELECT kind FROM ${VoltTrackerDb.TABLE_EVENTS} ORDER BY kind", null)
+            .use { cursor ->
+                val kinds = ArrayList<String>()
+                while (cursor.moveToNext()) kinds.add(cursor.getString(0))
+                assertEquals(listOf("trip_favorite", "trip_hidden", "trip_label"), kinds)
+            }
     }
 
     // ---- vacuumIfNeeded ------------------------------------------------------------
@@ -354,7 +400,17 @@ class ObdStoreMaintenanceDbTest {
         val values = ContentValues()
         values.put("mode", "obd")
         values.put("started_at_ms", 1L)
+        values.put("ended_at_ms", 2L)
         values.put("status", "complete")
+        values.put("created_at_ms", 1L)
+        return db.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, values)
+    }
+
+    private fun insertActiveSession(db: SQLiteDatabase): Long {
+        val values = ContentValues()
+        values.put("mode", "obd")
+        values.put("started_at_ms", 1L)
+        values.put("status", "connected")
         values.put("created_at_ms", 1L)
         return db.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, values)
     }

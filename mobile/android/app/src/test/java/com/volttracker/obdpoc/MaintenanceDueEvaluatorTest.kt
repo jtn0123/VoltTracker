@@ -117,6 +117,21 @@ class MaintenanceDueEvaluatorTest {
     }
 
     @Test
+    fun nonFiniteOdometerValuesCannotCreateAnInfiniteOverdueAlert() {
+        val entries = listOf(entry(odometerKm = 10_000.0, intervalKm = 12_000.0))
+
+        val due =
+            evaluator.evaluate(
+                entries,
+                odometerKm = Double.POSITIVE_INFINITY,
+                nowMs = now,
+                alreadyNotified = emptySet(),
+            )
+
+        assertTrue("corrupt odometer values must not produce an infinite notification", due.isEmpty())
+    }
+
+    @Test
     fun whenBothIntervalsOverdueTheLargerMagnitudeTripWins() {
         // Overdue by 5,000 km and by ~2 months: the km trip (larger magnitude) names the signature,
         // matching the dashboard's worst-first ordering.

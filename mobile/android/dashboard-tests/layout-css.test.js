@@ -71,10 +71,25 @@ describe('dashboard layout css', () => {
     const buttonRule = baseCss.match(/(?:^|\n)\s*button\s*\{[^}]+\}/)?.[0] || '';
 
     expect(baseCss).toMatch(/--touch-min:\s*44px/);
-    expect(baseCss).toMatch(/--touch-min-dense:\s*40px/);
+    expect(baseCss).toMatch(/--touch-min-dense:\s*44px/);
     expect(baseCss).toMatch(/--nav-h:\s*68px/);
     expect(baseCss).toMatch(/--nav-safe:\s*calc\(/);
     expect(buttonRule).toMatch(/min-height\s*:\s*var\(--touch-min\)/);
+  });
+
+  it('yields compact navigation while the map scrubber is being operated', () => {
+    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    expect(screensCss).toMatch(/body\.map-scrubber-interacting \.bottom-nav[\s\S]*?opacity:\s*0/);
+    expect(screensCss).toMatch(/body\.map-scrubber-playing \.bottom-nav[\s\S]*?pointer-events:\s*none/);
+    expect(screensCss).toMatch(/transform:\s*translate\(-50%,\s*calc\(100% \+ 24px\)\)/);
+  });
+
+  it('gives wide Insights an intentional hero, lifetime, chart, and vehicle layout', () => {
+    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    expect(screensCss).toMatch(/grid-template-areas:\s*"hero hero"\s*"lifetime charts"\s*"vehicle charts"/);
+    expect(screensCss).toMatch(/#view-insights > \.insights-hero\s*\{\s*grid-area:\s*hero/);
+    expect(screensCss).toMatch(/#view-insights > \.insights-sheet\s*\{\s*grid-area:\s*lifetime/);
+    expect(screensCss).toMatch(/#view-insights > \.map-layout\s*\{\s*grid-area:\s*charts/);
   });
 
   it('keeps tab content from overflowing the viewport horizontally', () => {

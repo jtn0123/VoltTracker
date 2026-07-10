@@ -350,7 +350,7 @@ class ObdStoreReportsDbTest {
         store.recordTelemetry(id, sample(60, 52.0, 34.07, -118.25, 3_000L))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4_000L, "")
 
-        val exported = store.getAllTripsForExportJson(10, 2)
+        val exported = store.projections().allTripsForExport(10, 2)
         assertEquals(1, exported.length())
         val trip = exported.getJSONObject(0)
         assertTrue("export payload should always carry the label key", trip.has("label"))
@@ -359,8 +359,8 @@ class ObdStoreReportsDbTest {
         assertTrue("export should include at least one route point", points.length() > 0)
         assertTrue("export route must honor the point limit", points.length() <= 2)
 
-        assertTrue(store.markTripNotTrip(trip.optString("tripId")))
-        assertEquals(0, store.getAllTripsForExportJson(10, 2).length())
+        assertTrue(store.setTripHidden(trip.optString("tripId"), true))
+        assertEquals(0, store.projections().allTripsForExport(10, 2).length())
     }
 
     @Test
@@ -700,8 +700,8 @@ class ObdStoreReportsDbTest {
     @Test
     fun chargeSummaryCachesFinalizedSessionsAndReturnsIdenticalOutputOnSecondRead() {
         // Two finalized drive sessions with a big SOC gain between them — the same inferred-charge
-        // scenario the projection detects. The first read must populate the per-session charge
-        // rollup cache for the (finalized) sessions; the second read must serve the cache and yield
+        // scenario the projection detects. Finalization now persists each durable contribution so
+        // opening Insights never pays an all-history rebuild; reads must serve that cache and yield
         // byte-for-byte identical JSON.
         val first = store.startSession("obd", "00:11", "Adapter")
         store.recordTelemetry(first, sample(40, 15.0, 34.05, -118.25, 1_000L))
@@ -713,7 +713,8 @@ class ObdStoreReportsDbTest {
         store.recordTelemetry(second, sample(38, 94.0, 34.07, -118.25, 8 * 3_600_000L + 2_000L))
         store.finishSession(second, ObdLocalStore.STATUS_COMPLETE, 8 * 3_600_000L + 3_000L, "")
 
-        assertEquals("cache must be empty before the first read", 0L, countChargeRollups())
+        val rollupsAtFinalization = countChargeRollups()
+        assertTrue("finalized sessions must already be cached", rollupsAtFinalization >= 2L)
 
         val firstRead = store.projections().chargeSummary().toString()
         val rollupsAfterFirstRead = countChargeRollups()
@@ -721,6 +722,7 @@ class ObdStoreReportsDbTest {
             "finalized sessions must be cached after the first read, saw $rollupsAfterFirstRead",
             rollupsAfterFirstRead >= 2L,
         )
+        assertEquals(rollupsAtFinalization, rollupsAfterFirstRead)
 
         val secondRead = store.projections().chargeSummary().toString()
         assertEquals("cached read must be byte-for-byte identical", firstRead, secondRead)

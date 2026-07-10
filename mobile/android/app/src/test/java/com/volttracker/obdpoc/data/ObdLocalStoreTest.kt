@@ -41,6 +41,30 @@ class ObdLocalStoreTest {
         assertEquals(0.0, ObdStoreSupport.distanceMeters(points(point(40.7, -74.0))), 0.001)
     }
 
+    @Test
+    fun invalidCoordinatesAreExcludedFromRouteDistanceAndBounds() {
+        val points =
+            JSONArray(
+                """
+                [
+                    {"lat":10.0,"lng":10.0},
+                    {"lat":91.0,"lng":10.0},
+                    {"lat":10.0,"lng":11.0},
+                    {"lat":1e9999,"lng":12.0}
+                ]
+                """.trimIndent(),
+            )
+
+        // An invalid point breaks continuity, so the valid points on either side must not be
+        // joined into an invented route leg. Invalid values must also stay out of JSON bounds.
+        assertEquals(0.0, ObdStoreSupport.distanceMeters(points), 0.001)
+        val bounds = ObdStoreSupport.boundsFor(points)
+        assertEquals(10.0, bounds.getDouble("minLat"), 0.0)
+        assertEquals(10.0, bounds.getDouble("maxLat"), 0.0)
+        assertEquals(10.0, bounds.getDouble("minLng"), 0.0)
+        assertEquals(11.0, bounds.getDouble("maxLng"), 0.0)
+    }
+
     @Throws(JSONException::class)
     private fun point(
         lat: Double,
