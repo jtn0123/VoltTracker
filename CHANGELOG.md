@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.31.2 (2026-07-10)
+
+### 🔺 Fix
+
+- **android**: Harden lifecycle and bridge reliability
+  ([#306](https://github.com/jtn0123/VoltTracker/pull/306),
+  [`71b5b78`](https://github.com/jtn0123/VoltTracker/commit/71b5b7813706d5616f952f43374563ff06845d45))
+
+
 ## v0.31.1 (2026-07-09)
 
 ### 🔺 Fix
