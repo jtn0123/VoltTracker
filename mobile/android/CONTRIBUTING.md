@@ -43,7 +43,7 @@ npm --prefix dashboard-tests run lint
 Windows users: substitute `.\gradlew.bat` for `./gradlew` and use PowerShell.
 
 Run `./gradlew doctor` or `./scripts/doctor.sh` when a local shell does not
-match CI. Dashboard tooling requires Node 22; use the repo-root `.nvmrc` or
+match CI. Dashboard tooling requires Node 24; use the repo-root `.nvmrc` or
 `.node-version`.
 
 ## Build JDK

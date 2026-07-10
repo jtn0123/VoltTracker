@@ -25,7 +25,7 @@ def dashboardE2eBrowsersDir = file("$buildDir/playwright-browsers")
 def dashboardAssetDir = file("app/src/main/assets/dashboard")
 // Repo root (this Gradle project lives at mobile/android/, so up two levels).
 def repoRootDir = rootProject.projectDir.parentFile.parentFile
-def requiredNodeMajor = 22
+def requiredNodeMajor = 24
 def unsupportedNodeOverrideEnv = "VOLTTRACKER_ALLOW_UNSUPPORTED_NODE"
 def productionJavaStragglers = fileTree("app/src/main/java") {
     include "**/*.java"
@@ -251,7 +251,7 @@ ${files ? files.collect { "- `${project.relativePath(it)}`" }.join("\n") : "- No
 }
 
 tasks.register("verifyDashboardNodeVersion") {
-    description = "Fails early when dashboard tooling is not running on Node 22.x."
+    description = "Fails early when dashboard tooling is not running on Node 24.x."
     doLast {
         def override = ["1", "true", "yes"].contains((System.getenv(unsupportedNodeOverrideEnv) ?: "").toLowerCase())
         def version = commandOutput(["node", "-p", "process.versions.node"])

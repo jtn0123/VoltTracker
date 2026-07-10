@@ -9,7 +9,7 @@ workspace, dashboard e2e workspace, and GitHub Actions workflows.
 ## Runtime Pins
 
 - JDK: Gradle runs the Android build on a JDK 21 toolchain.
-- Node: dashboard tooling requires Node 22. Use the repo-root `.nvmrc` or
+- Node: dashboard tooling requires Node 24. Use the repo-root `.nvmrc` or
   `.node-version`.
 - Android SDK: compile SDK 37 with the wrapper in `mobile/android/gradlew`.
 
@@ -20,7 +20,7 @@ Check a local shell with:
 ./scripts/doctor.sh
 ```
 
-`dashboardNpmCi` and `dashboardE2eNpmCi` fail early when Node is not 22.x. The
+`dashboardNpmCi` and `dashboardE2eNpmCi` fail early when Node is not 24.x. The
 temporary override is `VOLTTRACKER_ALLOW_UNSUPPORTED_NODE=1`.
 
 ## App Dependency Scope

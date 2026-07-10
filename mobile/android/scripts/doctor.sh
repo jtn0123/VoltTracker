@@ -90,13 +90,18 @@ section "Node and Dashboard Tooling"
 if need_cmd node; then
   node_version="$(node --version 2>&1 | head -n 1)"
   printf '%s\n' "$node_version"
-  expected_node_major="22"
-  if [ -f "$REPO_ROOT/.nvmrc" ]; then
-    expected_node_major="$(sed -E 's/^v?([0-9]+).*/\1/' "$REPO_ROOT/.nvmrc")"
-  fi
+  expected_node_major=""
+  for node_pin in "$REPO_ROOT/.nvmrc" "$REPO_ROOT/.node-version"; do
+    if [ -f "$node_pin" ]; then
+      expected_node_major="$(sed -E 's/^v?([0-9]+).*/\1/' "$node_pin")"
+      break
+    fi
+  done
   node_major="$(printf '%s\n' "$node_version" | sed -E 's/^v?([0-9]+).*/\1/')"
-  if [ "$node_major" != "$expected_node_major" ]; then
-    missing "Node ${expected_node_major}.x is required by .nvmrc and dashboard package engines"
+  if [ -z "$expected_node_major" ]; then
+    missing "repository Node version pin is missing (.nvmrc or .node-version)"
+  elif [ "$node_major" != "$expected_node_major" ]; then
+    missing "Node ${expected_node_major}.x is required by the repository version pin and dashboard package engines"
     if command -v nvm >/dev/null 2>&1; then
       warn "run from repo root: nvm use"
     elif command -v mise >/dev/null 2>&1; then

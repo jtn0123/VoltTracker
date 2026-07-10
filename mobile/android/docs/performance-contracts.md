@@ -26,7 +26,7 @@ npm --prefix dashboard-tests test -- startup-budget.test.js
 `verifyPerformance` runs the dashboard asset report, bundle-size gate,
 dashboard Vitest suite, and Android JVM/Robolectric tests. Use
 `VOLTTRACKER_ALLOW_UNSUPPORTED_NODE=1` only as a temporary local escape hatch
-when a machine is not yet on Node 22.
+when a machine is not yet on Node 24.
 
 `verifyStartupPerformance` runs the opt-in Macrobenchmark suite on a connected
 API 29+ device or emulator. It is intentionally separate from `check` and

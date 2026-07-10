@@ -152,7 +152,7 @@ Use the pinned toolchain before running the full verification task:
 
 - JDK 21. CI uses Temurin 21.
 - Android SDK with platform 37 and build tools installed.
-- Node 22. The root `.nvmrc` and `.node-version` both pin this.
+- Node 24. The root `.nvmrc` and `.node-version` both pin this.
 - npm dependencies for the dashboard test/build and Playwright workspaces.
 
 From `mobile/android/`:
@@ -263,7 +263,7 @@ dashboard drift, and migration straggler guards. See
 [`docs/validation-matrix.md`](docs/validation-matrix.md) for what this proves
 and which real-device/real-car checks still need separate evidence.
 
-Dashboard tooling is validated on Node 22 in CI and enforced by Gradle's
+Dashboard tooling is validated on Node 24 in CI and enforced by Gradle's
 dashboard npm tasks. Use the root `.nvmrc` or `.node-version` when setting up a
 local shell.
 

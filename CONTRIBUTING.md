@@ -20,7 +20,7 @@ cd VoltTracker/mobile/android
 ```
 
 Requires JDK 21 (CI uses Temurin 21; the bytecode target is Java 17), Android
-SDK 36, and Node 22 for the dashboard toolchain (the wrapper handles Gradle).
+SDK 36, and Node 24 for the dashboard toolchain (the wrapper handles Gradle).
 On Windows, replace `./gradlew` with `.\gradlew.bat`.
 
 ## The five gates we run in CI

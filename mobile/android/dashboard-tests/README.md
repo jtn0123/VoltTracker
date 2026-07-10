@@ -22,7 +22,7 @@ npm test
 npm run test:coverage
 ```
 
-Requires Node 22.x. `npm ci` needs network access. CI runs lint and the
+Requires Node 24.x. `npm ci` needs network access. CI runs lint and the
 coverage-gated suite in `.github/workflows/android.yml`.
 
 ## Layout
