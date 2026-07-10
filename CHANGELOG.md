@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.32.0 (2026-07-10)
+
+### 🔷 Changed
+
+- **tooling**: Upgrade dashboard to Node 24 LTS
+  ([#307](https://github.com/jtn0123/VoltTracker/pull/307),
+  [`90eed74`](https://github.com/jtn0123/VoltTracker/commit/90eed74723c1f6b5eb9687461c4f2bf8b24a5bf2))
+
+### ✳️ New
+
+- **android**: Polish daily workflows and harden data reliability
+  ([#308](https://github.com/jtn0123/VoltTracker/pull/308),
+  [`107ef56`](https://github.com/jtn0123/VoltTracker/commit/107ef5652a9c43acb51174f037f329ac7e9f70ea))
+
+
 ## v0.31.2 (2026-07-10)
 
 ### 🔺 Fix
