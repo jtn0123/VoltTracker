@@ -313,6 +313,9 @@ describe('scrubber.ts', () => {
     const path = svg.querySelector('path');
     expect(path).not.toBeNull();
     expect(path.namespaceURI).toBe(SVG_NS);
+    // C4: the strip is decorative texture inside the #scrubChart slider (which
+    // carries aria-label/valuenow), so the raw SVG stays hidden from AT.
+    expect(svg.getAttribute('aria-hidden')).toBe('true');
   });
 
   it('renders elevation across altM gaps without collapsing the reading to a bogus value', () => {

@@ -280,13 +280,25 @@ import { prefs, units } from "./prefs";
     VD.setText("tempEffHead", `Range peaks near ${units.tempText(peakTempC)} — about ${peakRangeText}`);
     const chart = el("tempEffChart");
     if (chart) {
-      chart.replaceChildren(buildTempRangeSvg(pts, peakTempC));
+      // C4: the aria-label carries the same peak the visual headline states, so
+      // a re-render after new drives re-summarizes the chart for AT users too.
+      chart.replaceChildren(
+        buildTempRangeSvg(
+          pts,
+          peakTempC,
+          `Estimated EV range for each drive against outside temperature; range peaks near ${units.tempText(peakTempC)} at about ${peakRangeText}`
+        )
+      );
     }
   }
 
   // The scatter SVG: temp on x (data-driven domain), estimated range on y,
   // one dot per drive, dots in the peak temperature bucket highlighted.
-  function buildTempRangeSvg(pts: Array<{ tempC: number; rangeMi: number }>, peakTempC: number) {
+  function buildTempRangeSvg(
+    pts: Array<{ tempC: number; rangeMi: number }>,
+    peakTempC: number,
+    ariaLabel: string
+  ) {
     const token = (name: string, fallback: string) => {
       const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
       return v || fallback;
@@ -313,7 +325,7 @@ import { prefs, units } from "./prefs";
     setSvgAttrs(svg, {
       viewBox: `0 0 ${w} ${h}`,
       role: "img",
-      "aria-label": "Estimated EV range for each drive against outside temperature"
+      "aria-label": ariaLabel
     });
     svg.style.width = "100%";
     svg.style.display = "block";
@@ -455,6 +467,9 @@ import { prefs, units } from "./prefs";
       }
       return metric ? day.miles * KM_PER_MILE : day.miles;
     });
+    // The dynamic headline doubles as the chart's aria-label detail (C4), so
+    // AT users hear the same summary the visual head shows on every re-render.
+    let headline: string;
     if (mode === "eff") {
       let bestIdx = -1;
       let bestEff = 0;
@@ -464,22 +479,18 @@ import { prefs, units } from "./prefs";
           bestIdx = i;
         }
       });
-      VD.setText(
-        "thisWeekHead",
+      headline =
         bestIdx >= 0
           ? `Best day ${units.efficiencyText(bestEff)} — ${WEEK_DAY_NAMES[bestIdx]}`
-          : "No HV energy logged this week yet."
-      );
+          : "No HV energy logged this week yet.";
     } else {
       const totalMiles = days.reduce((acc, day) => acc + day.miles, 0);
-      VD.setText(
-        "thisWeekHead",
-        `${totalTrips} drive${totalTrips === 1 ? "" : "s"} · ${VD.formatDistance(totalMiles * 1609.344)} this week`
-      );
+      headline = `${totalTrips} drive${totalTrips === 1 ? "" : "s"} · ${VD.formatDistance(totalMiles * 1609.344)} this week`;
     }
+    VD.setText("thisWeekHead", headline);
     const chart = el("thisWeekChart");
     if (chart) {
-      const aria = mode === "eff" ? "Efficiency per day this week" : "Distance per day this week";
+      const aria = `${mode === "eff" ? "Efficiency" : "Distance"} per day this week; ${headline.replace(/ · /g, ", ")}`;
       // v2 design week chart: green bars, today highlighted (others dimmed),
       // per-day value labels, and dashed placeholders for no-drive days.
       const todayIdx = (today.getDay() + 6) % 7;
