@@ -33,7 +33,10 @@
     <!-- .ring is a vertical battery gauge; data-state="waiting" shows an empty
          cell until the first SOC reading, then storage-status.ts drives --v +
          data-level (charge band) to fill and colour it. -->
-    <div id="realPackRing" class="ring" style="--v: 0" data-state="waiting">
+    <!-- No inline style="--v: 0": the CSP style-src has no 'unsafe-inline';
+         .ring::after already falls back via var(--v, 0) until the first
+         storage-status.ts setProperty("--v", ...) call. -->
+    <div id="realPackRing" class="ring" data-state="waiting">
       <strong id="realPackValue">--</strong>
     </div>
     <div>
@@ -303,7 +306,7 @@
         <span>Maintenance</span
         ><strong id="vehicleMaintenance">none logged</strong>
       </div>
-      <div class="vehicle-extra" style="grid-column: 1 / -1">
+      <div class="vehicle-extra vehicle-extra-wide">
         <span>VIN</span><strong id="vehicleVin">--</strong>
       </div>
     </div>

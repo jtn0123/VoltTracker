@@ -9,12 +9,16 @@
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
   map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
-  unreachable (see map.js error handler). Inline styles are required because the
-  bundled Leaflet CSS sets style attrs on injected tiles. No remote scripts ever.
+  unreachable (see map.js error handler). No remote scripts ever, and no
+  'unsafe-inline' anywhere: style-src is 'self' because nothing sets inline
+  styles CSP cares about — Leaflet positions tiles/markers via CSSOM
+  (el.style.prop, which style-src does not restrict), our own code uses
+  classList/setProperty, and the partials carry no style="" attributes
+  (legend swatches and the drive-event divIcon are data-attr + CSS rules).
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <!-- Display face (base.css @font-face). Preloaded so the first paint of the

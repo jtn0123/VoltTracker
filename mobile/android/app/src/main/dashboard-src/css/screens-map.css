@@ -276,6 +276,44 @@
     border-radius: 2px;
   }
 
+  /* Legend swatch colors. Kept as data-swatch attrs + CSS (not inline style="")
+     so style-src stays strict — the CSP has no 'unsafe-inline'. The --map-paint-*
+     tokens (base.css) mirror the exact literals map.ts paints on the canvas
+     layers, and stay scheme-invariant so the legend always matches the paint. */
+  .map-legend i[data-swatch="heat-slow"] {
+    background: var(--map-paint-heat-slow);
+  }
+  .map-legend i[data-swatch="heat-mid"] {
+    background: var(--map-paint-heat-mid);
+  }
+  .map-legend i[data-swatch="heat-fast"] {
+    background: var(--map-paint-heat-fast);
+  }
+  .map-legend i[data-swatch="eff-great"] {
+    background: var(--map-paint-eff-great);
+  }
+  .map-legend i[data-swatch="eff-avg"] {
+    background: var(--map-paint-eff-avg);
+  }
+  .map-legend i[data-swatch="eff-poor"] {
+    background: var(--map-paint-eff-poor);
+  }
+  .map-legend i[data-swatch="eff-none"] {
+    background: var(--map-paint-eff-none);
+  }
+  .map-legend i[data-swatch="route-drive"] {
+    background: var(--map-paint-route-drive);
+  }
+  .map-legend i[data-swatch="route-live"] {
+    background: var(--map-paint-route-live);
+  }
+  .map-legend i[data-swatch="stop-dwell"] {
+    background: var(--map-paint-stop);
+  }
+  .map-legend i[data-swatch="stop-moving"] {
+    background: var(--map-paint-stop-moving);
+  }
+
   /* v2: quiet affordance hint at the end of the legend, and the legend yields
      entirely while a tapped-detail card is open (same bottom-left corner). */
   .map-legend .map-legend-hint {
@@ -436,6 +474,15 @@
     /* Same value as dark --shadow; tokenized so the marker shadow follows
        the scheme like every other shadow. */
     box-shadow: 0 1px 4px var(--shadow);
+  }
+
+  /* Event-type border colors (map.ts buildDriveEventMarkers sets data-evt on
+     the divIcon html). CSS instead of inline style="" keeps style-src strict. */
+  .map-evt-diamond[data-evt="brake"] {
+    border-color: var(--map-paint-eff-poor);
+  }
+  .map-evt-diamond[data-evt="accel"] {
+    border-color: var(--map-paint-eff-avg);
   }
 
   .map-empty {
