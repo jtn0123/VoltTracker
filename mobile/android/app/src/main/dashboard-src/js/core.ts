@@ -150,7 +150,9 @@ import { VD } from "./vd-registry";
   export const errorController = new AbortController();
   VD.errorController = errorController;
 
-  const bridge = VD.bridge;
+  // Captured once at eval (identical to the old per-module `VD.bridge` snapshot):
+  // null outside the WebView. Exported for in-bundle ESM consumers (C7).
+  export const bridge = VD.bridge;
 
   // Typed querySelectorAll over elements (every dashboard selector targets HTMLElements), so
   // callers get .dataset/.hidden without a per-site cast.
@@ -232,7 +234,7 @@ import { VD } from "./vd-registry";
   // methods console.warn + report once through logClientError and return
   // undefined so callers degrade gracefully.
   const warnedMissingBridgeMethods = new Set<string>();
-  function callBridge<K extends keyof VoltBridge>(
+  export function callBridge<K extends keyof VoltBridge>(
     name: K,
     ...args: Parameters<VoltBridge[K]>
   ): ReturnType<VoltBridge[K]> | undefined {
