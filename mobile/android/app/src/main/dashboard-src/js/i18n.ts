@@ -39,11 +39,18 @@ export const EN = {
   "drive.trace.waitingForSamples": "speed trace appears once samples stream in",
   "drive.power.waitingForSamples": "Waiting for power samples",
   "drive.soc.waitingForSamples": "Waiting for SOC samples",
+<<<<<<< HEAD
   // map.ts first-open tile-privacy disclosure (E1). The basemap is the app's
   // only routine network egress, so the notice names who receives what.
   "map.privacyNotice.body":
     "Map imagery loads from OpenStreetMap/CARTO servers. They receive the approximate area you view (map-tile coordinates) — never your routes, telemetry, or identity.",
   "map.privacyNotice.gotIt": "Got it",
+=======
+  // core.ts lazy-chunk loader: shown when a lazy panel chunk fails to load.
+  // The nulled ensure*Module promise makes the next tap retry, so tell the
+  // user that instead of leaving the tap a silent no-op.
+  "lazy.chunkLoadFailed": "Couldn't load this panel — tap to try again",
+>>>>>>> origin/main
 } as const;
 
 /** Every translatable key. Derived from `EN` so call sites are compile-checked. */

@@ -133,6 +133,28 @@
        Deliberately static across schemes for now — it renders over the card
        surface, and the light theme keeps the same soft white separation. */
     --route-halo: rgba(255, 255, 255, 0.32);
+    /* Map canvas paint colors. map.ts paints routes, heat/efficiency bands,
+       stop markers, and drive-event diamonds with these exact literals on the
+       Leaflet layers in EVERY scheme, so the legend swatches + event-diamond
+       borders (screens-map.css) must reference the same values. Deliberately
+       scheme-invariant — never override these in the light/AMOLED blocks;
+       change them only together with the literals in map.ts. Tokens (not raw
+       hexes in screens-map.css) because the C5 guard in layout-css.test.js
+       ratchets that file hex-free, and CSS rules (not inline style="") because
+       the dashboard CSP style-src has no 'unsafe-inline'. */
+    --map-paint-heat-slow: #ff6b4a;
+    --map-paint-heat-mid: #ffd23f;
+    --map-paint-heat-fast: #7ee06a;
+    --map-paint-eff-great: #b8e63b;
+    --map-paint-eff-avg: #ffb84a;
+    --map-paint-eff-poor: #ff6b5f;
+    --map-paint-eff-none: #6a6a72;
+    --map-paint-route-drive: #ff7a45;
+    --map-paint-route-live: #4cc4ff;
+    --map-paint-stop: #ff8a3d;
+    /* Stops layer draws the between-stops trail as the #ff7a45 route line at
+       opacity 0.4; --volt-rgb is that same triplet and is static per scheme. */
+    --map-paint-stop-moving: rgba(var(--volt-rgb), 0.4);
     /* Per-tone "soft" text: readable on that tone's alpha-tinted fills */
     --volt-soft: #ffd3bf;
     --volt-soft-dim: #ffad88;

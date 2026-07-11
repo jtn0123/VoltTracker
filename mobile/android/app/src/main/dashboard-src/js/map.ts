@@ -2204,10 +2204,12 @@ import { VD } from "./vd-registry";
 
   function buildDriveEventMarkers(events: MapDriveEvent[]): LeafletLayer[] {
     return events.map((ev) => {
-      const color = ev.type === "brake" ? "#ff6b5f" : "#ffb84a";
+      // Border color comes from CSS ([data-evt] rules in screens-map.css), not an
+      // inline style="" — Leaflet injects this html via innerHTML, and a parsed
+      // style attribute would violate the strict style-src CSP (no 'unsafe-inline').
       const icon = L.divIcon({
         className: "map-evt-icon",
-        html: `<span class="map-evt-diamond" style="border-color: ${color}"></span>`,
+        html: `<span class="map-evt-diamond" data-evt="${ev.type}"></span>`,
         iconSize: [16, 16],
         iconAnchor: [8, 8]
       });

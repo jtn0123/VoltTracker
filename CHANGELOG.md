@@ -1,6 +1,118 @@
 # CHANGELOG
 
 
+## v0.32.1 (2026-07-11)
+
+### 🔺 Fix
+
+- **android**: Extended mid-drive reconnect tier + consolidated service state (B3, B5)
+  ([#315](https://github.com/jtn0123/VoltTracker/pull/315),
+  [`77d1e56`](https://github.com/jtn0123/VoltTracker/commit/77d1e5678d7403d0439ad4d90d2c15f3a7e923db))
+
+- **android**: Portable vehicle identity across reinstall/restore (B8 + ADR-0009)
+  ([#319](https://github.com/jtn0123/VoltTracker/pull/319),
+  [`2b68041`](https://github.com/jtn0123/VoltTracker/commit/2b680410cb6704b204a167807d0f809eeae43c20))
+
+- **android**: Survive WebView renderer death, add dashboard-load watchdog and crash capture (B1,
+  B2, B4) ([#317](https://github.com/jtn0123/VoltTracker/pull/317),
+  [`72efb53`](https://github.com/jtn0123/VoltTracker/commit/72efb5330a9583363f0d8bee744095c938e63bf4))
+
+- **android**: Transaction-safe vehicle store, release log stripping, passphrase whitespace handling
+  (B6, B7, E3) ([#313](https://github.com/jtn0123/VoltTracker/pull/313),
+  [`fd9a3a2`](https://github.com/jtn0123/VoltTracker/commit/fd9a3a294aa1a7217af2644aad14a24968e4de27))
+
+- **dashboard**: Don't arm route-hydration retry after test env teardown
+  ([#333](https://github.com/jtn0123/VoltTracker/pull/333),
+  [`82197e1`](https://github.com/jtn0123/VoltTracker/commit/82197e1e41c6304c693250bb4ca34a97dbf217b0))
+
+- **ui**: Settings licenses section, chart a11y labels, color-token sweep (C3, C4, C5)
+  ([#320](https://github.com/jtn0123/VoltTracker/pull/320),
+  [`f427c12`](https://github.com/jtn0123/VoltTracker/commit/f427c127ec632bf5c40d652e0bc176e3a43a588b))
+
+- **ui**: Themed rename dialog, single speed unit, branded splash, input bounds, touch targets (C1,
+  C2, C6, C8, C9) ([#314](https://github.com/jtn0123/VoltTracker/pull/314),
+  [`08c2b1c`](https://github.com/jtn0123/VoltTracker/commit/08c2b1c1de3ba5919f589881ea57b4cbea8c663a))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/setup-java from 5.4.0 to 5.5.0
+  ([#329](https://github.com/jtn0123/VoltTracker/pull/329),
+  [`430a495`](https://github.com/jtn0123/VoltTracker/commit/430a495f990a68782b9b28a2cba9fd6618cc8177))
+
+- **deps**: Bump reactivecircus/android-emulator-runner
+  ([#325](https://github.com/jtn0123/VoltTracker/pull/325),
+  [`bf465c7`](https://github.com/jtn0123/VoltTracker/commit/bf465c7e412a1c41740a1b0f71b96cbdac16f3d0))
+
+- **deps-dev**: Bump @vitest/coverage-istanbul
+  ([#332](https://github.com/jtn0123/VoltTracker/pull/332),
+  [`428c486`](https://github.com/jtn0123/VoltTracker/commit/428c486a935cf5ba091c567f5bb8ab3d87df7165))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#324](https://github.com/jtn0123/VoltTracker/pull/324),
+  [`a144b54`](https://github.com/jtn0123/VoltTracker/commit/a144b548b1b1dd26c0e14431aa85dfc627943c5b))
+
+- **deps-dev**: Bump typescript-eslint ([#326](https://github.com/jtn0123/VoltTracker/pull/326),
+  [`358eb2b`](https://github.com/jtn0123/VoltTracker/commit/358eb2b7295128a890be0106e090d40c7bf7c19b))
+
+- **deps-dev**: Bump vitest in /mobile/android/dashboard-tests
+  ([#328](https://github.com/jtn0123/VoltTracker/pull/328),
+  [`5b31a61`](https://github.com/jtn0123/VoltTracker/commit/5b31a6122c146319f044dbf7b87a11a6a9871337))
+
+### 🔷 Changed
+
+- Bump github/codeql-action init+analyze together to v4.37.0
+  ([#335](https://github.com/jtn0123/VoltTracker/pull/335),
+  [`b3f6c6c`](https://github.com/jtn0123/VoltTracker/commit/b3f6c6c704e40b22173d1fe19d322ef5b0af33d3))
+
+- Tighten supply-chain gates, dedupe dashboard builds, surface e2e flake (F1-F3, G3, I1-I4, D2, D4)
+  ([#312](https://github.com/jtn0123/VoltTracker/pull/312),
+  [`049fec8`](https://github.com/jtn0123/VoltTracker/commit/049fec8d016d186bc833490fbd6ba1fdb3d27121))
+
+### 🔷 Changed
+
+- Add MIT LICENSE and fix doc/reality drift (H1-H5)
+  ([#310](https://github.com/jtn0123/VoltTracker/pull/310),
+  [`23a51f2`](https://github.com/jtn0123/VoltTracker/commit/23a51f2fa95a3c845ed2c48644738cb1a9027e52))
+
+- **android**: Archive landed one-shot reports and refresh reports index
+  ([#309](https://github.com/jtn0123/VoltTracker/pull/309),
+  [`f704b8b`](https://github.com/jtn0123/VoltTracker/commit/f704b8bee7e32b7efe57923bc0222089363a84fb))
+
+### 🔷 Changed
+
+- Obd latency baseline machinery + startup bundle headroom (G1, G2)
+  ([#322](https://github.com/jtn0123/VoltTracker/pull/322),
+  [`4e40c2d`](https://github.com/jtn0123/VoltTracker/commit/4e40c2dd3a18416982ca2d55fc24d63333631d1f))
+
+### 🔷 Changed
+
+- **android**: Split VoltBridgeDataExports into per-feature bridge units (A3)
+  ([#318](https://github.com/jtn0123/VoltTracker/pull/318),
+  [`b7b7185`](https://github.com/jtn0123/VoltTracker/commit/b7b718504976739fdf9ca7b8e9ee2e930f98f6b3))
+
+- **dashboard**: Migrate cross-module calls from window globals to typed ESM imports (C7)
+  ([#323](https://github.com/jtn0123/VoltTracker/pull/323),
+  [`c6fb1e2`](https://github.com/jtn0123/VoltTracker/commit/c6fb1e24a9f706e05d53142a04efa0d9434c951c))
+
+- **data**: Extract vehicle-identity merge out of DatabaseMerger to restore the LargeClass ratchet
+  ([#334](https://github.com/jtn0123/VoltTracker/pull/334),
+  [`624cfa9`](https://github.com/jtn0123/VoltTracker/commit/624cfa9e746cda3d8df4c2fae1ad02c438432ecc))
+
+- **data**: Narrow the ObdLocalStore facade behind capability interfaces (A2)
+  ([#321](https://github.com/jtn0123/VoltTracker/pull/321),
+  [`ec82232`](https://github.com/jtn0123/VoltTracker/commit/ec822326b1070372209f4ce22c35f5b0b73369b6))
+
+- **obd**: Move Mode-22 decoders into the parser registry, lower complexity ratchets (A1)
+  ([#316](https://github.com/jtn0123/VoltTracker/pull/316),
+  [`7e13e96`](https://github.com/jtn0123/VoltTracker/commit/7e13e9654f875df2bdfc448299457ca47327236d))
+
+### 🔷 Changed
+
+- Branch-coverage ratchets, deterministic tab-switch gate, instrumented handshake smoke (D1, D3, D4)
+  ([#311](https://github.com/jtn0123/VoltTracker/pull/311),
+  [`27f16f0`](https://github.com/jtn0123/VoltTracker/commit/27f16f08ebd5eb7889726861732f071a09a53073))
+
+
 ## v0.32.0 (2026-07-10)
 
 ### 🔷 Changed

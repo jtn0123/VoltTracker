@@ -27,6 +27,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
 import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
+import { t } from "./i18n";
 import { initialTelemetryState } from "./telemetry-state";
 import { validatePayload } from "./payload-validators";
 import { applyDiagnosticsMode, prefs } from "./prefs";
@@ -694,6 +695,23 @@ import { VD } from "./vd-registry";
   let dtcDataPromise: Promise<VoltDashboard> | null = null;
   let leafletRuntimePromise: Promise<void> | null = null;
 
+  // Chunk-load failures used to be invisible: every ensure*Module() call site
+  // keeps a .catch so nothing crashes, and the nulled promise makes the next
+  // tap retry — but the user was never told the first tap failed, so the tap
+  // read as a dead button. Surface one short toast. Debounced with a single
+  // shared timestamp (the copy is identical for every chunk): chained loaders
+  // (ensureInsightsModule → ensureChargeHistoryModule) reject together, and
+  // rapid re-taps must not stack duplicate toasts. Feedback only — the
+  // retryable-promise semantics above are untouched.
+  const CHUNK_TOAST_DEBOUNCE_MS = 4000;
+  let lastChunkToastAtMs = 0;
+  function notifyChunkLoadFailed() {
+    const now = Date.now();
+    if (now - lastChunkToastAtMs < CHUNK_TOAST_DEBOUNCE_MS) return;
+    lastChunkToastAtMs = now;
+    VD.showToast?.(t("lazy.chunkLoadFailed"), true);
+  }
+
   export function dtcDataLoaded() {
     return typeof VD.dtcInfo === "function" && Array.isArray(VD.dtcSampleCodes);
   }
@@ -720,6 +738,7 @@ import { VD } from "./vd-registry";
             console.warn("DTC data chunk failed to load:", err && err.message);
           } catch (ignored) {}
           reportClientError("dtcData.load", err && err.message);
+          notifyChunkLoadFailed();
           if (typeof VD.setStatus === "function") {
             VD.setStatus({ state: "blocked", detail: "Diagnostic code database failed to load." });
           }
@@ -771,6 +790,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           mapModulePromise = null;
           reportClientError("map.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -798,6 +818,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           chargeHistoryModulePromise = null;
           reportClientError("chargeHistory.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -825,6 +846,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           maintenancePanelModulePromise = null;
           reportClientError("maintenancePanel.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -851,6 +873,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           dtcDetailModulePromise = null;
           reportClientError("dtcDetail.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -875,6 +898,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           insightsModulePromise = null;
           reportClientError("insights.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -898,6 +922,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           signalsModulePromise = null;
           reportClientError("signals.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
@@ -971,6 +996,7 @@ import { VD } from "./vd-registry";
         .catch((err) => {
           troubleshooterModulePromise = null;
           reportClientError("troubleshooter.load", err && err.message);
+          notifyChunkLoadFailed();
           throw err;
         });
     }
