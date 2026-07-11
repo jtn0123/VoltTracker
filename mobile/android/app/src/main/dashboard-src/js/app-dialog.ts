@@ -12,8 +12,17 @@ type AppPromptOptions = AppDialogOptions & {
   inputLabel?: string;
   // Autocomplete token for the prompt input. "current-password" (the default) fits
   // the restore flow; the choose-a-new-passphrase (encrypt) flow passes "new-password"
-  // so a password manager offers to save the freshly chosen passphrase.
+  // so a password manager offers to save the freshly chosen passphrase; plain-text
+  // prompts (trip rename) pass "off".
   autocomplete?: string;
+  // Input rendering. The passphrase flows keep the "password" default; plain-text
+  // prompts (trip rename) pass "text" so the typed value stays visible.
+  inputType?: "text" | "password";
+  // Prefill shown (and selected-for-overwrite via focus) when the dialog opens.
+  initialValue?: string;
+  // When true, confirming with a blank field resolves "" instead of being blocked —
+  // the trip-rename flow uses an empty submission to clear the custom name.
+  allowEmpty?: boolean;
 };
 
 type AppDialogNodes = {
@@ -113,11 +122,13 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
   n.cancel.textContent = options.cancelLabel || "Cancel";
   n.inputWrap.hidden = options.mode !== "prompt";
   n.inputLabel.textContent = options.inputLabel || "Passphrase";
-  n.input.value = "";
+  n.input.type = options.inputType || "password";
+  n.input.value = options.initialValue || "";
   // Per-use autocomplete: restore reuses the default "current-password"; the encrypt
   // flow passes "new-password" so the manager offers to save the chosen passphrase.
   n.input.autocomplete = (options.autocomplete || "current-password") as AutoFill;
-  n.confirm.disabled = options.mode === "prompt";
+  const allowEmpty = options.allowEmpty === true;
+  n.confirm.disabled = options.mode === "prompt" && !allowEmpty && !n.input.value.trim();
 
   return new Promise((resolve) => {
     // closeDialog() resolves via dialogSettle, so the promise settles exactly
@@ -127,7 +138,9 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
     const confirmValue = () => {
       if (options.mode === "prompt") {
         const trimmed = n.input.value.trim();
-        if (!trimmed) return;
+        // With allowEmpty a blank confirm resolves "" (distinct from the null
+        // cancel value) so callers can treat it as "clear the stored value".
+        if (!trimmed && !allowEmpty) return;
         settle(trimmed);
         return;
       }
@@ -135,7 +148,7 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
     };
     const cancelValue = () => settle(options.mode === "prompt" ? null : false);
     n.input.addEventListener("input", () => {
-      n.confirm.disabled = !n.input.value.trim();
+      n.confirm.disabled = !allowEmpty && !n.input.value.trim();
     }, { signal });
     n.confirm.addEventListener("click", confirmValue, { signal });
     n.cancel.addEventListener("click", cancelValue, { signal });

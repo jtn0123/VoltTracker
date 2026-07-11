@@ -373,6 +373,54 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
+    fun sessionOutcomeAccumulatesIntoOneConsistentSnapshot() {
+        // B5: the state/detail/failureClass/voltage/competingApps quintet is published as ONE
+        // immutable SessionOutcome record, so closeSessionLog and the status payload read a
+        // consistent snapshot instead of five separately-volatile fields.
+        val controller = newController(null)
+        val service = controller.create().get()
+        // onCreate kicks an async competing-app refresh that always publishes a CSV ("" when none
+        // found). Wait for it so the background write can't overwrite this test's value below.
+        val refreshDeadline = System.currentTimeMillis() + 5_000L
+        while (service.sessionOutcomeForTest().competingAppsCsv == null &&
+            System.currentTimeMillis() < refreshDeadline
+        ) {
+            Thread.sleep(10L)
+        }
+        assertNotNull(
+            "the onCreate competing-app refresh must have completed",
+            service.sessionOutcomeForTest().competingAppsCsv,
+        )
+
+        service.setLastFailureClass(FailureClass.CONNECT_TIMEOUT)
+        service.setLastVoltage(12.6)
+        service.setCompetingApps("Torque Pro")
+        service.broadcastStatus("error", "Adapter timed out.", true)
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val outcome = service.sessionOutcomeForTest()
+        assertEquals("error", outcome.state)
+        assertEquals("Adapter timed out.", outcome.detail)
+        assertEquals(FailureClass.CONNECT_TIMEOUT, outcome.failureClass)
+        assertEquals(12.6, outcome.voltage!!, 0.001)
+        assertEquals("Torque Pro", outcome.competingAppsCsv)
+
+        service.clearLastFailureClass()
+        val cleared = service.sessionOutcomeForTest()
+        assertEquals("clearing the failure class must not disturb the sibling fields", "error", cleared.state)
+        assertEquals("Adapter timed out.", cleared.detail)
+        assertEquals(null, cleared.failureClass)
+        assertEquals(12.6, cleared.voltage!!, 0.001)
+        assertEquals("Torque Pro", cleared.competingAppsCsv)
+
+        // A null setLastFailureClass call is a no-op by contract (the engine passes null when a
+        // failure could not be classified) — it must not clear an earlier classification.
+        service.setLastFailureClass(FailureClass.INSTANT_DROP)
+        service.setLastFailureClass(null)
+        assertEquals(FailureClass.INSTANT_DROP, service.sessionOutcomeForTest().failureClass)
+    }
+
+    @Test
     fun broadcastTelemetryEmitsTelemetryIntentWithTypedFields() {
         val controller = newController(null)
         val service = controller.create().get()

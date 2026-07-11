@@ -558,6 +558,8 @@
 /* Charge KPIs stay two-up on narrow phones: four stacked full-width
      cards for four small numbers doubled the scroll for no legibility win. */
 
+/* C9 touch audit: display-only status pill (#dtcReportBadge) — never tappable,
+   so it stays below --touch-min on purpose. */
 .session-badge {
   display: inline-flex;
   align-items: center;
@@ -1000,7 +1002,8 @@ pre {
      fault escalates it. */
 .nav-badge[data-severity="fault"] {
   background: var(--bad);
-  color: #fff;
+  /* White ink on the saturated bad fill in both themes. */
+  color: var(--on-control);
 }
 
 .nav-badge {
@@ -1396,6 +1399,8 @@ body.map-full-active .bottom-nav {
   gap: 6px;
 }
 
+/* C9 touch audit: read-only info rows (map.ts renderTripDetailStops) with no
+   click handling — 40px is layout rhythm, not a touch target. */
 .trip-detail-stop-row {
   display: flex;
   align-items: center;
@@ -1919,7 +1924,8 @@ body.map-full-active .bottom-nav {
 
 /* Right-edge fade when there are more chips offscreen, so users can tell
      the strip is scrollable. The :has check keeps it off when there's only
-     one chip and nothing to scroll. */
+     one chip and nothing to scroll. The #000 stops are alpha-mask opacity
+     values, not paint colors — keep them literal, not tokens. */
 .map-drive-chips:has(.map-drive-chip + .map-drive-chip + .map-drive-chip) {
   -webkit-mask-image: linear-gradient(
     to right,
@@ -2861,6 +2867,64 @@ button.drive-now-chip:focus-visible {
   text-align: center;
   margin-top: 16px;
   opacity: 0.6;
+}
+
+/* Open-source licenses (C3): a quiet collapsible ledger under the version
+   footer. Each entry expands to the copyright notice its license requires. */
+.oss-licenses {
+  margin: 6px auto 0;
+  max-width: 420px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.oss-licenses > summary {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.oss-licenses[open] > summary {
+  opacity: 1;
+}
+
+.oss-license-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.oss-license-list summary {
+  min-height: var(--touch-min-dense);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--fill-ghost);
+  cursor: pointer;
+}
+
+.oss-license-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.oss-license-list small {
+  color: var(--soft);
+  font-size: 10.5px;
+}
+
+.oss-license-list p {
+  margin: 4px 2px 8px;
+  line-height: 1.45;
+  color: var(--soft);
 }
 
 /* ===== 15. Light-scheme nav companion ===== */

@@ -5,4 +5,20 @@
         <item name="android:navigationBarColor">@color/volt_dark</item>
         <item name="android:fontFamily">sans</item>
     </style>
+
+    <!-- C6: branded launch splash (androidx.core:core-splashscreen). The window
+         background matches the WebView background pinned in WebViewBootstrap
+         (@color/volt_dark), so splash → dashboard first paint is one seamless
+         dark surface instead of a white/system flash. MainActivity calls
+         installSplashScreen() before super.onCreate(), which swaps this theme
+         for postSplashScreenTheme; the library back-ports the Android 12 splash
+         (background + centered launcher icon) down to minSdk 23. -->
+    <style name="Theme.VoltTracker.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/volt_dark</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher</item>
+        <item name="postSplashScreenTheme">@style/AppTheme</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:statusBarColor">@color/volt_dark</item>
+        <item name="android:navigationBarColor">@color/volt_dark</item>
+    </style>
 </resources>

@@ -1,6 +1,7 @@
 # This is a Gradle generated file for dependency locking.
 # Manual edits can break the build and are not advised.
 # This file is expected to be part of source control.
+# To regenerate this file, run: ./gradlew :app:dependencies --write-locks
 androidx.activity:activity:1.13.0=releaseRuntimeClasspath
 androidx.annotation:annotation-experimental:1.4.1=releaseRuntimeClasspath
 androidx.annotation:annotation-jvm:1.10.0=releaseRuntimeClasspath
@@ -13,6 +14,7 @@ androidx.compose.runtime:runtime-annotation-android:1.9.0=releaseRuntimeClasspat
 androidx.compose.runtime:runtime-annotation:1.9.0=releaseRuntimeClasspath
 androidx.concurrent:concurrent-futures:1.1.0=releaseRuntimeClasspath
 androidx.core:core-ktx:1.19.0=releaseRuntimeClasspath
+androidx.core:core-splashscreen:1.0.1=releaseRuntimeClasspath
 androidx.core:core-viewtree:1.0.0=releaseRuntimeClasspath
 androidx.core:core:1.19.0=releaseRuntimeClasspath
 androidx.interpolator:interpolator:1.0.0=releaseRuntimeClasspath

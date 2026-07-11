@@ -140,6 +140,9 @@ import { validatePayload } from "./payload-validators";
   // before binding the new one.
   let historyController: AbortController | null = null;
   let insightsModulePromise: Promise<VoltDashboard> | null = null;
+  let chargeHistoryModulePromise: Promise<VoltDashboard> | null = null;
+  let maintenancePanelModulePromise: Promise<VoltDashboard> | null = null;
+  let dtcDetailModulePromise: Promise<VoltDashboard> | null = null;
   let mapModulePromise: Promise<VoltDashboard> | null = null;
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
   let signalsModulePromise: Promise<VoltDashboard> | null = null;
@@ -749,6 +752,86 @@ import { validatePayload } from "./payload-validators";
     return mapModulePromise;
   }
 
+  function chargeHistoryModuleLoaded() {
+    return typeof VD.renderChargeSessions === "function" && typeof VD.buildMonthlyTrendSvg === "function";
+  }
+
+  // Charge-tab history + the shared monthly trend chart (G2 startup-headroom
+  // split from storage-status.ts). Loaded when the Charge tab opens, and
+  // chained ahead of insights-panel.js because the Insights charts render
+  // through VD.buildMonthlyTrendSvg / VD.monthBucketKey from this chunk.
+  function ensureChargeHistoryModule() {
+    if (chargeHistoryModuleLoaded()) return Promise.resolve(VD);
+    if (!chargeHistoryModulePromise) {
+      chargeHistoryModulePromise = loadDashboardScript("js/charge-history.js")
+        .then(() => {
+          if (!chargeHistoryModuleLoaded()) {
+            throw new Error("Charge-history script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          chargeHistoryModulePromise = null;
+          reportClientError("chargeHistory.load", err && err.message);
+          throw err;
+        });
+    }
+    return chargeHistoryModulePromise;
+  }
+
+  function maintenancePanelModuleLoaded() {
+    return typeof VD.renderMaintenanceList === "function" && typeof VD.loadMaintenanceLog === "function";
+  }
+
+  // Maintenance log list + add-entry form (G2 startup-headroom split from
+  // storage-status.ts). Loaded when the Insights tab (its home) opens or a
+  // maintenance action fires; the chunk fetches + renders the current native
+  // log as it loads, so broadcasts from before the load are never lost.
+  function ensureMaintenancePanelModule() {
+    if (maintenancePanelModuleLoaded()) return Promise.resolve(VD);
+    if (!maintenancePanelModulePromise) {
+      maintenancePanelModulePromise = loadDashboardScript("js/maintenance-panel.js")
+        .then(() => {
+          if (!maintenancePanelModuleLoaded()) {
+            throw new Error("Maintenance script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          maintenancePanelModulePromise = null;
+          reportClientError("maintenancePanel.load", err && err.message);
+          throw err;
+        });
+    }
+    return maintenancePanelModulePromise;
+  }
+
+  function dtcDetailModuleLoaded() {
+    return typeof VD.openDtcDetail === "function" && typeof VD.startDtcScanProgress === "function";
+  }
+
+  // DTC detail bottom sheet + scan narration (G2 startup-headroom split from
+  // storage-status.ts). Loaded on first use: tapping a code row / lookup hit,
+  // or starting a diagnostic scan.
+  function ensureDtcDetailModule() {
+    if (dtcDetailModuleLoaded()) return Promise.resolve(VD);
+    if (!dtcDetailModulePromise) {
+      dtcDetailModulePromise = loadDashboardScript("js/dtc-detail.js")
+        .then(() => {
+          if (!dtcDetailModuleLoaded()) {
+            throw new Error("DTC-detail script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          dtcDetailModulePromise = null;
+          reportClientError("dtcDetail.load", err && err.message);
+          throw err;
+        });
+    }
+    return dtcDetailModulePromise;
+  }
+
   function insightsModuleLoaded() {
     return typeof VD.loadTrips === "function" && typeof VD.loadInsights === "function";
   }
@@ -756,7 +839,8 @@ import { validatePayload } from "./payload-validators";
   function ensureInsightsModule() {
     if (insightsModuleLoaded()) return Promise.resolve(VD);
     if (!insightsModulePromise) {
-      insightsModulePromise = loadDashboardScript("js/insights-panel.js")
+      insightsModulePromise = ensureChargeHistoryModule()
+        .then(() => loadDashboardScript("js/insights-panel.js"))
         .then(() => {
           if (!insightsModuleLoaded()) {
             throw new Error("Insights script loaded but expected globals were not registered.");
@@ -805,6 +889,9 @@ import { validatePayload } from "./payload-validators";
   function pendingLazyLoads(): Promise<unknown[]> {
     const pending: Array<Promise<unknown>> = [];
     if (dtcDataPromise) pending.push(dtcDataPromise.catch(() => undefined));
+    if (chargeHistoryModulePromise) pending.push(chargeHistoryModulePromise.catch(() => undefined));
+    if (maintenancePanelModulePromise) pending.push(maintenancePanelModulePromise.catch(() => undefined));
+    if (dtcDetailModulePromise) pending.push(dtcDetailModulePromise.catch(() => undefined));
     if (insightsModulePromise) pending.push(insightsModulePromise.catch(() => undefined));
     if (signalsModulePromise) pending.push(signalsModulePromise.catch(() => undefined));
     if (connectionToolsModulePromise) pending.push(connectionToolsModulePromise.catch(() => undefined));
@@ -1252,12 +1339,18 @@ import { validatePayload } from "./payload-validators";
       }
     });
     if (view === "insights") {
+      // Maintenance card lives on this tab; hydrate it alongside the rollups.
+      void ensureMaintenancePanelModule().catch(() => {});
       void ensureInsightsModule()
         .then(() => {
           VD.loadTrips();
           VD.loadInsights();
         })
         .catch(() => {});
+    } else if (view === "charge") {
+      // Charge history/cost renders are a lazy chunk; it re-renders the
+      // current state on load, so entering the tab is what hydrates it.
+      void ensureChargeHistoryModule().catch(() => {});
     } else if (view === "map") {
       void ensureInsightsModule()
         .catch(() => undefined)
@@ -1627,6 +1720,9 @@ import { validatePayload } from "./payload-validators";
     ensureDtcData,
     dtcDataLoaded,
     ensureInsightsModule,
+    ensureChargeHistoryModule,
+    ensureMaintenancePanelModule,
+    ensureDtcDetailModule,
     ensureSignalsModule,
     hydrateConnectionTools,
     ensureConnectionToolsModule,

@@ -87,6 +87,45 @@ describe('app-dialog.ts — promise settlement', () => {
     await expect(second).resolves.toBe(true);
   });
 
+  it('prompt prefers the passphrase defaults: password input, blank confirm blocked', async () => {
+    const promise = promptAppDialog({ title: 'Pass', message: 'M' });
+    const input = document.getElementById('appDialogInput');
+    expect(input.type).toBe('password');
+    expect(document.getElementById('appDialogConfirm').disabled).toBe(true);
+
+    // A disabled confirm can't settle; the promise stays pending until cancel.
+    click('appDialogConfirm');
+    expect(await settledValue(promise)).toEqual({ pending: true });
+
+    click('appDialogCancel');
+    await expect(promise).resolves.toBeNull();
+  });
+
+  it('allowEmpty + initialValue (C1 rename shape): prefills, and a blank Save resolves ""', async () => {
+    const promise = promptAppDialog({
+      title: 'Name this drive',
+      message: 'M',
+      inputLabel: 'Drive name',
+      inputType: 'text',
+      autocomplete: 'off',
+      initialValue: 'Old name',
+      allowEmpty: true,
+    });
+    const input = document.getElementById('appDialogInput');
+    expect(input.type).toBe('text');
+    expect(input.value).toBe('Old name');
+    // With a non-empty prefill (or allowEmpty at all) the confirm starts enabled.
+    expect(document.getElementById('appDialogConfirm').disabled).toBe(false);
+
+    // Clearing the field keeps Save enabled — an empty submission means
+    // "clear the stored value" and resolves "" (distinct from the null cancel).
+    input.value = '';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    expect(document.getElementById('appDialogConfirm').disabled).toBe(false);
+    click('appDialogConfirm');
+    await expect(promise).resolves.toBe('');
+  });
+
   it('a stacked dialog cancels a pending prompt with null', async () => {
     const first = promptAppDialog({ title: 'Pass', message: 'M', inputLabel: 'Passphrase' });
     const second = confirmAppDialog({ title: 'Second', message: 'M2' });

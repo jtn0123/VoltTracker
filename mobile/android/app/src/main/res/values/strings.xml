@@ -40,6 +40,12 @@
     <string name="status_bt_denied_settings_opened">Android is no longer showing the Bluetooth prompt. In the app settings screen that just opened, choose Permissions &gt; Nearby devices &gt; Allow, then come back and tap Connect.</string>
     <string name="status_bt_denied_open_settings">Bluetooth permission is off for Volt Tracker. Open Android Settings &gt; Apps &gt; Volt Tracker &gt; Permissions and allow Nearby devices, then tap Connect again.</string>
 
+    <!-- Dashboard WebView recovery surface (DashboardErrorSurface / DashboardRecoveryCoordinator) -->
+    <string name="dashboard_reconnecting">Dashboard hiccup — reconnecting…</string>
+    <string name="dashboard_failed_to_load">Dashboard failed to load.</string>
+    <string name="dashboard_failed_repeatedly">The dashboard keeps crashing. Tap Retry to reload it.</string>
+    <string name="dashboard_retry">Retry</string>
+
     <!-- MainActivity statuses and dialogs -->
     <string name="status_action_cancelled">Action cancelled.</string>
     <string name="status_confirmation_failed">Could not show the Android confirmation.</string>

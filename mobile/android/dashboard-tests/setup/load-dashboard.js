@@ -32,14 +32,17 @@ const DASHBOARD_MODULE_LOADERS = {
   'actions-demo.js': () => import('../../app/src/main/dashboard-src/js/actions-demo.ts'),
   'actions-signals.js': () => import('../../app/src/main/dashboard-src/js/actions-signals.ts'),
   'actions-storage.js': () => import('../../app/src/main/dashboard-src/js/actions-storage.ts'),
+  'charge-history.js': () => import('../../app/src/main/dashboard-src/js/charge-history.ts'),
   'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.ts'),
   'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.ts'),
   'core.js': () => import('../../app/src/main/dashboard-src/js/core.ts'),
   'demo-data.js': () => import('../../app/src/main/dashboard-src/js/demo-data.ts'),
+  'dtc-detail.js': () => import('../../app/src/main/dashboard-src/js/dtc-detail.ts'),
   'drive.js': () => import('../../app/src/main/dashboard-src/js/drive.ts'),
   'dtc-causes.js': () => import('../../app/src/main/dashboard-src/js/dtc-causes.ts'),
   'dtc-lookup.js': () => import('../../app/src/main/dashboard-src/js/dtc-lookup.ts'),
   'insights-panel.js': () => import('../../app/src/main/dashboard-src/js/insights-panel.ts'),
+  'maintenance-panel.js': () => import('../../app/src/main/dashboard-src/js/maintenance-panel.ts'),
   'map.js': () => import('../../app/src/main/dashboard-src/js/map.ts'),
   'payload-validators.js': () => import('../../app/src/main/dashboard-src/js/payload-validators.ts'),
   'prefs.js': () => import('../../app/src/main/dashboard-src/js/prefs.ts'),
@@ -63,6 +66,15 @@ const DASHBOARD_EMITTED_JS_FILES = [
   'actions.js',
   'connection-status.js',
   'connection-tools.js',
+  // Lazy detail chunks (G2 split from storage-status). Loaded in the standard
+  // test sweep — like signals-panel/scrubber above — so the charge/maintenance/
+  // DTC-sheet suites keep exercising their renders without each test ensuring
+  // the chunk. They come AFTER the whole eager set, exactly as on-device: each
+  // chunk re-renders current state on load through helpers the later eager
+  // modules (telemetry.ts dbRowCount, actions.ts) register.
+  'charge-history.js',
+  'maintenance-panel.js',
+  'dtc-detail.js',
 ];
 
 function dashboardDomHtml() {
@@ -335,8 +347,11 @@ function installCanvasShim() {
  *   `extraDom` — HTML appended to REQUIRED_DOM. Use for tests that need
  *                additional fixture nodes (chart hosts, etc.) without losing
  *                the bootstrap-required tiles.
+ *   `skip` — emitted JS filenames to leave OUT of the standard sweep. Use to
+ *            exercise a lazy chunk's pre-load seam (e.g. the G2 detail chunks)
+ *            and then drive the real ensure*Module() path yourself.
  */
-export async function loadDashboard({ bridge, extras, extraDom, withBridge = true } = {}) {
+export async function loadDashboard({ bridge, extras, extraDom, withBridge = true, skip = [] } = {}) {
   clearDashboardTimers();
   installCanvasShim();
   installScrollShim();
@@ -374,7 +389,9 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
 
   try {
     vi.resetModules();
-    const allFiles = [...DASHBOARD_EMITTED_JS_FILES, ...(extras ?? [])];
+    const allFiles = [...DASHBOARD_EMITTED_JS_FILES, ...(extras ?? [])].filter(
+      (file) => !skip.includes(file),
+    );
     for (const file of allFiles) {
       const loadModule = DASHBOARD_MODULE_LOADERS[file];
       if (!loadModule) {

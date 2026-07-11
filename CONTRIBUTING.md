@@ -20,13 +20,13 @@ cd VoltTracker/mobile/android
 ```
 
 Requires JDK 21 (CI uses Temurin 21; the bytecode target is Java 17), Android
-SDK 36, and Node 24 for the dashboard toolchain (the wrapper handles Gradle).
+SDK 37, and Node 24 for the dashboard toolchain (the wrapper handles Gradle).
 On Windows, replace `./gradlew` with `.\gradlew.bat`.
 
 ## The five gates we run in CI
 
 1. `./gradlew :app:testDebugUnitTest` — JUnit + Robolectric unit tests.
-2. `./gradlew :app:spotlessCheck` — google-java-format (AOSP) for Java, Prettier for dashboard.
+2. `./gradlew :app:spotlessCheck` — ktlint for Kotlin, google-java-format (AOSP) for Java tests, Prettier for dashboard partials.
 3. `./gradlew :app:lintDebug` — Android Lint, baseline-tracked in `lint-baseline.xml`.
 4. `./gradlew :app:jacocoTestReport` + `jacocoTestCoverageVerification` — coverage floors.
 5. `cd dashboard-tests && npm run lint && npm run test:coverage` — ESLint plus Vitest/jsdom dashboard smoke tests.

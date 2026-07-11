@@ -26,6 +26,7 @@ private fun defaultPollingSleep(millis: Long): Boolean =
 open class ObdPollingEngine(
     private val service: EngineHost,
     private val sleeper: LoopSleeper = LoopSleeper { millis -> defaultPollingSleep(millis) },
+    private val extendedReconnectTier: ExtendedReconnectTier = ExtendedReconnectTier(),
 ) : LiveSampleReader.SampleContext {
     fun interface LoopSleeper {
         fun sleep(millis: Long): Boolean
@@ -76,8 +77,20 @@ open class ObdPollingEngine(
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
         firstSampleTimingLogged = false
+        extendedReconnectTier.reset()
         pidPolling.reset()
         liveSampleReader.reset()
+    }
+
+    /**
+     * Wakes a pending extended-tier reconnect wait so the next attempt runs immediately.
+     * Called by [ObdService] when the OS reports an ACL connection for the active adapter
+     * (the adapter reappeared) and when the user requests a retry cancel — both must not
+     * wait out the remaining minute of the extended interval. Safe from any thread; a no-op
+     * outside an extended-tier wait.
+     */
+    fun requestImmediateRetry() {
+        extendedReconnectTier.signal()
     }
 
     fun sampleCount(): Int = sampleCount
@@ -159,6 +172,14 @@ open class ObdPollingEngine(
                 try {
                     connectAndInitialize(address)
                     retry.noteConnected()
+                    if (extendedReconnectTier.active) {
+                        service.recorder.logEvent(
+                            "extended_reconnect_recovered",
+                            "attempts",
+                            extendedReconnectTier.attemptCount.toString(),
+                        )
+                    }
+                    extendedReconnectTier.reset()
                     service.clearLastFailureClass()
                     service.cancelRetryRequested = false
                     OBDLog.event("ObdPollingEngine", "connect", mapOf("name" to service.activeName))
@@ -315,8 +336,7 @@ open class ObdPollingEngine(
         service.setLastFailureClass(failureClass)
         val decision = retry.recordFailure(failureClass, attemptDurationMs)
         if (decision.exhausted) {
-            reportReconnectExhausted(decision, failureClass, watchdogFired, ex)
-            return false
+            return continueInExtendedTierOrGiveUp(decision, failureClass, watchdogFired, ex)
         }
         if (decision.wedgedModeStarted) {
             service.recorder.logEvent(
@@ -348,6 +368,85 @@ open class ObdPollingEngine(
             return false
         }
         return true
+    }
+
+    /**
+     * Handles a failure after the fast reconnect budget is spent. A mid-drive drop (see
+     * [ExtendedReconnectTier.shouldEnter]) moves into the low-power extended tier — one attempt
+     * roughly every [ExtendedReconnectTier.RETRY_INTERVAL_MS] until the
+     * [ExtendedReconnectTier.RETRY_WINDOW_MS] window expires — instead of giving up and silently
+     * losing the rest of the drive (B3). Every other exhaustion keeps the pre-B3 behaviour:
+     * report and stop. Returns true when the outer loop should attempt another connect.
+     */
+    private fun continueInExtendedTierOrGiveUp(
+        decision: ConnectionRetryCoordinator.RetryDecision,
+        failureClass: FailureClass,
+        watchdogFired: Boolean,
+        ex: IOException,
+    ): Boolean {
+        if (!extendedReconnectTier.active) {
+            if (!ExtendedReconnectTier.shouldEnter(decision.everConnected, lastVehicleState)) {
+                reportReconnectExhausted(decision, failureClass, watchdogFired, ex)
+                return false
+            }
+            enterExtendedReconnectTier(failureClass)
+        }
+        if (extendedReconnectTier.windowExpired()) {
+            service.recorder.logEvent(
+                "extended_reconnect_exhausted",
+                "attempts",
+                extendedReconnectTier.attemptCount.toString(),
+                "windowMs",
+                ExtendedReconnectTier.RETRY_WINDOW_MS.toString(),
+            )
+            reportReconnectExhausted(decision, failureClass, watchdogFired, ex)
+            return false
+        }
+        if (!extendedReconnectTier.awaitNextAttempt()) {
+            return false
+        }
+        if (!service.running.get()) {
+            return false
+        }
+        if (consumeCancelRetry(decision.attempt, decision.everConnected, "extended_reconnect")) {
+            return false
+        }
+        service.recorder.logEvent(
+            "extended_reconnect_attempt",
+            "attempt",
+            extendedReconnectTier.attemptCount.toString(),
+        )
+        return true
+    }
+
+    /**
+     * Arms the extended tier and surfaces the "waiting to reconnect" state to the user: a
+     * status broadcast for the dashboard and a foreground-notification update so a pocketed
+     * phone still shows why logging paused. Subsequent extended attempts refresh the UI via the
+     * normal connect-path broadcasts.
+     */
+    private fun enterExtendedReconnectTier(failureClass: FailureClass) {
+        extendedReconnectTier.begin()
+        service.recorder.logEvent(
+            "extended_reconnect_started",
+            "intervalMs",
+            ExtendedReconnectTier.RETRY_INTERVAL_MS.toString(),
+            "windowMs",
+            ExtendedReconnectTier.RETRY_WINDOW_MS.toString(),
+            "failureClass",
+            failureClass.wireName(),
+            "lastVehicleState",
+            lastVehicleState,
+        )
+        val intervalMin = ExtendedReconnectTier.RETRY_INTERVAL_MS / 60_000L
+        val windowMin = ExtendedReconnectTier.RETRY_WINDOW_MS / 60_000L
+        service.broadcastStatus(
+            "connecting",
+            "Lost the adapter link mid-drive - waiting to reconnect to ${service.activeName} " +
+                "(retrying every $intervalMin min for up to $windowMin min).",
+            false,
+        )
+        service.updateNotification("Waiting to reconnect to ${service.activeName}...")
     }
 
     private fun reportReconnectExhausted(
@@ -500,8 +599,11 @@ open class ObdPollingEngine(
             throw ex
         }
         logSocketOpenResult(true, openStart, "")
+        StartupTrace.mark(StartupTrace.OBD_SOCKET_CONNECTED)
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false)
-        initializeElm327()
+        StartupTrace.measure(StartupTrace.OBD_ELM_INIT_START, StartupTrace.OBD_ELM_INIT_END) {
+            initializeElm327()
+        }
     }
 
     private fun logSocketOpenResult(
@@ -622,6 +724,7 @@ open class ObdPollingEngine(
             return
         }
         firstSampleTimingLogged = true
+        StartupTrace.mark("${StartupTrace.OBD_FIRST_SAMPLE}:live")
         service.recorder.logEvent(
             "first_sample_latency",
             "durationMs",

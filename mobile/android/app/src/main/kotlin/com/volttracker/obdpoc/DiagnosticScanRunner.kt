@@ -31,6 +31,9 @@ class DiagnosticScanRunner(
     fun run(profile: DiagnosticScanProfile) {
         val full = profile == DiagnosticScanProfile.FULL
         dtcCodes.clear()
+        // Scan-stage latency marks (debug only): parsed by tools/perf/check_obd_latency.py so
+        // local/emulator captures can trend discovery, DTC-read, deep-probe, and publish spans.
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_START}:${profile.wireName}")
         service.broadcastStatus(
             "scanning",
             if (full) {
@@ -48,6 +51,7 @@ class DiagnosticScanRunner(
         probeCommand("ATDP", 1800, raw)
         probeCommand("ATDPN", 1800, raw)
         probeCommand("ATRV", 1800, raw)
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:adapter_identity")
 
         publishProgress("Checking standard OBD protocols, capability pages, and VIN...")
         var vinResponse: String? = null
@@ -62,6 +66,8 @@ class DiagnosticScanRunner(
             }
             probeCommand("03", 3500, raw)
         }
+
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:protocol_vin")
 
         ObdElmDecode.appendProbeLine(
             raw,
@@ -91,12 +97,14 @@ class DiagnosticScanRunner(
         // oscillate against the auto-scan baseline and re-fire a false NewDtc alert forever.
         probeCommand("07", 3500, raw)
         probeCommand("0A", 3500, raw)
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:dtc_reads")
 
         // FULL-only deep sweep: freeze frames, live data, and the slow Volt HV / charger /
         // transmission / brake / TPMS discovery headers. A QUICK scan stops after the generic
         // DTC reads above so a stored-code check returns in seconds.
         if (full) {
             runDeepProbes(raw)
+            StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:deep_probes")
         }
         probeCommand("ATSH7DF", 1800, raw)
 
@@ -127,6 +135,7 @@ class DiagnosticScanRunner(
             // Local values are safe.
         }
         service.broadcastTelemetry(sample)
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_COMPLETE}:${profile.wireName}")
         service.broadcastStatus(
             "scan-complete",
             if (full) {

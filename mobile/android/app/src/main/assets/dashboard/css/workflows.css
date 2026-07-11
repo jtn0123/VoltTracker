@@ -91,6 +91,8 @@
   scrollbar-width: none;
   backdrop-filter: blur(16px);
   scroll-padding-inline: 22px;
+  /* The #000 stops are alpha-mask opacity values, not paint colors — keep
+     them literal, not tokens. */
   -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
   mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 22px), transparent 100%);
 }

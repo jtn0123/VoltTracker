@@ -1,8 +1,8 @@
 package com.volttracker.obdpoc
 
 /**
- * Registry for decoded PID values. Standard adapter/Mode 01 decoders live here; less-common
- * manufacturer-specific Mode 22 decoders still fall through to [ObdProtocol.parseKnownValueLegacy].
+ * Registry for decoded PID values. Standard adapter/Mode 01 decoders live here; manufacturer-
+ * specific GM/Volt Mode 22 decoders fall through to [ObdVoltMode22ParserRegistry].
  */
 internal object ObdKnownValueParserRegistry {
     private fun interface Parser {
@@ -111,5 +111,5 @@ internal object ObdKnownValueParserRegistry {
         response: String?,
     ): ObdProtocol.ParsedPidValue? =
         standardParsers[cleanCommand]?.parse(response)
-            ?: ObdProtocol.parseKnownValueLegacy(cleanCommand, response)
+            ?: ObdVoltMode22ParserRegistry.parse(cleanCommand, response)
 }

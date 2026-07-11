@@ -77,9 +77,17 @@ open class ObdService :
     // without onCreate (or before it) simply skip the widget hook instead of crashing.
     private var widgetUpdater: WidgetUpdater? = null
     private var tripSummaryNotifier: TripSummaryNotifier? = null
-    private val latestWidgetTelemetry = AtomicReference<JSONObject?>()
-    private val widgetTelemetryScheduled = AtomicBoolean(false)
-    private val coalescedWidgetTelemetryCount = AtomicLong()
+
+    // Coalesces per-sample widget updates down to one delivery per window on the telemetry
+    // side-effect executor. The collaborator owns the last-wins scheduling state that used to be
+    // three loose atomics on this class (B5).
+    private val widgetTelemetryCoalescer =
+        WidgetTelemetryCoalescer(
+            WIDGET_TELEMETRY_COALESCE_MS,
+            { task, delayMs -> telemetrySideEffectExecutor.schedule(task, delayMs, TimeUnit.MILLISECONDS) },
+            ::maybeUpdateWidgetTelemetry,
+            { ex -> Log.w(AppPrefs.LOG_TAG, "widget telemetry enqueue failed", ex) },
+        )
 
     // The process-wide app-log mirror installed in onCreate. Held so onDestroy can detach it from
     // OBDLog and release the long-lived buffered-writer file handle (G1) instead of leaking it for
@@ -100,30 +108,39 @@ open class ObdService :
 
     override var sessionStartedAtMs = 0L
 
-    // Written by broadcastStatus on the poll/IO thread (NOT under ioLock) and read under ioLock in
-    // closeSessionLog to finalize the session row, so they must be @Volatile — otherwise a session
-    // that errored at the very end could be persisted with a stale state/detail. (The sibling
-    // cross-thread flags appInForeground / lastFailureClass are already @Volatile.)
-    @Volatile
-    private var lastSessionState = ""
+    // The session-outcome record (state/detail/failureClass/voltage/competingApps) is written by
+    // broadcastStatus + the probe/detector setters on the poll/IO, side-effect, and main threads,
+    // and read back as ONE consistent snapshot by closeSessionLog and every status broadcast.
+    // A single AtomicReference with copy-on-write updates replaces the five separately-@Volatile
+    // fields this class used to carry, closing the torn-read window between them (B5). The
+    // AtomicReference provides the same happens-before publication each @Volatile did.
+    private val sessionOutcome = AtomicReference(SessionOutcome())
 
-    @Volatile
-    private var lastSessionDetail = ""
+    // AtomicReference.updateAndGet needs API 24 (minSdk is 23) — same CAS loop, done by hand.
+    private fun updateSessionOutcome(transform: (SessionOutcome) -> SessionOutcome): SessionOutcome {
+        while (true) {
+            val current = sessionOutcome.get()
+            val next = transform(current)
+            if (sessionOutcome.compareAndSet(current, next)) return next
+        }
+    }
 
+    // Flipped by APP_FOREGROUND/APP_BACKGROUND intents on the main thread and read on the poll/IO
+    // thread (background-sample accounting) — @Volatile for the cross-thread visibility edge. It
+    // is deliberately NOT part of sessionOutcome: it is never read together with the outcome
+    // fields, so folding it in would only add contention on the visibility flags.
     @Volatile
     override var appInForeground = true
 
+    // Written on the main thread (foreground start/stop) and read on the poll/IO thread;
+    // @Volatile for the same independent-flag reasoning as appInForeground.
     @Volatile
     override var foregroundServiceActive = false
 
+    // Set by the user's cancel action on the main thread, consumed (and cleared) by the retry
+    // loop on the poll/IO thread; @Volatile for the same independent-flag reasoning as above.
     @Volatile
     override var cancelRetryRequested = false
-
-    @Volatile private var lastFailureClass: FailureClass? = null
-
-    @Volatile private var lastVoltage: Double? = null
-
-    @Volatile private var competingAppsCsv: String? = null
     private var activeForegroundServiceType = 0
     private var sessionWakeLock: PowerManager.WakeLock? = null
 
@@ -145,6 +162,12 @@ open class ObdService :
 
     fun requestCancelRetry() {
         cancelRetryRequested = true
+        // Also wake a pending extended-tier reconnect wait: the engine consumes the cancel flag
+        // right after the wait returns, so the cancel takes effect immediately instead of after
+        // up to a full extended-retry interval (B3).
+        if (::engine.isInitialized) {
+            engine.requestImmediateRetry()
+        }
     }
 
     override fun markSessionInactive() {
@@ -157,12 +180,16 @@ open class ObdService :
     }
 
     fun setLastVoltage(volts: Double) {
-        lastVoltage = volts
+        updateSessionOutcome { it.copy(voltage = volts) }
     }
 
     fun setCompetingApps(csv: String?) {
-        competingAppsCsv = csv
+        updateSessionOutcome { it.copy(competingAppsCsv = csv) }
     }
+
+    /** Test-only: the current consolidated session-outcome snapshot. */
+    @VisibleForTesting
+    fun sessionOutcomeForTest(): SessionOutcome = sessionOutcome.get()
 
     override fun onCreate() {
         super.onCreate()
@@ -183,7 +210,7 @@ open class ObdService :
         val eventPrefs = EventNotificationPrefs(sharedPrefs)
         tripSummaryNotifier = TripSummaryNotifier(this) { eventPrefs.tripSummaryEnabled() }
         widgetUpdater = createWidgetUpdater()
-        rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
+        rollingAppLog = RollingAppLog(File(filesDir, RollingAppLog.DIR_NAME))
         OBDLog.mirror(rollingAppLog)
         val summaryStore = SessionSummaryStore.getInstance(filesDir)
         recorder =
@@ -197,7 +224,15 @@ open class ObdService :
             )
         engine = createPollingEngine()
         sdpProbe = SdpProbe(this)
-        bluetoothObservability = BluetoothStateReporter(this, sdpProbe)
+        // The ACL hook keeps mid-drive recovery working while the Activity is gone (B3): when
+        // the OS reports the active adapter's link is back, wake the engine's extended
+        // reconnect wait so it retries immediately instead of waiting out its interval.
+        bluetoothObservability =
+            BluetoothStateReporter(this, sdpProbe) {
+                if (running.get()) {
+                    engine.requestImmediateRetry()
+                }
+            }
         voltageProbe = VoltageProbe(this)
         competingAppDetector = CompetingAppDetector(packageManager, this, recorder, packageName)
         if (hasBluetoothConnectPermission()) {
@@ -483,11 +518,13 @@ open class ObdService :
             acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
+        // Anchor for the connect→first-sample latency spans (debug builds only; see StartupTrace).
+        StartupTrace.mark("${StartupTrace.OBD_CONNECT_REQUEST}:${request.mode}")
         sessionStateMachine.start(request.phase, request.phaseDetail)
         // Clear any voltage carried over from a prior session: if this connect's 0142 probe
         // doesn't run, broadcastStatus must not re-emit the previous drive's reading into the
         // low-voltage hint / adapter-ready check.
-        lastVoltage = null
+        updateSessionOutcome { it.copy(voltage = null) }
         engine.beginSession(request.engineMode)
         try {
             eventCoordinator?.onSessionStart()
@@ -659,34 +696,11 @@ open class ObdService :
     }
 
     private fun enqueueWidgetTelemetry(payload: JSONObject) {
-        latestWidgetTelemetry.set(payload)
-        if (!widgetTelemetryScheduled.compareAndSet(false, true)) {
-            coalescedWidgetTelemetryCount.incrementAndGet()
-            return
-        }
-        try {
-            telemetrySideEffectExecutor.schedule(
-                {
-                    val latest = latestWidgetTelemetry.getAndSet(null)
-                    if (latest != null) {
-                        maybeUpdateWidgetTelemetry(latest)
-                    }
-                    widgetTelemetryScheduled.set(false)
-                    if (latestWidgetTelemetry.get() != null) {
-                        enqueueWidgetTelemetry(latestWidgetTelemetry.get()!!)
-                    }
-                },
-                WIDGET_TELEMETRY_COALESCE_MS,
-                TimeUnit.MILLISECONDS,
-            )
-        } catch (ex: RejectedExecutionException) {
-            widgetTelemetryScheduled.set(false)
-            Log.w(AppPrefs.LOG_TAG, "widget telemetry enqueue failed", ex)
-        }
+        widgetTelemetryCoalescer.submit(payload)
     }
 
     @VisibleForTesting
-    fun drainCoalescedWidgetTelemetryCountForTest(): Long = coalescedWidgetTelemetryCount.getAndSet(0L)
+    fun drainCoalescedWidgetTelemetryCountForTest(): Long = widgetTelemetryCoalescer.drainCoalescedCountForTest()
 
     private fun maybeUpdateWidgetTelemetry(payload: JSONObject) {
         try {
@@ -719,6 +733,10 @@ open class ObdService :
         blocked: Boolean,
         extras: JSONObject?,
     ) {
+        // Fold the new state/detail into the outcome record and read the rest of the payload
+        // fields from the SAME snapshot, so the broadcast can't mix a fresh state with a
+        // concurrently-cleared failure class or voltage.
+        val outcome = updateSessionOutcome { it.copy(state = state ?: "", detail = detail ?: "") }
         val status =
             StatusPayload(
                 state,
@@ -727,14 +745,12 @@ open class ObdService :
                 activeName,
                 System.currentTimeMillis(),
                 recorder.logFileName(),
-                lastFailureClass,
-                lastVoltage,
-                competingAppsCsv,
+                outcome.failureClass,
+                outcome.voltage,
+                outcome.competingAppsCsv,
                 extras,
             )
         val payload = status.toJson()
-        lastSessionState = state ?: ""
-        lastSessionDetail = detail ?: ""
         sessionStateMachine.observeStatus(state, detail, blocked)
         recorder.logJson("status", payload)
         recorder.persistStatus(state, detail, blocked, payload)
@@ -843,14 +859,12 @@ open class ObdService :
         if (fc == null) {
             return
         }
-        lastFailureClass = fc
+        updateSessionOutcome { it.copy(failureClass = fc) }
     }
 
     override fun clearLastFailureClass() {
-        lastFailureClass = null
+        updateSessionOutcome { it.copy(failureClass = null) }
     }
-
-    fun lastFailureClass(): FailureClass? = lastFailureClass
 
     private fun recordAppVisibility(foreground: Boolean) {
         if (foreground) {
@@ -886,8 +900,7 @@ open class ObdService :
         address: String?,
     ) {
         synchronized(ioLock) {
-            lastSessionState = "active"
-            lastSessionDetail = ""
+            updateSessionOutcome { it.copy(state = "active", detail = "") }
             recorder.openSession(
                 mode,
                 address,
@@ -905,12 +918,15 @@ open class ObdService :
             if (!::engine.isInitialized) {
                 return
             }
+            // One atomic read: the session row is finalized from a single consistent
+            // state/detail/failureClass snapshot instead of three separate volatile reads (B5).
+            val outcome = sessionOutcome.get()
             recorder.closeSession(
-                lastSessionState,
-                lastSessionDetail,
+                outcome.state,
+                outcome.detail,
                 engine.supportedPidsSummary(),
                 engine.sampleCount(),
-                lastFailureClass,
+                outcome.failureClass,
             )
             clearLastFailureClass()
             foregroundServiceActive = false

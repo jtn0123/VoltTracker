@@ -22,11 +22,13 @@ import vitestConfig from './vitest.config.js';
 // branches 62 -> 66 in lockstep with vitest.config.js (measured 84.6 / 81.3 /
 // 83.7 / 69.2 after the polish-pass test additions; see the dated audit entry
 // next to the thresholds there).
+// 2026-07-11 (D1): raised branches 66 -> 72 in lockstep with vitest.config.js
+// (measured 74.4% branches; the floor had drifted ~8pts below actual).
 const COVERAGE_BASELINE = Object.freeze({
   lines: 81,
   statements: 78,
   functions: 80,
-  branches: 66,
+  branches: 72,
 });
 
 // Committed baseline for the FOCUSED per-glob floors that guard the critical

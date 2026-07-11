@@ -75,6 +75,16 @@ def dashboardStartupBudgetBytes = 412_000L
 def dashboardLazySupportBudgetBytes = 90_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyExpertBudgetBytes = 40_000L
+// Detail-panel chunks split OUT of the eager app.js in the G2 startup-headroom
+// pass (2026-07-11): the Charge tab's history/cost renders + the shared monthly
+// trend chart (charge-history.js), the Insights maintenance log/form
+// (maintenance-panel.js), and the DTC detail sheet + scan narration
+// (dtc-detail.js). None paints on the Drive-first startup path; they load via
+// core.ts ensureChargeHistoryModule/ensureMaintenancePanelModule/
+// ensureDtcDetailModule on tab entry or first interaction. Their own bucket
+// (not support/panel, both nearly full) so the reclaimed startup bytes can't
+// silently crowd an existing allowance.
+def dashboardLazyDetailBudgetBytes = 25_000L
 // 20k → 23.5k (v2 design handoff): screens-map.css gains the tapped-route
 // detail card, fullscreen drive summary, drive-event diamond markers, and the
 // legend hint — all map-only chrome, kept in the lazy map stylesheet so the
@@ -85,6 +95,7 @@ def dashboardDtcDataBudgetBytes = 380_000L
 // charging every on-demand interaction to the generic support allowance.
 def dashboardLazyPanelFiles = ["js/insights-panel.js", "js/connection-tools.js"]
 def dashboardLazyExpertFiles = ["js/signals-panel.js", "js/scrubber.js"]
+def dashboardLazyDetailFiles = ["js/charge-history.js", "js/maintenance-panel.js", "js/dtc-detail.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
 // Lazy-injected stylesheets are NOT render-blocking links in index.template.html:
 // screens-map.css is injected by the lazy map chunk (map.ts#ensureMapStyles) and
@@ -102,10 +113,12 @@ def dashboardLazySupportAssets = files(fileTree(dashboardAssetDir) {
     exclude "js/app.js"
     dashboardLazyPanelFiles.each { exclude it }
     dashboardLazyExpertFiles.each { exclude it }
+    dashboardLazyDetailFiles.each { exclude it }
     dashboardDtcDataFiles.each { exclude it }
 })
 def dashboardLazyPanelAssets = files(dashboardLazyPanelFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardLazyExpertAssets = files(dashboardLazyExpertFiles.collect { new File(dashboardAssetDir, it) })
+def dashboardLazyDetailAssets = files(dashboardLazyDetailFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardDtcDataAssets = files(dashboardDtcDataFiles.collect { new File(dashboardAssetDir, it) })
 def dashboardEagerJsAssets = files(new File(dashboardAssetDir, "js/app.js"))
 def dashboardLazyJsAssets = files(fileTree(dashboardAssetDir) {
@@ -406,12 +419,13 @@ tasks.register("verifyDashboardBundleSize") {
     description = "Fails when dashboard startup, lazy support, or DTC data exceeds its size budget."
     // Measures the BUILT bundle (app.js + lazy chunks), so it must build first.
     dependsOn("buildDashboardJs")
-    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardLazyPanelAssets, dashboardLazyExpertAssets, dashboardLazyCssAssets, dashboardDtcDataAssets)
+    inputs.files(dashboardStartupAssets, dashboardLazySupportAssets, dashboardLazyPanelAssets, dashboardLazyExpertAssets, dashboardLazyDetailAssets, dashboardLazyCssAssets, dashboardDtcDataAssets)
     doLast {
         def startupBytes = sumBytes(dashboardStartupAssets)
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
         def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
         def lazyExpertBytes = sumBytes(dashboardLazyExpertAssets)
+        def lazyDetailBytes = sumBytes(dashboardLazyDetailAssets)
         def lazyCssBytes = sumBytes(dashboardLazyCssAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         if (startupBytes > dashboardStartupBudgetBytes) {
@@ -430,6 +444,10 @@ tasks.register("verifyDashboardBundleSize") {
             throw new GradleException(
                     "Dashboard lazy expert JS is ${lazyExpertBytes} bytes, over budget ${dashboardLazyExpertBudgetBytes} bytes")
         }
+        if (lazyDetailBytes > dashboardLazyDetailBudgetBytes) {
+            throw new GradleException(
+                    "Dashboard lazy detail JS is ${lazyDetailBytes} bytes, over budget ${dashboardLazyDetailBudgetBytes} bytes")
+        }
         if (lazyCssBytes > dashboardLazyCssBudgetBytes) {
             throw new GradleException(
                     "Dashboard lazy CSS is ${lazyCssBytes} bytes, over budget ${dashboardLazyCssBudgetBytes} bytes")
@@ -443,6 +461,7 @@ tasks.register("verifyDashboardBundleSize") {
                         "lazy support JS: ${lazySupportBytes} bytes (budget ${dashboardLazySupportBudgetBytes}); " +
                         "lazy panel JS: ${lazyPanelBytes} bytes (budget ${dashboardLazyPanelBudgetBytes}); " +
                         "lazy expert JS: ${lazyExpertBytes} bytes (budget ${dashboardLazyExpertBudgetBytes}); " +
+                        "lazy detail JS: ${lazyDetailBytes} bytes (budget ${dashboardLazyDetailBudgetBytes}); " +
                         "lazy CSS: ${lazyCssBytes} bytes (budget ${dashboardLazyCssBudgetBytes}); " +
                         "DTC data: ${dtcBytes} bytes (budget ${dashboardDtcDataBudgetBytes})")
     }
@@ -457,6 +476,7 @@ tasks.register("dashboardAssetReport") {
         def lazySupportBytes = sumBytes(dashboardLazySupportAssets)
         def lazyPanelBytes = sumBytes(dashboardLazyPanelAssets)
         def lazyExpertBytes = sumBytes(dashboardLazyExpertAssets)
+        def lazyDetailBytes = sumBytes(dashboardLazyDetailAssets)
         def lazyCssBytes = sumBytes(dashboardLazyCssAssets)
         def dtcBytes = sumBytes(dashboardDtcDataAssets)
         logger.lifecycle("")
@@ -471,6 +491,7 @@ tasks.register("dashboardAssetReport") {
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy support budget", lazySupportBytes, dashboardLazySupportBudgetBytes - lazySupportBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy panel budget", lazyPanelBytes, dashboardLazyPanelBudgetBytes - lazyPanelBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy expert budget", lazyExpertBytes, dashboardLazyExpertBudgetBytes - lazyExpertBytes))
+        logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy detail budget", lazyDetailBytes, dashboardLazyDetailBudgetBytes - lazyDetailBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "lazy CSS budget", lazyCssBytes, dashboardLazyCssBudgetBytes - lazyCssBytes))
         logger.lifecycle(String.format("%-22s %10d bytes (%d headroom)", "DTC data budget set", dtcBytes, dashboardDtcDataBudgetBytes - dtcBytes))
         logger.lifecycle("")
@@ -612,6 +633,45 @@ tasks.register("doctor") {
             throw new GradleException(
                     "Node.js ${requiredNodeMajor}.x is required for dashboard tooling; found ${nodeVersion}. " +
                             "Run `nvm use` from the repo root.")
+        }
+    }
+}
+
+// Auto-bootstrap the repo git hooks (repo-root lefthook.yml). The hooks used to
+// be purely opt-in (`brew install lefthook && lefthook install`), which fresh
+// clones never remembered to run. `lefthook install` is idempotent and fast, so
+// :app:preBuild wires this in; it is a strict no-op — never a build failure —
+// when lefthook is not on PATH (CI runners have none) or this is not a git
+// checkout, and it is skipped as UP-TO-DATE once the hooks are in place.
+tasks.register("installGitHooks") {
+    description = "Installs the repo git hooks via lefthook when it is on PATH (safe no-op otherwise)."
+    def repoRoot = repoRootDir
+    outputs.upToDateWhen {
+        // Plain checkouts only (in a git worktree `.git` is a file, so this stays
+        // false and the idempotent install below simply reruns).
+        def hook = new File(repoRoot, ".git/hooks/pre-commit")
+        hook.isFile() && hook.getText("UTF-8").contains("lefthook")
+    }
+    doLast {
+        if (!new File(repoRoot, ".git").exists()) {
+            logger.lifecycle("installGitHooks: ${repoRoot} is not a git checkout; skipping git-hook bootstrap.")
+            return
+        }
+        try {
+            def proc = new ProcessBuilder("lefthook", "install")
+                    .directory(repoRoot)
+                    .redirectErrorStream(true)
+                    .start()
+            def output = proc.inputStream.getText("UTF-8").trim()
+            proc.waitFor()
+            if (proc.exitValue() == 0) {
+                logger.lifecycle("installGitHooks: lefthook git hooks installed.")
+            } else {
+                logger.lifecycle("installGitHooks: `lefthook install` exited ${proc.exitValue()} (${output}); continuing without git hooks.")
+            }
+        } catch (Exception ignored) {
+            logger.lifecycle("installGitHooks: lefthook not found on PATH; skipping git-hook bootstrap. " +
+                    "Install it (`brew install lefthook`) to get the repo pre-commit/pre-push checks.")
         }
     }
 }

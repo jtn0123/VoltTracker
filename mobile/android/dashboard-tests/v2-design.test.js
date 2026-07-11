@@ -265,11 +265,16 @@ describe('Insights "This week" card', () => {
     expect(document.getElementById('thisWeekHead').textContent)
       .toBe('2 drives · 15 mi this week');
     expect(document.querySelectorAll('#thisWeekChart svg rect').length).toBeGreaterThan(0);
+    // C4: the chart aria-label mirrors the dynamic headline, mode included.
+    expect(document.querySelector('#thisWeekChart svg').getAttribute('aria-label'))
+      .toBe('Distance per day this week; 2 drives, 15 mi this week');
 
     // Efficiency mode: both drives landed today -> 15 mi / 5 kWh = 3 mi/kWh.
     document.querySelector('[data-week-mode="eff"]').click();
     expect(document.getElementById('thisWeekHead').textContent)
       .toContain('Best day 3.0 mi/kWh');
+    expect(document.querySelector('#thisWeekChart svg').getAttribute('aria-label'))
+      .toContain('Efficiency per day this week; Best day 3.0 mi/kWh');
     // The mode persists like the other chart-view prefs.
     expect(VD.prefs.get('weekChartMode', 'dist')).toBe('eff');
   });
