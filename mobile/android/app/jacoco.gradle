@@ -176,6 +176,18 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //     ObdPollingEngine LINE 85.5% (435/509) -> floor 0.85
 //     ObdService       LINE 84.4% (422/500) -> floor 0.80
 //     SessionRecorder   LINE 89.0% (307/345) -> floor 0.86
+//   2026-07-11 (round 15, A3 — VoltBridgeDataExports split): the grab-bag
+//   VoltBridgeDataExports sub-bridge (floor 0.86) was split into five focused
+//   units (VoltBridgeBackups / VoltBridgeSignalLogs / VoltBridgeTripExports /
+//   VoltBridgeTripEdits / VoltBridgeMaintenance); its tests moved alongside into
+//   mirrored per-unit suites, so no coverage was lost — the one superseded rule
+//   is replaced by five per-CLASS rules, every one at or above the old 0.86
+//   floor (this is a rule split, not a lowering). Measured after the split:
+//     VoltBridgeBackups     LINE 94.1% (64/68)   -> floor 0.90
+//     VoltBridgeSignalLogs  LINE 100%  (35/35)   -> floor 0.95
+//     VoltBridgeTripExports LINE 100%  (7/7)     -> floor 0.95
+//     VoltBridgeTripEdits   LINE 93.6% (103/110) -> floor 0.90
+//     VoltBridgeMaintenance LINE 96.5% (83/86)   -> floor 0.92
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -260,10 +272,32 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
             includes = ["com.volttracker.obdpoc.AutoDtcScanRunner"]
             limit { counter = "LINE"; minimum = 0.87 }
         }
+        // Round 15 (A3): VoltBridgeDataExports was split into five focused units; its single
+        // rule is superseded by these five (see the history note above).
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.VoltBridgeDataExports"]
-            limit { counter = "LINE"; minimum = 0.86 }
+            includes = ["com.volttracker.obdpoc.VoltBridgeBackups"]
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeSignalLogs"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeTripExports"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeTripEdits"]
+            limit { counter = "LINE"; minimum = 0.90 }
+        }
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.VoltBridgeMaintenance"]
+            limit { counter = "LINE"; minimum = 0.92 }
         }
         // Round 8 focused class floors from the expanded July 2026 test bump.
         rule {
