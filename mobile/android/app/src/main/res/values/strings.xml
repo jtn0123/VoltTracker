@@ -125,7 +125,7 @@
     <string name="notification_adapter_ready_text">Tap to open Volt Tracker and start logging.</string>
     <string name="share_diagnostics_subject">Volt Tracker diagnostics</string>
 
-    <!-- Per-trip GPX/CSV export (TripExportShareIntent / VoltBridgeDataExports) -->
+    <!-- Per-trip GPX/CSV export (TripExportShareIntent / VoltBridgeTripExports) -->
     <string name="share_trip_export_subject">Volt Tracker drive export</string>
     <string name="chooser_share_trip_export">Share drive export</string>
     <string name="status_trip_export_ready">Drive export ready — choose where to share it.</string>
