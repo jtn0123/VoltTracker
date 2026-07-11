@@ -2867,6 +2867,64 @@ button.drive-now-chip:focus-visible {
   opacity: 0.6;
 }
 
+/* Open-source licenses (C3): a quiet collapsible ledger under the version
+   footer. Each entry expands to the copyright notice its license requires. */
+.oss-licenses {
+  margin: 6px auto 0;
+  max-width: 420px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.oss-licenses > summary {
+  min-height: var(--touch-min);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.oss-licenses[open] > summary {
+  opacity: 1;
+}
+
+.oss-license-list {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.oss-license-list summary {
+  min-height: var(--touch-min-dense);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 8px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--fill-ghost);
+  cursor: pointer;
+}
+
+.oss-license-list strong {
+  color: var(--text);
+  font-size: 12px;
+}
+
+.oss-license-list small {
+  color: var(--soft);
+  font-size: 10.5px;
+}
+
+.oss-license-list p {
+  margin: 4px 2px 8px;
+  line-height: 1.45;
+  color: var(--soft);
+}
+
 /* ===== 15. Light-scheme nav companion ===== */
 
 /* Light-scheme companion for the floating nav. The nav surface/border/text
