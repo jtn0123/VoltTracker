@@ -454,7 +454,21 @@ class DataBackup(
                         bytesTotal = temp.length(),
                     ),
                 )
-                BackupCrypto.decryptFile(temp, candidate, requireNotNull(passphrase), MAX_RESTORE_BYTES)
+                val passphraseForm =
+                    BackupCrypto.decryptFileWithTrimFallback(
+                        temp,
+                        candidate,
+                        requireNotNull(passphrase),
+                        MAX_RESTORE_BYTES,
+                    )
+                // Log WHICH form unlocked the backup (never the passphrase itself). The trimmed
+                // fallback firing means this is a pre-trim-fix backup keyed on the trimmed
+                // passphrase — worth a warning so field logs explain "works here, fails there".
+                if (passphraseForm == BackupCrypto.PassphraseForm.LEGACY_TRIMMED) {
+                    Log.w(TAG, "Encrypted restore unlocked with the legacy TRIMMED passphrase form")
+                } else {
+                    Log.i(TAG, "Encrypted restore unlocked with the passphrase exactly as typed")
+                }
                 progress?.onProgress(
                     ProgressSnapshot(
                         "Decrypting backup",
