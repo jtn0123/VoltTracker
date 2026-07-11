@@ -28,6 +28,21 @@ class BridgeInputTest {
     }
 
     @Test
+    fun bridgeSafeNoTrimPreservesEdgeWhitespace() {
+        // Passphrase path (E3): edge whitespace is key material and must survive untouched.
+        assertEquals("", bridgeSafeNoTrim(null, BRIDGE_MAX_PASSPHRASE_LEN))
+        assertEquals("  pass  ", bridgeSafeNoTrim("  pass  ", BRIDGE_MAX_PASSPHRASE_LEN))
+        assertEquals("   ", bridgeSafeNoTrim("   ", BRIDGE_MAX_PASSPHRASE_LEN))
+    }
+
+    @Test
+    fun bridgeSafeNoTrimClampsLongValuesWithoutSplittingSurrogatePairs() {
+        assertEquals(" ab", bridgeSafeNoTrim(" abcdef", 3))
+        assertEquals("ab", bridgeSafeNoTrim("ab\uD83D\uDE00cd", 3))
+        assertEquals("ab\uD83D\uDE00", bridgeSafeNoTrim("ab\uD83D\uDE00cd", 4))
+    }
+
+    @Test
     fun parseBridgePositiveIdAcceptsOnlyPositiveWholeNumbersAfterSanitizing() {
         assertEquals(42L, parseBridgePositiveId(" 42 "))
         assertEquals(-1L, parseBridgePositiveId(null))

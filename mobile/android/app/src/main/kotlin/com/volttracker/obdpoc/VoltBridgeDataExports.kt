@@ -23,7 +23,7 @@ internal class VoltBridgeDataExports(
         passphrase: String?,
         dashboardPreferencesJson: String? = null,
     ) {
-        val cleanPassphrase = bridgeSafe(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
+        val cleanPassphrase = sanitizedPassphraseOrNull(passphrase) ?: return
         val preferences = dashboardPreferencesJson?.take(MAX_BACKUP_PREFERENCES_CHARS)
         activity.runOnUiThread {
             stateProvider.requireBackupController().launchEncryptedShare(cleanPassphrase, preferences)
@@ -35,10 +35,33 @@ internal class VoltBridgeDataExports(
     }
 
     fun restoreEncryptedBackup(passphrase: String?) {
-        val cleanPassphrase = bridgeSafe(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
+        val cleanPassphrase = sanitizedPassphraseOrNull(passphrase) ?: return
         activity.runOnUiThread {
             stateProvider.requireBackupController().launchEncryptedRestorePicker(cleanPassphrase)
         }
+    }
+
+    /**
+     * Length-bounds the backup passphrase WITHOUT trimming: edge whitespace is key material, and
+     * trimming it (the old behavior) silently derived a different PBKDF2 key than the user typed.
+     * An all-whitespace passphrase is rejected with a clear error instead of silently collapsing
+     * to empty; an empty/null one passes through so [BackupController]'s existing
+     * "enter a passphrase" messaging still handles it. Backups encrypted before this change used
+     * the TRIMMED form — decrypt compatibility lives in [BackupCrypto.decryptFileWithTrimFallback].
+     */
+    private fun sanitizedPassphraseOrNull(passphrase: String?): String? {
+        val bounded = bridgeSafeNoTrim(passphrase, BRIDGE_MAX_PASSPHRASE_LEN)
+        if (bounded.isNotEmpty() && bounded.isBlank()) {
+            activity.runOnUiThread {
+                activity.publishStatus(
+                    "blocked",
+                    "A backup passphrase cannot be only spaces. Include visible characters.",
+                    true,
+                )
+            }
+            return null
+        }
+        return bounded
     }
 
     fun clearStoredData() {

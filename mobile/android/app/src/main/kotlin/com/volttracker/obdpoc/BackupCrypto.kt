@@ -111,6 +111,45 @@ object BackupCrypto {
         }
     }
 
+    /** Which form of the passphrase authenticated an encrypted container. */
+    enum class PassphraseForm {
+        /** The passphrase exactly as the user typed it (edge whitespace included). */
+        EXACT,
+
+        /** The trimmed form — the key older backups were written with before trimming was removed. */
+        LEGACY_TRIMMED,
+    }
+
+    /**
+     * Decrypts like [decryptFile], but with a one-shot compatibility retry: passphrases used to be
+     * trimmed before key derivation, so a backup encrypted back then by a user who typed edge
+     * whitespace was actually keyed on the TRIMMED form. Now that the passphrase is used exactly as
+     * typed, that same input would fail GCM authentication against the old backup — so if the exact
+     * form fails authentication and the passphrase carries trimmable whitespace, retry once with
+     * the trimmed form. Returns which form unlocked the container so the caller can log it. Format
+     * errors (bad magic, truncated header, oversize plaintext) are NOT retried — only a failed
+     * authentication ([GeneralSecurityException]) can mean "wrong key".
+     */
+    @Throws(IOException::class, GeneralSecurityException::class)
+    fun decryptFileWithTrimFallback(
+        source: File,
+        dest: File,
+        passphrase: String,
+        maxPlaintextBytes: Long,
+    ): PassphraseForm {
+        try {
+            decryptFile(source, dest, passphrase, maxPlaintextBytes)
+            return PassphraseForm.EXACT
+        } catch (ex: GeneralSecurityException) {
+            val trimmed = passphrase.trim()
+            if (trimmed == passphrase || trimmed.isEmpty()) {
+                throw ex
+            }
+            decryptFile(source, dest, trimmed, maxPlaintextBytes)
+            return PassphraseForm.LEGACY_TRIMMED
+        }
+    }
+
     @Throws(IOException::class, GeneralSecurityException::class)
     fun decryptFile(
         source: File,

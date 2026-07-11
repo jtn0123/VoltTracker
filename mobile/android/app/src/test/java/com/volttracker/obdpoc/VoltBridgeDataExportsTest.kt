@@ -106,6 +106,29 @@ class VoltBridgeDataExportsTest {
         assertTrue(activity.lastStatusBlocked)
     }
 
+    @Test
+    fun allWhitespacePassphraseIsRejectedWithAClearErrorOnShareAndRestore() {
+        // E3: an all-spaces passphrase used to be silently trimmed to empty; now the bridge rejects
+        // it outright with a message that names the problem, before the controller is involved.
+        dataExports.shareEncryptedBackup("   ")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+        assertTrue(
+            "the error must explain the all-spaces rejection, got: ${activity.lastStatusDetail}",
+            activity.lastStatusDetail!!.contains("only spaces"),
+        )
+
+        activity.lastStatusState = null
+        activity.lastStatusDetail = null
+        activity.lastStatusBlocked = false
+        dataExports.restoreEncryptedBackup("\t \n")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+        assertTrue(activity.lastStatusDetail!!.contains("only spaces"))
+    }
+
     // ---- clearStoredData ---------------------------------------------------------------------
 
     @Test
