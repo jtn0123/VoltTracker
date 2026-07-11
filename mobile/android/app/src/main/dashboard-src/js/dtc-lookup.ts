@@ -12,9 +12,12 @@
 // demand by core.ts `ensureDtcData()` (first DTC lookup/scan), never in the
 // eager bundle, so first paint stays light. See dashboard-script-contract.md.
 
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 (function () {
   "use strict";
-  const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
 
   // Generic SAE J2012 powertrain codes (P0xxx) - the descriptions match the
   // SAE-defined wording. Many entries follow a family pattern (e.g. P0301-P0312

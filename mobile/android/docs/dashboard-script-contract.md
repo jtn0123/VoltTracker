@@ -10,23 +10,27 @@ editable source in `app/src/main/dashboard-src/js/` by `dashboard-tests/build.mj
 `app.js` is a classic IIFE — **never** an ES module. The WebView serves the dashboard from
 `file:///android_asset/`, where `<script type="module">` is fetched with CORS semantics that
 `file://` cannot satisfy, so a module bootstrap silently never runs on-device. esbuild bundles
-the eager source files (via side-effect imports, in dependency order) into `app.js`, so each
-file's IIFE runs in order and shares state through `window.VoltDashboard` exactly as before.
+the eager source files (via side-effect imports, in dependency order) into `app.js`. Inside
+that bundle, modules call each other through typed ESM imports (C7); `window.VoltDashboard`
+remains as the external ABI + cross-chunk registry, owned by `vd-registry.ts` and assembled
+by `core.ts` — see the policy comment in `dashboard-src/js/vd-registry.ts`.
 The bundle target is `chrome66` so Android 9-era WebViews do not receive syntax they cannot
 parse, such as optional chaining or nullish coalescing.
 
 Eager order (the `EAGER` array in `build.mjs`):
 
-1. `core` (seeds `window.VoltDashboard`)
-2. `panels`
-3. `map`
-4. `scrubber`
+1. `prefs` (seeds the preference store; first module to evaluate)
+2. `core` (assembles `window.VoltDashboard`; `vd-registry.ts` creates it)
+3. `payload-validators`
+4. `storage-status`
 5. `drive`
 6. `telemetry`
-7. `actions` (its bootstrap calls into map/drive/telemetry, so it comes after them)
-8. `troubleshooter`
-9. `connection-status`
-10. `connection-tools`
+7. `actions` (its bootstrap calls into drive/telemetry, so it comes after them)
+8. `connection-status`
+
+Note esbuild resolves imports first, so a module's imports may evaluate ahead of its slot
+(e.g. `drive` imports `telemetry`); new imports between eager modules must only point at
+modules that already evaluate earlier, or the side-effect order changes.
 
 The large DTC dictionaries (`dtc-causes`, `dtc-lookup`) and the demo fixture (`demo-data`)
 are **not** startup scripts. They build into their own `js/<name>.js` chunks, and `core.js`

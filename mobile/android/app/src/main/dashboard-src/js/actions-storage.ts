@@ -1,4 +1,5 @@
 import { confirmAppDialog, promptAppDialog } from "./app-dialog";
+import { actionModulesRegistry } from "./vd-registry";
 
 export type BusyButton = HTMLElement & {
   disabled?: boolean;
@@ -252,5 +253,4 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
   };
 }
 
-window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
-window.VoltDashboardActionModules.createStorageActions = createStorageActions;
+actionModulesRegistry().createStorageActions = createStorageActions;

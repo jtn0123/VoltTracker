@@ -26,7 +26,6 @@ import {
   ensureMaintenancePanelModule,
   ensureMapModule,
   ensureTroubleshooterModule,
-  errorController,
   loadDashboardScript,
   openTripFromNative,
   parsePayload,

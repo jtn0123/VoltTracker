@@ -8,11 +8,14 @@
 // helper is owned by storage-status.ts and read off VD here.
 import { setDataState } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
 (function () {
   "use strict";
 
-  const VD = window.VoltDashboard;
   const el = VD.el;
   const state = VD.state;
   let enhancedSignalFilter = "all";

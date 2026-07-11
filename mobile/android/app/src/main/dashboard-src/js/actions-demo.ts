@@ -1,3 +1,4 @@
+import { actionModulesRegistry } from "./vd-registry";
 function hexByte(value: number) {
   const clamped = Math.max(0, Math.min(255, Math.round(value)));
   return clamped.toString(16).toUpperCase().padStart(2, "0");
@@ -185,5 +186,4 @@ export function runBrowserDemoStream(
   window.__voltDemoTimer = window.setInterval(emitSample, 1000);
 }
 
-window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
-window.VoltDashboardActionModules.runBrowserDemoStream = runBrowserDemoStream;
+actionModulesRegistry().runBrowserDemoStream = runBrowserDemoStream;

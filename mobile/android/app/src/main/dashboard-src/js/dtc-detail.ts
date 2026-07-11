@@ -11,11 +11,14 @@
 // drivabilityLine) stays owned by storage-status.ts — the eager code list rows
 // use it too — and is read off VD here so the two surfaces can't drift.
 import { createFocusTrap, type FocusTrap } from "./focus-trap";
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
 (function () {
   "use strict";
 
-  const VD = window.VoltDashboard;
   const state = VD.state;
   const el = VD.el;
 
