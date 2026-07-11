@@ -27,7 +27,6 @@ import { asDataTone, setDataTone } from "./dataset-state";
 import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
-import { t } from "./i18n";
 import { initialTelemetryState } from "./telemetry-state";
 import { validatePayload } from "./payload-validators";
 import { applyDiagnosticsMode, prefs } from "./prefs";
