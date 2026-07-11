@@ -15,7 +15,7 @@ const SRC = path.resolve(
 // makes migration one-directional: the catalog may only grow, and every key in
 // it must have a real t() call site (no dead keys accumulating). When you add
 // keys, RAISE the floor to the new count.
-const CATALOG_FLOOR = 11;
+const CATALOG_FLOOR = 12;
 
 function readCatalogKeys() {
   const source = fs.readFileSync(path.join(SRC, "i18n.ts"), "utf8");
