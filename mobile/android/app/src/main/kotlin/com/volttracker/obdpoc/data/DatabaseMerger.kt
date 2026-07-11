@@ -293,9 +293,10 @@ object DatabaseMerger {
     ) {
         // First registration wins: an unlikely alias collision between two live rows keeps
         // matching deterministic instead of flip-flopping between them.
-        idByKey.putIfAbsent(live.key, live.id)
+        // Map.putIfAbsent needs API 24 (minSdk is 23), so spell out the same first-wins check.
+        if (live.key !in idByKey) idByKey[live.key] = live.id
         for (alias in live.aliases) {
-            idByKey.putIfAbsent(alias, live.id)
+            if (alias !in idByKey) idByKey[alias] = live.id
         }
     }
 
@@ -314,7 +315,7 @@ object DatabaseMerger {
         var changed = false
         for (donorKey in donorKeys) {
             if (donorKey != live.key && live.aliases.add(donorKey)) {
-                idByKey.putIfAbsent(donorKey, live.id)
+                if (donorKey !in idByKey) idByKey[donorKey] = live.id
                 changed = true
             }
         }
