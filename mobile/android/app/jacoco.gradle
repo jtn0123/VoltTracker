@@ -188,6 +188,17 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //     VoltBridgeTripExports LINE 100%  (7/7)     -> floor 0.95
 //     VoltBridgeTripEdits   LINE 93.6% (103/110) -> floor 0.90
 //     VoltBridgeMaintenance LINE 96.5% (83/86)   -> floor 0.92
+//   2026-07-11 (round 16, A2 — ObdLocalStore facade narrowing): the flat delegation
+//   surface on the ObdLocalStore facade moved behind narrow capability interfaces
+//   (data.ObdTripEditStore / ObdRouteQueryStore / ObdSignalLogStore /
+//   ObdMaintenanceLogStore / ObdExportLogStore / ObdDbMaintenanceStore), with the
+//   bodies rehomed into small data-package classes (ObdStoreTripEdits, ObdStoreRoutes,
+//   ObdStoreSignalLogs, ObdStoreMaintenanceLog, ObdStoreExportLog; ObdStoreMaintenance
+//   implements the DB-maintenance interface directly). Tests migrated with the call
+//   sites, so this is a code move, not a coverage change: the data-package PACKAGE
+//   rule (floor 0.90) still covers every rehomed line — measured after the move,
+//   com.volttracker.obdpoc.data LINE 96.3% (5762/5986) with every new class at
+//   91.7-100%. No floor is changed.
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
