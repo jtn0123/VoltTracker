@@ -204,6 +204,36 @@ class BluetoothStateReporterTest {
     }
 
     @Test
+    fun aclConnectedForActiveAdapterRunsTheReconnectWakeHook() {
+        // B3: the service wires this hook to the engine's extended-reconnect wake-up so an
+        // adapter reappearing mid-drive triggers an immediate attempt without the Activity.
+        var wakeUps = 0
+        val reporter = BluetoothStateReporter(service, null) { wakeUps += 1 }
+        setActiveAddress(reporter, "AA:BB:CC:DD:EE:FF")
+        val adapter = BluetoothAdapter.getDefaultAdapter()!!
+        val active = adapter.getRemoteDevice("AA:BB:CC:DD:EE:FF")
+        val other = adapter.getRemoteDevice("AA:BB:CC:DD:EE:00")
+
+        invokeSystemBroadcast(
+            reporter,
+            Intent(BluetoothDevice.ACTION_ACL_CONNECTED).putExtra(BluetoothDevice.EXTRA_DEVICE, other),
+        )
+        assertEquals("a different device's ACL event must not wake the reconnect wait", 0, wakeUps)
+
+        invokeSystemBroadcast(
+            reporter,
+            Intent(BluetoothDevice.ACTION_ACL_CONNECTED).putExtra(BluetoothDevice.EXTRA_DEVICE, active),
+        )
+        assertEquals("the active adapter's ACL event must run the wake hook", 1, wakeUps)
+
+        invokeSystemBroadcast(
+            reporter,
+            Intent(BluetoothDevice.ACTION_ACL_DISCONNECTED).putExtra(BluetoothDevice.EXTRA_DEVICE, active),
+        )
+        assertEquals("only ACL-connected events wake the reconnect wait", 1, wakeUps)
+    }
+
+    @Test
     fun systemBroadcastForDifferentDeviceIsIgnored() {
         val reporter = BluetoothStateReporter(service, null)
         setActiveAddress(reporter, "AA:BB:CC:DD:EE:FF")
