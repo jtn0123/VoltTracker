@@ -24,9 +24,9 @@
 //     connection-status.ts / troubleshooter.ts) and must stay late-bound for
 //     every caller.
 import { asDataTone, setDataTone } from "./dataset-state";
+import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
-import { t } from "./i18n";
 import { initialTelemetryState } from "./telemetry-state";
 import { validatePayload } from "./payload-validators";
 import { applyDiagnosticsMode, prefs } from "./prefs";
@@ -1750,6 +1750,11 @@ import { VD } from "./vd-registry";
   Object.assign(VD, {
     reportClientError,
     callBridge,
+    // The eager bundle's i18n lookup, published for LAZY chunks (map.ts): a
+    // chunk importing ./i18n would re-bundle its own catalog copy — dead bytes
+    // against the lazy-JS budget and blind to the locale resolved here. Inside
+    // the eager bundle, keep using the typed `import { t }` instead.
+    t,
     setRestoreProgress,
     parsePayload,
     setText,

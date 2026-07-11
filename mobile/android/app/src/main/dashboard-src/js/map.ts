@@ -297,6 +297,39 @@ import { VD } from "./vd-registry";
     syncRemoteTiles();
   }
 
+  // ── Map-tile privacy disclosure (E1) ────────────────────────────────────
+  // Basemap tile requests are the app's only routine network egress: they tell
+  // the OpenStreetMap/CARTO tile servers the approximate area being viewed
+  // (tile coordinates). Everything else — routes, OBD samples — stays local.
+  // Disclose that honestly the first time the Map renders on this install; a
+  // "Got it" tap persists the dismissal via prefs (vt.pref.* localStorage), so
+  // the notice never returns. Settings keeps a permanent one-line pointer.
+  const MAP_PRIVACY_NOTICE_DISMISSED_PREF = "mapTilePrivacyNoticeDismissed";
+
+  function maybeShowMapPrivacyNotice() {
+    const notice = el("mapPrivacyNotice");
+    // The notice ships hidden in the partial and only this unhides it, so a
+    // recorded dismissal is a plain skip (the Got-it handler re-hides live).
+    if (!notice || VD.prefs.get<boolean>(MAP_PRIVACY_NOTICE_DISMISSED_PREF, false)) return;
+    // Copy flows through the i18n catalog and lands via textContent only.
+    // `VD.t` is the EAGER bundle's i18n lookup (registered by core.ts):
+    // importing ./i18n here would re-bundle a private copy into this lazy
+    // chunk — dead weight against the lazy-JS budget AND blind to the locale
+    // the eager side resolved. The partial ships the English copy as its
+    // static fallback, so a missing VD.t just leaves that in place.
+    if (VD.t) {
+      VD.setText("mapPrivacyNoticeCopy", VD.t("map.privacyNotice.body"));
+      VD.setText("mapPrivacyGotItBtn", VD.t("map.privacyNotice.gotIt"));
+    }
+    notice.hidden = false;
+  }
+
+  el("mapPrivacyGotItBtn")?.addEventListener("click", () => {
+    VD.prefs.set(MAP_PRIVACY_NOTICE_DISMISSED_PREF, true);
+    const notice = el("mapPrivacyNotice");
+    if (notice) notice.hidden = true;
+  });
+
   const MAP_TILE_WARNING_THRESHOLD = 3;
   const MAP_TILE_FALLBACK_THRESHOLD = 6;
   // Cap on stop markers drawn (and counted in the badge) so a long stop-and-go
@@ -595,6 +628,7 @@ import { VD } from "./vd-registry";
 
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     syncRemoteTiles();
+    maybeShowMapPrivacyNotice();
     drawMapRoute(points, hasRoute, layer, routeSession);
     if (hasRoute && typeof VD.renderScrubber === "function") VD.renderScrubber(route);
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();

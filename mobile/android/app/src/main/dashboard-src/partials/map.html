@@ -14,6 +14,29 @@
     </button>
   </div>
 
+  <!--
+    One-time map-tile privacy disclosure (E1). Basemap imagery is the app's
+    only routine network egress; map.ts#maybeShowMapPrivacyNotice unhides this
+    on the first map render per install and fills the copy from the i18n
+    catalog. "Got it" persists the dismissal (vt.pref.mapTilePrivacyNoticeDismissed).
+  -->
+  <div
+    id="mapPrivacyNotice"
+    class="map-privacy-notice"
+    role="status"
+    aria-live="polite"
+    hidden
+  >
+    <span id="mapPrivacyNoticeCopy">
+      Map imagery loads from OpenStreetMap/CARTO servers. They receive the
+      approximate area you view (map-tile coordinates) &mdash; never your
+      routes, telemetry, or identity.
+    </span>
+    <button type="button" id="mapPrivacyGotItBtn" class="link-btn">
+      Got it
+    </button>
+  </div>
+
   <article id="mapCard" class="panel map-card">
     <div id="mapFrame" class="map-frame" data-layer="eff" data-noswipe="true">
       <!-- The layer tabs all render into this one Leaflet canvas, so it (not the

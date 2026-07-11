@@ -72,7 +72,11 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // and the week-chart/eff-bars renderer options. Eager CSS ships raw.
 // ~3.6 KB headroom retained.
 def dashboardStartupBudgetBytes = 412_000L
-def dashboardLazySupportBudgetBytes = 90_000L
+// 90k → 90.5k (E1 map-tile privacy disclosure, 2026-07-11): funds the one-time
+// "map imagery loads from OpenStreetMap/CARTO" notice in the lazy map chunk
+// (map.ts#maybeShowMapPrivacyNotice, ~0.4 KB). Copy resolves through the eager
+// bundle's VD.t so the chunk does not re-bundle the i18n catalog.
+def dashboardLazySupportBudgetBytes = 90_500L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyExpertBudgetBytes = 40_000L
 // Detail-panel chunks split OUT of the eager app.js in the G2 startup-headroom
