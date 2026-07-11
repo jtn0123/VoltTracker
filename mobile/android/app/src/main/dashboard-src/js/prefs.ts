@@ -834,18 +834,21 @@
     applyDriveTiles();
     renderTilesEditor();
     // Home electricity-rate ($/kWh) preference: hydrate the field and persist on
-    // edit. This is the default rate for all charge-cost / savings math.
-    bindNumericPref("pricePerKwhInput", "pricePerKwh", 0, 100);
+    // edit. This is the default rate for all charge-cost / savings math. C8: a
+    // realistic ceiling — even extreme DCFC/TOU rates stay under $2/kWh, so a
+    // fat-fingered "25" (meant as $0.25) can't silently poison the cost model.
+    // Bounds mirror the min/max on the partial's inputs (preferences.html).
+    bindNumericPref("pricePerKwhInput", "pricePerKwh", 0, 2);
     // Optional public / DC-fast rate (M3). When set (> 0), charge-cost
     // estimates bill public/DCFC sessions at this rate and home (Level 1/2,
     // unknown) sessions at the home rate; left blank, every session uses the
     // single home rate so behaviour is unchanged for users who never set it.
-    bindNumericPref("publicPricePerKwhInput", "publicPricePerKwh", 0, 100);
+    bindNumericPref("publicPricePerKwhInput", "publicPricePerKwh", 0, 2);
     // Comparison gas vehicle: MPG + gas price drive the "Estimated savings vs gas"
     // stat on Insights (insights-panel.ts). Clamped to plausible ranges so a
     // fat-fingered entry can't poison the estimate.
     bindNumericPref("gasMpgInput", "mpg", 5, 150);
-    bindNumericPref("gasPricePerGalInput", "gasPricePerGal", 0, 20);
+    bindNumericPref("gasPricePerGalInput", "gasPricePerGal", 0, 10);
     // Charge target SOC (M2/C3): now lives in BOTH the Preferences panel
     // (#prefChargeTargetInput — the canonical, always-reachable home) and the
     // live-charge card (#liveChargeTargetInput — a synced mirror, shown only while
