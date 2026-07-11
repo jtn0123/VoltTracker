@@ -493,6 +493,32 @@ class BackupRoundTripTest {
         legacyEncrypted.delete()
     }
 
+    /**
+     * E3 compatibility through the full restore path: backups written before passphrase trimming
+     * was removed were keyed on the TRIMMED passphrase. A user who typed edge whitespace back then
+     * types the same thing today — the exact form fails authentication, and stageRestoreFile must
+     * unlock the backup via the one-shot trimmed retry rather than reporting a wrong passphrase.
+     */
+    @Test
+    fun encryptedBackupKeyedOnTrimmedPassphraseStillStagesWithWhitespaceInput() {
+        val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 34.05, -118.25, 1_100L))
+
+        // Simulate the old encrypt path, which trimmed " trim me please " before deriving the key.
+        val plain = dataBackup.buildBackupFile(store)
+        assertNotNull(plain)
+        val legacyEncrypted = File(context.cacheDir, "legacy-trimmed-pass.vtdb")
+        BackupCrypto.encryptFile(plain!!, legacyEncrypted, "trim me please")
+        assertTrue(DataBackup.isEncryptedBackup(legacyEncrypted))
+
+        val uri = registerAsSafUri(legacyEncrypted)
+        val staged = dataBackup.stageRestoreFile(uri, " trim me please ")
+        assertNotNull("the trimmed-key fallback must unlock a pre-fix backup", staged)
+        assertTrue(DataBackup.isVoltTrackerBackup(staged))
+        staged!!.delete()
+        legacyEncrypted.delete()
+    }
+
     @Test
     fun stageRestoreFileMigratesV7BackupAndRestoresRows() {
         val legacy = createLegacyV7BackupFile()

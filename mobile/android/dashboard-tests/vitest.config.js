@@ -67,11 +67,15 @@ export default {
       //   app-dialog focus specs, CSS data-state/tone drift specs); floors set
       //   ~3pts below measured per the convention above. Baselines in
       //   coverage-ratchet.test.js raised in lockstep.
+      //   2026-07-11 (D1): branches 66 -> 72. Measured 74.4% branches
+      //   (6288/8452) — the old floor had drifted ~8pts below actual, so a
+      //   sizeable branch-coverage regression could land without failing CI.
+      //   Floor set ~2pts below measured per the ratchet convention.
       thresholds: {
         lines: 81,
         statements: 78,
         functions: 80,
-        branches: 66,
+        branches: 72,
         '../**/dashboard-src/js/troubleshooter.ts': {
           statements: 85,
           branches: 68,

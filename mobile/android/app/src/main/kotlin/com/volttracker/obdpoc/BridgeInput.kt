@@ -17,16 +17,30 @@ internal const val BRIDGE_MAX_PASSPHRASE_LEN = 256
 internal fun bridgeSafe(
     value: String?,
     maxLen: Int,
+): String = clampBridgeValue(value?.trim().orEmpty(), maxLen)
+
+/**
+ * Length-bounds untrusted WebView text WITHOUT trimming edge whitespace. For secret inputs —
+ * backup passphrases — where every character, including leading/trailing spaces, is key
+ * material: silently trimming would derive a different encryption key than the user typed.
+ */
+internal fun bridgeSafeNoTrim(
+    value: String?,
+    maxLen: Int,
+): String = clampBridgeValue(value.orEmpty(), maxLen)
+
+private fun clampBridgeValue(
+    value: String,
+    maxLen: Int,
 ): String {
-    val trimmed = value?.trim() ?: return ""
-    if (trimmed.length <= maxLen) {
-        return trimmed
+    if (value.length <= maxLen) {
+        return value
     }
     var cut = maxLen
-    if (cut > 0 && Character.isHighSurrogate(trimmed[cut - 1])) {
+    if (cut > 0 && Character.isHighSurrogate(value[cut - 1])) {
         cut -= 1
     }
-    return trimmed.substring(0, cut)
+    return value.substring(0, cut)
 }
 
 /** Bounds untrusted WebView text and removes characters that can forge extra logcat records. */

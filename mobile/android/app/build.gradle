@@ -295,4 +295,7 @@ tasks.named("preBuild") {
     // The shipped dashboard JS assets (assets/dashboard/js) are gitignored, built from
     // dashboard-src/js TypeScript by esbuild — build them before the assets get packaged.
     dependsOn(rootProject.tasks.named("buildDashboardJs"))
+    // Bootstrap the lefthook git hooks on any local build; a safe no-op when
+    // lefthook is not installed (CI runners) — see rootProject installGitHooks.
+    dependsOn(rootProject.tasks.named("installGitHooks"))
 }

@@ -1,4 +1,7 @@
-# Install: brew install lefthook && lefthook install
+# Install: brew install lefthook — any `./gradlew` Android build then bootstraps
+# the hooks automatically (:app:preBuild -> installGitHooks runs `lefthook
+# install` when lefthook is on PATH; safe no-op otherwise, e.g. in CI).
+# Manual install: lefthook install
 # Run manually: lefthook run pre-commit
 
 pre-commit:

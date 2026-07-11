@@ -434,6 +434,93 @@ class BackupCryptoTest {
         }
     }
 
+    // ---- passphrase whitespace handling (E3) ------------------------------------------------
+
+    /**
+     * Edge whitespace is key material now: a passphrase typed with a leading/trailing space
+     * encrypts and decrypts round-trip exactly as typed, and the fallback reports EXACT (no
+     * trimmed retry needed).
+     */
+    @Test
+    fun passphraseWithEdgeWhitespaceRoundTripsExactly() {
+        val payload = randomBytes(1_024)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, " correct horse ")
+
+        val form =
+            BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, " correct horse ", Long.MAX_VALUE)
+
+        assertEquals(BackupCrypto.PassphraseForm.EXACT, form)
+        assertArrayEquals(payload, decrypted.readBytes())
+    }
+
+    /**
+     * The whitespace really is significant: the TRIMMED form must not unlock a container keyed on
+     * the whitespace-carrying passphrase. (The fallback only retries exact -> trimmed, never the
+     * other direction, so this must fail authentication.)
+     */
+    @Test
+    fun trimmedFormCannotUnlockAWhitespaceKeyedBackup() {
+        val payload = randomBytes(512)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, " correct horse ")
+
+        try {
+            BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, "correct horse", Long.MAX_VALUE)
+            fail("the trimmed form must not unlock a container keyed with edge whitespace")
+        } catch (ex: GeneralSecurityException) {
+            // Expected: wrong key, and no whitespace on the input to fall back from.
+        }
+    }
+
+    /**
+     * Legacy compatibility: before this fix the passphrase was trimmed before key derivation, so an
+     * old backup made by a user who typed " correct horse " is keyed on "correct horse". When that
+     * user types the same whitespace-carrying passphrase today, the exact form fails and the
+     * one-shot trimmed retry must unlock the backup, reporting LEGACY_TRIMMED.
+     */
+    @Test
+    fun legacyTrimmedKeyBackupStillDecryptsViaTrimFallback() {
+        val payload = randomBytes(2_048)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        // Simulate the old encrypt path: key derived from the TRIMMED passphrase.
+        BackupCrypto.encryptFile(source, encrypted, "correct horse")
+
+        val form =
+            BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, "  correct horse ", Long.MAX_VALUE)
+
+        assertEquals(BackupCrypto.PassphraseForm.LEGACY_TRIMMED, form)
+        assertArrayEquals("the legacy-keyed backup must still decrypt", payload, decrypted.readBytes())
+    }
+
+    /** The trimmed retry must not mask a genuinely wrong passphrase — it still throws. */
+    @Test
+    fun trimFallbackStillRejectsAWrongPassphrase() {
+        val payload = randomBytes(512)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        try {
+            BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, " wrong passphrase ", Long.MAX_VALUE)
+            fail("a wrong passphrase must fail even after the trimmed retry")
+        } catch (ex: GeneralSecurityException) {
+            // Expected: neither the exact nor the trimmed form derives the right key.
+        }
+        assertEquals("no plaintext may survive a failed fallback", 0L, decrypted.length())
+    }
+
     /** Builds a real v2 container (legacy 150k KDF, magic+salt+IV AAD) the way the prior code did. */
     private fun writeLegacyV2Container(
         payload: ByteArray,
