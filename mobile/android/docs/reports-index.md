@@ -52,5 +52,5 @@ Recheck against current code before acting on anything in `archive/`.
 
 For a fresh graded audit with addressable improvement IDs, run the
 `grade-codebase` skill; its report is written to repo-local, gitignored
-`.Codex/grade-report.md`. Historical audit reports live under `archive/` so
+`.claude/grade-report.md`. Historical audit reports live under `archive/` so
 they stay available without looking like current implementation guidance.
