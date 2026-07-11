@@ -176,6 +176,12 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //     ObdPollingEngine LINE 85.5% (435/509) -> floor 0.85
 //     ObdService       LINE 84.4% (422/500) -> floor 0.80
 //     SessionRecorder   LINE 89.0% (307/345) -> floor 0.86
+//   2026-07-11 (round 15, A1 — Mode-22 parser registry): the Mode-22 when-table decoder
+//   (ObdVoltMode22Decoder) became ObdVoltMode22ParserRegistry, a pure dispatch-table class
+//   whose every PID family is pinned at exact decoded values by golden vectors in
+//   ObdProtocolTest (added before the refactor to prove equivalence). Measured
+//   LINE 100% (186/186) -> floor 0.95 (churn room), same convention as the other
+//   pure decode contracts (ObdElmDecode).
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -238,6 +244,14 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         rule {
             element = "CLASS"
             includes = ["com.volttracker.obdpoc.ObdElmDecode"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        // Round 15 (A1): the Mode-22 parser registry is a pure dispatch table pinned by
+        // golden vectors in ObdProtocolTest; a coverage drop here means a PID family lost
+        // its value-level test.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdVoltMode22ParserRegistry"]
             limit { counter = "LINE"; minimum = 0.95 }
         }
         rule {
