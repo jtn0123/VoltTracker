@@ -183,7 +183,7 @@ open class ObdService :
         val eventPrefs = EventNotificationPrefs(sharedPrefs)
         tripSummaryNotifier = TripSummaryNotifier(this) { eventPrefs.tripSummaryEnabled() }
         widgetUpdater = createWidgetUpdater()
-        rollingAppLog = RollingAppLog(File(filesDir, "app-log"))
+        rollingAppLog = RollingAppLog(File(filesDir, RollingAppLog.DIR_NAME))
         OBDLog.mirror(rollingAppLog)
         val summaryStore = SessionSummaryStore.getInstance(filesDir)
         recorder =

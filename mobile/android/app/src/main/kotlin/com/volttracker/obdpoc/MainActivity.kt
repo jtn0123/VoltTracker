@@ -37,7 +37,130 @@ open class MainActivity :
     DashboardHost {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
+    private var dashboardRoot: FrameLayout? = null
+    private var dashboardErrorSurface: DashboardErrorSurface? = null
     private val mainHandler = Handler(Looper.getMainLooper())
+
+    // WebView renderer-death / handshake resilience (report items B1/B2). The coordinator holds
+    // the policy (recovery cap, watchdog, logging); this Seam supplies the Activity-owned side effects,
+    // mirroring the DashboardBroadcastCoordinator seam pattern. The attach/teardown bodies live
+    // here (not as Activity members) because onCreate and onDestroy share them with the recovery
+    // path. OBDLog.error tees the log lines into the RollingAppLog whenever the service has the
+    // mirror installed.
+    private val dashboardWebViewSeam: DashboardRecoveryCoordinator.Seam =
+        object : DashboardRecoveryCoordinator.Seam {
+            /**
+             * Tears down any existing WebView, then creates a fresh one, mounts it in
+             * [dashboardRoot], and re-runs the one-shot [WebViewBootstrap] wiring (hardened
+             * settings + a fresh [VoltBridge] + loadUrl) — restoring the JS bridge so telemetry
+             * publishing resumes after the new page's handshake. Also the initial attach path
+             * from [onCreate] (the teardown half no-ops when there is nothing to tear down).
+             */
+            override fun recreateWebView() {
+                destroyWebView()
+                StartupTrace.mark("webview_create_start")
+                val createdWebView = WebView(this@MainActivity)
+                StartupTrace.mark("webview_create_end")
+                webView = createdWebView
+                createdWebView.id = R.id.dashboard_webview
+                createdWebView.contentDescription = DASHBOARD_LOADING_DESCRIPTION
+                // Mounted at index 0 so the error surface (if showing) stays above the WebView.
+                dashboardRoot?.addView(
+                    createdWebView,
+                    0,
+                    FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    ),
+                )
+                dashboardPublisher =
+                    DashboardPublisher(createdWebView, { !isFinishing && !isDestroyed }) { command ->
+                        runOnUiThread(command)
+                    }
+                StartupTrace.measure("webview_configure_start", "webview_configure_end") {
+                    WebViewBootstrap.configure(createdWebView, VoltBridge(this@MainActivity), webViewCrashEvents)
+                }
+            }
+
+            /**
+             * Detaches and destroys the current dashboard WebView (shared by [onDestroy] and the
+             * renderer-death recovery). The WebView holds the VoltBridge JS interface, which keeps
+             * a strong reference back to this Activity; without destroy()/removeJavascriptInterface
+             * the WebView (and the whole Activity graph + native chromium resources) leaks, and the
+             * orphaned page's JS timers/console callbacks keep firing.
+             */
+            override fun destroyWebView() {
+                webView?.let { wv ->
+                    try {
+                        (wv.parent as? ViewGroup)?.removeView(wv)
+                        wv.removeJavascriptInterface("VoltTrackerAndroid")
+                        wv.stopLoading()
+                        wv.destroy()
+                    } catch (ex: RuntimeException) {
+                        // Chromium can throw from stopLoading()/destroy() while tearing down its
+                        // native side; a leaked WebView beats crashing the teardown.
+                        Log.w(TAG, "WebView teardown failed", ex)
+                    }
+                }
+                webView = null
+                dashboardPublisher = null
+            }
+
+            override fun showErrorSurface(
+                messageResId: Int,
+                showRetry: Boolean,
+            ) {
+                dashboardErrorSurface?.show(messageResId, showRetry)
+            }
+
+            override fun hideErrorSurface() {
+                dashboardErrorSurface?.hide()
+            }
+
+            override fun isDashboardReady(): Boolean = dashboardPublisher?.isPageReady() == true
+
+            override fun scheduleDelayed(
+                delayMs: Long,
+                task: Runnable,
+            ) {
+                mainHandler.postDelayed(task, delayMs)
+            }
+
+            override fun cancelScheduled(task: Runnable) {
+                mainHandler.removeCallbacks(task)
+            }
+
+            override fun logError(message: String) = OBDLog.error(TAG, message)
+        }
+
+    private val dashboardRecovery = DashboardRecoveryCoordinator(dashboardWebViewSeam)
+
+    // Renderer-death / main-frame-error notifications from the WebViewClient. Reports from a
+    // WebView that has already been replaced by a recovery are stale and ignored — acting on one
+    // would tear down the healthy replacement.
+    private val webViewCrashEvents: WebViewBootstrap.CrashEvents =
+        object : WebViewBootstrap.CrashEvents {
+            override fun onRendererGone(
+                view: WebView?,
+                crashed: Boolean,
+            ) {
+                if (view !== webView || isFinishing || isDestroyed) {
+                    return
+                }
+                dashboardRecovery.onRendererGone(crashed)
+            }
+
+            override fun onMainFrameLoadFailed(
+                view: WebView?,
+                errorCode: Int,
+                description: String,
+            ) {
+                if (view !== webView || isFinishing || isDestroyed) {
+                    return
+                }
+                dashboardRecovery.onMainFrameLoadFailed(errorCode, description)
+            }
+        }
     private val publishAppStateCommand: () -> Unit = { callDashboard("setAppState", getAppStateJson()) }
     private var isActivityResumed = false
     private var postReadyDashboardRefreshPending = false
@@ -365,19 +488,16 @@ open class MainActivity :
             }
         }
 
-        StartupTrace.mark("webview_create_start")
-        val createdWebView = WebView(this)
-        StartupTrace.mark("webview_create_end")
-        webView = createdWebView
-        createdWebView.id = R.id.dashboard_webview
-        createdWebView.contentDescription = DASHBOARD_LOADING_DESCRIPTION
-        createdWebView.layoutParams =
-            FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        // The dashboard WebView sits inside a plain FrameLayout so the native error/reconnecting
+        // surface (report items B1/B2) can be layered over it, and so a dead WebView can be
+        // swapped for a fresh one without touching the Activity's content view.
+        val root = FrameLayout(this)
+        dashboardRoot = root
         StartupTrace.mark("set_content_view_start")
-        setContentView(createdWebView)
+        setContentView(root)
         StartupTrace.mark("set_content_view_end")
 
-        ViewCompat.setOnApplyWindowInsetsListener(createdWebView) { view, windowInsets ->
+        ViewCompat.setOnApplyWindowInsetsListener(root) { view, windowInsets ->
             val bars =
                 windowInsets.getInsets(
                     WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout(),
@@ -385,15 +505,14 @@ open class MainActivity :
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             windowInsets
         }
-        ViewCompat.requestApplyInsets(createdWebView)
+        ViewCompat.requestApplyInsets(root)
 
-        dashboardPublisher =
-            DashboardPublisher(createdWebView, { !isFinishing && !isDestroyed }) { command ->
-                runOnUiThread(command)
-            }
-        StartupTrace.measure("webview_configure_start", "webview_configure_end") {
-            WebViewBootstrap.configure(createdWebView, VoltBridge(this))
-        }
+        dashboardErrorSurface = DashboardErrorSurface(root) { dashboardRecovery.onRetryRequested() }
+        // Initial attach: same path a renderer-death recovery uses (see dashboardWebViewSeam).
+        dashboardWebViewSeam.recreateWebView()
+        // Handshake watchdog (report item B2): if the dashboard JS never calls dashboardReady,
+        // surface a native "failed to load" + Retry instead of a blank screen forever.
+        dashboardRecovery.onDashboardLoadStarted()
 
         onBackPressedDispatcher.addCallback(this, backCallback)
         StartupTrace.mark("activity_on_create_end")
@@ -402,6 +521,8 @@ open class MainActivity :
     override fun onDashboardReady() {
         StartupTrace.mark("dashboard_ready_bridge_start")
         Log.i(TAG, "$DASHBOARD_READY_LOG: JS is live")
+        // Clear any recovery/reconnecting surface — the fresh page's JS is alive.
+        dashboardRecovery.onDashboardReady()
         val publisher = dashboardPublisher ?: return
         if (publisher.isPageReady()) {
             return
@@ -539,24 +660,11 @@ open class MainActivity :
         backgroundExecutor.shutdownNow()
         troubleshooter?.shutdown()
         ActivityStoreTeardown.closeWhenExecutorStops(backgroundExecutor, storeToClose)
-        // Tear the WebView down explicitly. It holds the VoltBridge JS interface, which keeps a
-        // strong reference back to this Activity; without destroy()/removeJavascriptInterface the
-        // WebView (and the whole Activity graph + native chromium resources) leaks every time the
-        // Activity is torn down, and the orphaned page's JS timers/console callbacks keep firing.
-        webView?.let { wv ->
-            try {
-                (wv.parent as? ViewGroup)?.removeView(wv)
-                wv.removeJavascriptInterface("VoltTrackerAndroid")
-                wv.stopLoading()
-                wv.destroy()
-            } catch (ex: RuntimeException) {
-                // Chromium can throw from stopLoading()/destroy() while tearing down its native
-                // side; a leaked WebView beats crashing the whole Activity teardown.
-                Log.w(TAG, "WebView teardown failed", ex)
-            }
-        }
-        webView = null
-        dashboardPublisher = null
+        // Cancel the handshake watchdog so its runnable cannot fire against a dead Activity.
+        dashboardRecovery.dispose()
+        // Tear the WebView down explicitly — see dashboardWebViewSeam.destroyWebView's KDoc for
+        // why leaking it would leak the whole Activity graph.
+        dashboardWebViewSeam.destroyWebView()
         autoConnectController = null
         eventNotificationPrefs = null
         super.onDestroy()
