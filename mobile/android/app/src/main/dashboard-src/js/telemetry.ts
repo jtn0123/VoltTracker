@@ -1760,7 +1760,7 @@ import { VD } from "./vd-registry";
   // Reveal/hide the 96-group heatmap. Called from the "Read 96 cells" / "Hide
   // cells" toggle (actions.ts). Forces a grid re-render since the memo key depends
   // on the open state.
-  function setCellGridOpen(open: boolean) {
+  export function setCellGridOpen(open: boolean) {
     cellGridOpen = open;
     const toggle = el("cellToggleBtn");
     if (toggle) {
@@ -1771,13 +1771,13 @@ import { VD } from "./vd-registry";
     renderCellGrid();
   }
 
-  function isCellGridOpen(): boolean {
+  export function isCellGridOpen(): boolean {
     return cellGridOpen;
   }
 
   // True when a full per-cell read is already loaded (live array or stored probe),
   // so the toggle can skip firing a fresh probe.
-  function cellGridHasFull(): boolean {
+  export function cellGridHasFull(): boolean {
     const t = state.telemetry || {};
     const rawCells = Array.isArray(t.cellVoltages) ? (t.cellVoltages as unknown[]) : [];
     let liveKnown = 0;
