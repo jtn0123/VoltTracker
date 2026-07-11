@@ -39,6 +39,11 @@ export const EN = {
   "drive.trace.waitingForSamples": "speed trace appears once samples stream in",
   "drive.power.waitingForSamples": "Waiting for power samples",
   "drive.soc.waitingForSamples": "Waiting for SOC samples",
+  // map.ts first-open tile-privacy disclosure (E1). The basemap is the app's
+  // only routine network egress, so the notice names who receives what.
+  "map.privacyNotice.body":
+    "Map imagery loads from OpenStreetMap/CARTO servers. They receive the approximate area you view (map-tile coordinates) — never your routes, telemetry, or identity.",
+  "map.privacyNotice.gotIt": "Got it",
 } as const;
 
 /** Every translatable key. Derived from `EN` so call sites are compile-checked. */

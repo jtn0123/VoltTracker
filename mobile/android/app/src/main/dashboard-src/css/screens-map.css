@@ -23,6 +23,33 @@
   align-items: stretch;
 }
 
+/* One-time map-tile privacy disclosure (E1). Sits between the drive picker
+   and the map card — a static banner, not a canvas overlay, so it never
+   fights the tile-error banner or the layer tabs. Mirrors the .map-tile-error
+   look (screens.css) at rest position. */
+.map-privacy-notice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--surface-overlay);
+  color: var(--soft);
+  font-size: 12px;
+}
+
+.map-privacy-notice[hidden] {
+  display: none;
+}
+
+.map-privacy-notice .link-btn {
+  flex: none;
+  min-height: var(--touch-min-dense);
+  padding: 0 10px;
+}
+
 .map-all-drives-btn {
   min-height: var(--touch-min);
   align-self: center;

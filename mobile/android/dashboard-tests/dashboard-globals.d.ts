@@ -709,6 +709,14 @@ interface VoltRestoreProgress {
     parsePayload<T = VoltPayload>(payload: unknown, fallback?: unknown): T;
     /** Set an element's text (with "--" fallback); returns whether the node existed. */
     setText(id: string, value: unknown): boolean;
+    /** The EAGER bundle's i18n lookup (i18n.ts `t`), published by core.ts for
+     *  lazy chunks: a chunk importing ./i18n directly would re-bundle its own
+     *  catalog copy and miss the locale resolved on the eager side. Typed with
+     *  MessageKey so cross-chunk call sites keep compile-time key checking. */
+    t?(
+      key: import("../app/src/main/dashboard-src/js/i18n").MessageKey,
+      params?: Readonly<Record<string, string | number>>,
+    ): string;
     /** Set a meter element's fill width (0-100); returns whether the node existed. */
     setMeter(id: string, value: unknown): boolean;
     scrollAppToTop(): void;

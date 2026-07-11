@@ -86,6 +86,26 @@ The Map and Trips basemap is fetched at view time from the CARTO basemap CDN
 fallback when CARTO is unreachable. Tile requests are the only routine network
 traffic the app generates.
 
+**What leaves the device:** a tile request contains the tile's map
+coordinates (zoom level plus x/y tile indices) and standard HTTP metadata
+such as your IP address. Tile coordinates identify the approximate
+geographic area shown on screen — at typical zoom levels a tile covers
+roughly a neighborhood-to-city-sized area — so the tile provider can infer
+the coarse region you are looking at (which often correlates with where you
+drive). **What does not leave the device:** your GPS route points, OBD
+telemetry, drive history, vehicle identity, and account-free app state are
+never sent to tile providers or anywhere else; routes are drawn locally on
+top of the fetched imagery. No telemetry, analytics, or identifiers beyond
+the plain HTTP request are attached.
+
+**Timing:** no tiles are fetched at app startup. Tile requests begin only
+when a map actually renders on screen — opening the Map tab or opening a
+trip onto the map (real or demo); the Leaflet map and its tile layer are not
+even created while the map view is hidden. The first time the map
+renders on an install, the app shows a one-time dismissible notice stating
+the above; a permanent one-line restatement lives at the bottom of Settings
+next to the open-source licenses.
+
 Tiles are deliberately **not persistently cached** by the app. There is no
 offline tile store: caching tiles to disk would accumulate a
 location-revealing archive of everywhere the map has been viewed, and an
