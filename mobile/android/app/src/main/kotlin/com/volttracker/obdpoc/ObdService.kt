@@ -483,6 +483,8 @@ open class ObdService :
             acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
+        // Anchor for the connect→first-sample latency spans (debug builds only; see StartupTrace).
+        StartupTrace.mark("${StartupTrace.OBD_CONNECT_REQUEST}:${request.mode}")
         sessionStateMachine.start(request.phase, request.phaseDetail)
         // Clear any voltage carried over from a prior session: if this connect's 0142 probe
         // doesn't run, broadcastStatus must not re-emit the previous drive's reading into the

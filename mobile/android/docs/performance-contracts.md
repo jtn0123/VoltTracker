@@ -18,6 +18,7 @@ bash tools/benchmark-adb-startup-local.sh <ip:port-or-adb-serial>
 bash tools/benchmark-adb-tabs-local.sh <ip:port-or-adb-serial>
 bash tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db
 bash tools/device-baseline-local.sh <ip:port-or-adb-serial>
+python3 tools/perf/check_obd_latency.py --logcat <logcat-dump-or-->
 ./gradlew dashboardAssetReport
 npm --prefix dashboard-tests test -- startup-budget.test.js
 ./gradlew :app:testDebugUnitTest --tests 'com.volttracker.obdpoc.data.ObdStoreReportsDbTest' --tests 'com.volttracker.obdpoc.data.ObdStoreRouteProjectionDbTest'
@@ -100,6 +101,7 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 | Device cold start | app launches to the dashboard-ready probe within the Macrobenchmark run | `verifyStartupPerformance` |
 | Local startup breakdown | debug builds emit `VoltStartup` marks that identify WebView, dashboard JS, ready-handshake, and storage-summary spans | `tools/benchmark-adb-startup-local.sh <device>` |
 | Startup-to-tab responsiveness | startup plus Map/Charge/Insights/Diagnostics/Settings tab readiness is trended per device | `tools/benchmark-adb-tabs-local.sh <device>` |
+| OBD connect/scan latency | debug builds emit `obd_*` `VoltStartup` marks (connect request, socket connect, ELM init, first sample, scan stages); spans stay under the provisional ceilings in `tools/perf/check_obd_latency.py` | `tools/perf/check_obd_latency.py` (run by `scripts/emulator-smoke.sh` with `--require demo`) |
 | Seeded storage reads | overview, details, trips, and route reads stay inside generous JVM budgets | `ObdStorePerformanceBudgetTest` |
 | Real database reads | optional local timing on a copied SQLite database, useful for large restored histories | `tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db` |
 | Route/scalar serialization | route, SOC, and power tracks cap at `MAX_TRACK_POINTS` and preserve first/last samples | `ObdStoreRouteProjectionDbTest` |
@@ -124,6 +126,14 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
   lookup/update loops on the polling thread.
 - Field latency claims need log evidence: socket timing, ELM prompt timing,
   command timing, and first useful sample timing.
+- Debug builds mark the connect path with `obd_*` `VoltStartup` marks
+  (`StartupTrace.OBD_*`): connect request, socket connect, ELM init span,
+  first published sample (`:live` or `:demo`), and diagnostic-scan stages.
+  `tools/perf/check_obd_latency.py` parses any logcat dump into per-session
+  spans and gates them against provisional ceilings; the emulator smoke runs
+  it against the demo session so the marks stay capturable without a car.
+  Keep the mark names in sync with the parser —
+  `ObdLatencyMarksContractTest` pins both sides.
 
 ## Dashboard Rules
 
