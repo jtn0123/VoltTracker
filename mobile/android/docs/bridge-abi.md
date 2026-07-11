@@ -23,8 +23,9 @@ trims, and truncates. The bounds are `BRIDGE_MAX_ADDRESS_LEN=64`, `BRIDGE_MAX_NA
 > frozen `VOLT_BRIDGE_METHODS` contract in
 > `dashboard-tests/setup/voltbridge.fixture.js`. If that count changes, this table
 > has drifted: re-diff it against the fixture and `VoltBridge.kt` (plus its
-> `VoltBridgeConnections` / `VoltBridgeDataExports` / `VoltBridgeDiagnostics` /
-> `VoltBridgeNotifications` / `VoltBridgeStorage`
+> `VoltBridgeConnections` / `VoltBridgeBackups` / `VoltBridgeSignalLogs` /
+> `VoltBridgeTripExports` / `VoltBridgeTripEdits` / `VoltBridgeMaintenance` /
+> `VoltBridgeDiagnostics` / `VoltBridgeNotifications` / `VoltBridgeStorage`
 > delegates) and update the rows below.
 
 | Method | Args | Returns | Validation | Notes |

@@ -13,7 +13,11 @@ class VoltBridge(
     private val activity: DashboardHost,
 ) : VoltBridgeNotifications(activity) {
     private val connections = VoltBridgeConnections(activity)
-    private val dataExports = VoltBridgeDataExports(activity, activity)
+    private val backups = VoltBridgeBackups(activity, activity)
+    private val signalLogs = VoltBridgeSignalLogs(activity)
+    private val tripExports = VoltBridgeTripExports(activity)
+    private val tripEdits = VoltBridgeTripEdits(activity)
+    private val maintenance = VoltBridgeMaintenance(activity)
     private val diagnostics = VoltBridgeDiagnostics(activity)
     private val storage = VoltBridgeStorage(activity)
     private val clientErrorRateLimiter = ClientErrorRateLimiter()
@@ -132,26 +136,26 @@ class VoltBridge(
     fun requestStorageDetails(): Boolean = storage.requestStorageDetails()
 
     @JavascriptInterface
-    fun exportDebugBundle(): String = dataExports.exportDebugBundle()
+    fun exportDebugBundle(): String = backups.exportDebugBundle()
 
     @JavascriptInterface
     fun shareBackup(dashboardPreferencesJson: String?) {
-        dataExports.shareBackup(dashboardPreferencesJson)
+        backups.shareBackup(dashboardPreferencesJson)
     }
 
     @JavascriptInterface
     fun shareEncryptedBackup(
         passphrase: String?,
         dashboardPreferencesJson: String?,
-    ) = dataExports.shareEncryptedBackup(passphrase, dashboardPreferencesJson)
+    ) = backups.shareEncryptedBackup(passphrase, dashboardPreferencesJson)
 
     @JavascriptInterface
     fun restoreBackup() {
-        dataExports.restoreBackup()
+        backups.restoreBackup()
     }
 
     @JavascriptInterface
-    fun restoreEncryptedBackup(passphrase: String?) = dataExports.restoreEncryptedBackup(passphrase)
+    fun restoreEncryptedBackup(passphrase: String?) = backups.restoreEncryptedBackup(passphrase)
 
     @JavascriptInterface
     fun getTrips(): String = storage.getTrips()
@@ -199,7 +203,7 @@ class VoltBridge(
 
     @JavascriptInterface
     fun clearStoredData() {
-        dataExports.clearStoredData()
+        backups.clearStoredData()
     }
 
     @JavascriptInterface
@@ -244,47 +248,47 @@ class VoltBridge(
     }
 
     @JavascriptInterface
-    fun exportDetailedSignalLog(id: String?): String = dataExports.exportDetailedSignalLog(id)
+    fun exportDetailedSignalLog(id: String?): String = signalLogs.exportDetailedSignalLog(id)
 
     @JavascriptInterface
-    fun exportDetailedSignalLogs(): String = dataExports.exportDetailedSignalLogs()
+    fun exportDetailedSignalLogs(): String = signalLogs.exportDetailedSignalLogs()
 
     /** Exports a single logged trip as a GPX track and opens the share sheet. */
     @JavascriptInterface
-    fun exportTripGpx(routeKeyOrSessionId: String?): String = dataExports.exportTripGpx(routeKeyOrSessionId)
+    fun exportTripGpx(routeKeyOrSessionId: String?): String = tripExports.exportTripGpx(routeKeyOrSessionId)
 
     /** Exports a single logged trip as a CSV sample log and opens the share sheet. */
     @JavascriptInterface
-    fun exportTripCsv(routeKeyOrSessionId: String?): String = dataExports.exportTripCsv(routeKeyOrSessionId)
+    fun exportTripCsv(routeKeyOrSessionId: String?): String = tripExports.exportTripCsv(routeKeyOrSessionId)
 
     /** Exports every logged trip as one combined CSV (M6) and opens the share sheet. */
     @JavascriptInterface
-    fun exportAllTripsCsv(): String = dataExports.exportAllTripsCsv()
+    fun exportAllTripsCsv(): String = tripExports.exportAllTripsCsv()
 
     /**
      * Exports the charge history as one CSV (M1) and opens the share sheet. [pricePerKwh] (the user's
      * electricity rate, as a string) adds an estimated-cost column when it parses as a positive rate.
      */
     @JavascriptInterface
-    fun exportChargeSessionsCsv(pricePerKwh: String?): String = dataExports.exportChargeSessionsCsv(pricePerKwh)
+    fun exportChargeSessionsCsv(pricePerKwh: String?): String = tripExports.exportChargeSessionsCsv(pricePerKwh)
 
     /** Shareable drive-summary card (PNG): route outline + the trip-detail sheet's stat strings. */
     @JavascriptInterface
-    fun shareTripCard(cardJson: String?): String = dataExports.shareTripCard(cardJson)
+    fun shareTripCard(cardJson: String?): String = tripExports.shareTripCard(cardJson)
 
     @JavascriptInterface
     fun deleteDetailedSignalLog(id: String?) {
-        dataExports.deleteDetailedSignalLog(id)
+        signalLogs.deleteDetailedSignalLog(id)
     }
 
     @JavascriptInterface
     fun markTripNotTrip(routeKey: String?) {
-        dataExports.markTripNotTrip(routeKey)
+        tripEdits.markTripNotTrip(routeKey)
     }
 
     @JavascriptInterface
     fun restoreTrip(routeKey: String?) {
-        dataExports.restoreTrip(routeKey)
+        tripEdits.restoreTrip(routeKey)
     }
 
     /** Sets or clears (empty/null label) the user label for a stored trip (M4). */
@@ -293,7 +297,7 @@ class VoltBridge(
         routeKey: String?,
         label: String?,
     ) {
-        dataExports.setTripLabel(routeKey, label)
+        tripEdits.setTripLabel(routeKey, label)
     }
 
     /** Sets or clears the user "favorite" flag for a stored trip (M4 favorites half). */
@@ -302,23 +306,23 @@ class VoltBridge(
         routeKey: String?,
         favorite: Boolean,
     ) {
-        dataExports.setTripFavorite(routeKey, favorite)
+        tripEdits.setTripFavorite(routeKey, favorite)
     }
 
     /** Records a maintenance-log entry from the Insights add-entry form (M5). */
     @JavascriptInterface
     fun addMaintenanceEntry(json: String?) {
-        dataExports.addMaintenanceEntry(json)
+        maintenance.addMaintenanceEntry(json)
     }
 
     /** Newest-first maintenance log as a JSON array (M5). */
     @JavascriptInterface
-    fun getMaintenanceLog(): String = dataExports.getMaintenanceLog()
+    fun getMaintenanceLog(): String = maintenance.getMaintenanceLog()
 
     /** Deletes one maintenance-log entry by id (M5). */
     @JavascriptInterface
     fun deleteMaintenanceEntry(id: String?) {
-        dataExports.deleteMaintenanceEntry(id)
+        maintenance.deleteMaintenanceEntry(id)
     }
 
     @JavascriptInterface
