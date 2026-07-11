@@ -188,6 +188,21 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //     VoltBridgeTripExports LINE 100%  (7/7)     -> floor 0.95
 //     VoltBridgeTripEdits   LINE 93.6% (103/110) -> floor 0.90
 //     VoltBridgeMaintenance LINE 96.5% (83/86)   -> floor 0.92
+//   2026-07-11 (round 15, A1 — Mode-22 parser registry): the Mode-22 when-table decoder
+//   (ObdVoltMode22Decoder) became ObdVoltMode22ParserRegistry, a pure dispatch-table class
+//   whose every PID family is pinned at exact decoded values by golden vectors in
+//   ObdProtocolTest (added before the refactor to prove equivalence). Measured
+//   LINE 100% (186/186) -> floor 0.95 (churn room), same convention as the other
+//   pure decode contracts (ObdElmDecode).
+//   2026-07-11 (round 15, D1 — aggregate BRANCH floor): every rule above gates the
+//   LINE counter only, so a change that keeps lines touched but stops exercising
+//   decision outcomes (e.g. tests that only ever hit the happy arm of each `if`)
+//   could not fail the build. Added ONE aggregate BRANCH floor as a ratchet
+//   baseline alongside the aggregate LINE floor — deliberately no per-class
+//   branch rules (framework-bound classes have legitimately skewed branch
+//   profiles, mirroring the round-4 rationale for skipping a blanket CLASS rule).
+//   Measured aggregate project BRANCH 79.1% (6848/8659) -> floor 0.77
+//   (~actual-2, churn room). Raise only; never lower.
 //   2026-07-11 (round 16, A2 — ObdLocalStore facade narrowing): the flat delegation
 //   surface on the ObdLocalStore facade moved behind narrow capability interfaces
 //   (data.ObdTripEditStore / ObdRouteQueryStore / ObdSignalLogStore /
@@ -261,6 +276,14 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         rule {
             element = "CLASS"
             includes = ["com.volttracker.obdpoc.ObdElmDecode"]
+            limit { counter = "LINE"; minimum = 0.95 }
+        }
+        // Round 15 (A1): the Mode-22 parser registry is a pure dispatch table pinned by
+        // golden vectors in ObdProtocolTest; a coverage drop here means a PID family lost
+        // its value-level test.
+        rule {
+            element = "CLASS"
+            includes = ["com.volttracker.obdpoc.ObdVoltMode22ParserRegistry"]
             limit { counter = "LINE"; minimum = 0.95 }
         }
         rule {
@@ -459,6 +482,12 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             limit { counter = "LINE"; minimum = 0.91 }
+        }
+        // Aggregate BRANCH ratchet (round 15, D1 — see history note above). Measured
+        // 79.1% (6848/8659) on 2026-07-11; floor is ~actual-2 so refactor churn has
+        // room while a real decision-coverage regression fails the gate.
+        rule {
+            limit { counter = "BRANCH"; minimum = 0.77 }
         }
     }
 }

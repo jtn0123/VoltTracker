@@ -156,6 +156,14 @@ describe('efficiency vs outside temperature (Insights)', () => {
     );
     // One dot per qualifying drive.
     expect(document.querySelectorAll('#tempEffChart circle')).toHaveLength(4);
+    // C4: the chart is a labelled image whose aria-label restates the current
+    // peak, so a re-render after new drives re-summarizes for AT users too.
+    const svg = document.querySelector('#tempEffChart svg');
+    expect(svg.getAttribute('role')).toBe('img');
+    expect(svg.getAttribute('aria-label')).toBe(
+      'Estimated EV range for each drive against outside temperature; ' +
+        'range peaks near 77°F at about 56 mi',
+    );
   });
 
   it('uses Celsius and km in metric mode', () => {

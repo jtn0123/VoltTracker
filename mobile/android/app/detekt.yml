@@ -23,15 +23,20 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   CyclomaticComplexMethod:
     active: true
-    threshold: 179 # ObdProtocol.parseKnownValueLegacy (178) — the Mode-22 PID decoder when-table.
-    # Standard Mode-01 PIDs moved to ObdKnownValueParserRegistry.standardParsers (report item A2),
-    # dropping this from 212. LOWER further if more PID families move to the registry.
+    threshold: 98 # ObdElmDecode.nameForCommand (97) — the PID display-name when-table.
+    # RATCHETED DOWN from 179 (A1): the Mode-22 PID decoder when-table (178) became the
+    # per-command parser map in ObdVoltMode22ParserRegistry (mirroring the A2 move of the
+    # standard Mode-01 PIDs, which had already dropped this from 212), so PID dispatch no
+    # longer concentrates complexity in one method. LOWER further if nameForCommand becomes
+    # a lookup table too.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 1149 # ObdProtocol = 1148 by detekt's LargeClass metric (NOT wc -l); shrank from 1168
-    # after removing the dead/duplicated standard-PID branches from parseKnownValueLegacy (report
-    # item A2 — the registry already handled them). LOWER further as more decoders move out.
+    threshold: 969 # data.DatabaseMerger = 968 by detekt's LargeClass metric (NOT wc -l).
+    # RATCHETED DOWN from 1149 (A1): the old pin (ObdProtocol at 1148) predates the Mode-22
+    # decoder extraction; with the Mode-22 dispatch + helpers now in ObdVoltMode22ParserRegistry,
+    # ObdProtocol measures under 900 and the worst class is the backup DatabaseMerger. LOWER
+    # further as the merger or the big stores are decomposed.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true
@@ -58,7 +63,10 @@ complexity:
     # now MainActivity (63), with ObdService (54), ObdLocalStore (44) and ObdPollingEngine (42)
     # next, so worst+1 = 64. LOWER further as MainActivity / ObdService are decomposed.
     thresholdInInterfaces: 25 # ObdSessionStore (24)
-    thresholdInObjects: 61 # ObdProtocol (60)
+    thresholdInObjects: 51 # data.ObdStoreSupport (50) — RATCHETED DOWN from 61 (A1). The old
+    # pin (ObdProtocol at 60) was stale: after the standard-PID (A2) and Mode-22 (A1) parser
+    # tables moved into their registries, ObdProtocol measures 47 functions and the worst
+    # object is ObdStoreSupport (50).
     thresholdInEnums: 12
     excludes: ['**/src/test/**', '**/src/androidTest/**']
 

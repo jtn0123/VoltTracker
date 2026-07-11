@@ -10,8 +10,8 @@ import org.junit.Test
  *
  * The leaf decoders are exhaustively pinned in [ObdProtocolTest]; this file instead exercises the
  * *dispatch table*: that a command routes to the right decoder, that every registered standard
- * command resolves to a working parser, that unmapped commands fall through to the legacy table,
- * and that genuinely unknown commands return null instead of throwing.
+ * command resolves to a working parser, that unmapped commands fall through to the Mode-22
+ * registry, and that genuinely unknown commands return null instead of throwing.
  *
  * The registry exposes a single public entry point — `parse(cleanCommand, response)` — and expects
  * an already-cleaned, uppercase command (the trim/uppercase step lives in
@@ -49,9 +49,9 @@ class ObdKnownValueParserRegistryTest {
     }
 
     @Test
-    fun unmappedCommandFallsThroughToLegacyDecoder() {
+    fun unmappedCommandFallsThroughToMode22Registry() {
         // 222429 has no standard-parser entry, so parse() must hand off to
-        // ObdProtocol.parseKnownValueLegacy. Same vector ObdProtocolTest pins at 360.0 V.
+        // ObdVoltMode22ParserRegistry. Same vector ObdProtocolTest pins at 360.0 V.
         val hvVoltage = ObdKnownValueParserRegistry.parse("222429", "6224295A00")
         assertNotNull(hvVoltage)
         assertEquals("hv pack voltage", hvVoltage!!.name)
@@ -99,7 +99,40 @@ class ObdKnownValueParserRegistryTest {
         }
     }
 
-    // ---- 3. Unknown commands return null, never throw -------------------------------
+    // ---- 3. Header-collision guardrail ------------------------------------------------
+
+    @Test
+    fun collidingCellDidIsHeaderRoutedAndNeverHitsTheFlatCommandMap() {
+        // "2241A3" collides across ECUs: on the 7E4 energy ECU it is HV pack capacity
+        // (word / 10 Ah), but on the 7E7 BECM the same command string is the cell-35 voltage
+        // probe. The flat command registry must ALWAYS apply the 7E4 meaning; the 7E7 meaning
+        // is only reachable through the header-aware entry point
+        // (ObdProtocol.parseCellVoltageProbe), which the cell-probe runner calls directly.
+        val capacityFrame = "6241A30205" // word 517 -> 51.7 Ah (7E4 meaning)
+        val cellFrame = "6241A31720" // word 5920 -> 3.700 V at the BECM 1/1600 scale
+
+        val viaRegistry = ObdKnownValueParserRegistry.parse("2241A3", capacityFrame)
+        assertNotNull(viaRegistry)
+        assertEquals("HV battery capacity", viaRegistry!!.name)
+        assertEquals("Ah", viaRegistry.unit)
+        assertEquals(51.7, viaRegistry.valueNumeric!!, 0.01)
+
+        val viaProbe = ObdProtocol.parseCellVoltageProbe("2241A3", cellFrame)
+        assertNotNull(viaProbe)
+        assertEquals("cell 35 voltage", viaProbe!!.name)
+        assertEquals("V", viaProbe.unit)
+        assertEquals(3.7, viaProbe.valueNumeric!!, 0.001)
+
+        // The BECM cell frame reads as 592 Ah under the 7E4 formula — outside the capacity
+        // sanity band — so the registry must return null for it and must NOT fall through to
+        // the header-aware cell decoder: a 7E4 frame must never decode with the 7E7 meaning.
+        assertNull(ObdKnownValueParserRegistry.parse("2241A3", cellFrame))
+        // Symmetrically, the 7E4 capacity frame is implausible as a cell voltage on either
+        // known scale, so the probe path rejects it rather than inventing a reading.
+        assertNull(ObdProtocol.parseCellVoltageProbe("2241A3", capacityFrame))
+    }
+
+    // ---- 4. Unknown commands return null, never throw -------------------------------
 
     @Test
     fun unknownCommandReturnsNull() {

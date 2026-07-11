@@ -98,6 +98,9 @@ const EAGER = [
 ];
 
 const LAZY = [
+  "charge-history",
+  "maintenance-panel",
+  "dtc-detail",
   "insights-panel",
   "map",
   "troubleshooter",

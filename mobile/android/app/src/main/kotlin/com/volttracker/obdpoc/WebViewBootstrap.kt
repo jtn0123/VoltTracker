@@ -2,9 +2,12 @@ package com.volttracker.obdpoc
 
 import android.annotation.SuppressLint
 import android.graphics.Bitmap
+import android.os.Build
 import android.util.Log
 import android.webkit.ConsoleMessage
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebSettings
 import android.webkit.WebView
@@ -26,15 +29,47 @@ object WebViewBootstrap {
     private const val BRIDGE_NAME = "VoltTrackerAndroid"
 
     /**
+     * Fatal WebView events the host must react to (report item B1): the renderer process dying
+     * and the dashboard main frame failing to load. Both leave the page dead or broken with no
+     * JS alive to tell anyone, so the host tears the WebView down and recovers natively.
+     * Callbacks arrive on the main thread (standard WebViewClient threading).
+     */
+    interface CrashEvents {
+        /**
+         * The renderer process is gone. [view] is the (now dead) WebView that lost it, so the
+         * host can ignore stale reports from an already-replaced instance. [crashed] is
+         * [RenderProcessGoneDetail.didCrash]: true for a real renderer crash, false when the
+         * system reclaimed the renderer (typically low memory).
+         */
+        fun onRendererGone(
+            view: WebView?,
+            crashed: Boolean,
+        )
+
+        /** The dashboard main frame failed to load; the page is broken, not just a sub-resource. */
+        fun onMainFrameLoadFailed(
+            view: WebView?,
+            errorCode: Int,
+            description: String,
+        )
+    }
+
+    /**
      * Configures [webView], attaches [bridge] as the [BRIDGE_NAME] JS interface, then loads the
      * dashboard. The dashboard calls `VoltTrackerAndroid.dashboardReady()` once its scripts have
      * created `window.VoltTrackerNative`; `onPageFinished` is too early on some WebView builds.
+     *
+     * [crashEvents] receives renderer-death / main-frame-failure notifications; without it the
+     * renderer-gone default is still "consume, never crash the app" (the platform default kills
+     * the whole Activity), just with no recovery.
      */
     @SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
     @JvmStatic
+    @JvmOverloads
     fun configure(
         webView: WebView,
         bridge: Any,
+        crashEvents: CrashEvents? = null,
     ) {
         val settings = webView.settings
         settings.javaScriptEnabled = true
@@ -130,6 +165,48 @@ object WebViewBootstrap {
                     view: WebView?,
                     url: String?,
                 ): Boolean = blockOffOrigin(url)
+
+                // Renderer death (report item B1). The platform default for an unhandled
+                // renderer-gone event is to kill the app process, so this MUST return true.
+                // Recovery (detach + destroy + recreate) is the host's job via crashEvents;
+                // didCrash() distinguishes a real crash from a low-memory kill in the logs.
+                // Only invoked on API >= 26; older WebViews never killed the host this way.
+                override fun onRenderProcessGone(
+                    view: WebView?,
+                    detail: RenderProcessGoneDetail?,
+                ): Boolean {
+                    // didCrash() itself is an API 26 method; the callback only fires on O+,
+                    // but minSdk is 23 so lint (correctly) demands the explicit guard.
+                    val crashed =
+                        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && detail?.didCrash() == true
+                    Log.e(
+                        AppPrefs.LOG_TAG,
+                        "dashboard WebView render process gone (didCrash=$crashed)",
+                    )
+                    crashEvents?.onRendererGone(view, crashed)
+                    return true
+                }
+
+                // Main-frame load failure (a missing/corrupt dashboard asset, etc.) otherwise
+                // shows a silent broken page; route it into the same native recovery path.
+                // Sub-resource errors are ignored: the page's own JS handles those.
+                override fun onReceivedError(
+                    view: WebView?,
+                    request: WebResourceRequest?,
+                    error: WebResourceError?,
+                ) {
+                    super.onReceivedError(view, request, error)
+                    if (request?.isForMainFrame != true) {
+                        return
+                    }
+                    val code = error?.errorCode ?: 0
+                    val description = error?.description?.toString() ?: "unknown error"
+                    Log.e(
+                        AppPrefs.LOG_TAG,
+                        "dashboard main-frame load error (code=$code): $description",
+                    )
+                    crashEvents?.onMainFrameLoadFailed(view, code, description)
+                }
             }
         StartupTrace.mark("webview_add_js_interface_start")
         webView.addJavascriptInterface(bridge, BRIDGE_NAME)

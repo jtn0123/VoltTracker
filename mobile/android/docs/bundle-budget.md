@@ -20,6 +20,18 @@ Not all dashboard bytes are equal:
 - **Lazy panel JS** — deferred panel-sized UI chunks such as Insights. This
   bucket keeps a user-facing panel from inflating startup without hiding its
   own growth inside the support bucket.
+- **Lazy expert JS** — expert-surface chunks (`js/signals-panel.js`,
+  `js/scrubber.js`). Destination-specific controls stay in this bounded bucket
+  instead of charging every on-demand interaction to the generic support
+  allowance.
+- **Lazy detail JS** — the tab-detail chunks split OUT of the eager `app.js`
+  in the G2 startup-headroom pass (2026-07-11): the Charge tab's history/cost
+  renders + the shared monthly trend chart (`js/charge-history.js`), the
+  Insights maintenance log/form (`js/maintenance-panel.js`), and the DTC
+  detail sheet + scan narration (`js/dtc-detail.js`). None paints on the
+  Drive-first startup path; they load via `core.ts`
+  `ensureChargeHistoryModule`/`ensureMaintenancePanelModule`/
+  `ensureDtcDetailModule` on tab entry or first interaction.
 - **DTC reference data** — `js/dtc-lookup.js` and `js/dtc-causes.js`, ~337 KB of
   pure lookup tables. These are **lazy-loaded** via `loadDashboardScript` only when
   a user opens a specific diagnostic code, so they don't touch startup.
@@ -35,11 +47,22 @@ unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **364,000 B** | ~353 KB |
-| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~74 KB |
-| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~25 KB |
-| Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **20,000 B** | ~17 KB |
+| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **412,000 B** | ~385 KB |
+| Lazy support JS | first-party lazy JS chunks except panel, expert, detail, and DTC data | **90,000 B** | ~89 KB |
+| Lazy panel JS | `js/insights-panel.js`, `js/connection-tools.js` | **45,000 B** | ~43 KB |
+| Lazy expert JS | `js/signals-panel.js`, `js/scrubber.js` | **40,000 B** | ~20 KB |
+| Lazy detail JS | `js/charge-history.js`, `js/maintenance-panel.js`, `js/dtc-detail.js` | **25,000 B** | ~21 KB |
+| Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **23,500 B** | ~15 KB |
 | DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~267 KB |
+
+The startup budget was last raised to 412,000 B for the v2 design work (swipe
+tab navigation, DTC bottom sheet, card-stack rework, cell-balance heatmap, and
+the rest of the tab-by-tab design match) — see the history comments above
+`dashboardStartupBudgetBytes` in `build.gradle`. The G2 startup-headroom pass
+(2026-07-11) then moved the charge-history, maintenance, and DTC-detail
+renders into the lazy detail bucket, dropping the startup set from ~402 KB to
+~385 KB (~27 KB headroom) without touching the budget — reclaimed bytes stay
+reclaimed.
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is
@@ -68,8 +91,10 @@ DTC family (`P04`, `U00`, etc.) before raising the byte budget.
 ## Bumping a budget
 
 Raise the relevant constant in `build.gradle` (`dashboardStartupBudgetBytes`,
-`dashboardLazySupportBudgetBytes`, `dashboardLazyCssBudgetBytes`, or
-`dashboardDtcDataBudgetBytes`) and say why in the commit. Treat the startup
+`dashboardLazySupportBudgetBytes`, `dashboardLazyPanelBudgetBytes`,
+`dashboardLazyExpertBudgetBytes`, `dashboardLazyDetailBudgetBytes`,
+`dashboardLazyCssBudgetBytes`, or `dashboardDtcDataBudgetBytes`) and say why
+in the commit. Treat the startup
 budget as a ratchet you justify, not a number you quietly grow.
 
 Before raising the startup budget, verify that trip and insight rollups still

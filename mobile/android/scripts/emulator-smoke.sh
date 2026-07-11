@@ -253,6 +253,18 @@ start_service_as_app "$ACTION_DEMO"
 wait_for_demo_telemetry
 screenshot "demo-started"
 check_logcat "demo telemetry"
+# OBD latency gate: the debug build emits VoltStartup obd_* marks around every
+# session (StartupTrace.OBD_*). The demo session just exercised the same
+# connect-request -> first-sample path a real adapter uses, so parse the marks
+# and enforce the (provisional, generous) ceilings. --require demo also makes
+# this a mark-PRESENCE gate: if the marks are renamed or dropped, this fails
+# rather than silently measuring nothing. check_logcat above already refreshed
+# $LOGCAT with the demo session's lines.
+echo "Checking VoltStartup obd_* latency marks for the demo session."
+python3 tools/perf/check_obd_latency.py \
+  --logcat "$LOGCAT" \
+  --require demo \
+  --output-dir "$ARTIFACT_DIR/obd-latency"
 stop_service_as_app
 sleep 1
 check_logcat "demo disconnect before navigation"

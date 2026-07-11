@@ -700,21 +700,27 @@ describe('actions.ts — bridge dispatch', () => {
     warn.mockRestore();
   });
 
-  it('reports trip rename bridge failures', () => {
+  it('reports trip rename bridge failures', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const list = document.getElementById('mapSessionList');
     list.innerHTML = '<button type="button" data-trip-rename="drive-1" data-trip-rename-label="Old">Rename</button>';
     bridge.setTripLabel = vi.fn(() => { throw new Error('label denied'); });
-    const prompt = vi.spyOn(window, 'prompt').mockReturnValue('New name');
 
+    // C1: the rename prompt is the themed in-app dialog, not window.prompt.
     expect(() => list.querySelector('[data-trip-rename]').click()).not.toThrow();
+    const input = document.getElementById('appDialogInput');
+    expect(input.value).toBe('Old');
+    input.value = 'New name';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('appDialogConfirm').click();
+    // The dialog promise's .then() forwards to the bridge — let it run.
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
 
     expect(VD.state.status).toMatchObject({
       state: 'blocked',
       detail: 'Could not rename this drive.',
     });
     expect(bridge.setTripLabel).toHaveBeenCalledWith('drive-1', 'New name');
-    expect(prompt).toHaveBeenCalledTimes(1);
     expect(bridge.logClientError).toHaveBeenCalledWith(
       'bridge.call_failed',
       expect.stringContaining('bridge.setTripLabel failed: label denied'),

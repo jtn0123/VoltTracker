@@ -126,6 +126,22 @@ describe('per-trip detail sheet (M7)', () => {
     expect(head).toContain('92 ft descent');
   });
 
+  it('labels the speed chart with the same peak the headline states (C4)', () => {
+    const id = seed();
+    VD.openTripDetail(id);
+    const svg = document.querySelector('#tripDetailSpeedChart svg');
+    expect(svg).not.toBeNull();
+    expect(svg.getAttribute('role')).toBe('img');
+    const label = svg.getAttribute('aria-label');
+    // Dynamic summary: the aria-label carries the computed peak speed, and it
+    // matches the visual "Peaks at N unit." headline exactly.
+    const match = /peaking at (\d+ [a-z/]+)$/.exec(label);
+    expect(match, `aria-label "${label}" should end with the peak`).not.toBeNull();
+    expect(document.getElementById('tripDetailSpeedHead').textContent).toBe(
+      `Peaks at ${match[1]}.`,
+    );
+  });
+
   it('hides the elevation card when the route has no altitude fixes', () => {
     const data = driveStorage({});
     for (const point of data.storage.recentRoutes[0].points) delete point.altM;

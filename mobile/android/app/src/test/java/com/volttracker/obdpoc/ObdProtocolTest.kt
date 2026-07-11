@@ -669,6 +669,149 @@ class ObdProtocolTest {
         assertEquals(-20.0, outsideRaw.valueNumeric!!, 0.01)
     }
 
+    // ---- A1 golden vectors: Mode-22 branches that previously lacked value-level pins --
+    //
+    // Added BEFORE the Mode-22 dispatch moved out of the ObdVoltMode22Decoder when-table into
+    // ObdVoltMode22ParserRegistry, so that refactor is provably behavior-preserving: every
+    // Mode-22 command family has at least one exact decoded-value assertion below or above.
+
+    @Test
+    fun prndlStateDecodesGearCode() {
+        // 222889 emits the raw gear code as a clean number (not rawByteValue's "RAW_<n>").
+        val prndl = ObdProtocol.parseKnownValue("222889", "6228890D")
+        assertNotNull(prndl)
+        assertEquals("prndl state", prndl!!.name)
+        assertEquals("13", prndl.valueText)
+        assertEquals(13.0, prndl.valueNumeric!!, 0.01)
+        assertEquals("", prndl.unit)
+    }
+
+    @Test
+    fun remainingInverterTemperaturesDecode() {
+        // 221C28 / 221C2A = A - 40, same encoding as inverter temperature 1 (221C26).
+        val inverter2 = ObdProtocol.parseKnownValue("221C28", "621C2841")
+        assertNotNull(inverter2)
+        assertEquals("inverter temperature 2", inverter2!!.name)
+        assertEquals(25.0, inverter2.valueNumeric!!, 0.01)
+        assertEquals("deg C", inverter2.unit)
+
+        val inverter3 = ObdProtocol.parseKnownValue("221C2A", "621C2A42")
+        assertNotNull(inverter3)
+        assertEquals("inverter temperature 3", inverter3!!.name)
+        assertEquals(26.0, inverter3.valueNumeric!!, 0.01)
+
+        // 0xFF - 40 = 215 C is outside TEMP_C_RANGE and must be rejected, like inverter 1.
+        assertNull(ObdProtocol.parseKnownValue("221C28", "621C28FF"))
+        assertNull(ObdProtocol.parseKnownValue("221C2A", "621C2AFF"))
+    }
+
+    @Test
+    fun batteryHeaterCommandedPowerDecodes() {
+        // 2241B5 = signed (A*256+B) W, bounded to the heater power band (-100..10000 W).
+        val heater = ObdProtocol.parseKnownValue("2241B5", "6241B50384")
+        assertNotNull(heater)
+        assertEquals("battery heater commanded power", heater!!.name)
+        assertEquals(900.0, heater.valueNumeric!!, 0.01)
+        assertEquals("W", heater.unit)
+
+        // 0xFFF6 = -10 W: a small negative command survives the signed decode + bound.
+        val negative = ObdProtocol.parseKnownValue("2241B5", "6241B5FFF6")
+        assertNotNull(negative)
+        assertEquals(-10.0, negative!!.valueNumeric!!, 0.01)
+
+        // 0x8000 = -32768 W is far outside the plausible band and must be rejected.
+        assertNull(ObdProtocol.parseKnownValue("2241B5", "6241B58000"))
+    }
+
+    @Test
+    fun brakePedalPositionTwoDecodes() {
+        // 224502 = signed (A*256+B) / 100 mm, same encoding as brake pedal position 1 (224501).
+        val pedal = ObdProtocol.parseKnownValue("224502", "62450204D2")
+        assertNotNull(pedal)
+        assertEquals("brake pedal position 2", pedal!!.name)
+        assertEquals(12.34, pedal.valueNumeric!!, 0.01)
+        assertEquals("mm", pedal.unit)
+
+        // 0xFB2E = -1234 -> -12.34 mm: signed travel decodes below zero.
+        val negative = ObdProtocol.parseKnownValue("224502", "624502FB2E")
+        assertNotNull(negative)
+        assertEquals(-12.34, negative!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun maximumPackVoltageDecodes() {
+        // 22433C = (A*256+B) * 0.52 V, same encoding as minimum pack voltage (22433B).
+        // 0x02C0 = 704 -> 366.08 V.
+        val maxPack = ObdProtocol.parseKnownValue("22433C", "62433C02C0")
+        assertNotNull(maxPack)
+        assertEquals("maximum pack voltage", maxPack!!.name)
+        assertEquals(366.08, maxPack.valueNumeric!!, 0.01)
+        assertEquals("V", maxPack.unit)
+    }
+
+    @Test
+    fun allBatterySectionTemperaturesDecode() {
+        // 2240D7..2240E1 (odd DIDs) = A - 40 per pack section; the section index is derived
+        // from the command string, so each DID must map to its own labelled signal.
+        val sections =
+            listOf(
+                Triple("2240D7", 1, "6240D740"), // 0x40 - 40 = 24 C
+                Triple("2240D9", 2, "6240D941"),
+                Triple("2240DB", 3, "6240DB42"),
+                Triple("2240DD", 4, "6240DD43"),
+                Triple("2240DF", 5, "6240DF44"),
+                Triple("2240E1", 6, "6240E145"),
+            )
+        for ((command, section, response) in sections) {
+            val parsed = ObdProtocol.parseKnownValue(command, response)
+            assertNotNull("$command must decode", parsed)
+            assertEquals("battery section $section temperature", parsed!!.name)
+            assertEquals(24.0 + (section - 1), parsed.valueNumeric!!, 0.01)
+            assertEquals("deg C", parsed.unit)
+        }
+    }
+
+    @Test
+    fun chargingModeUnknownWordDecodes() {
+        // Anything other than 0x0000 / 0xFFFF is an unmodeled charge state: keep the raw word
+        // but label it UNKNOWN rather than guessing.
+        val unknown = ObdProtocol.parseKnownValue("224373", "7EC0562437300FF")
+        assertNotNull(unknown)
+        assertEquals("charging mode", unknown!!.name)
+        assertEquals("UNKNOWN", unknown.valueText)
+        assertEquals(255.0, unknown.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun chargingLevelBranchesDecode() {
+        // The AC_2 case is pinned in chargerModeAndLevelDecode; pin the remaining branches.
+        val none = ObdProtocol.parseKnownValue("224531", "62453100")
+        assertNotNull(none)
+        assertEquals("charging level", none!!.name)
+        assertEquals("NOT_CHARGING", none.valueText)
+        assertEquals(0.0, none.valueNumeric!!, 0.01)
+
+        val level1 = ObdProtocol.parseKnownValue("224531", "62453101")
+        assertNotNull(level1)
+        assertEquals("AC_1", level1!!.valueText)
+        assertEquals(1.0, level1.valueNumeric!!, 0.01)
+
+        val unknown = ObdProtocol.parseKnownValue("224531", "62453105")
+        assertNotNull(unknown)
+        assertEquals("UNKNOWN", unknown!!.valueText)
+        assertEquals(5.0, unknown.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun regenInactiveDecodes() {
+        // Payload <= 7 means regen braking is not active (the ACTIVE case is pinned above).
+        val regen = ObdProtocol.parseKnownValue("2224B0", "6224B007")
+        assertNotNull(regen)
+        assertEquals("regen braking active", regen!!.name)
+        assertEquals("INACTIVE", regen.valueText)
+        assertEquals(0.0, regen.valueNumeric!!, 0.01)
+    }
+
     @Test
     fun socThroughParseKnownValue() {
         val v = ObdProtocol.parseKnownValue("015B", "415B7F")

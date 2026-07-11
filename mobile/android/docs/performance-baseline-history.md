@@ -84,11 +84,79 @@ regression signals.
   database.
 - Run `tools/generate-synthetic-db-local.sh build/reports/local/synthetic-1m.db`
   and benchmark that fixture when private database access is not available.
-- Capture first-useful-OBD-sample timing from connect request to decoded sample
-  publish using the `obd_*` `VoltStartup` marks.
 - Capture per-tab data request/received/rendered timings alongside tab paint for
   Map, Charge, Insights, Diagnostics, and Settings.
-- Capture scan-stage timing for discovery, command latency, persistence, and
-  dashboard publish.
 - Establish pass/fail SLOs after a few more clean baselines show normal local
   device variance.
+- ~~Capture first-useful-OBD-sample timing using the `obd_*` marks~~ — the
+  marks and gate now exist (see the 2026-07-11 section below); what remains is
+  recording the first real-device numbers into that section's table.
+
+## 2026-07-11: OBD Connect/Scan Latency Baseline (provisional)
+
+The `obd_*` `VoltStartup` marks referenced by the 2026-06-17 follow-ups now
+exist. Debug builds emit, per session:
+
+- `obd_connect_request:<mode>` when `ObdService.startSession` accepts a
+  connect/scan/demo/tpms-scan/clear-dtc request,
+- `obd_socket_connected` after the RFCOMM socket + wake nudge succeed,
+- `obd_elm_init_start` / `obd_elm_init_end` around ELM327 init,
+- `obd_first_sample:live` (or `:demo` from the demo loop) right after the
+  first telemetry broadcast, and
+- `obd_scan_start/stage/complete:<...>` around the diagnostic-scan stages
+  (adapter identity, protocol/VIN sweep, DTC reads, deep probes).
+
+`tools/perf/check_obd_latency.py` parses any logcat dump into per-session
+spans and enforces ceilings; `scripts/emulator-smoke.sh` runs it with
+`--require demo` so the connect→first-sample path is captured and gated on
+every emulator smoke without a car (`ObdLatencyMarksContractTest` pins the
+mark names on both sides).
+
+### Measured spans
+
+**Pending first device capture** — no device or emulator was attached when
+this machinery landed, and numbers are never fabricated. Fill this table from
+the first real capture:
+
+| Span | Mode | Median | Min | Max | Runs |
+|---|---|---:|---:|---:|---:|
+| Connect request → first sample | demo | pending first device capture | — | — | — |
+| Connect request → first sample | live | pending first device capture | — | — | — |
+| Connect request → socket connected | live | pending first device capture | — | — | — |
+| ELM327 init | live | pending first device capture | — | — | — |
+| Quick scan total | scan | pending first device capture | — | — | — |
+| Full scan total | scan | pending first device capture | — | — | — |
+
+Capture commands (debug build):
+
+```sh
+# Demo session, no car needed (also what CI's emulator smoke runs):
+bash scripts/run-emulator-smoke-local.sh
+python3 tools/perf/check_obd_latency.py \
+  --logcat build/emulator-smoke-logcat.txt --require demo
+
+# Real adapter: connect (or run a scan) in the app, then:
+adb logcat -d | python3 tools/perf/check_obd_latency.py --logcat -
+```
+
+### Provisional ceilings
+
+Until a few clean captures establish real variance, the gate uses generous
+order-of-magnitude ceilings (defaults in `check_obd_latency.py`, each
+overridable per run). They derive from the contract expectations — first live
+telemetry must not wait on the deferred VIN/mode-01/voltage probes, the
+ATSP6-pinned init avoids the ~4.8 s auto-detect sweep, and a quick scan should
+"return in seconds":
+
+| Span | Provisional ceiling |
+|---|---:|
+| Demo connect → first sample | 15,000 ms |
+| Live connect → first sample | 45,000 ms |
+| Connect → socket connected | 30,000 ms |
+| ELM327 init | 25,000 ms |
+| Quick scan total | 120,000 ms |
+| Full scan total | 900,000 ms |
+
+Ratchet plan: after the measured-spans table above has real numbers from a few
+sessions, lower each ceiling to roughly 3× the observed median and record the
+change here.
