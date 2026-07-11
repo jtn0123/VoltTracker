@@ -1,14 +1,24 @@
-import { el } from "./core";
+import {
+  bridge,
+  clearDemoTelemetry,
+  el,
+  formatRowCount,
+  parsePayload,
+  renderMapIfLoaded,
+  setDemoActive,
+  setMeter,
+  setState,
+  setText,
+  state
+} from "./core";
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
+import { setStorage } from "./storage-status";
 import { initialTelemetryState } from "./telemetry-state";
-
-  const VD = window.VoltDashboard;
-  const state = VD.state;
-  const bridge = VD.bridge;
+import { VD } from "./vd-registry";
 
   type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
@@ -176,7 +186,7 @@ import { initialTelemetryState } from "./telemetry-state";
   // consumption, Settings-tab suppression, dedupe) — a user action always
   // deserves immediate visible feedback, on any tab. `urgent` flags a failure
   // so it announces assertively like failed status pushes do.
-  function showToast(message: unknown, urgent = false) {
+  export function showToast(message: unknown, urgent = false) {
     const node = el("statusToast");
     if (!node) return;
     const text = String(message == null ? "" : message).trim();
@@ -186,7 +196,7 @@ import { initialTelemetryState } from "./telemetry-state";
 
   function setStatus(payload: unknown) {
     const wasActive = isActiveStatus();
-    const parsed = VD.parsePayload<unknown>(payload, {});
+    const parsed = parsePayload<unknown>(payload, {});
     validatePayload("setStatus", parsed);
     const status = asPayloadRecord(parsed) as VoltStatus;
     state.status = status;
@@ -202,8 +212,8 @@ import { initialTelemetryState } from "./telemetry-state";
     // session, so it must not re-zero the JS session baseline.
     if (isTerminalStopStatus(next)) resetArmed = true;
     hydrateLiveRouteIfActive();
-    VD.setText("stateText", next);
-    VD.setText("statusCopy", status.detail || "Ready.");
+    setText("stateText", next);
+    setText("statusCopy", status.detail || "Ready.");
     showStatusToast(status.detail, next);
     if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
     renderOperationalState();
@@ -212,13 +222,13 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setAppState(payload: unknown) {
-    const candidate = VD.parsePayload<unknown>(payload, {});
+    const candidate = parsePayload<unknown>(payload, {});
     validatePayload("setAppState", candidate);
     const parsed = asPayloadRecord(candidate) as VoltAppState;
     if (state.demoActive && state.demoPreviewAppState) {
       // Park the real app-state behind the demo preview (cross-module demo invariant).
-      VD.setState({ realAppState: parsed });
-      if (parsed.storage) VD.setStorage(parsed.storage);
+      setState({ realAppState: parsed });
+      if (parsed.storage) setStorage(parsed.storage);
       renderOperationalState();
       updateLiveUi();
       updateValidationUi();
@@ -244,7 +254,7 @@ import { initialTelemetryState } from "./telemetry-state";
       // Route through setStorage so the sample-data fallback / preserve
       // logic (in panels.js) applies here too — otherwise a later
       // appState push with empty storage wipes the sample we just loaded.
-      VD.setStorage(state.appState.storage);
+      setStorage(state.appState.storage);
     }
     renderOperationalState();
     updateLiveUi();
@@ -327,7 +337,7 @@ import { initialTelemetryState } from "./telemetry-state";
   function applyCurrentSessionRoutePayload(payload: unknown): boolean {
     let parsed: PayloadRecord;
     try {
-      const candidate = VD.parsePayload<unknown>(payload, {});
+      const candidate = parsePayload<unknown>(payload, {});
       validatePayload("setCurrentSessionRoute", candidate);
       if (!Object.keys(asPayloadRecord(candidate)).length) {
         armLiveRouteHydrationRetry();
@@ -392,7 +402,7 @@ import { initialTelemetryState } from "./telemetry-state";
     } else {
       state.liveRoutePoints = mapped;
     }
-    if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
+    renderMapIfLoaded();
     return true;
   }
 
@@ -484,8 +494,8 @@ import { initialTelemetryState } from "./telemetry-state";
       VD.refreshConnectionToolsAvailability();
     }
 
-    VD.setText("adapterSummary", adapterName);
-    VD.setText(
+    setText("adapterSummary", adapterName);
+    setText(
       "appStateSummary",
       state.demoActive
         ? "Preview data is isolated from real OBD history."
@@ -502,17 +512,17 @@ import { initialTelemetryState } from "./telemetry-state";
     // Compact status word, not a sample count — this tile is ~76px wide so
     // "1,911 samples" just clips to "1,911 sa…". The live count is shown in the
     // drive pill, the OBD-session card, and the database card.
-    VD.setText("loggingState", connected ? (samples ? "live" : (sessionState || "ready")) : "idle");
+    setText("loggingState", connected ? (samples ? "live" : (sessionState || "ready")) : "idle");
     // Number.isFinite guard (same as the gpsValue tile below) so a legitimate
     // coordinate of exactly 0 still reads as locked; both axes must be valid.
     const hasFix =
       Number.isFinite(Number(state.telemetry.latitude)) &&
       Number.isFinite(Number(state.telemetry.longitude));
-    VD.setText("gpsState", gps.state || (hasFix ? "locked" : "waiting"));
-    VD.setText("dataSourceState", state.demoActive ? "demo" : "real");
-    VD.setText("dbState", VD.formatRowCount(dbRowCount(storage)));
+    setText("gpsState", gps.state || (hasFix ? "locked" : "waiting"));
+    setText("dataSourceState", state.demoActive ? "demo" : "real");
+    setText("dbState", formatRowCount(dbRowCount(storage)));
     const appInfo = app.app || {};
-    VD.setText("appVersionFooter", appInfo.version ? `Volt Tracker v${appInfo.version}` : "Volt Tracker");
+    setText("appVersionFooter", appInfo.version ? `Volt Tracker v${appInfo.version}` : "Volt Tracker");
 
     const primary = el("connectBtn");
     const lastButton = el("lastBtn") as HTMLButtonElement | null;
@@ -552,7 +562,7 @@ import { initialTelemetryState } from "./telemetry-state";
     }
   }
 
-  function dbRowCount(storage: PayloadRecord) {
+  export function dbRowCount(storage: PayloadRecord) {
     const keys = [
       "sampleCount",
       "eventCount",
@@ -569,14 +579,14 @@ import { initialTelemetryState } from "./telemetry-state";
     return keys.reduce((total, key) => total + Number(storage[key] || 0), 0);
   }
 
-  function getLastDevice() {
+  export function getLastDevice() {
     if (bridge && typeof bridge.getLastDevice === "function") {
-      state.lastDevice = VD.parsePayload(bridge.getLastDevice(), state.lastDevice || {});
+      state.lastDevice = parsePayload(bridge.getLastDevice(), state.lastDevice || {});
     }
     return state.lastDevice || {};
   }
 
-  function relativeTime(value: unknown) {
+  export function relativeTime(value: unknown) {
     const ts = Number(value);
     if (!Number.isFinite(ts) || ts <= 0) return "saved";
     const seconds = Math.max(1, Math.round((Date.now() - ts) / 1000));
@@ -622,7 +632,7 @@ import { initialTelemetryState } from "./telemetry-state";
   }
 
   function setOptionalLiveText(id: string, value: unknown) {
-    VD.setText(id, value);
+    setText(id, value);
     const node = el(id);
     if (!node) return;
     const cell = node.closest("[data-live-cell]");
@@ -657,7 +667,7 @@ import { initialTelemetryState } from "./telemetry-state";
     renderOperationalState();
   }
 
-  function getSelectedDevice() {
+  export function getSelectedDevice() {
     const select = el("deviceSelect") as HTMLSelectElement | null;
     const option = select?.selectedOptions[0];
     if (!option || !option.value) return null;
@@ -671,15 +681,15 @@ import { initialTelemetryState } from "./telemetry-state";
   // renderOperationalState, updateValidationUi) to the next animation
   // frame so a high-rate OBD source can't cause render thrash.
   function updateTelemetry(payload: unknown) {
-    const parsed = VD.parsePayload<unknown>(payload, {});
+    const parsed = parsePayload<unknown>(payload, {});
     validatePayload("updateTelemetry", parsed);
     const sample = asPayloadRecord(parsed);
     const source = String(sample.source || "").toLowerCase();
     const isDemoSample = source.includes("demo");
-    if (isDemoSample && !state.demoActive) VD.setDemoActive(true);
+    if (isDemoSample && !state.demoActive) setDemoActive(true);
     if (sample.source && !isDemoSample && state.demoActive) {
-      VD.clearDemoTelemetry();
-      VD.setDemoActive(false);
+      clearDemoTelemetry();
+      setDemoActive(false);
     }
     const sampleCount = Number(sample.sampleCount);
     const previousCount = Number(state.telemetry && state.telemetry.sampleCount);
@@ -896,7 +906,7 @@ import { initialTelemetryState } from "./telemetry-state";
     });
   }
 
-  function updateLiveUi() {
+  export function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
     // Guard null/"" explicitly (like the rpm/voltage/soc tiles below) BEFORE the
@@ -912,9 +922,9 @@ import { initialTelemetryState } from "./telemetry-state";
     const primary = hasSpeed ? units.speed(kph) : null;
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
     const altUnit = metric ? "mph" : "km/h";
-    VD.setText("speedValue", primary ? primary.value : null);
-    VD.setText("speedUnitMain", primary ? primary.unit : (metric ? "km/h" : "mph"));
-    VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
+    setText("speedValue", primary ? primary.value : null);
+    setText("speedUnitMain", primary ? primary.unit : (metric ? "km/h" : "mph"));
+    setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
       bindSpeedAltReveal(speedMeter);
@@ -998,15 +1008,15 @@ import { initialTelemetryState } from "./telemetry-state";
     liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
     liveNum("moreTorque", t.engineTorqueNm, (n) => `${Math.round(n)} Nm`);
 
-    VD.setText("rawFrames", t.raw || "Waiting for telemetry…");
+    setText("rawFrames", t.raw || "Waiting for telemetry…");
     const soc = finiteNum(t.soc);
     const batteryTemp = finiteNum(t.batteryTemp);
-    VD.setText("driveSocValue", soc != null ? `${Math.round(soc)}%` : "--");
+    setText("driveSocValue", soc != null ? `${Math.round(soc)}%` : "--");
     // v2 design: the SOC caption doubles as the EV-range note ("≈ 26 mi EV
     // range") once the enhanced range signal reports; otherwise it stays the
     // static "state of charge" label so the number is never unexplained.
     const evRangeKm = finiteNum(t.evDistanceThisCycleKm);
-    VD.setText(
+    setText(
       "driveSocSub",
       evRangeKm != null && evRangeKm > 0
         ? `≈ ${units.distanceText(evRangeKm)} EV range`
@@ -1014,19 +1024,19 @@ import { initialTelemetryState } from "./telemetry-state";
     );
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
     // indeterminate state for a missing reading rather than announcing a false 0%.
-    VD.setMeter("driveSocMeter", soc ?? NaN);
+    setMeter("driveSocMeter", soc ?? NaN);
     // Color the SOC bar by charge level (amber when low, red when nearly empty)
     // so a depleted pack is obvious at a glance instead of a full-green bar.
     const socMeterEl = el("driveSocMeter");
     if (socMeterEl) {
       socMeterEl.dataset.level = soc == null ? "" : soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
     }
-    VD.setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
+    setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
     const power = finiteNum(t.powerKw);
     // Typographic minus (U+2212) for negatives so the hero POWER readout matches
     // the signed pack-current/pack-power tiles below it — the ASCII hyphen has a
     // narrower advance width, so the same regen reading rendered two glyphs.
-    VD.setText("powerValue", power != null ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--");
+    setText("powerValue", power != null ? `${power < 0 ? "−" : ""}${Math.abs(power).toFixed(1)} kW` : "--");
     // HV traction-pack live readings (mode-22 PIDs 222429 / 222414). When the
     // adapter hasn't responded yet these fall back to "--" exactly like the rest of
     // the live readout.
@@ -1077,8 +1087,8 @@ import { initialTelemetryState } from "./telemetry-state";
     // The visible scale drops the +/- sign — the "REGEN"/"DRIVE" words already carry
     // the direction (v2 design: "◄ REGEN 40 … DRIVE 40 ►"). The signed range stays on
     // the meter's aria-valuemin/max below for assistive tech.
-    VD.setText("powerScaleMin", `${powerScaleKw}`);
-    VD.setText("powerScaleMax", `${powerScaleKw}`);
+    setText("powerScaleMin", `${powerScaleKw}`);
+    setText("powerScaleMax", `${powerScaleKw}`);
     // Fraction of the half-track (0..1); the fill's CSS spans the right half
     // and scaleX stretches it from the zero-line — a negative scale mirrors it
     // left for regen. Transform-only so this per-sample update stays on the
@@ -1118,7 +1128,7 @@ import { initialTelemetryState } from "./telemetry-state";
     if (typeof VD.renderDriveLive === "function") VD.renderDriveLive();
   }
 
-  function updateDiagnostics() {
+  export function updateDiagnostics() {
     const t = state.telemetry || {};
     const app = state.appState || {};
     const vehicle = app.vehicle || {};
@@ -1131,17 +1141,17 @@ import { initialTelemetryState } from "./telemetry-state";
     // Status details are toast-style sentences ("Demo scenario: typical.");
     // as a card title the trailing period clashes with every other headline.
     const diagTitle = String(status.detail || (t.updatedAt ? "Live OBD data received" : "Waiting for adapter")).replace(/\.\s*$/, "");
-    VD.setText("diagState", diagTitle);
-    VD.setText("diagSamples", samples ? `${samples} sample${samples === 1 ? "" : "s"}` : "0 samples");
+    setText("diagState", diagTitle);
+    setText("diagSamples", samples ? `${samples} sample${samples === 1 ? "" : "s"}` : "0 samples");
     // Drive's slim session/health footer (v2 design) mirrors this card's state
     // in one line; the full card itself now lives on Diagnostics.
     // "demo scenario: typical" compresses to the design's "demo typical" so the
     // one-line footer fits without ellipsizing the samples count off-screen.
-    VD.setText(
+    setText(
       "sessionFooterLine",
       `OBD session · ${diagTitle.toLowerCase().replace(/^demo scenario:\s*/, "demo ")} · ${samples} sample${samples === 1 ? "" : "s"}`
     );
-    VD.setText("diagAdapter", t.adapter || status.adapter || "--");
+    setText("diagAdapter", t.adapter || status.adapter || "--");
     // Surface the classifier's confidence inline and its reason codes (the "why"
     // behind driving/charging/parked) as a tooltip — both already reach JS via the
     // app-state payload (vehicle.confidence / vehicle.reasons).
@@ -1149,14 +1159,14 @@ import { initialTelemetryState } from "./telemetry-state";
     const stateReasons = Array.isArray(vehicle.reasons)
       ? vehicle.reasons.filter(Boolean).map(String)
       : [];
-    VD.setText("diagVehicleState", stateConfidence ? `${vehicleState} · ${stateConfidence}` : vehicleState);
+    setText("diagVehicleState", stateConfidence ? `${vehicleState} · ${stateConfidence}` : vehicleState);
     const stateEl = el("diagVehicleState");
     if (stateEl) {
       if (stateReasons.length) stateEl.setAttribute("title", `Why: ${stateReasons.join("; ")}`);
       else stateEl.removeAttribute("title");
     }
-    VD.setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
-    VD.setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
+    setText("diagSession", t.sessionMs ? formatDuration(Number(t.sessionMs)) : "--");
+    setText("diagSupported", t.supportedPids ? summarizePidLine(t.supportedPids) : "unknown");
     // Footnote tier: a placeholder printed at value weight ("unknown", "--")
     // is noise, not information — hide the cell until it has a real reading.
     ["diagAdapter", "diagVehicleState", "diagSession", "diagSupported"].forEach((id) => {
@@ -1362,8 +1372,8 @@ import { initialTelemetryState } from "./telemetry-state";
       frag.appendChild(none);
     }
     list.replaceChildren(frag);
-    VD.setText("liveSignalsBadge", `${reporting}/${total}`);
-    VD.setText(
+    setText("liveSignalsBadge", `${reporting}/${total}`);
+    setText(
       "liveSignalsTitle",
       hasLiveData ? `${reporting} of ${total} metrics reporting` : "Connect to see live metrics",
     );
@@ -1410,7 +1420,7 @@ import { initialTelemetryState } from "./telemetry-state";
       Number.isFinite(minV) && Number.isFinite(maxV);
     const toggle = el("cellToggleBtn");
     if (!has) {
-      VD.setText("cellBalanceCopy", "No cell readings yet — connect while the car is awake.");
+      setText("cellBalanceCopy", "No cell readings yet — connect while the car is awake.");
       // No data → hide the toggle and keep the heatmap collapsed. renderCellGrid
       // (called right after in updateLiveUi) then hides the grid section.
       if (toggle) toggle.hidden = true;
@@ -1422,7 +1432,7 @@ import { initialTelemetryState } from "./telemetry-state";
       ? Number(t.cellBalanceMv)
       : Math.round((maxV - minV) * 1000);
     const tone = cellBalanceTone(mv);
-    VD.setText(
+    setText(
       "cellBalanceCopy",
       `Δ ${mv} mV across ${CELL_GRID_COUNT} groups — ${cellHealthWord(tone)}`,
     );
@@ -1523,9 +1533,9 @@ import { initialTelemetryState } from "./telemetry-state";
           ? `${socRound}% — full around ${finish}`
           : `${socRound}% — ${targetSoc}% around ${finish}`;
     }
-    VD.setText("liveChargeEta", etaText);
-    VD.setText("liveChargeSoc", `${socRound}%`);
-    VD.setText("liveChargeRemaining", `${remainingKwh.toFixed(1)} kWh`);
+    setText("liveChargeEta", etaText);
+    setText("liveChargeSoc", `${socRound}%`);
+    setText("liveChargeRemaining", `${remainingKwh.toFixed(1)} kWh`);
     const powerBadge = el("liveChargePower");
     if (powerBadge) {
       const label = powerBadge.querySelector("span:last-child");
@@ -1535,16 +1545,16 @@ import { initialTelemetryState } from "./telemetry-state";
     }
     // Progress toward the target (v2): SOC-wide green bar with the session's
     // from→to on the left and the target caption on the right.
-    VD.setMeter("liveChargeMeter", soc);
+    setMeter("liveChargeMeter", soc);
     const session = liveChargeSession();
     const startSoc = session ? Number(session.startSoc) : NaN;
-    VD.setText(
+    setText(
       "liveChargeFromTo",
       Number.isFinite(startSoc) && Math.round(startSoc) !== socRound
         ? `${Math.round(startSoc)}% → ${socRound}%`
         : `${socRound}%`
     );
-    VD.setText("liveChargeTargetLabel", `target ${targetSoc}%`);
+    setText("liveChargeTargetLabel", `target ${targetSoc}%`);
     // "Level 2 · 3.4 kW · started 38m ago" — charger type + live power +
     // session age. Hidden when the in-progress session hasn't landed yet.
     const subEl = el("liveChargeSub");
@@ -1608,7 +1618,7 @@ import { initialTelemetryState } from "./telemetry-state";
    * clears the stored map (storage was wiped).
    */
   function applyCellSnapshot(payload: unknown) {
-    const snap = asPayloadRecord(VD.parsePayload<unknown>(payload, {}));
+    const snap = asPayloadRecord(parsePayload<unknown>(payload, {}));
     const rawCells = Array.isArray(snap.cells) ? (snap.cells as unknown[]) : [];
     const slots: Array<number | null> = new Array(CELL_GRID_COUNT).fill(null);
     for (const item of rawCells) {
@@ -1731,13 +1741,13 @@ import { initialTelemetryState } from "./telemetry-state";
     grid.hidden = false;
     grid.replaceChildren(frag);
     // Footer: min / max / Δ (green when tight, amber when wide) / note.
-    VD.setText("cellGridMin", `${lo.toFixed(3)} V`);
-    VD.setText("cellGridMax", `${hi.toFixed(3)} V`);
+    setText("cellGridMin", `${lo.toFixed(3)} V`);
+    setText("cellGridMax", `${hi.toFixed(3)} V`);
     const mv = Math.round((hi - lo) * 1000);
-    VD.setText("cellGridDelta", `${mv} mV`);
+    setText("cellGridDelta", `${mv} mV`);
     const deltaEl = el("cellGridDelta");
     if (deltaEl) deltaEl.style.color = mv > 14 ? "var(--warn)" : "var(--ev)";
-    VD.setText(
+    setText(
       "cellGridNote",
       full
         ? t.minCellNumber != null && Number.isFinite(minCell)
@@ -1860,10 +1870,10 @@ import { initialTelemetryState } from "./telemetry-state";
     );
     const total = document.querySelectorAll(".validation-row").length;
     const okCount = document.querySelectorAll(".validation-row[data-tone='ok']").length;
-    VD.setText("validationSummary", okCount ? `${okCount}/${total} ok` : "waiting");
+    setText("validationSummary", okCount ? `${okCount}/${total} ok` : "waiting");
     // Drive's slim footer mirrors the same summary ("N/5 checks ok") and tints
     // its dot green only once most checks pass — same threshold the design uses.
-    VD.setText("sessionFooterHealth", okCount ? `${okCount}/${total} checks ok` : "waiting");
+    setText("sessionFooterHealth", okCount ? `${okCount}/${total} checks ok` : "waiting");
     const footerDot = el("sessionFooterDot");
     if (footerDot) footerDot.dataset.tone = okCount >= Math.max(1, total - 1) ? "ok" : "warn";
   }

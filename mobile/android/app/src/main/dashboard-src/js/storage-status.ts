@@ -35,8 +35,8 @@ import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { storageRollupSignature } from "./render-signatures";
 
-(function () {
-  "use strict";
+// Module scope (the old IIFE wrapper is redundant under ESM and blocks
+// `export` declarations).
 
   let storageDetailsScheduled = false;
   const storageDetailsRead = createNativeRequestGate(() => handleStorageDetailsFailure());
@@ -74,7 +74,7 @@ import { storageRollupSignature } from "./render-signatures";
   // VoltNativeError, so a `payload is VoltNativeError` guard would narrow the
   // happy-path value to `never`. Callers read the error fields off the same
   // payload after the check.
-  function isNativeError(payload: unknown): boolean {
+  export function isNativeError(payload: unknown): boolean {
     const candidate = payload as VoltNativeError | null;
     return (
       candidate != null &&
@@ -84,7 +84,7 @@ import { storageRollupSignature } from "./render-signatures";
     );
   }
 
-  function reportNativeReadError(payload: unknown, fallbackDetail: string) {
+  export function reportNativeReadError(payload: unknown, fallbackDetail: string) {
     const err = (payload || {}) as VoltNativeError;
     const detail = err.message || fallbackDetail || "Could not read local storage.";
     VD.setStatus({ state: "blocked", detail });
@@ -172,7 +172,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function setStorage(payload: unknown) {
+  export function setStorage(payload: unknown) {
     const parsed = parsePayload<VoltStorageSummary>(payload, {});
     validatePayload("setStorage", parsed);
     if (isNativeError(parsed)) {
@@ -241,7 +241,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function updateStorageUi() {
+  export function updateStorageUi() {
     const storage = state.storage || {};
     const sessions = Number(storage.sessionCount || 0);
     const samples = Number(storage.sampleCount || 0);
@@ -327,7 +327,7 @@ import { storageRollupSignature } from "./render-signatures";
   // innerHTML += template literals so storage strings can never be reinterpreted
   // as markup. Each builder returns a single root Element.
 
-  function buildStatusCopy(text: string) {
+  export function buildStatusCopy(text: string) {
     const p = document.createElement("p");
     p.className = "status-copy";
     p.textContent = text;
@@ -361,7 +361,7 @@ import { storageRollupSignature } from "./render-signatures";
   // nothing. Memoized like lastDtcListSig.
   let lastReviewSig = "";
 
-  function updateDiagnosticCodeUi() {
+  export function updateDiagnosticCodeUi() {
     const storage = state.storage || {};
     const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
     const list = el("dtcList");
@@ -1169,7 +1169,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function renderRealV2Ui() {
+  export function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
     const charge = storage.chargeSummary || {};
@@ -1282,7 +1282,7 @@ import { storageRollupSignature } from "./render-signatures";
     setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
   }
 
-  function toggleHidden(id: string, hidden: unknown) {
+  export function toggleHidden(id: string, hidden: unknown) {
     const node = el(id);
     if (node) node.hidden = Boolean(hidden);
   }
@@ -1337,6 +1337,5 @@ import { storageRollupSignature } from "./render-signatures";
     severityLabel,
     drivabilityLine
   });
-})();
 
 export {};

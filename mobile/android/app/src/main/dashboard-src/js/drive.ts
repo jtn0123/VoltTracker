@@ -15,16 +15,15 @@
  * The render entry point is renderDriveLive(), called once per scheduled render
  * frame from telemetry.js. Charts re-render on resize.
  */
-import { el } from "./core";
+import { el, setText, state } from "./core";
 import { setDataTone } from "./dataset-state";
 import type { DataToneValue } from "./dataset-state";
-import { formatDuration } from "./telemetry";
+import { dbRowCount, formatDuration } from "./telemetry";
 import { units } from "./prefs";
 import { t } from "./i18n";
 import { numberSeriesSignature } from "./render-signatures";
 
-const VD = window.VoltDashboard;
-const state = VD.state;
+import { VD } from "./vd-registry";
 
 type DriveChip = {
   tone: DataToneValue;
@@ -184,7 +183,7 @@ type ChartPoint = {
     const soc = tm.soc == null ? NaN : Number(tm.soc);
     if (Number.isFinite(soc) && soc > 0) meta.push(Math.round(soc) + "% SOC");
     else if (Number(session.sampleCount || tm.sampleCount || 0)) meta.push("live sample data");
-    VD.setText("topDemoMeta", meta.length ? meta.join(" · ") : "sample data");
+    setText("topDemoMeta", meta.length ? meta.join(" · ") : "sample data");
     line.hidden = false;
   }
 
@@ -208,8 +207,8 @@ type ChartPoint = {
     const showLive = Boolean(live && live.tone !== "idle" && live.tone !== "ok");
     if (rec) {
       if (showLive && live) {
-        VD.setText("driveRecordingLabel", live.label);
-        VD.setText("driveRecordingMeta", live.meta.join(" · "));
+        setText("driveRecordingLabel", live.label);
+        setText("driveRecordingMeta", live.meta.join(" · "));
         setDataTone(rec, live.tone);
         rec.hidden = false;
       } else {
@@ -266,7 +265,7 @@ type ChartPoint = {
     // Not connected: distinguish "have saved history" (offline) from "nothing yet".
     const storage = state.storage || {};
     const hasStored =
-      (typeof VD.dbRowCount === "function" && VD.dbRowCount(storage) > 0) ||
+      dbRowCount(storage) > 0 ||
       (state.trips || []).length > 0;
     if (hasStored) {
       return { kind: "offline", label: "Offline · stored data", sub: "Showing saved history — connect for live" };
