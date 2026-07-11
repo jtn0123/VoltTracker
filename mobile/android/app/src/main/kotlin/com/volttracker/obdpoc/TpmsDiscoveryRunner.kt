@@ -148,7 +148,12 @@ class TpmsDiscoveryRunner(
         }
         val store: ObdLocalStore = service.localStore ?: return false
         return try {
-            store.hasRecentEnhancedCapability(adapterAddress, profile.header, profile.command, profile.retryAfterMs)
+            store.signalLogs.hasRecentEnhancedCapability(
+                adapterAddress,
+                profile.header,
+                profile.command,
+                profile.retryAfterMs,
+            )
         } catch (ex: RuntimeException) {
             service.recorder.logError("enhanced_capability_cache_read_failed", ex)
             false

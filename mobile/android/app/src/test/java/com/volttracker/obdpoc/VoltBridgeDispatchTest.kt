@@ -5,6 +5,9 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
+import com.volttracker.obdpoc.data.ObdSignalLogStore
+import com.volttracker.obdpoc.data.ObdTripEditStore
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -733,7 +736,7 @@ class VoltBridgeDispatchTest {
         activity.store.setTripLabelReturn = true
         activity.store.setTripFavoriteReturn = true
         activity.store.addMaintenanceReturn = 42L
-        activity.store.maintenanceLog = JSONArray().put(JSONObject().put("id", 42))
+        activity.store.maintenanceLogPayload = JSONArray().put(JSONObject().put("id", 42))
         activity.store.deleteMaintenanceReturn = 1
 
         bridge.setTripLabel(" 12:1000:2000 ", " Commute ")
@@ -1285,7 +1288,7 @@ class VoltBridgeDispatchTest {
         var addMaintenanceReturn = -1L
         var lastMaintenanceType: String? = null
         var lastMaintenanceNote: String? = null
-        var maintenanceLog = JSONArray()
+        var maintenanceLogPayload = JSONArray()
         var deleteMaintenanceReturn = 0
         var lastDeletedMaintenanceId = Long.MIN_VALUE
 
@@ -1293,66 +1296,75 @@ class VoltBridgeDispatchTest {
             clearAllDataCalls += 1
         }
 
-        override fun deleteEnhancedCapability(id: Long): Int {
-            lastDeletedId = id
-            return deleteReturn
-        }
+        override val signalLogs: ObdSignalLogStore =
+            object : RecordingSignalLogStore() {
+                override fun deleteEnhancedCapability(id: Long): Int {
+                    lastDeletedId = id
+                    return deleteReturn
+                }
 
-        override fun getEnhancedCapabilityExportJson(id: Long): JSONObject {
-            lastSingleExportId = id
-            return singleExport
-        }
+                override fun getEnhancedCapabilityExportJson(id: Long): JSONObject {
+                    lastSingleExportId = id
+                    return singleExport
+                }
 
-        override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject {
-            lastBulkExportLimit = limit
-            return bulkExport
-        }
+                override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject {
+                    lastBulkExportLimit = limit
+                    return bulkExport
+                }
+            }
 
-        override fun setTripHidden(
-            routeKey: String?,
-            hidden: Boolean,
-        ): Boolean {
-            lastMarkedTripRouteKey = routeKey
-            return markTripReturn
-        }
+        override val tripEdits: ObdTripEditStore =
+            object : ObdTripEditStore {
+                override fun setTripHidden(
+                    routeKey: String?,
+                    hidden: Boolean,
+                ): Boolean {
+                    lastMarkedTripRouteKey = routeKey
+                    return markTripReturn
+                }
 
-        override fun setTripLabel(
-            routeKey: String?,
-            label: String?,
-        ): Boolean {
-            lastTripLabelRouteKey = routeKey
-            lastTripLabel = label
-            return setTripLabelReturn
-        }
+                override fun setTripLabel(
+                    routeKey: String?,
+                    label: String?,
+                ): Boolean {
+                    lastTripLabelRouteKey = routeKey
+                    lastTripLabel = label
+                    return setTripLabelReturn
+                }
 
-        override fun setTripFavorite(
-            routeKey: String?,
-            favorite: Boolean,
-        ): Boolean {
-            lastTripFavoriteRouteKey = routeKey
-            lastTripFavorite = favorite
-            return setTripFavoriteReturn
-        }
+                override fun setTripFavorite(
+                    routeKey: String?,
+                    favorite: Boolean,
+                ): Boolean {
+                    lastTripFavoriteRouteKey = routeKey
+                    lastTripFavorite = favorite
+                    return setTripFavoriteReturn
+                }
+            }
 
-        override fun addMaintenanceEntry(
-            createdAtMs: Long,
-            odometerKm: Double?,
-            type: String?,
-            note: String?,
-            intervalKm: Double?,
-            intervalMonths: Int?,
-        ): Long {
-            lastMaintenanceType = type
-            lastMaintenanceNote = note
-            return addMaintenanceReturn
-        }
+        override val maintenanceLog: ObdMaintenanceLogStore =
+            object : ObdMaintenanceLogStore {
+                override fun addMaintenanceEntry(
+                    createdAtMs: Long,
+                    odometerKm: Double?,
+                    type: String?,
+                    note: String?,
+                    intervalKm: Double?,
+                    intervalMonths: Int?,
+                ): Long {
+                    lastMaintenanceType = type
+                    lastMaintenanceNote = note
+                    return addMaintenanceReturn
+                }
 
-        override fun getMaintenanceLogJson(limit: Int): JSONArray = maintenanceLog
+                override fun getMaintenanceLogJson(limit: Int): JSONArray = maintenanceLogPayload
 
-        override fun deleteMaintenanceEntry(id: Long): Int {
-            lastDeletedMaintenanceId = id
-            return deleteMaintenanceReturn
-        }
+                override fun deleteMaintenanceEntry(id: Long): Int {
+                    lastDeletedMaintenanceId = id
+                    return deleteMaintenanceReturn
+                }
+            }
     }
 
     private companion object {

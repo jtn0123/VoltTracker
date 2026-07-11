@@ -243,11 +243,11 @@ class ObdStoreTripsDbTest {
                 .getJSONObject("session")
                 .getString("id")
 
-        assertTrue(store.setTripHidden(routeKey, true))
+        assertTrue(store.tripEdits.setTripHidden(routeKey, true))
         assertEquals(0, store.getTripsJson(40).length())
         assertEquals(0, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
 
-        assertTrue(store.setTripHidden(routeKey, false))
+        assertTrue(store.tripEdits.setTripHidden(routeKey, false))
         assertEquals(1, store.getTripsJson(40).length())
         assertEquals(1, StorageSummaryJson.build(store.getStorageSummaryRecord()).getJSONArray("recentRoutes").length())
     }
@@ -265,7 +265,7 @@ class ObdStoreTripsDbTest {
         // Trips with no label carry an empty-string label, never a missing key.
         assertEquals("", store.getTripsJson(40).getJSONObject(0).optString("label", "MISSING"))
 
-        assertTrue(store.setTripLabel(routeKey, "Commute home"))
+        assertTrue(store.tripEdits.setTripLabel(routeKey, "Commute home"))
 
         val trip = store.getTripsJson(40).getJSONObject(0)
         assertEquals(routeKey, trip.getString("id"))
@@ -280,23 +280,23 @@ class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
-        assertTrue(store.setTripLabel(routeKey, "Road trip"))
+        assertTrue(store.tripEdits.setTripLabel(routeKey, "Road trip"))
         assertEquals("Road trip", store.getTripsJson(40).getJSONObject(0).optString("label"))
 
         // An empty label clears the entry — the later (clearing) event wins over the earlier one.
-        assertTrue(store.setTripLabel(routeKey, ""))
+        assertTrue(store.tripEdits.setTripLabel(routeKey, ""))
         assertEquals("", store.getTripsJson(40).getJSONObject(0).optString("label", "MISSING"))
 
         // Re-labeling after a clear works (latest event wins).
-        assertTrue(store.setTripLabel(routeKey, "Weekend"))
+        assertTrue(store.tripEdits.setTripLabel(routeKey, "Weekend"))
         assertEquals("Weekend", store.getTripsJson(40).getJSONObject(0).optString("label"))
     }
 
     @Test
     fun setTripLabelRejectsUnparseableRouteKey() {
-        assertEquals(false, store.setTripLabel(null, "x"))
-        assertEquals(false, store.setTripLabel("", "x"))
-        assertEquals(false, store.setTripLabel("not-a-route-key", "x"))
+        assertEquals(false, store.tripEdits.setTripLabel(null, "x"))
+        assertEquals(false, store.tripEdits.setTripLabel("", "x"))
+        assertEquals(false, store.tripEdits.setTripLabel("not-a-route-key", "x"))
     }
 
     // ---- M4 trip favorites ---------------------------------------------------------
@@ -312,7 +312,7 @@ class ObdStoreTripsDbTest {
         // Trips default to not-favorite, never a missing key.
         assertEquals(false, store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", true))
 
-        assertTrue(store.setTripFavorite(routeKey, true))
+        assertTrue(store.tripEdits.setTripFavorite(routeKey, true))
 
         val trip = store.getTripsJson(40).getJSONObject(0)
         assertEquals(routeKey, trip.getString("id"))
@@ -327,23 +327,23 @@ class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
-        assertTrue(store.setTripFavorite(routeKey, true))
+        assertTrue(store.tripEdits.setTripFavorite(routeKey, true))
         assertTrue(store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", false))
 
         // The later (un-favorite) event wins over the earlier favorite.
-        assertTrue(store.setTripFavorite(routeKey, false))
+        assertTrue(store.tripEdits.setTripFavorite(routeKey, false))
         assertEquals(false, store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", true))
 
         // Re-favoriting after a clear works (latest event wins).
-        assertTrue(store.setTripFavorite(routeKey, true))
+        assertTrue(store.tripEdits.setTripFavorite(routeKey, true))
         assertTrue(store.getTripsJson(40).getJSONObject(0).optBoolean("favorite", false))
     }
 
     @Test
     fun setTripFavoriteRejectsUnparseableRouteKey() {
-        assertEquals(false, store.setTripFavorite(null, true))
-        assertEquals(false, store.setTripFavorite("", true))
-        assertEquals(false, store.setTripFavorite("not-a-route-key", true))
+        assertEquals(false, store.tripEdits.setTripFavorite(null, true))
+        assertEquals(false, store.tripEdits.setTripFavorite("", true))
+        assertEquals(false, store.tripEdits.setTripFavorite("not-a-route-key", true))
     }
 
     // ---- M6 bulk all-trips export bundle --------------------------------------------
@@ -356,7 +356,7 @@ class ObdStoreTripsDbTest {
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 3000L, "")
 
         val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
-        assertTrue(store.setTripLabel(routeKey, "Commute home"))
+        assertTrue(store.tripEdits.setTripLabel(routeKey, "Commute home"))
 
         val bundle = store.projections().allTripsForExport(40, 500)
         assertEquals("one trip in the bundle", 1, bundle.length())
@@ -390,12 +390,12 @@ class ObdStoreTripsDbTest {
         val newest = trips.getJSONObject(0)
         // Sanity: the list id is point-clipped (13m), not the window-key start (12m + 1ms).
         assertEquals(startMs + 13 * minuteMs, newest.optLong("startedAtMs"))
-        assertEquals(2, store.getRecentRoutesJson(8, 500).length())
+        assertEquals(2, store.routes.getRecentRoutesJson(8, 500).length())
 
-        assertTrue(store.setTripHidden(newest.getString("id"), true))
+        assertTrue(store.tripEdits.setTripHidden(newest.getString("id"), true))
 
         assertEquals(1, store.getTripsJson(40).length())
-        val routesAfter = store.getRecentRoutesJson(8, 500)
+        val routesAfter = store.routes.getRecentRoutesJson(8, 500)
         assertEquals(
             "a trip hidden by its list id must disappear from the map projection too",
             1,
@@ -543,7 +543,7 @@ class ObdStoreTripsDbTest {
         assertEquals(startMs + 5 * minuteMs, oldest.optLong("endedAtMs"))
         assertEquals(id, newest.optLong("sessionId"))
 
-        val route = store.getTripRouteJson(newest.optString("id"))
+        val route = store.routes.getTripRouteJson(newest.optString("id"))
         val points = route.optJSONArray("points")
         assertNotNull(points)
         assertTrue(points!!.length() >= 2)

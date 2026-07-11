@@ -18,7 +18,7 @@ internal class VoltBridgeSignalLogs(
         if (rowId <= 0L || store == null) {
             return BridgeJsonResult.error("invalid_id", "Choose a saved detailed signal log.").serialize()
         }
-        return BridgeJsonResult.obj(store.getEnhancedCapabilityExportJson(rowId)).serialize()
+        return BridgeJsonResult.obj(store.signalLogs.getEnhancedCapabilityExportJson(rowId)).serialize()
     }
 
     fun exportDetailedSignalLogs(): String {
@@ -26,7 +26,10 @@ internal class VoltBridgeSignalLogs(
         if (store == null) {
             return BridgeJsonResult.error("storage_unavailable", "Local storage is not ready.").serialize()
         }
-        return BridgeJsonResult.obj(store.getEnhancedCapabilitiesExportJson(MAX_BULK_EXPORT_ROWS)).serialize()
+        return BridgeJsonResult
+            .obj(
+                store.signalLogs.getEnhancedCapabilitiesExportJson(MAX_BULK_EXPORT_ROWS),
+            ).serialize()
     }
 
     fun deleteDetailedSignalLog(id: String?) {
@@ -40,7 +43,7 @@ internal class VoltBridgeSignalLogs(
         activity.runOnBackground {
             val deleted =
                 try {
-                    activity.localStore?.deleteEnhancedCapability(rowId) ?: 0
+                    activity.localStore?.signalLogs?.deleteEnhancedCapability(rowId) ?: 0
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "deleteDetailedSignalLog failed", ex)
                     0

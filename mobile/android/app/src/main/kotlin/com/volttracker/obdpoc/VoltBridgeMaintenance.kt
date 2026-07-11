@@ -41,7 +41,7 @@ internal class VoltBridgeMaintenance(
         activity.runOnBackground {
             val id =
                 try {
-                    activity.localStore?.addMaintenanceEntry(
+                    activity.localStore?.maintenanceLog?.addMaintenanceEntry(
                         createdAtMs,
                         odometerKm,
                         type,
@@ -71,7 +71,7 @@ internal class VoltBridgeMaintenance(
             return BridgeJsonResult.error("storage_unavailable", "Maintenance log is not available yet.").serialize()
         }
         return try {
-            BridgeJsonResult.array(store.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS)).serialize()
+            BridgeJsonResult.array(store.maintenanceLog.getMaintenanceLogJson(MAX_MAINTENANCE_ROWS)).serialize()
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "getMaintenanceLog failed", ex)
             BridgeJsonResult.error("maintenance_log_failed", "Could not read the maintenance log.").serialize()
@@ -90,7 +90,7 @@ internal class VoltBridgeMaintenance(
         activity.runOnBackground {
             val deleted =
                 try {
-                    activity.localStore?.deleteMaintenanceEntry(rowId) ?: 0
+                    activity.localStore?.maintenanceLog?.deleteMaintenanceEntry(rowId) ?: 0
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "deleteMaintenanceEntry failed", ex)
                     0

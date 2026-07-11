@@ -3,6 +3,9 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.os.Bundle
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
+import com.volttracker.obdpoc.data.ObdSignalLogStore
+import com.volttracker.obdpoc.data.ObdTripEditStore
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -131,7 +134,7 @@ class DataBridgeRecordingStore(
     var lastMaintenanceIntervalMonths: Int? = Int.MIN_VALUE
     var throwAddMaintenance = false
 
-    var maintenanceLog = JSONArray()
+    var maintenanceLogPayload = JSONArray()
     var throwMaintenanceLog = false
     var lastMaintenanceLogLimit = Int.MIN_VALUE
 
@@ -149,96 +152,133 @@ class DataBridgeRecordingStore(
         }
     }
 
-    override fun deleteEnhancedCapability(id: Long): Int {
-        lastDeletedId = id
-        if (throwDeleteEnhancedCapability) {
-            throw IllegalStateException("delete failed")
-        }
-        return deleteReturn
-    }
-
-    override fun getEnhancedCapabilityExportJson(id: Long): JSONObject {
-        lastSingleExportId = id
-        return singleExport
-    }
-
-    override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject {
-        lastBulkExportLimit = limit
-        return bulkExport
-    }
-
-    override fun setTripHidden(
-        routeKey: String?,
-        hidden: Boolean,
-    ): Boolean {
-        if (hidden) {
-            lastMarkedTripRouteKey = routeKey
-            if (throwMarkTrip) {
-                throw IllegalStateException("mark failed")
+    override val signalLogs: ObdSignalLogStore =
+        object : RecordingSignalLogStore() {
+            override fun deleteEnhancedCapability(id: Long): Int {
+                lastDeletedId = id
+                if (throwDeleteEnhancedCapability) {
+                    throw IllegalStateException("delete failed")
+                }
+                return deleteReturn
             }
-            return markTripReturn
-        }
-        lastRestoredTripRouteKey = routeKey
-        return restoreTripReturn
-    }
 
-    override fun setTripLabel(
-        routeKey: String?,
-        label: String?,
-    ): Boolean {
-        lastLabelRouteKey = routeKey
-        lastLabelValue = label
-        if (throwSetTripLabel) {
-            throw IllegalStateException("label failed")
-        }
-        return setTripLabelReturn
-    }
+            override fun getEnhancedCapabilityExportJson(id: Long): JSONObject {
+                lastSingleExportId = id
+                return singleExport
+            }
 
-    override fun setTripFavorite(
-        routeKey: String?,
-        favorite: Boolean,
-    ): Boolean {
-        lastFavoriteRouteKey = routeKey
-        lastFavoriteValue = favorite
-        if (throwSetTripFavorite) {
-            throw IllegalStateException("favorite failed")
+            override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject {
+                lastBulkExportLimit = limit
+                return bulkExport
+            }
         }
-        return setTripFavoriteReturn
-    }
 
-    override fun addMaintenanceEntry(
-        createdAtMs: Long,
-        odometerKm: Double?,
-        type: String?,
-        note: String?,
-        intervalKm: Double?,
-        intervalMonths: Int?,
-    ): Long {
-        lastMaintenanceCreatedAtMs = createdAtMs
-        lastMaintenanceOdometerKm = odometerKm
-        lastMaintenanceType = type
-        lastMaintenanceNote = note
-        lastMaintenanceIntervalKm = intervalKm
-        lastMaintenanceIntervalMonths = intervalMonths
-        if (throwAddMaintenance) {
-            throw IllegalStateException("maintenance failed")
-        }
-        return addMaintenanceReturn
-    }
+    override val tripEdits: ObdTripEditStore =
+        object : ObdTripEditStore {
+            override fun setTripHidden(
+                routeKey: String?,
+                hidden: Boolean,
+            ): Boolean {
+                if (hidden) {
+                    lastMarkedTripRouteKey = routeKey
+                    if (throwMarkTrip) {
+                        throw IllegalStateException("mark failed")
+                    }
+                    return markTripReturn
+                }
+                lastRestoredTripRouteKey = routeKey
+                return restoreTripReturn
+            }
 
-    override fun getMaintenanceLogJson(limit: Int): JSONArray {
-        if (throwMaintenanceLog) {
-            throw IllegalStateException("maintenance log failed")
-        }
-        lastMaintenanceLogLimit = limit
-        return maintenanceLog
-    }
+            override fun setTripLabel(
+                routeKey: String?,
+                label: String?,
+            ): Boolean {
+                lastLabelRouteKey = routeKey
+                lastLabelValue = label
+                if (throwSetTripLabel) {
+                    throw IllegalStateException("label failed")
+                }
+                return setTripLabelReturn
+            }
 
-    override fun deleteMaintenanceEntry(id: Long): Int {
-        lastDeletedMaintenanceId = id
-        if (throwDeleteMaintenance) {
-            throw IllegalStateException("delete failed")
+            override fun setTripFavorite(
+                routeKey: String?,
+                favorite: Boolean,
+            ): Boolean {
+                lastFavoriteRouteKey = routeKey
+                lastFavoriteValue = favorite
+                if (throwSetTripFavorite) {
+                    throw IllegalStateException("favorite failed")
+                }
+                return setTripFavoriteReturn
+            }
         }
-        return deleteMaintenanceReturn
-    }
+
+    override val maintenanceLog: ObdMaintenanceLogStore =
+        object : ObdMaintenanceLogStore {
+            override fun addMaintenanceEntry(
+                createdAtMs: Long,
+                odometerKm: Double?,
+                type: String?,
+                note: String?,
+                intervalKm: Double?,
+                intervalMonths: Int?,
+            ): Long {
+                lastMaintenanceCreatedAtMs = createdAtMs
+                lastMaintenanceOdometerKm = odometerKm
+                lastMaintenanceType = type
+                lastMaintenanceNote = note
+                lastMaintenanceIntervalKm = intervalKm
+                lastMaintenanceIntervalMonths = intervalMonths
+                if (throwAddMaintenance) {
+                    throw IllegalStateException("maintenance failed")
+                }
+                return addMaintenanceReturn
+            }
+
+            override fun getMaintenanceLogJson(limit: Int): JSONArray {
+                if (throwMaintenanceLog) {
+                    throw IllegalStateException("maintenance log failed")
+                }
+                lastMaintenanceLogLimit = limit
+                return maintenanceLogPayload
+            }
+
+            override fun deleteMaintenanceEntry(id: Long): Int {
+                lastDeletedMaintenanceId = id
+                if (throwDeleteMaintenance) {
+                    throw IllegalStateException("delete failed")
+                }
+                return deleteMaintenanceReturn
+            }
+        }
+}
+
+/**
+ * [ObdSignalLogStore] base whose members all fail; recording fakes override just the members the
+ * test under construction drives.
+ */
+open class RecordingSignalLogStore : ObdSignalLogStore {
+    override fun getEnhancedCapabilitiesJson(limit: Int): JSONArray = throw UnsupportedOperationException("unused")
+
+    override fun hasRejectedEnhancedCapability(
+        adapterAddress: String?,
+        header: String?,
+        command: String?,
+    ): Boolean = throw UnsupportedOperationException("unused")
+
+    override fun hasRecentEnhancedCapability(
+        adapterAddress: String?,
+        header: String?,
+        command: String?,
+        minAgeMs: Long,
+    ): Boolean = throw UnsupportedOperationException("unused")
+
+    override fun getEnhancedCapabilityExportJson(id: Long): JSONObject = throw UnsupportedOperationException("unused")
+
+    override fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject =
+        throw UnsupportedOperationException("unused")
+
+    override fun deleteEnhancedCapability(id: Long): Int = throw UnsupportedOperationException("unused")
 }

@@ -117,7 +117,7 @@ class ObdLocalStoreDbTest {
         assertEquals(
             "no recovered row may remain the current live route",
             0,
-            store.getCurrentSessionRouteJson().length(),
+            store.routes.getCurrentSessionRouteJson().length(),
         )
     }
 
@@ -207,7 +207,7 @@ class ObdLocalStoreDbTest {
         store.recordTelemetry(id, sample(60, 1600, 34.13, -118.25, 3000))
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000, "")
 
-        val route = store.getTripRouteJson(id)
+        val route = store.routes.getTripRouteJson(id)
         val session = route.optJSONObject("session")
         val points = route.optJSONArray("points")
         assertNotNull(session)
@@ -222,7 +222,7 @@ class ObdLocalStoreDbTest {
     fun getTripRouteJsonReturnsEmptyForUnknownSession() {
         // Defensive: selecting a trip whose row is gone must not throw — it returns {} so the UI
         // falls back to its "no route" state.
-        val route = store.getTripRouteJson(999_999L)
+        val route = store.routes.getTripRouteJson(999_999L)
         assertEquals(0, route.length())
     }
 
@@ -446,7 +446,7 @@ class ObdLocalStoreDbTest {
             1000L,
         )
 
-        val capabilities = store.getEnhancedCapabilitiesJson(10)
+        val capabilities = store.signalLogs.getEnhancedCapabilitiesJson(10)
         assertEquals(1, capabilities.length())
         val capability = capabilities.getJSONObject(0)
         assertEquals("221154", capability.optString("command"))
@@ -510,7 +510,7 @@ class ObdLocalStoreDbTest {
             )
 
         assertEquals(3, inserted)
-        val capabilities = store.getEnhancedCapabilitiesJson(10)
+        val capabilities = store.signalLogs.getEnhancedCapabilitiesJson(10)
         assertEquals(1, capabilities.length())
         val capability = capabilities.getJSONObject(0)
         assertEquals("221154", capability.optString("command"))
@@ -539,7 +539,7 @@ class ObdLocalStoreDbTest {
             )
 
         assertEquals(1, updated)
-        val updatedCapability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0)
+        val updatedCapability = store.signalLogs.getEnhancedCapabilitiesJson(10).getJSONObject(0)
         assertEquals(3L, updatedCapability.optLong("responseCount"))
         assertEquals(1000L, updatedCapability.optLong("firstSeenMs"))
         assertEquals(2000L, updatedCapability.optLong("lastSeenMs"))
@@ -580,7 +580,7 @@ class ObdLocalStoreDbTest {
             2000L,
         )
 
-        val capability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0)
+        val capability = store.signalLogs.getEnhancedCapabilitiesJson(10).getJSONObject(0)
         assertTrue(capability.optBoolean("supported"))
         assertEquals(1L, capability.optLong("responseCount"))
         assertEquals(2000L, capability.optLong("lastSeenMs"))
@@ -612,10 +612,10 @@ class ObdLocalStoreDbTest {
         )
 
         // One capability row per adapter key — the cache must not bleed session A's key into B.
-        val capabilities = store.getEnhancedCapabilitiesJson(10)
+        val capabilities = store.signalLogs.getEnhancedCapabilitiesJson(10)
         assertEquals(2, capabilities.length())
-        assertTrue(store.hasRecentEnhancedCapability("00:11", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
-        assertTrue(store.hasRecentEnhancedCapability("00:22", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
+        assertTrue(store.signalLogs.hasRecentEnhancedCapability("00:11", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
+        assertTrue(store.signalLogs.hasRecentEnhancedCapability("00:22", "ATSH7E0", "221154", Long.MAX_VALUE / 2L))
         // The two session-A observations were upserts into a single row.
         val counts = mutableListOf<Long>()
         for (i in 0 until capabilities.length()) {
@@ -644,10 +644,10 @@ class ObdLocalStoreDbTest {
             1000L,
         )
 
-        assertTrue(store.hasRejectedEnhancedCapability("00:11", "ATSH760", "224051"))
-        assertFalse(store.hasRejectedEnhancedCapability("00:11", "ATSH760", "224052"))
+        assertTrue(store.signalLogs.hasRejectedEnhancedCapability("00:11", "ATSH760", "224051"))
+        assertFalse(store.signalLogs.hasRejectedEnhancedCapability("00:11", "ATSH760", "224052"))
         assertTrue(
-            store.hasRecentEnhancedCapability(
+            store.signalLogs.hasRecentEnhancedCapability(
                 "00:11",
                 "ATSH760",
                 "224051",
@@ -655,7 +655,7 @@ class ObdLocalStoreDbTest {
             ),
         )
         assertFalse(
-            store.hasRecentEnhancedCapability(
+            store.signalLogs.hasRecentEnhancedCapability(
                 "00:11",
                 "ATSH760",
                 "224052",
@@ -683,22 +683,22 @@ class ObdLocalStoreDbTest {
             1000L,
         )
 
-        val capability = store.getEnhancedCapabilitiesJson(10).getJSONObject(0)
+        val capability = store.signalLogs.getEnhancedCapabilitiesJson(10).getJSONObject(0)
         val rowId = capability.optLong("id")
         assertTrue(rowId > 0L)
 
-        val one = store.getEnhancedCapabilityExportJson(rowId)
+        val one = store.signalLogs.getEnhancedCapabilityExportJson(rowId)
         assertTrue(one.optBoolean("ok"))
         assertEquals("detailed-signal-log", one.optString("kind"))
         assertEquals("221154", one.getJSONObject("item").optString("command"))
 
-        val all = store.getEnhancedCapabilitiesExportJson(10)
+        val all = store.signalLogs.getEnhancedCapabilitiesExportJson(10)
         assertTrue(all.optBoolean("ok"))
         assertEquals(1, all.getJSONArray("items").length())
 
-        assertEquals(1, store.deleteEnhancedCapability(rowId))
-        assertEquals(0, store.getEnhancedCapabilitiesJson(10).length())
-        assertFalse(store.getEnhancedCapabilityExportJson(rowId).optBoolean("ok"))
+        assertEquals(1, store.signalLogs.deleteEnhancedCapability(rowId))
+        assertEquals(0, store.signalLogs.getEnhancedCapabilitiesJson(10).length())
+        assertFalse(store.signalLogs.getEnhancedCapabilityExportJson(rowId).optBoolean("ok"))
     }
 
     // ---- GPS route building (the data the map renders) -----------------------------
@@ -756,7 +756,7 @@ class ObdLocalStoreDbTest {
         locationSample(id, 2000L, 91.0, -118.25, 5.0)
         locationSample(id, 3000L, 34.06, -118.25, 5.0)
 
-        val route = store.getTripRouteJson(id)
+        val route = store.routes.getTripRouteJson(id)
         val points = route.getJSONArray("points")
         assertEquals(2, points.length())
         assertTrue(points.getJSONObject(0).isNull("accuracyM"))
@@ -1409,7 +1409,7 @@ class ObdLocalStoreDbTest {
         }
         val donorFile = context.getDatabasePath("merge-from-donor.db")
 
-        val result = store.mergeFrom(donorFile)
+        val result = store.dbMaintenance.mergeFrom(donorFile)
 
         assertTrue(result.ok)
         assertEquals(1, result.sessionsAdded)
@@ -1425,7 +1425,7 @@ class ObdLocalStoreDbTest {
         val context = RuntimeEnvironment.getApplication()
         val missing = File(context.cacheDir, "does-not-exist.db")
 
-        val result = store.mergeFrom(missing)
+        val result = store.dbMaintenance.mergeFrom(missing)
 
         assertFalse(result.ok)
     }
@@ -1441,7 +1441,7 @@ class ObdLocalStoreDbTest {
             donor.close()
         }
 
-        val result = store.mergeFrom(donorFile)
+        val result = store.dbMaintenance.mergeFrom(donorFile)
 
         assertFalse(result.ok)
         assertTrue(result.summary().contains("different app version"))
@@ -1456,7 +1456,7 @@ class ObdLocalStoreDbTest {
         // No capacity → not a battery snapshot, must not appear in the history.
         store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 2500))
 
-        val history = store.getBatterySohHistoryJson()
+        val history = store.routes.getBatterySohHistoryJson()
 
         assertEquals(2, history.length())
         // Oldest-first for charting.
@@ -1471,7 +1471,7 @@ class ObdLocalStoreDbTest {
         val id = store.startSession("obd", "00:11", "Adapter")
         store.recordTelemetry(id, sample(40, 1500, 34.05, -118.25, 1000))
 
-        assertEquals(0, store.getBatterySohHistoryJson().length())
+        assertEquals(0, store.routes.getBatterySohHistoryJson().length())
     }
 
     @Test
@@ -1539,7 +1539,7 @@ class ObdLocalStoreDbTest {
         // trend must not pick it up as a data point.
         store.recordCellSnapshot(MutableList(96) { 3.9 })
 
-        assertEquals(0, store.getBatterySohHistoryJson().length())
+        assertEquals(0, store.routes.getBatterySohHistoryJson().length())
     }
 
     companion object {

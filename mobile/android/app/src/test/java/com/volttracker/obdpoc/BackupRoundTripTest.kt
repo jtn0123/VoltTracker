@@ -393,7 +393,7 @@ class BackupRoundTripTest {
             )
         }
         store!!.recordDiagnosticCode(sessionId, diagnosticCode("P25A2", "stored", startedAtMs + 25_000L))
-        store!!.addMaintenanceEntry(
+        store!!.maintenanceLog.addMaintenanceEntry(
             createdAtMs = startedAtMs + 30_000L,
             odometerKm = 12_345.6,
             type = "Coolant service",
@@ -456,7 +456,7 @@ class BackupRoundTripTest {
         assertEquals(1, trips.length())
         assertTrue(trips.getJSONObject(0).optBoolean("hasRoute"))
 
-        val maintenance = store!!.getMaintenanceLogJson(10)
+        val maintenance = store!!.maintenanceLog.getMaintenanceLogJson(10)
         assertEquals(1, maintenance.length())
         assertEquals("Coolant service", maintenance.getJSONObject(0).optString("type"))
     }

@@ -2,7 +2,9 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import android.content.Intent
+import com.volttracker.obdpoc.data.ObdExportLogStore
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdRouteQueryStore
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -488,16 +490,31 @@ class TripExportControllerTest {
 
         override val isOpen: Boolean get() = openValue
 
-        override fun getTripRouteJson(routeKey: String?): JSONObject {
-            if (routeReadThrows) {
-                throw IllegalStateException("route read failed")
+        override val routes: ObdRouteQueryStore =
+            object : ObdRouteQueryStore {
+                override fun getTripRouteJson(sessionId: Long): JSONObject =
+                    throw UnsupportedOperationException("unused")
+
+                override fun getTripRouteJson(routeKey: String?): JSONObject {
+                    if (routeReadThrows) {
+                        throw IllegalStateException("route read failed")
+                    }
+                    return route
+                }
+
+                override fun getCurrentSessionRouteJson(): JSONObject = throw UnsupportedOperationException("unused")
+
+                override fun getBatterySohHistoryJson(): JSONArray = throw UnsupportedOperationException("unused")
+
+                override fun getRecentRoutesJson(
+                    limit: Int,
+                    pointLimit: Int,
+                ): JSONArray = throw UnsupportedOperationException("unused")
             }
-            return route
-        }
 
         // Serve canned charge rows without standing up a real DB: the charge export reads through the
-        // projections() sub-accessor (ObdLocalStore is at the detekt function ceiling), so the fake
-        // returns a StoreProjections subclass that overrides only chargeSessionsForExport.
+        // projections() sub-accessor, so the fake returns a StoreProjections subclass that overrides
+        // only the projections it serves.
         override fun projections(): StoreProjections =
             object : StoreProjections() {
                 override fun chargeSessionsForExport(limit: Int): JSONArray = chargeRows
@@ -514,29 +531,32 @@ class TripExportControllerTest {
                     }
             }
 
-        override fun recordExport(
-            routeKey: String?,
-            exportType: String,
-            fileName: String,
-            mimeType: String,
-            bytes: Long,
-        ): Long {
-            recordExportCalls += 1
-            if (recordExportThrows) {
-                throw IllegalStateException("recordExport failed")
-            }
-            return 1L
-        }
+        override val exportLog: ObdExportLogStore =
+            object : ObdExportLogStore {
+                override fun recordExport(
+                    routeKey: String?,
+                    exportType: String,
+                    fileName: String,
+                    mimeType: String,
+                    bytes: Long,
+                ): Long {
+                    recordExportCalls += 1
+                    if (recordExportThrows) {
+                        throw IllegalStateException("recordExport failed")
+                    }
+                    return 1L
+                }
 
-        override fun recordAllTripsExport(
-            exportType: String,
-            fileName: String,
-            mimeType: String,
-            bytes: Long,
-        ): Long {
-            recordAllTripsExportCalls += 1
-            return 1L
-        }
+                override fun recordAllTripsExport(
+                    exportType: String,
+                    fileName: String,
+                    mimeType: String,
+                    bytes: Long,
+                ): Long {
+                    recordAllTripsExportCalls += 1
+                    return 1L
+                }
+            }
     }
 
     private companion object {

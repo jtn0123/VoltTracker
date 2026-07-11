@@ -18,6 +18,22 @@ import java.io.File
 
 /**
  * On-device SQLite store for OBD sessions, telemetry, GPS, events and adapter history.
+ *
+ * This facade owns the store lifecycle ([isOpen]/[close]) plus the session write/read surface
+ * ([ObdSessionStore]/[ObdQueryStore]) the recording pipeline depends on, and hands everything
+ * else out through narrow capability interfaces. Query-family map:
+ *
+ * | Query family                                      | Capability                             |
+ * |---------------------------------------------------|----------------------------------------|
+ * | Session/telemetry/GPS/event writes                | [ObdSessionStore] (this class)         |
+ * | Session/telemetry/storage reads                   | [ObdQueryStore] (this class)           |
+ * | Trip edits (label / favorite / hide)              | [tripEdits] -> [ObdTripEditStore]      |
+ * | Route + live-track + SOH-history projections      | [routes] -> [ObdRouteQueryStore]       |
+ * | Read-side dashboard JSON projections              | [projections] -> [StoreProjections]    |
+ * | Enhanced-capability signal logs                   | [signalLogs] -> [ObdSignalLogStore]    |
+ * | Maintenance log (M5)                              | [maintenanceLog] -> [ObdMaintenanceLogStore] |
+ * | Export bookkeeping (`exports` table)              | [exportLog] -> [ObdExportLogStore]     |
+ * | Whole-DB maintenance (merge / integrity / vacuum) | [dbMaintenance] -> [ObdDbMaintenanceStore] |
  */
 open class ObdLocalStore(
     context: Context,
@@ -25,27 +41,34 @@ open class ObdLocalStore(
     MaterializerData,
     ObdSessionStore,
     ObdQueryStore {
-    private val helper: VoltTrackerDb
-    private val trips: ObdStoreTrips
-    private val reports: ObdStoreReports
-    private val maintenance: ObdStoreMaintenance
-    private val writer: ObdStoreWriter
-    private val vehicles: ObdStoreVehicles
-    private val materialize: ObdStoreMaterialize
+    private val helper = VoltTrackerDb(context.applicationContext)
+    private val trips = ObdStoreTrips(helper)
+    private val reports = ObdStoreReports(helper, trips)
+    private val maintenance = ObdStoreMaintenance(context.applicationContext, helper)
+    private val writer = ObdStoreWriter(helper, ObdStoreSnapshots())
+    private val vehicles = ObdStoreVehicles(helper, VinKeyHasher(context.applicationContext))
+    private val materialize = ObdStoreMaterialize(helper)
+
+    /** Trip-edit writes (labels, favorites, hide/restore) from the dashboard bridge. */
+    open val tripEdits: ObdTripEditStore = ObdStoreTripEdits(writer, trips)
+
+    /** Route/track projections for the dashboard's map views and the pack-health trend. */
+    open val routes: ObdRouteQueryStore = ObdStoreRoutes(helper, reports)
+
+    /** Detailed enhanced-capability signal logs (list/export/delete + probe-history checks). */
+    open val signalLogs: ObdSignalLogStore = ObdStoreSignalLogs(reports)
+
+    /** The user-authored maintenance log (M5): add, list, delete. */
+    open val maintenanceLog: ObdMaintenanceLogStore = ObdStoreMaintenanceLog(writer, reports)
+
+    /** Best-effort bookkeeping of completed share-sheet exports. */
+    open val exportLog: ObdExportLogStore = ObdStoreExportLog(writer)
+
+    /** Whole-database maintenance: donor merges, integrity checks, startup prune+vacuum. */
+    open val dbMaintenance: ObdDbMaintenanceStore = maintenance
 
     @Volatile
     private var closed = false
-
-    init {
-        val appContext = context.applicationContext
-        helper = VoltTrackerDb(appContext)
-        trips = ObdStoreTrips(helper)
-        reports = ObdStoreReports(helper, trips)
-        maintenance = ObdStoreMaintenance(appContext, helper)
-        writer = ObdStoreWriter(helper, ObdStoreSnapshots())
-        vehicles = ObdStoreVehicles(helper, VinKeyHasher(appContext))
-        materialize = ObdStoreMaterialize(helper)
-    }
 
     open override fun startSession(
         mode: String?,
@@ -261,17 +284,12 @@ open class ObdLocalStore(
 
     open override fun getStorageDetailsJson(): JSONObject = reports.storageDetailsJson()
 
-    open fun getRecentRoutesJson(
-        limit: Int,
-        pointLimit: Int,
-    ): JSONArray = reports.recentRoutesProjectionJson(limit, pointLimit)
-
     /**
      * The individual read-side JSON projections, grouped behind one accessor so they live as members
      * of [StoreProjections] rather than as flat functions on this class — the same "group behind one
-     * accessor" pattern as `MainActivity.eventNotifications()` (see `app/detekt.yml` TooManyFunctions
-     * note), which keeps this class under the detekt ratchet. [StoreProjections.latestVehicle] is the
-     * lightweight single-query VIN/vehicle path the OBD connect handshake reads.
+     * accessor" pattern as the [tripEdits]/[routes]/[signalLogs] capability accessors above.
+     * [StoreProjections.latestVehicle] is the lightweight single-query VIN/vehicle path the OBD
+     * connect handshake reads.
      */
     open fun projections(): StoreProjections = StoreProjections(reports, getDatabaseFile())
 
@@ -279,8 +297,7 @@ open class ObdLocalStore(
      * Read-side projections grouped off [ObdLocalStore]'s class surface; each delegates to [reports].
      * Open with an open [chargeSessionsForExport] + a no-arg [protected] constructor so a test fake
      * store can serve canned charge rows without standing up a real database (the all-trips export
-     * fakes a flat [ObdLocalStore] method instead; charges ride this sub-accessor because
-     * [ObdLocalStore] is at the detekt TooManyFunctions ceiling — see `app/detekt.yml`).
+     * fakes a flat [ObdLocalStore] method instead).
      */
     open class StoreProjections {
         private val reports: ObdStoreReports?
@@ -348,104 +365,9 @@ open class ObdLocalStore(
 
     open override fun getAdapterHistoryJson(limit: Int): JSONArray = reports.adapterHistoryJson(limit)
 
-    open fun getEnhancedCapabilitiesJson(limit: Int): JSONArray = reports.enhancedCapabilitiesJson(limit)
-
-    open fun hasRejectedEnhancedCapability(
-        adapterAddress: String?,
-        header: String?,
-        command: String?,
-    ): Boolean = reports.hasRejectedEnhancedCapability(adapterAddress, header, command)
-
-    open fun hasRecentEnhancedCapability(
-        adapterAddress: String?,
-        header: String?,
-        command: String?,
-        minAgeMs: Long,
-    ): Boolean = reports.hasRecentEnhancedCapability(adapterAddress, header, command, minAgeMs)
-
-    open fun getEnhancedCapabilityExportJson(id: Long): JSONObject = reports.enhancedCapabilityJson(id)
-
-    open fun getEnhancedCapabilitiesExportJson(limit: Int): JSONObject = reports.enhancedCapabilitiesExportJson(limit)
-
-    open fun deleteEnhancedCapability(id: Long): Int = reports.deleteEnhancedCapability(id)
-
     open override fun getTripsJson(limit: Int): JSONArray = trips.tripsJson(limit)
 
     open override fun getInsightsJson(): JSONObject = trips.insightsJson()
-
-    open fun getTripRouteJson(sessionId: Long): JSONObject = reports.tripRouteJson(sessionId)
-
-    open fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
-
-    /**
-     * Records a completed per-trip GPX/CSV export into the `exports` table (one row per share).
-     * Best-effort: returns the new row id, or -1 if the insert failed (recording must never break
-     * the share). See [ObdStoreWriter.recordExport].
-     */
-    open fun recordExport(
-        routeKey: String?,
-        exportType: String,
-        fileName: String,
-        mimeType: String,
-        bytes: Long,
-    ): Long {
-        val parsed = DriveWindowDetector.parseRouteKey(routeKey)
-        return writer.recordExport(
-            parsed?.sessionId ?: -1L,
-            exportType,
-            fileName,
-            mimeType,
-            bytes,
-            parsed?.startedAtMs ?: -1L,
-            parsed?.endedAtMs ?: -1L,
-        )
-    }
-
-    /**
-     * Records a completed bulk all-trips CSV export (M6) into the `exports` table. The export spans
-     * every trip rather than one session, so it has no single session id / time range. Best-effort:
-     * returns the new row id, or -1 if the insert failed (recording must never break the share).
-     */
-    open fun recordAllTripsExport(
-        exportType: String,
-        fileName: String,
-        mimeType: String,
-        bytes: Long,
-    ): Long = writer.recordExport(-1L, exportType, fileName, mimeType, bytes, -1L, -1L)
-
-    /**
-     * Route projection for the in-progress (status = [STATUS_ACTIVE]) session, or an empty object
-     * when nothing is recording. Lets the dashboard rehydrate the live track after the WebView is
-     * torn down and recreated mid-drive (the foreground service keeps writing location samples to
-     * the active session's row the whole time). Reuses the same projection as completed trips.
-     */
-    open fun getCurrentSessionRouteJson(): JSONObject {
-        // Direct lookup of the newest in-progress (STATUS_ACTIVE) session, independent of how many
-        // newer started rows exist: a fixed-size recent scan could miss the live drive after a
-        // finalize race or rapid scan/demo churn pushed enough completed rows ahead of it; this
-        // status-filtered query always finds it. Inlined (not a helper) to keep the class function
-        // count under the detekt TooManyFunctions ratchet.
-        var active: ObdSessionRecord? = null
-        helper.readableDatabase
-            .query(
-                VoltTrackerDb.TABLE_SESSIONS,
-                null,
-                "status = ?",
-                arrayOf(STATUS_ACTIVE),
-                null,
-                null,
-                "started_at_ms DESC",
-                "1",
-            ).use { cursor ->
-                if (cursor.moveToNext()) {
-                    active = ObdStoreSupport.readSession(cursor)
-                }
-            }
-        return active?.let { reports.tripRouteJson(it.id) } ?: JSONObject()
-    }
-
-    /** Battery-health snapshots (oldest-first) for the dashboard's pack-health trend chart. */
-    open fun getBatterySohHistoryJson(): JSONArray = reports.batterySohHistoryJson(1000)
 
     /**
      * Persists one full-pack cell-voltage probe result (surfaced to the dashboard via the
@@ -453,100 +375,6 @@ open class ObdLocalStore(
      * id or -1.
      */
     open fun recordCellSnapshot(voltages: List<Double?>): Long = writer.recordCellSnapshot(voltages)
-
-    /**
-     * Sets (or clears, when [label] is blank) the user label for the trip identified by [routeKey].
-     * Persists the label as a route-key-keyed status event so it survives trip re-materialization,
-     * and best-effort stamps the matching materialized `trip_segments` row's `label` column. Returns
-     * false when the route key is unparseable.
-     */
-    open fun setTripLabel(
-        routeKey: String?,
-        label: String?,
-    ): Boolean {
-        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
-        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
-        // canonicalRouteKey guarantees a 3-part key, so both timestamps are present here.
-        val startedAtMs = parsed.startedAtMs ?: return false
-        val endedAtMs = parsed.endedAtMs ?: return false
-        val cleanLabel = ObdTripLabels.cleanLabel(label)
-        writer.recordEvent(
-            parsed.sessionId,
-            ObdTripLabels.EVENT_KIND,
-            if (cleanLabel.isEmpty()) "cleared" else "labeled",
-            canonical,
-            false,
-            ObdTripLabels.eventPayload(canonical, cleanLabel),
-        )
-        writer.setTripSegmentLabel(parsed.sessionId, startedAtMs, endedAtMs, cleanLabel)
-        return true
-    }
-
-    /**
-     * Sets or clears the user "favorite" flag for the trip identified by [routeKey] (M4). Persists
-     * the flag as a route-key-keyed status event so it survives trip re-materialization (no schema
-     * change — mirrors [setTripLabel]). The latest event for a route key wins, so un-favoriting
-     * writes a `favorite=false` event that supersedes an earlier favorite. Returns false when the
-     * route key is unparseable.
-     */
-    open fun setTripFavorite(
-        routeKey: String?,
-        favorite: Boolean,
-    ): Boolean {
-        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
-        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
-        writer.recordEvent(
-            parsed.sessionId,
-            ObdTripFavorites.EVENT_KIND,
-            if (favorite) "favorited" else "unfavorited",
-            canonical,
-            false,
-            ObdTripFavorites.eventPayload(canonical, favorite),
-        )
-        return true
-    }
-
-    open fun setTripHidden(
-        routeKey: String?,
-        hidden: Boolean,
-    ): Boolean {
-        val canonical = ObdTripExclusions.canonicalRouteKey(routeKey) ?: return false
-        val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return false
-        writer.recordEvent(
-            parsed.sessionId,
-            ObdTripExclusions.EVENT_KIND,
-            if (hidden) ObdTripExclusions.STATE_HIDDEN else ObdTripExclusions.STATE_RESTORED,
-            canonical,
-            false,
-            ObdTripExclusions.eventPayload(
-                canonical,
-                if (hidden) ObdTripExclusions.REASON_NOT_TRIP else "manual_restore",
-            ),
-        )
-        trips.invalidateSessionTripCache(parsed.sessionId)
-        return true
-    }
-
-    /**
-     * Inserts a user-authored maintenance-log entry (M5). [odometerKm] may be null. [createdAtMs]
-     * dates the entry (defaults to now). [intervalKm] / [intervalMonths] are the optional service
-     * interval (M1/C4) for the dashboard's "next due" line; null leaves a plain history entry.
-     * Returns the new row id, or -1 on failure.
-     */
-    open fun addMaintenanceEntry(
-        createdAtMs: Long,
-        odometerKm: Double?,
-        type: String?,
-        note: String?,
-        intervalKm: Double? = null,
-        intervalMonths: Int? = null,
-    ): Long = writer.addMaintenanceEntry(createdAtMs, odometerKm, type, note, intervalKm, intervalMonths)
-
-    /** Newest-first user maintenance log (M5). See [ObdStoreReports.maintenanceLogJson]. */
-    open fun getMaintenanceLogJson(limit: Int): JSONArray = reports.maintenanceLogJson(limit)
-
-    /** Removes one maintenance-log entry by id; returns the number of rows deleted (0 or 1). */
-    open fun deleteMaintenanceEntry(id: Long): Int = writer.deleteMaintenanceEntry(id)
 
     open override fun readLocationSamples(sessionId: Long): List<LocationSample> =
         materialize.readLocationSamples(sessionId)
@@ -589,21 +417,7 @@ open class ObdLocalStore(
 
     open override fun checkpoint(): Boolean = maintenance.checkpoint()
 
-    open fun mergeFrom(
-        donorDbFile: File?,
-        progressListener: DatabaseMerger.ProgressListener? = null,
-    ): DatabaseMerger.MergeResult = maintenance.mergeFrom(donorDbFile, progressListener)
-
     open override fun pruneRawDataOlderThan(keepDays: Int): Int = maintenance.pruneRawDataOlderThan(keepDays)
-
-    /** Runs `PRAGMA quick_check`; never throws. See [ObdStoreMaintenance.quickCheck]. */
-    open fun quickCheck(): ObdStoreMaintenance.IntegrityResult = maintenance.quickCheck()
-
-    /**
-     * Startup maintenance: prunes raw rows older than [keepDays], then VACUUMs when enough
-     * freed pages have accumulated. Returns the pruned row count.
-     */
-    open fun runStartupMaintenance(keepDays: Int): Int = maintenance.runStartupMaintenance(keepDays)
 
     /**
      * False once [close] has been called. Synchronous readers on other threads (the WebView

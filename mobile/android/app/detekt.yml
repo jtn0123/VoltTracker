@@ -54,15 +54,14 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 67 # ObdLocalStore (66) is now the worst — RATCHETED DOWN from 70 (A1/I3).
-    # Grouping MainActivity's seven EventNotificationCommands host overrides
-    # (getEventNotificationStateJson + 5 notify setters + the M2 setChargeTargetSoc target seam)
-    # behind one `eventNotifications()` accessor returning EventNotificationHostDelegate dropped
-    # MainActivity from 70 -> 64 (the bridge now calls host.eventNotifications().setNewDtcEnabled(...)
-    # and the Activity exposes the cluster with a single member). MainActivity is no longer the
-    # ceiling: the worst class is now ObdLocalStore (66), with VoltBridge (65) next, so worst+1 = 67.
-    # This restores the down-only convention every other complexity threshold follows. LOWER further
-    # as the next-worst class (ObdLocalStore / VoltBridge) is decomposed.
+    thresholdInClasses: 64 # MainActivity (63) is now the worst — RATCHETED DOWN from 67 (A2).
+    # Narrowing the ObdLocalStore facade behind capability interfaces (the tripEdits / routes /
+    # signalLogs / maintenanceLog / exportLog / dbMaintenance accessors, each backed by a
+    # sub-store) dropped ObdLocalStore from 66 -> 44, and moving MainActivity's three route-read
+    # forwards (getTripRouteJson / getCurrentSessionRouteJson / getBatterySohHistoryJson) onto
+    # SessionDataReader interface defaults dropped MainActivity from 66 -> 63. The worst class is
+    # now MainActivity (63), with ObdService (54), ObdLocalStore (44) and ObdPollingEngine (42)
+    # next, so worst+1 = 64. LOWER further as MainActivity / ObdService are decomposed.
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 51 # data.ObdStoreSupport (50) — RATCHETED DOWN from 61 (A1). The old
     # pin (ObdProtocol at 60) was stale: after the standard-PID (A2) and Mode-22 (A1) parser

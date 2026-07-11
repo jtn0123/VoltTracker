@@ -316,7 +316,7 @@ class DataBackup(
         store: ObdLocalStore,
         progress: ProgressListener?,
     ) {
-        val integrity = store.quickCheck()
+        val integrity = store.dbMaintenance.quickCheck()
         if (!integrity.ok) {
             Log.w(
                 TAG,

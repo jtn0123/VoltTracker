@@ -65,7 +65,7 @@ class DashboardStorageReader(
     internal fun tripRoute(routeKey: String?): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            BridgeJsonResult.obj(store.getTripRouteJson(routeKey))
+            BridgeJsonResult.obj(store.routes.getTripRouteJson(routeKey))
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getTripRouteJson failed", ex)
             BridgeJsonResult.error("trip_route_read_failed", "Could not read the trip route.")
@@ -89,7 +89,7 @@ class DashboardStorageReader(
     internal fun currentSessionRoute(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            BridgeJsonResult.obj(store.getCurrentSessionRouteJson())
+            BridgeJsonResult.obj(store.routes.getCurrentSessionRouteJson())
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getCurrentSessionRouteJson failed", ex)
             BridgeJsonResult.error("current_route_read_failed", "Could not read the current route.")
@@ -101,7 +101,7 @@ class DashboardStorageReader(
     internal fun batterySohHistory(): BridgeJsonResult {
         val store = storeOrUnavailable() ?: return storageUnavailable()
         return try {
-            BridgeJsonResult.array(store.getBatterySohHistoryJson())
+            BridgeJsonResult.array(store.routes.getBatterySohHistoryJson())
         } catch (ex: RuntimeException) {
             Log.w(TAG, "getBatterySohHistoryJson failed", ex)
             BridgeJsonResult.error("battery_soh_history_failed", "Could not read battery history.")
