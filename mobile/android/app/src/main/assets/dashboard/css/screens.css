@@ -421,6 +421,12 @@
   display: none;
 }
 
+/* Full-width row (VIN) in the Vehicle card grid. A class instead of an inline
+     style="grid-column" so the strict style-src CSP (no 'unsafe-inline') holds. */
+.vehicle-extra-wide {
+  grid-column: 1 / -1;
+}
+
 /* v2 design: the Lifetime stat row has no top divider (the kicker line above
      already separates it) and Insights uses a plain 3-up split. */
 .insights-sheet .map-sheet-stats {
@@ -2811,7 +2817,9 @@ button.drive-now-chip:focus-visible {
 }
 
 #dbCard #dbSessionList {
-  margin-top: 8px !important;
+  /* Was 8px !important to beat an inline style="margin-top: 12px"; the inline
+     style is gone (strict style-src CSP), so a plain declaration wins now. */
+  margin-top: 8px;
 }
 
 .db-backup-tools {
