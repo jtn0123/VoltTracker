@@ -73,4 +73,4 @@ VOLTTRACKER_ALLOW_UNSUPPORTED_NODE=1 ./gradlew --no-daemon --warning-mode all ve
 `ReportingExtension.file(String)` during Detekt plugin application at
 `app/build.gradle:9`. Treat this as Detekt plugin/tooling debt and re-check when
 upgrading Detekt. The older `dependencyUpdates` warning remains isolated to the
-Gradle Versions plugin path documented in `dependency-report-2026-05-26.md`.
+Gradle Versions plugin path documented in `archive/dependency-report-2026-05-26.md`.

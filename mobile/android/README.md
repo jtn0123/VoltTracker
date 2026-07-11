@@ -404,7 +404,7 @@ scrcpy
   coordinates.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.
 
-Fresh graded audits are written to `.Codex/grade-report.md`, which is repo-local
+Fresh graded audits are written to `.claude/grade-report.md`, which is repo-local
 and gitignored. Historical tracked reports remain under `docs/`.
 
 ## Pulling Field-Test Logs
