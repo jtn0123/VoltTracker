@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdRouteQueryStore
 import com.volttracker.obdpoc.data.StorageSummaryRecord
 import org.json.JSONArray
 import org.json.JSONObject
@@ -161,26 +162,37 @@ class DashboardStorageReaderTest {
             return JSONArray().put(JSONObject().put("routeKey", "trip-a"))
         }
 
-        override fun getTripRouteJson(routeKey: String?): JSONObject {
-            failIf("route")
-            lastRouteKey = routeKey
-            return JSONObject().put("points", JSONArray().put(1).put(2).put(3))
-        }
-
         override fun getInsightsJson(): JSONObject {
             failIf("insights")
             return JSONObject().put("trend", "steady")
         }
 
-        override fun getCurrentSessionRouteJson(): JSONObject {
-            failIf("current")
-            return JSONObject().put("active", true)
-        }
+        override val routes: ObdRouteQueryStore =
+            object : ObdRouteQueryStore {
+                override fun getTripRouteJson(sessionId: Long): JSONObject =
+                    throw UnsupportedOperationException("unused")
 
-        override fun getBatterySohHistoryJson(): JSONArray {
-            failIf("soh")
-            return JSONArray().put(JSONObject().put("sohPct", 91.5))
-        }
+                override fun getTripRouteJson(routeKey: String?): JSONObject {
+                    failIf("route")
+                    lastRouteKey = routeKey
+                    return JSONObject().put("points", JSONArray().put(1).put(2).put(3))
+                }
+
+                override fun getCurrentSessionRouteJson(): JSONObject {
+                    failIf("current")
+                    return JSONObject().put("active", true)
+                }
+
+                override fun getBatterySohHistoryJson(): JSONArray {
+                    failIf("soh")
+                    return JSONArray().put(JSONObject().put("sohPct", 91.5))
+                }
+
+                override fun getRecentRoutesJson(
+                    limit: Int,
+                    pointLimit: Int,
+                ): JSONArray = throw UnsupportedOperationException("unused")
+            }
 
         override fun close() {
             open = false

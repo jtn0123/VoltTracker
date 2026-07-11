@@ -98,7 +98,7 @@ open class MainActivity :
         MaintenanceDueNotifier(
             isEnabled = { eventNotificationPrefs?.maintenanceDueEnabled() == true },
             readMaintenanceLogJson = {
-                localStore?.getMaintenanceLogJson(MaintenanceDueNotifier.MAX_MAINTENANCE_ROWS)
+                localStore?.maintenanceLog?.getMaintenanceLogJson(MaintenanceDueNotifier.MAX_MAINTENANCE_ROWS)
             },
             readLatestOdometerKm = { localStore?.projections()?.latestOdometerKm() },
             readNotifiedSignatures = { eventNotificationPrefs?.notifiedMaintenanceSignatures() ?: emptySet() },
@@ -349,7 +349,7 @@ open class MainActivity :
             try {
                 val retentionDays =
                     activityPrefs.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
-                val pruned = localStore?.runStartupMaintenance(retentionDays) ?: 0
+                val pruned = localStore?.dbMaintenance?.runStartupMaintenance(retentionDays) ?: 0
                 if (pruned > 0) {
                     markStorageSummaryDirty()
                     Log.i(TAG, "Pruned $pruned raw rows older than $retentionDays days")
@@ -869,16 +869,14 @@ open class MainActivity :
 
     override fun getTripsJson(): String = storageReader.tripsJson()
 
-    override fun getTripRouteJson(routeKey: String?): String = storageReader.tripRouteJson(routeKey)
+    // getTripRouteJson / getCurrentSessionRouteJson / getBatterySohHistoryJson ride the
+    // SessionDataReader interface defaults (same DashboardStorageReader-backed pattern as
+    // getTripsPageJson), so this Activity does not accrete a one-line forward per route read.
 
     override fun exportTripFromBridge(
         routeKey: String?,
         format: String?,
     ): String = tripExportController.exportAndShare(routeKey, format)
-
-    override fun getCurrentSessionRouteJson(): String = storageReader.currentSessionRouteJson()
-
-    override fun getBatterySohHistoryJson(): String = storageReader.batterySohHistoryJson()
 
     override fun getInsightsJson(): String = storageReader.insightsJson()
 

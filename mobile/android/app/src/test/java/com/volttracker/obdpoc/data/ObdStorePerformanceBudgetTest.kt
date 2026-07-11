@@ -45,7 +45,7 @@ class ObdStorePerformanceBudgetTest {
         val detailsMs = measureMs { store.getStorageDetailsJson() }
         val tripsMs = measureMs { store.getTripsJson(40) }
         val newestRouteKey = store.getTripsJson(1).getJSONObject(0).getString("id")
-        val routeMs = measureMs { store.getTripRouteJson(newestRouteKey) }
+        val routeMs = measureMs { store.routes.getTripRouteJson(newestRouteKey) }
 
         println(
             "[G1 storage budget] seededSessions=$SEEDED_SESSION_COUNT samplesPerSession=$SAMPLES_PER_SESSION " +
@@ -71,7 +71,7 @@ class ObdStorePerformanceBudgetTest {
         val detailsMs = measureMs { store.getStorageDetailsJson() }
         val tripsMs = measureMs { store.getTripsJson(120) }
         val newestRouteKey = store.getTripsJson(1).getJSONObject(0).getString("id")
-        val routeMs = measureMs { store.getTripRouteJson(newestRouteKey) }
+        val routeMs = measureMs { store.routes.getTripRouteJson(newestRouteKey) }
 
         println(
             "[G5 storage budget] seededSessions=$LARGE_SEEDED_SESSION_COUNT " +

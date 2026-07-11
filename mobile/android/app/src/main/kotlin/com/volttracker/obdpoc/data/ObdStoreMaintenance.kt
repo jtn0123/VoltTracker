@@ -6,11 +6,15 @@ import android.util.Log
 import androidx.core.database.sqlite.transaction
 import java.io.File
 
-/** Database maintenance: full-store reset, WAL checkpoint, and on-disk path lookup. */
+/**
+ * Database maintenance: full-store reset, WAL checkpoint, and on-disk path lookup. Also the
+ * [ObdDbMaintenanceStore] capability the backup/restore and startup paths reach via
+ * [ObdLocalStore.dbMaintenance].
+ */
 class ObdStoreMaintenance(
     private val context: Context,
     private val helper: VoltTrackerDb,
-) {
+) : ObdDbMaintenanceStore {
     fun clearAllData() {
         val db = helper.writableDatabase
         db.transaction {
@@ -211,7 +215,7 @@ class ObdStoreMaintenance(
      * verification) and reports up to [maxProblems] problem rows. Never throws — any
      * failure to even run the check is reported as a non-ok result.
      */
-    fun quickCheck(maxProblems: Int = MAX_QUICK_CHECK_PROBLEMS): IntegrityResult {
+    override fun quickCheck(maxProblems: Int): IntegrityResult {
         val bound = maxProblems.coerceAtLeast(1)
         return try {
             val problems = ArrayList<String>()
@@ -278,7 +282,7 @@ class ObdStoreMaintenance(
      * Startup maintenance entry point: prunes raw rows older than [keepDays], then reclaims
      * freed disk space when enough has accumulated. Returns the pruned row count.
      */
-    fun runStartupMaintenance(keepDays: Int): Int {
+    override fun runStartupMaintenance(keepDays: Int): Int {
         val pruned = pruneRawDataOlderThan(keepDays)
         vacuumIfNeeded()
         return pruned
@@ -292,9 +296,9 @@ class ObdStoreMaintenance(
             if (cursor.moveToFirst()) cursor.getLong(0) else 0L
         }
 
-    fun mergeFrom(
+    override fun mergeFrom(
         donorDbFile: File?,
-        progressListener: DatabaseMerger.ProgressListener? = null,
+        progressListener: DatabaseMerger.ProgressListener?,
     ): DatabaseMerger.MergeResult {
         if (donorDbFile == null || !donorDbFile.exists()) {
             return DatabaseMerger.MergeResult.failure("Merge failed - backup file is missing.")

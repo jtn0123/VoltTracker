@@ -332,8 +332,8 @@ class ObdStoreMaintenanceDbTest {
                     .put("updatedAt", oldMs)
             store.recordTelemetry(sessionId, sample, oldMs)
 
-            assertTrue(store.quickCheck().ok)
-            assertEquals(1, store.runStartupMaintenance(30))
+            assertTrue(store.dbMaintenance.quickCheck().ok)
+            assertEquals(1, store.dbMaintenance.runStartupMaintenance(30))
         } finally {
             store.close()
         }

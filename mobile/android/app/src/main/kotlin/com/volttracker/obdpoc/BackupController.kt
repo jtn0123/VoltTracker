@@ -881,7 +881,7 @@ class BackupController(
             }
             ensureActive()
             val merged =
-                store.mergeFrom(
+                store.dbMaintenance.mergeFrom(
                     staged,
                     DatabaseMerger.ProgressListener { phase, rowsDone, rowsTotal ->
                         ensureActive()

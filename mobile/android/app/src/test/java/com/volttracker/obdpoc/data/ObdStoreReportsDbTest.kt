@@ -221,7 +221,7 @@ class ObdStoreReportsDbTest {
         val battery = store.projections().batterySummary()
         assertTrue(battery.has("snapshotCount"))
 
-        val routes = store.getRecentRoutesJson(4, 120)
+        val routes = store.routes.getRecentRoutesJson(4, 120)
         assertNotNull(routes)
     }
 
@@ -289,22 +289,22 @@ class ObdStoreReportsDbTest {
             1000L,
         )
 
-        val list = store.getEnhancedCapabilitiesJson(10)
+        val list = store.signalLogs.getEnhancedCapabilitiesJson(10)
         assertEquals(1, list.length())
         val capabilityId = list.getJSONObject(0).getLong("id")
 
-        val detail = store.getEnhancedCapabilityExportJson(capabilityId)
+        val detail = store.signalLogs.getEnhancedCapabilityExportJson(capabilityId)
         assertTrue(detail.optBoolean("ok"))
         assertEquals("detailed-signal-log", detail.optString("kind"))
         assertEquals("221154", detail.getJSONObject("item").optString("command"))
 
-        val all = store.getEnhancedCapabilitiesExportJson(10)
+        val all = store.signalLogs.getEnhancedCapabilitiesExportJson(10)
         assertTrue(all.optBoolean("ok"))
         assertEquals("detailed-signal-logs", all.optString("kind"))
         assertEquals(1, all.getJSONArray("items").length())
 
-        assertEquals(1, store.deleteEnhancedCapability(capabilityId))
-        val missing = store.getEnhancedCapabilityExportJson(capabilityId)
+        assertEquals(1, store.signalLogs.deleteEnhancedCapability(capabilityId))
+        val missing = store.signalLogs.getEnhancedCapabilityExportJson(capabilityId)
         assertFalse(missing.optBoolean("ok"))
         assertEquals("not_found", missing.optString("error"))
     }
@@ -332,7 +332,7 @@ class ObdStoreReportsDbTest {
 
         assertEquals(12_456.0, store.projections().latestOdometerKm()!!, 0.001)
 
-        val history = store.getBatterySohHistoryJson()
+        val history = store.routes.getBatterySohHistoryJson()
         assertEquals(2, history.length())
         assertEquals(1_000L, history.getJSONObject(0).optLong("capturedAtMs"))
         assertEquals(96.5, history.getJSONObject(0).optDouble("sohPct"), 0.001)
@@ -359,7 +359,7 @@ class ObdStoreReportsDbTest {
         assertTrue("export should include at least one route point", points.length() > 0)
         assertTrue("export route must honor the point limit", points.length() <= 2)
 
-        assertTrue(store.setTripHidden(trip.optString("tripId"), true))
+        assertTrue(store.tripEdits.setTripHidden(trip.optString("tripId"), true))
         assertEquals(0, store.projections().allTripsForExport(10, 2).length())
     }
 

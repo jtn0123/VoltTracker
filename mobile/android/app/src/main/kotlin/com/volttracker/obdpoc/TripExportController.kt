@@ -238,7 +238,7 @@ class TripExportController(
         export: TripExportShareIntent.TripExportFile,
     ) {
         try {
-            store.recordAllTripsExport("csv_charges", export.name, export.format.mime, export.bytes)
+            store.exportLog.recordAllTripsExport("csv_charges", export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "charge-sessions export recordExport failed", ex)
         }
@@ -260,7 +260,7 @@ class TripExportController(
         export: TripExportShareIntent.TripExportFile,
     ) {
         try {
-            store.recordAllTripsExport("csv_all", export.name, export.format.mime, export.bytes)
+            store.exportLog.recordAllTripsExport("csv_all", export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "all-trips export recordExport failed", ex)
         }
@@ -271,7 +271,7 @@ class TripExportController(
         routeKey: String,
     ): JSONObject? =
         try {
-            store.getTripRouteJson(routeKey)
+            store.routes.getTripRouteJson(routeKey)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "trip export route read failed", ex)
             null
@@ -283,7 +283,7 @@ class TripExportController(
         export: TripExportShareIntent.TripExportFile,
     ) {
         try {
-            store.recordExport(routeKey, export.format.key, export.name, export.format.mime, export.bytes)
+            store.exportLog.recordExport(routeKey, export.format.key, export.name, export.format.mime, export.bytes)
         } catch (ex: RuntimeException) {
             // Recording is best-effort bookkeeping; never let it sink the share.
             Log.w(AppPrefs.LOG_TAG, "trip export recordExport failed", ex)

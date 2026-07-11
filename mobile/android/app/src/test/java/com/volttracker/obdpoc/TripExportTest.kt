@@ -21,7 +21,7 @@ import java.io.File
 /**
  * Robolectric coverage for the file/share/recording half of the per-trip export: that
  * [TripExportShareIntent.writeExport] writes a real cache file (and degrades gracefully on an empty
- * route), and that [ObdLocalStore.recordExport] inserts a well-formed row into the `exports` table
+ * route), and that [ObdExportLogStore.recordExport] inserts a well-formed row into the `exports` table
  * — the table that was scaffolded-but-unwired until this feature.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -97,7 +97,7 @@ class TripExportTest {
         val before = exportRowCount()
 
         val rowId =
-            store.recordExport(
+            store.exportLog.recordExport(
                 "7:1000:2000",
                 "gpx",
                 "volt-trip-2024-05-01-0930-7.gpx",
@@ -122,7 +122,7 @@ class TripExportTest {
     @Test
     fun recordExportForABareSessionIdLeavesRangeNull() {
         seedSession(42L)
-        val rowId = store.recordExport("42", "csv", "volt-trip.csv", "text/csv", 64L)
+        val rowId = store.exportLog.recordExport("42", "csv", "volt-trip.csv", "text/csv", 64L)
 
         val row = readExportRow(rowId)
         assertEquals(42L, row.sessionId)

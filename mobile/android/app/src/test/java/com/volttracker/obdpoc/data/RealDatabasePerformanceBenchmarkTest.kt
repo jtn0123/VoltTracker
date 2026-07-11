@@ -72,7 +72,11 @@ class RealDatabasePerformanceBenchmarkTest {
         val routeMs =
             routeKey?.let { key ->
                 measureMs {
-                    routeBytes = localStore.getTripRouteJson(key).toString().length
+                    routeBytes =
+                        localStore.routes
+                            .getTripRouteJson(key)
+                            .toString()
+                            .length
                 }
             }
         var insightsBytes = 0
@@ -83,7 +87,11 @@ class RealDatabasePerformanceBenchmarkTest {
         var sohBytes = 0
         val sohMs =
             measureMs {
-                sohBytes = localStore.getBatterySohHistoryJson().toString().length
+                sohBytes =
+                    localStore.routes
+                        .getBatterySohHistoryJson()
+                        .toString()
+                        .length
             }
 
         val result =

@@ -41,7 +41,7 @@ internal class VoltBridgeTripEdits(
         activity.runOnBackground {
             val changed =
                 try {
-                    activity.localStore?.setTripHidden(cleanRouteKey, false) == true
+                    activity.localStore?.tripEdits?.setTripHidden(cleanRouteKey, false) == true
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "restoreTrip failed", ex)
                     false
@@ -81,7 +81,7 @@ internal class VoltBridgeTripEdits(
         activity.runOnBackground {
             val changed =
                 try {
-                    activity.localStore?.setTripLabel(cleanRouteKey, cleanLabel) == true
+                    activity.localStore?.tripEdits?.setTripLabel(cleanRouteKey, cleanLabel) == true
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "setTripLabel failed", ex)
                     false
@@ -121,7 +121,7 @@ internal class VoltBridgeTripEdits(
         activity.runOnBackground {
             val changed =
                 try {
-                    activity.localStore?.setTripFavorite(cleanRouteKey, favorite) == true
+                    activity.localStore?.tripEdits?.setTripFavorite(cleanRouteKey, favorite) == true
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "setTripFavorite failed", ex)
                     false
@@ -145,7 +145,7 @@ internal class VoltBridgeTripEdits(
         activity.runOnBackground {
             val changed =
                 try {
-                    activity.localStore?.setTripHidden(routeKey, true) == true
+                    activity.localStore?.tripEdits?.setTripHidden(routeKey, true) == true
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "markTripNotTrip failed", ex)
                     false

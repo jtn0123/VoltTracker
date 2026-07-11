@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.FileProvider
+import com.volttracker.obdpoc.data.DatabaseMerger
+import com.volttracker.obdpoc.data.ObdDbMaintenanceStore
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import org.junit.After
@@ -25,6 +27,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
+import java.io.File
 import java.lang.reflect.Modifier
 import java.util.concurrent.AbstractExecutorService
 import java.util.concurrent.RejectedExecutionException
@@ -567,11 +570,27 @@ class BackupControllerShareTest {
     private class CorruptQuickCheckStore(
         context: Context,
     ) : ObdLocalStore(context) {
-        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
-            ObdStoreMaintenance.IntegrityResult(
-                false,
-                listOf("row 7 missing from index idx_samples"),
+        override val dbMaintenance: ObdDbMaintenanceStore =
+            FixedQuickCheckMaintenance(
+                ObdStoreMaintenance.IntegrityResult(
+                    false,
+                    listOf("row 7 missing from index idx_samples"),
+                ),
             )
+    }
+
+    /** [ObdDbMaintenanceStore] fake serving a canned `PRAGMA quick_check` result. */
+    private class FixedQuickCheckMaintenance(
+        private val result: ObdStoreMaintenance.IntegrityResult,
+    ) : ObdDbMaintenanceStore {
+        override fun quickCheck(maxProblems: Int): ObdStoreMaintenance.IntegrityResult = result
+
+        override fun mergeFrom(
+            donorDbFile: File?,
+            progressListener: DatabaseMerger.ProgressListener?,
+        ): DatabaseMerger.MergeResult = throw UnsupportedOperationException("unused")
+
+        override fun runStartupMaintenance(keepDays: Int): Int = throw UnsupportedOperationException("unused")
     }
 
     /** Inline executor: build/share work runs synchronously so the test can assert outcomes. */

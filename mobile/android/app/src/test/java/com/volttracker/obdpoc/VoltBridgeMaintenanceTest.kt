@@ -188,7 +188,7 @@ class VoltBridgeMaintenanceTest {
 
     @Test
     fun getMaintenanceLogReturnsStoreArray() {
-        activity.store.maintenanceLog =
+        activity.store.maintenanceLogPayload =
             JSONArray().put(JSONObject().put("id", 1).put("type", "Oil change"))
 
         val log = JSONArray(maintenance.getMaintenanceLog())

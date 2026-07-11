@@ -223,7 +223,7 @@ interface SessionDataReader {
 
     fun getInsightsJson(): String
 
-    fun getTripRouteJson(routeKey: String?): String
+    fun getTripRouteJson(routeKey: String?): String = DashboardStorageReader { localStore }.tripRouteJson(routeKey)
 
     /**
      * Exports the trip identified by [routeKey] as `format` (`gpx`/`csv`): reads the route, writes a
@@ -238,10 +238,10 @@ interface SessionDataReader {
 
     /** Route projection for the in-progress session, so the dashboard can rehydrate the live
      *  track after a mid-drive WebView teardown. Empty JSON when nothing is recording. */
-    fun getCurrentSessionRouteJson(): String
+    fun getCurrentSessionRouteJson(): String = DashboardStorageReader { localStore }.currentSessionRouteJson()
 
     /** Battery-health snapshots (oldest-first JSON array) for the pack-health trend chart. */
-    fun getBatterySohHistoryJson(): String
+    fun getBatterySohHistoryJson(): String = DashboardStorageReader { localStore }.batterySohHistoryJson()
 }
 
 /**

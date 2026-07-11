@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.database.sqlite.SQLiteDatabase
 import android.net.Uri
+import com.volttracker.obdpoc.data.DatabaseMerger
+import com.volttracker.obdpoc.data.ObdDbMaintenanceStore
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import com.volttracker.obdpoc.data.VoltTrackerDb
@@ -895,8 +897,24 @@ class DataBackupTest {
     private class CorruptQuickCheckStore(
         context: Context,
     ) : ObdLocalStore(context) {
-        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
-            ObdStoreMaintenance.IntegrityResult(false, listOf(FAKE_INTEGRITY_PROBLEM))
+        override val dbMaintenance: ObdDbMaintenanceStore =
+            FixedQuickCheckMaintenance(
+                ObdStoreMaintenance.IntegrityResult(false, listOf(FAKE_INTEGRITY_PROBLEM)),
+            )
+    }
+
+    /** [ObdDbMaintenanceStore] fake serving a canned `PRAGMA quick_check` result. */
+    private class FixedQuickCheckMaintenance(
+        private val result: ObdStoreMaintenance.IntegrityResult,
+    ) : ObdDbMaintenanceStore {
+        override fun quickCheck(maxProblems: Int): ObdStoreMaintenance.IntegrityResult = result
+
+        override fun mergeFrom(
+            donorDbFile: File?,
+            progressListener: DatabaseMerger.ProgressListener?,
+        ): DatabaseMerger.MergeResult = throw UnsupportedOperationException("unused")
+
+        override fun runStartupMaintenance(keepDays: Int): Int = throw UnsupportedOperationException("unused")
     }
 
     private class MissingDatabaseFileStore(
@@ -905,8 +923,8 @@ class DataBackupTest {
         // Do not create or checkpoint the real DB; this fake is for backup-file absence.
         override fun checkpoint(): Boolean = true
 
-        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
-            ObdStoreMaintenance.IntegrityResult(true, emptyList())
+        override val dbMaintenance: ObdDbMaintenanceStore =
+            FixedQuickCheckMaintenance(ObdStoreMaintenance.IntegrityResult(true, emptyList()))
 
         override fun getDatabaseFile(): File = File(appContext.cacheDir, "missing-db-${System.nanoTime()}.db")
     }
@@ -919,8 +937,8 @@ class DataBackupTest {
         // The unreadable path is a directory, so copying/encrypting it must fail cleanly.
         override fun checkpoint(): Boolean = true
 
-        override fun quickCheck(): ObdStoreMaintenance.IntegrityResult =
-            ObdStoreMaintenance.IntegrityResult(true, emptyList())
+        override val dbMaintenance: ObdDbMaintenanceStore =
+            FixedQuickCheckMaintenance(ObdStoreMaintenance.IntegrityResult(true, emptyList()))
 
         override fun getDatabaseFile(): File {
             fakeDatabaseFile.mkdirs()
