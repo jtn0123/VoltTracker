@@ -1,4 +1,4 @@
-import { confirmAppDialog } from "./app-dialog";
+import { confirmAppDialog, promptAppDialog } from "./app-dialog";
 import { bindPageDragScroll } from "./actions-page-scroll";
 import { bindListenerGuarded, el } from "./core";
 import { setDataState } from "./dataset-state";
@@ -917,7 +917,8 @@ type SignalActions = {
   }
 
   // Delegated handler for the per-row "Rename / Name" button on a stored map route (M4). Reads the
-  // route key + current label off data-trip-rename(-label), prompts for a new name, and forwards it
+  // route key + current label off data-trip-rename(-label), prompts for a new name through the
+  // themed in-app dialog (app-dialog.ts — no more native window.prompt chrome), and forwards it
   // to the native setTripLabel. An empty/blank submission clears the label; cancel is a no-op.
   function onTripRenameClick(event: Event) {
     const target = event.target as Element | null;
@@ -933,10 +934,22 @@ type SignalActions = {
       return;
     }
     const current = String(button.dataset.tripRenameLabel || "");
-    const next = window.prompt("Name this drive (leave blank to clear):", current);
-    // prompt returns null on Cancel — do nothing. An empty string clears the label.
-    if (next === null) return;
-    callBridgeAction("setTripLabel", [routeKey, next.trim()], "Could not rename this drive.");
+    // The dialog is async (promise settles on Save/Cancel); the handler itself
+    // stays fire-and-forget like every other delegated click here.
+    void promptAppDialog({
+      title: "Name this drive",
+      message: "Leave blank to clear the custom name.",
+      confirmLabel: "Save",
+      inputLabel: "Drive name",
+      inputType: "text",
+      autocomplete: "off",
+      initialValue: current,
+      allowEmpty: true,
+    }).then((next) => {
+      // null = Cancel — do nothing. An empty string clears the label.
+      if (next === null) return;
+      callBridgeAction("setTripLabel", [routeKey, next.trim()], "Could not rename this drive.");
+    });
   }
 
   function paintFavoriteButton(button: HTMLElement, favorite: boolean) {
