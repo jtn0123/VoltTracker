@@ -67,6 +67,12 @@ import { initialTelemetryState } from "./telemetry-state";
   const LIVE_ROUTE_HYDRATION_RETRY_MS = 5_000;
   const LIVE_ROUTE_HYDRATION_MAX_ATTEMPTS = 3;
   let rateChipReconnectBound = false;
+  // C2: the converted speed readout (#speedKph) is hidden by default — the hero
+  // shows only the preferred unit. Tapping the speed row reveals the conversion
+  // for a few seconds, then it hides again.
+  const ALT_SPEED_REVEAL_MS = 3000;
+  let speedAltRevealBound = false;
+  let speedAltRevealTimer: ReturnType<typeof setTimeout> | null = null;
   // One-shot guard so we only ask the backend to rehydrate the live track once per
   // session activation (reset in resetTelemetry). Recovers the in-progress drive's
   // route after the WebView is torn down and recreated mid-drive.
@@ -852,6 +858,25 @@ import { initialTelemetryState } from "./telemetry-state";
     if (rateLabel) rateLabel.textContent = label;
   }
 
+  // C2: tap-to-convert on the speed hero. The secondary readout (#speedKph,
+  // the other unit system) stays hidden so the hero reads as ONE number; a tap
+  // anywhere on the speed row shows the conversion for ALT_SPEED_REVEAL_MS.
+  // The speed row had no other click handler, so a plain listener is safe.
+  function bindSpeedAltReveal(row: Element) {
+    if (speedAltRevealBound) return;
+    speedAltRevealBound = true;
+    row.addEventListener("click", () => {
+      const alt = el("speedKph");
+      if (!alt) return;
+      alt.hidden = false;
+      if (speedAltRevealTimer != null) clearTimeout(speedAltRevealTimer);
+      speedAltRevealTimer = setTimeout(() => {
+        speedAltRevealTimer = null;
+        alt.hidden = true;
+      }, ALT_SPEED_REVEAL_MS);
+    });
+  }
+
   function bindRateChipReconnect(chip: HTMLElement) {
     if (rateChipReconnectBound) return;
     rateChipReconnectBound = true;
@@ -880,8 +905,9 @@ import { initialTelemetryState } from "./telemetry-state";
     // neighboring tile correctly showed "--", then jumped to the true value on
     // the first sample. A genuine stopped-car 0 (numeric) still passes.
     const hasSpeed = t.speedKph != null && t.speedKph !== "" && Number.isFinite(kph);
-    // Primary = the user's chosen unit; secondary readout = the other system so
-    // both are always visible. Driven by the units preference (prefs.ts).
+    // Primary = the user's chosen unit (prefs.ts). The secondary readout keeps
+    // tracking the other system but stays hidden until the hero is tapped (C2:
+    // preferred-unit-only, conversion on tap — see bindSpeedAltReveal).
     const metric = units.system() === "metric";
     const primary = hasSpeed ? units.speed(kph) : null;
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
@@ -891,6 +917,7 @@ import { initialTelemetryState } from "./telemetry-state";
     VD.setText("speedKph", hasSpeed ? `${altValue} ${altUnit}` : `-- ${altUnit}`);
     const speedMeter = el("speedValue")?.closest("[role='meter']");
     if (speedMeter) {
+      bindSpeedAltReveal(speedMeter);
       // The markup's 120 ceiling is mph-shaped; aria-valuenow is written in the
       // selected unit, so widen the range when the primary unit is km/h.
       speedMeter.setAttribute("aria-valuemax", metric ? "200" : "120");

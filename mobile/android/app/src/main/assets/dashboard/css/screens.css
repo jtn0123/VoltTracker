@@ -558,6 +558,8 @@
 /* Charge KPIs stay two-up on narrow phones: four stacked full-width
      cards for four small numbers doubled the scroll for no legibility win. */
 
+/* C9 touch audit: display-only status pill (#dtcReportBadge) — never tappable,
+   so it stays below --touch-min on purpose. */
 .session-badge {
   display: inline-flex;
   align-items: center;
@@ -1396,6 +1398,8 @@ body.map-full-active .bottom-nav {
   gap: 6px;
 }
 
+/* C9 touch audit: read-only info rows (map.ts renderTripDetailStops) with no
+   click handling — 40px is layout rhythm, not a touch target. */
 .trip-detail-stop-row {
   display: flex;
   align-items: center;

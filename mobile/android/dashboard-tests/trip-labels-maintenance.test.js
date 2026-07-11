@@ -96,7 +96,22 @@ describe('M4 — trip labels in the map session list', () => {
     expect(list.querySelector('strong').textContent).toContain('<img src=x onerror=alert(1)>');
   });
 
-  it('forwards a rename to bridge.setTripLabel with the prompted value', async () => {
+  // C1: the rename flow runs through the themed in-app dialog (app-dialog.ts), not
+  // window.prompt. Drive it the way a user would: click Rename, edit the dialog
+  // input, then Save/Cancel. The dialog promise settles on the button click; a few
+  // microtask turns let the .then() that forwards to the bridge run.
+  async function flushDialogPromise() {
+    for (let i = 0; i < 5; i += 1) await Promise.resolve();
+  }
+
+  function submitRenameDialog(value) {
+    const input = document.getElementById('appDialogInput');
+    input.value = value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    document.getElementById('appDialogConfirm').click();
+  }
+
+  it('forwards a rename to bridge.setTripLabel with the dialog value', async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
@@ -108,16 +123,43 @@ describe('M4 — trip labels in the map session list', () => {
     const id = seedRouteWithTrips(VD, '');
     VD.renderMap();
 
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue('  Weekend  ');
-    try {
-      document.querySelector('#mapSessionList [data-trip-rename]').click();
-    } finally {
-      promptSpy.mockRestore();
-    }
+    document.querySelector('#mapSessionList [data-trip-rename]').click();
+    const dialog = document.getElementById('appDialog');
+    expect(dialog.hidden).toBe(false);
+    // Plain-text prompt: visible input, no password-manager autocomplete.
+    const input = document.getElementById('appDialogInput');
+    expect(input.type).toBe('text');
+    expect(input.autocomplete).toBe('off');
+    submitRenameDialog('  Weekend  ');
+    await flushDialogPromise();
+
     expect(setTripLabel).toHaveBeenCalledWith(id, 'Weekend');
+    expect(dialog.hidden).toBe(true);
   });
 
-  it('cancelling the rename prompt is a no-op (no bridge call)', async () => {
+  it('prefills the current label and clears it on an empty Save', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const setTripLabel = vi.fn();
+    await loadDashboard({ bridge: createVoltBridgeFixture({ setTripLabel }) });
+    await window.VoltDashboard.ensureMapModule();
+    const VD = window.VoltDashboard;
+    const id = seedRouteWithTrips(VD, 'Road trip');
+    VD.renderMap();
+
+    document.querySelector('#mapSessionList [data-trip-rename]').click();
+    // The current name is prefilled so a small edit doesn't mean retyping it.
+    expect(document.getElementById('appDialogInput').value).toBe('Road trip');
+    // Blank Save = clear the custom name (the old window.prompt contract).
+    submitRenameDialog('');
+    await flushDialogPromise();
+
+    expect(setTripLabel).toHaveBeenCalledWith(id, '');
+  });
+
+  it('cancelling the rename dialog is a no-op (no bridge call)', async () => {
     document.body.innerHTML = '';
     delete window.VoltDashboard;
     delete window.VoltTrackerNative;
@@ -129,12 +171,11 @@ describe('M4 — trip labels in the map session list', () => {
     seedRouteWithTrips(VD, '');
     VD.renderMap();
 
-    const promptSpy = vi.spyOn(window, 'prompt').mockReturnValue(null);
-    try {
-      document.querySelector('#mapSessionList [data-trip-rename]').click();
-    } finally {
-      promptSpy.mockRestore();
-    }
+    document.querySelector('#mapSessionList [data-trip-rename]').click();
+    expect(document.getElementById('appDialog').hidden).toBe(false);
+    document.getElementById('appDialogCancel').click();
+    await flushDialogPromise();
+
     expect(setTripLabel).not.toHaveBeenCalled();
   });
 

@@ -146,6 +146,37 @@ describe('prefs store', () => {
     }
   });
 
+  it('C8: clamps the price fields to realistic ceilings (2 $/kWh, 10 $/gal) on commit', async () => {
+    // Minimal pref-price markup so bootPrefsUi binds the numeric prefs.
+    document.body.innerHTML = `
+      <label><input id="pricePerKwhInput" type="number" /></label>
+      <label><input id="publicPricePerKwhInput" type="number" /></label>
+      <label><input id="gasPricePerGalInput" type="number" /></label>
+    `;
+    const prefs = await loadPrefs();
+
+    // "25" is a classic mis-entry of $0.25/kWh — the old 100 ceiling let it
+    // straight through and poisoned every cost estimate by ~100x.
+    const kwh = document.getElementById('pricePerKwhInput');
+    kwh.value = '25';
+    kwh.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(kwh.value).toBe('2');
+    expect(prefs.get('pricePerKwh', 0)).toBe(2);
+    // The silent rewrite is flagged for screen readers + the transient hint.
+    expect(kwh.getAttribute('aria-invalid')).toBe('true');
+
+    const gas = document.getElementById('gasPricePerGalInput');
+    gas.value = '18';
+    gas.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(gas.value).toBe('10');
+    expect(prefs.get('gasPricePerGal', 0)).toBe(10);
+
+    // Ordinary values still commit untouched.
+    kwh.value = '0.25';
+    kwh.dispatchEvent(new Event('change', { bubbles: true }));
+    expect(prefs.get('pricePerKwh', 0)).toBe(0.25);
+  });
+
   it('gives each Drive tile visibility toggle a unique accessible name', async () => {
     document.body.innerHTML = '<div id="liveReadout"></div><div id="driveTilesEditor"></div>';
     await loadPrefs();

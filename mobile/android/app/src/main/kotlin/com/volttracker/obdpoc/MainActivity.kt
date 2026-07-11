@@ -23,6 +23,7 @@ import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.VisibleForTesting
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
@@ -304,6 +305,11 @@ open class MainActivity :
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        // C6: branded splash. Must run before super.onCreate() — it swaps the
+        // launch theme (Theme.VoltTracker.Splash: brand-dark background + the
+        // launcher icon) for AppTheme via postSplashScreenTheme, and back-ports
+        // the Android 12 splash to older devices (minSdk 23).
+        installSplashScreen()
         StartupTrace.mark("activity_on_create_start")
         super.onCreate(savedInstanceState)
         dashboardTripDeepLink.capture(intent)
