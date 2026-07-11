@@ -1,4 +1,4 @@
-# Volt Tracker Android OBD POC
+# Volt Tracker Android App
 
 This is a standalone Android app for replacing Torque as the day-to-day OBD bridge.
 
@@ -416,21 +416,38 @@ files/obd-logs/session-*.jsonl
 files/obd-logs/latest.txt
 ```
 
-After reconnecting the phone with USB debugging:
+After reconnecting the phone with USB debugging (bash):
+
+```sh
+pkg="com.volttracker.obdpoc"
+out="./field-test-latest.jsonl"
+latest=$(adb shell run-as "$pkg" cat files/obd-logs/latest.txt | tr -d '\r')
+adb exec-out run-as "$pkg" cat "files/obd-logs/$latest" > "$out"
+```
+
+Or with PowerShell:
 
 ```powershell
 $pkg = "com.volttracker.obdpoc"
-$out = "C:\Users\Justin\OneDrive\Documents\Github\VoltTracker\mobile\android\field-test-latest.jsonl"
+$out = ".\field-test-latest.jsonl"
 $latest = adb shell run-as $pkg cat files/obd-logs/latest.txt
 adb exec-out run-as $pkg cat "files/obd-logs/$latest" > $out
 ```
 
 Those logs include status transitions, connection failures, every ELM327 command and response, parsed telemetry samples, timing, empty responses, and whether the adapter prompt (`>`) was seen.
 
-The SQLite database can also be pulled after a test:
+The SQLite database can also be pulled after a test (bash):
+
+```sh
+pkg="com.volttracker.obdpoc"
+out="./field-test-db.db"
+adb exec-out run-as "$pkg" cat databases/volttracker_obd_poc.db > "$out"
+```
+
+Or with PowerShell:
 
 ```powershell
 $pkg = "com.volttracker.obdpoc"
-$out = "C:\Users\Justin\OneDrive\Documents\Github\VoltTracker\mobile\android\field-test-db.db"
+$out = ".\field-test-db.db"
 adb exec-out run-as $pkg cat databases/volttracker_obd_poc.db > $out
 ```
