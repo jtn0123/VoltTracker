@@ -40,8 +40,8 @@ release APK.
 
 ```sh
 ./gradlew dependencyUpdates -Drevision=release
-npm --prefix dashboard-tests audit --audit-level=high
-npm --prefix dashboard-e2e audit --audit-level=high
+npm --prefix dashboard-tests audit --audit-level=moderate
+npm --prefix dashboard-e2e audit --audit-level=moderate
 ```
 
 The weekly `Dependency snapshot` workflow runs a fuller advisory snapshot with
