@@ -22,6 +22,15 @@ on:
 # Keep only the newest run for a PR branch or main push. PR branch pushes no
 # longer trigger this workflow directly, so canceling superseded runs now removes
 # stale slow jobs instead of leaving duplicate checks behind.
+#
+# Deliberate choice — do not switch back to queueing. PR #210 briefly grouped
+# runs by commit SHA with cancel-in-progress: false so the duplicate push+PR
+# runs of the same commit queued instead of leaving a cancelled run's checks
+# red. PR #235 then fixed the root cause instead: the push trigger above is
+# limited to main, so a PR commit only ever starts one run and there is no
+# same-SHA twin left to protect. With duplicates gone, a cancelled run here is
+# always one that a newer run of the same ref supersedes, so cancelling is
+# strictly cheaper than queueing.
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
@@ -52,8 +61,15 @@ jobs:
               - 'mobile/android/gradle.properties'
               - 'mobile/android/gradle/**'
               - 'mobile/android/app/build.gradle'
+              # Covers the dashboard TypeScript/CSS sources (app/src/main/dashboard-src)
+              # whose bundle the WebView handshake executes.
               - 'mobile/android/app/src/main/**'
               - 'mobile/android/app/src/androidTest/**'
+              # The esbuild toolchain (build.mjs, pinned esbuild/leaflet deps) lives in
+              # dashboard-tests and shapes the shipped JS bundle just as much as the
+              # sources do, so toolchain changes must also exercise the WebView runtime
+              # smoke — the handshake depends on the built bundle.
+              - 'mobile/android/dashboard-tests/**'
               - 'mobile/android/scripts/emulator-smoke.sh'
 
   unit-tests:
@@ -179,15 +195,33 @@ jobs:
           python3 - <<'PY'
           import json
           import os
+          import re
           from pathlib import Path
 
           root = Path("app/src/main/assets/dashboard")
           report_dir = Path("build/reports/performance-trends")
           report_dir.mkdir(parents=True, exist_ok=True)
-          startup_budget = 360_000
-          lazy_support_budget = 90_000
-          lazy_panel_budget = 45_000
-          dtc_budget = 380_000
+
+          # Budgets are read from their single source of truth in build.gradle
+          # (the verifyDashboardBundleSize gate) — mirroring the read_budget sed
+          # helper in the dashboard-tests bundle report — so this snapshot can
+          # never drift from the Gradle gate again (it previously hardcoded a
+          # stale startup budget).
+          budget_gradle = Path("build.gradle").read_text(encoding="utf-8")
+
+          def read_budget(name):
+              # Matches e.g. `def dashboardStartupBudgetBytes = 412_000L`; strips
+              # Groovy's underscore digit separators.
+              match = re.search(rf"^def {name} = ([0-9_]+)L", budget_gradle, flags=re.M)
+              if not match:
+                  print(f"::error title=Performance trend snapshot::could not extract {name} from build.gradle (declaration renamed/reformatted?)")
+                  raise SystemExit(1)
+              return int(match.group(1).replace("_", ""))
+
+          startup_budget = read_budget("dashboardStartupBudgetBytes")
+          lazy_support_budget = read_budget("dashboardLazySupportBudgetBytes")
+          lazy_panel_budget = read_budget("dashboardLazyPanelBudgetBytes")
+          dtc_budget = read_budget("dashboardDtcDataBudgetBytes")
           lazy_panel_files = {root / "js/insights-panel.js"}
           dtc_files = {root / "js/dtc-lookup.js", root / "js/dtc-causes.js"}
 
@@ -354,7 +388,14 @@ jobs:
           elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
           echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
-  dashboard-tests:
+  build-dashboard:
+    # Single esbuild compile of the dashboard TypeScript into the shipped bundle
+    # (gitignored assets/dashboard/js plus the regenerated lazy CSS and vendored
+    # Leaflet assets). The three Node dashboard lanes (dashboard-tests,
+    # dashboard-e2e, dashboard-visual) download this artifact instead of each
+    # re-running npm ci + esbuild in dashboard-tests. The Gradle jobs are left
+    # alone on purpose: their preBuild -> buildDashboardJs rebuild happens inside
+    # Gradle (with its own up-to-date checks) and stays authoritative for the APK.
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -368,27 +409,70 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
-      - name: Install dashboard test deps
+      - name: Install dashboard build deps
         run: npm ci
       - name: Build dashboard bundle
-        # esbuild compiles dashboard-src/js -> assets/dashboard/js (gitignored), so the
-        # bundle-size report below measures the real shipped output. Lint/typecheck/tests
-        # read the source, not the bundle.
         run: npm run build
+      - name: Upload dashboard bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-bundle
+          # Everything build.mjs writes (see buildDashboardJs outputs in
+          # mobile/android/build.gradle): the gitignored js/ bundle plus the
+          # regenerated minified lazy CSS and the vendored Leaflet tree.
+          path: |
+            mobile/android/app/src/main/assets/dashboard/js/
+            mobile/android/app/src/main/assets/dashboard/css/screens-map.css
+            mobile/android/app/src/main/assets/dashboard/css/troubleshooter.css
+            mobile/android/app/src/main/assets/dashboard/lib/leaflet/
+          if-no-files-found: error
+
+  dashboard-tests:
+    needs: [build-dashboard]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile/android/dashboard-tests
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - name: Download prebuilt dashboard bundle
+        # Built once in build-dashboard; the bundle-size report below measures the
+        # real shipped output. Lint/typecheck/tests read the source, not the bundle.
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-bundle
+          path: mobile/android/app/src/main/assets/dashboard
+      - name: Install dashboard test deps
+        run: npm ci
+      - name: Verify package-lock.json is in sync
+        # npm ci rewrites the lockfile when package.json was edited without
+        # relocking (e.g. a hand-bumped version range). A dirty lockfile here
+        # means the committed lock no longer matches package.json — fail fast
+        # instead of testing against dependencies nobody pinned.
+        run: git diff --exit-code package-lock.json
       - name: Audit dashboard dependencies
-        # Fail the job on a known high/critical advisory in the dashboard's
-        # (dev-only) npm tree. `--audit-level=high` keeps low/moderate noise from
-        # blocking PRs while still gating on anything seriously exploitable.
-        run: npm audit --audit-level=high
+        # Fail the job on a known moderate+ advisory in the dashboard's (dev-only)
+        # npm tree. `--audit-level=moderate` keeps low-severity noise from blocking
+        # PRs while still gating on anything meaningfully exploitable — the esbuild
+        # advisory that previously bit this repo was rated Moderate, which the old
+        # `--audit-level=high` gate would have waved through.
+        run: npm audit --audit-level=moderate
       - name: Lint dashboard JS
         # ESLint catches undefined globals / redeclared names / unreachable code
         # that Spotless (formatting-only) does not. Fails the job on any lint error.
         run: npm run lint
-      - name: Type-check opted-in dashboard JS
-        # tsc --checkJs over the files that start with `// @ts-check` (see
-        # tsconfig.json). Catches type-level bugs ESLint can't — wrong property
-        # access, bad call arity. Migrate a file by adding the comment + clearing
-        # errors; this gate keeps the already-migrated files honest.
+      - name: Type-check dashboard TypeScript
+        # tsc over the full dashboard TypeScript source — tsconfig.json includes
+        # all of dashboard-src/js/**/*.ts under full `strict` (the old per-file
+        # `// @ts-check` opt-in migration is complete). Catches type-level bugs
+        # ESLint can't — wrong property access, bad call arity.
         run: npm run typecheck
       - name: Run dashboard JS smoke tests with coverage gate
         # Istanbul instruments the dashboard JS loaded by the jsdom smoke suite and
@@ -526,6 +610,7 @@ jobs:
           fi
 
   dashboard-e2e:
+    needs: [build-dashboard]
     # Playwright renders the REAL dashboard (index.html + css + js) in headless Chromium and
     # asserts actual rendered layout + interaction — the regression net for UI bugs the jsdom
     # suite (dashboard-tests) physically can't see: box sizes, clipping, real computed styles.
@@ -550,12 +635,16 @@ jobs:
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
         run: npm ci
+      - name: Verify package-lock.json is in sync
+        # Mirrors the dashboard-tests lockfile-sync gate: catches a package.json
+        # edited without relocking before it drifts past CI.
+        run: git diff --exit-code package-lock.json
       - name: Audit e2e dependencies
-        # Fail the job on a known high/critical advisory in the e2e (dev-only) npm
-        # tree, mirroring the dashboard-tests audit gate. `--audit-level=high` keeps
-        # low/moderate noise from blocking PRs while still gating on anything
-        # seriously exploitable.
-        run: npm audit --audit-level=high
+        # Fail the job on a known moderate+ advisory in the e2e (dev-only) npm
+        # tree, mirroring the dashboard-tests audit gate. `--audit-level=moderate`
+        # keeps low-severity noise from blocking PRs while still gating on anything
+        # meaningfully exploitable (see the dashboard-tests audit step).
+        run: npm audit --audit-level=moderate
       - name: Resolve pinned Playwright version
         # Cache key input: the browser build is fixed by the @playwright/test pin in
         # package-lock.json, so the cache rolls over exactly when the pin changes.
@@ -577,10 +666,24 @@ jobs:
         # not cached, so they still need installing on every runner.
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-      - name: Build dashboard bundle
-        # Playwright serves the real index.html, which loads js/app.js (the built bundle).
-        working-directory: mobile/android/dashboard-tests
-        run: npm ci && npm run build
+      - name: Download prebuilt dashboard bundle
+        # Playwright serves the real index.html, which loads js/app.js — the bundle
+        # built once in the build-dashboard job (no second npm ci + esbuild here).
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-bundle
+          path: mobile/android/app/src/main/assets/dashboard
+      - name: Restore previous run's retried-spec list
+        # Cross-run flake state for the escalation in the report step below. The
+        # primary key is unique per run/attempt (so the save step always writes a
+        # fresh entry); restore-keys falls back to the most recent previous run on
+        # this branch.
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: mobile/android/dashboard-e2e/.playwright-retries
+          key: dashboard-e2e-retries-${{ github.head_ref || github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            dashboard-e2e-retries-${{ github.head_ref || github.ref }}-
       - name: Run dashboard Playwright tests
         # Functional/layout project only — the visual (screenshot) project runs in the
         # separate `dashboard-visual` job (also required via ci-success) so a baseline
@@ -590,12 +693,35 @@ jobs:
         run: npx playwright test --project=chromium
       - name: Report retried Playwright tests
         if: always()
+        # Flake escalation policy: retries stay at 1 (playwright.config.js) so a
+        # one-off runner hiccup cannot red the lane, but retries must not make
+        # real flake invisible either. A spec that needed a retry gets a
+        # ::warning; a spec that needed a retry in TWO CONSECUTIVE runs on the
+        # same branch FAILS this job — that streak is a flaky test, not runner
+        # noise. The per-branch retried-spec list is persisted in
+        # .playwright-retries/ via the cache restore/save pair around this step
+        # (restored list = previous run, written list = this run). A clean run
+        # writes an empty list, so fixing the flake clears the streak.
         run: |
           node - <<'NODE'
           const fs = require('node:fs');
           const path = 'playwright-report/results.json';
+          const stateDir = '.playwright-retries';
+          const statePath = `${stateDir}/retried-specs.json`;
           const summary = process.env.GITHUB_STEP_SUMMARY;
-          if (!fs.existsSync(path) || !summary) process.exit(0);
+          fs.mkdirSync(stateDir, { recursive: true });
+          let previous = [];
+          try {
+            previous = JSON.parse(fs.readFileSync(statePath, 'utf8'));
+            if (!Array.isArray(previous)) previous = [];
+          } catch {
+            previous = [];
+          }
+          if (!fs.existsSync(path)) {
+            // Crashed before the reporter wrote results.json: keep the previous
+            // state (do not overwrite) so an infra failure can't launder a streak.
+            process.exit(0);
+          }
           const report = JSON.parse(fs.readFileSync(path, 'utf8'));
           const retried = [];
           function visitSuite(suite, prefix = []) {
@@ -611,16 +737,34 @@ jobs:
             }
           }
           for (const suite of report.suites || []) visitSuite(suite);
+          const current = retried.map((item) => `${item.project}: ${item.title}`).sort();
+          fs.writeFileSync(statePath, JSON.stringify(current, null, 2) + '\n');
           if (!retried.length) {
-            fs.appendFileSync(summary, '\n### Playwright retries\n\nNo dashboard e2e tests needed a retry.\n');
+            if (summary) fs.appendFileSync(summary, '\n### Playwright retries\n\nNo dashboard e2e tests needed a retry.\n');
             process.exit(0);
           }
-          fs.appendFileSync(summary, '\n### Playwright retries\n\n| Test | Project | Retries |\n|------|---------|---------|\n');
+          if (summary) fs.appendFileSync(summary, '\n### Playwright retries\n\n| Test | Project | Retries |\n|------|---------|---------|\n');
           for (const item of retried) {
             console.log(`::warning title=Playwright retry::${item.project}: ${item.title} retried ${item.count} time(s)`);
-            fs.appendFileSync(summary, `| ${item.title.replace(/\|/g, '\\|')} | ${item.project} | ${item.count} |\n`);
+            if (summary) fs.appendFileSync(summary, `| ${item.title.replace(/\|/g, '\\|')} | ${item.project} | ${item.count} |\n`);
+          }
+          const repeated = current.filter((name) => previous.includes(name));
+          if (repeated.length) {
+            for (const name of repeated) {
+              console.log(`::error title=Playwright flake streak::${name} needed a retry in two consecutive runs on this branch — fix the flaky test instead of leaning on retries`);
+            }
+            if (summary) fs.appendFileSync(summary, `\nFAILED: ${repeated.length} spec(s) retried in two consecutive runs (flake streak).\n`);
+            process.exit(1);
           }
           NODE
+      - name: Save this run's retried-spec list
+        # always(): the state must persist precisely when the report step above
+        # fails the job, so the streak is visible to the next run.
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: mobile/android/dashboard-e2e/.playwright-retries
+          key: dashboard-e2e-retries-${{ github.head_ref || github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Upload Playwright report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -636,6 +780,7 @@ jobs:
           echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
   dashboard-visual:
+    needs: [build-dashboard]
     # Required pixel-screenshot regression for the reworked dashboard surfaces (Playwright
     # toHaveScreenshot). Pinned to a fixed ubuntu image so font rendering matches the committed
     # baselines; the @playwright/test pin fixes the Chromium build. Baselines are Linux-only
@@ -681,10 +826,13 @@ jobs:
         # not cached, so they still need installing on every runner.
         if: steps.playwright-cache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
-      - name: Build dashboard bundle
-        # Playwright serves the real index.html, which loads js/app.js (the built bundle).
-        working-directory: mobile/android/dashboard-tests
-        run: npm ci && npm run build
+      - name: Download prebuilt dashboard bundle
+        # Playwright serves the real index.html, which loads js/app.js — the bundle
+        # built once in the build-dashboard job (no second npm ci + esbuild here).
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dashboard-bundle
+          path: mobile/android/app/src/main/assets/dashboard
       - name: Run visual screenshot tests
         run: npx playwright test --project=visual
       - name: Upload visual baselines + diffs
@@ -755,6 +903,28 @@ jobs:
             mobile/android/app/gradle.lockfile
             results.sarif
           if-no-files-found: ignore
+
+  dependency-review:
+    # Supply-chain gate on the PR's dependency diff (GitHub dependency graph):
+    # fails when a PR introduces a dependency with a known moderate+ advisory or
+    # an unexpected license, before it ever lands. Complements the lockfile
+    # audits above: npm audit / OSV scan what is already resolved, this reviews
+    # what a PR is about to add. The event has no dependency diff outside
+    # pull_request, so the job only runs there; ci-success below treats its
+    # skipped result on main pushes as success (same pattern as emulator-smoke).
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - name: Review PR dependency diff
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          # Match the npm audit gates: moderate+ blocks, low-severity is noise.
+          fail-on-severity: moderate
 
   emulator-smoke:
     # Required WebView runtime smoke for the file:// dashboard path. It installs
@@ -872,10 +1042,12 @@ jobs:
         changes,
         unit-tests,
         static-analysis,
+        build-dashboard,
         dashboard-tests,
         dashboard-e2e,
         dashboard-visual,
         gradle-dependency-audit,
+        dependency-review,
         emulator-smoke,
       ]
     runs-on: ubuntu-latest
@@ -885,7 +1057,10 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'
-          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success" and (.key != "emulator-smoke" or .value.result != "skipped")) | .key] | join(", ")')"
+          # emulator-smoke may be path-skipped on PRs; dependency-review only has a
+          # dependency diff to review on pull_request events, so it is skipped on
+          # main pushes. Both count as success when skipped.
+          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success" and (.key != "emulator-smoke" or .value.result != "skipped") and (.key != "dependency-review" or .value.result != "skipped")) | .key] | join(", ")')"
           if [ -n "$failed" ]; then
             echo "::error::One or more required CI jobs did not succeed: $failed"
             exit 1

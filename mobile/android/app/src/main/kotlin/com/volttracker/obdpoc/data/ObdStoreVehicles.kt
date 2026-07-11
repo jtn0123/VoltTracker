@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
+import androidx.core.database.sqlite.transaction
 import java.util.Calendar
 import java.util.Locale
 
@@ -24,8 +25,7 @@ class ObdStoreVehicles(
         val make = guessMakeFromWmi(wmi)
         val year = decodeModelYear(vin[9])
         val db = helper.writableDatabase
-        db.beginTransaction()
-        try {
+        return db.transaction {
             val matches = ArrayList<Pair<Long, String>>()
             val placeholders = candidateHashes.joinToString(",") { "?" }
             db
@@ -60,30 +60,26 @@ class ObdStoreVehicles(
                     "_id = ?",
                     arrayOf(preferred.first.toString()),
                 )
-                db.setTransactionSuccessful()
-                return preferred.first
+                preferred.first
+            } else {
+                val values = ContentValues()
+                values.put("vehicle_key", hash)
+                values.put("vin_redacted", last4)
+                values.put("vin_hash", hash)
+                values.put("vin_source", "obd_0902")
+                if (make != null) {
+                    values.put("make", make)
+                    values.put("display_name", make)
+                }
+                if (year != null) {
+                    values.put("model_year", year)
+                }
+                values.put("first_seen_ms", now)
+                values.put("last_seen_ms", now)
+                values.put("created_at_ms", now)
+                values.put("updated_at_ms", now)
+                db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, values)
             }
-            val values = ContentValues()
-            values.put("vehicle_key", hash)
-            values.put("vin_redacted", last4)
-            values.put("vin_hash", hash)
-            values.put("vin_source", "obd_0902")
-            if (make != null) {
-                values.put("make", make)
-                values.put("display_name", make)
-            }
-            if (year != null) {
-                values.put("model_year", year)
-            }
-            values.put("first_seen_ms", now)
-            values.put("last_seen_ms", now)
-            values.put("created_at_ms", now)
-            values.put("updated_at_ms", now)
-            val id = db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, values)
-            db.setTransactionSuccessful()
-            return id
-        } finally {
-            db.endTransaction()
         }
     }
 

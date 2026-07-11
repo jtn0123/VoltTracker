@@ -20,6 +20,10 @@ Not all dashboard bytes are equal:
 - **Lazy panel JS** — deferred panel-sized UI chunks such as Insights. This
   bucket keeps a user-facing panel from inflating startup without hiding its
   own growth inside the support bucket.
+- **Lazy expert JS** — expert-surface chunks (`js/signals-panel.js`,
+  `js/scrubber.js`). Destination-specific controls stay in this bounded bucket
+  instead of charging every on-demand interaction to the generic support
+  allowance.
 - **DTC reference data** — `js/dtc-lookup.js` and `js/dtc-causes.js`, ~337 KB of
   pure lookup tables. These are **lazy-loaded** via `loadDashboardScript` only when
   a user opens a specific diagnostic code, so they don't touch startup.
@@ -35,11 +39,17 @@ unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **364,000 B** | ~353 KB |
-| Lazy support JS | first-party lazy JS chunks except panel and DTC data | **90,000 B** | ~74 KB |
-| Lazy panel JS | deferred panel chunks such as `js/insights-panel.js` | **45,000 B** | ~25 KB |
-| Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **20,000 B** | ~17 KB |
+| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **412,000 B** | ~392 KB |
+| Lazy support JS | first-party lazy JS chunks except panel, expert, and DTC data | **90,000 B** | ~87 KB |
+| Lazy panel JS | `js/insights-panel.js`, `js/connection-tools.js` | **45,000 B** | ~42 KB |
+| Lazy expert JS | `js/signals-panel.js`, `js/scrubber.js` | **40,000 B** | ~19 KB |
+| Lazy CSS | `css/screens-map.css`, `css/troubleshooter.css` | **23,500 B** | ~15 KB |
 | DTC data | `js/dtc-lookup.js`, `js/dtc-causes.js` | **380,000 B** | ~267 KB |
+
+The startup budget was last raised to 412,000 B for the v2 design work (swipe
+tab navigation, DTC bottom sheet, card-stack rework, cell-balance heatmap, and
+the rest of the tab-by-tab design match) — see the history comments above
+`dashboardStartupBudgetBytes` in `build.gradle`.
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is
@@ -68,7 +78,8 @@ DTC family (`P04`, `U00`, etc.) before raising the byte budget.
 ## Bumping a budget
 
 Raise the relevant constant in `build.gradle` (`dashboardStartupBudgetBytes`,
-`dashboardLazySupportBudgetBytes`, `dashboardLazyCssBudgetBytes`, or
+`dashboardLazySupportBudgetBytes`, `dashboardLazyPanelBudgetBytes`,
+`dashboardLazyExpertBudgetBytes`, `dashboardLazyCssBudgetBytes`, or
 `dashboardDtcDataBudgetBytes`) and say why in the commit. Treat the startup
 budget as a ratchet you justify, not a number you quietly grow.
 

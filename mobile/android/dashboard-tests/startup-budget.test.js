@@ -9,7 +9,19 @@ const ROUTE_POINT_COUNT = 2000; // ~33min drive at 1 GPS fix/s — the long-rout
 const MAP_SESSION_COUNT = 250; // months of daily driving in the session list — well past the native 40-trip page.
 const TELEMETRY_BURST_COUNT = 300; // a wedged native queue flushing at once; must coalesce into ONE rAF render.
 const TAB_SWITCH_REPEAT_COUNT = 25; // repeats x6 tabs = 150 switches, enough samples to average out jsdom jitter.
-const TAB_SWITCH_BUDGET_PER_SWITCH_MS = 4; // ~1/4 of a 16.7ms 60fps frame, leaving the rest for WebView paint.
+// Deterministic per-switch WORK budgets (the real regression gate — see the tab-switch
+// spec below). Measured 2026-07-11: 18.3 mutation records/switch (body datasets, view/nav
+// class + aria toggles, heading text) and exactly 1 rAF/switch (setView's single
+// after-paint mark). The budgets leave ~2x headroom for legitimate UI additions while
+// still failing hard on per-switch re-renders (a re-rendered 80-row session list alone
+// is hundreds of mutation records).
+const TAB_SWITCH_MUTATION_BUDGET_PER_SWITCH = 40;
+const TAB_SWITCH_RAF_BUDGET_PER_SWITCH = 2;
+// Wall-clock is only a SANITY bound, not the gate: CI runners are noisy/shared, so a
+// tight ms budget (this was 4ms/switch) is a timing coin-flip there. 25ms/switch is
+// ~60x the measured 0.4ms/switch — loose enough that scheduler jitter can't flake it,
+// tight enough that a runaway loop per switch still fails.
+const TAB_SWITCH_BUDGET_PER_SWITCH_MS = 25;
 
 function makeRoutePoint(index) {
   const capturedAtMs = 1_720_000_000_000 + index * 1000;
@@ -152,17 +164,50 @@ describe('dashboard startup budget', () => {
     const VD = window.VoltDashboard;
     await VD.ensureMapModule();
     const tabs = ['drive', 'map', 'charge', 'insights', 'diagnostics', 'settings'];
+    const switchCount = TAB_SWITCH_REPEAT_COUNT * tabs.length;
 
-    const start = performance.now();
-    for (let i = 0; i < TAB_SWITCH_REPEAT_COUNT; i += 1) {
-      for (const tab of tabs) {
-        VD.setView(tab);
+    // Deterministic work proxies. A wall-clock-only budget is a coin flip on a
+    // loaded CI runner, so the real regression gate is the amount of WORK each
+    // switch performs, which jsdom can observe exactly:
+    //   - DOM mutation records: setView touches a fixed set of nodes (body
+    //     datasets, view/nav class + aria toggles, heading text). Someone
+    //     re-rendering a list or rebuilding a section per switch multiplies this.
+    //   - rAF schedules: setView defers exactly one after-paint mark per switch;
+    //     render work leaking into the synchronous switch path shows up here.
+    const mutationObserver = new MutationObserver(() => {});
+    mutationObserver.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      characterData: true,
+    });
+    const originalRaf = window.requestAnimationFrame;
+    let rafScheduleCount = 0;
+    window.requestAnimationFrame = (callback) => {
+      rafScheduleCount += 1;
+      return originalRaf ? originalRaf.call(window, callback) : 0;
+    };
+
+    let elapsedMs = 0;
+    let mutationRecordCount = 0;
+    try {
+      const start = performance.now();
+      for (let i = 0; i < TAB_SWITCH_REPEAT_COUNT; i += 1) {
+        for (const tab of tabs) {
+          VD.setView(tab);
+        }
       }
+      elapsedMs = performance.now() - start;
+      mutationRecordCount = mutationObserver.takeRecords().length;
+    } finally {
+      mutationObserver.disconnect();
+      window.requestAnimationFrame = originalRaf;
     }
-    const elapsedMs = performance.now() - start;
 
     expect(document.body.dataset.activeView).toBe('settings');
-    expect(elapsedMs / (TAB_SWITCH_REPEAT_COUNT * tabs.length)).toBeLessThan(TAB_SWITCH_BUDGET_PER_SWITCH_MS);
+    expect(mutationRecordCount / switchCount).toBeLessThan(TAB_SWITCH_MUTATION_BUDGET_PER_SWITCH);
+    expect(rafScheduleCount / switchCount).toBeLessThan(TAB_SWITCH_RAF_BUDGET_PER_SWITCH);
+    expect(elapsedMs / switchCount).toBeLessThan(TAB_SWITCH_BUDGET_PER_SWITCH_MS);
   });
 
   it('coalesces a high-rate telemetry burst into one render frame inside budget', async () => {

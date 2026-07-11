@@ -616,6 +616,45 @@ tasks.register("doctor") {
     }
 }
 
+// Auto-bootstrap the repo git hooks (repo-root lefthook.yml). The hooks used to
+// be purely opt-in (`brew install lefthook && lefthook install`), which fresh
+// clones never remembered to run. `lefthook install` is idempotent and fast, so
+// :app:preBuild wires this in; it is a strict no-op — never a build failure —
+// when lefthook is not on PATH (CI runners have none) or this is not a git
+// checkout, and it is skipped as UP-TO-DATE once the hooks are in place.
+tasks.register("installGitHooks") {
+    description = "Installs the repo git hooks via lefthook when it is on PATH (safe no-op otherwise)."
+    def repoRoot = repoRootDir
+    outputs.upToDateWhen {
+        // Plain checkouts only (in a git worktree `.git` is a file, so this stays
+        // false and the idempotent install below simply reruns).
+        def hook = new File(repoRoot, ".git/hooks/pre-commit")
+        hook.isFile() && hook.getText("UTF-8").contains("lefthook")
+    }
+    doLast {
+        if (!new File(repoRoot, ".git").exists()) {
+            logger.lifecycle("installGitHooks: ${repoRoot} is not a git checkout; skipping git-hook bootstrap.")
+            return
+        }
+        try {
+            def proc = new ProcessBuilder("lefthook", "install")
+                    .directory(repoRoot)
+                    .redirectErrorStream(true)
+                    .start()
+            def output = proc.inputStream.getText("UTF-8").trim()
+            proc.waitFor()
+            if (proc.exitValue() == 0) {
+                logger.lifecycle("installGitHooks: lefthook git hooks installed.")
+            } else {
+                logger.lifecycle("installGitHooks: `lefthook install` exited ${proc.exitValue()} (${output}); continuing without git hooks.")
+            }
+        } catch (Exception ignored) {
+            logger.lifecycle("installGitHooks: lefthook not found on PATH; skipping git-hook bootstrap. " +
+                    "Install it (`brew install lefthook`) to get the repo pre-commit/pre-push checks.")
+        }
+    }
+}
+
 // Fast inner-loop tier (I5): the subset of verifyActiveApp that catches the mistakes you make
 // while editing — formatting, static analysis, broken Kotlin/dashboard logic — WITHOUT the two
 // slow steps: the Playwright e2e run (dashboardE2e, which boots a browser) and the full
