@@ -197,4 +197,38 @@ describe('dashboard layout css', () => {
         .toMatch(new RegExp(`${hexToken}\\s*:\\s*${hex}\\s*;`));
     }
   });
+
+  it('keeps screens-map.css and troubleshooter.css free of raw hex paint literals (C5)', () => {
+    // C5 tokenized the last raw hexes out of these two files (route halo /
+    // marker shadow → --route-halo / --shadow; troubleshooter status tints →
+    // rgba(var(--bad-rgb|--bad-soft-rgb|--volt-rgb), a)). Ratchet: any new
+    // color in them must come from a base.css token.
+    for (const name of ['screens-map.css', 'troubleshooter.css']) {
+      const css = readFileSync(resolve(DASHBOARD_ASSETS, `css/${name}`), 'utf8');
+      expect(css, `${name} reintroduced a raw hex color literal`).not.toMatch(
+        /#[0-9a-fA-F]{3,8}\b/,
+      );
+    }
+  });
+
+  it('paints the tokenized C5 surfaces from tokens, not literals', () => {
+    const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
+    const componentsCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/components.css'), 'utf8');
+    const screensCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens.css'), 'utf8');
+    const mapCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens-map.css'), 'utf8');
+
+    // New tokens resolve to the exact literals they replaced (dark default).
+    expect(baseCss).toMatch(/--ev-deep:\s*#8fbf2e;/);
+    expect(baseCss).toMatch(/--ok-deep:\s*#1f9c6c;/);
+    expect(baseCss).toMatch(/--route-halo:\s*rgba\(255,\s*255,\s*255,\s*0\.32\);/);
+    expect(baseCss).toMatch(/--bad-soft-rgb:\s*255,\s*192,\s*187;/);
+
+    // ...and the consuming rules reference the tokens.
+    expect(componentsCss).toMatch(/linear-gradient\(90deg,\s*var\(--ev-deep\),\s*var\(--ev\)\)/);
+    expect(componentsCss).toMatch(/linear-gradient\(90deg,\s*var\(--ok-deep\),\s*var\(--ok\)\)/);
+    expect(mapCss).toMatch(/\.real-route-halo\{stroke:var\(--route-halo\)/);
+    // White ink on saturated fills flows from --on-control (white in both schemes).
+    const navBadgeFault = screensCss.match(/\.nav-badge\[data-severity="fault"\]\s*\{[^}]+\}/)?.[0] || '';
+    expect(navBadgeFault).toMatch(/color:\s*var\(--on-control\)/);
+  });
 });

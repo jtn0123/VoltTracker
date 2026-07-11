@@ -79,7 +79,7 @@
   }
 
   .real-route-halo {
-    stroke: rgba(255, 255, 255, 0.32);
+    stroke: var(--route-halo);
     stroke-width: 10;
   }
 
@@ -433,7 +433,9 @@
     border-radius: 2.5px;
     background: var(--panel);
     transform: rotate(45deg);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+    /* Same value as dark --shadow; tokenized so the marker shadow follows
+       the scheme like every other shadow. */
+    box-shadow: 0 1px 4px var(--shadow);
   }
 
   .map-empty {

@@ -450,7 +450,7 @@ body[data-active-view="insights"] .empty-hints b {
 
 .meter.battery-meter span {
   /* v2 design: a two-stop green gradient reads as charge, not a flat bar. */
-  background: linear-gradient(90deg, #8fbf2e, var(--ev));
+  background: linear-gradient(90deg, var(--ev-deep), var(--ev));
   transition: background var(--motion-fast, 0.2s) var(--motion-ease, ease);
 }
 
@@ -836,9 +836,9 @@ body[data-active-view="insights"] .empty-hints b {
   text-shadow:
     0 1px 2px rgba(0, 0, 0, 0.65),
     0 0 8px rgba(0, 0, 0, 0.45);
-  /* Shadow is tuned for WHITE ink — pin it in both themes (light-mode
-       --text under a dark glow smears). */
-  color: #fff;
+  /* Shadow is tuned for WHITE ink — --on-control is white in both themes
+       (light-mode --text under a dark glow smears). */
+  color: var(--on-control);
 }
 
 .status-meta span {
@@ -1325,7 +1325,7 @@ canvas {
   height: 100%;
   width: 0%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #1f9c6c, var(--ok));
+  background: linear-gradient(90deg, var(--ok-deep), var(--ok));
   transition: width 120ms linear;
 }
 

@@ -2989,6 +2989,73 @@
   </p>
 
   <!--
+    Open-source licenses (C3). Everything third-party that ships INSIDE the
+    app: the vendored Leaflet build (lib/leaflet), the remote basemap tile
+    data (OpenStreetMap via CARTO — ODbL attribution required), and the
+    bundled Space Grotesk font (fonts/SpaceGroteskVar.woff2; its full OFL
+    text ships beside it as fonts/OFL.txt). BSD/OFL require the copyright
+    notice to travel with the distribution, so each entry expands to that
+    notice — not the full license text. The in-map ODbL credit is separate:
+    Leaflet's attribution control on the Map tab (map.ts#createRemoteTileLayer).
+  -->
+  <details id="ossLicenses" class="oss-licenses">
+    <summary>Open-source licenses</summary>
+    <ul class="oss-license-list">
+      <li>
+        <details>
+          <summary>
+            <strong>Leaflet 1.9.4</strong>
+            <small>BSD-2-Clause &middot; interactive route maps</small>
+          </summary>
+          <p>
+            Copyright &copy; 2010&ndash;2023 Vladimir Agafonkin. Copyright
+            &copy; 2010&ndash;2011 CloudMade. All rights reserved. Redistributed
+            under the BSD 2-Clause License (leafletjs.com).
+          </p>
+        </details>
+      </li>
+      <li>
+        <details>
+          <summary>
+            <strong>OpenStreetMap data</strong>
+            <small>ODbL 1.0 &middot; basemap tile data</small>
+          </summary>
+          <p>
+            Map data &copy; OpenStreetMap contributors, available under the Open
+            Database License (openstreetmap.org/copyright).
+          </p>
+        </details>
+      </li>
+      <li>
+        <details>
+          <summary>
+            <strong>CARTO basemaps</strong>
+            <small>Tile service &middot; dark basemap style</small>
+          </summary>
+          <p>
+            Map tiles &copy; CARTO (carto.com/attributions), rendered from
+            OpenStreetMap data.
+          </p>
+        </details>
+      </li>
+      <li>
+        <details>
+          <summary>
+            <strong>Space Grotesk</strong>
+            <small>SIL OFL 1.1 &middot; display typeface</small>
+          </summary>
+          <p>
+            Copyright 2020 The Space Grotesk Project Authors
+            (github.com/floriankarsten/space-grotesk). Licensed under the SIL
+            Open Font License 1.1 &mdash; the full license text ships with this
+            app as fonts/OFL.txt.
+          </p>
+        </details>
+      </li>
+    </ul>
+  </details>
+
+  <!--
     Live recording progress belongs at the quiet end of Settings, not in the
     already-dense title row. drive.ts#renderDriveNowChips fills the label/meta
     and toggles [hidden] only while a real adapter session is active.

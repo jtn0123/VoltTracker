@@ -380,8 +380,13 @@ import { haversineMetersJs } from "./map-route-utils";
     // "image/svg+xml", and without a default namespace declaration every node
     // lands in the null namespace and renders nothing (the fill/stroke/d
     // attributes become inert). With it, the nodes are real SVG elements.
+    //
+    // aria-hidden (C4): these strips are decorative texture inside the
+    // scrubber. The values they trace are announced through the #scrubChart
+    // slider (aria-label/valuenow) and the live readout chips, so exposing
+    // the raw SVGs would only add noise for AT users.
     return (
-      '<svg xmlns="http://www.w3.org/2000/svg" width="' +
+      '<svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="' +
       w +
       '" height="' +
       h +
