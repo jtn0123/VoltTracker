@@ -728,6 +728,12 @@ interface VoltRestoreProgress {
     pendingLazyLoads(): Promise<unknown[]>;
     dtcDataLoaded(): boolean;
     ensureInsightsModule(): Promise<VoltDashboard>;
+    /** G2 split: Charge-tab history/cost renders + the shared monthly trend chart. */
+    ensureChargeHistoryModule(): Promise<VoltDashboard>;
+    /** G2 split: the Insights maintenance log list + add-entry form. */
+    ensureMaintenancePanelModule(): Promise<VoltDashboard>;
+    /** G2 split: the DTC detail bottom sheet + scan-progress narration. */
+    ensureDtcDetailModule(): Promise<VoltDashboard>;
     ensureSignalsModule(): Promise<VoltDashboard>;
     hydrateConnectionTools(): boolean;
     ensureConnectionToolsModule(): Promise<VoltDashboard>;
@@ -789,24 +795,15 @@ interface VoltRestoreProgress {
     setStorage(payload: unknown): void;
     updateStorageUi(): void;
     updateDiagnosticCodeUi(): void;
-    /** DTC detail bottom sheet: opened from a scanned-code row or a lookup hit. */
-    openDtcDetail(code: VoltDtcRow): void;
-    closeDtcDetail(): void;
-    /** Cosmetic Mode 03/07/02 scan narration; completes on the real scan-complete status. */
-    startDtcScanProgress(quick?: boolean): void;
     updateReviewUi(): void;
     renderRealV2Ui(): void;
     renderVehicleUi(): void;
-    /** M5 maintenance log: load from native into state, render the list with M1/C4 next-due lines,
-     *  toggle the inline add-entry form, submit/cancel it. */
-    loadMaintenanceLog(): void;
-    renderMaintenanceList(): void;
-    addMaintenanceEntry(): void;
-    submitMaintenanceForm(): void;
-    closeMaintenanceForm(): void;
-    /** M1 charge-history CSV export: read the electricity-rate pref and forward it to
-     *  bridge.exportChargeSessionsCsv so native can append an estimated-cost column. */
-    exportChargeSessionsCsv(): void;
+    /** The latest battery/telemetry reading the Insights hero renders (shared with the
+     *  lazy maintenance-panel.ts chunk for the next-due odometer math). */
+    latestInsightReading(storage: VoltStorageSummary): Record<string, unknown>;
+    /** Report a failed bridge write: status toast + logClientError (shared with the
+     *  lazy charge-history.ts chunk). */
+    reportBridgeWriteFailure(label: string, detail: string, err: unknown): void;
     buildRealInsights(review: VoltSessionReview): Array<{ title: string; detail: string }>;
     stateCountSummary(counts: Record<string, number>): string;
     /** True when a parsed native payload is a failed read (`ok === false`). */
@@ -817,6 +814,38 @@ interface VoltRestoreProgress {
     /** True when the Insights screen has real content to show (logged trip /
      *  distance or a battery reading) — gates insightsEmptyState. */
     hasInsightContent(): boolean;
+    // ----- maintenance-panel.ts (lazy; G2 split from storage-status.ts) -------
+    /** M5 maintenance log: load from native into state, render the list with M1/C4 next-due lines,
+     *  toggle the inline add-entry form, submit/cancel it. Registered when the lazy chunk loads
+     *  (core.ts#ensureMaintenancePanelModule); eager callers guard with typeof checks. */
+    loadMaintenanceLog(): void;
+    renderMaintenanceList(): void;
+    addMaintenanceEntry(): void;
+    submitMaintenanceForm(): void;
+    closeMaintenanceForm(): void;
+
+    // ----- dtc-detail.ts (lazy; G2 split from storage-status.ts) --------------
+    /** DTC detail bottom sheet: opened from a scanned-code row or a lookup hit. Registered when
+     *  the lazy chunk loads (core.ts#ensureDtcDetailModule); eager callers guard with typeof. */
+    openDtcDetail(code: VoltDtcRow): void;
+    closeDtcDetail(): void;
+    /** Cosmetic Mode 03/07/02 scan narration; completes on the real scan-complete status. */
+    startDtcScanProgress(quick?: boolean): void;
+    /** Severity vocabulary owned by storage-status.ts (the eager code rows render it) and
+     *  shared with the lazy dtc-detail.ts sheet. */
+    dtcSeverity(rawCode: unknown, metaSeverity: string | null): 'critical' | 'warning' | 'info';
+    severityLabel(severity: 'critical' | 'warning' | 'info'): string;
+    drivabilityLine(severity: 'critical' | 'warning' | 'info'): string;
+
+    // ----- charge-history.ts (lazy; G2 split from storage-status.ts) ----------
+    /** Charge-tab per-session history rows + energy/cost rollup. Registered when the lazy
+     *  chunk loads (core.ts#ensureChargeHistoryModule); eager callers guard with typeof checks. */
+    renderChargeSessions(charge: VoltChargeSummary): void;
+    /** Insights hero pack-stat row (voltage/temp/health/power). */
+    renderPackStats(latest: Record<string, unknown>): void;
+    /** M1 charge-history CSV export: read the electricity-rate pref and forward it to
+     *  bridge.exportChargeSessionsCsv so native can append an estimated-cost column. */
+    exportChargeSessionsCsv(): void;
     /** Calendar-month key + short label ("May ’26") for a timestamp (shared by the trend charts). */
     monthBucketKey(ms: number): { key: string; label: string; firstMs: number };
     /** Monthly bar chart shared by the charging (Battery tab) and driving (Insights) trends. */

@@ -460,8 +460,15 @@ type SignalActions = {
     }
     showConnectionProgress(selected, scan);
     // Narrate the scan phases (Mode 03/07/02) while native works — the block
-    // finishes only on the real scan-complete status (storage-status.ts).
-    if (scan && typeof VD.startDtcScanProgress === "function") VD.startDtcScanProgress(quick);
+    // finishes only on the real scan-complete status. The narration lives in
+    // the lazy dtc-detail.ts chunk (G2 split); load-then-start on first scan.
+    if (scan) {
+      if (typeof VD.startDtcScanProgress === "function") {
+        VD.startDtcScanProgress(quick);
+      } else if (typeof VD.ensureDtcDetailModule === "function") {
+        void VD.ensureDtcDetailModule().then(() => VD.startDtcScanProgress?.(quick)).catch(() => {});
+      }
+    }
     // Guard the bridge call so a quick double-tap doesn't issue two
     // overlapping connect/scan invocations against the adapter.
     withBusy(button, () => {
@@ -613,10 +620,26 @@ type SignalActions = {
       case "confirmClearDtc": confirmClearDtc(button); return;
       case "previewDtcCodes": void previewDtcCodes(); return;
       case "clearPreviewDtcCodes": clearPreviewDtcCodes(); return;
-      case "addMaintenance": VD.addMaintenanceEntry(); return;
-      case "cancelMaintenance": VD.closeMaintenanceForm(); return;
+      // The maintenance form and charge-history export live in lazy chunks
+      // (G2 split). Call through synchronously when the chunk is present (the
+      // usual case — entering their tabs ensures it); otherwise load-then-call
+      // so a fast tap straight after startup still works.
+      case "addMaintenance": {
+        if (typeof VD.addMaintenanceEntry === "function") { VD.addMaintenanceEntry(); return; }
+        void VD.ensureMaintenancePanelModule().then(() => VD.addMaintenanceEntry?.()).catch(() => {});
+        return;
+      }
+      case "cancelMaintenance": {
+        if (typeof VD.closeMaintenanceForm === "function") { VD.closeMaintenanceForm(); return; }
+        void VD.ensureMaintenancePanelModule().then(() => VD.closeMaintenanceForm?.()).catch(() => {});
+        return;
+      }
       case "exportAllTripsCsv": exportAllTripsCsv(); return;
-      case "exportChargeSessionsCsv": VD.exportChargeSessionsCsv(); return;
+      case "exportChargeSessionsCsv": {
+        if (typeof VD.exportChargeSessionsCsv === "function") { VD.exportChargeSessionsCsv(); return; }
+        void VD.ensureChargeHistoryModule().then(() => VD.exportChargeSessionsCsv?.()).catch(() => {});
+        return;
+      }
       case "closeTripDetail": closeTripDetail(); return;
       case "tripViewOnMap": tripViewOnMap(button); return;
       case "shareTripCard": if (typeof VD.shareTripCard === "function") VD.shareTripCard(); return;
@@ -1227,15 +1250,19 @@ type SignalActions = {
     out.appendChild(desc);
 
     // Hit: the card links through to the same detail sheet the scanned-code
-    // rows open, so lookup and scan results read identically.
-    if (info && info.description && typeof VD.openDtcDetail === "function") {
+    // rows open, so lookup and scan results read identically. The sheet lives
+    // in the lazy dtc-detail.ts chunk (G2 split); load-then-open on first tap.
+    if (info && info.description) {
       const detailBtn = document.createElement("button");
       detailBtn.type = "button";
       detailBtn.className = "link-btn dtc-lookup-detail";
       detailBtn.textContent = "From the built-in Volt code database · tap for detail";
       detailBtn.addEventListener("click", () => {
+        const row = { dtc: code, status: "lookup", statusLabel: "database entry" };
         if (typeof VD.openDtcDetail === "function") {
-          VD.openDtcDetail({ dtc: code, status: "lookup", statusLabel: "database entry" });
+          VD.openDtcDetail(row);
+        } else if (typeof VD.ensureDtcDetailModule === "function") {
+          void VD.ensureDtcDetailModule().then(() => VD.openDtcDetail?.(row)).catch(() => {});
         }
       });
       out.appendChild(detailBtn);
