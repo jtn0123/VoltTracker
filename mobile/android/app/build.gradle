@@ -235,6 +235,9 @@ dependencies {
     implementation libs.androidx.activity
     // FileProvider, for handing the data-backup file to the Android share sheet.
     implementation libs.androidx.core
+    // Branded launch splash (C6): Theme.VoltTracker.Splash + installSplashScreen()
+    // in MainActivity; back-ports the Android 12 splash to minSdk 23.
+    implementation libs.androidx.core.splashscreen
     // Installs the packaged baseline profile (src/main/baseline-prof.txt) on devices that
     // don't get Play-delivered compilation, so the profiled startup path is AOT-compiled.
     implementation libs.androidx.profileinstaller
