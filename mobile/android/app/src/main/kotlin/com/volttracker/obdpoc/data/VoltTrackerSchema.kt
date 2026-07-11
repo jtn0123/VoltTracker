@@ -337,7 +337,8 @@ object VoltTrackerSchema {
                 last_seen_ms INTEGER NOT NULL,
                 created_at_ms INTEGER NOT NULL,
                 updated_at_ms INTEGER NOT NULL,
-                metadata_json TEXT
+                metadata_json TEXT,
+                vehicle_key_aliases TEXT
             )
             """.trimIndent(),
         )

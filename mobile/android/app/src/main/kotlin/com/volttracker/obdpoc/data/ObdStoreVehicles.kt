@@ -6,64 +6,82 @@ import java.util.Calendar
 import java.util.Locale
 
 /**
- * Vehicle identity derived from the VIN. Stores a privacy-preserving row: hash + redacted last-4,
- * never the raw VIN.
+ * Vehicle identity derived from the VIN. Stores a privacy-preserving row: keyed hash + redacted
+ * last-4 + keyed-hash aliases under every known install secret (ADR 0009), never the raw VIN and
+ * never the enumerable unsalted hash.
  */
 class ObdStoreVehicles(
     private val helper: VoltTrackerDb,
     private val vinKeyHasher: VinKeyHasher,
 ) {
+    private class VehicleRow(
+        val id: Long,
+        val key: String,
+        val aliases: Set<String>,
+        val firstSeenMs: Long,
+    )
+
     fun upsertVehicleFromVin(vin: String?): Long {
         if (vin == null || vin.length != 17) {
             return 0L
         }
         val now = System.currentTimeMillis()
         val hash = vinKeyHasher.hash(vin)
-        val candidateHashes = (vinKeyHasher.hashCandidates(vin) + VinKeyHasher.legacyHash(vin)).distinct()
+        // Every keyed-HMAC form of this VIN under the secrets this install knows. These are what
+        // gets recorded as aliases (ADR 0009) so a later merge can recognize the car without the
+        // VIN. The legacy unsalted hash is a match candidate only — storing it would reintroduce
+        // the enumerable hash the HMAC keying removed.
+        val hmacCandidates = vinKeyHasher.hashCandidates(vin)
+        val legacyHash = VinKeyHasher.legacyHash(vin)
+        val candidateHashes = (hmacCandidates + legacyHash).toSet()
         val last4 = vin.substring(13)
         val wmi = vin.substring(0, 3)
         val make = guessMakeFromWmi(wmi)
         val year = decodeModelYear(vin[9])
         val db = helper.writableDatabase
         return db.transaction {
-            val matches = ArrayList<Pair<Long, String>>()
-            val placeholders = candidateHashes.joinToString(",") { "?" }
-            db
-                .rawQuery(
-                    "SELECT _id, vehicle_key FROM ${VoltTrackerDb.TABLE_VEHICLES} " +
-                        "WHERE vehicle_key IN ($placeholders)",
-                    candidateHashes.toTypedArray(),
-                ).use { cursor ->
-                    while (cursor.moveToNext()) matches.add(cursor.getLong(0) to cursor.getString(1))
+            // The table holds one row per physical car the user owns, so loading it whole is
+            // cheap and lets matching cover recorded aliases, not just the primary key column.
+            val matches =
+                loadVehicleRows(db).filter { row ->
+                    row.key in candidateHashes || row.aliases.any { it in candidateHashes }
                 }
             if (matches.isNotEmpty()) {
                 // Prefer the row already keyed by this install. A merged backup can contain the
                 // same VIN keyed with a donor secret; consolidate every dependent row before
                 // deleting that duplicate and normalizing to the local primary key.
-                val preferred = matches.firstOrNull { it.second == hash } ?: matches.first()
-                for (duplicate in matches.filter { it.first != preferred.first }) {
-                    remapVehicleReferences(db, duplicate.first, preferred.first)
+                val preferred = matches.firstOrNull { it.key == hash } ?: matches.first()
+                for (duplicate in matches.filter { it.id != preferred.id }) {
+                    remapVehicleReferences(db, duplicate.id, preferred.id)
                     db.delete(
                         VoltTrackerDb.TABLE_VEHICLES,
                         "_id = ?",
-                        arrayOf(duplicate.first.toString()),
+                        arrayOf(duplicate.id.toString()),
                     )
                 }
+                // Fold the consolidated rows' identity lineage (their keys and recorded aliases)
+                // into the surviving row so future merges of old backups match at merge time.
+                val aliases =
+                    (hmacCandidates + matches.flatMap { it.aliases } + matches.map { it.key })
+                        .filter { it != legacyHash }
                 val update = ContentValues()
                 update.put("vehicle_key", hash)
                 update.put("vin_hash", hash)
+                update.put(VehicleKeyAliases.COLUMN, VehicleKeyAliases.serialize(aliases))
+                update.put("first_seen_ms", matches.minOf { it.firstSeenMs })
                 update.put("last_seen_ms", now)
                 update.put("updated_at_ms", now)
                 db.update(
                     VoltTrackerDb.TABLE_VEHICLES,
                     update,
                     "_id = ?",
-                    arrayOf(preferred.first.toString()),
+                    arrayOf(preferred.id.toString()),
                 )
-                preferred.first
+                preferred.id
             } else {
                 val values = ContentValues()
                 values.put("vehicle_key", hash)
+                values.put(VehicleKeyAliases.COLUMN, VehicleKeyAliases.serialize(hmacCandidates))
                 values.put("vin_redacted", last4)
                 values.put("vin_hash", hash)
                 values.put("vin_source", "obd_0902")
@@ -81,6 +99,28 @@ class ObdStoreVehicles(
                 db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, values)
             }
         }
+    }
+
+    private fun loadVehicleRows(db: android.database.sqlite.SQLiteDatabase): List<VehicleRow> {
+        val rows = ArrayList<VehicleRow>()
+        db
+            .rawQuery(
+                "SELECT _id, vehicle_key, ${VehicleKeyAliases.COLUMN}, first_seen_ms" +
+                    " FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                null,
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    rows.add(
+                        VehicleRow(
+                            cursor.getLong(0),
+                            cursor.getString(1),
+                            VehicleKeyAliases.parse(cursor.getString(2)),
+                            cursor.getLong(3),
+                        ),
+                    )
+                }
+            }
+        return rows
     }
 
     private fun remapVehicleReferences(
