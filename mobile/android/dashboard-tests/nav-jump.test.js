@@ -54,14 +54,14 @@ describe('[data-nav-jump] delegation', () => {
     const staticButton = document.querySelector('[data-nav-jump]');
     expect(staticButton, 'generated DOM should ship at least one [data-nav-jump] button').not.toBeNull();
 
-    const original = VD.setView;
-    const spy = vi.fn((view) => original(view));
-    VD.setView = spy;
-    try {
-      staticButton.click();
-    } finally {
-      VD.setView = original;
-    }
+    // actions.ts calls setView through a static ESM import (C7), so stubbing
+    // window.VoltDashboard.setView can no longer observe the delegated call.
+    // Count through setView's per-invocation bridge side-channel instead:
+    // every setView() pushes exactly one setActiveDashboardView(view), so a
+    // delegation double-fire would surface as two calls here.
+    const spy = vi.fn();
+    VD.bridge.setActiveDashboardView = spy;
+    staticButton.click();
 
     expect(spy).toHaveBeenCalledTimes(1);
     expect(spy).toHaveBeenCalledWith(staticButton.dataset.navJump);
