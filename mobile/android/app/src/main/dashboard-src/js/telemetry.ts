@@ -399,7 +399,12 @@ import { initialTelemetryState } from "./telemetry-state";
   function armLiveRouteHydrationRetry() {
     if (
       liveRouteHydrationRetryTimer !== null ||
-      liveRouteHydrationAttempts >= LIVE_ROUTE_HYDRATION_MAX_ATTEMPTS
+      liveRouteHydrationAttempts >= LIVE_ROUTE_HYDRATION_MAX_ATTEMPTS ||
+      // A hydration attempt can resolve asynchronously after a vitest file's jsdom
+      // environment (and its timer globals) has been torn down; arming the retry then
+      // throws an unhandled "setTimeout is not a function" that fails the whole run.
+      // In the WebView setTimeout always exists, so this only disarms dead test envs.
+      typeof setTimeout !== "function"
     ) {
       return;
     }
