@@ -1,6 +1,23 @@
 # CHANGELOG
 
 
+## v0.32.2 (2026-07-11)
+
+### 🔺 Fix
+
+- **privacy**: Disclose map-tile CDN egress in-app and in docs (E1)
+  ([#337](https://github.com/jtn0123/VoltTracker/pull/337),
+  [`241d2ab`](https://github.com/jtn0123/VoltTracker/commit/241d2abadbdf93cc8cae282676b28865e1987d1c))
+
+- **security**: Tighten dashboard CSP style-src to 'self' (E2)
+  ([#338](https://github.com/jtn0123/VoltTracker/pull/338),
+  [`d1ea7d7`](https://github.com/jtn0123/VoltTracker/commit/d1ea7d7481e6c8b2f2f6d2a88dac141adf56b80c))
+
+- **ui**: Surface a retry toast when a lazy dashboard chunk fails to load
+  ([#336](https://github.com/jtn0123/VoltTracker/pull/336),
+  [`98a0ede`](https://github.com/jtn0123/VoltTracker/commit/98a0edeb1650ed10287c02df1bc3cf31e9bb0e2d))
+
+
 ## v0.32.1 (2026-07-11)
 
 ### 🔺 Fix
