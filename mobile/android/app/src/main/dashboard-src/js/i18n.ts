@@ -39,6 +39,10 @@ export const EN = {
   "drive.trace.waitingForSamples": "speed trace appears once samples stream in",
   "drive.power.waitingForSamples": "Waiting for power samples",
   "drive.soc.waitingForSamples": "Waiting for SOC samples",
+  // core.ts lazy-chunk loader: shown when a lazy panel chunk fails to load.
+  // The nulled ensure*Module promise makes the next tap retry, so tell the
+  // user that instead of leaving the tap a silent no-op.
+  "lazy.chunkLoadFailed": "Couldn't load this panel — tap to try again",
 } as const;
 
 /** Every translatable key. Derived from `EN` so call sites are compile-checked. */
