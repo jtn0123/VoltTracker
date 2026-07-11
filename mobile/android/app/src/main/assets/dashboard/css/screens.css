@@ -1002,7 +1002,8 @@ pre {
      fault escalates it. */
 .nav-badge[data-severity="fault"] {
   background: var(--bad);
-  color: #fff;
+  /* White ink on the saturated bad fill in both themes. */
+  color: var(--on-control);
 }
 
 .nav-badge {
@@ -1923,7 +1924,8 @@ body.map-full-active .bottom-nav {
 
 /* Right-edge fade when there are more chips offscreen, so users can tell
      the strip is scrollable. The :has check keeps it off when there's only
-     one chip and nothing to scroll. */
+     one chip and nothing to scroll. The #000 stops are alpha-mask opacity
+     values, not paint colors — keep them literal, not tokens. */
 .map-drive-chips:has(.map-drive-chip + .map-drive-chip + .map-drive-chip) {
   -webkit-mask-image: linear-gradient(
     to right,
