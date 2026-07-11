@@ -599,8 +599,11 @@ open class ObdPollingEngine(
             throw ex
         }
         logSocketOpenResult(true, openStart, "")
+        StartupTrace.mark(StartupTrace.OBD_SOCKET_CONNECTED)
         service.broadcastStatus("initializing", "Connected. Initializing ELM327 adapter...", false)
-        initializeElm327()
+        StartupTrace.measure(StartupTrace.OBD_ELM_INIT_START, StartupTrace.OBD_ELM_INIT_END) {
+            initializeElm327()
+        }
     }
 
     private fun logSocketOpenResult(
@@ -721,6 +724,7 @@ open class ObdPollingEngine(
             return
         }
         firstSampleTimingLogged = true
+        StartupTrace.mark("${StartupTrace.OBD_FIRST_SAMPLE}:live")
         service.recorder.logEvent(
             "first_sample_latency",
             "durationMs",

@@ -90,6 +90,9 @@ describe('dashboard production script bundle', () => {
     expect(match).not.toBeNull();
     const lazy = [...match[1].matchAll(/"([^"]+)"/g)].map((m) => m[1]);
     expect(lazy).toEqual([
+      'charge-history',
+      'maintenance-panel',
+      'dtc-detail',
       'insights-panel',
       'map',
       'troubleshooter',

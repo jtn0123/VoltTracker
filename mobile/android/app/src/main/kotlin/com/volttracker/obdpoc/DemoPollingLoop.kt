@@ -86,6 +86,7 @@ class DemoPollingLoop(
 
     fun run() {
         service.broadcastStatus("connected", "Demo telemetry is running without an OBD adapter.", false)
+        var firstSampleMarked = false
         val start = System.currentTimeMillis()
         while (service.running.get()) {
             val t = (System.currentTimeMillis() - start) / 1000.0
@@ -162,6 +163,13 @@ class DemoPollingLoop(
                 // Local numeric values are safe.
             }
             service.broadcastTelemetry(sample)
+            if (!firstSampleMarked) {
+                firstSampleMarked = true
+                // Demo counterpart of the live path's obd_first_sample:live mark (ObdPollingEngine.
+                // logFirstSampleTiming): lets the emulator smoke capture connect→first-sample
+                // latency without a car. The ":demo" suffix keeps it distinct from real-adapter runs.
+                StartupTrace.mark("${StartupTrace.OBD_FIRST_SAMPLE}:demo")
+            }
             if (!sleeper.sleep(1000)) {
                 return
             }
