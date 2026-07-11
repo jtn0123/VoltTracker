@@ -2,24 +2,42 @@
 // review block, the DTC (diagnostic trouble code) report, the Insights "real
 // v2" hero (battery/charge/vehicle) and the Charge tab history.
 //
-// Split out of the old panels.ts god-module (C2). Cross-module render entry
-// points are attached to the shared VD global exactly as before; the few helpers
-// the sibling panels (signals-panel.ts, insights-panel.ts) reach for —
-// isNativeError, reportNativeReadError, buildStatusCopy, toggleHidden — are
-// published on VD here so this module stays the single owner of them.
-import { el, setSvgAttrs } from "./core";
+// Split out of the old panels.ts god-module (C2). In-bundle cross-module calls
+// use typed ESM imports (C7); the Object.assign(VD, ...) at the bottom republishes
+// this module's entry points on the VD registry for the external ABI and for the
+// LAZY chunks (insights-panel.ts, signals-panel.ts, charge-history.ts,
+// maintenance-panel.ts, dtc-detail.ts) that reach for isNativeError /
+// reportNativeReadError / buildStatusCopy / toggleHidden / dtcSeverity across
+// the chunk boundary. Remaining VD.* call sites here are that same boundary in
+// the other direction (chunk-owned symbols like dtcInfo/openDtcDetail/
+// renderPackStats/loadTrips), telemetry-owned helpers that evaluate after this
+// module (formatWhen/formatDuration/dbRowCount/...), and the runtime-wrapped
+// setStatus — see vd-registry.ts.
+import {
+  bridge,
+  callBridge,
+  ensureDtcData,
+  ensureDtcDetailModule,
+  ensureInsightsModule,
+  el,
+  formatRowCount,
+  parsePayload,
+  renderMapIfLoaded,
+  setState,
+  setSvgAttrs,
+  setText,
+  state
+} from "./core";
+import { VD } from "./vd-registry";
 import { setDataState } from "./dataset-state";
 import { createNativeRequestGate } from "./native-request-gate";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { storageRollupSignature } from "./render-signatures";
 
-(function () {
-  "use strict";
+// Module scope (the old IIFE wrapper is redundant under ESM and blocks
+// `export` declarations).
 
-  const VD = window.VoltDashboard;
-  const state = VD.state;
-  const bridge = VD.bridge;
   let storageDetailsScheduled = false;
   const storageDetailsRead = createNativeRequestGate(() => handleStorageDetailsFailure());
   let applyingStorageDetails = false;
@@ -48,11 +66,7 @@ import { storageRollupSignature } from "./render-signatures";
         if (typeof VD.loadInsights === "function") VD.loadInsights();
       }
     };
-    if (typeof VD.ensureInsightsModule === "function") {
-      void VD.ensureInsightsModule().then(load).catch(() => {});
-      return;
-    }
-    load();
+    void ensureInsightsModule().then(load).catch(() => {});
   }
 
   // Plain boolean (not a type predicate): the parsed payloads it screens —
@@ -60,7 +74,7 @@ import { storageRollupSignature } from "./render-signatures";
   // VoltNativeError, so a `payload is VoltNativeError` guard would narrow the
   // happy-path value to `never`. Callers read the error fields off the same
   // payload after the check.
-  function isNativeError(payload: unknown): boolean {
+  export function isNativeError(payload: unknown): boolean {
     const candidate = payload as VoltNativeError | null;
     return (
       candidate != null &&
@@ -70,7 +84,7 @@ import { storageRollupSignature } from "./render-signatures";
     );
   }
 
-  function reportNativeReadError(payload: unknown, fallbackDetail: string) {
+  export function reportNativeReadError(payload: unknown, fallbackDetail: string) {
     const err = (payload || {}) as VoltNativeError;
     const detail = err.message || fallbackDetail || "Could not read local storage.";
     VD.setStatus({ state: "blocked", detail });
@@ -112,10 +126,13 @@ import { storageRollupSignature } from "./render-signatures";
   }
 
   function scheduleStorageDetailsLoad() {
+    // Local capture so the narrowing from this guard flows into the deferred
+    // `load` closure (TS does not narrow imported bindings inside closures).
+    const bridgeApi = bridge;
     if (
-      !bridge ||
-      (typeof bridge.getStorageDetails !== "function" &&
-        typeof bridge.requestStorageDetails !== "function")
+      !bridgeApi ||
+      (typeof bridgeApi.getStorageDetails !== "function" &&
+        typeof bridgeApi.requestStorageDetails !== "function")
     ) {
       return;
     }
@@ -125,15 +142,12 @@ import { storageRollupSignature } from "./render-signatures";
     const load = () => {
       storageDetailsScheduled = false;
       try {
-        if (typeof bridge.requestStorageDetails === "function" && bridge.requestStorageDetails()) {
+        if (typeof bridgeApi.requestStorageDetails === "function" && bridgeApi.requestStorageDetails()) {
           storageDetailsRead.begin();
           return;
         }
-        if (typeof bridge.getStorageDetails !== "function") return;
-        const payload =
-          typeof VD.callBridge === "function"
-            ? VD.callBridge("getStorageDetails")
-            : bridge.getStorageDetails();
+        if (typeof bridgeApi.getStorageDetails !== "function") return;
+        const payload = callBridge("getStorageDetails");
         if (payload == null) {
           handleStorageDetailsFailure();
           return;
@@ -158,8 +172,8 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function setStorage(payload: unknown) {
-    const parsed = VD.parsePayload<VoltStorageSummary>(payload, {});
+  export function setStorage(payload: unknown) {
+    const parsed = parsePayload<VoltStorageSummary>(payload, {});
     validatePayload("setStorage", parsed);
     if (isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
@@ -173,7 +187,7 @@ import { storageRollupSignature } from "./render-signatures";
       state.storage = storageError;
       updateStorageUi();
       renderRealV2Ui();
-      VD.renderMapIfLoaded();
+      renderMapIfLoaded();
       VD.updateValidationUi();
       return;
     }
@@ -187,9 +201,9 @@ import { storageRollupSignature } from "./render-signatures";
       if (isDetails) {
         const details = { ...(parsed as Record<string, unknown>) };
         delete details.storageDetails;
-        VD.setState({ realStorage: { ...(state.realStorage || {}), ...details } });
+        setState({ realStorage: { ...(state.realStorage || {}), ...details } });
       } else {
-        VD.setState({ realStorage: parsed });
+        setState({ realStorage: parsed });
         scheduleStorageDetailsLoad();
       }
       return;
@@ -206,7 +220,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
     updateStorageUi();
     renderRealV2Ui();
-    VD.renderMapIfLoaded();
+    renderMapIfLoaded();
     VD.updateValidationUi();
     if (!isDetails) {
       // Only invalidate + reload the trips/insights rollups (which rebuild every
@@ -227,7 +241,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function updateStorageUi() {
+  export function updateStorageUi() {
     const storage = state.storage || {};
     const sessions = Number(storage.sessionCount || 0);
     const samples = Number(storage.sampleCount || 0);
@@ -241,26 +255,26 @@ import { storageRollupSignature } from "./render-signatures";
     const cellRows = Number(storage.cellSnapshotCount || 0);
     const dbCard = el("dbCard");
     if (dbCard) dbCard.classList.toggle("is-empty", VD.dbRowCount(storage) === 0);
-    VD.setText("dbSessionCount", sessions);
-    VD.setText("dbSampleCount", samples);
-    VD.setText("dbEventCount", events);
-    VD.setText("dbPidCount", pidRows);
-    VD.setText("dbDtcCount", dtcRows);
-    VD.setText("dbLocationCount", locationRows);
-    VD.setText("dbTripCount", tripRows);
-    VD.setText("dbChargeCount", chargeRows);
-    VD.setText("dbBatteryCount", batteryRows + cellRows);
-    VD.setText("dbSize", VD.formatBytes(Number(storage.databaseBytes || 0)));
+    setText("dbSessionCount", sessions);
+    setText("dbSampleCount", samples);
+    setText("dbEventCount", events);
+    setText("dbPidCount", pidRows);
+    setText("dbDtcCount", dtcRows);
+    setText("dbLocationCount", locationRows);
+    setText("dbTripCount", tripRows);
+    setText("dbChargeCount", chargeRows);
+    setText("dbBatteryCount", batteryRows + cellRows);
+    setText("dbSize", VD.formatBytes(Number(storage.databaseBytes || 0)));
     // Presence check, not truthiness: a legitimate rawTelemetryCount of 0 must
     // render as 0 — only fall back to the sample count when the field is
     // missing (null/undefined) or non-numeric.
     const rawTelemetry = storage.rawTelemetryCount == null ? NaN : Number(storage.rawTelemetryCount);
-    VD.setText("dbRawTelemetryCount", Number.isFinite(rawTelemetry) ? rawTelemetry : samples);
-    VD.setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
-    VD.setText("dbState", VD.formatRowCount(VD.dbRowCount(storage)));
+    setText("dbRawTelemetryCount", Number.isFinite(rawTelemetry) ? rawTelemetry : samples);
+    setText("dbEmptyTelemetryCount", Number(storage.emptyTelemetryCount || 0));
+    setText("dbState", formatRowCount(VD.dbRowCount(storage)));
     const last = storage.lastEventAtMs || storage.lastStartedAtMs;
     const sampleLabel = `${samples} sample${samples === 1 ? "" : "s"}`;
-    VD.setText("dbSummaryTitle", sessions ? (last ? `${sampleLabel} · ${VD.formatWhen(last)}` : sampleLabel) : "No stored sessions yet");
+    setText("dbSummaryTitle", sessions ? (last ? `${sampleLabel} · ${VD.formatWhen(last)}` : sampleLabel) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
     updateDiagnosticCodeUi();
@@ -313,7 +327,7 @@ import { storageRollupSignature } from "./render-signatures";
   // innerHTML += template literals so storage strings can never be reinterpreted
   // as markup. Each builder returns a single root Element.
 
-  function buildStatusCopy(text: string) {
+  export function buildStatusCopy(text: string) {
     const p = document.createElement("p");
     p.className = "status-copy";
     p.textContent = text;
@@ -347,7 +361,7 @@ import { storageRollupSignature } from "./render-signatures";
   // nothing. Memoized like lastDtcListSig.
   let lastReviewSig = "";
 
-  function updateDiagnosticCodeUi() {
+  export function updateDiagnosticCodeUi() {
     const storage = state.storage || {};
     const codes = Array.isArray(storage.latestDiagnosticCodes) ? storage.latestDiagnosticCodes : [];
     const list = el("dtcList");
@@ -361,9 +375,9 @@ import { storageRollupSignature } from "./render-signatures";
     const storedOrCurrent = Number(statusCounts.stored || 0) + Number(statusCounts.current || 0);
     const latestSeen = codes.reduce((latest, code) => Math.max(latest, Number(code.lastSeenMs || 0)), 0);
     const needsDtcData = codes.length > 0 && typeof VD.dtcInfo !== "function";
-    VD.setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
-    VD.setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
-    VD.setText("dtcTotalCount", totalCodes);
+    setText("dtcTitle", totalCodes ? `${totalCodes} code${totalCodes === 1 ? "" : "s"} saved` : "No car-code scan yet");
+    setText("dtcReportBadge", needsDtcData ? "loading details" : totalCodes ? "evidence saved" : "ready");
+    setText("dtcTotalCount", totalCodes);
     // X3: mirror the count onto the Diag nav badge so saved codes are visible
     // from every tab (hidden at zero).
     const navBadge = document.getElementById("navDiagBadge");
@@ -385,19 +399,19 @@ import { storageRollupSignature } from "./render-signatures";
       });
       navBadge.dataset.severity = hasCurrent || hasCritical ? "fault" : "info";
     }
-    VD.setText("dtcStoredCount", storedOrCurrent);
-    VD.setText("dtcPendingCount", Number(statusCounts.pending || 0));
-    VD.setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
-    VD.setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
-    VD.setText("dtcLastSeen", latestSeen ? VD.formatWhen(latestSeen) : "--");
+    setText("dtcStoredCount", storedOrCurrent);
+    setText("dtcPendingCount", Number(statusCounts.pending || 0));
+    setText("dtcPermanentCount", Number(statusCounts.permanent || 0));
+    setText("dtcFreezeCount", Number(statusCounts["freeze-frame"] || 0));
+    setText("dtcLastSeen", latestSeen ? VD.formatWhen(latestSeen) : "--");
     if (!list) return;
-    if (needsDtcData && typeof VD.ensureDtcData === "function") {
-      VD.ensureDtcData()
+    if (needsDtcData) {
+      ensureDtcData()
         .then(() => {
-          if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+          updateDiagnosticCodeUi();
         })
         .catch(() => {
-          VD.setText("dtcReportBadge", "details unavailable");
+          setText("dtcReportBadge", "details unavailable");
         });
     }
     // Memo: storage pushes arrive constantly (every status broadcast), and an
@@ -682,18 +696,18 @@ import { storageRollupSignature } from "./render-signatures";
     const reviewCard = el("reviewCard");
     if (reviewCard) reviewCard.classList.toggle("has-session", hasSession);
 
-    VD.setText("reviewTitle", hasSession
+    setText("reviewTitle", hasSession
       ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
-    VD.setText("reviewMaxSpeed", maxSpeed ? units.speedText(maxSpeed) : "--");
-    VD.setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
-    VD.setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
-    VD.setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
-    VD.setText("reviewBackground", backgroundSamples ? `${backgroundSamples} sample${backgroundSamples === 1 ? "" : "s"}` : "--");
-    VD.setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
-    VD.setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
-    VD.setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
-    VD.setText("pidFrameTitle", frames.length ? `${frames.length} latest frame${frames.length === 1 ? "" : "s"}` : "Waiting for scan data");
+    setText("reviewMaxSpeed", maxSpeed ? units.speedText(maxSpeed) : "--");
+    setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
+    setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
+    setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
+    setText("reviewBackground", backgroundSamples ? `${backgroundSamples} sample${backgroundSamples === 1 ? "" : "s"}` : "--");
+    setText("reviewGaps", sampleGaps ? `${sampleGaps}` : "0");
+    setText("reviewUsefulSamples", usefulSamples ? `${usefulSamples}` : "--");
+    setText("reviewEmptySamples", emptySamples ? `${emptySamples}` : "0");
+    setText("pidFrameTitle", frames.length ? `${frames.length} latest frame${frames.length === 1 ? "" : "s"}` : "Waiting for scan data");
 
     const warningList = el("reviewWarnings");
     if (warningList) {
@@ -930,7 +944,7 @@ import { storageRollupSignature } from "./render-signatures";
     const raw = typeof payload === "string" ? payload : JSON.stringify(payload ?? []);
     if (raw === sohLastRaw) return;
     sohLastRaw = raw;
-    const parsed = VD.parsePayload<Array<Record<string, unknown>>>(raw, []);
+    const parsed = parsePayload<Array<Record<string, unknown>>>(raw, []);
     validatePayload("setBatterySohHistory", parsed);
     sohPoints = Array.isArray(parsed)
       ? parsed
@@ -1075,16 +1089,16 @@ import { storageRollupSignature } from "./render-signatures";
     if (stats) stats.hidden = !has;
     if (empty) empty.hidden = has;
     if (!has) {
-      VD.setText("sohTrendTitle", "No battery-health readings yet");
+      setText("sohTrendTitle", "No battery-health readings yet");
       if (latestEl) latestEl.textContent = points.length === 1 ? `${points[0]!.soh.toFixed(1)}%` : "--";
       return;
     }
     const latest = points[points.length - 1]!;
-    VD.setText("sohTrendTitle", "Pack state-of-health over time");
+    setText("sohTrendTitle", "Pack state-of-health over time");
     if (latestEl) latestEl.textContent = `${latest.soh.toFixed(1)}%`;
-    VD.setText("sohTrendCapacity", Number.isFinite(latest.cap) ? `${latest.cap.toFixed(1)} Ah` : "--");
-    VD.setText("sohTrendCount", String(points.length));
-    VD.setText("sohTrendSpan", sohSpanLabel(points[0]!.at, latest.at));
+    setText("sohTrendCapacity", Number.isFinite(latest.cap) ? `${latest.cap.toFixed(1)} Ah` : "--");
+    setText("sohTrendCount", String(points.length));
+    setText("sohTrendSpan", sohSpanLabel(points[0]!.at, latest.at));
     if (chart) chart.replaceChildren(buildSohSvg(points));
   }
 
@@ -1120,7 +1134,7 @@ import { storageRollupSignature } from "./render-signatures";
       ? trips.find((row) => String(row.id) === sessionId) || null
       : null;
     const durationMs = trip && trip.durationMs != null ? Number(trip.durationMs) : NaN;
-    VD.setText(
+    setText(
       "tripTimeValue",
       Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function"
         ? VD.formatDuration(durationMs)
@@ -1130,13 +1144,13 @@ import { storageRollupSignature } from "./render-signatures";
     const hasEnergy = Number.isFinite(energyKwh) && energyKwh > 0;
     const tripMeters = trip && trip.distanceMeters != null ? Number(trip.distanceMeters) : routeDistance;
     const miles = Number.isFinite(tripMeters) && tripMeters > 0 ? tripMeters / 1609.344 : NaN;
-    VD.setText(
+    setText(
       "tripEffValue",
       hasEnergy && Number.isFinite(miles) && miles > 0
         ? units.efficiencyText(miles / energyKwh)
         : "--"
     );
-    VD.setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
+    setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
     if (!cost) return;
     const rate = prefs.get<number>("pricePerKwh", 0);
     if (hasEnergy && rate > 0) {
@@ -1155,7 +1169,7 @@ import { storageRollupSignature } from "./render-signatures";
     }
   }
 
-  function renderRealV2Ui() {
+  export function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
     const charge = storage.chargeSummary || {};
@@ -1168,14 +1182,14 @@ import { storageRollupSignature } from "./render-signatures";
     toggleHidden("chargeSummaryGrid", !hasCharge);
     toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
-    VD.setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
-    VD.setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
+    setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
+    setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
     renderThisTripCard(route, routeDistance);
 
-    VD.setText("realChargeHints", Number(charge.chargingHintCount || 0));
-    VD.setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
+    setText("realChargeHints", Number(charge.chargingHintCount || 0));
+    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
     // Charge history is an on-demand lazy chunk (charge-history.ts); treat its
     // renderer as an optional subscriber, like updateEnhancedCapabilityUi.
     if (typeof VD.renderChargeSessions === "function") VD.renderChargeSessions(charge);
@@ -1197,10 +1211,10 @@ import { storageRollupSignature } from "./render-signatures";
       // vehicle state only when the car actually reported one, and never
       // print pipeline caveats in the tab's first card.
       const socRound = Math.round(soc);
-      VD.setText("realPackTitle", `Pack at ${socRound}%${socRound <= 15 ? " — low" : socRound <= 30 ? " — getting low" : ""}`);
+      setText("realPackTitle", `Pack at ${socRound}%${socRound <= 15 ? " — low" : socRound <= 30 ? " — getting low" : ""}`);
       const stateText = latest.vehicleState && latest.vehicleState !== "unknown" ? String(latest.vehicleState) : "";
       const powerText = Number.isFinite(power) ? (power < -0.05 ? `Regenerating ${Math.abs(power).toFixed(1)} kW` : power > 0.05 ? `Drawing ${power.toFixed(1)} kW` : "") : "";
-      VD.setText("realPackCopy", [stateText, powerText].filter(Boolean).join(" · ") || "From the latest logged reading.");
+      setText("realPackCopy", [stateText, powerText].filter(Boolean).join(" · ") || "From the latest logged reading.");
     } else {
       if (ring) {
         ring.style.setProperty("--v", "0");
@@ -1208,8 +1222,8 @@ import { storageRollupSignature } from "./render-signatures";
         delete ring.dataset.level;
       }
       if (ringValue) ringValue.textContent = "--";
-      VD.setText("realPackTitle", "Waiting for battery readings");
-      VD.setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
+      setText("realPackTitle", "Waiting for battery readings");
+      setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
     if (typeof VD.renderPackStats === "function") VD.renderPackStats(latest);
 
@@ -1242,12 +1256,12 @@ import { storageRollupSignature } from "./render-signatures";
     const name = vehicle.name || vehicle.nickname || "";
     const known = Boolean(name || identity || vehicle.vin);
 
-    VD.setText("vehicleName", name || identity || "No vehicle identified yet");
-    VD.setText("vehicleSummary", known
+    setText("vehicleName", name || identity || "No vehicle identified yet");
+    setText("vehicleSummary", known
       ? "Read from your vehicle. Blank fields fill in as more readings come through."
       : "Your vehicle's details fill in automatically once the VIN and odometer are read.");
-    VD.setText("vehicleVin", vehicle.vin || "--");
-    VD.setText("vehicleYear", year || "--");
+    setText("vehicleVin", vehicle.vin || "--");
+    setText("vehicleYear", year || "--");
 
     const odoMiles = Number(vehicle.odometerMiles);
     const odoKm = Number(vehicle.odometerKm);
@@ -1262,13 +1276,13 @@ import { storageRollupSignature } from "./render-signatures";
       const v = odoMetric ? odoKm : odoKm * 0.621371;
       odometer = `${Math.round(v).toLocaleString()} ${odoMetric ? "km" : "mi"}`;
     }
-    VD.setText("vehicleOdometer", odometer);
+    setText("vehicleOdometer", odometer);
 
     const loggedMeters = Number(insights.totalDistanceMeters || 0);
-    VD.setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
+    setText("vehicleLoggedDistance", loggedMeters > 0 ? VD.formatDistance(loggedMeters) : "--");
   }
 
-  function toggleHidden(id: string, hidden: unknown) {
+  export function toggleHidden(id: string, hidden: unknown) {
     const node = el(id);
     if (node) node.hidden = Boolean(hidden);
   }
@@ -1287,13 +1301,11 @@ import { storageRollupSignature } from "./render-signatures";
       VD.openDtcDetail(code);
       return;
     }
-    if (typeof VD.ensureDtcDetailModule === "function") {
-      void VD.ensureDtcDetailModule()
-        .then(() => {
-          if (typeof VD.openDtcDetail === "function") VD.openDtcDetail(code);
-        })
-        .catch(() => {});
-    }
+    void ensureDtcDetailModule()
+      .then(() => {
+        if (typeof VD.openDtcDetail === "function") VD.openDtcDetail(code);
+      })
+      .catch(() => {});
   }
 
   Object.assign(VD, {
@@ -1325,6 +1337,5 @@ import { storageRollupSignature } from "./render-signatures";
     severityLabel,
     drivabilityLine
   });
-})();
 
 export {};

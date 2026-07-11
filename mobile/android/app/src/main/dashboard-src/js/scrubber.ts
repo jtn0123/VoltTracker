@@ -1,4 +1,8 @@
 import { haversineMetersJs } from "./map-route-utils";
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
   // Route scrubber for the Map tab. Drag through a logged drive to inspect
   // speed / elevation / grade / battery / efficiency at each point. Fed by
@@ -6,7 +10,6 @@ import { haversineMetersJs } from "./map-route-utils";
   // lights up once route points carry a derived `eff` field (set by
   // VD.enrichRouteEff once telemetry_samples.power_kw is available).
 
-  const VD = window.VoltDashboard;
   const el = VD.el;
   const units = VD.units;
 

@@ -11,7 +11,7 @@
 // JS-side callers legitimately send partial payloads (e.g. a local
 // setStatus({state, detail})), so absence is not a finding — except for
 // setStatus.state, which every producer (native and local) always sends.
-const VD = window.VoltDashboard;
+import { VD } from "./vd-registry";
 
 // expected `typeof`; "object" additionally rejects arrays.
 type FieldTypes = Record<string, string>;

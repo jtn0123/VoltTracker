@@ -9,7 +9,10 @@
 //
 // The low-voltage hint markup lives in the same partial but is owned by
 // connection-status.ts (it observes every status broadcast for `lastVoltage`).
-const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 const bridge = window.VoltTrackerAndroid || null;
 const el = (id: string) => document.getElementById(id);
 

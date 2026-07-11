@@ -15,11 +15,14 @@
 // cost-model is a small shared leaf module (insights-panel bundles it the same
 // way); everything else is read off VD to avoid duplicating core/prefs here.
 import { rateForCharger } from "./cost-model";
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
 (function () {
   "use strict";
 
-  const VD = window.VoltDashboard;
   const bridge = VD.bridge;
   const el = VD.el;
   const setSvgAttrs = VD.setSvgAttrs;

@@ -1,4 +1,5 @@
 import { confirmAppDialog } from "./app-dialog";
+import { actionModulesRegistry } from "./vd-registry";
 
 type SignalActionContext = {
   VD: VoltDashboard;
@@ -156,5 +157,4 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
   return { exportSignalLog, exportSignalLogs, deleteSignalLog };
 }
 
-window.VoltDashboardActionModules = window.VoltDashboardActionModules || {};
-window.VoltDashboardActionModules.createSignalActions = createSignalActions;
+actionModulesRegistry().createSignalActions = createSignalActions;

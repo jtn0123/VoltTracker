@@ -19,11 +19,14 @@ import {
 import { haversineMetersJs, numOrNaN } from "./map-route-utils";
 import { createNativeRequestGate } from "./native-request-gate";
 import { prefs, units } from "./prefs";
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
 (function () {
   "use strict";
 
-  const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;

@@ -7,8 +7,13 @@
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
 import { resolveDeviceLocale, t } from "./i18n";
+import { parsePayload, state } from "./core";
 import { units } from "./prefs";
 import { formatDuration, formatWhen, gpsText } from "./telemetry";
+// VD is imported (never window-read) for the setStatus/updateTelemetry observer
+// wraps below — those must re-read and re-assign the live registry slots so
+// every wrap in the chain (actions.ts / troubleshooter.ts) composes.
+import { VD } from "./vd-registry";
 
 // Pick up the device locale once at module load so the demo-migrated copy below
 // resolves to a registered translation when one matches navigator.language. The
@@ -28,7 +33,6 @@ type LowVoltageStatus = {
 
 type StatusHandler = (payload: unknown) => unknown;
 
-const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
 const bridge = window.VoltTrackerAndroid || null;
 const el = (id: string) => document.getElementById(id);
 
@@ -384,7 +388,7 @@ let popoverOpener: HTMLElement | null = null;
 // of recasting everything to Record<string, unknown>, so field access below is
 // compiler-checked against the bridge payload shapes.
 function dashboardState(): DashboardState {
-  return VD.state;
+  return state;
 }
 
 function statusPopoverEl() {
@@ -639,9 +643,7 @@ function installStatusObserver() {
         result = prior(payload);
       }
       try {
-        const parsed = VD.parsePayload
-          ? VD.parsePayload<LowVoltageStatus>(payload, {})
-          : (payload as LowVoltageStatus | null | undefined);
+        const parsed = parsePayload<LowVoltageStatus>(payload, {});
         noteStatus(parsed);
       } catch (_err) {
         // Observer must never break the underlying setStatus call.

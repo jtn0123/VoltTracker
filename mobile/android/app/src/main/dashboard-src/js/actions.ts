@@ -1,6 +1,46 @@
 import { confirmAppDialog, promptAppDialog } from "./app-dialog";
 import { bindPageDragScroll } from "./actions-page-scroll";
-import { bindListenerGuarded, el } from "./core";
+import { VD, actionModulesRegistry } from "./vd-registry";
+import { prefs, scrollToSettingsSection } from "./prefs";
+import { renderRealV2Ui, updateDiagnosticCodeUi, updateStorageUi } from "./storage-status";
+import {
+  cellGridHasFull,
+  getLastDevice,
+  getSelectedDevice,
+  isCellGridOpen,
+  setCellGridOpen,
+  showToast,
+  updateDiagnostics,
+  updateLiveUi
+} from "./telemetry";
+import {
+  bindListenerGuarded,
+  bridge,
+  clearDemoTelemetry,
+  el,
+  ensureChargeHistoryModule,
+  ensureDemoData,
+  ensureDtcData,
+  ensureDtcDetailModule,
+  ensureInsightsModule,
+  ensureMaintenancePanelModule,
+  ensureMapModule,
+  ensureTroubleshooterModule,
+  loadDashboardScript,
+  openTripFromNative,
+  parsePayload,
+  renderMapIfLoaded,
+  reportClientError,
+  requestMapRender,
+  scrollAppToTop,
+  setDemoActive,
+  setDevices,
+  setHistory,
+  setState,
+  setText,
+  setView,
+  state
+} from "./core";
 import { setDataState } from "./dataset-state";
 import type { DataStateValue } from "./dataset-state";
 import { createFocusTrap } from "./focus-trap";
@@ -42,9 +82,11 @@ type SignalActions = {
  * the same pattern via `VoltDashboard.errorController`; reset there too if you
  * ever need to tear everything down.
  */
-  const VD = window.VoltDashboard;
-  const state = VD.state;
-  const bridge = VD.bridge;
+  // VD: ABI/cross-chunk registry (vd-registry.ts). Still read late-bound here for
+  // (a) lazy-chunk symbols (loadDemoScenario/openDtcDetail/loadTrips/...) after
+  // their ensure*Module() resolves, (b) the runtime-wrapped setStatus/
+  // updateTelemetry/pendingLazyLoads chain, and (c) assembling the
+  // window.VoltTrackerNative ABI below.
 
   function bridgeFailureMessage(method: string, err: unknown) {
     const detail = err instanceof Error && err.message ? err.message : String(err || "");
@@ -57,7 +99,7 @@ type SignalActions = {
     let reported = false;
     if (typeof VD.reportClientError === "function") {
       try {
-        VD.reportClientError("bridge.call_failed", message);
+        reportClientError("bridge.call_failed", message);
         reported = true;
       } catch (_ignored) {}
     }
@@ -167,7 +209,7 @@ type SignalActions = {
     if (typeof VD.loadDashboardScript !== "function") {
       return Promise.reject(new Error("Dashboard script loader is not available."));
     }
-    const load = VD.loadDashboardScript(src)
+    const load = loadDashboardScript(src)
       .then(() => {
         const loaded = resolveModule();
         if (!loaded) throw new Error(label + " loaded but did not register.");
@@ -175,7 +217,7 @@ type SignalActions = {
       })
       .catch((err) => {
         const message = err instanceof Error ? err.message : String(err || "unknown error");
-        if (typeof VD.reportClientError === "function") VD.reportClientError(label + ".load", message);
+        if (typeof VD.reportClientError === "function") reportClientError(label + ".load", message);
         if (typeof VD.setStatus === "function") {
           VD.setStatus({ state: "blocked", detail: "Dashboard action module failed to load." });
         }
@@ -193,7 +235,7 @@ type SignalActions = {
         "js/actions-storage.js",
         "actions-storage",
         () => {
-          const factory = window.VoltDashboardActionModules?.createStorageActions;
+          const factory = actionModulesRegistry().createStorageActions;
           if (typeof factory !== "function") return null;
           storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
           return storageActions;
@@ -213,7 +255,7 @@ type SignalActions = {
         "js/actions-signals.js",
         "actions-signals",
         () => {
-          const factory = window.VoltDashboardActionModules?.createSignalActions;
+          const factory = actionModulesRegistry().createSignalActions;
           if (typeof factory !== "function") return null;
           signalActions = factory({ VD, bridge }) as SignalActions;
           return signalActions;
@@ -227,14 +269,14 @@ type SignalActions = {
   }
 
   function ensureBrowserDemoStream(): Promise<(dashboard: VoltDashboard, dashboardState: DashboardState) => void> {
-    const loaded = window.VoltDashboardActionModules?.runBrowserDemoStream;
+    const loaded = actionModulesRegistry().runBrowserDemoStream;
     if (typeof loaded === "function") return Promise.resolve(loaded);
     if (!demoActionsPromise) {
       demoActionsPromise = loadActionScript(
         "js/actions-demo.js",
         "actions-demo",
         () => {
-          const run = window.VoltDashboardActionModules?.runBrowserDemoStream;
+          const run = actionModulesRegistry().runBrowserDemoStream;
           return typeof run === "function" ? run : null;
         }
       ).catch((err) => {
@@ -318,18 +360,18 @@ type SignalActions = {
     // callBridge tolerates a native build that predates a method (warns once,
     // returns undefined) instead of throwing mid-refresh.
     const devices = readBridgeValue("listDevices", [], "Could not refresh adapter list.");
-    if (devices !== undefined) VD.setDevices(devices);
+    if (devices !== undefined) setDevices(devices);
     if (typeof bridge.getDeviceHistory === "function") {
       const history = readBridgeValue("getDeviceHistory", [], "Could not refresh adapter history.");
-      if (history !== undefined) VD.setHistory(history);
+      if (history !== undefined) setHistory(history);
     }
   }
 
   function showBlockedAdapterFeedback(detail: string) {
     VD.setStatus({ state: "blocked", detail });
-    VD.setText("adapterSummary", "Adapter needed");
-    VD.setText("appStateSummary", detail);
-    VD.setText("statusCopy", detail);
+    setText("adapterSummary", "Adapter needed");
+    setText("appStateSummary", detail);
+    setText("statusCopy", detail);
     const reviewWarnings = el("reviewWarnings");
     if (reviewWarnings) {
       const p = document.createElement("p");
@@ -398,7 +440,7 @@ type SignalActions = {
       return;
     }
     pendingPermissionConnect = null;
-    if (VD.getSelectedDevice()) {
+    if (getSelectedDevice()) {
       connectSelected(pending.scan, null);
     } else {
       showBlockedAdapterFeedback(
@@ -412,7 +454,7 @@ type SignalActions = {
       VD.setEnhancedBadge(label, tone);
       return;
     }
-    VD.setText("enhancedBadge", label);
+    setText("enhancedBadge", label);
     setDataState(el("enhancedBadge"), tone);
   }
 
@@ -428,7 +470,7 @@ type SignalActions = {
   }
 
   function connectSelected(scan: boolean, button?: BusyButton | null, quick = false) {
-    const selected = VD.getSelectedDevice();
+    const selected = getSelectedDevice();
     if (!selected) {
       explainMissingAdapter(scan, true);
       return;
@@ -465,8 +507,8 @@ type SignalActions = {
     if (scan) {
       if (typeof VD.startDtcScanProgress === "function") {
         VD.startDtcScanProgress(quick);
-      } else if (typeof VD.ensureDtcDetailModule === "function") {
-        void VD.ensureDtcDetailModule().then(() => VD.startDtcScanProgress?.(quick)).catch(() => {});
+      } else {
+        void ensureDtcDetailModule().then(() => VD.startDtcScanProgress?.(quick)).catch(() => {});
       }
     }
     // Guard the bridge call so a quick double-tap doesn't issue two
@@ -489,7 +531,7 @@ type SignalActions = {
   }
 
   function detailProbeSelected(button?: BusyButton | null) {
-    const selected = VD.getSelectedDevice();
+    const selected = getSelectedDevice();
     if (!selected) {
       explainMissingAdapter(false, false);
       setEnhancedProbeBadge("blocked", "blocked");
@@ -525,16 +567,16 @@ type SignalActions = {
   // hides the 96-group heatmap; when opening it for the first time (no full read
   // loaded yet) it also fires the real per-cell probe to fill the map in.
   function toggleCellGrid(button?: BusyButton | null) {
-    const isOpen = typeof VD.isCellGridOpen === "function" && VD.isCellGridOpen();
+    const isOpen = isCellGridOpen();
     const willOpen = !isOpen;
-    if (typeof VD.setCellGridOpen === "function") VD.setCellGridOpen(willOpen);
-    if (willOpen && !(typeof VD.cellGridHasFull === "function" && VD.cellGridHasFull())) {
+    setCellGridOpen(willOpen);
+    if (willOpen && !cellGridHasFull()) {
       cellProbeLast(button);
     }
   }
 
   function connectLastAdapter(button?: BusyButton | null) {
-    const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
+    const last = getLastDevice();
     if (!last || !String(last.address || "").trim()) {
       showBlockedAdapterFeedback("Connect once or pick a paired adapter before using Last.");
       return;
@@ -557,22 +599,22 @@ type SignalActions = {
       explainMissingAdapter(false, true);
       return;
     }
-    const selected = typeof VD.getSelectedDevice === "function" ? VD.getSelectedDevice() : null;
+    const selected = typeof VD.getSelectedDevice === "function" ? getSelectedDevice() : null;
     if (selected && String(selected.address || "").trim()) {
       connectSelected(false, button);
       return;
     }
-    const last = typeof VD.getLastDevice === "function" ? VD.getLastDevice() : state.lastDevice;
+    const last = getLastDevice();
     if (last && String(last.address || "").trim()) {
       connectLastAdapter(button);
       return;
     }
     // No safe connection target exists yet. Take the user to the exact setup
     // control, refresh the paired list, and explain the blocker there.
-    VD.setView("settings");
+    setView("settings");
     refreshDevices();
     window.setTimeout(() => {
-      VD.scrollToSettingsSection?.("settingsConnection");
+      scrollToSettingsSection("settingsConnection");
       const select = el("deviceSelect") as HTMLSelectElement | null;
       if (select && !select.disabled) select.focus({ preventScroll: true });
     }, 80);
@@ -626,18 +668,18 @@ type SignalActions = {
       // so a fast tap straight after startup still works.
       case "addMaintenance": {
         if (typeof VD.addMaintenanceEntry === "function") { VD.addMaintenanceEntry(); return; }
-        void VD.ensureMaintenancePanelModule().then(() => VD.addMaintenanceEntry?.()).catch(() => {});
+        void ensureMaintenancePanelModule().then(() => VD.addMaintenanceEntry?.()).catch(() => {});
         return;
       }
       case "cancelMaintenance": {
         if (typeof VD.closeMaintenanceForm === "function") { VD.closeMaintenanceForm(); return; }
-        void VD.ensureMaintenancePanelModule().then(() => VD.closeMaintenanceForm?.()).catch(() => {});
+        void ensureMaintenancePanelModule().then(() => VD.closeMaintenanceForm?.()).catch(() => {});
         return;
       }
       case "exportAllTripsCsv": exportAllTripsCsv(); return;
       case "exportChargeSessionsCsv": {
         if (typeof VD.exportChargeSessionsCsv === "function") { VD.exportChargeSessionsCsv(); return; }
-        void VD.ensureChargeHistoryModule().then(() => VD.exportChargeSessionsCsv?.()).catch(() => {});
+        void ensureChargeHistoryModule().then(() => VD.exportChargeSessionsCsv?.()).catch(() => {});
         return;
       }
       case "closeTripDetail": closeTripDetail(); return;
@@ -654,7 +696,7 @@ type SignalActions = {
       return;
     }
     if (callBridgeAction("exportAllTripsCsv", [], "All-trips export failed.")) {
-      VD.showToast?.("Exporting all drives to CSV…");
+      showToast("Exporting all drives to CSV…");
     }
   }
 
@@ -797,9 +839,9 @@ type SignalActions = {
   } | null = null;
 
   function previewDtcCodes(): Promise<void> | undefined {
-    if (!Array.isArray(VD.dtcSampleCodes) && typeof VD.ensureDtcData === "function") {
+    if (!Array.isArray(VD.dtcSampleCodes)) {
       VD.setStatus({ state: "ready", detail: "Loading DTC examples…" });
-      return VD.ensureDtcData()
+      return ensureDtcData()
         .then(previewDtcCodes)
         .catch(() => VD.setStatus({ state: "blocked", detail: "DTC examples could not be loaded." }));
     }
@@ -822,7 +864,7 @@ type SignalActions = {
       acc[k] = (acc[k] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
-    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    updateDiagnosticCodeUi();
     VD.setStatus({ state: "ready", detail: "DTC example data loaded into the Insights view." });
     return undefined;
   }
@@ -842,7 +884,7 @@ type SignalActions = {
       storage.diagnosticCodeCount = 0;
       storage.diagnosticCodeStatusCounts = {};
     }
-    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    updateDiagnosticCodeUi();
     VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
   }
 
@@ -935,7 +977,7 @@ type SignalActions = {
       return;
     }
     if (callBridgeAction(wantCsv ? "exportTripCsv" : "exportTripGpx", [routeKey], "Drive export failed.")) {
-      VD.showToast?.(wantCsv ? "Exporting drive CSV…" : "Exporting drive GPX…");
+      showToast(wantCsv ? "Exporting drive CSV…" : "Exporting drive GPX…");
     }
   }
 
@@ -1012,7 +1054,7 @@ type SignalActions = {
       return;
     }
     // v2: confirm the action with a toast (the star alone is easy to miss).
-    VD.showToast?.(next ? "Drive added to favorites" : "Removed from favorites");
+    showToast(next ? "Drive added to favorites" : "Removed from favorites");
   }
 
   // ---- M7 per-trip detail sheet --------------------------------------------
@@ -1091,8 +1133,8 @@ type SignalActions = {
     const key = button ? String((button as HTMLElement).dataset.mapSession || "").trim() : "";
     closeTripDetail();
     if (!key) return;
-    VD.setState({ selectedMapSessionId: key });
-    void VD.requestMapRender().catch(() => {});
+    setState({ selectedMapSessionId: key });
+    void requestMapRender().catch(() => {});
     el("mapCard")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }
 
@@ -1212,11 +1254,9 @@ type SignalActions = {
     if (typeof VD.dtcInfo !== "function") {
       out.hidden = false;
       out.replaceChildren(document.createTextNode("Loading code database…"));
-      if (typeof VD.ensureDtcData === "function") {
-        VD.ensureDtcData().then(renderDtcLookup).catch(() => {
-          out.replaceChildren(document.createTextNode("Code database could not be loaded."));
-        });
-      }
+      ensureDtcData().then(renderDtcLookup).catch(() => {
+        out.replaceChildren(document.createTextNode("Code database could not be loaded."));
+      });
       return;
     }
     const info = VD.dtcInfo(raw);
@@ -1261,8 +1301,8 @@ type SignalActions = {
         const row = { dtc: code, status: "lookup", statusLabel: "database entry" };
         if (typeof VD.openDtcDetail === "function") {
           VD.openDtcDetail(row);
-        } else if (typeof VD.ensureDtcDetailModule === "function") {
-          void VD.ensureDtcDetailModule().then(() => VD.openDtcDetail?.(row)).catch(() => {});
+        } else {
+          void ensureDtcDetailModule().then(() => VD.openDtcDetail?.(row)).catch(() => {});
         }
       });
       out.appendChild(detailBtn);
@@ -1300,7 +1340,7 @@ type SignalActions = {
   const DEMO_RUNNING_DETAIL = "Demo / Testing is running.";
 
   function startDemo() {
-    VD.ensureDemoData((error) => {
+    ensureDemoData((error) => {
       if (error) {
         VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
         return;
@@ -1312,7 +1352,7 @@ type SignalActions = {
       if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
       else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
       seedDemoScenario();
-      VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
+      setDemoActive(true, DEMO_RUNNING_DETAIL);
       // Choose by method availability, not bare bridge presence: an older APK's
       // bridge object may lack demo(), and callBridge would then no-op while the
       // UI claims the demo is running. Fall back to the browser demo instead.
@@ -1336,15 +1376,13 @@ type SignalActions = {
     const scenario = currentDemoScenario();
     if (typeof VD.loadDemoScenario === "function") {
       VD.loadDemoScenario(scenario);
-    } else if (typeof VD.ensureMapModule === "function") {
-      void VD.ensureMapModule()
+    } else {
+      void ensureMapModule()
         .then(() => {
           if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
           else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
         })
         .catch(() => {});
-    } else if (typeof VD.loadSampleData === "function") {
-      VD.loadSampleData();
     }
   }
 
@@ -1371,16 +1409,16 @@ type SignalActions = {
       state.appState = Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
       // Clear the demo-mode shadow copies (cross-module invariant: they gate
       // whether storage/trips/insights renders read real vs preview data).
-      VD.setState({
+      setState({
         demoPreviewStorage: null,
         demoPreviewTrips: null,
         demoPreviewInsights: null,
         demoPreviewAppState: null,
         _mapSampleLoaded: false
       });
-      VD.updateStorageUi();
-      VD.renderRealV2Ui();
-      VD.renderMapIfLoaded();
+      updateStorageUi();
+      renderRealV2Ui();
+      renderMapIfLoaded();
       if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
       if (typeof VD.renderInsightScatter === "function") VD.renderInsightScatter();
       return;
@@ -1390,15 +1428,11 @@ type SignalActions = {
       if (typeof VD.loadTrips === "function") VD.loadTrips(VD.forceLazyStorageRead);
       if (typeof VD.loadInsights === "function") VD.loadInsights(VD.forceLazyStorageRead);
     };
-    if (typeof VD.ensureInsightsModule === "function") {
-      void VD.ensureInsightsModule().then(refreshRollups).catch(() => {});
-    } else {
-      refreshRollups();
-    }
-    if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
-    VD.renderMapIfLoaded();
+    void ensureInsightsModule().then(refreshRollups).catch(() => {});
+    renderRealV2Ui();
+    renderMapIfLoaded();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
-    VD.setState({
+    setState({
       demoPreviewStorage: null,
       demoPreviewTrips: null,
       demoPreviewInsights: null,
@@ -1409,11 +1443,11 @@ type SignalActions = {
   function stopDemo() {
     window.clearInterval(window.__voltDemoTimer ?? undefined);
     const stopped = !bridge || !state.demoActive || callBridgeAction("disconnect", [], "Could not stop the native connection.");
-    VD.clearDemoTelemetry();
+    clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
-    VD.setDemoActive(false);
+    setDemoActive(false);
     refreshNativeDataAfterDemo();
-    VD.updateLiveUi();
+    updateLiveUi();
     if (stopped) VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
@@ -1421,15 +1455,15 @@ type SignalActions = {
     const wasDemo = state.demoActive;
     window.clearInterval(window.__voltDemoTimer ?? undefined);
     const stopped = !bridge || callBridgeAction("disconnect", [], "Could not stop the native connection.");
-    VD.clearDemoTelemetry();
+    clearDemoTelemetry();
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
-    VD.setDemoActive(false);
+    setDemoActive(false);
     // If a demo was running, state.storage still holds the synthetic DB summary and the
     // demoPreview* shadow fields are still set. setDemoActive(false) reloads trips/insights but
     // NOT storage, so without this the Settings DB card keeps showing demo counts next to real
     // trips until the next native push. Mirror stopDemo()'s cleanup.
     if (wasDemo) refreshNativeDataAfterDemo();
-    VD.updateLiveUi();
+    updateLiveUi();
     if (stopped) VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
@@ -1449,7 +1483,7 @@ type SignalActions = {
     document.querySelectorAll("[data-nav]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
-        VD.setView(button.dataset.nav ?? "");
+        setView(button.dataset.nav ?? "");
         button.blur();
       }, opts);
     });
@@ -1463,12 +1497,12 @@ type SignalActions = {
       const button = target && (target.closest("[data-nav-jump]") as HTMLElement | null);
       if (!button) return;
       if (button.closest("#tripDetailSheet")) closeTripDetail();
-      VD.setView(button.dataset.navJump ?? "");
+      setView(button.dataset.navJump ?? "");
       const sectionId = button.dataset.settingsTarget;
       const focusId = button.dataset.settingsFocus;
       if (sectionId) {
         window.setTimeout(() => {
-          VD.scrollToSettingsSection?.(sectionId);
+          scrollToSettingsSection(sectionId);
           if (focusId) {
             const focusTarget = el(focusId) as HTMLElement | null;
             window.setTimeout(() => {
@@ -1496,7 +1530,7 @@ type SignalActions = {
         // isolation guard (state.demoActive && state.demoPreviewStorage) let a
         // native setStorage push write real data over the demo view.
         const activateDemo = () => {
-          if (typeof VD.setDemoActive === "function") VD.setDemoActive(true, DEMO_RUNNING_DETAIL);
+          setDemoActive(true, DEMO_RUNNING_DETAIL);
         };
         // Only mark the tapped scenario button selected once the demo has actually
         // activated — otherwise a rejected ensureMapModule() (swallowed below) would
@@ -1514,8 +1548,8 @@ type SignalActions = {
           VD.loadDemoScenario(scenario);
           activateDemo();
           markScenarioActive();
-        } else if (typeof VD.ensureMapModule === "function") {
-          void VD.ensureMapModule()
+        } else {
+          void ensureMapModule()
             .then(() => {
               if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
               activateDemo();
@@ -1524,9 +1558,6 @@ type SignalActions = {
             .catch(() => {
               VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
             });
-        } else {
-          activateDemo();
-          markScenarioActive();
         }
       }, opts);
     });
@@ -1535,9 +1566,9 @@ type SignalActions = {
       button.addEventListener("click", () => {
         // The [data-map-layer] selector guarantees the attribute is present.
         state.mapLayer = button.dataset.mapLayer as string;
-        VD.prefs.set("mapLayer", state.mapLayer);
+        prefs.set("mapLayer", state.mapLayer);
         button.blur();
-        void VD.requestMapRender()
+        void requestMapRender()
           .then(() => {
             window.setTimeout(VD.renderMap, 80);
           })
@@ -1555,8 +1586,8 @@ type SignalActions = {
       const target = event.target as Element | null;
       const button = target && target.closest("[data-map-session]");
       if (!button) return;
-      VD.setState({ selectedMapSessionId: (button as HTMLElement).dataset.mapSession as string });
-      void VD.requestMapRender().catch(() => {});
+      setState({ selectedMapSessionId: (button as HTMLElement).dataset.mapSession as string });
+      void requestMapRender().catch(() => {});
     };
     // Bound before the row-select click so the export/rename buttons' stopPropagation keeps a tap
     // from also selecting the session.
@@ -1600,7 +1631,7 @@ type SignalActions = {
         browser.hidden = false;
         browser.classList.add("is-open");
       }
-      void VD.requestMapRender().catch(() => {});
+      void requestMapRender().catch(() => {});
       const search = el("mapSessionSearch") as HTMLInputElement | null;
       if (!search) return;
       window.requestAnimationFrame(() => {
@@ -1613,14 +1644,14 @@ type SignalActions = {
       const browser = document.querySelector<HTMLElement>("#view-map .map-layout");
       if (browser) browser.hidden = true;
       browser?.classList.remove("is-open");
-      void VD.requestMapRender().catch(() => {});
+      void requestMapRender().catch(() => {});
       window.setTimeout(() => (el("mapAllDrivesBtn") as HTMLElement | null)?.focus(), 0);
     }, opts);
     bindListenerGuarded("tripUndoBtn", "click", () => {
       const undo = el("tripUndoToast") as HTMLElement | null;
       const routeKey = String(undo?.dataset.routeKey || "").trim();
       if (!routeKey || !bridge || typeof bridge.restoreTrip !== "function") {
-        VD.showToast?.("This drive could not be restored", true);
+        showToast("This drive could not be restored", true);
         return;
       }
       undo!.hidden = true;
@@ -1629,20 +1660,20 @@ type SignalActions = {
     bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
     bindListenerGuarded("mapFullBtn", "click", () => {
       state.mapFull = !state.mapFull;
-      void VD.requestMapRender().catch(() => {});
+      void requestMapRender().catch(() => {});
     }, opts);
     // "Full map" in the scrubber action row (v2) — always opens (never toggles
     // closed: the row is unreachable while the map is fullscreen anyway).
     bindListenerGuarded("mapFullOpenBtn", "click", () => {
       state.mapFull = true;
-      void VD.requestMapRender().catch(() => {});
+      void requestMapRender().catch(() => {});
     }, opts);
     bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
       const target = (event.target as HTMLElement | null)?.closest("[data-live-signal-filter]") as HTMLElement | null;
       if (!target) return;
       const f = target.dataset.liveSignalFilter;
       state.liveSignalsFilter = f === "missing" || f === "all" ? f : "reporting";
-      if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
+      updateDiagnostics();
     }, opts);
     bindListenerGuarded("mapFollowBtn", "click", () => {
       // Toggle live-follow; turning it on recenters on the current drive. The map
@@ -1651,8 +1682,7 @@ type SignalActions = {
       if (typeof VD.setMapFollowLive === "function") VD.setMapFollowLive();
     }, opts);
     bindListenerGuarded("errorBannerHelp", "click", () => {
-      if (typeof VD.ensureTroubleshooterModule !== "function") return;
-      void VD.ensureTroubleshooterModule()
+      void ensureTroubleshooterModule()
         .then((dashboard) => {
           const ts = dashboard.troubleshooter;
           if (ts && typeof ts.open === "function") ts.open();
@@ -1785,7 +1815,7 @@ type SignalActions = {
   // is the ABI and must keep its exact shape.
   let tripUndoTimer = 0;
   const showTripUndo = (payload: unknown) => {
-    const parsed = VD.parsePayload<Record<string, unknown>>(payload, {});
+    const parsed = parsePayload<Record<string, unknown>>(payload, {});
     const routeKey = String(parsed.routeKey || "").trim();
     const undo = el("tripUndoToast") as HTMLElement | null;
     if (!routeKey || !undo) return;
@@ -1824,23 +1854,22 @@ type SignalActions = {
     setAppState: VD.setAppState,
     setRestoreProgress: VD.setRestoreProgress,
     updateTelemetry: VD.updateTelemetry,
-    showToast: (message: unknown) => VD.showToast?.(message),
+    showToast: (message: unknown) => showToast(message),
     showTripUndo,
     setBackupReceipt: (payload: unknown) => VD.setBackupReceipt?.(payload),
     applyRestoredPreferences: (payload: unknown) => {
-      if (VD.prefs.restoreFromBackup(payload)) VD.showToast?.("Backup settings restored");
+      if (prefs.restoreFromBackup(payload)) showToast("Backup settings restored");
     },
     openTrip: (routeKey: unknown) => {
-      if (typeof VD.openTripFromNative === "function") VD.openTripFromNative(String(routeKey || ""));
+      if (typeof VD.openTripFromNative === "function") openTripFromNative(String(routeKey || ""));
     },
     openTripReceipt: (routeKey: unknown) => {
-      if (typeof VD.openTripFromNative === "function") VD.openTripFromNative(String(routeKey || ""), true);
+      if (typeof VD.openTripFromNative === "function") openTripFromNative(String(routeKey || ""), true);
     },
-    restoreView: (view: unknown) => VD.setView(String(view || "drive"))
+    restoreView: (view: unknown) => setView(String(view || "drive"))
   };
 
   function maybeLoadTroubleshooterForStatus(payload: unknown) {
-    if (typeof VD.ensureTroubleshooterModule !== "function") return;
     const status = parseStatusPayload(payload);
     const stateName = String(status.state || "").toLowerCase();
     const detail = String(status.detail || "").toLowerCase();
@@ -1851,7 +1880,7 @@ type SignalActions = {
       stateName === "blocked" ||
       detail.includes("retrying");
     if (!needsHelp) return;
-    void VD.ensureTroubleshooterModule()
+    void ensureTroubleshooterModule()
       .then((dashboard) => {
         const ts = dashboard.troubleshooter;
         if (ts && typeof ts.noteStatus === "function") ts.noteStatus(status);
@@ -1860,7 +1889,7 @@ type SignalActions = {
   }
 
   function parseStatusPayload(payload: unknown): VoltStatus {
-    const parsed = VD.parsePayload<VoltStatus>(payload, {});
+    const parsed = parsePayload<VoltStatus>(payload, {});
     return parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   }
 
@@ -1900,12 +1929,12 @@ type SignalActions = {
   startupMark("actions_bootstrap_start");
   bindListeners();
   startupMark("actions_bind_listeners_done");
-  VD.setDemoActive(false);
+  setDemoActive(false);
   // updateLiveUi() already renders operational state, validation, diagnostics,
   // charge/cell panels, and the Drive live strip. Keep the first-paint path to
   // the Drive dashboard; storage/map/diagnostic-code summaries render after the
   // native ready handshake or when the storage payload arrives.
-  VD.updateLiveUi();
+  updateLiveUi();
   // Current Android builds publish devices/storage from onDashboardReady(). Only fall back to the
   // JS-side refresh path for browser preview or an older bridge that has no ready handshake.
   if (!bridge || typeof bridge.dashboardReady !== "function") refreshDevices();
@@ -1914,7 +1943,7 @@ type SignalActions = {
     startupMark("actions_first_frame");
     callBridgeAction("dashboardReady");
     startupMark("actions_dashboard_ready_called");
-    VD.scrollAppToTop();
+    scrollAppToTop();
   });
   // Storage overview is published by Android after the dashboardReady handshake. Trips/Insights
   // rollups are demand-loaded when the user opens Map/Insights, so startup no longer schedules
@@ -1924,12 +1953,12 @@ type SignalActions = {
     // tab taps get priority; storage payloads and active views still render on
     // demand through their normal handlers.
     startupMark("actions_secondary_render_start");
-    if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
-    if (typeof VD.renderMapIfLoaded === "function") VD.renderMapIfLoaded();
-    if (typeof VD.updateDiagnosticCodeUi === "function") VD.updateDiagnosticCodeUi();
+    renderRealV2Ui();
+    if (typeof VD.renderMapIfLoaded === "function") renderMapIfLoaded();
+    updateDiagnosticCodeUi();
     startupMark("actions_secondary_render_end");
   };
   schedulePostStartupIdle(loadDeferredPanels);
-  setTimeout(() => VD.scrollAppToTop(), 200);
+  setTimeout(() => scrollAppToTop(), 200);
 
 export {};

@@ -11,7 +11,12 @@
 // subscriber for that key plus the wildcard "*" subscribers, so a renderer can
 // re-render the moment a preference flips without a full reload.
 
-  const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
+// prefs is the FIRST module to evaluate in the eager bundle (before core.ts),
+// so its cross-module calls into later modules (updateLiveUi, setView,
+// ensureSignalsModule, ...) must stay late-bound through the VD registry —
+// importing those modules from here would flip the bundle's side-effect
+// evaluation order. See vd-registry.ts for the policy.
+import { VD } from "./vd-registry";
 
   const PREFIX = "vt.pref.";
   const keyListeners: Record<string, Array<(value: unknown) => void>> = {};
@@ -325,7 +330,8 @@
     return get<string>("diagnosticsMode", "basic") === "advanced" ? "advanced" : "basic";
   }
 
-  function applyDiagnosticsMode(): void {
+  // Exported for in-bundle ESM consumers (C7): core.ts calls it at boot.
+  export function applyDiagnosticsMode(): void {
     const advanced = diagnosticsMode() === "advanced";
     document.querySelectorAll<HTMLElement>("[data-diagnostics-expert]").forEach((node) => {
       node.hidden = !advanced;
@@ -391,7 +397,7 @@
   // telemetry's VD.showToast doesn't exist yet at load time — but it does by
   // the time any click handler runs.
   function toast(message: string): void {
-    const show = window.VoltDashboard && window.VoltDashboard.showToast;
+    const show = VD.showToast;
     if (typeof show === "function") show(message);
   }
 
@@ -529,7 +535,7 @@
     applyDiagnosticsMode();
   }
 
-  function selectDrivePreset(next: DrivePreset): void {
+  export function selectDrivePreset(next: DrivePreset): void {
     const current = drivePreset();
     if (next === "focus") {
       if (current !== "focus") set("driveTilesDetailedBackup", tilesConfig());
@@ -548,7 +554,7 @@
 
   VD.selectDrivePreset = selectDrivePreset;
 
-  function scrollToSettingsSection(id: string): boolean {
+  export function scrollToSettingsSection(id: string): boolean {
     const section = document.getElementById(id);
     if (!section) return false;
     section.setAttribute("tabindex", "-1");

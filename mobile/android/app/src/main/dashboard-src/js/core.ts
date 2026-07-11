@@ -1,13 +1,35 @@
-// Initializes the VoltDashboard namespace shared by every dashboard source file. Each
-// source file attaches cross-file calls to `window.VoltDashboard` (aliased
-// locally as `VD`). `window.VoltTrackerAndroid` (the Android->WebView bridge)
-// and `window.VoltTrackerNative` (the WebView<-Android callback surface) are
-// preserved exactly as-is — those names are part of the ABI.
+// Assembles the `window.VoltDashboard` ABI/registry object (owned by
+// vd-registry.ts) and owns the app shell: views/navigation, lazy-chunk
+// loading, global error reporting, and the shared `state` bag.
+// `window.VoltTrackerAndroid` (the Android->WebView bridge) and
+// `window.VoltTrackerNative` (the WebView<-Android callback surface, built in
+// actions.ts) are preserved exactly as-is — those names are part of the ABI.
+//
+// ── ESM migration status (C7) ─────────────────────────────────────────────
+// Cross-module calls INSIDE the eager bundle now go through typed ESM imports;
+// the exports below (el, setText, state, ensure*Module, …) are that surface,
+// and every `VD.x = …` assignment here exists only to (re)build the external
+// ABI + the cross-chunk registry documented in vd-registry.ts. Remaining
+// late-bound `VD.*` call sites in this file are one of:
+//   - symbols owned by a lazy chunk (loadTrips/loadInsights/renderMap/
+//     openTripDetail/openDtcDetail/renderChargeSessions/renderMaintenanceList/
+//     updateEnhancedCapabilityUi/bindConnectionTools/troubleshooter/…), which
+//     can only ever be reached through the registry, or
+//   - symbols owned by eager modules that evaluate AFTER core (telemetry's
+//     showToast/relativeTime/getLastDevice/selectDevice/updateLiveUi,
+//     connection-status's closeStatusPopover, …). Importing "forward" from
+//     core would flip the bundle's side-effect evaluation order, so these stay
+//     late-bound until those helpers move into leaf modules, or
+//   - setStatus, which is re-wrapped at runtime (actions.ts /
+//     connection-status.ts / troubleshooter.ts) and must stay late-bound for
+//     every caller.
 import { asDataTone, setDataTone } from "./dataset-state";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
 import { initialTelemetryState } from "./telemetry-state";
 import { validatePayload } from "./payload-validators";
+import { applyDiagnosticsMode, prefs } from "./prefs";
+import { VD } from "./vd-registry";
 
   type DashboardData = {
     trips: unknown[];
@@ -69,7 +91,6 @@ import { validatePayload } from "./payload-validators";
 
   installLegacyWebViewPolyfills();
 
-  const VD = (window.VoltDashboard = window.VoltDashboard || ({} as VoltDashboard));
   VD.bridge = window.VoltTrackerAndroid || null;
   // Exported for in-bundle ESM consumers (A3): renderers import { el } from
   // "./core" instead of aliasing window.VoltDashboard.el. VD.el stays assigned
@@ -125,10 +146,13 @@ import { validatePayload } from "./payload-validators";
   }
   VD.bindListenerGuarded = bindListenerGuarded;
   // Top-level abort controller for window-level error/rejection listeners, so the
-  // reset hook can tear them down with the rest of the actions.js listeners.
-  VD.errorController = new AbortController();
+  // reset hook (actions.ts) can tear them down with the rest of the listeners.
+  export const errorController = new AbortController();
+  VD.errorController = errorController;
 
-  const bridge = VD.bridge;
+  // Captured once at eval (identical to the old per-module `VD.bridge` snapshot):
+  // null outside the WebView. Exported for in-bundle ESM consumers (C7).
+  export const bridge = VD.bridge;
 
   // Typed querySelectorAll over elements (every dashboard selector targets HTMLElements), so
   // callers get .dataset/.hidden without a per-site cast.
@@ -161,7 +185,7 @@ import { validatePayload } from "./payload-validators";
   let lastErrorBannerAt = 0;
   let errorBannerRepeatCount = 0;
 
-  function reportClientError(label: unknown, detail?: unknown) {
+  export function reportClientError(label: unknown, detail?: unknown) {
     const message = String(detail || label || "Unknown error");
     // The banner gets a single readable line; the full detail (stack traces
     // included) still flows to logClientError below.
@@ -210,7 +234,7 @@ import { validatePayload } from "./payload-validators";
   // methods console.warn + report once through logClientError and return
   // undefined so callers degrade gracefully.
   const warnedMissingBridgeMethods = new Set<string>();
-  function callBridge<K extends keyof VoltBridge>(
+  export function callBridge<K extends keyof VoltBridge>(
     name: K,
     ...args: Parameters<VoltBridge[K]>
   ): ReturnType<VoltBridge[K]> | undefined {
@@ -394,8 +418,8 @@ import { validatePayload } from "./payload-validators";
     return "Backup and restore";
   }
 
-  function setRestoreProgress(payload: unknown) {
-    const parsed = VD.parsePayload<unknown>(payload, {});
+  export function setRestoreProgress(payload: unknown) {
+    const parsed = parsePayload<unknown>(payload, {});
     validatePayload("setRestoreProgress", parsed);
     const progress = (isPlainRecord(parsed) ? parsed : {}) as RestoreProgressPayload;
     if (progress.visible === false) {
@@ -414,10 +438,10 @@ import { validatePayload } from "./payload-validators";
     const percent = knownProgressPercent(progress, busy, tone);
     updateRestoreProgressMeter(node, percent);
     const operation = restoreProgressOperation(progress);
-    VD.setText("restoreProgressKicker", operation);
+    setText("restoreProgressKicker", operation);
     const meter = el("restoreProgressMeter");
     if (meter) meter.setAttribute("aria-label", `${operation} progress`);
-    VD.setText(
+    setText(
       "restoreProgressTitle",
       progress.title ||
         (busy
@@ -426,21 +450,21 @@ import { validatePayload } from "./payload-validators";
             : "Restoring backup"
           : "Restore status")
     );
-    VD.setText(
+    setText(
       "restoreProgressPhase",
       progress.phase || (busy ? "Working" : tone === "ok" ? "Complete" : "Review needed")
     );
-    VD.setText(
+    setText(
       "restoreProgressPercent",
       percent == null ? (busy ? "--" : tone === "ok" ? "100%" : "--") : `${Math.round(percent)}%`
     );
-    VD.setText("restoreProgressEta", formatRestoreEta(progress, busy, tone, percent));
-    VD.setText(
+    setText("restoreProgressEta", formatRestoreEta(progress, busy, tone, percent));
+    setText(
       "restoreProgressDetail",
       progress.detail || "Volt Tracker is processing the selected backup file."
     );
-    VD.setText("restoreProgressStats", restoreProgressStats(progress));
-    VD.setText(
+    setText("restoreProgressStats", restoreProgressStats(progress));
+    setText(
       "restoreProgressNote",
       busy ? "Keep Volt Tracker open until this finishes." : "The status line below keeps the result visible."
     );
@@ -488,7 +512,7 @@ import { validatePayload } from "./payload-validators";
   window.addEventListener("error", (event) => {
     const stack = event && event.error && event.error.stack;
     reportClientError("window.error", stack || (event && event.message) || "Script error");
-  }, { signal: VD.errorController.signal });
+  }, { signal: errorController.signal });
 
   window.addEventListener("unhandledrejection", (event) => {
     const reason = event && event.reason;
@@ -496,7 +520,7 @@ import { validatePayload } from "./payload-validators";
       "unhandledrejection",
       (reason && reason.stack) || String(reason || "Unhandled promise rejection")
     );
-  }, { signal: VD.errorController.signal });
+  }, { signal: errorController.signal });
 
   // Forward CSP violations to the Android logger so blocked inline scripts,
   // disallowed sources, or accidental eval show up in adb logcat without
@@ -507,7 +531,7 @@ import { validatePayload } from "./payload-validators";
       const blocked = (event && event.blockedURI) || "?";
       bridge?.logClientError?.("csp.violation", directive + " " + blocked);
     } catch (_err) { /* logClientError best-effort */ }
-  }, { signal: VD.errorController.signal });
+  }, { signal: errorController.signal });
 
   (function bindErrorBannerDismiss() {
     const dismiss = el("errorBannerDismiss");
@@ -515,18 +539,18 @@ import { validatePayload } from "./payload-validators";
       dismiss.addEventListener("click", () => {
         const node = el("errorBanner");
         if (node) node.hidden = true;
-      }, { signal: VD.errorController.signal });
+      }, { signal: errorController.signal });
     }
   })();
 
   (function bindRestoreProgressDismiss() {
     const close = el("restoreProgressClose");
     if (close) {
-      close.addEventListener("click", hideRestoreProgress, { signal: VD.errorController.signal });
+      close.addEventListener("click", hideRestoreProgress, { signal: errorController.signal });
     }
   })();
 
-  const data: DashboardData = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
+  export const data: DashboardData = { trips: [], sessions: [], hourly: [], insights: [], demoLoaded: false };
   VD.data = data;
 
   let demoDataLoading = false;
@@ -595,7 +619,7 @@ import { validatePayload } from "./payload-validators";
     });
   }
 
-  function ensureDemoData(callback?: DemoDataCallback) {
+  export function ensureDemoData(callback?: DemoDataCallback) {
     if (data.demoLoaded) {
       if (callback) callback(null, data);
       return true;
@@ -639,7 +663,7 @@ import { validatePayload } from "./payload-validators";
     return Boolean(document.querySelector(`script[src="${src}"][data-dashboard-lazy="true"]`));
   }
 
-  function loadDashboardScript(src: string) {
+  export function loadDashboardScript(src: string) {
     if (window.__VoltDashboardLoadScript) {
       return Promise.resolve(window.__VoltDashboardLoadScript(src));
     }
@@ -669,11 +693,11 @@ import { validatePayload } from "./payload-validators";
   let dtcDataPromise: Promise<VoltDashboard> | null = null;
   let leafletRuntimePromise: Promise<void> | null = null;
 
-  function dtcDataLoaded() {
+  export function dtcDataLoaded() {
     return typeof VD.dtcInfo === "function" && Array.isArray(VD.dtcSampleCodes);
   }
 
-  function ensureDtcData() {
+  export function ensureDtcData() {
     if (dtcDataLoaded()) return Promise.resolve(VD);
     if (!dtcDataPromise) {
       dtcDataPromise = loadDashboardScript("js/dtc-causes.js")
@@ -731,7 +755,7 @@ import { validatePayload } from "./payload-validators";
     return leafletRuntimePromise;
   }
 
-  function ensureMapModule() {
+  export function ensureMapModule() {
     if (mapModuleLoaded()) return Promise.resolve(VD);
     if (!mapModulePromise) {
       mapModulePromise = ensureLeafletRuntime()
@@ -760,7 +784,7 @@ import { validatePayload } from "./payload-validators";
   // split from storage-status.ts). Loaded when the Charge tab opens, and
   // chained ahead of insights-panel.js because the Insights charts render
   // through VD.buildMonthlyTrendSvg / VD.monthBucketKey from this chunk.
-  function ensureChargeHistoryModule() {
+  export function ensureChargeHistoryModule() {
     if (chargeHistoryModuleLoaded()) return Promise.resolve(VD);
     if (!chargeHistoryModulePromise) {
       chargeHistoryModulePromise = loadDashboardScript("js/charge-history.js")
@@ -787,7 +811,7 @@ import { validatePayload } from "./payload-validators";
   // storage-status.ts). Loaded when the Insights tab (its home) opens or a
   // maintenance action fires; the chunk fetches + renders the current native
   // log as it loads, so broadcasts from before the load are never lost.
-  function ensureMaintenancePanelModule() {
+  export function ensureMaintenancePanelModule() {
     if (maintenancePanelModuleLoaded()) return Promise.resolve(VD);
     if (!maintenancePanelModulePromise) {
       maintenancePanelModulePromise = loadDashboardScript("js/maintenance-panel.js")
@@ -813,7 +837,7 @@ import { validatePayload } from "./payload-validators";
   // DTC detail bottom sheet + scan narration (G2 startup-headroom split from
   // storage-status.ts). Loaded on first use: tapping a code row / lookup hit,
   // or starting a diagnostic scan.
-  function ensureDtcDetailModule() {
+  export function ensureDtcDetailModule() {
     if (dtcDetailModuleLoaded()) return Promise.resolve(VD);
     if (!dtcDetailModulePromise) {
       dtcDetailModulePromise = loadDashboardScript("js/dtc-detail.js")
@@ -836,7 +860,7 @@ import { validatePayload } from "./payload-validators";
     return typeof VD.loadTrips === "function" && typeof VD.loadInsights === "function";
   }
 
-  function ensureInsightsModule() {
+  export function ensureInsightsModule() {
     if (insightsModuleLoaded()) return Promise.resolve(VD);
     if (!insightsModulePromise) {
       insightsModulePromise = ensureChargeHistoryModule()
@@ -860,7 +884,7 @@ import { validatePayload } from "./payload-validators";
     return typeof VD.updateEnhancedCapabilityUi === "function" && typeof VD.setEnhancedBadge === "function";
   }
 
-  function ensureSignalsModule() {
+  export function ensureSignalsModule() {
     if (signalsModuleLoaded()) return Promise.resolve(VD);
     if (!signalsModulePromise) {
       signalsModulePromise = loadDashboardScript("js/signals-panel.js")
@@ -903,13 +927,13 @@ import { validatePayload } from "./payload-validators";
     return Promise.all(pending);
   }
 
-  function renderMapIfLoaded() {
+  export function renderMapIfLoaded() {
     if (mapModuleLoaded() && typeof VD.renderMap === "function") {
       VD.renderMap();
     }
   }
 
-  function requestMapRender() {
+  export function requestMapRender() {
     // Gate the first paint on the lazy Map stylesheets (leaflet.css + screens-map.css)
     // so the map never renders before its CSS applies. mapStylesReady is set by map.ts
     // as the chunk loads; until then it may be undefined, which resolves immediately.
@@ -933,7 +957,7 @@ import { validatePayload } from "./payload-validators";
     return Boolean(ts && typeof ts.open === "function" && typeof ts.noteStatus === "function");
   }
 
-  function ensureTroubleshooterModule() {
+  export function ensureTroubleshooterModule() {
     if (troubleshooterModuleLoaded()) return Promise.resolve(VD);
     if (!troubleshooterModulePromise) {
       troubleshooterModulePromise = loadDashboardScript("js/troubleshooter.js")
@@ -952,7 +976,7 @@ import { validatePayload } from "./payload-validators";
     return troubleshooterModulePromise;
   }
 
-  function dtcSearchUrl(code: unknown) {
+  export function dtcSearchUrl(code: unknown) {
     const key = String(code || "").trim().toUpperCase();
     const q = encodeURIComponent((key || "OBD-II") + " Chevy Volt DTC");
     return "https://www.google.com/search?q=" + q;
@@ -962,7 +986,7 @@ import { validatePayload } from "./payload-validators";
   // file (telemetry samples, render selections, map layers); the closed
   // DashboardState interface (dashboard-globals.d.ts) pins its shape, and
   // state-shape.test.js pins the seeded key set.
-  const state: DashboardState = {
+  export const state: DashboardState = {
     view: "drive",
     mode: "ev",
     selectedRealTripId: null,
@@ -981,8 +1005,8 @@ import { validatePayload } from "./payload-validators";
     demoSessions: null,
     appState: {},
     demoActive: false,
-    mapLayer: ["routes", "heat", "stops", "eff"].includes(VD.prefs.get<string>("mapLayer", "eff"))
-      ? VD.prefs.get<string>("mapLayer", "eff")
+    mapLayer: ["routes", "heat", "stops", "eff"].includes(prefs.get<string>("mapLayer", "eff"))
+      ? prefs.get<string>("mapLayer", "eff")
       : "eff",
     mapRemoteTilesEnabled: true,
     mapFull: false,
@@ -1038,17 +1062,17 @@ import { validatePayload } from "./payload-validators";
   //   - selectedMapSessionId is a free scalar, read/written directly (not a cross-module invariant).
   // setState is a plain patch-merge (Object.assign), so behaviour is identical to a direct
   // assignment; the value is one typed, greppable seam for the invariants that matter.
-  function setState(patch: Partial<DashboardState>) {
+  export function setState(patch: Partial<DashboardState>) {
     Object.assign(state, patch);
     return state;
   }
   // Typed getters for the most cross-referenced invariant fields. Thin reads —
   // they exist so other modules can ask "is demo on?" / "which session?" without
   // reaching into the raw bag, mirroring setState on the write side.
-  function isDemoActive() {
+  export function isDemoActive() {
     return state.demoActive === true;
   }
-  function getSelectedMapSessionId() {
+  export function getSelectedMapSessionId() {
     return state.selectedMapSessionId;
   }
   VD.setState = setState;
@@ -1079,9 +1103,9 @@ import { validatePayload } from "./payload-validators";
   // stroked outline (matching the nav icons).
   const filledViewIcons = new Set(["charge"]);
 
-  function parsePayload(payload: unknown, fallback: unknown = null) {
-    if (!payload) return fallback;
-    try { return typeof payload === "string" ? JSON.parse(payload) : payload; }
+  export function parsePayload<T = VoltPayload>(payload: unknown, fallback: unknown = null): T {
+    if (!payload) return fallback as T;
+    try { return (typeof payload === "string" ? JSON.parse(payload) : payload) as T; }
     catch (err) {
       // A native payload that fails JSON.parse used to vanish silently into the
       // fallback — a renamed/garbled bridge return read as "no data" with no
@@ -1095,7 +1119,7 @@ import { validatePayload } from "./payload-validators";
           (err instanceof Error ? err.message : String(err)) +
           "): " + snippet
       );
-      return fallback;
+      return fallback as T;
     }
   }
 
@@ -1124,7 +1148,7 @@ import { validatePayload } from "./payload-validators";
     } catch (ignored) {}
   }
 
-  function setText(id: string, value: unknown) {
+  export function setText(id: string, value: unknown) {
     const node = el(id);
     if (!node) {
       warnMissingTarget("setText", id);
@@ -1134,7 +1158,7 @@ import { validatePayload } from "./payload-validators";
     return true;
   }
 
-  function setMeter(id: string, value: unknown) {
+  export function setMeter(id: string, value: unknown) {
     const node = el(id);
     if (!node) {
       warnMissingTarget("setMeter", id);
@@ -1158,15 +1182,15 @@ import { validatePayload } from "./payload-validators";
     return true;
   }
 
-  function scrollAppToTop() {
+  export function scrollAppToTop() {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 
-  function scrollAppBy(deltaY: number) {
+  export function scrollAppBy(deltaY: number) {
     window.scrollBy({ top: deltaY, left: 0, behavior: "auto" });
   }
 
-  function canScrollApp() {
+  export function canScrollApp() {
     const root = document.scrollingElement || document.documentElement;
     const bodyHeight = document.body ? document.body.scrollHeight : 0;
     return Math.max(root.scrollHeight, bodyHeight) > window.innerHeight + 2;
@@ -1223,7 +1247,7 @@ import { validatePayload } from "./payload-validators";
     return cachedNavNodes || (cachedNavNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
   }
 
-  function hydrateConnectionTools(): boolean {
+  export function hydrateConnectionTools(): boolean {
     const mount = el("connectionToolsMount");
     const template = el("connectionToolsTemplate") as HTMLTemplateElement | null;
     if (!mount || !template) return false;
@@ -1236,7 +1260,7 @@ import { validatePayload } from "./payload-validators";
     return true;
   }
 
-  function ensureConnectionToolsModule(): Promise<VoltDashboard> {
+  export function ensureConnectionToolsModule(): Promise<VoltDashboard> {
     if (typeof VD.bindConnectionTools === "function") return Promise.resolve(VD);
     if (!connectionToolsModulePromise) {
       connectionToolsModulePromise = loadDashboardScript("js/connection-tools.js")
@@ -1260,7 +1284,7 @@ import { validatePayload } from "./payload-validators";
   // "5738 rows" overflowed the Settings state chip into "5738 r…" — compact
   // thousands ("5.7k rows") keep the figure readable at chip width. Zero rows
   // reads as the chip's old idle label.
-  function formatRowCount(count: unknown): string {
+  export function formatRowCount(count: unknown): string {
     const n = Number(count) || 0;
     if (!n) return "ready";
     const label =
@@ -1270,7 +1294,7 @@ import { validatePayload } from "./payload-validators";
     return `${label} ${n === 1 ? "row" : "rows"}`;
   }
 
-  function setBackupReceipt(payload: unknown): void {
+  export function setBackupReceipt(payload: unknown): void {
     const parsed = parsePayload(payload, {}) as Record<string, unknown>;
     const atMs = Number(parsed.lastBackupAtMs || 0);
     const trips = Math.max(0, Number(parsed.lastBackupTrips || 0));
@@ -1297,7 +1321,7 @@ import { validatePayload } from "./payload-validators";
   // (Settings' section sits before Diagnostics' in the markup).
   const NAV_VIEW_ORDER = ["drive", "map", "charge", "insights", "diagnostics", "settings"];
 
-  function setView(view: string) {
+  export function setView(view: string) {
     // An unknown view name (stale deep link, removed tab like the old "trips")
     // would deactivate every section and leave a blank screen with no way
     // back — fall back to Drive instead of rendering nothing.
@@ -1325,7 +1349,7 @@ import { validatePayload } from "./payload-validators";
     if (view !== "map" && state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
-      VD.renderMapIfLoaded();
+      renderMapIfLoaded();
     }
     if (view !== "map") document.body.classList.remove("map-scrubber-active");
     viewNodes().forEach((node) => node.classList.toggle("is-active", node.dataset.view === view));
@@ -1356,7 +1380,7 @@ import { validatePayload } from "./payload-validators";
         .catch(() => undefined)
         .then(() => {
           if (typeof VD.loadTrips === "function") VD.loadTrips();
-          return VD.requestMapRender();
+          return requestMapRender();
         })
         .catch(() => {});
     }
@@ -1366,7 +1390,7 @@ import { validatePayload } from "./payload-validators";
     afterNextPaint(() => startupMark("tab:" + view + ":paint"));
   }
 
-  function openTripFromNative(routeKey: string, receipt = false) {
+  export function openTripFromNative(routeKey: string, receipt = false) {
     const clean = String(routeKey || "").trim();
     if (!clean) return;
     state.selectedMapSessionId = clean;
@@ -1382,7 +1406,7 @@ import { validatePayload } from "./payload-validators";
             /* the trips payload may already contain enough route data */
           }
         }
-        return VD.requestMapRender();
+        return requestMapRender();
       })
       .then(() => {
         window.setTimeout(() => {
@@ -1490,7 +1514,7 @@ import { validatePayload } from "./payload-validators";
     return false;
   }
 
-  function handleAndroidBack(): boolean {
+  export function handleAndroidBack(): boolean {
     if (dismissOpenDialogs()) {
       return true;
     }
@@ -1507,7 +1531,7 @@ import { validatePayload } from "./payload-validators";
     if (state.mapFull) {
       state.mapFull = false;
       document.body.classList.remove("map-full-active");
-      VD.renderMapIfLoaded();
+      renderMapIfLoaded();
       return true;
     }
     if (state.view && state.view !== "drive") {
@@ -1517,7 +1541,7 @@ import { validatePayload } from "./payload-validators";
     return false;
   }
 
-  function updateViewHeading() {
+  export function updateViewHeading() {
     // Demo uses the same headings as real — it only simulates numbers, it doesn't relabel the UI.
     const meta = realViewMeta[String(state.view)] || realViewMeta.drive;
     if (!meta) return;
@@ -1543,7 +1567,7 @@ import { validatePayload } from "./payload-validators";
     }
   }
 
-  function setDemoActive(active: unknown, detail?: string) {
+  export function setDemoActive(active: unknown, detail?: string) {
     const next = Boolean(active);
     const changed = state.demoActive !== next;
     setState({ demoActive: next });
@@ -1575,7 +1599,7 @@ import { validatePayload } from "./payload-validators";
       .catch(() => {});
   }
 
-  function clearDemoTelemetry() {
+  export function clearDemoTelemetry() {
     const source = String(state.telemetry.source || "").toLowerCase();
     if (!source.includes("demo")) return;
     // Drop any locally-staged demo rows + the live telemetry/session derivations
@@ -1598,7 +1622,7 @@ import { validatePayload } from "./payload-validators";
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
   }
 
-  function setDevices(payload: unknown) {
+  export function setDevices(payload: unknown) {
     // Guard the array invariant like setHistory does: parsePayload only falls
     // back to [] for a falsy/unparseable payload, so a payload that parses to a
     // non-array JSON value would reach .length/.forEach/.find and throw.
@@ -1639,7 +1663,7 @@ import { validatePayload } from "./payload-validators";
     }
   }
 
-  function setHistory(payload: unknown) {
+  export function setHistory(payload: unknown) {
     // Abort any listeners attached by the previous render so they don't
     // leak when the history list is rebuilt.
     historyController?.abort();
@@ -1736,6 +1760,6 @@ import { validatePayload } from "./payload-validators";
     setHistory,
     realViewMeta
   });
-  if (typeof VD.applyDiagnosticsMode === "function") VD.applyDiagnosticsMode();
+  applyDiagnosticsMode();
 
 export {};

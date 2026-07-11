@@ -13,10 +13,13 @@
 // tab hydrates immediately. The shared native-read-error helpers and
 // latestInsightReading stay owned by storage-status.ts and are read off VD.
 
+// VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
+// eager bundle and every entry point it publishes crosses the chunk boundary
+// through the VD registry (see vd-registry.ts).
+import { VD } from "./vd-registry";
 (function () {
   "use strict";
 
-  const VD = window.VoltDashboard;
   const state = VD.state;
   const bridge = VD.bridge;
   const el = VD.el;
