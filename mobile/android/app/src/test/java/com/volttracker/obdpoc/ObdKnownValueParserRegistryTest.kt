@@ -10,8 +10,8 @@ import org.junit.Test
  *
  * The leaf decoders are exhaustively pinned in [ObdProtocolTest]; this file instead exercises the
  * *dispatch table*: that a command routes to the right decoder, that every registered standard
- * command resolves to a working parser, that unmapped commands fall through to the legacy table,
- * and that genuinely unknown commands return null instead of throwing.
+ * command resolves to a working parser, that unmapped commands fall through to the Mode-22
+ * registry, and that genuinely unknown commands return null instead of throwing.
  *
  * The registry exposes a single public entry point — `parse(cleanCommand, response)` — and expects
  * an already-cleaned, uppercase command (the trim/uppercase step lives in
@@ -49,9 +49,9 @@ class ObdKnownValueParserRegistryTest {
     }
 
     @Test
-    fun unmappedCommandFallsThroughToLegacyDecoder() {
+    fun unmappedCommandFallsThroughToMode22Registry() {
         // 222429 has no standard-parser entry, so parse() must hand off to
-        // ObdProtocol.parseKnownValueLegacy. Same vector ObdProtocolTest pins at 360.0 V.
+        // ObdVoltMode22ParserRegistry. Same vector ObdProtocolTest pins at 360.0 V.
         val hvVoltage = ObdKnownValueParserRegistry.parse("222429", "6224295A00")
         assertNotNull(hvVoltage)
         assertEquals("hv pack voltage", hvVoltage!!.name)
