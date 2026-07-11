@@ -696,6 +696,81 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV15_addsVehicleKeyAliasesColumn() {
+        // The v15→v16 migration (ADR 0009 / B8) adds the nullable vehicle_key_aliases column so
+        // merges can recognize the same car across installs keyed by different HMAC secrets. The
+        // step is non-destructive: an existing vehicle row must survive with a NULL alias set.
+        // The vehicles table is created with its v15-era DDL explicitly, because the current
+        // VoltTrackerSchema DDL already includes the new column.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v15_v16.db"
+        context.deleteDatabase(name)
+
+        val v15Helper =
+            object : SQLiteOpenHelper(context.applicationContext, name, null, 15) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    VoltTrackerSchema.createBaseTables(db)
+                    db.execSQL(
+                        "CREATE TABLE " +
+                            VoltTrackerDb.TABLE_VEHICLES +
+                            " (_id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                            " vehicle_key TEXT NOT NULL UNIQUE," +
+                            " display_name TEXT, make TEXT, model TEXT, model_year INTEGER," +
+                            " vin_redacted TEXT, vin_hash TEXT, vin_source TEXT," +
+                            " first_seen_ms INTEGER NOT NULL, last_seen_ms INTEGER NOT NULL," +
+                            " created_at_ms INTEGER NOT NULL, updated_at_ms INTEGER NOT NULL," +
+                            " metadata_json TEXT)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO " +
+                            VoltTrackerDb.TABLE_VEHICLES +
+                            " (vehicle_key, first_seen_ms, last_seen_ms, created_at_ms, updated_at_ms)" +
+                            " VALUES ('key-v15', 1000, 2000, 1000, 2000)",
+                    )
+                }
+
+                override fun onUpgrade(
+                    db: SQLiteDatabase,
+                    oldVersion: Int,
+                    newVersion: Int,
+                ) {
+                    // unused
+                }
+            }
+        val v15Db = v15Helper.writableDatabase
+        assertFalse(
+            "v15 schema must not pre-contain the alias column",
+            readColumnNames(v15Db, VoltTrackerDb.TABLE_VEHICLES).contains("vehicle_key_aliases"),
+        )
+        v15Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(
+            "Reopened DB should be at the current schema version after onUpgrade.",
+            VoltTrackerDb.DATABASE_VERSION,
+            newDb.version,
+        )
+        assertTrue(
+            "After v15->v16 upgrade, the vehicle_key_aliases column must exist.",
+            readColumnNames(newDb, VoltTrackerDb.TABLE_VEHICLES).contains("vehicle_key_aliases"),
+        )
+        newDb
+            .rawQuery(
+                "SELECT vehicle_key, vehicle_key_aliases FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                null,
+            ).use { cursor ->
+                assertTrue("pre-existing vehicle row must survive", cursor.moveToFirst())
+                assertEquals("key-v15", cursor.getString(0))
+                assertTrue("migrated rows start with a NULL alias set", cursor.isNull(1))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -840,7 +915,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 15
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 16
 
         private val V7_INDEXES =
             arrayOf(

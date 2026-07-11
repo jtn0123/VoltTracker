@@ -1112,6 +1112,92 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun upsertVehicleFromVinRecordsAliasesUnderEveryKnownSecretButNeverTheLegacyHash() {
+        // ADR 0009: with the VIN in hand, the upsert records the vehicle's key under every known
+        // identity secret (primary + imported) so later merges can match without the VIN. The
+        // legacy unsalted hash must never be stored — it is enumerable from public VIN lists.
+        val vin = "1G1ZD5ST8JF" + "202020"
+        val context = RuntimeEnvironment.getApplication()
+        val importedSecret = ByteArray(32) { (it + 1).toByte() }
+        VinKeyHasher.importSecrets(
+            context,
+            listOf(android.util.Base64.encodeToString(importedSecret, android.util.Base64.NO_WRAP)),
+        )
+
+        store.upsertVehicleFromVin(vin)
+        store.checkpoint()
+
+        val importedKey = hmacSha256Hex(importedSecret, vin)
+        val legacyHash = VinKeyHasher.legacyHash(vin)
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT vehicle_key, vehicle_key_aliases FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                    null,
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    val aliases = VehicleKeyAliases.parse(cursor.getString(1))
+                    assertTrue(
+                        "aliases must include the primary key form",
+                        aliases.contains(cursor.getString(0)),
+                    )
+                    assertTrue(
+                        "aliases must include the key under the imported (donor) secret",
+                        aliases.contains(importedKey),
+                    )
+                    assertFalse(
+                        "the enumerable unsalted hash must never be recorded",
+                        aliases.contains(legacyHash),
+                    )
+                }
+        }
+    }
+
+    @Test
+    fun upsertVehicleFromVinConsolidatesADonorKeyedRowMatchedThroughItsAliases() {
+        // A merged backup can leave a row keyed by a donor secret this install never imported, but
+        // carrying this install's key in its recorded aliases. The upsert must recognize it by
+        // alias, claim it, and keep the donor key in the surviving row's lineage.
+        val vin = "1G1ZD5ST8JF" + "202020"
+        val localKey = VinKeyHasher(RuntimeEnvironment.getApplication()).hash(vin)
+        val donorKey = "0123456789abcdef".repeat(4)
+        val now = System.currentTimeMillis()
+        var donorRowId = 0L
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            val vehicle = ContentValues()
+            vehicle.put("vehicle_key", donorKey)
+            vehicle.put("vin_hash", donorKey)
+            vehicle.put("vehicle_key_aliases", """["$donorKey","$localKey"]""")
+            vehicle.put("first_seen_ms", 500L)
+            vehicle.put("last_seen_ms", now)
+            vehicle.put("created_at_ms", 500L)
+            vehicle.put("updated_at_ms", now)
+            donorRowId = db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, vehicle)
+        }
+
+        val returned = store.upsertVehicleFromVin(vin)
+
+        assertEquals("the alias-matched row is claimed, not duplicated", donorRowId, returned)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT COUNT(*), MIN(vehicle_key), MIN(vehicle_key_aliases), MIN(first_seen_ms)" +
+                        " FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                    null,
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(1, cursor.getInt(0))
+                    assertEquals("row is rekeyed to the local install", localKey, cursor.getString(1))
+                    val aliases = VehicleKeyAliases.parse(cursor.getString(2))
+                    assertTrue("donor key stays in the lineage", aliases.contains(donorKey))
+                    assertTrue(aliases.contains(localKey))
+                    assertEquals("earliest first-seen survives", 500L, cursor.getLong(3))
+                }
+        }
+    }
+
+    @Test
     fun upsertVehicleFromVinRejectsWrongLength() {
         assertEquals(0L, store.upsertVehicleFromVin(null))
         assertEquals(0L, store.upsertVehicleFromVin("TOOSHORT"))
@@ -1457,6 +1543,17 @@ class ObdLocalStoreDbTest {
     }
 
     companion object {
+        private fun hmacSha256Hex(
+            secret: ByteArray,
+            value: String,
+        ): String {
+            val mac = javax.crypto.Mac.getInstance("HmacSHA256")
+            mac.init(javax.crypto.spec.SecretKeySpec(secret, "HmacSHA256"))
+            return mac
+                .doFinal(value.toByteArray(StandardCharsets.UTF_8))
+                .joinToString(separator = "") { "%02x".format(it) }
+        }
+
         private fun sample(
             speedKph: Int,
             rpm: Int,

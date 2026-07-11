@@ -263,6 +263,95 @@ class DatabaseMergerTest {
     }
 
     @Test
+    fun mergesVehicleByAliasWhenKeysDifferAcrossInstalls() {
+        // ADR 0009 (B8): the same physical car keyed under two install secrets. The donor row
+        // carries the live install's key in its recorded aliases (written when the donor last read
+        // the VIN with the live secret imported), so the merge must consolidate instead of forking.
+        val liveVehicle = insertVehicle(live, "KEY-LIVE", """["KEY-LIVE"]""", 5000L, 6000L)
+        val donorVehicle =
+            insertVehicle(donor, "KEY-DONOR", """["KEY-DONOR","KEY-LIVE"]""", 1000L, 9000L)
+        val donorSession = insertSession(donor, 5000L)
+        insertTripSegment(donor, donorSession, donorVehicle, 5000L)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        assertEquals(0, result.vehiclesAdded)
+        assertEquals(1, result.vehiclesMerged)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        // The imported trip points at the live vehicle id.
+        assertEquals(
+            1,
+            count(live, VoltTrackerDb.TABLE_TRIP_SEGMENTS + " WHERE vehicle_id = " + liveVehicle),
+        )
+        // Identity lineage is unioned and the seen window widened to cover the donor's history.
+        val aliases = vehicleAliases(live, liveVehicle)
+        assertTrue("donor key must be recorded as an alias", aliases.contains("KEY-DONOR"))
+        assertTrue(aliases.contains("KEY-LIVE"))
+        live
+            .rawQuery(
+                "SELECT vehicle_key, first_seen_ms, last_seen_ms FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("live key stays authoritative", "KEY-LIVE", cursor.getString(0))
+                assertEquals(1000L, cursor.getLong(1))
+                assertEquals(9000L, cursor.getLong(2))
+            }
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun mergesVehicleWhenLiveAliasesContainTheDonorKey() {
+        // Mirror direction: the LIVE row learned the donor's key as an alias (via an earlier
+        // manifest import + reconnect); a pre-fix donor without aliases still merges.
+        val liveVehicle = insertVehicle(live, "KEY-LIVE", """["KEY-LIVE","KEY-DONOR"]""")
+        insertVehicle(donor, "KEY-DONOR", null)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        assertEquals(0, result.vehiclesAdded)
+        assertEquals(1, result.vehiclesMerged)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertTrue(vehicleAliases(live, liveVehicle).contains("KEY-DONOR"))
+    }
+
+    @Test
+    fun vehiclesWithoutAliasesFallBackToStrictKeyMatch() {
+        // Pre-fix backups (or no-VIN rows) have NULL aliases: different keys must keep forking
+        // exactly as before this change — the connect-time healer owns that case.
+        insertVehicle(live, "KEY-LIVE", null)
+        insertVehicle(donor, "KEY-DONOR", null)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        assertEquals(1, result.vehiclesAdded)
+        assertEquals(0, result.vehiclesMerged)
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun aliasMergeIsIdempotentOnRemerge() {
+        val liveVehicle = insertVehicle(live, "KEY-LIVE", """["KEY-LIVE"]""")
+        insertVehicle(donor, "KEY-DONOR", """["KEY-DONOR","KEY-LIVE"]""")
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        val remerge = DatabaseMerger.merge(live, donor)
+
+        assertTrue(remerge.ok)
+        assertEquals(0, remerge.vehiclesAdded)
+        assertEquals(1, remerge.vehiclesMerged)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertEquals(
+            setOf("KEY-LIVE", "KEY-DONOR"),
+            vehicleAliases(live, liveVehicle),
+        )
+    }
+
+    @Test
     fun mergeIntoEmptyImportsEverything() {
         val donorSession = insertSession(donor, 7000L)
         insertTelemetry(donor, donorSession, 7000L)
@@ -788,15 +877,40 @@ class DatabaseMergerTest {
         private fun insertVehicle(
             db: SQLiteDatabase,
             key: String,
+        ): Long = insertVehicle(db, key, null, 1L, 2L)
+
+        private fun insertVehicle(
+            db: SQLiteDatabase,
+            key: String,
+            aliasesJson: String?,
+            firstSeenMs: Long = 1L,
+            lastSeenMs: Long = 2L,
         ): Long {
             val cv = ContentValues()
             cv.put("vehicle_key", key)
             cv.put("display_name", "Test $key")
-            cv.put("first_seen_ms", 1L)
-            cv.put("last_seen_ms", 2L)
-            cv.put("created_at_ms", 1L)
-            cv.put("updated_at_ms", 2L)
+            cv.put("first_seen_ms", firstSeenMs)
+            cv.put("last_seen_ms", lastSeenMs)
+            cv.put("created_at_ms", firstSeenMs)
+            cv.put("updated_at_ms", lastSeenMs)
+            if (aliasesJson != null) {
+                cv.put("vehicle_key_aliases", aliasesJson)
+            }
             return db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, cv)
+        }
+
+        private fun vehicleAliases(
+            db: SQLiteDatabase,
+            vehicleId: Long,
+        ): Set<String> {
+            db
+                .rawQuery(
+                    "SELECT vehicle_key_aliases FROM ${VoltTrackerDb.TABLE_VEHICLES} WHERE _id = ?",
+                    arrayOf(vehicleId.toString()),
+                ).use { cursor ->
+                    if (!cursor.moveToFirst()) return emptySet()
+                    return VehicleKeyAliases.parse(cursor.getString(0))
+                }
         }
 
         private fun insertTripSegment(

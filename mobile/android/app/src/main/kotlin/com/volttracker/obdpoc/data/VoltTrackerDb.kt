@@ -172,6 +172,22 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 VoltTrackerSchema.createCellSnapshotIndexes(target)
             }
         }
+        if (oldVersion < 16) {
+            runMigrationStep(db, oldVersion, 16, "vehicle-key-aliases-column") { target ->
+                // ADR 0009 (B8): nullable JSON-array column recording the vehicle's key under
+                // every identity secret known when its VIN was last read, so DatabaseMerger can
+                // recognize the same car across installs keyed by different HMAC secrets.
+                // Non-destructive ADD COLUMN; existing rows keep NULL (strict-key merge fallback).
+                // vehicles has existed since v4, but guard the ALTER so a partial/legacy schema
+                // missing the table can't abort the step (same rationale as the v12 step).
+                if (!hasTable(target, TABLE_VEHICLES)) {
+                    VoltTrackerSchema.createRoadmapTables(target)
+                    VoltTrackerSchema.createRoadmapIndexes(target)
+                } else if (!hasColumn(target, TABLE_VEHICLES, "vehicle_key_aliases")) {
+                    target.execSQL("ALTER TABLE $TABLE_VEHICLES ADD COLUMN vehicle_key_aliases TEXT")
+                }
+            }
+        }
     }
 
     fun interface MigrationStep {
@@ -180,7 +196,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 15
+        const val DATABASE_VERSION = 16
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
