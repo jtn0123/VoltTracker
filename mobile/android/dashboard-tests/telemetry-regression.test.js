@@ -101,6 +101,41 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(meter.getAttribute('aria-valuenow')).toBe('0');
   });
 
+  it('C2: shows one speed unit by default; tapping the hero reveals the conversion briefly', async () => {
+    const { initialTelemetryState } = await import(
+      '../app/src/main/dashboard-src/js/telemetry-state.ts'
+    );
+    const VD = window.VoltDashboard;
+    VD.state.telemetry = { ...initialTelemetryState(), speedKph: 100 };
+    VD.updateLiveUi();
+
+    // Preferred-unit-only: the converted readout keeps tracking the value but
+    // stays hidden (imperial default → primary mph, secondary km/h).
+    // The tile appends a visually-hidden "(stale)" marker; assert the value only.
+    const alt = document.getElementById('speedKph');
+    expect(alt.hidden).toBe(true);
+    expect(alt.firstChild.textContent).toBe('100 km/h');
+    expect(document.getElementById('speedValue').firstChild.textContent).toBe('62');
+
+    // Tap the speed row → the conversion shows for ~3 s, then hides again.
+    const meter = document.getElementById('speedValue').closest("[role='meter']");
+    meter.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    expect(alt.hidden).toBe(false);
+    vi.advanceTimersByTime(2999);
+    expect(alt.hidden).toBe(false);
+    vi.advanceTimersByTime(1);
+    expect(alt.hidden).toBe(true);
+
+    // A second tap restarts the reveal window instead of stacking timers.
+    meter.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    vi.advanceTimersByTime(2000);
+    meter.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+    vi.advanceTimersByTime(2000);
+    expect(alt.hidden).toBe(false);
+    vi.advanceTimersByTime(1000);
+    expect(alt.hidden).toBe(true);
+  });
+
   it('resetTelemetry restores the exact boot-time telemetry shape', async () => {
     // Both core.ts (state seed / clearDemoTelemetry) and telemetry.ts
     // (resetTelemetry) build the empty sample from the shared factory in

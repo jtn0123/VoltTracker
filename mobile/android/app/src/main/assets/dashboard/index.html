@@ -590,7 +590,14 @@
         <div id="speedValue" class="speed-value" data-live-tile="true">--</div>
         <div class="speed-units">
           <span id="speedUnitMain" class="speed-unit-main">mph</span>
-          <span id="speedKph" class="speed-unit-sub" data-live-tile="true"
+          <!-- C2: only the preferred unit shows by default; tapping the speed
+               row reveals this converted readout for a few seconds
+               (telemetry.ts#bindSpeedAltReveal). -->
+          <span
+            id="speedKph"
+            class="speed-unit-sub"
+            data-live-tile="true"
+            hidden
             >-- km/h</span
           >
         </div>
