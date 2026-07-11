@@ -189,6 +189,85 @@ class WebViewBootstrapTest {
         }
     }
 
+    @Test
+    fun rendererGoneIsConsumedEvenWithoutCrashEventsWired() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val webView = WebView(activity)
+            WebViewBootstrap.configure(webView, VoltBridge(activity))
+
+            val client = shadowOf(webView).webViewClient
+            // Returning false here would let Android kill the whole app process.
+            assertTrue(client.onRenderProcessGone(webView, renderDeath(crashed = true)))
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    @Test
+    fun rendererGoneAndMainFrameErrorsForwardToCrashEvents() {
+        val controller = Robolectric.buildActivity(MainActivity::class.java).create()
+        try {
+            val activity = controller.get()
+            val webView = WebView(activity)
+            val rendererReports = ArrayList<Boolean>()
+            val loadFailures = ArrayList<Pair<Int, String>>()
+            val events =
+                object : WebViewBootstrap.CrashEvents {
+                    override fun onRendererGone(
+                        view: WebView?,
+                        crashed: Boolean,
+                    ) {
+                        assertSame(webView, view)
+                        rendererReports.add(crashed)
+                    }
+
+                    override fun onMainFrameLoadFailed(
+                        view: WebView?,
+                        errorCode: Int,
+                        description: String,
+                    ) {
+                        loadFailures.add(errorCode to description)
+                    }
+                }
+            WebViewBootstrap.configure(webView, VoltBridge(activity), events)
+            val client = shadowOf(webView).webViewClient
+
+            assertTrue(client.onRenderProcessGone(webView, renderDeath(crashed = true)))
+            assertTrue(client.onRenderProcessGone(webView, renderDeath(crashed = false)))
+            assertTrue("a null detail is treated as a system kill", client.onRenderProcessGone(webView, null))
+            client.onReceivedError(webView, request("file:///android_asset/dashboard/index.html"), error(-14, "gone"))
+            client.onReceivedError(
+                webView,
+                subResourceRequest("file:///android_asset/dashboard/css/app.css"),
+                error(-2, "sub-resource"),
+            )
+
+            assertEquals(listOf(true, false, false), rendererReports)
+            assertEquals("only main-frame errors are fatal", listOf(-14 to "gone"), loadFailures)
+        } finally {
+            controller.destroy()
+        }
+    }
+
+    private fun renderDeath(crashed: Boolean): android.webkit.RenderProcessGoneDetail =
+        object : android.webkit.RenderProcessGoneDetail() {
+            override fun didCrash(): Boolean = crashed
+
+            override fun rendererPriorityAtExit(): Int = 0
+        }
+
+    private fun error(
+        code: Int,
+        description: String,
+    ): android.webkit.WebResourceError = android.webkit.TestWebResourceError(code, description)
+
+    private fun subResourceRequest(url: String): WebResourceRequest =
+        object : WebResourceRequest by request(url) {
+            override fun isForMainFrame(): Boolean = false
+        }
+
     private fun request(url: String): WebResourceRequest =
         object : WebResourceRequest {
             override fun getUrl(): Uri = Uri.parse(url)

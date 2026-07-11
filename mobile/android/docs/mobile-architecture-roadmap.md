@@ -12,9 +12,11 @@ The UI should not mix real data, demo data, and future/placeholder data. Demo re
 
 ## Current Progress
 
-Last updated: 2026-05-30
+Last updated: 2026-07-11
 
-Current Android database schema: v9
+Current Android database schema: v15 (`VoltTrackerDb.DATABASE_VERSION`).
+Migrations are additive-only (`ALTER TABLE ... ADD COLUMN` / `CREATE TABLE IF
+NOT EXISTS`) — upgrades never drop or rewrite existing data.
 
 Completed:
 

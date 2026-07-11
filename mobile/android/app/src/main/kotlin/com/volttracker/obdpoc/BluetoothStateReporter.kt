@@ -41,6 +41,15 @@ import org.json.JSONObject
 class BluetoothStateReporter(
     private val service: ObdService?,
     private val sdpProbe: SdpProbe?,
+    /**
+     * Invoked when the OS reports an ACL connection for the active adapter address (already
+     * filtered by [handleSystemBroadcast]). [ObdService] wires this to the engine's
+     * extended-reconnect wake-up so an adapter reappearing mid-drive triggers an immediate
+     * reconnect attempt for the whole service lifetime — the Activity-side auto-connect
+     * receiver only exists while the Activity is resumed, so a pocketed phone relies on this
+     * path (audit item B3).
+     */
+    private val onActiveAdapterAclConnected: Runnable? = null,
 ) {
     private val receivers = BroadcastReceiverGroup()
 
@@ -271,8 +280,12 @@ class BluetoothStateReporter(
             return
         }
         when (action) {
-            BluetoothDevice.ACTION_ACL_CONNECTED ->
+            BluetoothDevice.ACTION_ACL_CONNECTED -> {
                 recorder.logEvent("bluetooth_acl_connected", "address", address)
+                // The active adapter's link is back — let a waiting extended reconnect tier
+                // retry now instead of sitting out the rest of its interval (B3).
+                onActiveAdapterAclConnected?.run()
+            }
 
             BluetoothDevice.ACTION_ACL_DISCONNECTED ->
                 recorder.logEvent("bluetooth_acl_disconnected", "address", address)

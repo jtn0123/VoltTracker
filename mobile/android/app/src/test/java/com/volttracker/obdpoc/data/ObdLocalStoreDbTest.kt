@@ -1138,6 +1138,96 @@ class ObdLocalStoreDbTest {
     }
 
     @Test
+    fun upsertVehicleFromVinConsolidatesLegacyKeyedDuplicateAndRemapsReferences() {
+        // A merged backup can leave a second row for the SAME VIN keyed by a donor/legacy hash.
+        // The upsert must consolidate: remap dependent rows to the local primary row, delete the
+        // duplicate, and return the preferred (locally keyed) row id. This pins the early-return
+        // update branch of upsertVehicleFromVin including its duplicate-merge side effects.
+        val vin = "1G1ZD5ST8JF" + "202020"
+        val primaryId = store.upsertVehicleFromVin(vin)
+        assertTrue(primaryId > 0)
+        store.checkpoint()
+
+        // Seed the duplicate the way a legacy import would have written it: same VIN, keyed by the
+        // unsalted legacy hash, with a dependent field-capability row pointing at it.
+        val legacyKey = VinKeyHasher.legacyHash(vin)
+        val now = System.currentTimeMillis()
+        var duplicateId = 0L
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            val vehicle = ContentValues()
+            vehicle.put("vehicle_key", legacyKey)
+            vehicle.put("vin_hash", legacyKey)
+            vehicle.put("first_seen_ms", now)
+            vehicle.put("last_seen_ms", now)
+            vehicle.put("created_at_ms", now)
+            vehicle.put("updated_at_ms", now)
+            duplicateId = db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, vehicle)
+            val capability = ContentValues()
+            capability.put("vehicle_id", duplicateId)
+            capability.put("command", "22005B")
+            capability.put("first_seen_ms", now)
+            capability.put("last_seen_ms", now)
+            db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, capability)
+        }
+        assertTrue(duplicateId > 0)
+
+        val returned = store.upsertVehicleFromVin(vin)
+
+        assertEquals("the locally keyed row wins the merge", primaryId, returned)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db.rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_VEHICLES}", null).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("the duplicate row must be deleted", 1, cursor.getInt(0))
+            }
+            db.rawQuery("SELECT vehicle_id FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}", null).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("dependent rows must be remapped to the surviving row", primaryId, cursor.getLong(0))
+            }
+        }
+    }
+
+    @Test
+    fun upsertVehicleFromVinRekeysALegacyOnlyRowInPlace() {
+        // Only a legacy-keyed row exists (no locally keyed one): the upsert must claim that row —
+        // normalizing vehicle_key/vin_hash to the current install hash — and return ITS id rather
+        // than inserting a second vehicle. Pins the update early-return when preferred != local.
+        val vin = "1G1ZD5ST8JF" + "202020"
+        val legacyKey = VinKeyHasher.legacyHash(vin)
+        val now = System.currentTimeMillis()
+        var legacyId = 0L
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            val vehicle = ContentValues()
+            vehicle.put("vehicle_key", legacyKey)
+            vehicle.put("vin_hash", legacyKey)
+            vehicle.put("first_seen_ms", now)
+            vehicle.put("last_seen_ms", now)
+            vehicle.put("created_at_ms", now)
+            vehicle.put("updated_at_ms", now)
+            legacyId = db.insertOrThrow(VoltTrackerDb.TABLE_VEHICLES, null, vehicle)
+        }
+
+        val returned = store.upsertVehicleFromVin(vin)
+
+        assertEquals("the legacy row is claimed, not duplicated", legacyId, returned)
+        store.checkpoint()
+        SQLiteDatabase.openDatabase(store.getDatabaseFile().path, null, SQLiteDatabase.OPEN_READONLY).use { db ->
+            db
+                .rawQuery(
+                    "SELECT COUNT(*), MIN(vehicle_key) FROM ${VoltTrackerDb.TABLE_VEHICLES}",
+                    null,
+                ).use { cursor ->
+                    assertTrue(cursor.moveToFirst())
+                    assertEquals(1, cursor.getInt(0))
+                    assertFalse(
+                        "vehicle_key must be rekeyed away from the legacy hash",
+                        legacyKey == cursor.getString(1),
+                    )
+                }
+        }
+    }
+
+    @Test
     fun storageSummaryLatestVehicleIsEmptyWhenNoVehiclesRecorded() {
         // No upsert called → vehicles table is empty → latestVehicleJson returns {}.
         val latest =

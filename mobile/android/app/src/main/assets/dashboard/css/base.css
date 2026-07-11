@@ -46,6 +46,12 @@
     --bad: #ff6b5f;
     --mixed: #a48cff;
     --gas: #ff7141;
+    /* Darkened gradient starts for the battery meter (--ev-deep) and the DTC
+       scan bar (--ok-deep). Like --volt-rgb these are deliberately static
+       across schemes: the gradients always rendered these literals in both
+       schemes, so a single value preserves that rendering exactly. */
+    --ev-deep: #8fbf2e;
+    --ok-deep: #1f9c6c;
     /* RGB triplets of the DEFAULT status tones above, for rgba(var(--x-rgb), a)
        alpha tints. Like --volt-rgb they are deliberately static across schemes:
        the alpha-tint rules always rendered these default-tone literals in both
@@ -123,6 +129,10 @@
     --map-accent-rgb: 76, 196, 255; /* RGB of --map-accent, for rgba(var(--map-accent-rgb), a) tints */
     --on-map-accent: #04222e;
     --accent-soft: #c7edff;
+    /* Contrast halo behind the mini route-preview trace (screens-map.css).
+       Deliberately static across schemes for now — it renders over the card
+       surface, and the light theme keeps the same soft white separation. */
+    --route-halo: rgba(255, 255, 255, 0.32);
     /* Per-tone "soft" text: readable on that tone's alpha-tinted fills */
     --volt-soft: #ffd3bf;
     --volt-soft-dim: #ffad88;
@@ -132,6 +142,10 @@
     --on-ok: #06231a;
     --warn-soft: #ffd37f;
     --bad-soft: #ffc0bb;
+    /* RGB triplet of --bad-soft for rgba(var(--bad-soft-rgb), a) alpha tints
+       (hover/active fills on the error-copy actions). Unlike the static status
+       -rgb triplets above, this one follows --bad-soft per scheme. */
+    --bad-soft-rgb: 255, 192, 187;
     --bad-text: #ff8a7e;
     --bad-line: rgba(255,192,187,0.5);
     --bad-fill: rgba(255,192,187,0.12);
@@ -1619,6 +1633,7 @@
       --on-ok: #ffffff;
       --warn-soft: #8a5a00;
       --bad-soft: #b42318;
+      --bad-soft-rgb: 180, 35, 24;
       --bad-text: #b42318;
       --bad-line: rgba(180,35,24,0.4);
       --bad-fill: rgba(180,35,24,0.08);
@@ -1646,7 +1661,9 @@
     body[data-active-view="trips"] .drive-title-mark {
       color: var(--volt-deep);
     }
-    body[data-active-view="map"] .drive-title-mark { color: #0a5e86; }
+    /* Same ink as light --accent-soft (#0a5e86) — tokenized so the two can't
+       drift apart. */
+    body[data-active-view="map"] .drive-title-mark { color: var(--accent-soft); }
     body[data-active-view="charge"] .drive-title-mark { color: var(--ev); }
     body[data-active-view="insights"] .drive-title-mark { color: var(--mixed); }
     body[data-active-view="settings"] .drive-title-mark { color: var(--warn); }

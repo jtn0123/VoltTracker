@@ -217,15 +217,15 @@ object ObdProtocol {
         return ObdKnownValueParserRegistry.parse(cleanCommand, response)
     }
 
-    internal fun parseKnownValueLegacy(
-        cleanCommand: String,
-        response: String?,
-    ): ParsedPidValue? = ObdVoltMode22Decoder.parse(cleanCommand, response)
-
     /**
      * Header-aware decode for the dedicated 96-cell probe on the BECM (ATSH7E7). Bypasses the
      * command-string dispatch of [parseKnownValue], which would misroute the cell DIDs that
      * collide with 7E4 meanings of the same command string (e.g. "2241A3").
+     *
+     * No field anchor exists yet for the per-cell DIDs, so [ObdVoltCellVoltageDecoder.parseProbe]
+     * accepts either known encoding. The scales' plausible word ranges are disjoint (a 1.5-4.5 V
+     * cell needs word 19661-58982 at 5/65535 but 2400-7200 at 1/1600), so trying both is
+     * unambiguous.
      */
     @JvmStatic
     fun parseCellVoltageProbe(
@@ -233,7 +233,7 @@ object ObdProtocol {
         response: String?,
     ): ParsedPidValue? {
         val cleanCommand = command?.trim()?.uppercase(Locale.US) ?: ""
-        return ObdVoltMode22Decoder.parseCellVoltage(cleanCommand, response)
+        return ObdVoltCellVoltageDecoder.parseProbe(cleanCommand, response)
     }
 
     @JvmStatic

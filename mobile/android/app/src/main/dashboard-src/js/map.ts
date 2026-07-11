@@ -1805,7 +1805,6 @@ import { VD } from "./vd-registry";
       viewBox: `0 0 ${w} ${h}`,
       preserveAspectRatio: "none",
       role: "img",
-      "aria-label": "Speed over the drive",
       class: "trip-detail-speed-svg"
     });
     const coords = series.map((v, i) => [
@@ -1820,6 +1819,9 @@ import { VD } from "./vd-registry";
     svg.append(fill, line);
     card.hidden = false;
     const maxSpeed = VD.units.speed(maxV * 3.6);
+    // C4: the label restates the headline's peak so a rebuilt chart (each
+    // trip-detail open) re-summarizes its current data for AT users.
+    svg.setAttribute("aria-label", `Speed over the drive, peaking at ${maxSpeed.value} ${maxSpeed.unit}`);
     VD.setText("tripDetailSpeedHead", `Peaks at ${maxSpeed.value} ${maxSpeed.unit}.`);
     chart.replaceChildren(svg);
   }

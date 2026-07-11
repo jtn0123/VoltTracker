@@ -248,6 +248,15 @@ class RollingAppLog {
     companion object {
         private const val TAG = "RollingAppLog"
 
+        /**
+         * Directory (under the app's `files/`) the process-wide app log lives in. Shared by the
+         * two writers ([ObdService]'s mirror and [VoltTrackerApp]'s crash capture) so both append
+         * to the same `app.log`; every write is a single flushed line under the instance monitor,
+         * and the file is opened in append mode, so the two instances interleave safely at line
+         * granularity.
+         */
+        const val DIR_NAME = "app-log"
+
         /** Rotate the live log file when it's at least this old. */
         const val ROTATE_AGE_MS: Long = 7L * 24L * 60L * 60L * 1000L
 

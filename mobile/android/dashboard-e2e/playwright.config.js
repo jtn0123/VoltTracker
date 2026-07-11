@@ -17,6 +17,10 @@ module.exports = defineConfig({
   testDir: __dirname,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // One CI retry absorbs one-off runner hiccups, but retries are not a flake
+  // amnesty: the dashboard-e2e workflow job warns on every retried spec and
+  // FAILS when the same spec needs a retry in two consecutive runs on a branch
+  // (see "Report retried Playwright tests" in .github/workflows/android.yml).
   retries: process.env.CI ? 1 : 0,
   workers: 1,
   timeout: 60_000,

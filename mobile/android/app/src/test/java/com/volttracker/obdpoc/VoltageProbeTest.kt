@@ -115,11 +115,9 @@ class VoltageProbeTest {
     companion object {
         private const val EPS = 1e-3
 
-        private fun lastVoltage(service: ObdService): Double? {
-            val field = ObdService::class.java.getDeclaredField("lastVoltage")
-            field.isAccessible = true
-            return field.get(service) as Double?
-        }
+        // B5 consolidated the service's lastVoltage field into the SessionOutcome snapshot;
+        // read it through the test accessor instead of reflecting on the removed field.
+        private fun lastVoltage(service: ObdService): Double? = service.sessionOutcomeForTest().voltage
     }
 
     private class RecordingSender(
