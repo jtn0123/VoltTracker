@@ -8,17 +8,18 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
-import com.volttracker.obdpoc.data.DatabaseMerger
-import com.volttracker.obdpoc.data.ObdLocalStore
 import org.json.JSONObject
 import java.io.File
-import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
-import kotlin.math.ceil
 
-/** Drives the Activity-facing backup/restore user flows. */
+/**
+ * Drives the Activity-facing backup/restore user flows: share disclosure + backup building,
+ * SAF restore picking, and the merge/replace choice. Progress publishing lives in
+ * [BackupRestoreProgressPresenter]; applying a staged restore to the live database lives in
+ * [RestoreApplyPipeline].
+ */
 class BackupController(
     private val activity: MainActivity,
     private val dataBackup: DataBackup,
@@ -29,6 +30,8 @@ class BackupController(
     private val backupShareInFlight = AtomicBoolean(false)
     private val disposed = AtomicBoolean(false)
     private val restoreLog = LogcatMirror(RollingAppLog(File(activity.filesDir, "app-log")))
+    private val progressPresenter = BackupRestoreProgressPresenter(activity) { isCancelled() }
+    private val restoreApply = RestoreApplyPipeline(activity) { isCancelled() }
 
     /**
      * Releases this controller's app-log file handle. Called from [MainActivity.onDestroy] so the
@@ -49,13 +52,6 @@ class BackupController(
             return
         }
         restorePickerInFlight = savedInstanceState.getBoolean(KEY_RESTORE_PICKER_IN_FLIGHT, false)
-    }
-
-    private enum class RestoreResult {
-        OK,
-        INVALID_FILE,
-        LOGGING_ACTIVE,
-        OTHER,
     }
 
     fun launchShare(dashboardPreferencesJson: String? = null) {
@@ -179,10 +175,10 @@ class BackupController(
                     R.string.progress_preparing_backup_detail
                 },
             )
-        showRestoreProgress(title, detail, operation = OPERATION_BACKUP)
+        progressPresenter.show(title, detail, operation = OPERATION_BACKUP)
         val started =
             runBackground(activity.getString(R.string.status_backup_worker_failed)) {
-                val progress = ProgressEmitter(title, detail, OPERATION_BACKUP)
+                val progress = progressPresenter.emitter(title, detail, OPERATION_BACKUP)
                 // Set when DataBackup's pre-export quick_check reports problems. The backup still
                 // proceeds (a possibly damaged backup beats no backup), but the final success status
                 // must tell the user instead of burying the warning in logcat.
@@ -225,7 +221,7 @@ class BackupController(
                             AppPrefs.LOG_TAG,
                             "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
                         )
-                        showRestoreProgress(
+                        progressPresenter.show(
                             activity.getString(R.string.progress_backup_failed_title),
                             activity.getString(R.string.status_backup_create_failed),
                             busy = false,
@@ -274,7 +270,7 @@ class BackupController(
                                 .put("lastBackupTrips", tripCount)
                                 .toString(),
                         )
-                        showRestoreProgress(
+                        progressPresenter.show(
                             activity.getString(R.string.progress_backup_ready_title),
                             activity.getString(
                                 if (encrypted) {
@@ -299,7 +295,7 @@ class BackupController(
                         backupShareInFlight.set(false)
                     } catch (ex: RuntimeException) {
                         Log.e(AppPrefs.LOG_TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
-                        showRestoreProgress(
+                        progressPresenter.show(
                             activity.getString(R.string.progress_backup_failed_title),
                             activity.getString(R.string.status_share_sheet_failed),
                             busy = false,
@@ -313,7 +309,7 @@ class BackupController(
             }
         if (!started) {
             databaseLease.close()
-            showRestoreProgress(
+            progressPresenter.show(
                 activity.getString(R.string.progress_backup_failed_title),
                 activity.getString(R.string.status_backup_worker_failed),
                 busy = false,
@@ -388,7 +384,7 @@ class BackupController(
         passphrase: String?,
     ) {
         val encrypted = hasPassphrase(passphrase)
-        showRestoreProgress(
+        progressPresenter.show(
             readingBackupTitle(encrypted),
             activity.getString(R.string.progress_reading_backup_detail),
             operation = OPERATION_RESTORE,
@@ -403,7 +399,7 @@ class BackupController(
         )
         if (!runBackground(activity.getString(R.string.status_restore_worker_failed)) {
                 val progress =
-                    ProgressEmitter(
+                    progressPresenter.emitter(
                         readingBackupTitle(encrypted),
                         activity.getString(
                             if (encrypted) {
@@ -438,13 +434,13 @@ class BackupController(
                             "bytes" to outcome.bytesRead,
                         ),
                     )
-                    hideRestoreProgress()
+                    progressPresenter.hide()
                     activity.publishStatus("ready", restoreVerifiedMessage(outcome), false)
                     promptRestoreMode(staged)
                 }
             }
         ) {
-            showRestoreProgress(
+            progressPresenter.show(
                 restoreFailedTitle(),
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
@@ -480,12 +476,12 @@ class BackupController(
 
     private fun cancelStagedRestore(staged: File?) {
         DataBackup.deleteIfExists(staged)
-        hideRestoreProgress()
+        progressPresenter.hide()
         activity.publishStatus("ready", activity.getString(R.string.status_restore_cancelled), false)
     }
 
     private fun performReplace(staged: File) {
-        showRestoreProgress(
+        progressPresenter.show(
             activity.getString(R.string.progress_restoring_title),
             activity.getString(R.string.progress_restoring_detail),
             operation = OPERATION_RESTORE,
@@ -494,21 +490,21 @@ class BackupController(
         activity.publishStatus("ready", activity.getString(R.string.status_restoring), false)
         if (!runBackground(activity.getString(R.string.status_restore_worker_failed)) {
                 val progress =
-                    ProgressEmitter(
+                    progressPresenter.emitter(
                         activity.getString(R.string.progress_restoring_title),
                         activity.getString(R.string.progress_replace_worker_detail),
                         OPERATION_RESTORE,
                     )
                 val settingsManifest = dataBackup.readSettingsManifest(staged)
                 dataBackup.removeSettingsManifest(staged)
-                val result = applyReplace(staged, progress)
+                val result = restoreApply.applyReplace(staged, progress)
                 activity.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
-                    if (result == RestoreResult.OK) {
+                    if (result == RestoreApplyPipeline.Result.OK) {
                         applyRestoredSettings(settingsManifest)
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
-                        showRestoreProgress(
+                        progressPresenter.show(
                             activity.getString(R.string.progress_restore_complete_title),
                             activity.getString(R.string.progress_restore_complete_detail),
                             busy = false,
@@ -527,7 +523,7 @@ class BackupController(
                 }
             }
         ) {
-            showRestoreProgress(
+            progressPresenter.show(
                 restoreFailedTitle(),
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
@@ -538,7 +534,7 @@ class BackupController(
     }
 
     private fun performMerge(staged: File) {
-        showRestoreProgress(
+        progressPresenter.show(
             activity.getString(R.string.progress_merging_title),
             activity.getString(R.string.progress_merging_detail),
             operation = OPERATION_RESTORE,
@@ -547,22 +543,22 @@ class BackupController(
         activity.publishStatus("ready", activity.getString(R.string.status_merging), false)
         if (!runBackground(activity.getString(R.string.status_restore_worker_failed)) {
                 val progress =
-                    ProgressEmitter(
+                    progressPresenter.emitter(
                         activity.getString(R.string.progress_merging_title),
                         activity.getString(R.string.progress_merge_worker_detail),
                         OPERATION_RESTORE,
                     )
                 val settingsManifest = dataBackup.readSettingsManifest(staged)
                 dataBackup.removeSettingsManifest(staged)
-                val outcome = applyMerge(staged, progress)
+                val outcome = restoreApply.applyMerge(staged, progress)
                 activity.runOnUiThread {
                     if (disposed.get()) return@runOnUiThread
-                    if (outcome.result == RestoreResult.OK) {
+                    if (outcome.result == RestoreApplyPipeline.Result.OK) {
                         applyRestoredSettings(settingsManifest)
                         activity.publishDeviceList()
                         activity.publishStorageSummary()
                         val mergeMessage = outcome.message ?: activity.getString(R.string.merge_default_message)
-                        showRestoreProgress(
+                        progressPresenter.show(
                             activity.getString(R.string.progress_merge_complete_title),
                             activity.getString(R.string.merge_reconnect_suffix, mergeMessage),
                             busy = false,
@@ -575,11 +571,11 @@ class BackupController(
                             activity.getString(R.string.merge_reconnect_suffix, mergeMessage),
                             false,
                         )
-                    } else if (outcome.result == RestoreResult.LOGGING_ACTIVE) {
+                    } else if (outcome.result == RestoreApplyPipeline.Result.LOGGING_ACTIVE) {
                         publishRestoreFailure(outcome.result)
                     } else {
                         val message = outcome.message ?: activity.getString(R.string.status_merge_failed_generic)
-                        showRestoreProgress(
+                        progressPresenter.show(
                             restoreFailedTitle(),
                             message,
                             busy = false,
@@ -596,7 +592,7 @@ class BackupController(
                 }
             }
         ) {
-            showRestoreProgress(
+            progressPresenter.show(
                 restoreFailedTitle(),
                 activity.getString(R.string.status_restore_worker_failed),
                 busy = false,
@@ -606,9 +602,9 @@ class BackupController(
         }
     }
 
-    private fun publishRestoreFailure(result: RestoreResult) {
+    private fun publishRestoreFailure(result: RestoreApplyPipeline.Result) {
         val message = restoreFailureMessage(result)
-        showRestoreProgress(
+        progressPresenter.show(
             restoreFailedTitle(),
             message,
             busy = false,
@@ -631,9 +627,9 @@ class BackupController(
     private fun publishRestoreStageFailure(outcome: DataBackup.RestoreStageOutcome) {
         val message = restoreStageFailureMessage(outcome.status)
         if (outcome.status == DataBackup.RestoreStageStatus.NO_FILE) {
-            hideRestoreProgress()
+            progressPresenter.hide()
         } else {
-            showRestoreProgress(
+            progressPresenter.show(
                 restoreFailedTitle(),
                 message,
                 busy = false,
@@ -680,11 +676,11 @@ class BackupController(
             if (encrypted) R.string.progress_reading_encrypted_backup_title else R.string.progress_reading_backup_title,
         )
 
-    private fun restoreFailureMessage(result: RestoreResult): String =
+    private fun restoreFailureMessage(result: RestoreApplyPipeline.Result): String =
         activity.getString(
             when (result) {
-                RestoreResult.LOGGING_ACTIVE -> R.string.restore_failed_logging_active
-                RestoreResult.INVALID_FILE -> R.string.restore_failed_invalid_file
+                RestoreApplyPipeline.Result.LOGGING_ACTIVE -> R.string.restore_failed_logging_active
+                RestoreApplyPipeline.Result.INVALID_FILE -> R.string.restore_failed_invalid_file
                 else -> R.string.restore_failed_other
             },
         )
@@ -710,49 +706,6 @@ class BackupController(
             DataBackup.RestoreStageStatus.OK ->
                 activity.getString(R.string.restore_stage_not_prepared)
         }
-
-    private fun showRestoreProgress(
-        title: String,
-        detail: String,
-        busy: Boolean = true,
-        tone: String = "busy",
-        phase: String? = null,
-        bytesDone: Long = -1L,
-        bytesTotal: Long = -1L,
-        rowsDone: Long = -1L,
-        rowsTotal: Long = -1L,
-        percent: Int = -1,
-        etaSeconds: Long = -1L,
-        operation: String? = null,
-    ) {
-        val resolvedPercent =
-            if (percent >= 0) {
-                percent.coerceIn(0, 100)
-            } else if (!busy && tone == "ok") {
-                100
-            } else {
-                progressPercent(bytesDone, bytesTotal, rowsDone, rowsTotal)
-            }
-        activity.publishRestoreProgress(
-            true,
-            busy,
-            title,
-            detail,
-            tone,
-            phase,
-            bytesDone,
-            bytesTotal,
-            rowsDone,
-            rowsTotal,
-            resolvedPercent,
-            etaSeconds,
-            operation,
-        )
-    }
-
-    private fun hideRestoreProgress() {
-        activity.publishRestoreProgress(false, false, null, null, "idle", null, -1L, -1L, -1L, -1L, -1, -1L, null)
-    }
 
     private fun logRestore(
         event: String,
@@ -788,230 +741,7 @@ class BackupController(
         return false
     }
 
-    private inner class ProgressEmitter(
-        private val title: String,
-        private val fallbackDetail: String,
-        private val operation: String,
-    ) {
-        private val startedAtMs = System.currentTimeMillis()
-        private var lastPublishedAtMs = 0L
-
-        fun onDataBackupProgress(snapshot: DataBackup.ProgressSnapshot) {
-            publish(
-                phase = snapshot.phase,
-                detail = snapshot.detail,
-                bytesDone = snapshot.bytesDone,
-                bytesTotal = snapshot.bytesTotal,
-                rowsDone = snapshot.rowsDone,
-                rowsTotal = snapshot.rowsTotal,
-            )
-        }
-
-        fun onMergeProgress(
-            phase: String,
-            rowsDone: Long,
-            rowsTotal: Long,
-        ) {
-            publish(
-                phase = phase,
-                detail = fallbackDetail,
-                rowsDone = rowsDone,
-                rowsTotal = rowsTotal,
-            )
-        }
-
-        private fun publish(
-            phase: String?,
-            detail: String?,
-            bytesDone: Long = -1L,
-            bytesTotal: Long = -1L,
-            rowsDone: Long = -1L,
-            rowsTotal: Long = -1L,
-        ) {
-            if (isCancelled()) return
-            val now = System.currentTimeMillis()
-            val percent = progressPercent(bytesDone, bytesTotal, rowsDone, rowsTotal)
-            val complete = percent >= 100
-            if (lastPublishedAtMs > 0L &&
-                now - lastPublishedAtMs < PROGRESS_UPDATE_INTERVAL_MS &&
-                !complete
-            ) {
-                return
-            }
-            lastPublishedAtMs = now
-            val etaSeconds = estimateEtaSeconds(bytesDone, bytesTotal, rowsDone, rowsTotal, startedAtMs, now)
-            activity.runOnUiThread {
-                if (isCancelled()) return@runOnUiThread
-                showRestoreProgress(
-                    title,
-                    detail ?: fallbackDetail,
-                    phase = phase,
-                    bytesDone = bytesDone,
-                    bytesTotal = bytesTotal,
-                    rowsDone = rowsDone,
-                    rowsTotal = rowsTotal,
-                    percent = percent,
-                    etaSeconds = etaSeconds,
-                    operation = operation,
-                )
-            }
-        }
-    }
-
-    private class MergeOutcome(
-        val result: RestoreResult,
-        val message: String?,
-    )
-
-    private fun applyMerge(
-        staged: File,
-        progress: ProgressEmitter,
-    ): MergeOutcome {
-        val databaseLease =
-            DatabaseOperationLease.tryAcquire(OPERATION_RESTORE)
-                ?: return MergeOutcome(RestoreResult.OTHER, null)
-        try {
-            ensureActive()
-            val store = activity.localStore
-            if (store == null) {
-                return MergeOutcome(RestoreResult.OTHER, null)
-            }
-            if (!stopLoggingForRestore()) {
-                return MergeOutcome(RestoreResult.LOGGING_ACTIVE, null)
-            }
-            ensureActive()
-            val merged =
-                store.dbMaintenance.mergeFrom(
-                    staged,
-                    DatabaseMerger.ProgressListener { phase, rowsDone, rowsTotal ->
-                        ensureActive()
-                        progress.onMergeProgress(phase, rowsDone, rowsTotal)
-                    },
-                )
-            if (!merged.ok) {
-                return MergeOutcome(RestoreResult.OTHER, merged.summary())
-            }
-            return MergeOutcome(RestoreResult.OK, merged.summary())
-        } catch (ex: RuntimeException) {
-            return MergeOutcome(RestoreResult.OTHER, null)
-        } finally {
-            databaseLease.close()
-            DataBackup.deleteIfExists(staged)
-        }
-    }
-
-    private fun applyReplace(
-        staged: File,
-        progress: ProgressEmitter,
-    ): RestoreResult {
-        var restoreTemp: File? = null
-        var restoreBackup: File? = null
-        var preserveRestoreBackup = false
-        val databaseLease = DatabaseOperationLease.tryAcquire(OPERATION_RESTORE) ?: return RestoreResult.OTHER
-        try {
-            ensureActive()
-            val dbFile = activity.localStore?.getDatabaseFile() ?: return RestoreResult.OTHER
-            if (!stopLoggingForRestore()) {
-                return RestoreResult.LOGGING_ACTIVE
-            }
-            ensureActive()
-            val activeStore = activity.localStore
-            if (activeStore != null) {
-                if (!activeStore.checkpoint()) {
-                    Log.w(AppPrefs.LOG_TAG, "replace restore aborted: live WAL checkpoint stayed incomplete")
-                    return RestoreResult.OTHER
-                }
-                activeStore.close()
-                activity.localStore = null
-            }
-            restoreTemp = File(dbFile.path + ".restore-new")
-            restoreBackup = File(dbFile.path + ".restore-backup")
-            DataBackup.deleteIfExists(restoreTemp)
-            DataBackup.deleteIfExists(restoreBackup)
-            DataBackup.copyFile(
-                staged,
-                restoreTemp,
-                DataBackup.ProgressListener { snapshot -> progress.onDataBackupProgress(snapshot) },
-                activity.getString(R.string.progress_phase_copying_backup),
-                activity.getString(R.string.progress_replace_worker_detail),
-            )
-            ensureActive()
-            DataBackup.deleteIfExists(File(dbFile.path + "-wal"))
-            DataBackup.deleteIfExists(File(dbFile.path + "-shm"))
-            if (dbFile.exists()) {
-                DataBackup.renameFile(dbFile, restoreBackup)
-            }
-            try {
-                DataBackup.renameFile(restoreTemp, dbFile)
-            } catch (ex: IOException) {
-                preserveRestoreBackup = !restoreOriginalDatabase(dbFile, restoreBackup)
-                throw ex
-            } catch (ex: RuntimeException) {
-                preserveRestoreBackup = !restoreOriginalDatabase(dbFile, restoreBackup)
-                throw ex
-            }
-            try {
-                activity.localStore = ObdLocalStore(activity)
-            } catch (ex: RuntimeException) {
-                val rolledBack = restoreOriginalDatabase(dbFile, restoreBackup)
-                preserveRestoreBackup = !rolledBack
-                if (rolledBack) activity.localStore = ObdLocalStore(activity)
-                throw ex
-            }
-            return RestoreResult.OK
-        } catch (ex: Exception) {
-            if (ex is IOException || ex is RuntimeException) {
-                if (activity.localStore == null && !isCancelled() && !preserveRestoreBackup) {
-                    try {
-                        activity.localStore = ObdLocalStore(activity)
-                    } catch (ignored: RuntimeException) {
-                        // Nothing more we can do; the next launch will recreate it.
-                    }
-                }
-                return RestoreResult.OTHER
-            }
-            throw ex
-        } finally {
-            databaseLease.close()
-            DataBackup.deleteIfExists(restoreTemp)
-            if (shouldDeleteRestoreSafetyCopy(preserveRestoreBackup)) {
-                DataBackup.deleteIfExists(restoreBackup)
-            } else {
-                Log.e(AppPrefs.LOG_TAG, "preserving restore safety copy after rollback failure: $restoreBackup")
-            }
-            DataBackup.deleteIfExists(staged)
-        }
-    }
-
-    private fun stopLoggingForRestore(): Boolean {
-        if (isCancelled()) return false
-        if (!activity.isLoggingActive()) {
-            return true
-        }
-        try {
-            activity.stopObdService()
-        } catch (ex: RuntimeException) {
-            return false
-        }
-        val deadline = System.currentTimeMillis() + RESTORE_STOP_TIMEOUT_MS
-        while (activity.isLoggingActive() && System.currentTimeMillis() < deadline) {
-            try {
-                Thread.sleep(50L)
-            } catch (ex: InterruptedException) {
-                Thread.currentThread().interrupt()
-                return false
-            }
-        }
-        return !activity.isLoggingActive()
-    }
-
     private fun isCancelled(): Boolean = disposed.get() || Thread.currentThread().isInterrupted
-
-    private fun ensureActive() {
-        if (isCancelled()) throw RestoreCancelledException()
-    }
-
-    private class RestoreCancelledException : RuntimeException("Restore cancelled during teardown")
 
     companion object {
         const val PREF_LAST_BACKUP_AT_MS = "last_successful_backup_at_ms"
@@ -1020,81 +750,7 @@ class BackupController(
         private const val KEY_RESTORE_PICKER_IN_FLIGHT = "volttracker.restore_picker_in_flight"
         private const val OPERATION_BACKUP = "backup"
         private const val OPERATION_RESTORE = "restore"
-        private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
-        private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
 
         private fun hasPassphrase(passphrase: String?): Boolean = !passphrase?.trim().isNullOrEmpty()
-
-        private fun progressUnits(
-            bytesDone: Long,
-            bytesTotal: Long,
-            rowsDone: Long,
-            rowsTotal: Long,
-        ): LongArray? =
-            if (bytesTotal > 0L && bytesDone >= 0L) {
-                longArrayOf(bytesDone, bytesTotal)
-            } else if (rowsTotal > 0L && rowsDone >= 0L) {
-                longArrayOf(rowsDone, rowsTotal)
-            } else {
-                null
-            }
-
-        private fun progressPercent(
-            bytesDone: Long,
-            bytesTotal: Long,
-            rowsDone: Long,
-            rowsTotal: Long,
-        ): Int {
-            val (done, total) = progressUnits(bytesDone, bytesTotal, rowsDone, rowsTotal) ?: return -1
-            return ((done.toDouble() / total.toDouble()) * 100.0).toInt().coerceIn(0, 100)
-        }
-
-        private fun estimateEtaSeconds(
-            bytesDone: Long,
-            bytesTotal: Long,
-            rowsDone: Long,
-            rowsTotal: Long,
-            startedAtMs: Long,
-            nowMs: Long,
-        ): Long {
-            val (done, total) = progressUnits(bytesDone, bytesTotal, rowsDone, rowsTotal) ?: return -1L
-            if (done >= total) {
-                return 0L
-            }
-            val elapsedMs = nowMs - startedAtMs
-            if (done <= 0L || elapsedMs < 500L) {
-                return -1L
-            }
-            val unitsPerMs = done.toDouble() / elapsedMs.toDouble()
-            if (unitsPerMs <= 0.0) {
-                return -1L
-            }
-            val remainingMs = (total - done).toDouble() / unitsPerMs
-            return ceil(remainingMs / 1000.0).toLong().coerceAtLeast(1L)
-        }
-
-        internal fun shouldDeleteRestoreSafetyCopy(rollbackFailed: Boolean): Boolean = !rollbackFailed
-
-        private fun restoreOriginalDatabase(
-            dbFile: File,
-            restoreBackup: File?,
-        ): Boolean {
-            if (restoreBackup == null || !restoreBackup.exists()) {
-                return true
-            }
-            try {
-                DataBackup.deleteIfExists(dbFile)
-                DataBackup.renameFile(restoreBackup, dbFile)
-                DataBackup.deleteIfExists(File(dbFile.path + "-wal"))
-                DataBackup.deleteIfExists(File(dbFile.path + "-shm"))
-                return true
-            } catch (ex: Exception) {
-                if (ex !is IOException && ex !is RuntimeException) {
-                    throw ex
-                }
-                Log.w(AppPrefs.LOG_TAG, "restoreOriginalDatabase failed; original DB may be gone", ex)
-                return false
-            }
-        }
     }
 }
