@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.32.3 (2026-07-12)
+
+### 🔺 Fix
+
+- 20 deep-dive audit items + background telemetry backfill for live charts
+  ([#339](https://github.com/jtn0123/VoltTracker/pull/339),
+  [`799c934`](https://github.com/jtn0123/VoltTracker/commit/799c9341c73949161ab7434ce2c890bb884ee21b))
+
+
 ## v0.32.2 (2026-07-11)
 
 ### 🔺 Fix
