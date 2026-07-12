@@ -1226,6 +1226,37 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun responseContainsAllMode01Pids_acceptsAscendingPidOrderReply() {
+        // B11: an ECU may answer a batched "010D0C" in ascending PID order (0C before 0D) on one
+        // line. The probe must still recognize the batch as complete instead of silently
+        // disabling mode-01 batching for the whole session.
+        val ascending = "41 0C 0B B8 41 0D 50\r\r>"
+        assertTrue(ObdProtocol.responseContainsAllMode01Pids(ascending, listOf("0D", "0C")))
+    }
+
+    @Test
+    fun responseContainsAllMode01Pids_outOfOrderAcrossLinesIsAccepted() {
+        val response = "41 0C 0B B8\r41 0D 50\r>"
+        assertTrue(ObdProtocol.responseContainsAllMode01Pids(response, listOf("0D", "0C")))
+    }
+
+    @Test
+    fun responseContainsAllMode01Pids_unorderedRetryCannotDoubleCountPayloadBytes() {
+        // 410C's payload here happens to contain the byte pair 4105 — a naive unordered scan
+        // could satisfy PID 05 from inside 0C's consumed payload. The forward-only consumption
+        // pass must still reject this response because no real 4105 frame follows.
+        val overlapping = "41 0C 41 05\r>"
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(overlapping, listOf("0C", "05")))
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(overlapping, listOf("05", "0C")))
+    }
+
+    @Test
+    fun responseContainsAllMode01Pids_missingPidStillFailsWhenOthersAreUnordered() {
+        val response = "41 0C 0B B8 41 05 5A\r>"
+        assertFalse(ObdProtocol.responseContainsAllMode01Pids(response, listOf("0D", "0C", "05")))
+    }
+
+    @Test
     fun responseContainsAllMode01Pids_odometerNeedsFourBytes() {
         val truncated = "41 0D 50 41 A6 00 12 D6\r>"
         assertFalse(ObdProtocol.responseContainsAllMode01Pids(truncated, listOf("0D", "A6")))

@@ -355,13 +355,36 @@ class VoltBridgeConnectionsTest {
             requireDeviceCatalog().remember(address, name)
         }
 
-        override fun cancelRetryFromBridge() {
-            cancelRetryCalls += 1
-        }
+        // Connections only reaches the two retry/settings commands; the rest of the
+        // DiagnosticsCommands cluster is inert here.
+        private val recordingDiagnostics =
+            object : DiagnosticsCommands {
+                override fun forceStopPackageFromBridge(packageName: String?): Boolean = false
 
-        override fun openBluetoothSettingsFromBridge() {
-            openBluetoothSettingsCalls += 1
-        }
+                override fun cancelRetryFromBridge() {
+                    cancelRetryCalls += 1
+                }
+
+                override fun openBluetoothSettingsFromBridge() {
+                    openBluetoothSettingsCalls += 1
+                }
+
+                override fun getRecentSessionsJson(n: Int): String = "[]"
+
+                override fun shareDiagnosticsFromBridge() = Unit
+
+                override fun shareDiagnosticsDigestFromBridge() = Unit
+
+                override fun startTestConnectionFromBridge() = Unit
+
+                override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) = Unit
+
+                override fun cancelAdapterReadyNotifyFromBridge() = Unit
+
+                override fun openSetupGuideFromBridge() = Unit
+            }
+
+        override fun diagnostics(): DiagnosticsCommands = recordingDiagnostics
     }
 
     /** A minimal store; connections never mutates it, but MainActivity wires one up. */

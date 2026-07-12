@@ -3,11 +3,11 @@
 Date: 2026-05-27
 
 > **Note (2026-06-17):** the single combined budget below is a historical
-> snapshot. The budget has since been **split** — startup JS/CSS 360,000 bytes,
-> lazy support JS 90,000 bytes, and lazy DTC data 380,000 bytes — see
-> [`bundle-budget.md`](bundle-budget.md) and the dashboard budget constants in
-> `mobile/android/build.gradle` for the current numbers. Use
-> `./gradlew dashboardAssetReport` for current local asset sizes.
+> snapshot. The budget has since been **split** into per-bucket byte budgets —
+> see [`bundle-budget.md`](bundle-budget.md) and the dashboard budget constants
+> in `mobile/android/build.gradle` for the current numbers (this note quotes
+> none on purpose, so it can't drift). Use `./gradlew dashboardAssetReport`
+> for current local asset sizes.
 
 Scope: first-party dashboard JavaScript and CSS under
 `mobile/android/app/src/main/assets/dashboard`, excluding vendored

@@ -85,7 +85,7 @@ internal class VoltBridgeConnections(
     }
 
     fun cancelRetry() {
-        activity.runOnUiThread(activity::cancelRetryFromBridge)
+        activity.runOnUiThread { activity.diagnostics().cancelRetryFromBridge() }
     }
 
     fun tryReconnectNow() {
@@ -103,7 +103,7 @@ internal class VoltBridgeConnections(
     }
 
     fun openBluetoothSettings() {
-        activity.runOnUiThread(activity::openBluetoothSettingsFromBridge)
+        activity.runOnUiThread { activity.diagnostics().openBluetoothSettingsFromBridge() }
     }
 
     private fun startSelectedDeviceAction(

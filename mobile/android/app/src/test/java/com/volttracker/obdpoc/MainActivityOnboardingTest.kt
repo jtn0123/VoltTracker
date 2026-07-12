@@ -146,7 +146,7 @@ class MainActivityOnboardingTest {
 
         // But re-opening on demand still surfaces the flow — the only remaining step is the
         // connect/demo call-to-action, which then leads to the completion screen.
-        activity.openSetupGuideFromBridge()
+        activity.diagnostics().openSetupGuideFromBridge()
         assertTrue("re-open should surface the connect/demo step: ${latestTitle()}", latestTitle().contains("demo"))
         clickSkip()
         assertTrue("skipping the CTA reaches completion: ${latestTitle()}", latestTitle().contains("all set"))
@@ -179,7 +179,7 @@ class MainActivityOnboardingTest {
         // connect/demo. Walk: location (skip) -> connect/demo.
         grantBluetooth(activity)
         pairAdapter(activity)
-        activity.openSetupGuideFromBridge()
+        activity.diagnostics().openSetupGuideFromBridge()
 
         // First presented step is location; skip it to reach the connect/demo step.
         assertTrue("re-open should open on location: ${latestTitle()}", latestTitle().contains("location"))
@@ -211,7 +211,7 @@ class MainActivityOnboardingTest {
         ShadowAlertDialog.reset()
 
         // Auto-show stays suppressed, but the bridge re-open still surfaces the guide.
-        activity.openSetupGuideFromBridge()
+        activity.diagnostics().openSetupGuideFromBridge()
         assertNotNull("the Setup guide affordance must re-open the walkthrough after completion", latestDialog())
         assertTrue(
             "re-open on a fresh-perms device starts at pairing: ${latestTitle()}",

@@ -403,25 +403,7 @@ class TripExportControllerTest {
 
         override fun requireBackupController() = unused()
 
-        override fun forceStopPackageFromBridge(packageName: String?) = unused()
-
-        override fun cancelRetryFromBridge() = unused()
-
-        override fun openBluetoothSettingsFromBridge() = unused()
-
-        override fun getRecentSessionsJson(n: Int) = unused()
-
-        override fun shareDiagnosticsFromBridge() = unused()
-
-        override fun shareDiagnosticsDigestFromBridge() = unused()
-
-        override fun startTestConnectionFromBridge() = unused()
-
-        override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) = unused()
-
-        override fun cancelAdapterReadyNotifyFromBridge() = unused()
-
-        override fun openSetupGuideFromBridge() = unused()
+        override fun diagnostics(): DiagnosticsCommands = unused()
 
         override fun onDashboardReady() = unused()
 
