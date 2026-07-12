@@ -352,6 +352,179 @@ class DatabaseMergerTest {
     }
 
     @Test
+    fun tripEditsSurviveMergeWhenDonorSessionIdsCollideWithTargetIds() {
+        // B2: trip labels/favorites/hidden flags are events whose route key
+        // ("<sessionId>:<start>:<end>") is embedded as TEXT in detail and payload.routeKey. The
+        // donor's session 1 collides with the live session 1, so the merged events get session_id
+        // 2 — and the embedded keys must be rewritten too, or every route-key lookup misses.
+        insertSession(live, 1000L) // live _id 1 — forces the donor's session 1 to remap.
+        val donorSession = insertSession(donor, 2000L) // donor _id 1
+        assertEquals("precondition: donor session id must collide with a live id", 1L, donorSession)
+        insertTripEditEvent(
+            donor,
+            donorSession,
+            2001L,
+            ObdTripLabels.EVENT_KIND,
+            "labeled",
+            "1:2000:3000",
+            """{"routeKey":"1:2000:3000","label":"Home"}""",
+        )
+        insertTripEditEvent(
+            donor,
+            donorSession,
+            2002L,
+            ObdTripFavorites.EVENT_KIND,
+            "favorited",
+            "1:2100:3100",
+            """{"routeKey":"1:2100:3100","favorite":true}""",
+        )
+        insertTripEditEvent(
+            donor,
+            donorSession,
+            2003L,
+            ObdTripExclusions.EVENT_KIND,
+            ObdTripExclusions.STATE_HIDDEN,
+            "1:2200:3200",
+            """{"routeKey":"1:2200:3200","reason":"manual_not_trip"}""",
+        )
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+
+        val targetSession = sessionIdByStart(live, 2000L)
+        assertTrue("the donor session must have been remapped", targetSession != donorSession)
+        assertEquals(
+            "imported label must resolve against the TARGET session id",
+            mapOf("$targetSession:2000:3000" to "Home"),
+            ObdTripLabels.labelsByRouteKey(live, listOf(targetSession)),
+        )
+        assertEquals(
+            "imported favorite must resolve against the TARGET session id",
+            setOf("$targetSession:2100:3100"),
+            ObdTripFavorites.favoriteRouteKeys(live, listOf(targetSession)),
+        )
+        assertEquals(
+            "imported hidden flag must resolve against the TARGET session id",
+            setOf("$targetSession:2200:3200"),
+            ObdTripExclusions.hiddenRouteKeys(live, listOf(targetSession)),
+        )
+
+        // Re-merging the same donor must dedupe the (rewritten) events, not duplicate them.
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals("re-merge must not duplicate trip-edit events", 3, count(live, VoltTrackerDb.TABLE_EVENTS))
+        assertEquals(
+            mapOf("$targetSession:2000:3000" to "Home"),
+            ObdTripLabels.labelsByRouteKey(live, listOf(targetSession)),
+        )
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun malformedTripEditPayloadsCopyThroughWithoutFailingTheMerge() {
+        insertSession(live, 1000L)
+        val donorSession = insertSession(donor, 2000L)
+        // Malformed detail + unparseable payload: both must copy verbatim, never crash the merge.
+        insertTripEditEvent(donor, donorSession, 2001L, ObdTripLabels.EVENT_KIND, "labeled", "garbage", "not json")
+        // Valid detail with unparseable payload: detail is rewritten, payload copies untouched.
+        insertTripEditEvent(donor, donorSession, 2002L, ObdTripLabels.EVENT_KIND, "labeled", "1:2000:3000", "not json")
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+
+        val targetSession = sessionIdByStart(live, 2000L)
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_EVENTS))
+        assertEquals(
+            "malformed detail must copy through untouched",
+            1,
+            count(live, "${VoltTrackerDb.TABLE_EVENTS} WHERE detail = 'garbage' AND payload = 'not json'"),
+        )
+        assertEquals(
+            "a valid embedded key is still rewritten even when the payload is unparseable",
+            1,
+            count(
+                live,
+                "${VoltTrackerDb.TABLE_EVENTS} WHERE detail = '$targetSession:2000:3000' AND payload = 'not json'",
+            ),
+        )
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun fieldCapabilityMergeSumsCountersAndKeepsNewestFields() {
+        // B5: duplicate-keyed donor field_capabilities rows used to be skipped outright, dropping
+        // the donor's response_count, newer last_seen_ms, and sample_json. They now counter-merge
+        // like adapter history / diagnostic codes.
+        val liveVehicle = insertVehicle(live, "VH1")
+        val donorVehicle = insertVehicle(donor, "VH1")
+        insertFieldCapabilityFull(live, liveVehicle, 5, 100L, 200L, """{"sample":"old"}""")
+        insertFieldCapabilityFull(donor, donorVehicle, 3, 50L, 400L, """{"sample":"new"}""")
+
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_FIELD_CAPABILITIES))
+        assertEquals(
+            "donor extends the seen interval, so counters must sum",
+            8,
+            scalar(live, "SELECT response_count FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}"),
+        )
+        assertEquals(50, scalar(live, "SELECT first_seen_ms FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}"))
+        assertEquals(400, scalar(live, "SELECT last_seen_ms FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}"))
+        live
+            .rawQuery("SELECT sample_json FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}", null)
+            .use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("newest sample_json wins", """{"sample":"new"}""", cursor.getString(0))
+            }
+
+        // Re-import of the same backup adds no new time span — counters must not double.
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_FIELD_CAPABILITIES))
+        assertEquals(
+            "re-importing the same backup must not inflate response_count",
+            8,
+            scalar(live, "SELECT response_count FROM ${VoltTrackerDb.TABLE_FIELD_CAPABILITIES}"),
+        )
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
+    fun aliasCollisionBetweenTwoLiveRowsResolvesDeterministically() {
+        // D4: two live rows both claim the alias KEY-SHARED (possible after odd import
+        // sequences). registerVehicleKeys is first-registration-wins, so the donor must map to
+        // the FIRST live row on every merge — deterministic, never flip-flopping — with the
+        // donor's children attached to that winner and no orphans.
+        val firstLive = insertVehicle(live, "KEY-A", """["KEY-A","KEY-SHARED"]""")
+        val secondLive = insertVehicle(live, "KEY-B", """["KEY-B","KEY-SHARED"]""")
+        val donorVehicle = insertVehicle(donor, "KEY-SHARED", """["KEY-SHARED"]""")
+        val donorSession = insertSession(donor, 5000L)
+        insertTripSegment(donor, donorSession, donorVehicle, 5000L)
+
+        val result = DatabaseMerger.merge(live, donor)
+
+        assertTrue(result.ok)
+        assertEquals(0, result.vehiclesAdded)
+        assertEquals(1, result.vehiclesMerged)
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertEquals(
+            "the first-registered live row must win the alias collision",
+            1,
+            count(live, "${VoltTrackerDb.TABLE_TRIP_SEGMENTS} WHERE vehicle_id = $firstLive"),
+        )
+        assertEquals(0, count(live, "${VoltTrackerDb.TABLE_TRIP_SEGMENTS} WHERE vehicle_id = $secondLive"))
+        assertEquals(
+            "no imported child row may be orphaned off both live vehicles",
+            0,
+            count(live, "${VoltTrackerDb.TABLE_TRIP_SEGMENTS} WHERE vehicle_id IS NULL"),
+        )
+        assertForeignKeysIntact(live)
+
+        // Re-merging must pick the SAME winner (first-registration-wins is stable).
+        assertTrue(DatabaseMerger.merge(live, donor).ok)
+        assertEquals(2, count(live, VoltTrackerDb.TABLE_VEHICLES))
+        assertEquals(1, count(live, VoltTrackerDb.TABLE_TRIP_SEGMENTS))
+        assertEquals(1, count(live, "${VoltTrackerDb.TABLE_TRIP_SEGMENTS} WHERE vehicle_id = $firstLive"))
+        assertForeignKeysIntact(live)
+    }
+
+    @Test
     fun mergeIntoEmptyImportsEverything() {
         val donorSession = insertSession(donor, 7000L)
         insertTelemetry(donor, donorSession, 7000L)
@@ -942,6 +1115,39 @@ class DatabaseMergerTest {
             db.insertOrThrow(VoltTrackerDb.TABLE_EVENTS, null, cv)
         }
 
+        private fun insertTripEditEvent(
+            db: SQLiteDatabase,
+            sessionId: Long,
+            occurredAtMs: Long,
+            kind: String,
+            state: String,
+            detail: String,
+            payload: String,
+        ) {
+            val cv = ContentValues()
+            cv.put("session_id", sessionId)
+            cv.put("occurred_at_ms", occurredAtMs)
+            cv.put("kind", kind)
+            cv.put("state", state)
+            cv.put("detail", detail)
+            cv.put("blocked", 0)
+            cv.put("payload", payload)
+            db.insertOrThrow(VoltTrackerDb.TABLE_EVENTS, null, cv)
+        }
+
+        private fun sessionIdByStart(
+            db: SQLiteDatabase,
+            startedAtMs: Long,
+        ): Long =
+            db
+                .rawQuery(
+                    "SELECT _id FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE started_at_ms = ?",
+                    arrayOf(startedAtMs.toString()),
+                ).use { cursor ->
+                    assertTrue("expected a session started at $startedAtMs", cursor.moveToFirst())
+                    cursor.getLong(0)
+                }
+
         private fun insertPidObservation(
             db: SQLiteDatabase,
             sessionId: Long,
@@ -1004,6 +1210,25 @@ class DatabaseMergerTest {
             cv.put("response_count", 1)
             cv.put("first_seen_ms", 1L)
             cv.put("last_seen_ms", 2L)
+            db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, cv)
+        }
+
+        private fun insertFieldCapabilityFull(
+            db: SQLiteDatabase,
+            vehicleId: Long,
+            responseCount: Int,
+            firstSeenMs: Long,
+            lastSeenMs: Long,
+            sampleJson: String,
+        ) {
+            val cv = ContentValues()
+            cv.put("vehicle_id", vehicleId)
+            cv.put("command", "0105")
+            cv.put("supported", 1)
+            cv.put("response_count", responseCount)
+            cv.put("first_seen_ms", firstSeenMs)
+            cv.put("last_seen_ms", lastSeenMs)
+            cv.put("sample_json", sampleJson)
             db.insertOrThrow(VoltTrackerDb.TABLE_FIELD_CAPABILITIES, null, cv)
         }
 

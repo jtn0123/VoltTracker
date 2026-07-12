@@ -63,17 +63,22 @@ object BackupCrypto {
         if (file == null) {
             return false
         }
-        val header = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
         return try {
-            FileInputStream(file).use { input ->
-                if (input.read(header) != header.size) {
-                    return false
-                }
-                isMagic(header)
-            }
+            FileInputStream(file).use { input -> isEncryptedBackupStream(input) }
         } catch (ex: IOException) {
             false
         }
+    }
+
+    /**
+     * Stream form of the magic-header sniff, split out so tests can drive it with short-read
+     * streams. Uses [readExactly] because a single `read(buf)` filling the whole buffer is not
+     * guaranteed by the [InputStream] contract — short reads without EOF are legal.
+     */
+    @Throws(IOException::class)
+    internal fun isEncryptedBackupStream(input: InputStream): Boolean {
+        val header = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
+        return readExactly(input, header) && isMagic(header)
     }
 
     @Throws(IOException::class, GeneralSecurityException::class)
@@ -157,55 +162,90 @@ object BackupCrypto {
         passphrase: String,
         maxPlaintextBytes: Long,
     ) {
+        FileInputStream(source).use { fileIn -> decryptStream(fileIn, dest, passphrase, maxPlaintextBytes) }
+    }
+
+    /**
+     * Stream form of [decryptFile], split out so tests can drive it with short-read streams. All
+     * fixed-size header fields are read with [readExactly] — a single `read(buf)` filling the
+     * whole buffer is not guaranteed by the [InputStream] contract (short reads without EOF are
+     * legal), so treating `read(buf) != buf.size` as truncation could reject a valid backup.
+     */
+    @Throws(IOException::class, GeneralSecurityException::class)
+    internal fun decryptStream(
+        fileIn: InputStream,
+        dest: File,
+        passphrase: String,
+        maxPlaintextBytes: Long,
+    ) {
         val magic = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
         val salt = ByteArray(ENCRYPTION_SALT_BYTES)
         val iv = ByteArray(ENCRYPTION_IV_BYTES)
-        FileInputStream(source).use { fileIn ->
-            if (fileIn.read(magic) != magic.size || !isMagic(magic)) {
-                throw IOException("Not an encrypted Volt Tracker backup")
-            }
-            if (fileIn.read(salt) != salt.size || fileIn.read(iv) != iv.size) {
-                throw IOException("Encrypted backup header is truncated")
-            }
-            val isV3 = magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V3)
-            // v3 stores the KDF iteration count in a 4-byte field after the IV; v1/v2 predate the
-            // field and used the legacy count. Read it here so the key derives with the SAME count
-            // the file was written with — otherwise the GCM tag (and the key) would never match.
-            var iterBytes: ByteArray? = null
-            val iterations: Int =
-                if (isV3) {
-                    val bytes = ByteArray(ENCRYPTION_ITER_FIELD_BYTES)
-                    if (fileIn.read(bytes) != bytes.size) {
-                        throw IOException("Encrypted backup header is truncated")
-                    }
-                    iterBytes = bytes
-                    decodeIterations(bytes)
-                } else {
-                    LEGACY_PBKDF2_ITERATIONS
-                }
-            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-            cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt, iterations), GCMParameterSpec(128, iv))
-            // v2 and v3 authenticate the header as AAD (v3 additionally binds the iteration count so
-            // it can't be tampered down); v1 wrote no AAD, so skip it for the oldest magic.
-            if (magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2) || isV3) {
-                cipher.updateAAD(magic)
-                cipher.updateAAD(salt)
-                cipher.updateAAD(iv)
-                if (iterBytes != null) {
-                    cipher.updateAAD(iterBytes)
-                }
-            }
-            // Authenticate-then-trust instead of using a CipherInputStream: some Android
-            // CipherInputStream implementations swallow the end-of-stream AEADBadTagException (they
-            // return EOF rather than throwing), so a wrong passphrase / tampered container would
-            // "succeed" and stream unauthenticated plaintext to disk — silently defeating GCM's
-            // integrity guarantee and never firing DECRYPT_FAILED. writeAuthenticatedPlaintext
-            // streams the plaintext out (never buffering the whole restore in RAM) but verifies the
-            // trailing GCM tag via doFinal() and deletes dest on any failure, so no unauthenticated
-            // or partial plaintext ever survives; DataBackup maps the thrown exception to
-            // DECRYPT_FAILED.
-            writeAuthenticatedPlaintext(cipher, fileIn, dest, maxPlaintextBytes)
+        if (!readExactly(fileIn, magic) || !isMagic(magic)) {
+            throw IOException("Not an encrypted Volt Tracker backup")
         }
+        if (!readExactly(fileIn, salt) || !readExactly(fileIn, iv)) {
+            throw IOException("Encrypted backup header is truncated")
+        }
+        val isV3 = magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V3)
+        // v3 stores the KDF iteration count in a 4-byte field after the IV; v1/v2 predate the
+        // field and used the legacy count. Read it here so the key derives with the SAME count
+        // the file was written with — otherwise the GCM tag (and the key) would never match.
+        var iterBytes: ByteArray? = null
+        val iterations: Int =
+            if (isV3) {
+                val bytes = ByteArray(ENCRYPTION_ITER_FIELD_BYTES)
+                if (!readExactly(fileIn, bytes)) {
+                    throw IOException("Encrypted backup header is truncated")
+                }
+                iterBytes = bytes
+                decodeIterations(bytes)
+            } else {
+                LEGACY_PBKDF2_ITERATIONS
+            }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt, iterations), GCMParameterSpec(128, iv))
+        // v2 and v3 authenticate the header as AAD (v3 additionally binds the iteration count so
+        // it can't be tampered down); v1 wrote no AAD, so skip it for the oldest magic.
+        if (magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2) || isV3) {
+            cipher.updateAAD(magic)
+            cipher.updateAAD(salt)
+            cipher.updateAAD(iv)
+            if (iterBytes != null) {
+                cipher.updateAAD(iterBytes)
+            }
+        }
+        // Authenticate-then-trust instead of using a CipherInputStream: some Android
+        // CipherInputStream implementations swallow the end-of-stream AEADBadTagException (they
+        // return EOF rather than throwing), so a wrong passphrase / tampered container would
+        // "succeed" and stream unauthenticated plaintext to disk — silently defeating GCM's
+        // integrity guarantee and never firing DECRYPT_FAILED. writeAuthenticatedPlaintext
+        // streams the plaintext out (never buffering the whole restore in RAM) but verifies the
+        // trailing GCM tag via doFinal() and deletes dest on any failure, so no unauthenticated
+        // or partial plaintext ever survives; DataBackup maps the thrown exception to
+        // DECRYPT_FAILED.
+        writeAuthenticatedPlaintext(cipher, fileIn, dest, maxPlaintextBytes)
+    }
+
+    /**
+     * Fills [buffer] completely, looping over short reads (the readFully contract, mirroring
+     * RestoreValidator's DataInputStream use). Returns false when EOF arrives before the buffer
+     * is full — the only condition that actually means the header is truncated.
+     */
+    @Throws(IOException::class)
+    internal fun readExactly(
+        input: InputStream,
+        buffer: ByteArray,
+    ): Boolean {
+        var offset = 0
+        while (offset < buffer.size) {
+            val read = input.read(buffer, offset, buffer.size - offset)
+            if (read < 0) {
+                return false
+            }
+            offset += read
+        }
+        return true
     }
 
     /**

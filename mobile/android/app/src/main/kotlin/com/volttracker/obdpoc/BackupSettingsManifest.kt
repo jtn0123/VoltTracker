@@ -10,12 +10,21 @@ import java.io.File
 
 /** Versioned, allowlisted user settings stored inside a Volt Tracker database backup. */
 object BackupSettingsManifest {
+    /**
+     * [includeIdentitySecrets] must be true ONLY when the backup file will be encrypted (E1):
+     * the manifest's `vehicleIdentityKeys` are the [VinKeyHasher] HMAC secrets, and shipping them
+     * in a plaintext `.db` next to `vehicles.vin_hash` would let anyone holding the file
+     * brute-force the VIN — defeating ADR-0009's non-enumerability. Without the keys, restore
+     * still works and merge matching degrades gracefully to strict-key/alias matching; the
+     * connect-time healer reconciles identity on the next live VIN read.
+     */
     fun embed(
         context: Context,
         databaseFile: File,
         dashboardPreferencesJson: String?,
+        includeIdentitySecrets: Boolean,
     ) {
-        val manifest = capture(context, dashboardPreferencesJson)
+        val manifest = capture(context, dashboardPreferencesJson, includeIdentitySecrets)
         SQLiteDatabase.openDatabase(databaseFile.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
             db.execSQL(
                 "CREATE TABLE IF NOT EXISTS $TABLE_NAME " +
@@ -109,6 +118,7 @@ object BackupSettingsManifest {
     private fun capture(
         context: Context,
         dashboardPreferencesJson: String?,
+        includeIdentitySecrets: Boolean,
     ): JSONObject {
         val prefs = context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
         val dashboard =
@@ -120,7 +130,6 @@ object BackupSettingsManifest {
         val native =
             JSONObject()
                 .put("eventNotifications", JSONObject(EventNotificationPrefs(prefs).stateJson()))
-                .put("vehicleIdentityKeys", JSONArray(VinKeyHasher.exportSecrets(context)))
                 .put(
                     "autoConnect",
                     prefs.getBoolean(
@@ -134,6 +143,10 @@ object BackupSettingsManifest {
                     "tripSummary",
                     prefs.getBoolean(DashboardExperienceHostDelegate.PREF_TRIP_SUMMARY, false),
                 )
+        if (includeIdentitySecrets) {
+            // E1: only encrypted containers may carry the VIN HMAC secrets — see embed()'s KDoc.
+            native.put("vehicleIdentityKeys", JSONArray(VinKeyHasher.exportSecrets(context)))
+        }
         return JSONObject()
             .put("schemaVersion", SCHEMA_VERSION)
             .put("dashboard", dashboard)
