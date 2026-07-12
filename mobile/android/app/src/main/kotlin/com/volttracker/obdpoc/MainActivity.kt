@@ -288,6 +288,7 @@ open class MainActivity :
             publishStatus = { callDashboard("setStatus", it.toString()) },
             publishAppState = publishAppStateCommand,
             publishTelemetry = { callDashboard("updateTelemetry", it.toString()) },
+            publishTelemetryBackfill = { callDashboard("backfillTelemetry", it.toString()) },
         )
     private val dashboardResumeCatchUp = DashboardResumeCatchUp { callDashboard("showToast", it) }
     private val dashboardTripDeepLink =
@@ -545,7 +546,9 @@ open class MainActivity :
         StartupTrace.mark("dashboard_ready_post_work_start")
         publishDeviceList()
         publishStorageSummary()
-        dashboardResumeCatchUp.publish(liveDashboardStatePublisher.publish())
+        dashboardResumeCatchUp.publish(
+            liveDashboardStatePublisher.publish(dashboardResumeCatchUp.pauseBaselineUpdatedAt()),
+        )
         if (!isLoggingActive() && localStore == null) {
             // The store failed to open in onCreate; say so instead of claiming "viewing local
             // data" with no data behind it.
@@ -616,7 +619,9 @@ open class MainActivity :
         if (dashboardPublisher?.isPageReady() == true) {
             publishDeviceList()
             publishStorageSummary()
-            dashboardResumeCatchUp.publish(liveDashboardStatePublisher.publish())
+            dashboardResumeCatchUp.publish(
+                liveDashboardStatePublisher.publish(dashboardResumeCatchUp.pauseBaselineUpdatedAt()),
+            )
         } else {
             StartupTrace.mark("resume_dashboard_publish_skipped_not_ready")
         }

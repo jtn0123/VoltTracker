@@ -125,17 +125,7 @@ object DatabaseMerger {
                         null,
                         progress,
                     )
-                rows +=
-                    copyChildren(
-                        target,
-                        donor,
-                        VoltTrackerDb.TABLE_FIELD_CAPABILITIES,
-                        sessionMap,
-                        vehicleMap,
-                        null,
-                        null,
-                        progress,
-                    )
+                rows += FieldCapabilityMerge.copy(target, donor, vehicleMap, progress)
                 rows +=
                     copyChildren(
                         target,
@@ -275,6 +265,11 @@ object DatabaseMerger {
                 }
                 cv.remove("_id")
                 remap(cv, "session_id", sessionMap)
+                if (table == VoltTrackerDb.TABLE_EVENTS) {
+                    // B2: trip-edit events embed the route key (with the donor's session id) in
+                    // detail/payload; rewrite it so post-merge route-key lookups still resolve.
+                    TripEditRemapper.remapEvent(cv, sessionMap)
+                }
                 if (vehicleMap != null) {
                     remap(cv, "vehicle_id", vehicleMap)
                 }
@@ -598,7 +593,7 @@ object DatabaseMerger {
         return desired.filter { existing.contains(it) }.toTypedArray()
     }
 
-    private fun remap(
+    internal fun remap(
         cv: ContentValues,
         column: String,
         map: Map<Long, Long>,
@@ -680,15 +675,6 @@ object DatabaseMerger {
                     "json",
                 )
             VoltTrackerDb.TABLE_LOCATION_SAMPLES -> arrayOf("session_id", "captured_at_ms", "latitude", "longitude")
-            VoltTrackerDb.TABLE_FIELD_CAPABILITIES ->
-                arrayOf(
-                    "vehicle_id",
-                    "adapter_key",
-                    "protocol",
-                    "header",
-                    "command",
-                    "pid",
-                )
             VoltTrackerDb.TABLE_TRIP_SEGMENTS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "classification")
             VoltTrackerDb.TABLE_CHARGE_SESSIONS -> arrayOf("session_id", "started_at_ms", "ended_at_ms", "charger_type")
             VoltTrackerDb.TABLE_BATTERY_SNAPSHOTS -> arrayOf("session_id", "captured_at_ms", "json")
@@ -717,7 +703,7 @@ object DatabaseMerger {
      * that was already merged, so summing would double the counters on every re-import. A donor
      * that extends the interval on either side genuinely carries new activity and keeps summing.
      */
-    private fun donorIntervalContained(
+    internal fun donorIntervalContained(
         existing: ContentValues,
         donor: ContentValues,
     ): Boolean {
@@ -733,7 +719,7 @@ object DatabaseMerger {
      * already-merged span — then the larger of the two values is kept so re-importing the same
      * backup leaves counters unchanged. See [donorIntervalContained].
      */
-    private fun mergeCounter(
+    internal fun mergeCounter(
         out: ContentValues,
         column: String,
         existing: ContentValues,
@@ -745,7 +731,7 @@ object DatabaseMerger {
         out.put(column, if (donorContained) maxOf(live, donated) else live + donated)
     }
 
-    private fun copyIfPresent(
+    internal fun copyIfPresent(
         out: ContentValues,
         src: ContentValues,
         column: String,
@@ -763,7 +749,7 @@ object DatabaseMerger {
         }
     }
 
-    private fun minLong(
+    internal fun minLong(
         a: Long?,
         b: Long?,
     ): Long {
@@ -776,7 +762,7 @@ object DatabaseMerger {
         return minOf(a, b)
     }
 
-    private fun orZero(value: Long?): Long = value ?: 0L
+    internal fun orZero(value: Long?): Long = value ?: 0L
 
     // Internal (not private) so DatabaseMergerColumnsTest can assert these lists stay in sync
     // with the live schema — a migration that adds a column without updating them would

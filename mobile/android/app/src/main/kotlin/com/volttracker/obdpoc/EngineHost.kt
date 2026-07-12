@@ -65,7 +65,19 @@ interface EngineHost {
 
     fun markSessionInactive()
 
-    fun stopSelf()
+    /**
+     * True while the session bound to the calling runner thread is still the service's live,
+     * running session. Unlike reading [running] directly, this also fails for a *stale* runner
+     * that has been superseded by a newer session (B3): the old runner must treat itself as
+     * stopped instead of acting against the new session's flag.
+     */
+    fun isSessionRunnerActive(): Boolean
+
+    /**
+     * Stops the owning service from the session-runner thread. Token-gated by the host: a stale
+     * runner superseded by a newer session must never stop the service underneath it (B3).
+     */
+    fun stopSelfFromRunner()
 
     fun hasBluetoothConnectPermission(): Boolean
 

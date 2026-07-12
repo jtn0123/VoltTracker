@@ -833,6 +833,19 @@ import { VD } from "./vd-registry";
   }
 
   function bootPrefsUi(): void {
+    // Boot the preference UI at most once per document (mirrors
+    // __voltPrefsClickBound below). Defense in depth for the lazy-chunk seam:
+    // every lazy chunk is an independent esbuild bundle, so a stateful import
+    // of this module from a chunk would execute a SECOND copy of the boot
+    // side effects against the live DOM — six numeric preference inputs
+    // getting duplicate input/change listeners (double commits, double
+    // setChargeTargetSoc pushes), a second scroll-spy listener pair on
+    // window, and a Settings-nav reset. The flag rides on document (not a
+    // module-scoped let) so it survives a re-import while still resetting
+    // with each fresh document in the unit suite.
+    const doc = document as Document & { __voltPrefsUiBooted?: boolean };
+    if (doc.__voltPrefsUiBooted) return;
+    doc.__voltPrefsUiBooted = true;
     applyUnitsAttr();
     syncUnitButtons();
     applyAccessibilityAttrs();

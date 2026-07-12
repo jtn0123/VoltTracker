@@ -166,6 +166,68 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV4_backfillsEveryNullFlagRow() {
+        // B10: the old backfill stepped a `WHERE charge_transition_hint IS NULL` cursor while its
+        // own UPDATEs removed rows from that predicate on the same connection — SQLite's row
+        // visitation under a mutating scan is undefined, so rows could be skipped and stay NULL
+        // forever. The fix collects ids first (cursor closed), then updates in a batch. Seed far
+        // more rows than one cursor window holds and assert every single one is backfilled.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v4_v5_bulk.db"
+        context.deleteDatabase(name)
+
+        oldHelper = LegacyHelper(context, name, 4)
+        val v4Db = oldHelper!!.writableDatabase
+        val rowCount = 500
+        v4Db.beginTransaction()
+        try {
+            for (i in 0 until rowCount) {
+                val json = if (i % 2 == 0) """{"chargeTransitionHint":true}""" else """{"appForeground":false}"""
+                v4Db.execSQL(
+                    "INSERT INTO ${VoltTrackerDb.TABLE_TELEMETRY} (session_id, captured_at_ms, json)" +
+                        " VALUES (1, ${1_000L + i}, ?)",
+                    arrayOf(json),
+                )
+            }
+            v4Db.setTransactionSuccessful()
+        } finally {
+            v4Db.endTransaction()
+        }
+        oldHelper!!.close()
+        oldHelper = null
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, newDb.version)
+        newDb
+            .rawQuery(
+                "SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_TELEMETRY}" +
+                    " WHERE charge_transition_hint IS NULL OR app_foreground IS NULL",
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("every seeded row must be backfilled — none skipped", 0, cursor.getInt(0))
+            }
+        // Spot-check both flag derivations landed, not just non-NULL defaults.
+        newDb
+            .rawQuery(
+                "SELECT" +
+                    " SUM(CASE WHEN charge_transition_hint = 1 THEN 1 ELSE 0 END)," +
+                    " SUM(CASE WHEN app_foreground = 0 THEN 1 ELSE 0 END)" +
+                    " FROM ${VoltTrackerDb.TABLE_TELEMETRY}",
+                null,
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("even rows carry the parsed charge hint", rowCount / 2, cursor.getInt(0))
+                assertEquals("odd rows carry the parsed background flag", rowCount / 2, cursor.getInt(1))
+            }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun upgradeFromV7_addsHvPackColumns() {
         // The v7→v8 migration adds pack_voltage and pack_current_a to telemetry_samples so
         // the trip materializer can integrate V·I for energy_kwh and the dashboard can show

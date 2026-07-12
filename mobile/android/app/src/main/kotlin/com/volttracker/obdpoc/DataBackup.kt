@@ -226,7 +226,9 @@ class DataBackup(
                 "Writing backup",
                 "Copying your on-phone Volt Tracker data.",
             )
-            BackupSettingsManifest.embed(context, dest, dashboardPreferencesJson)
+            // E1: this file ships as PLAINTEXT — the VIN identity secrets must stay out of its
+            // manifest or the HMAC key would ride next to vehicles.vin_hash (VIN brute-force).
+            BackupSettingsManifest.embed(context, dest, dashboardPreferencesJson, includeIdentitySecrets = false)
             dest
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) null else throw ex
@@ -275,7 +277,9 @@ class DataBackup(
                 ),
             )
             copyFile(source, prepared)
-            BackupSettingsManifest.embed(context, prepared, dashboardPreferencesJson)
+            // The prepared file is encrypted immediately below (and deleted either way), so the
+            // identity secrets only ever land inside the AES/GCM container.
+            BackupSettingsManifest.embed(context, prepared, dashboardPreferencesJson, includeIdentitySecrets = true)
             try {
                 BackupCrypto.encryptFile(prepared, dest, requireNotNull(passphrase))
             } finally {

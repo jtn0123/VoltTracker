@@ -18,7 +18,6 @@ import {
 } from "./cost-model";
 import { haversineMetersJs, numOrNaN } from "./map-route-utils";
 import { createNativeRequestGate } from "./native-request-gate";
-import { prefs, units } from "./prefs";
 // VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
 // eager bundle and every entry point it publishes crosses the chunk boundary
 // through the VD registry (see vd-registry.ts).
@@ -31,6 +30,15 @@ import { VD } from "./vd-registry";
   const bridge = VD.bridge;
   const el = VD.el;
   const setSvgAttrs = VD.setSvgAttrs;
+  // prefs/units are read off the VD registry (charge-history.ts pattern), NOT
+  // imported from "./prefs": prefs.ts is a stateful module with top-level boot
+  // side effects, so an ES import from this lazy chunk would bundle a second
+  // copy that re-runs bootPrefsUi() against the live DOM when the chunk loads
+  // (duplicate preference input listeners → double commits, a second window
+  // scroll-spy pair, and a Settings-nav reset). Only stateless leaf helpers
+  // may be imported across the chunk boundary — see vd-registry.ts.
+  const prefs = VD.prefs;
+  const units = VD.units;
   const FORCE_LAZY_READ = true;
   const tripsRead = createNativeRequestGate(() => handleTripsBridgeFailure());
   const insightsRead = createNativeRequestGate(() => handleInsightsBridgeFailure());

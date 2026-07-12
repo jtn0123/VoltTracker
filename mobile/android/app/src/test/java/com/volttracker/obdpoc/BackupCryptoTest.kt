@@ -521,6 +521,79 @@ class BackupCryptoTest {
         assertEquals("no plaintext may survive a failed fallback", 0L, decrypted.length())
     }
 
+    // ---- short-read header handling (B9) -----------------------------------------------------
+
+    /**
+     * An [java.io.InputStream] that returns at most one byte per read() call without ever hitting
+     * EOF early — legal per the InputStream contract. The old header parsing treated
+     * `read(buf) != buf.size` as truncation, which would misclassify/reject a perfectly valid
+     * container arriving through such a stream.
+     */
+    private class TrickleInputStream(
+        private val delegate: java.io.InputStream,
+    ) : java.io.InputStream() {
+        override fun read(): Int = delegate.read()
+
+        override fun read(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ): Int = delegate.read(b, off, if (len > 0) 1 else 0)
+    }
+
+    /** A valid encrypted container must still be CLASSIFIED as one over one-byte-per-read streams. */
+    @Test
+    fun headerSniffClassifiesContainerOverShortReadStream() {
+        val source = writeFile("plain.bin", randomBytes(256))
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        encrypted.inputStream().use { input ->
+            assertTrue(
+                "a short-read stream over a valid header must still classify as encrypted",
+                BackupCrypto.isEncryptedBackupStream(TrickleInputStream(input)),
+            )
+        }
+    }
+
+    /** A valid encrypted container must still DECRYPT over a one-byte-per-read stream. */
+    @Test
+    fun decryptStreamSurvivesShortReadsAcrossTheWholeHeader() {
+        val payload = randomBytes(6_000)
+        val source = writeFile("plain.bin", payload)
+        val encrypted = tmp.newFile("encrypted.vtdb")
+        val decrypted = tmp.newFile("decrypted.bin")
+        BackupCrypto.encryptFile(source, encrypted, passphrase)
+
+        encrypted.inputStream().use { input ->
+            BackupCrypto.decryptStream(TrickleInputStream(input), decrypted, passphrase, Long.MAX_VALUE)
+        }
+
+        assertArrayEquals(
+            "short reads across magic/salt/IV/iteration fields must not be treated as truncation",
+            payload,
+            decrypted.readBytes(),
+        )
+    }
+
+    /** readExactly still reports genuine truncation: EOF before the buffer fills returns false. */
+    @Test
+    fun readExactlyDistinguishesShortReadsFromGenuineEof() {
+        val bytes = byteArrayOf(1, 2, 3, 4, 5)
+        java.io.ByteArrayInputStream(bytes).let { direct ->
+            val full = ByteArray(5)
+            assertTrue(BackupCrypto.readExactly(TrickleInputStream(direct), full))
+            assertArrayEquals(bytes, full)
+        }
+        java.io.ByteArrayInputStream(bytes).let { direct ->
+            val tooBig = ByteArray(6)
+            assertFalse(
+                "EOF before the buffer fills is the only genuine truncation",
+                BackupCrypto.readExactly(TrickleInputStream(direct), tooBig),
+            )
+        }
+    }
+
     /** Builds a real v2 container (legacy 150k KDF, magic+salt+IV AAD) the way the prior code did. */
     private fun writeLegacyV2Container(
         payload: ByteArray,

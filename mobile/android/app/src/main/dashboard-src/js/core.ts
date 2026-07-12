@@ -704,7 +704,7 @@ import { VD } from "./vd-registry";
   // retryable-promise semantics above are untouched.
   const CHUNK_TOAST_DEBOUNCE_MS = 4000;
   let lastChunkToastAtMs = 0;
-  function notifyChunkLoadFailed() {
+  export function notifyChunkLoadFailed() {
     const now = Date.now();
     if (now - lastChunkToastAtMs < CHUNK_TOAST_DEBOUNCE_MS) return;
     lastChunkToastAtMs = now;
@@ -1026,9 +1026,6 @@ import { VD } from "./vd-registry";
     maintenanceLog: [],
     tripsReadError: null,
     insightsReadError: null,
-    // Demo-only staged charge sessions (actions.js stages rows here so they
-    // don't touch the real session list); null until demo mode adds the first.
-    demoSessions: null,
     appState: {},
     demoActive: false,
     mapLayer: ["routes", "heat", "stops", "eff"].includes(prefs.get<string>("mapLayer", "eff"))
@@ -1628,12 +1625,11 @@ import { VD } from "./vd-registry";
   export function clearDemoTelemetry() {
     const source = String(state.telemetry.source || "").toLowerCase();
     if (!source.includes("demo")) return;
-    // Drop any locally-staged demo rows + the live telemetry/session derivations
-    // they fed, so they don't reappear on the next demo toggle. Routed through
-    // setState since several of these (demoSessions, the session-distance anchors)
-    // are read cross-module by the drive/charge renders.
+    // Drop the live telemetry/session derivations the demo stream fed, so they
+    // don't reappear on the next demo toggle. Routed through setState since
+    // several of these (the session-distance anchors) are read cross-module by
+    // the drive/charge renders.
     setState({
-      demoSessions: null,
       telemetry: initialTelemetryState(),
       speedHistory: [],
       powerHistory: [],

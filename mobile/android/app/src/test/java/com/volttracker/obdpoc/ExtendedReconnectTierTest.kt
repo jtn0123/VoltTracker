@@ -75,7 +75,10 @@ class ExtendedReconnectTierTest {
 
     @Test
     fun awaitNextAttemptElapsesTheIntervalWhenNoSignalArrives() {
-        val tier = ExtendedReconnectTier(intervalMs = 120L, windowMs = 60_000L)
+        // Interval 250ms vs the >=100ms bound leaves a >=150ms margin so a slow CI scheduler
+        // can't flake the assertion (D3); the intent (the wait sleeps out a real interval and
+        // is not short-circuited) is unchanged.
+        val tier = ExtendedReconnectTier(intervalMs = 250L, windowMs = 60_000L)
         tier.begin()
 
         val start = System.nanoTime()
@@ -120,7 +123,8 @@ class ExtendedReconnectTierTest {
 
     @Test
     fun beginDropsStaleSignalsFromBeforeTheTierWasArmed() {
-        val tier = ExtendedReconnectTier(intervalMs = 150L, windowMs = 60_000L)
+        // Interval 250ms vs the >=100ms bound: >=150ms margin against scheduler jitter (D3).
+        val tier = ExtendedReconnectTier(intervalMs = 250L, windowMs = 60_000L)
         tier.signal() // stale: arrives before the tier is armed
         tier.begin()
 

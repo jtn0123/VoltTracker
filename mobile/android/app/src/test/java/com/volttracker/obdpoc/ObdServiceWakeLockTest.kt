@@ -65,6 +65,24 @@ class ObdServiceWakeLockTest {
     }
 
     @Test
+    fun markSessionInactiveReleasesWakeLock() {
+        // B1: one-shot runners (diagnostic scan / clear-DTC / TPMS / cell probe) and pre-connect
+        // aborts end their session through markSessionInactive() on the poll thread, never via
+        // stopCurrentSession — the wake lock must be released there too, or it leaks until its
+        // 12-hour timeout ceiling.
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF")
+        val latest = ShadowPowerManager.getLatestWakeLock()
+        assertTrue(latest.isHeld)
+
+        service.markSessionInactive()
+
+        assertFalse(
+            "wake lock must be released when the runner marks the session inactive",
+            latest.isHeld,
+        )
+    }
+
+    @Test
     fun destroyReleasesWakeLock() {
         val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF"))
         controller.create().startCommand(0, 1)

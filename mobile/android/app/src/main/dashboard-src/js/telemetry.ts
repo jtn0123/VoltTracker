@@ -717,6 +717,15 @@ import { VD } from "./vd-registry";
     if (Number.isFinite(sampleUpdatedAt) && sampleUpdatedAt > lastSeenSampleUpdatedAt) {
       lastSeenSampleUpdatedAt = sampleUpdatedAt;
     }
+    recordSampleHistory(sample);
+    scheduleRender();
+  }
+
+  // Shared by the live updateTelemetry path and the resume backfill below: appends one
+  // sample's readings to the bounded chart histories and advances the session distance /
+  // live route. Deliberately does NOT touch state.telemetry or state.lastSampleAt — only a
+  // genuinely fresh live sample may drive the tiles and the staleness clock.
+  function recordSampleHistory(sample: PayloadRecord) {
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       pushBounded(state.speedHistory, kph, 48);
@@ -765,6 +774,47 @@ import { VD } from "./vd-registry";
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
       else recordQueuedLivePosition(lat, lon);
     }
+  }
+
+  // Resume catch-up: the native side buffers the samples broadcast while the Activity was
+  // paused (the WebView is suspended and the broadcast receiver unregistered, so they were
+  // never delivered) and replays them here in one batch right after resume/handshake.
+  // Replaying through recordSampleHistory rebuilds the speed/power/SOC charts, the session
+  // distance, and the live route as if the dashboard had been foregrounded the whole time.
+  // History only: the newest fresh sample still arrives via updateTelemetry (the native side
+  // keeps it out of the batch), so this path never bumps lastSampleAt or the live tiles.
+  const BACKFILL_MAX_SAMPLES = 300;
+  function backfillTelemetry(payload: unknown) {
+    const parsed = parsePayload<PayloadRecord>(payload, {});
+    // Validate before the shape guard (like every sibling setter) so a malformed native
+    // payload still surfaces the warn-once diagnostic instead of vanishing silently.
+    validatePayload("backfillTelemetry", parsed);
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    // Demo isolation: while the demo view is up, real history must not repaint the charts
+    // underneath the demo banner — stopping demo refetches everything anyway.
+    if (state.demoActive) return;
+    const raw = (parsed as PayloadRecord).samples;
+    if (!Array.isArray(raw) || raw.length === 0) return;
+    const samples = (raw as unknown[])
+      .filter(
+        (entry): entry is PayloadRecord =>
+          entry != null && typeof entry === "object" && !Array.isArray(entry)
+      )
+      .filter((entry) => {
+        // Demo-sourced samples never backfill (demo has its own seeded stream), and
+        // anything at or before the newest sample already seen is a re-delivery
+        // (double resume, overlapping handshake) — dropping those makes replay idempotent.
+        if (String(entry.source || "").toLowerCase().includes("demo")) return false;
+        const at = Number(entry.updatedAt);
+        return Number.isFinite(at) && at > lastSeenSampleUpdatedAt;
+      })
+      .sort((a, b) => Number(a.updatedAt) - Number(b.updatedAt))
+      .slice(-BACKFILL_MAX_SAMPLES);
+    if (!samples.length) return;
+    samples.forEach((sample) => {
+      recordSampleHistory(sample);
+      lastSeenSampleUpdatedAt = Number(sample.updatedAt);
+    });
     scheduleRender();
   }
 
@@ -1947,6 +1997,7 @@ import { VD } from "./vd-registry";
     selectDevice,
     getSelectedDevice,
     updateTelemetry,
+    backfillTelemetry,
     hydrateLiveRouteIfActive,
     setCurrentSessionRoute: applyCurrentSessionRoutePayload,
     scheduleRender,

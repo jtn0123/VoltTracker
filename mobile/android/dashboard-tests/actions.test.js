@@ -38,6 +38,13 @@ async function clickAppDialogCancel() {
   await Promise.resolve();
 }
 
+// Dismissal (the X / Escape / backdrop) — distinct from the cancel-slot button
+// for choice dialogs like the E2 backup-sensitivity warning.
+async function clickAppDialogClose() {
+  document.getElementById('appDialogClose').click();
+  await Promise.resolve();
+}
+
 function enterAppDialogInput(value) {
   const input = document.getElementById('appDialogInput');
   input.value = value;
@@ -466,12 +473,30 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.clearStoredData).toHaveBeenCalledTimes(1);
   });
 
-  it('shareBackup() invokes bridge.shareBackup after app-dialog confirmation', async () => {
+  it('shareBackup() invokes bridge.shareBackup only after the explicit unencrypted choice', async () => {
     await VD.actions.shareBackup(button);
-    expect(appDialogMessage()).toMatch(/plaintext backup/i);
+    // E2: the sensitivity warning leads with the encrypted option as primary.
+    expect(appDialogMessage()).toMatch(/unencrypted backup/i);
+    expect(appDialogMessage()).toMatch(/location history/i);
     expect(appDialogMessage()).toMatch(/encrypted backup/i);
-    await clickAppDialogConfirm();
+    // The cancel-slot button is the explicit "Share unencrypted" secondary.
+    await clickAppDialogCancel();
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
+    // The unencrypted choice must ONLY share plain: no passphrase prompt may open
+    // afterwards and the encrypted bridge must stay untouched.
+    expect(appDialog().hidden).toBe(true);
+    expect(bridge.shareEncryptedBackup).not.toHaveBeenCalled();
+  });
+
+  it('shareBackup() primary choice routes to the encrypted passphrase prompt', async () => {
+    await VD.actions.shareBackup(button);
+    await clickAppDialogConfirm();
+    expect(appDialog().hidden).toBe(false);
+    expect(document.getElementById('appDialogInputWrap').hidden).toBe(false);
+    enterAppDialogInput('secret-pass');
+    await clickAppDialogConfirm();
+    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('secret-pass', expect.any(String));
+    expect(bridge.shareBackup).not.toHaveBeenCalled();
   });
 
   it('shareEncryptedBackup() passes the app-dialog passphrase to the bridge', async () => {
@@ -511,10 +536,13 @@ describe('actions.ts — bridge dispatch', () => {
     expect(VD.state.storage.diagnosticCodeStatusCounts).toEqual({ stored: 1 });
   });
 
-  it('shareBackup() cancel path sets a ready status and skips the bridge', async () => {
+  it('shareBackup() dismissal path sets a ready status and skips the bridge', async () => {
     await VD.actions.shareBackup(button);
-    await clickAppDialogCancel();
+    // Backing out is the X (or Escape); the cancel-slot button now carries the
+    // explicit "Share unencrypted" action (E2 choice dialog).
+    await clickAppDialogClose();
     expect(bridge.shareBackup).not.toHaveBeenCalled();
+    expect(bridge.shareEncryptedBackup).not.toHaveBeenCalled();
     expect(VD.state.status).toMatchObject({ state: 'ready' });
     expect(VD.state.status.detail).toMatch(/cancel/i);
   });

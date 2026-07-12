@@ -46,6 +46,12 @@ describe('dashboard demo data', () => {
     // telemetry through the real components — so we assert the data backing
     // store loaded and demo activated, not any (now-deleted) mockup DOM.
     expect(VD.data.demoLoaded).toBe(true);
+    // C3: with the map/seed chunk not yet loaded, demo mode must NOT read
+    // active while the async seed is still in flight — flipping it early left
+    // a window where a native storage push could overwrite the demo view.
+    expect(VD.state.demoActive).toBe(false);
+    await VD.pendingLazyLoads();
+    await Promise.resolve();
     expect(VD.state.demoActive).toBe(true);
     expect(VD.data.trips.some((trip) => trip.label === 'Home -> Office')).toBe(true);
     expect(VD.data.insights.some((insight) => /Best month yet/.test(insight.title))).toBe(true);
@@ -130,6 +136,84 @@ describe('dashboard demo data', () => {
     expect(VD.state.storage.sessionCount).toBe(0);
     expect(VD.state.trips).toHaveLength(0);
     expect(VD.state.insights).toEqual({});
+  });
+
+  it('startDemo() stays inactive and surfaces the retry toast when the seed chunk fails to load (C3)', async () => {
+    await loadDashboard({ extras: ['demo-data.js'] });
+    const VD = window.VoltDashboard;
+    const toasts = [];
+    // telemetry.ts owns VD.showToast; core + actions call it late-bound
+    // through the registry (lazy-chunk-toast.test.js convention).
+    VD.showToast = (message, urgent) => {
+      toasts.push({ message: String(message), urgent: Boolean(urgent) });
+    };
+    // The map/seed chunk never arrives.
+    window.__VoltDashboardLoadScript = () => Promise.reject(new Error('chunk gone'));
+
+    VD.actions.startDemo();
+    // demoActive must not flip on while the seed is (still) in flight…
+    expect(VD.state.demoActive).toBe(false);
+    await VD.pendingLazyLoads();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // …and after the failure the demo is NOT left "running" with no data
+    // (the old silent .catch(() => {}) did exactly that).
+    expect(VD.state.demoActive).toBe(false);
+    expect(document.body.classList.contains('demo-active')).toBe(false);
+    expect(VD.state.status).toMatchObject({ state: 'blocked' });
+    expect(VD.state.status.detail).toMatch(/demo/i);
+    expect(toasts).toHaveLength(1);
+    expect(toasts[0].urgent).toBe(true);
+    expect(toasts[0].message).toMatch(/load this panel/i);
+  });
+
+  it('stopDemo() restores the real app-state parked during demo so the fake vehicle cannot linger (C4)', async () => {
+    const bridge = await loadDashboard({ extras: ['demo-data.js', 'insights-panel.js'] });
+    bridge.demo = vi.fn();
+    bridge.disconnect = vi.fn();
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+
+    VD.loadDemoScenario('extreme');
+    expect(VD.state.demoActive).toBe(true);
+    expect(VD.state.appState.vehicle.vin).toBe('1G1RC6S52HU1234567');
+
+    // A live native app-state push lands mid-demo: parked behind the preview,
+    // not painted over the demo view.
+    VD.setAppState({ vehicle: { vin: 'REALVIN000000001', make: 'Chevrolet' } });
+    expect(VD.state.appState.vehicle.vin).toBe('1G1RC6S52HU1234567');
+    expect(VD.state.realAppState.vehicle.vin).toBe('REALVIN000000001');
+
+    VD.actions.stopDemo();
+    await VD.pendingLazyLoads();
+
+    // The parked push is restored immediately — no waiting for the next
+    // native broadcast to flush the demo VIN/odometer.
+    expect(VD.state.demoActive).toBe(false);
+    expect(VD.state.appState.vehicle.vin).toBe('REALVIN000000001');
+    expect(VD.state.realAppState).toBe(null);
+    expect(VD.state.realStorage).toBe(null);
+    expect(VD.state.realTrips).toBe(null);
+    expect(VD.state.realInsights).toBe(null);
+  });
+
+  it('stopDemo() flushes the demo vehicle even when no native push arrived during demo (C4)', async () => {
+    const bridge = await loadDashboard({ extras: ['demo-data.js', 'insights-panel.js'] });
+    bridge.demo = vi.fn();
+    bridge.disconnect = vi.fn();
+    const VD = window.VoltDashboard;
+    await VD.ensureMapModule();
+
+    VD.loadDemoScenario('extreme');
+    expect(VD.state.appState.vehicle.vin).toBe('1G1RC6S52HU1234567');
+
+    VD.actions.stopDemo();
+    await VD.pendingLazyLoads();
+
+    expect(VD.state.demoActive).toBe(false);
+    expect(VD.state.appState.vehicle).toBe(null);
+    expect(VD.state.appState.latestTelemetry).toBe(null);
   });
 
   it('browser-preview Start demo seeds and clears sample data without a native bridge', async () => {

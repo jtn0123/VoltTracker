@@ -423,7 +423,6 @@ interface DashboardState {
   insightsReadError: string | null;
   tripsLoaded?: boolean;
   insightsLoaded?: boolean;
-  demoSessions: VoltChargeSessionRow[] | null;
   appState: VoltAppState;
   demoActive: boolean;
   demoScenario?: string;
@@ -768,6 +767,38 @@ interface VoltRestoreProgress {
     relativeTime(value: unknown): string;
     realViewMeta: Record<string, [string, string]>;
 
+    // ----- app-dialog.ts -----------------------------------------------------
+    // The themed modal (one #appDialog node, one mutable controller). The
+    // module ships ONLY in the eager bundle (via actions.ts) and registers
+    // these here so the lazy action chunks reach the single dialog instance
+    // instead of bundling a duplicate stateful copy (which would stack focus
+    // traps and settle two promises with one Confirm).
+    confirmAppDialog(options: {
+      title: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+    }): Promise<boolean>;
+    promptAppDialog(options: {
+      title: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+      inputLabel?: string;
+      autocomplete?: string;
+      inputType?: "text" | "password";
+      initialValue?: string;
+      allowEmpty?: boolean;
+    }): Promise<string | null>;
+    /** Three-way confirm: true = primary button, false = the explicit
+     *  secondary (cancel-slot) button, null = dismissed (Escape/X/backdrop). */
+    choiceAppDialog(options: {
+      title: string;
+      message: string;
+      confirmLabel?: string;
+      cancelLabel?: string;
+    }): Promise<boolean | null>;
+
     // ----- payload-validators.ts ---------------------------------------------
     /** Warn-only runtime shape check for native callback payloads
      *  (see docs/bridge-abi.md). Never
@@ -778,6 +809,8 @@ interface VoltRestoreProgress {
     setStatus(payload: VoltStatus): void;
     setAppState(payload: unknown): void;
     updateTelemetry(payload: VoltPayload): void;
+    /** Resume catch-up: replays natively buffered background samples into the chart histories. */
+    backfillTelemetry(payload: VoltPayload): void;
     updateLiveUi(): void;
     renderOperationalState(): void;
     /** Live time-to-full estimate on the Charge tab; reads live telemetry. */

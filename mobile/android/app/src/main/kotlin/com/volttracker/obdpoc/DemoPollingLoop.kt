@@ -88,7 +88,9 @@ class DemoPollingLoop(
         service.broadcastStatus("connected", "Demo telemetry is running without an OBD adapter.", false)
         var firstSampleMarked = false
         val start = System.currentTimeMillis()
-        while (service.running.get()) {
+        // Token-aware check (B3): a stale demo runner superseded by a newer session must stop
+        // instead of reading the new session's running flag as its own.
+        while (service.isSessionRunnerActive()) {
             val t = (System.currentTimeMillis() - start) / 1000.0
             val charging = isChargingPhase(t)
             val driveT = driveSeconds(t)

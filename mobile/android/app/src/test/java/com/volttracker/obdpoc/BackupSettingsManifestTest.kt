@@ -57,7 +57,7 @@ class BackupSettingsManifestTest {
         EventNotificationPrefs(prefs).setLowSocEnabled(true)
         val dashboard = """{"schemaVersion":1,"preferences":{"units":"metric"}}"""
 
-        BackupSettingsManifest.embed(context, databaseFile, dashboard)
+        BackupSettingsManifest.embed(context, databaseFile, dashboard, includeIdentitySecrets = false)
         val manifest = BackupSettingsManifest.read(databaseFile)
         requireNotNull(manifest)
         assertEquals("metric", manifest.getJSONObject("dashboard").getJSONObject("preferences").getString("units"))
@@ -80,6 +80,27 @@ class BackupSettingsManifestTest {
     }
 
     @Test
+    fun plaintextManifestOmitsVehicleIdentitySecretsButStillApplies() {
+        // E1: a plaintext backup manifest must NOT carry the VIN HMAC secrets (they would sit
+        // next to vehicles.vin_hash and make the VIN brute-forceable). The rest of the settings
+        // still capture and apply, and applyNative tolerates the absent key array.
+        val prefs = context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        prefs.edit().putBoolean(DashboardExperienceHostDelegate.PREF_KEEP_SCREEN_AWAKE, true).commit()
+
+        BackupSettingsManifest.embed(context, databaseFile, "{}", includeIdentitySecrets = false)
+        val manifest = requireNotNull(BackupSettingsManifest.read(databaseFile))
+
+        assertFalse(
+            "plaintext manifest must not embed the VIN identity secrets",
+            manifest.getJSONObject("native").has("vehicleIdentityKeys"),
+        )
+
+        prefs.edit().clear().commit()
+        BackupSettingsManifest.applyNative(context, manifest)
+        assertTrue(prefs.getBoolean(DashboardExperienceHostDelegate.PREF_KEEP_SCREEN_AWAKE, false))
+    }
+
+    @Test
     fun oldDatabaseOnlyBackupHasNoSettingsManifest() {
         assertNull(BackupSettingsManifest.read(databaseFile))
         assertEquals("{}", BackupSettingsManifest.dashboardPreferences(null))
@@ -89,7 +110,9 @@ class BackupSettingsManifestTest {
     fun manifestLetsANewInstallationRecognizeRestoredVehicleHashes() {
         val vin = "synthetic-vehicle-identity"
         val donorHash = VinKeyHasher(context).hash(vin)
-        BackupSettingsManifest.embed(context, databaseFile, "{}")
+        // includeIdentitySecrets = true is the ENCRYPTED-container path (E1) — the only one
+        // allowed to transport the VIN HMAC secrets.
+        BackupSettingsManifest.embed(context, databaseFile, "{}", includeIdentitySecrets = true)
         val manifest = requireNotNull(BackupSettingsManifest.read(databaseFile))
         assertTrue(manifest.getJSONObject("native").getJSONArray("vehicleIdentityKeys").length() > 0)
 

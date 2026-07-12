@@ -198,6 +198,9 @@ class VoltTrackerDb : SQLiteOpenHelper {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
         const val DATABASE_VERSION = 16
 
+        // v5 backfill batch: bounds migration memory on large telemetry histories (B10).
+        private const val BACKFILL_BATCH_SIZE = 500
+
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
         const val TABLE_EVENTS = "status_events"
@@ -249,35 +252,56 @@ class VoltTrackerDb : SQLiteOpenHelper {
          * version applied (hint 0, foreground 1).
          */
         private fun backfillTelemetryJsonFlags(db: SQLiteDatabase) {
+            // B10: collect a bounded batch of ids + derived flags, close the cursor, THEN update,
+            // and repeat. The UPDATEs remove rows from the cursor's own `IS NULL` predicate, and
+            // SQLite's row visitation while the underlying table changes mid-scan is undefined —
+            // rows could be skipped and stay unbackfilled forever. Batching (instead of loading
+            // the whole table) keeps migration memory flat even for a multi-year telemetry
+            // history; each pass shrinks the predicate's result set, so the loop terminates.
             val update =
                 db.compileStatement(
                     "UPDATE $TABLE_TELEMETRY SET charge_transition_hint = ?, app_foreground = ?" +
                         " WHERE _id = ?",
                 )
             update.use { statement ->
-                db
-                    .rawQuery(
-                        "SELECT _id, json FROM $TABLE_TELEMETRY" +
-                            " WHERE charge_transition_hint IS NULL OR app_foreground IS NULL",
-                        null,
-                    ).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            var chargeHint = false
-                            var foreground = true
-                            try {
-                                val sample = JSONObject(cursor.getString(1) ?: "")
-                                chargeHint = sample.optBoolean("chargeTransitionHint", false)
-                                foreground = sample.optBoolean("appForeground", true)
-                            } catch (ignored: JSONException) {
-                                // Keep the defaults for rows whose snapshot is not valid JSON.
+                while (true) {
+                    // Each entry is [_id, charge_transition_hint, app_foreground].
+                    val pending = ArrayList<LongArray>(BACKFILL_BATCH_SIZE)
+                    db
+                        .rawQuery(
+                            "SELECT _id, json FROM $TABLE_TELEMETRY" +
+                                " WHERE charge_transition_hint IS NULL OR app_foreground IS NULL" +
+                                " LIMIT $BACKFILL_BATCH_SIZE",
+                            null,
+                        ).use { cursor ->
+                            while (cursor.moveToNext()) {
+                                var chargeHint = false
+                                var foreground = true
+                                try {
+                                    val sample = JSONObject(cursor.getString(1) ?: "")
+                                    chargeHint = sample.optBoolean("chargeTransitionHint", false)
+                                    foreground = sample.optBoolean("appForeground", true)
+                                } catch (ignored: JSONException) {
+                                    // Keep the defaults for rows whose snapshot is not valid JSON.
+                                }
+                                pending.add(
+                                    longArrayOf(
+                                        cursor.getLong(0),
+                                        if (chargeHint) 1L else 0L,
+                                        if (foreground) 1L else 0L,
+                                    ),
+                                )
                             }
-                            statement.clearBindings()
-                            statement.bindLong(1, if (chargeHint) 1L else 0L)
-                            statement.bindLong(2, if (foreground) 1L else 0L)
-                            statement.bindLong(3, cursor.getLong(0))
-                            statement.executeUpdateDelete()
                         }
+                    if (pending.isEmpty()) break
+                    for (row in pending) {
+                        statement.clearBindings()
+                        statement.bindLong(1, row[1])
+                        statement.bindLong(2, row[2])
+                        statement.bindLong(3, row[0])
+                        statement.executeUpdateDelete()
                     }
+                }
             }
         }
 

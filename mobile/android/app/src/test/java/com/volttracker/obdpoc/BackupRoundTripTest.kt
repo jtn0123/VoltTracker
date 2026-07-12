@@ -346,6 +346,49 @@ class BackupRoundTripTest {
         )
     }
 
+    /**
+     * E1: a plaintext .db backup must NOT embed the VIN HMAC identity secrets in its settings
+     * manifest — they would ship next to `vehicles.vin_hash` and make the VIN brute-forceable,
+     * defeating ADR-0009's non-enumerability. The encrypted container still carries them (that is
+     * how a reinstall recognizes restored vehicle hashes), and the keyless plaintext backup still
+     * restores end-to-end.
+     */
+    @Test
+    fun plaintextBackupOmitsVinIdentitySecretsWhileEncryptedBackupCarriesThem() {
+        val sessionId = store!!.startSession("obd", "AA:BB:CC", "Adapter", 1_000L)
+        store!!.recordTelemetry(sessionId, telemetrySample(41, 1500, 34.05, -118.25, 1_100L))
+
+        val plain = dataBackup.buildBackupFile(store)
+        assertNotNull(plain)
+        val plainManifest = dataBackup.readSettingsManifest(plain)
+        assertNotNull("plaintext backups still carry a settings manifest", plainManifest)
+        assertFalse(
+            "a plaintext backup manifest must never embed the VIN identity secrets",
+            plainManifest!!.getJSONObject("native").has("vehicleIdentityKeys"),
+        )
+
+        val encrypted = dataBackup.buildEncryptedBackupFile(store, "correct horse battery")
+        assertNotNull(encrypted)
+        val decrypted = File(context.cacheDir, "e1-decrypted-probe.db")
+        BackupCrypto.decryptFile(encrypted!!, decrypted, "correct horse battery", Long.MAX_VALUE)
+        val encryptedManifest = dataBackup.readSettingsManifest(decrypted)
+        assertNotNull(encryptedManifest)
+        assertTrue(
+            "the encrypted container is the only transport for the identity secrets",
+            encryptedManifest!!.getJSONObject("native").getJSONArray("vehicleIdentityKeys").length() > 0,
+        )
+        decrypted.delete()
+        encrypted.delete()
+
+        // The plaintext backup without the keys still stages and restores.
+        val staged = dataBackup.stageRestoreFile(registerAsSafUri(plain!!), null)
+        assertNotNull("a keyless plaintext backup must still stage", staged)
+        swapStagedFileIntoLiveDb(staged!!)
+        staged.delete()
+        plain.delete()
+        assertNotNull("restored session must be readable", store!!.getSession(sessionId))
+    }
+
     @Test
     fun encryptedRoundTripFeedsDashboardReaderProjectionsAfterRestore() {
         val startedAtMs = 10_000L

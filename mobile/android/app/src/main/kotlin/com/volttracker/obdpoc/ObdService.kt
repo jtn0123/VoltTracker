@@ -142,7 +142,18 @@ open class ObdService :
     @Volatile
     override var cancelRetryRequested = false
     private var activeForegroundServiceType = 0
-    private var sessionWakeLock: PowerManager.WakeLock? = null
+
+    // Acquired on the main thread (startSession) but released from BOTH the main thread
+    // (stopCurrentSession) and the poll/IO thread (markSessionInactive at the end of a one-shot
+    // runner, B1) — an AtomicReference so the two release paths can't double-release or leak.
+    private val sessionWakeLock = AtomicReference<PowerManager.WakeLock?>()
+
+    // B4: onDestroy hands the (potentially ~60s) persistence drain to this background thread so
+    // the main thread is never blocked. The flag guards against a double-teardown.
+    private val persistenceTeardownStarted = AtomicBoolean(false)
+
+    @Volatile
+    private var persistenceTeardownThread: Thread? = null
 
     private class SessionStartRequest(
         val mode: String,
@@ -177,6 +188,21 @@ open class ObdService :
         running.set(false)
         SESSION_ACTIVE.set(false)
         sessionStateMachine.stop("inactive")
+        // One-shot runners (diagnostic scan / clear-DTC / TPMS / cell probe) and pre-connect
+        // aborts end here on the poll thread without ever passing through stopCurrentSession —
+        // release the session wake lock so it can't leak until its 12h ceiling (B1).
+        releaseSessionWakeLock()
+    }
+
+    override fun isSessionRunnerActive(): Boolean = running.get() && canCurrentThreadCleanupSession()
+
+    override fun stopSelfFromRunner() {
+        // A stale runner superseded by a newer session must never stop the service (and with it
+        // the new session's foreground state) out from under that session (B3).
+        if (!canCurrentThreadCleanupSession()) {
+            return
+        }
+        stopSelf()
     }
 
     fun setLastVoltage(volts: Double) {
@@ -354,18 +380,15 @@ open class ObdService :
 
     override fun onDestroy() {
         stopCurrentSession(getString(R.string.status_service_stopped))
+        // Drop the foreground state right away: the persistence drain below runs off the main
+        // thread, and the dying service must not keep its notification alive meanwhile (B4).
+        ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+        foregroundServiceActive = false
         bluetoothObservability?.unregister(this)
         executor.shutdownNow()
         competingAppExecutor.shutdownNow()
         telemetrySideEffectExecutor.shutdownNow()
-        val persistenceShutdown = recorder.shutdown()
-        if (persistenceShutdown.fullyTerminated) {
-            localStore?.close()
-        } else {
-            // A worker that ignored interruption may still be inside a SQLite call. Leaking the
-            // handle until process teardown is safer than closing it underneath that late write.
-            Log.e(AppPrefs.LOG_TAG, "persistence workers survived service teardown; leaving SQLite open")
-        }
+        startPersistenceTeardown()
         localStore = null
         // Detach the app-log mirror before releasing its handle so any late OBDLog call becomes a
         // no-op rather than lazily reopening the writer we're about to close.
@@ -373,6 +396,43 @@ open class ObdService :
         rollingAppLog?.close()
         rollingAppLog = null
         super.onDestroy()
+    }
+
+    /**
+     * Drains and closes the persistence stack off the main thread (B4): [SessionRecorder.shutdown]
+     * can block for tens of seconds waiting out the telemetry/lifecycle executor drains, which is
+     * an ANR when run inline in [onDestroy]. Process death mid-drain is safe — ObdSessionRecovery
+     * finalizes any session whose finalization was cut short on the next [onCreate]. The captured
+     * references belong to THIS instance, so a quickly-recreated service (fresh recorder + store)
+     * never races this teardown; the flag additionally guards a double [onDestroy].
+     */
+    private fun startPersistenceTeardown() {
+        if (!persistenceTeardownStarted.compareAndSet(false, true)) {
+            return
+        }
+        val recorderToDrain = recorder
+        val storeToClose = localStore
+        val teardown =
+            Thread({
+                val persistenceShutdown = recorderToDrain.shutdown()
+                if (persistenceShutdown.fullyTerminated) {
+                    storeToClose?.close()
+                } else {
+                    // A worker that ignored interruption may still be inside a SQLite call. Leaking
+                    // the handle until process teardown is safer than closing it under a late write.
+                    Log.e(AppPrefs.LOG_TAG, "persistence workers survived service teardown; leaving SQLite open")
+                }
+            }, "obd-persistence-teardown")
+        persistenceTeardownThread = teardown
+        teardown.start()
+    }
+
+    /** Test-only: blocks until the [startPersistenceTeardown] thread finishes (or [timeoutMs]). */
+    @VisibleForTesting
+    fun awaitPersistenceTeardownForTest(timeoutMs: Long): Boolean {
+        val teardown = persistenceTeardownThread ?: return true
+        teardown.join(timeoutMs)
+        return !teardown.isAlive
     }
 
     override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) {
@@ -512,6 +572,12 @@ open class ObdService :
         }
         if (!startForegroundSession(request.foregroundText)) {
             broadcastStatus("blocked", getString(R.string.status_foreground_blocked), true)
+            // The service was launched via startForegroundService but never reached the
+            // foreground: without a session to own, it must stop itself or Android eventually
+            // kills the process with a RemoteServiceException for the missing startForeground
+            // call (B6). No wake lock is held here — acquisition only happens after this gate,
+            // and stopCurrentSession above released any lock a previous session held.
+            stopSelf()
             return
         }
         if (request.holdWakeLock) {
@@ -608,17 +674,18 @@ open class ObdService :
      * session. Callers opt in via [SessionStartRequest.holdWakeLock]; [mode] is only logged.
      */
     private fun acquireSessionWakeLock(mode: String) {
-        if (sessionWakeLock?.isHeld == true) {
+        if (sessionWakeLock.get()?.isHeld == true) {
             return
         }
         try {
             val powerManager = getSystemService(POWER_SERVICE) as PowerManager
             val lock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, WAKE_LOCK_TAG)
             lock.setReferenceCounted(false)
-            // Timeout is a leak ceiling, not the session length: stopCurrentSession() releases
-            // on every session end; the ceiling only catches a missed release.
+            // Timeout is a leak ceiling, not the session length: stopCurrentSession() and
+            // markSessionInactive() release on every session end; the ceiling only catches a
+            // missed release.
             lock.acquire(SESSION_WAKE_LOCK_TIMEOUT_MS)
-            sessionWakeLock = lock
+            sessionWakeLock.set(lock)
             recorder.logEvent("wake_lock_acquired", "mode", mode)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "session wake lock acquire failed", ex)
@@ -626,8 +693,7 @@ open class ObdService :
     }
 
     private fun releaseSessionWakeLock() {
-        val lock = sessionWakeLock ?: return
-        sessionWakeLock = null
+        val lock = sessionWakeLock.getAndSet(null) ?: return
         try {
             if (lock.isHeld) {
                 lock.release()
@@ -672,6 +738,12 @@ open class ObdService :
 
     open fun broadcastTelemetry(telemetry: TelemetryPayload?) {
         if (telemetry == null || telemetry.isEmpty()) {
+            return
+        }
+        // Same stale-runner gate as broadcastStatus (B3): a runner superseded between its loop's
+        // isSessionRunnerActive() check and this call must not persist or publish its sample into
+        // the NEW session. Non-runner threads carry no token and always pass.
+        if (!canCurrentThreadCleanupSession()) {
             return
         }
         val payload = telemetry.toJson()
@@ -733,6 +805,12 @@ open class ObdService :
         blocked: Boolean,
         extras: JSONObject?,
     ) {
+        // A stale runner superseded by a newer session must not write its terminal state into
+        // the NEW session's outcome record and broadcast stream (B3). Non-runner threads (main,
+        // side-effect executors) carry no token and always pass.
+        if (!canCurrentThreadCleanupSession()) {
+            return
+        }
         // Fold the new state/detail into the outcome record and read the rest of the payload
         // fields from the SAME snapshot, so the broadcast can't mix a fresh state with a
         // concurrently-cleared failure class or voltage.
@@ -772,17 +850,14 @@ open class ObdService :
     private fun startForegroundSession(text: String): Boolean {
         val notification = notifications.build(text)
         return try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val serviceType = currentForegroundServiceType()
-                startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType)
+            val serviceType =
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) currentForegroundServiceType() else null
+            enterForeground(notification, serviceType)
+            if (serviceType != null) {
                 activeForegroundServiceType = serviceType
-                foregroundServiceActive = true
-                true
-            } else {
-                startForeground(ObdNotifications.NOTIFICATION_ID, notification)
-                foregroundServiceActive = true
-                true
             }
+            foregroundServiceActive = true
+            true
         } catch (ex: SecurityException) {
             onStartForegroundRefused("startForegroundSession", ex)
             false
@@ -792,6 +867,25 @@ open class ObdService :
             // route it to the same "blocked" fallback instead of crashing the process.
             onStartForegroundRefused("startForegroundSession", ex)
             false
+        }
+    }
+
+    /**
+     * Performs the actual startForeground call ([serviceType] is null below Android Q).
+     * Behavior-identical to the inlined calls it replaces; `open` only so a test can simulate
+     * the OS refusing the foreground start (B6) — Robolectric never throws here on its own.
+     */
+    @VisibleForTesting
+    open fun enterForeground(
+        notification: Notification,
+        serviceType: Int?,
+    ) {
+        // The SDK_INT check re-proves what the caller already guarantees (serviceType is only
+        // non-null on Q+) so lint can verify the 3-arg overload's API-29 requirement locally.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && serviceType != null) {
+            startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType)
+        } else {
+            startForeground(ObdNotifications.NOTIFICATION_ID, notification)
         }
     }
 
@@ -856,13 +950,18 @@ open class ObdService :
     }
 
     override fun setLastFailureClass(fc: FailureClass?) {
-        if (fc == null) {
+        // The token gate keeps a stale runner's late failure classification out of the NEW
+        // session's outcome (B3).
+        if (fc == null || !canCurrentThreadCleanupSession()) {
             return
         }
         updateSessionOutcome { it.copy(failureClass = fc) }
     }
 
     override fun clearLastFailureClass() {
+        if (!canCurrentThreadCleanupSession()) {
+            return
+        }
         updateSessionOutcome { it.copy(failureClass = null) }
     }
 

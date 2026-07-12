@@ -23,6 +23,7 @@ const NATIVE_METHODS = [
   'setAppState',
   'setRestoreProgress',
   'updateTelemetry',
+  'backfillTelemetry',
   'showToast',
   'showTripUndo',
   'setBackupReceipt',
