@@ -62,7 +62,7 @@ internal class VoltBridgeDiagnostics(
             "Ask Android to stop $pkg if it is holding the Bluetooth adapter. Only use this for a competing OBD app you recognize.",
             "Force-stop",
         ) {
-            val stopped = activity.forceStopPackageFromBridge(pkg)
+            val stopped = activity.diagnostics().forceStopPackageFromBridge(pkg)
             activity.publishStatus(
                 if (stopped) "ready" else "blocked",
                 if (stopped) "Force-stop requested for $pkg." else "Could not force-stop $pkg.",
@@ -74,33 +74,34 @@ internal class VoltBridgeDiagnostics(
 
     // Clamp the JS-supplied count up front so a hostile/buggy dashboard cannot request an
     // unbounded read of the summary file.
-    fun getRecentSessions(n: Int): String = activity.getRecentSessionsJson(n.coerceIn(0, MAX_RECENT_SESSIONS))
+    fun getRecentSessions(n: Int): String =
+        activity.diagnostics().getRecentSessionsJson(n.coerceIn(0, MAX_RECENT_SESSIONS))
 
     fun shareDiagnostics() {
-        activity.runOnUiThread(activity::shareDiagnosticsFromBridge)
+        activity.runOnUiThread { activity.diagnostics().shareDiagnosticsFromBridge() }
     }
 
     fun shareDiagnosticsDigest() {
-        activity.runOnUiThread(activity::shareDiagnosticsDigestFromBridge)
+        activity.runOnUiThread { activity.diagnostics().shareDiagnosticsDigestFromBridge() }
     }
 
     fun startTestConnection() {
-        activity.runOnUiThread(activity::startTestConnectionFromBridge)
+        activity.runOnUiThread { activity.diagnostics().startTestConnectionFromBridge() }
     }
 
     fun scheduleAdapterReadyNotify(mins: Int) {
         val clamped = mins.coerceIn(MIN_ADAPTER_READY_MINS, MAX_ADAPTER_READY_MINS)
         activity.runOnUiThread {
-            activity.scheduleAdapterReadyNotifyFromBridge(clamped)
+            activity.diagnostics().scheduleAdapterReadyNotifyFromBridge(clamped)
         }
     }
 
     fun cancelAdapterReadyNotify() {
-        activity.runOnUiThread(activity::cancelAdapterReadyNotifyFromBridge)
+        activity.runOnUiThread { activity.diagnostics().cancelAdapterReadyNotifyFromBridge() }
     }
 
     fun openSetupGuide() {
-        activity.runOnUiThread(activity::openSetupGuideFromBridge)
+        activity.runOnUiThread { activity.diagnostics().openSetupGuideFromBridge() }
     }
 
     companion object {

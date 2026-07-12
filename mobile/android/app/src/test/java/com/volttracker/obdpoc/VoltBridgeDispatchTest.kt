@@ -1127,47 +1127,55 @@ class VoltBridgeDispatchTest {
             dashboardCallbacks.add(functionName to jsonPayload)
         }
 
-        override fun forceStopPackageFromBridge(packageName: String?): Boolean {
-            lastForceStopPackage = packageName
-            return forceStopReturn
-        }
+        // The troubleshooter/setup-guide cluster is reached through the diagnostics() accessor
+        // (mirroring production, where the bodies live on DiagnosticsHostDelegate); the recording
+        // object below replaces the delegate wholesale.
+        private val recordingDiagnostics =
+            object : DiagnosticsCommands {
+                override fun forceStopPackageFromBridge(packageName: String?): Boolean {
+                    lastForceStopPackage = packageName
+                    return forceStopReturn
+                }
 
-        override fun cancelRetryFromBridge() {
-            cancelRetryCalls += 1
-        }
+                override fun cancelRetryFromBridge() {
+                    cancelRetryCalls += 1
+                }
 
-        override fun openBluetoothSettingsFromBridge() {
-            openBluetoothSettingsCalls += 1
-        }
+                override fun openBluetoothSettingsFromBridge() {
+                    openBluetoothSettingsCalls += 1
+                }
 
-        override fun getRecentSessionsJson(n: Int): String {
-            lastRecentSessionsCount = n
-            return recentSessionsJson
-        }
+                override fun getRecentSessionsJson(n: Int): String {
+                    lastRecentSessionsCount = n
+                    return recentSessionsJson
+                }
 
-        override fun shareDiagnosticsFromBridge() {
-            shareDiagnosticsCalls += 1
-        }
+                override fun shareDiagnosticsFromBridge() {
+                    shareDiagnosticsCalls += 1
+                }
 
-        override fun shareDiagnosticsDigestFromBridge() {
-            shareDiagnosticsDigestCalls += 1
-        }
+                override fun shareDiagnosticsDigestFromBridge() {
+                    shareDiagnosticsDigestCalls += 1
+                }
 
-        override fun startTestConnectionFromBridge() {
-            startTestConnectionCalls += 1
-        }
+                override fun startTestConnectionFromBridge() {
+                    startTestConnectionCalls += 1
+                }
 
-        override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) {
-            lastScheduleMinutes = mins
-        }
+                override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) {
+                    lastScheduleMinutes = mins
+                }
 
-        override fun cancelAdapterReadyNotifyFromBridge() {
-            cancelAdapterReadyNotifyCalls += 1
-        }
+                override fun cancelAdapterReadyNotifyFromBridge() {
+                    cancelAdapterReadyNotifyCalls += 1
+                }
 
-        override fun openSetupGuideFromBridge() {
-            openSetupGuideCalls += 1
-        }
+                override fun openSetupGuideFromBridge() {
+                    openSetupGuideCalls += 1
+                }
+            }
+
+        override fun diagnostics(): DiagnosticsCommands = recordingDiagnostics
 
         override fun getTripRouteJson(routeKey: String?): String {
             lastTripRouteKey = routeKey

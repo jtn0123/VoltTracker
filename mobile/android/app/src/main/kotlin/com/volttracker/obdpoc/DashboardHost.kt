@@ -141,6 +141,13 @@ interface BridgeStateProvider {
 
 /**
  * Troubleshooter forwarders plus the diagnostics-oriented session reads they pair with.
+ *
+ * This cluster is exposed on [DashboardHost] as a single `diagnostics()` accessor returning this
+ * interface (backed by [DiagnosticsHostDelegate]) rather than as N flat host overrides on the
+ * Activity, mirroring [EventNotificationCommands]: the bridge calls
+ * `host.diagnostics().startTestConnectionFromBridge()`. Folding the group behind one accessor
+ * keeps `MainActivity` from accreting a one-line troubleshooter forward per command (the
+ * growth-by-override sink the architecture audit flagged) — the delegate holds every body.
  */
 interface DiagnosticsCommands {
     fun forceStopPackageFromBridge(packageName: String?): Boolean
@@ -258,7 +265,6 @@ interface DashboardHost :
     DeviceCommands,
     PermissionCommands,
     AutoConnectCommands,
-    DiagnosticsCommands,
     DashboardStatePublisher,
     SessionDataReader,
     BridgeStateProvider {
@@ -291,6 +297,14 @@ interface DashboardHost :
      * and the Activity exposes the cluster with a single member.
      */
     fun eventNotifications(): EventNotificationCommands
+
+    /**
+     * The troubleshooter-forward + setup-guide cluster, exposed as one accessor instead of ten
+     * flat host overrides (see [DiagnosticsCommands]). `MainActivity` returns its
+     * [DiagnosticsHostDelegate] here, so every forward body lives on the delegate and the
+     * Activity exposes the cluster with a single member.
+     */
+    fun diagnostics(): DiagnosticsCommands
 
     fun dashboardExperience(): DashboardExperienceCommands = DashboardExperienceCommands.NONE
 }

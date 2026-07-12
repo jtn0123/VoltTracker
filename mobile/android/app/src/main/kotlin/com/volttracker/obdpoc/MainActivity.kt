@@ -590,10 +590,18 @@ open class MainActivity :
         )
     }
 
-    /** Re-opens the guided setup walkthrough on demand (bridge "Setup guide" affordance). */
-    override fun openSetupGuideFromBridge() {
-        setupGuideController.open()
+    // Backs the DiagnosticsCommands seam: the ten troubleshooter/setup-guide forwards live on the
+    // delegate, and the bridge reaches them through the single diagnostics() accessor below (same
+    // growth-by-override fix as eventNotifications()). Lazy so it survives the test seam that
+    // skips super.onCreate(), and because the troubleshooter only exists after onCreate.
+    private val diagnosticsHost by lazy {
+        DiagnosticsHostDelegate(
+            troubleshooter = { requireTroubleshooter() },
+            openSetupGuide = { setupGuideController.open() },
+        )
     }
+
+    override fun diagnostics(): DiagnosticsCommands = diagnosticsHost
 
     @VisibleForTesting
     internal fun isDashboardReadyForTest(): Boolean = dashboardPublisher?.isPageReady() == true
@@ -909,38 +917,9 @@ open class MainActivity :
         }
     }
 
-    override fun forceStopPackageFromBridge(packageName: String?): Boolean =
-        requireTroubleshooter().forceStopPackage(packageName)
-
-    override fun cancelRetryFromBridge() {
-        requireTroubleshooter().cancelRetry()
-    }
-
-    override fun openBluetoothSettingsFromBridge() {
-        requireTroubleshooter().openBluetoothSettings()
-    }
-
-    override fun getRecentSessionsJson(n: Int): String = requireTroubleshooter().getRecentSessionsJson(n)
-
-    override fun shareDiagnosticsFromBridge() {
-        requireTroubleshooter().shareDiagnostics()
-    }
-
-    override fun shareDiagnosticsDigestFromBridge() {
-        requireTroubleshooter().shareDiagnosticsDigest()
-    }
-
-    override fun startTestConnectionFromBridge() {
-        requireTroubleshooter().startTestConnection()
-    }
-
-    override fun scheduleAdapterReadyNotifyFromBridge(mins: Int) {
-        requireTroubleshooter().scheduleAdapterReadyNotify(mins)
-    }
-
-    override fun cancelAdapterReadyNotifyFromBridge() {
-        requireTroubleshooter().cancelAdapterReadyNotify()
-    }
+    // The troubleshooter forwarders (forceStopPackageFromBridge, shareDiagnosticsFromBridge, the
+    // adapter-ready-notify pair, …) live on DiagnosticsHostDelegate behind the diagnostics()
+    // accessor above, so this Activity does not accrete a one-line forward per command.
 
     open fun onAdapterStatusForReadyNotify(status: JSONObject?) {
         requireTroubleshooter().onAdapterStatusForReadyNotify(status)

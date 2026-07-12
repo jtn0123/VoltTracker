@@ -411,7 +411,8 @@ class DashboardBridgeWorkflowSimulationTest {
     private class SimulatedDashboardHost(
         private val context: Context,
         private val store: ObdLocalStore,
-    ) : DashboardHost {
+    ) : DashboardHost,
+        DiagnosticsCommands {
         private val reader = DashboardStorageReader { store.takeIf { it.isOpen } }
         private val prefs =
             EventNotificationPrefs(
@@ -599,6 +600,10 @@ class DashboardBridgeWorkflowSimulationTest {
             etaSeconds: Long,
             operation: String?,
         ) = Unit
+
+        // The host implements DiagnosticsCommands itself and hands the cluster out through the
+        // diagnostics() accessor, keeping the flat recording overrides below unchanged.
+        override fun diagnostics(): DiagnosticsCommands = this
 
         override fun forceStopPackageFromBridge(packageName: String?): Boolean = false
 
