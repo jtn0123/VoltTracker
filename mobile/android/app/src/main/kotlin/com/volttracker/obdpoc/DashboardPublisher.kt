@@ -72,6 +72,7 @@ class DashboardPublisher(
         val ALLOWED_FUNCTIONS: Set<String> =
             setOf(
                 "updateTelemetry",
+                "backfillTelemetry",
                 "setStatus",
                 "setDevices",
                 "setHistory",

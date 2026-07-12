@@ -33,6 +33,7 @@ describe('native payload fuzzing', () => {
       'setAppState',
       'setRestoreProgress',
       'updateTelemetry',
+      'backfillTelemetry',
     ];
 
     for (let iteration = 0; iteration < 2_000; iteration += 1) {

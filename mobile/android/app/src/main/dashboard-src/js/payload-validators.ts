@@ -75,6 +75,11 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
       longitude: "number"
     }
   },
+  backfillTelemetry: {
+    shape: "object",
+    required: ["samples"],
+    fields: { samples: "array" }
+  },
   setDevices: { shape: "array", required: [], fields: {} },
   setHistory: { shape: "array", required: [], fields: {} },
   setTrips: { shape: "array", required: [], fields: {} },
