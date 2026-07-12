@@ -482,6 +482,10 @@ describe('actions.ts — bridge dispatch', () => {
     // The cancel-slot button is the explicit "Share unencrypted" secondary.
     await clickAppDialogCancel();
     expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
+    // The unencrypted choice must ONLY share plain: no passphrase prompt may open
+    // afterwards and the encrypted bridge must stay untouched.
+    expect(appDialog().hidden).toBe(true);
+    expect(bridge.shareEncryptedBackup).not.toHaveBeenCalled();
   });
 
   it('shareBackup() primary choice routes to the encrypted passphrase prompt', async () => {

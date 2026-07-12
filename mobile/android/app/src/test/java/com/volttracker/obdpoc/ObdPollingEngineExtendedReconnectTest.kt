@@ -318,9 +318,14 @@ class ObdPollingEngineExtendedReconnectTest {
         val log = latestObdLogText()
         val armings = log.split("\"event\":\"extended_reconnect_started\"").size - 1
         assertEquals("the second mid-drive drop must re-arm the tier after a recovery", 2, armings)
+        // Ordering, not just presence: the recovery must sit between the two armings — a
+        // reversed sequence (two armings, then one recovery) would otherwise pass vacuously.
+        val recoveredAt = log.indexOf("\"event\":\"extended_reconnect_recovered\"")
+        val secondArmingAt = log.lastIndexOf("\"event\":\"extended_reconnect_started\"")
+        assertTrue("a recovery event must be logged", recoveredAt >= 0)
         assertTrue(
-            "the first drop must have recovered before the second armed",
-            log.contains("\"event\":\"extended_reconnect_recovered\""),
+            "the first drop must have recovered before the second arming",
+            recoveredAt < secondArmingAt,
         )
         assertFalse(
             "no exhaustion may be reported while both extended windows are still open",

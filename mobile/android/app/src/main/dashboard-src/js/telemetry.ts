@@ -786,8 +786,10 @@ import { VD } from "./vd-registry";
   const BACKFILL_MAX_SAMPLES = 300;
   function backfillTelemetry(payload: unknown) {
     const parsed = parsePayload<PayloadRecord>(payload, {});
-    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return;
+    // Validate before the shape guard (like every sibling setter) so a malformed native
+    // payload still surfaces the warn-once diagnostic instead of vanishing silently.
     validatePayload("backfillTelemetry", parsed);
+    if (parsed == null || typeof parsed !== "object" || Array.isArray(parsed)) return;
     // Demo isolation: while the demo view is up, real history must not repaint the charts
     // underneath the demo banner — stopping demo refetches everything anyway.
     if (state.demoActive) return;

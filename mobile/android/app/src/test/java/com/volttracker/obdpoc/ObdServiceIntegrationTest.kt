@@ -593,6 +593,10 @@ class ObdServiceIntegrationTest {
             "the stale error broadcast must be suppressed",
             captured.status.none { it.optString("detail") == "stale runner poison" },
         )
+        assertTrue(
+            "a stale runner's telemetry must be neither published nor persisted into the new session",
+            captured.telemetry.none { it.optString("source") == "stale-runner-poison" },
+        )
     }
 
     // ---- harness -------------------------------------------------------------------
@@ -728,6 +732,7 @@ class ObdServiceIntegrationTest {
                         // through and fire the poison exactly like a stale runner would.
                     }
                     broadcastStatus("error", "stale runner poison", true)
+                    broadcastTelemetry(JSONObject().put("source", "stale-runner-poison").put("speedKph", 999))
                     setLastFailureClass(FailureClass.INSTANT_DROP)
                     markSessionInactive()
                     stopSelfFromRunner()

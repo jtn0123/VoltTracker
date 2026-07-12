@@ -740,6 +740,12 @@ open class ObdService :
         if (telemetry == null || telemetry.isEmpty()) {
             return
         }
+        // Same stale-runner gate as broadcastStatus (B3): a runner superseded between its loop's
+        // isSessionRunnerActive() check and this call must not persist or publish its sample into
+        // the NEW session. Non-runner threads carry no token and always pass.
+        if (!canCurrentThreadCleanupSession()) {
+            return
+        }
         val payload = telemetry.toJson()
         recorder.logJson("telemetry", payload)
         recorder.persistTelemetry(payload)
@@ -874,7 +880,9 @@ open class ObdService :
         notification: Notification,
         serviceType: Int?,
     ) {
-        if (serviceType != null) {
+        // The SDK_INT check re-proves what the caller already guarantees (serviceType is only
+        // non-null on Q+) so lint can verify the 3-arg overload's API-29 requirement locally.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && serviceType != null) {
             startForeground(ObdNotifications.NOTIFICATION_ID, notification, serviceType)
         } else {
             startForeground(ObdNotifications.NOTIFICATION_ID, notification)
