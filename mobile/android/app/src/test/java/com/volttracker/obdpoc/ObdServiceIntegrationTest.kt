@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.Manifest
+import android.app.Notification
 import android.app.Service
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -15,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -24,8 +26,12 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowPowerManager
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Integration coverage for the [ObdService] action-dispatch orchestration that the pure-logic
@@ -57,7 +63,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class ObdServiceIntegrationTest {
-    private val controllers = mutableListOf<ServiceController<out TestObdService>>()
+    private val controllers = mutableListOf<ServiceController<out ObdService>>()
     private val receivers = mutableListOf<BroadcastReceiver>()
 
     @After
@@ -473,6 +479,122 @@ class ObdServiceIntegrationTest {
         assertTrue("an empty telemetry payload must not be broadcast", captured.telemetry.isEmpty())
     }
 
+    // ---- B6: foreground refusal must not leave an orphaned started service ----------
+
+    @Test
+    fun foregroundRefusalStopsTheOrphanedServiceWithoutAWakeLock() {
+        val controller =
+            newController(
+                ForegroundRefusedObdService::class.java,
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        controller.startCommand(0, 1)
+
+        assertFalse("a refused foreground start must not leave a session running", service.running.get())
+        assertFalse("the foreground flag must stay down after the refusal", service.foregroundServiceActive)
+        val status = captured.lastStatus()
+        assertNotNull("the refusal must broadcast a blocked status", status)
+        assertEquals("blocked", status!!.optString("state"))
+        assertTrue(
+            "a service launched via startForegroundService that never reached the foreground " +
+                "must stop itself instead of lingering until a RemoteServiceException (B6)",
+            shadowOf(service).isStoppedBySelf,
+        )
+        assertNull(
+            "no session wake lock may be acquired when the foreground start is refused",
+            ShadowPowerManager.getLatestWakeLock(),
+        )
+    }
+
+    // ---- B4: onDestroy must not block the main thread on the persistence drain ------
+
+    @Test
+    fun destroyDoesNotBlockTheMainThreadOnThePersistenceDrain() {
+        val controller = newController(null)
+        val service = controller.create().get()
+        val releaseWorker = CountDownLatch(1)
+        val workerFinished = AtomicBoolean(false)
+        // Occupy the recorder's persistence worker the way an in-flight session finalize would.
+        service.recorder.runAsync {
+            try {
+                releaseWorker.await(20, TimeUnit.SECONDS)
+            } catch (ignored: InterruptedException) {
+                Thread.currentThread().interrupt()
+            }
+            workerFinished.set(true)
+        }
+
+        val startedAtMs = System.currentTimeMillis()
+        controller.destroy()
+        val destroyMs = System.currentTimeMillis() - startedAtMs
+
+        assertFalse(
+            "onDestroy must return while the persistence worker is still draining (B4)",
+            workerFinished.get(),
+        )
+        assertTrue(
+            "onDestroy must not block the main thread on the drain (took ${destroyMs}ms; the " +
+                "pre-B4 inline shutdown would have waited out the blocked worker)",
+            destroyMs < 10_000L,
+        )
+        releaseWorker.countDown()
+        assertTrue(
+            "the persistence teardown must still run to completion off the main thread",
+            service.awaitPersistenceTeardownForTest(10_000L),
+        )
+    }
+
+    // ---- B3: a stale runner must not poison or stop the superseding session ---------
+
+    @Test
+    fun staleRunnerCannotPoisonOrStopAFreshlyStartedSession() {
+        val controller =
+            newController(
+                StaleRunnerObdService::class.java,
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "First ELM", null),
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+        controller.startCommand(0, 1)
+        assertTrue(
+            "precondition: the first session's runner must have started",
+            service.firstRunnerParked.await(5, TimeUnit.SECONDS),
+        )
+
+        // A second CONNECT supersedes the first session. startSession() interrupts the parked
+        // first runner, which then fires the exact late calls a stale runner races the new
+        // session with: an error broadcast, a failure classification, session teardown, stopSelf.
+        service.onStartCommand(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Second ELM", null), 0, 2)
+        assertTrue(
+            "the stale runner must have fired its late calls",
+            service.firstRunnerDone.await(5, TimeUnit.SECONDS),
+        )
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertTrue("the new session must still be running", service.running.get())
+        assertFalse(
+            "a stale runner must never stop the service underneath the new session",
+            shadowOf(service).isStoppedBySelf,
+        )
+        val outcome = service.sessionOutcomeForTest()
+        assertFalse(
+            "a stale runner's error state must not reach the new session's outcome",
+            "error" == outcome.state,
+        )
+        assertEquals(
+            "a stale runner's failure classification must be dropped",
+            null,
+            outcome.failureClass,
+        )
+        assertTrue(
+            "the stale error broadcast must be suppressed",
+            captured.status.none { it.optString("detail") == "stale runner poison" },
+        )
+    }
+
     // ---- harness -------------------------------------------------------------------
 
     /** Builds the service, runs onCreate + onStartCommand for [action], returns the live service. */
@@ -490,7 +612,7 @@ class ObdServiceIntegrationTest {
     private fun newController(intent: Intent?): ServiceController<TestObdService> =
         newController(TestObdService::class.java, intent)
 
-    private fun <T : TestObdService> newController(
+    private fun <T : ObdService> newController(
         serviceClass: Class<T>,
         intent: Intent?,
     ): ServiceController<T> {
@@ -568,6 +690,53 @@ class ObdServiceIntegrationTest {
     }
 
     /**
+     * [TestObdService] whose foreground start is always refused, the way API 31+ blocks a
+     * background-initiated FGS start with ForegroundServiceStartNotAllowedException (B6).
+     */
+    class ForegroundRefusedObdService : TestObdService() {
+        override fun enterForeground(
+            notification: Notification,
+            serviceType: Int?,
+        ): Unit = throw IllegalStateException("simulated ForegroundServiceStartNotAllowedException")
+    }
+
+    /**
+     * [ObdService] whose engine's live-loop body is replaced with a controllable script (B3): the
+     * FIRST runner parks until a superseding session interrupts it, then fires the exact late
+     * calls a stale runner races the new session with; later runners return immediately so the
+     * new session's flags stay untouched.
+     */
+    class StaleRunnerObdService : ObdService() {
+        val firstRunnerParked = CountDownLatch(1)
+        val firstRunnerDone = CountDownLatch(1)
+        private val runnerInvocations = AtomicInteger()
+
+        override fun createPollingEngine(): ObdPollingEngine =
+            object : ObdPollingEngine(this@StaleRunnerObdService) {
+                override fun runBluetoothLoop(
+                    address: String?,
+                    scanMode: Boolean,
+                ) {
+                    if (runnerInvocations.incrementAndGet() > 1) {
+                        return // the superseding session's runner: inert
+                    }
+                    firstRunnerParked.countDown()
+                    try {
+                        Thread.sleep(30_000L)
+                    } catch (ignored: InterruptedException) {
+                        // startSession() cancelled this runner in favor of a newer session; fall
+                        // through and fire the poison exactly like a stale runner would.
+                    }
+                    broadcastStatus("error", "stale runner poison", true)
+                    setLastFailureClass(FailureClass.INSTANT_DROP)
+                    markSessionInactive()
+                    stopSelfFromRunner()
+                    firstRunnerDone.countDown()
+                }
+            }
+    }
+
+    /**
      * An [EngineHost] that delegates read-only adapter/context state to the real service but reports
      * the session as not running and swallows every mutating callback the engine might make.
      */
@@ -605,7 +774,9 @@ class ObdServiceIntegrationTest {
 
         override fun markSessionInactive() = Unit
 
-        override fun stopSelf() = Unit
+        override fun isSessionRunnerActive(): Boolean = false
+
+        override fun stopSelfFromRunner() = Unit
 
         override fun hasBluetoothConnectPermission(): Boolean = false
 

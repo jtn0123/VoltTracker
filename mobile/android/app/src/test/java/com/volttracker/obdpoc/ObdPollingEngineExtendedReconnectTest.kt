@@ -221,6 +221,163 @@ class ObdPollingEngineExtendedReconnectTest {
         assertTrue(log.contains("\"event\":\"extended_reconnect_attempt\""))
     }
 
+    // ---- RECOVERY: a successful reconnect while the tier is armed --------------------
+
+    @Test
+    fun reconnectSuccessWhileTierIsArmedLogsRecoveryDisarmsAndKeepsSampling() {
+        val tier = ExtendedReconnectTier(intervalMs = 1L, windowMs = 900_000L)
+        val engine = newEngine(tier)
+        scriptDrivingSamples()
+        val dropped = AtomicBoolean(false)
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") {
+            val n = cycles.incrementAndGet()
+            if (n == 2) {
+                dropped.set(true) // tunnel drop after two live cycles
+            }
+            if (n >= 4) {
+                service.running.set(false) // two more post-recovery cycles, then stop cleanly
+            }
+        }
+        fake.transactInterceptor =
+            TransactInterceptor { _ ->
+                if (dropped.get()) {
+                    throw IOException("simulated tunnel drop")
+                }
+                null
+            }
+        // Let the fast budget exhaust (arming the tier) and a couple of extended attempts run,
+        // then the adapter comes back: from this open on, the scripted connect succeeds.
+        engine.afterOpen =
+            Runnable {
+                if (engine.openCount.get() >= ObdProbes.MAX_RECONNECT_ATTEMPTS + 3) {
+                    dropped.set(false)
+                }
+            }
+
+        openSession(engine)
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        assertTrue(
+            "the tier must have armed before the recovery",
+            log.contains("\"event\":\"extended_reconnect_started\""),
+        )
+        assertTrue(
+            "a successful reconnect while the tier is armed must log the recovery event",
+            log.contains("\"event\":\"extended_reconnect_recovered\""),
+        )
+        assertFalse("the recovery must disarm the extended tier", tier.active)
+        assertEquals("the recovery must clear the tier's attempt counter", 0, tier.attemptCount)
+        assertTrue(
+            "the session must keep sampling after the recovery (got ${engine.sampleCount()})",
+            engine.sampleCount() >= 3,
+        )
+        assertFalse(
+            "a recovered session must not report exhaustion",
+            log.contains("\"event\":\"reconnect_exhausted\""),
+        )
+    }
+
+    @Test
+    fun aSecondDropAfterRecoveryReArmsTheExtendedTierCleanly() {
+        val tier = ExtendedReconnectTier(intervalMs = 1L, windowMs = 900_000L)
+        val engine = newEngine(tier)
+        scriptDrivingSamples()
+        val dropped = AtomicBoolean(false)
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") {
+            val n = cycles.incrementAndGet()
+            if (n == 2 || n == 4) {
+                dropped.set(true) // first drop after cycle 2, second after cycle 4
+            }
+        }
+        fake.transactInterceptor =
+            TransactInterceptor { _ ->
+                if (dropped.get()) {
+                    throw IOException("simulated tunnel drop")
+                }
+                null
+            }
+        val firstRecoveryAtOpens = ObdProbes.MAX_RECONNECT_ATTEMPTS + 3
+        val stopAtOpens = firstRecoveryAtOpens + ObdProbes.MAX_RECONNECT_ATTEMPTS + 4
+        engine.afterOpen =
+            Runnable {
+                val opens = engine.openCount.get()
+                if (opens == firstRecoveryAtOpens) {
+                    dropped.set(false) // first recovery: the adapter is back
+                }
+                if (opens >= stopAtOpens) {
+                    service.running.set(false) // stop mid-way through the SECOND extended tier
+                }
+            }
+
+        openSession(engine)
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        val armings = log.split("\"event\":\"extended_reconnect_started\"").size - 1
+        assertEquals("the second mid-drive drop must re-arm the tier after a recovery", 2, armings)
+        assertTrue(
+            "the first drop must have recovered before the second armed",
+            log.contains("\"event\":\"extended_reconnect_recovered\""),
+        )
+        assertFalse(
+            "no exhaustion may be reported while both extended windows are still open",
+            log.contains("\"event\":\"reconnect_exhausted\""),
+        )
+    }
+
+    @Test
+    fun extendedTierAttemptsUseTheFixedIntervalPathNotExponentialBackoff() {
+        val tier = ExtendedReconnectTier(intervalMs = 1L, windowMs = 900_000L)
+        val engine = newEngine(tier)
+        scriptDrivingSamples()
+        val dropped = AtomicBoolean(false)
+        val cycles = AtomicInteger(0)
+        fake.afterCommand("ATSH7DF") {
+            if (cycles.incrementAndGet() >= 2) {
+                dropped.set(true)
+            }
+        }
+        fake.transactInterceptor =
+            TransactInterceptor { _ ->
+                if (dropped.get()) {
+                    throw IOException("simulated tunnel drop")
+                }
+                null
+            }
+        engine.afterOpen =
+            Runnable {
+                if (engine.openCount.get() >= ObdProbes.MAX_RECONNECT_ATTEMPTS + 5) {
+                    service.running.set(false)
+                }
+            }
+
+        openSession(engine)
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        val log = latestObdLogText()
+        val armedAt = log.indexOf("\"event\":\"extended_reconnect_started\"")
+        assertTrue("the tier must arm once the fast budget exhausts", armedAt >= 0)
+        val afterArming = log.substring(armedAt)
+        val extendedAttempts = afterArming.split("\"event\":\"extended_reconnect_attempt\"").size - 1
+        assertTrue(
+            "attempts while the tier is armed must flow through the fixed-interval path " +
+                "(got $extendedAttempts extended attempts)",
+            extendedAttempts >= 3,
+        )
+        assertFalse(
+            "no fast-tier retry (a \"reconnect\" event carrying a computeBackoffMs backoff) may " +
+                "run while the tier is armed",
+            afterArming.contains("\"event\":\"reconnect\""),
+        )
+        assertFalse(
+            "the still-open window must not report exhaustion",
+            afterArming.contains("\"event\":\"reconnect_exhausted\""),
+        )
+    }
+
     // ---- exhaustion while NOT driving keeps the pre-B3 prompt stop -------------------
 
     @Test

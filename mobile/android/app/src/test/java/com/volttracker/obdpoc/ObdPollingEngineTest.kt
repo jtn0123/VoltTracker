@@ -14,12 +14,14 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.io.File
 import java.io.IOException
 import java.util.Collections
 import java.util.UUID
 import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 
@@ -219,8 +221,17 @@ class ObdPollingEngineTest {
 
         val startNanos = System.nanoTime()
         var firstSampleMs = -1L
+        val probesRanBeforeFirstSample = AtomicBoolean(false)
         fake.afterCommand("ATSH7DF") {
-            if (firstSampleMs < 0L) firstSampleMs = (System.nanoTime() - startNanos) / 1_000_000L
+            if (firstSampleMs < 0L) {
+                firstSampleMs = (System.nanoTime() - startNanos) / 1_000_000L
+                // Work proxy captured at the moment of the first sample (D3): by construction the
+                // first sample paid the deferred-probe latency if and only if either probe command
+                // had already been transacted here.
+                probesRanBeforeFirstSample.set(
+                    fake.commandLog.contains("0902") || fake.commandLog.contains("010D0C"),
+                )
+            }
             service.running.set(false)
         }
 
@@ -242,9 +253,13 @@ class ObdPollingEngineTest {
                 "off the pre-first-data path=${deferredProbeMs}ms (prior time-to-first-data " +
                 "~=${firstSampleMs + deferredProbeMs}ms)",
         )
-        assertTrue(
-            "first sample must arrive without waiting on the ${deferredProbeMs}ms of deferred probes",
-            firstSampleMs < deferredProbeMs,
+        // Deliberately NOT a wall-clock ceiling (the old `firstSampleMs < deferredProbeMs` flaked
+        // on slow CI runners): the command-order proxy above proves the first sample did not wait
+        // on the deferred probes without depending on scheduler timing (D3).
+        assertFalse(
+            "the deferred probes (0902/010D0C) must not have been transacted before the first " +
+                "sample — the first sample would otherwise pay their ${deferredProbeMs}ms latency",
+            probesRanBeforeFirstSample.get(),
         )
     }
 
@@ -267,6 +282,11 @@ class ObdPollingEngineTest {
         assertEquals("blank adapter address must not open a socket", 0, engine.openCount.get())
         assertTrue("blank address must not transact commands", fake.commandLog.isEmpty())
         assertFalse("pre-connect abort must mark the session inactive", service.running.get())
+        assertTrue(
+            "a terminal pre-connect abort must stop the service so it cannot linger as a live " +
+                "foreground service (B1)",
+            shadowOf(service).isStoppedBySelf,
+        )
         assertTrue(latestObdLogText().contains("No adapter selected."))
     }
 
@@ -408,6 +428,54 @@ class ObdPollingEngineTest {
         assertEquals("clear-DTC one-shot must not enter the live poll loop", 0, engine.sampleCount())
         assertFalse("clear-DTC one-shot must not poll speed", fake.commandLog.contains("010D"))
         assertFalse("clear-DTC one-shot must not run deferred VIN probe", fake.commandLog.contains("0902"))
+    }
+
+    @Test
+    fun oneShotSessionCompletionStopsTheServiceAndMarksSessionInactive() {
+        // B1: a one-shot runner ends via the engine's finally (closeSessionLog +
+        // markSessionInactive) without any DISCONNECT intent. The service must stop itself,
+        // or it lingers forever as a live foreground service holding the session wake lock.
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["04"] = "44\r>"
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false, true) }
+
+        assertFalse("one-shot completion must mark the session inactive", service.running.get())
+        assertTrue(
+            "a completed one-shot session must stop the service (no lingering FGS / wake lock)",
+            shadowOf(service).isStoppedBySelf,
+        )
+    }
+
+    @Test
+    fun cancelRequestedDuringConnectAttemptEndsSessionAfterConnectSucceeds() {
+        // B7: the user cancels while a connect attempt is mid-flight and the attempt then
+        // SUCCEEDS. The UI already told the user "Retry cancelled." (the service broadcasts it
+        // synchronously), so the engine must tear the session down instead of silently clearing
+        // the flag and polling on.
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.8V\r>"
+        fake.responses["010D"] = "41 0D 28\r>"
+        fake.responses["010C"] = "41 0C 0F A0\r>"
+        fake.afterCommand("ATZ") { service.cancelRetryRequested = true }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals("a cancelled session must not enter the live poll loop", 0, engine.sampleCount())
+        assertFalse("the pending cancel must be consumed", service.cancelRetryRequested)
+        assertFalse("the cancelled session must be stopped", service.running.get())
+        assertTrue("a consumed cancel must stop the service", shadowOf(service).isStoppedBySelf)
+        val log = latestObdLogText()
+        assertTrue(log.contains("retry_cancelled_by_user"))
+        assertTrue(
+            "the cancel must be honored on the post-connect path, not dropped",
+            log.contains("\"phase\":\"post_connect\""),
+        )
+        assertTrue(log.contains("Retry cancelled."))
     }
 
     @Test

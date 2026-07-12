@@ -42,7 +42,14 @@ open class ObdPollingEngine(
     private val sessionHealth: SessionHealthTracker
     private val pidPolling: PidPollingState
     private val liveSampleReader: LiveSampleReader
+
+    // Written on the poll/IO thread, read on the main thread when closeSessionLog finalizes the
+    // session row — @Volatile for the cross-thread visibility edge so the finalized row can't
+    // record stale counters (B8). Single writer, so a plain volatile is sufficient.
+    @Volatile
     private var sampleCount = 0
+
+    @Volatile
     private var supportedPidsSummary = ""
     private var redactedVin = ""
     private var connectAttemptStartedAtMs = 0L
@@ -112,8 +119,10 @@ open class ObdPollingEngine(
         connection = replacement
     }
 
+    // `open` is a test seam (matching isBluetoothReady/openBluetoothSocket): the stale-runner
+    // race test substitutes a controllable runner body behind the ObdService dispatch path.
     @SuppressLint("MissingPermission")
-    fun runBluetoothLoop(
+    open fun runBluetoothLoop(
         address: String?,
         scanMode: Boolean,
     ) {
@@ -162,9 +171,13 @@ open class ObdPollingEngine(
             return
         }
 
+        // One-shot operations (scan / clear-DTC / TPMS / detail probe) complete their session when
+        // the runner returns; the service must then stop instead of lingering as a live foreground
+        // service holding the wake lock (B1). Live-poll sessions are stopped by the service.
+        val oneShot = scanMode || clearDtcMode || tpmsScanMode || !detailProbeStage.isNullOrBlank()
         val retry = ConnectionRetryCoordinator()
         try {
-            while (service.running.get()) {
+            while (service.isSessionRunnerActive()) {
                 if (consumeCancelRetry(retry.attempt, retry.everConnected, "pre_connect")) {
                     return
                 }
@@ -181,11 +194,19 @@ open class ObdPollingEngine(
                     }
                     extendedReconnectTier.reset()
                     service.clearLastFailureClass()
-                    service.cancelRetryRequested = false
+                    // A cancel requested while this connect attempt was in flight must still end
+                    // the session — the UI already told the user "Retry cancelled", so silently
+                    // clearing the flag and polling on would make that a lie (B7).
+                    if (consumeCancelRetry(retry.attempt, retry.everConnected, "post_connect")) {
+                        return
+                    }
                     OBDLog.event("ObdPollingEngine", "connect", mapOf("name" to service.activeName))
                     // May throw IOException from the live-poll loop, which re-enters the
                     // reconnect path below exactly like a failed connect attempt.
                     runConnectedSession(address, scanMode, clearDtcMode, tpmsScanMode, detailProbeStage, retry)
+                    if (oneShot) {
+                        service.stopSelfFromRunner()
+                    }
                     return
                 } catch (ex: IOException) {
                     if (!handleAttemptFailure(retry, ex, attemptStart)) {
@@ -197,7 +218,7 @@ open class ObdPollingEngine(
             Log.w(AppPrefs.LOG_TAG, "OBD loop runtime failure for ${service.activeName} after $sampleCount samples", ex)
             service.recorder.logError("connection_failure", ex)
             service.broadcastStatus("error", ObdElmDecode.friendlyConnectionMessage(ex), true)
-            service.stopSelf()
+            service.stopSelfFromRunner()
         } finally {
             service.recorder.logEvent("socket_closing")
             closeSocket()
@@ -211,6 +232,9 @@ open class ObdPollingEngine(
         service.broadcastStatus("error", message, true)
         service.closeSessionLog()
         service.markSessionInactive()
+        // A preflight failure is terminal — no retry loop follows, so the service must stop
+        // instead of lingering as an orphaned foreground service (B1).
+        service.stopSelfFromRunner()
     }
 
     /**
@@ -248,7 +272,7 @@ open class ObdPollingEngine(
         // Keep this literal in sync with R.string.status_retry_cancelled (the value ObdService
         // broadcasts). The engine has no Context, so it can't resolve the resource itself.
         service.broadcastStatus("idle", "Retry cancelled.", false)
-        service.stopSelf()
+        service.stopSelfFromRunner()
         return true
     }
 
@@ -321,7 +345,7 @@ open class ObdPollingEngine(
         if (retry.everConnected) {
             OBDLog.event("ObdPollingEngine", "disconnect", mapOf("reason" to ObdElmDecode.safeMessage(ex)))
         }
-        if (!service.running.get()) {
+        if (!service.isSessionRunnerActive()) {
             return false
         }
         val phase = connection.lastErrorPhase.ifEmpty { "post_connect" }
@@ -405,7 +429,7 @@ open class ObdPollingEngine(
         if (!extendedReconnectTier.awaitNextAttempt()) {
             return false
         }
-        if (!service.running.get()) {
+        if (!service.isSessionRunnerActive()) {
             return false
         }
         if (consumeCancelRetry(decision.attempt, decision.everConnected, "extended_reconnect")) {
@@ -496,7 +520,7 @@ open class ObdPollingEngine(
                 "Adapter went to sleep with the car. Logging stopped — your drive was saved.",
                 false,
             )
-            service.stopSelf()
+            service.stopSelfFromRunner()
             return
         }
         service.broadcastStatus(
@@ -508,7 +532,7 @@ open class ObdPollingEngine(
             },
             true,
         )
-        service.stopSelf()
+        service.stopSelfFromRunner()
     }
 
     private fun logReconnectAttempt(
@@ -656,7 +680,7 @@ open class ObdPollingEngine(
 
     @Throws(IOException::class)
     private fun pollUntilStoppedOrBroken() {
-        while (service.running.get()) {
+        while (service.isSessionRunnerActive()) {
             val sample = liveSampleReader.read(this)
             if (sample.length() == 0) {
                 service.recorder.logEvent("empty_sample_skipped")
@@ -708,7 +732,7 @@ open class ObdPollingEngine(
             "Car went to sleep — stopped logging. Your drive was saved.",
             false,
         )
-        service.stopSelf()
+        service.stopSelfFromRunner()
     }
 
     fun runDemoLoop() {
