@@ -11,6 +11,12 @@ pre-commit:
       glob: "mobile/android/app/src/**/*.java"
       run: cd mobile/android && ./gradlew --no-daemon :app:spotlessJavaCheck
       stage_fixed: false
+    # I1 (2026-07-12): Kotlin is the primary production language; without this hook a ktlint
+    # violation rode ~8 min to CI while Java (legacy tests only) was checked locally.
+    spotless-kotlin:
+      glob: "mobile/android/app/src/**/*.kt"
+      run: cd mobile/android && ./gradlew --no-daemon :app:spotlessKotlinCheck
+      stage_fixed: false
     spotless-dashboard:
       glob: "mobile/android/app/src/main/{assets/dashboard,dashboard-src}/**/*.{js,css,html}"
       run: cd mobile/android && ./gradlew --no-daemon :app:spotlessDashboardCheck
@@ -57,6 +63,16 @@ pre-push:
   commands:
     unit-tests:
       run: cd mobile/android && ./gradlew --no-daemon :app:testDebugUnitTest
+    # I2 (2026-07-12): detekt ratchets and tsc are zero-tolerance CI gates; running them here
+    # (~30-60s combined) keeps a ratchet trip or type error from riding ~8 min to CI.
+    detekt:
+      run: cd mobile/android && ./gradlew --no-daemon :app:detekt
+    dashboard-typecheck:
+      run: |
+        if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
+          npm --prefix mobile/android/dashboard-tests ci
+        fi
+        npm --prefix mobile/android/dashboard-tests run typecheck
     dashboard-tests:
       run: |
         if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
