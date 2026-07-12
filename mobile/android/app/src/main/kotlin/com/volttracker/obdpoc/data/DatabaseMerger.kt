@@ -171,8 +171,8 @@ object DatabaseMerger {
                         null,
                         progress,
                     )
-                rows += copyAdapterHistory(target, donor, sessionMap, progress)
-                rows += copyDiagnosticCodes(target, donor, sessionMap, progress)
+                rows += AdapterHistoryMerge.copy(target, donor, sessionMap, progress)
+                rows += DiagnosticCodeMerge.copy(target, donor, sessionMap, progress)
                 rows += copyMaintenanceLog(target, donor, progress)
                 progress.publish("Refreshing trip projections")
                 invalidateTripProjectionCaches(target, sessionMap.values)
@@ -341,123 +341,6 @@ object DatabaseMerger {
         }
     }
 
-    private fun copyAdapterHistory(
-        target: SQLiteDatabase,
-        donor: SQLiteDatabase,
-        sessionMap: Map<Long, Long>,
-        progress: MergeProgress,
-    ): Long {
-        var touched = 0L
-        donorRows(donor, VoltTrackerDb.TABLE_ADAPTER_HISTORY).use { c ->
-            while (c.moveToNext()) {
-                progress.step("Merging adapter history")
-                val cv = readRow(c)
-                val key = cv.getAsString("adapter_key") ?: continue
-                val canCopyLastSession = canCopyMappedReference(cv, "last_session_id", sessionMap)
-                remap(cv, "last_session_id", sessionMap)
-                val existing =
-                    queryOne(
-                        target,
-                        VoltTrackerDb.TABLE_ADAPTER_HISTORY,
-                        "adapter_key = ?",
-                        arrayOf(key),
-                        ADAPTER_HISTORY_COLUMNS,
-                    )
-                if (existing == null) {
-                    target.insertOrThrow(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, cv)
-                    touched++
-                } else {
-                    val merged = ContentValues()
-                    val donorContained = donorIntervalContained(existing, cv)
-                    mergeCounter(merged, "connect_count", existing, cv, donorContained)
-                    mergeCounter(merged, "scan_count", existing, cv, donorContained)
-                    mergeCounter(merged, "demo_count", existing, cv, donorContained)
-                    mergeCounter(merged, "sample_count", existing, cv, donorContained)
-                    merged.put(
-                        "first_seen_ms",
-                        minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
-                    )
-                    val liveLast = orZero(existing.getAsLong("last_seen_ms"))
-                    val donorLast = orZero(cv.getAsLong("last_seen_ms"))
-                    merged.put("last_seen_ms", maxOf(liveLast, donorLast))
-                    if (donorLast >= liveLast) {
-                        copyIfPresent(merged, cv, "address")
-                        copyIfPresent(merged, cv, "name")
-                        if (canCopyLastSession) {
-                            copyIfPresent(merged, cv, "last_session_id")
-                        }
-                        copyIfPresent(merged, cv, "last_mode")
-                        copyIfPresent(merged, cv, "last_status")
-                        copyIfPresent(merged, cv, "supported_pids")
-                        copyIfPresent(merged, cv, "last_event_detail")
-                    }
-                    target.update(VoltTrackerDb.TABLE_ADAPTER_HISTORY, merged, "adapter_key = ?", arrayOf(key))
-                }
-            }
-        }
-        return touched
-    }
-
-    private fun copyDiagnosticCodes(
-        target: SQLiteDatabase,
-        donor: SQLiteDatabase,
-        sessionMap: Map<Long, Long>,
-        progress: MergeProgress,
-    ): Long {
-        var touched = 0L
-        donorRows(donor, VoltTrackerDb.TABLE_DIAGNOSTIC_CODES).use { c ->
-            while (c.moveToNext()) {
-                progress.step("Merging diagnostic codes")
-                val cv = readRow(c)
-                val moduleKey = cv.getAsString("module_key")
-                val dtc = cv.getAsString("dtc")
-                val status = cv.getAsString("status")
-                if (moduleKey == null || dtc == null || status == null) {
-                    continue
-                }
-                cv.remove("_id")
-                val canCopyLastSession = canCopyMappedReference(cv, "last_session_id", sessionMap)
-                remap(cv, "last_session_id", sessionMap)
-                val where = "module_key = ? AND dtc = ? AND status = ?"
-                val args = arrayOf(moduleKey, dtc, status)
-                val existing =
-                    queryOne(
-                        target,
-                        VoltTrackerDb.TABLE_DIAGNOSTIC_CODES,
-                        where,
-                        args,
-                        DIAGNOSTIC_MERGE_COLUMNS,
-                    )
-                if (existing == null) {
-                    target.insertOrThrow(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, null, cv)
-                    touched++
-                } else {
-                    val merged = ContentValues()
-                    mergeCounter(merged, "seen_count", existing, cv, donorIntervalContained(existing, cv))
-                    merged.put(
-                        "first_seen_ms",
-                        minLong(existing.getAsLong("first_seen_ms"), cv.getAsLong("first_seen_ms")),
-                    )
-                    val liveLast = orZero(existing.getAsLong("last_seen_ms"))
-                    val donorLast = orZero(cv.getAsLong("last_seen_ms"))
-                    merged.put("last_seen_ms", maxOf(liveLast, donorLast))
-                    if (donorLast >= liveLast) {
-                        copyIfPresent(merged, cv, "status_label")
-                        copyIfPresent(merged, cv, "module_name")
-                        copyIfPresent(merged, cv, "header")
-                        if (canCopyLastSession) {
-                            copyIfPresent(merged, cv, "last_session_id")
-                        }
-                        copyIfPresent(merged, cv, "raw_response")
-                        copyIfPresent(merged, cv, "json")
-                    }
-                    target.update(VoltTrackerDb.TABLE_DIAGNOSTIC_CODES, merged, where, args)
-                }
-            }
-        }
-        return touched
-    }
-
     /**
      * Copies the donor's user maintenance log (M5). The table has no foreign keys (entries are
      * independent of any session/vehicle), so rows copy verbatim with no key remapping. Dedupes on
@@ -610,7 +493,7 @@ object DatabaseMerger {
         }
     }
 
-    private fun canCopyMappedReference(
+    internal fun canCopyMappedReference(
         cv: ContentValues,
         column: String,
         map: Map<Long, Long>,
@@ -684,7 +567,7 @@ object DatabaseMerger {
             else -> emptyArray()
         }
 
-    private fun queryOne(
+    internal fun queryOne(
         db: SQLiteDatabase,
         table: String,
         where: String,
@@ -1010,21 +893,6 @@ object DatabaseMerger {
     private val DIAGNOSTIC_CODE_COLUMNS =
         arrayOf(
             "_id",
-            "dtc",
-            "status",
-            "status_label",
-            "module_key",
-            "module_name",
-            "header",
-            "first_seen_ms",
-            "last_seen_ms",
-            "seen_count",
-            "last_session_id",
-            "raw_response",
-            "json",
-        )
-    private val DIAGNOSTIC_MERGE_COLUMNS =
-        arrayOf(
             "dtc",
             "status",
             "status_label",
