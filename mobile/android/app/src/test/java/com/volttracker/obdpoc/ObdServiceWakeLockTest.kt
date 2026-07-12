@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.content.Intent
+import com.volttracker.obdpoc.service.ObdService
 import org.junit.After
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

@@ -1,6 +1,14 @@
-package com.volttracker.obdpoc
+package com.volttracker.obdpoc.service
 
 import android.util.Log
+import com.volttracker.obdpoc.AppPrefs
+import com.volttracker.obdpoc.BuildFlags
+import com.volttracker.obdpoc.FailureClass
+import com.volttracker.obdpoc.ObdElmDecode
+import com.volttracker.obdpoc.ObdProtocol
+import com.volttracker.obdpoc.ObdSessionLog
+import com.volttracker.obdpoc.SessionSummary
+import com.volttracker.obdpoc.SessionSummaryStore
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException

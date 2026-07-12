@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull

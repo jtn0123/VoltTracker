@@ -32,12 +32,14 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 858 # BackupController = 857 by detekt's LargeClass metric (NOT wc -l).
-    # RATCHETED DOWN from 969 (A2): the old pin (DatabaseMerger at 968) predates the
-    # counter-merge extractions; with the adapter-history and diagnostic-code merges now in
-    # AdapterHistoryMerge / DiagnosticCodeMerge (joining VehicleIdentityMerge and
-    # FieldCapabilityMerge), the merger measures under 850 and the worst class is
-    # BackupController. LOWER further as the controller or the big stores are decomposed.
+    threshold: 847 # EnhancedPidCatalog = 846 by detekt's LargeClass metric (NOT wc -l).
+    # RATCHETED DOWN from 858: the old pin (BackupController at 857) shed its two biggest
+    # clusters — progress publishing (percent/ETA math + the throttled worker emitter) into
+    # BackupRestoreProgressPresenter, and the staged merge/replace apply (including the
+    # replace staging/rollback ladder) into RestoreApplyPipeline — and now measures under
+    # 700. The worst class is EnhancedPidCatalog, a PID data table. LOWER further if the
+    # catalog's profile rows move to a resource/registry, or as the remaining hotspots
+    # (MainActivity, ObdService, ObdPollingEngine) are decomposed.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true

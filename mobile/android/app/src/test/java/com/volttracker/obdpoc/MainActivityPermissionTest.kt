@@ -7,6 +7,8 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebView
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.PermissionGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

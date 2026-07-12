@@ -2,6 +2,8 @@ package com.volttracker.obdpoc
 
 import android.Manifest
 import android.app.Activity
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.PermissionGate
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue

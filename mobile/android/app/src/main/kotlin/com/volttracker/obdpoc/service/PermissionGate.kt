@@ -1,4 +1,4 @@
-package com.volttracker.obdpoc
+package com.volttracker.obdpoc.service
 
 import android.Manifest
 import android.app.Activity

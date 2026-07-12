@@ -4,6 +4,7 @@ import android.Manifest
 import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.DialogInterface
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertNotNull

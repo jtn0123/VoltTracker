@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.service.ObdService
+
 internal class VoltBridgeConnections(
     private val activity: DashboardHost,
 ) {

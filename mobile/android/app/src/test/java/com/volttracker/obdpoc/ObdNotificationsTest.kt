@@ -2,6 +2,8 @@ package com.volttracker.obdpoc
 
 import android.content.ComponentName
 import android.content.Intent
+import com.volttracker.obdpoc.service.ObdNotifications
+import com.volttracker.obdpoc.service.ObdService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

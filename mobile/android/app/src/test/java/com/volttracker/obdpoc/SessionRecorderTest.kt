@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.FilteredLocation
+import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONException
 import org.json.JSONObject
 import org.junit.Assert.assertEquals

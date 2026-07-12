@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.service.ObdService
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull

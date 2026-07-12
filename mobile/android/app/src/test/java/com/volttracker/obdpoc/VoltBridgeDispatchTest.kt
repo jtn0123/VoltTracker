@@ -8,6 +8,8 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
 import com.volttracker.obdpoc.data.ObdSignalLogStore
 import com.volttracker.obdpoc.data.ObdTripEditStore
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.PermissionGate
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After

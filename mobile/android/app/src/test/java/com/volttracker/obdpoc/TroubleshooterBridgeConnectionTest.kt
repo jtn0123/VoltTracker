@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.content.Context
 import android.os.Bundle
 import android.os.Looper
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals

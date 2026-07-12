@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import com.volttracker.obdpoc.service.ObdService
 import java.util.Arrays
 
 /**

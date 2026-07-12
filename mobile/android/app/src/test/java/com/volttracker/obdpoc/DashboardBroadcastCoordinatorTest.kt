@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

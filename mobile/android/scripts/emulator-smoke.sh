@@ -35,7 +35,8 @@ cd "$(dirname "$0")/.."
 
 PKG="com.volttracker.obdpoc"
 MAIN_ACTIVITY="$PKG/.MainActivity"
-OBD_SERVICE="$PKG/.ObdService"
+# Full component path: ObdService moved to the service/ subpackage in the A3 restructure.
+OBD_SERVICE="$PKG/.service.ObdService"
 ACTION_DEMO="$PKG.action.DEMO"
 ACTION_DISCONNECT="$PKG.action.DISCONNECT"
 ARTIFACT_DIR="build/emulator-smoke"

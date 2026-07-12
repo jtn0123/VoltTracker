@@ -14,6 +14,7 @@ import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale

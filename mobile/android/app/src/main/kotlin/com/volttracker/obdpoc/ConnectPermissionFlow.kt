@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import com.volttracker.obdpoc.service.PermissionGate
 
 /**
  * Owns the connect-attempt / runtime-permission handshake extracted from [MainActivity]:

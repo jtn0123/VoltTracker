@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.ObdPersistenceWorker
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull

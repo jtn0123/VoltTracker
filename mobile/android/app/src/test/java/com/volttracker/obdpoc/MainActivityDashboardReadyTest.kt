@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.os.Looper
 import android.webkit.WebView
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals

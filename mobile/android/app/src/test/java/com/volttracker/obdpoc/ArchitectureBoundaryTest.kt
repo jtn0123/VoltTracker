@@ -11,50 +11,16 @@ import java.nio.file.Paths
 class ArchitectureBoundaryTest {
     @Test
     fun dataLayerDoesNotImportUiServiceOrEngineClasses() {
-        val violations = ArrayList<String>()
-        for (sourceRoot in sourceRoots()) {
-            val dataDir =
-                sourceRoot
-                    .resolve("com")
-                    .resolve("volttracker")
-                    .resolve("obdpoc")
-                    .resolve("data")
-            if (!Files.isDirectory(dataDir)) {
-                continue
-            }
-            Files.walk(dataDir).use { paths ->
-                paths
-                    .filter { isSourceFile(it) }
-                    .forEach { path ->
-                        try {
-                            val source = String(Files.readAllBytes(path), StandardCharsets.UTF_8)
-                            for (forbidden in FORBIDDEN_DATA_LAYER_IMPORTS) {
-                                if (source.contains(forbidden)) {
-                                    violations.add(
-                                        displayPath(path) + " imports upward via " + forbidden,
-                                    )
-                                }
-                            }
-                        } catch (ex: IOException) {
-                            throw AssertionError("Could not read $path", ex)
-                        }
-                    }
-            }
-        }
+        val violations =
+            scanPackageDirForForbiddenReferences("data", FORBIDDEN_DATA_LAYER_IMPORTS)
+
         assertTrue("Layering violations:\n" + violations.joinToString("\n"), violations.isEmpty())
     }
 
     @Test
     fun engineDoesNotReferenceDashboardBridgeOrWebViewApis() {
         val violations =
-            scanProductionFilesForForbiddenReferences(
-                { name ->
-                    name.contains("Engine") ||
-                        name.endsWith("Runner.kt") ||
-                        name == "ElmConnection.kt"
-                },
-                FORBIDDEN_ENGINE_UI_REFERENCES,
-            )
+            scanPackageDirForForbiddenReferences("engine", FORBIDDEN_ENGINE_UI_REFERENCES)
 
         assertTrue(
             "Engine/UI boundary violations:\n" + violations.joinToString("\n"),
@@ -65,24 +31,29 @@ class ArchitectureBoundaryTest {
     @Test
     fun serviceLayerDoesNotCallWebViewApis() {
         val violations =
-            scanProductionFilesForForbiddenReferences(
-                { name ->
-                    !name.startsWith("VoltBridge") &&
-                        (
-                            name.endsWith("Service.kt") ||
-                                name.endsWith("Notifications.kt") ||
-                                name.endsWith("PermissionGate.kt") ||
-                                name.endsWith("Worker.kt") ||
-                                name.endsWith("Recorder.kt")
-                        )
-                },
-                FORBIDDEN_SERVICE_WEBVIEW_REFERENCES,
-            )
+            scanPackageDirForForbiddenReferences("service", FORBIDDEN_SERVICE_WEBVIEW_REFERENCES)
 
         assertTrue(
             "Service/WebView boundary violations:\n" + violations.joinToString("\n"),
             violations.isEmpty(),
         )
+    }
+
+    /**
+     * The engine/service rules above are scoped structurally to their package
+     * directories. If a refactor accidentally moved those files back into the
+     * root package the rules would pass vacuously, so pin the directories as
+     * non-empty here.
+     */
+    @Test
+    fun engineAndServicePackagesAreNonEmpty() {
+        for (packageDirName in listOf("engine", "service")) {
+            assertTrue(
+                "Expected at least one source file under the '$packageDirName' package; " +
+                    "the boundary rules for it would be vacuous otherwise",
+                countPackageSourceFiles(packageDirName) > 0,
+            )
+        }
     }
 
     @Test
@@ -173,8 +144,7 @@ class ArchitectureBoundaryTest {
                 "import android.webkit.",
                 "import com.volttracker.obdpoc.VoltBridge",
                 "import com.volttracker.obdpoc.WebViewBootstrap",
-                "import com.volttracker.obdpoc.ObdPollingEngine",
-                "import com.volttracker.obdpoc.ElmConnection",
+                "import com.volttracker.obdpoc.engine.",
                 "evaluateJavascript",
             )
 
@@ -183,13 +153,8 @@ class ArchitectureBoundaryTest {
                 "import com.volttracker.obdpoc.MainActivity",
                 "import com.volttracker.obdpoc.VoltBridge",
                 "import com.volttracker.obdpoc.WebViewBootstrap",
-                "import com.volttracker.obdpoc.ObdService",
-                "import com.volttracker.obdpoc.ObdPollingEngine",
-                "import com.volttracker.obdpoc.ElmConnection",
-                "import com.volttracker.obdpoc.DiagnosticScanRunner",
-                "import com.volttracker.obdpoc.ClearDtcRunner",
-                "import com.volttracker.obdpoc.ObdNotifications",
-                "import com.volttracker.obdpoc.PermissionGate",
+                "import com.volttracker.obdpoc.engine.",
+                "import com.volttracker.obdpoc.service.",
                 "import com.volttracker.obdpoc.BackupController",
                 "import com.volttracker.obdpoc.DataBackup",
                 "import android.webkit.",
@@ -229,6 +194,61 @@ class ArchitectureBoundaryTest {
                 }
             }
             return violations
+        }
+
+        /**
+         * Walks every source file under the given subpackage directory of
+         * com.volttracker.obdpoc (across all production source roots) and reports
+         * files containing any of the forbidden references. Structural scoping:
+         * membership in the rule set is decided by package directory, never by
+         * filename convention.
+         */
+        @Throws(IOException::class)
+        fun scanPackageDirForForbiddenReferences(
+            packageDirName: String,
+            forbiddenReferences: List<String>,
+        ): List<String> {
+            val violations = ArrayList<String>()
+            forEachPackageSourceFile(packageDirName) { path ->
+                val source =
+                    try {
+                        String(Files.readAllBytes(path), StandardCharsets.UTF_8)
+                    } catch (ex: IOException) {
+                        throw AssertionError("Could not read $path", ex)
+                    }
+                for (forbidden in forbiddenReferences) {
+                    if (source.contains(forbidden)) {
+                        violations.add(displayPath(path) + " references " + forbidden)
+                    }
+                }
+            }
+            return violations
+        }
+
+        fun countPackageSourceFiles(packageDirName: String): Int {
+            var count = 0
+            forEachPackageSourceFile(packageDirName) { count++ }
+            return count
+        }
+
+        fun forEachPackageSourceFile(
+            packageDirName: String,
+            action: (Path) -> Unit,
+        ) {
+            for (sourceRoot in sourceRoots()) {
+                val packageDir =
+                    sourceRoot
+                        .resolve("com")
+                        .resolve("volttracker")
+                        .resolve("obdpoc")
+                        .resolve(packageDirName)
+                if (!Files.isDirectory(packageDir)) {
+                    continue
+                }
+                Files.walk(packageDir).use { paths ->
+                    paths.filter { isSourceFile(it) }.forEach { action(it) }
+                }
+            }
         }
 
         @Throws(IOException::class)

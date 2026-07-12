@@ -27,6 +27,9 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.ObdNotifications
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.PermissionGate
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors

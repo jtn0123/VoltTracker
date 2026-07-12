@@ -23,7 +23,7 @@ class DatabaseOperationLeaseTest {
 
     @Test
     fun failedRollbackPreservesTheOnlyRestoreSafetyCopy() {
-        assertFalse(BackupController.shouldDeleteRestoreSafetyCopy(rollbackFailed = true))
-        assertTrue(BackupController.shouldDeleteRestoreSafetyCopy(rollbackFailed = false))
+        assertFalse(RestoreApplyPipeline.shouldDeleteRestoreSafetyCopy(rollbackFailed = true))
+        assertTrue(RestoreApplyPipeline.shouldDeleteRestoreSafetyCopy(rollbackFailed = false))
     }
 }
