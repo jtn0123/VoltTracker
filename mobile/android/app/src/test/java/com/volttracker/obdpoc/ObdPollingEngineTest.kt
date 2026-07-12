@@ -3,6 +3,11 @@ package com.volttracker.obdpoc
 import android.bluetooth.BluetoothDevice
 import android.content.Context
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.engine.CellVoltageProbeRunner
+import com.volttracker.obdpoc.engine.ElmConnection
+import com.volttracker.obdpoc.engine.EngineHost
+import com.volttracker.obdpoc.engine.ObdPollingEngine
+import com.volttracker.obdpoc.service.ObdService
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

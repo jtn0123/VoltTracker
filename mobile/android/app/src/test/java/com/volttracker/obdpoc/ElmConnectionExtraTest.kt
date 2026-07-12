@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.engine.ElmConnection
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

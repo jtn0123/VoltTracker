@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.content.Intent
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.PermissionGate
 
 /**
  * Lifecycle/threading hooks the [VoltBridge] posts work onto.

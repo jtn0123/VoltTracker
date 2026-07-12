@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Intent
 import android.util.Log
 import androidx.core.net.toUri
+import com.volttracker.obdpoc.service.ObdService
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.Locale

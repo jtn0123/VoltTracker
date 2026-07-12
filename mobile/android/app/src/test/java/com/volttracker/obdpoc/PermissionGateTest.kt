@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.Manifest
 import android.app.Activity
 import android.os.Bundle
+import com.volttracker.obdpoc.service.PermissionGate
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

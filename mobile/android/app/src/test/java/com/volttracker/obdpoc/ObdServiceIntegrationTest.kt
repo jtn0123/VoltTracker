@@ -10,7 +10,11 @@ import android.content.IntentFilter
 import android.content.pm.ServiceInfo
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.engine.EngineHost
+import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.location.LocationTracker
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals

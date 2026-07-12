@@ -4,6 +4,8 @@ import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.content.Intent
 import android.os.ParcelUuid
+import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals

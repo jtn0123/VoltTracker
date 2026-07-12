@@ -86,7 +86,7 @@ ones and should not be re-evaluated.
 
 - `app/src/main/kotlin/com/volttracker/obdpoc/ConnectionFailureClassifier.kt`
 - `app/src/test/java/com/volttracker/obdpoc/ConnectionFailureClassifierTest.java`
-- `app/src/main/kotlin/com/volttracker/obdpoc/ObdPollingEngine.kt`
+- `app/src/main/kotlin/com/volttracker/obdpoc/engine/ObdPollingEngine.kt`
   (`LONG_BACKOFFS_MS` activation on consecutive INSTANT_DROP)
 - `app/src/main/dashboard-src/js/troubleshooter.ts`
   (`FAILURE_CLASS_COPY` — the user-facing mapping)

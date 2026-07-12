@@ -1,9 +1,10 @@
-package com.volttracker.obdpoc
+package com.volttracker.obdpoc.engine
 
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import android.os.SystemClock
 import androidx.annotation.VisibleForTesting
+import com.volttracker.obdpoc.OBDLog
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream

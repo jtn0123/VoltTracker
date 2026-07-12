@@ -11,7 +11,7 @@ HSPLcom/volttracker/obdpoc/WebViewBootstrap;->**(**)**
 HSPLcom/volttracker/obdpoc/VoltBridge;->**(**)**
 HSPLcom/volttracker/obdpoc/DashboardPublisher;->**(**)**
 HSPLcom/volttracker/obdpoc/JsonSnapshot;->**(**)**
-HSPLcom/volttracker/obdpoc/PermissionGate;->**(**)**
+HSPLcom/volttracker/obdpoc/service/PermissionGate;->**(**)**
 HSPLcom/volttracker/obdpoc/DeviceCatalog;->**(**)**
 HSPLcom/volttracker/obdpoc/data/ObdLocalStore;->**(**)**
 HSPLcom/volttracker/obdpoc/data/VoltTrackerDb;->**(**)**

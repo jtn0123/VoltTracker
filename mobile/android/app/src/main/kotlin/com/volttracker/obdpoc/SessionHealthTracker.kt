@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.engine.EngineHost
 import org.json.JSONException
 import org.json.JSONObject
 

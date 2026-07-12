@@ -2,8 +2,12 @@ package com.volttracker.obdpoc
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import com.volttracker.obdpoc.engine.ElmConnection
+import com.volttracker.obdpoc.engine.EngineHost
+import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.location.FilteredLocation
 import com.volttracker.obdpoc.location.LocationTracker
+import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals

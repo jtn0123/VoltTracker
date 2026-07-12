@@ -214,6 +214,15 @@ tasks.register("jacocoTestReport", JacocoReport) {
 //   rule (floor 0.90) still covers every rehomed line — measured after the move,
 //   com.volttracker.obdpoc.data LINE 96.3% (5762/5986) with every new class at
 //   91.7-100%. No floor is changed.
+//   2026-07-12 (round 17, A3 — engine/service package split): the architecture
+//   boundary rules' filename heuristics became structural packages. Eight engine
+//   classes (AutoDtcScanRunner, CellVoltageProbeRunner, ClearDtcRunner,
+//   DiagnosticScanRunner, ElmConnection, EngineHost, ObdPollingEngine,
+//   TpmsDiscoveryRunner) moved to com.volttracker.obdpoc.engine, and five service
+//   classes (ObdNotifications, ObdPersistenceWorker, ObdService, PermissionGate,
+//   SessionRecorder) to com.volttracker.obdpoc.service. Pure code move, zero
+//   behavior change: the seven per-CLASS floors keyed to moved classes keep
+//   their thresholds verbatim with updated FQNs. No floor is changed.
 tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
     dependsOn "jacocoTestReport"
     sourceDirectories.setFrom(coverageSourceDirs())
@@ -303,7 +312,7 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.AutoDtcScanRunner"]
+            includes = ["com.volttracker.obdpoc.engine.AutoDtcScanRunner"]
             limit { counter = "LINE"; minimum = 0.87 }
         }
         // Round 15 (A3): VoltBridgeDataExports was split into five focused units; its single
@@ -356,7 +365,7 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.ClearDtcRunner"]
+            includes = ["com.volttracker.obdpoc.engine.ClearDtcRunner"]
             limit { counter = "LINE"; minimum = 0.85 }
         }
         rule {
@@ -383,7 +392,7 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.TpmsDiscoveryRunner"]
+            includes = ["com.volttracker.obdpoc.engine.TpmsDiscoveryRunner"]
             limit { counter = "LINE"; minimum = 0.82 }
         }
         // Round 10 focused class floors from share/log failure-path coverage.
@@ -436,7 +445,7 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.ObdPersistenceWorker"]
+            includes = ["com.volttracker.obdpoc.service.ObdPersistenceWorker"]
             limit { counter = "LINE"; minimum = 0.80 }
         }
         // Round 12/14 focused class floors from backup failure-flow and engine helper/loop coverage.
@@ -447,19 +456,19 @@ tasks.register("jacocoTestCoverageVerification", JacocoCoverageVerification) {
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.ObdPollingEngine"]
+            includes = ["com.volttracker.obdpoc.engine.ObdPollingEngine"]
             limit { counter = "LINE"; minimum = 0.85 }
         }
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.ObdService"]
+            includes = ["com.volttracker.obdpoc.service.ObdService"]
             limit { counter = "LINE"; minimum = 0.80 }
         }
         // Round 13 focused class floors from recorder/report-projection coverage and the
         // route-downsampling point-limit fix.
         rule {
             element = "CLASS"
-            includes = ["com.volttracker.obdpoc.SessionRecorder"]
+            includes = ["com.volttracker.obdpoc.service.SessionRecorder"]
             limit { counter = "LINE"; minimum = 0.86 }
         }
         rule {

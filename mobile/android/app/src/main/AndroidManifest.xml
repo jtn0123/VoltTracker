@@ -63,7 +63,7 @@
         </activity>
 
         <service
-            android:name=".ObdService"
+            android:name="com.volttracker.obdpoc.service.ObdService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice|location" />
 

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.ConnectionFailureClassifier.Input
+import com.volttracker.obdpoc.engine.ObdPollingEngine
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail

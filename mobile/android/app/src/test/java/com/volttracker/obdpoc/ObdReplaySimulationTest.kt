@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After

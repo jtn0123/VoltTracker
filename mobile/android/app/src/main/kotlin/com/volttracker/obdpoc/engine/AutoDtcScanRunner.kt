@@ -1,5 +1,6 @@
-package com.volttracker.obdpoc
+package com.volttracker.obdpoc.engine
 
+import com.volttracker.obdpoc.ObdProtocol
 import java.io.IOException
 
 /**

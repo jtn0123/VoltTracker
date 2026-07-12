@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.content.Intent
 import androidx.core.content.ContextCompat
+import com.volttracker.obdpoc.service.ObdService
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
