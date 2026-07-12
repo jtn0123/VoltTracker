@@ -32,11 +32,12 @@ complexity:
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LargeClass:
     active: true
-    threshold: 969 # data.DatabaseMerger = 968 by detekt's LargeClass metric (NOT wc -l).
-    # RATCHETED DOWN from 1149 (A1): the old pin (ObdProtocol at 1148) predates the Mode-22
-    # decoder extraction; with the Mode-22 dispatch + helpers now in ObdVoltMode22ParserRegistry,
-    # ObdProtocol measures under 900 and the worst class is the backup DatabaseMerger. LOWER
-    # further as the merger or the big stores are decomposed.
+    threshold: 858 # BackupController = 857 by detekt's LargeClass metric (NOT wc -l).
+    # RATCHETED DOWN from 969 (A2): the old pin (DatabaseMerger at 968) predates the
+    # counter-merge extractions; with the adapter-history and diagnostic-code merges now in
+    # AdapterHistoryMerge / DiagnosticCodeMerge (joining VehicleIdentityMerge and
+    # FieldCapabilityMerge), the merger measures under 850 and the worst class is
+    # BackupController. LOWER further as the controller or the big stores are decomposed.
     excludes: ['**/src/test/**', '**/src/androidTest/**']
   LongMethod:
     active: true
@@ -54,14 +55,16 @@ complexity:
   TooManyFunctions:
     active: true
     thresholdInFiles: 66
-    thresholdInClasses: 64 # MainActivity (63) is now the worst — RATCHETED DOWN from 67 (A2).
-    # Narrowing the ObdLocalStore facade behind capability interfaces (the tripEdits / routes /
-    # signalLogs / maintenanceLog / exportLog / dbMaintenance accessors, each backed by a
-    # sub-store) dropped ObdLocalStore from 66 -> 44, and moving MainActivity's three route-read
-    # forwards (getTripRouteJson / getCurrentSessionRouteJson / getBatterySohHistoryJson) onto
-    # SessionDataReader interface defaults dropped MainActivity from 66 -> 63. The worst class is
-    # now MainActivity (63), with ObdService (54), ObdLocalStore (44) and ObdPollingEngine (42)
-    # next, so worst+1 = 64. LOWER further as MainActivity / ObdService are decomposed.
+    thresholdInClasses: 61 # ObdService (60) is now the worst — RATCHETED DOWN from 64 (A1).
+    # Moving MainActivity's ten DiagnosticsCommands forwards (forceStopPackageFromBridge /
+    # cancelRetryFromBridge / openBluetoothSettingsFromBridge / getRecentSessionsJson /
+    # shareDiagnostics(Digest)FromBridge / startTestConnectionFromBridge / the adapter-ready
+    # schedule+cancel pair / openSetupGuideFromBridge) onto DiagnosticsHostDelegate behind a single
+    # diagnostics() accessor (the eventNotifications() growth-by-override pattern) dropped
+    # MainActivity from 63 -> 54. The worst class is now ObdService (60, measured — the old
+    # "ObdService (54)" note here was stale), with MainActivity (54), ObdPollingEngine (45) and
+    # ObdLocalStore (44) next, so worst+1 = 61. LOWER further as ObdService / MainActivity are
+    # decomposed.
     thresholdInInterfaces: 25 # ObdSessionStore (24)
     thresholdInObjects: 51 # data.ObdStoreSupport (50) — RATCHETED DOWN from 61 (A1). The old
     # pin (ObdProtocol at 60) was stale: after the standard-PID (A2) and Mode-22 (A1) parser

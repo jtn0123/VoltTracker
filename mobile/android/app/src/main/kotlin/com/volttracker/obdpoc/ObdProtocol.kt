@@ -125,10 +125,37 @@ object ObdProtocol {
             return false
         }
         val lines = adapterHexLines(response)
+        val cleanPids = pidHex.map { (it ?: "").uppercase(Locale.US) }
+        if (consumeMode01MarkersInOrder(lines, cleanPids)) {
+            return true
+        }
+        // ECUs are allowed to answer a batched 01-request in a different order than it was
+        // asked (commonly ascending PID). Retry with the PIDs sorted by where their marker
+        // first appears in the response; the same forward-only consumption pass then verifies
+        // completeness, so payload bytes consumed by one PID still can't satisfy another.
+        val positions = HashMap<String, Long>(cleanPids.size)
+        for (pid in cleanPids) {
+            positions[pid] = firstMode01MarkerPosition(lines, pid) ?: return false
+        }
+        val byAppearance = cleanPids.sortedBy { positions.getValue(it) }
+        if (byAppearance == cleanPids) {
+            return false
+        }
+        return consumeMode01MarkersInOrder(lines, byAppearance)
+    }
+
+    /**
+     * Walks [lines] with a forward-only cursor consuming each PID's `41xx` marker plus its full
+     * payload, in the given order. Consumption means a marker inside an already-consumed span
+     * can never double-count.
+     */
+    private fun consumeMode01MarkersInOrder(
+        lines: List<String>,
+        cleanPids: List<String>,
+    ): Boolean {
         var lineIndex = 0
         var cursor = 0
-        for (pid in pidHex) {
-            val cleanPid = (pid ?: "").uppercase(Locale.US)
+        for (cleanPid in cleanPids) {
             val marker = "41$cleanPid"
             val expectedBytes = mode01PayloadBytes(cleanPid)
             var found = false
@@ -155,6 +182,21 @@ object ObdProtocol {
             }
         }
         return true
+    }
+
+    /** Line-major position of the first `41<pid>` marker, or null when absent entirely. */
+    private fun firstMode01MarkerPosition(
+        lines: List<String>,
+        cleanPid: String,
+    ): Long? {
+        val marker = "41$cleanPid"
+        for ((lineIndex, line) in lines.withIndex()) {
+            val index = line.indexOf(marker)
+            if (index >= 0) {
+                return lineIndex.toLong() * Int.MAX_VALUE + index
+            }
+        }
+        return null
     }
 
     @JvmStatic
