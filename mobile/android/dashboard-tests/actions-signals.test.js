@@ -16,6 +16,9 @@
 // confirm, and hand-stub the VD seam + bridge so each test owns its state.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  confirmAppDialog,
+} from '../app/src/main/dashboard-src/js/app-dialog.ts';
 import { createSignalActions } from '../app/src/main/dashboard-src/js/actions-signals.ts';
 
 const DIALOG_DOM = `
@@ -41,6 +44,11 @@ function makeVd() {
   return {
     statuses: [],
     reportClientError: vi.fn(),
+    // The production chunk reaches the ONE dialog instance through the VD
+    // registry (C2 — importing app-dialog into the lazy chunk would bundle a
+    // duplicate stateful copy). Wire the real module in so these specs still
+    // drive the real dialog DOM.
+    confirmAppDialog,
     setStatus(payload) {
       this.statuses.push(payload);
     },

@@ -8,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 // resolve it relative to this file.
 async function loadPrefs({ clear = true } = {}) {
   if (clear) window.localStorage.clear();
+  // prefs.ts boots its UI at most once per document (C1 lazy-chunk guard);
+  // this helper re-executes the module against a rebuilt DOM, so reset the
+  // once-flag or the fresh elements would never get their listeners.
+  delete document.__voltPrefsUiBooted;
   vi.resetModules();
   await import('../app/src/main/dashboard-src/js/prefs.ts');
   return window.VoltDashboard.prefs;

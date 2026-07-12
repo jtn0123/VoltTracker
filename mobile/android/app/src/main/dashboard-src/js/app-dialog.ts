@@ -1,5 +1,15 @@
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
+// VD: this module owns mutable dialog state (controller / trap / settle) that
+// drives the ONE #appDialog DOM node, so it must exist exactly once at
+// runtime. It ships ONLY in the eager app.js bundle (via actions.ts) and
+// publishes its API on the VD registry at the bottom of this file; lazy
+// chunks (actions-storage.ts, actions-signals.ts, …) MUST call through
+// VD.confirmAppDialog / VD.promptAppDialog / VD.choiceAppDialog instead of
+// importing this module — a lazy-chunk import would bundle a second copy
+// whose duplicate state stacks focus traps and settles two promises with a
+// single Confirm tap (see vd-registry.ts).
+import { VD } from "./vd-registry";
 
 type AppDialogOptions = {
   title: string;
@@ -147,17 +157,23 @@ function openDialog(options: AppPromptOptions & { mode: "confirm" | "prompt" }):
       settle(true);
     };
     const cancelValue = () => settle(options.mode === "prompt" ? null : false);
+    // Dismissal (Escape, the X, the backdrop) settles null — distinct from the
+    // explicit cancel BUTTON, which settles false in confirm mode. confirm-
+    // and prompt-mode callers collapse both to "not confirmed"; choice mode
+    // (choiceAppDialog) needs the distinction so a dialog whose secondary
+    // button carries a real action can still be backed out of safely.
+    const dismissValue = () => settle(null);
     n.input.addEventListener("input", () => {
       n.confirm.disabled = !allowEmpty && !n.input.value.trim();
     }, { signal });
     n.confirm.addEventListener("click", confirmValue, { signal });
     n.cancel.addEventListener("click", cancelValue, { signal });
-    n.close.addEventListener("click", cancelValue, { signal });
-    n.root.querySelector("[data-app-dialog-cancel]")?.addEventListener("click", cancelValue, { signal });
+    n.close.addEventListener("click", dismissValue, { signal });
+    n.root.querySelector("[data-app-dialog-cancel]")?.addEventListener("click", dismissValue, { signal });
     // The shared trap owns background inerting, Tab/Escape containment, and
     // focus save/restore. Activate it while the opener still holds focus (it
     // snapshots document.activeElement), then move focus into the dialog.
-    dialogTrap = createFocusTrap(n.root, { backgroundNodes, onEscape: cancelValue });
+    dialogTrap = createFocusTrap(n.root, { backgroundNodes, onEscape: dismissValue });
     n.root.hidden = false;
     dialogTrap.activate();
     window.requestAnimationFrame(() => {
@@ -174,3 +190,22 @@ export function confirmAppDialog(options: AppDialogOptions): Promise<boolean> {
 export function promptAppDialog(options: AppPromptOptions): Promise<string | null> {
   return openDialog({ ...options, mode: "prompt" }).then((result) => typeof result === "string" ? result : null);
 }
+
+/**
+ * Three-way confirm: resolves true for the primary (confirm) button, false for
+ * the explicit secondary (cancel-slot) button, and null when the dialog is
+ * dismissed (Escape / the X / the backdrop). Use where the safe choice is the
+ * primary action but a deliberate riskier alternative must stay reachable —
+ * e.g. the plain-backup share (E2), where "Use encrypted backup" is primary,
+ * "Share unencrypted" is the explicit secondary, and backing out via Escape
+ * must do nothing rather than trigger either.
+ */
+export function choiceAppDialog(options: AppDialogOptions): Promise<boolean | null> {
+  return openDialog({ ...options, mode: "confirm" }).then((result) =>
+    result === true ? true : result === false ? false : null
+  );
+}
+
+// Cross-chunk registration: the lazy action chunks reach the ONE dialog
+// instance through the VD registry (see the module comment up top).
+Object.assign(VD, { confirmAppDialog, promptAppDialog, choiceAppDialog });

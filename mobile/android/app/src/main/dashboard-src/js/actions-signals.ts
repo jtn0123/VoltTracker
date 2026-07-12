@@ -1,4 +1,8 @@
-import { confirmAppDialog } from "./app-dialog";
+// NOTE: this file is a LAZY chunk (its own esbuild bundle). Dialogs go through
+// the VD registry (VD.confirmAppDialog, registered by the eager app-dialog.ts)
+// — importing app-dialog here would bundle a second copy of its mutable dialog
+// state into this chunk, stacking focus traps and settling two promises with
+// one Confirm.
 import { actionModulesRegistry } from "./vd-registry";
 
 type SignalActionContext = {
@@ -139,7 +143,7 @@ export function createSignalActions({ VD, bridge }: SignalActionContext) {
       VD.setStatus({ state: "idle", detail: "Signal log cleanup is only available inside the Android app." });
       return;
     }
-    void confirmAppDialog({
+    void VD.confirmAppDialog({
       title: "Delete signal evidence",
       message: "Delete this saved detailed signal evidence row?",
       confirmLabel: "Delete"

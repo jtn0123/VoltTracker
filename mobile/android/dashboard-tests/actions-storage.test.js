@@ -16,6 +16,11 @@
 // test owns exactly the state it asserts.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  choiceAppDialog,
+  confirmAppDialog,
+  promptAppDialog,
+} from '../app/src/main/dashboard-src/js/app-dialog.ts';
 import { createStorageActions } from '../app/src/main/dashboard-src/js/actions-storage.ts';
 
 // Minimal app-dialog markup — every id app-dialog's nodes() dereferences, plus
@@ -52,6 +57,13 @@ function makeVd() {
   return {
     statuses: [],
     storage: undefined,
+    // The production chunk reaches the ONE dialog instance through the VD
+    // registry (C2 — importing app-dialog into the lazy chunk would bundle a
+    // duplicate stateful copy). Wire the real module in so these specs still
+    // drive the real dialog DOM.
+    choiceAppDialog,
+    confirmAppDialog,
+    promptAppDialog,
     setStatus(payload) {
       this.statuses.push(payload);
     },
@@ -101,6 +113,13 @@ async function clickCancel() {
   await Promise.resolve();
 }
 
+// Dismissal path (the X / Escape / backdrop) — distinct from the cancel-slot
+// button since choiceAppDialog gave the secondary button a real action (E2).
+async function clickClose() {
+  document.getElementById('appDialogClose').click();
+  await Promise.resolve();
+}
+
 function disableBrowserDownloads() {
   const original = Object.getOwnPropertyDescriptor(window.URL, 'createObjectURL');
   Object.defineProperty(window.URL, 'createObjectURL', { configurable: true, value: undefined });
@@ -139,16 +158,53 @@ describe('actions-storage.ts — confirm/prompt cancel paths', () => {
     expect(bridge.clearStoredData).not.toHaveBeenCalled();
   });
 
-  it('shareBackup() cancel sets a ready "cancelled" status and skips the bridge', async () => {
-    const bridge = { shareBackup: vi.fn() };
+  it('shareBackup() dismissal (the X) shares nothing and sets a ready "cancelled" status', async () => {
+    const bridge = { shareBackup: vi.fn(), shareEncryptedBackup: vi.fn() };
     const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
 
     actions.shareBackup(null);
-    expect(appDialogMessage()).toMatch(/plaintext backup/i);
+    // E2: the sensitivity warning leads, and encrypted is the primary action.
+    expect(appDialogMessage()).toMatch(/location history/i);
+    expect(appDialogMessage()).toMatch(/vin/i);
+    expect(document.getElementById('appDialogConfirm').textContent).toMatch(/encrypted/i);
+    expect(document.getElementById('appDialogCancel').textContent).toMatch(/unencrypted/i);
 
-    await clickCancel();
+    await clickClose();
     expect(bridge.shareBackup).not.toHaveBeenCalled();
+    expect(bridge.shareEncryptedBackup).not.toHaveBeenCalled();
     expect(VD.lastStatus()).toMatchObject({ state: 'ready', detail: 'Backup cancelled.' });
+  });
+
+  it('shareBackup() only calls bridge.shareBackup after the explicit "Share unencrypted" choice', async () => {
+    const bridge = { shareBackup: vi.fn(), shareEncryptedBackup: vi.fn() };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    actions.shareBackup(null);
+    expect(bridge.shareBackup).not.toHaveBeenCalled();
+
+    // The secondary (cancel-slot) button is the explicit plaintext confirm.
+    await clickCancel();
+    expect(bridge.shareBackup).toHaveBeenCalledTimes(1);
+    expect(bridge.shareBackup).toHaveBeenCalledWith(expect.any(String));
+    expect(bridge.shareEncryptedBackup).not.toHaveBeenCalled();
+  });
+
+  it('shareBackup() primary choice routes into the encrypted passphrase prompt', async () => {
+    const bridge = { shareBackup: vi.fn(), shareEncryptedBackup: vi.fn() };
+    const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
+
+    actions.shareBackup(null);
+    await clickConfirm();
+
+    // The passphrase prompt is now open (input visible), nothing shared yet.
+    expect(appDialog().hidden).toBe(false);
+    expect(document.getElementById('appDialogInputWrap').hidden).toBe(false);
+    expect(bridge.shareBackup).not.toHaveBeenCalled();
+
+    enterAppDialogInput('hunter2');
+    await clickConfirm();
+    expect(bridge.shareEncryptedBackup).toHaveBeenCalledWith('hunter2', expect.any(String));
+    expect(bridge.shareBackup).not.toHaveBeenCalled();
   });
 
   it('shareEncryptedBackup() prompt cancel sets a ready status and skips the bridge', async () => {
@@ -196,7 +252,8 @@ describe('actions-storage.ts — confirm/prompt cancel paths', () => {
     const actions = createStorageActions({ VD, bridge, withBusy: passthroughBusy });
 
     actions.shareBackup(null);
-    await clickConfirm();
+    // "Share unencrypted" now lives in the cancel slot (E2 choice dialog).
+    await clickCancel();
 
     expect(VD.lastStatus()).toMatchObject({
       state: 'blocked',

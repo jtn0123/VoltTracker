@@ -27,6 +27,7 @@ import {
   ensureMapModule,
   ensureTroubleshooterModule,
   loadDashboardScript,
+  notifyChunkLoadFailed,
   openTripFromNative,
   parsePayload,
   renderMapIfLoaded,
@@ -1351,18 +1352,45 @@ type SignalActions = {
       // clearing state directly when it hasn't loaded yet (map.ts seeds from state on load).
       if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
       else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
-      seedDemoScenario();
-      setDemoActive(true, DEMO_RUNNING_DETAIL);
-      // Choose by method availability, not bare bridge presence: an older APK's
-      // bridge object may lack demo(), and callBridge would then no-op while the
-      // UI claims the demo is running. Fall back to the browser demo instead.
-      if (bridge && typeof bridge.demo === "function") {
-        if (!callBridgeAction("demo", [], "Native demo could not start. Running browser demo instead.")) {
+      // Flip demoActive on ONLY AFTER the scenario seed has captured the demo
+      // preview snapshot — mirrors the scenario-picker path in bindListeners.
+      // Activating before the async map-module load resolved left a window
+      // where demoActive was true but demoPreviewStorage was still null, so
+      // the demo isolation guard (state.demoActive && state.demoPreviewStorage)
+      // let a native setStorage push write real data over the demo view.
+      const activateAndStart = () => {
+        setDemoActive(true, DEMO_RUNNING_DETAIL);
+        // Choose by method availability, not bare bridge presence: an older APK's
+        // bridge object may lack demo(), and callBridge would then no-op while the
+        // UI claims the demo is running. Fall back to the browser demo instead.
+        if (bridge && typeof bridge.demo === "function") {
+          if (!callBridgeAction("demo", [], "Native demo could not start. Running browser demo instead.")) {
+            void runBrowserDemo();
+          }
+        } else {
           void runBrowserDemo();
         }
-      } else {
-        void runBrowserDemo();
+      };
+      const scenario = currentDemoScenario();
+      if (typeof VD.loadDemoScenario === "function") {
+        VD.loadDemoScenario(scenario);
+        activateAndStart();
+        return;
       }
+      void ensureMapModule()
+        .then(() => {
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
+          activateAndStart();
+        })
+        .catch(() => {
+          // The seed chunk never loaded: demo mode was never activated (the
+          // old ordering left it "running" with no data), so just surface the
+          // failure — the shared chunk-failure toast plus a blocked status.
+          setDemoActive(false);
+          notifyChunkLoadFailed();
+          VD.setStatus({ state: "blocked", detail: "Demo could not start — the demo module failed to load." });
+        });
     });
   }
 
@@ -1370,20 +1398,6 @@ type SignalActions = {
     const picker = el("demoScenarioPicker");
     const active = picker && picker.querySelector<HTMLElement>("[data-scenario].is-active");
     return String(state.demoScenario || (active && active.dataset.scenario) || "typical");
-  }
-
-  function seedDemoScenario() {
-    const scenario = currentDemoScenario();
-    if (typeof VD.loadDemoScenario === "function") {
-      VD.loadDemoScenario(scenario);
-    } else {
-      void ensureMapModule()
-        .then(() => {
-          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
-          else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
-        })
-        .catch(() => {});
-    }
   }
 
   function refreshNativeDataAfterDemo() {
@@ -1408,12 +1422,17 @@ type SignalActions = {
       state.insights = {};
       state.appState = Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
       // Clear the demo-mode shadow copies (cross-module invariant: they gate
-      // whether storage/trips/insights renders read real vs preview data).
+      // whether storage/trips/insights renders read real vs preview data) and
+      // the parked real payloads (nothing to restore without a bridge).
       setState({
         demoPreviewStorage: null,
         demoPreviewTrips: null,
         demoPreviewInsights: null,
         demoPreviewAppState: null,
+        realStorage: null,
+        realTrips: null,
+        realInsights: null,
+        realAppState: null,
         _mapSampleLoaded: false
       });
       updateStorageUi();
@@ -1423,12 +1442,26 @@ type SignalActions = {
       if (typeof VD.renderInsightScatter === "function") VD.renderInsightScatter();
       return;
     }
+    // Restore the real payloads parked while the demo preview owned the screen
+    // (storage-status.ts / insights-panel.ts / telemetry.ts stash live native
+    // pushes on state.real* during demo). appState matters most: the bridge has
+    // no re-request path for it, so without this the demo scenario's fake
+    // vehicle (VIN / odometer) lingered on the Settings card until the next
+    // native broadcast. Storage/trips/insights repaint instantly from the
+    // parked copies too, then re-request below for freshness.
+    if (state.realStorage) state.storage = state.realStorage;
+    if (Array.isArray(state.realTrips)) state.trips = state.realTrips;
+    if (state.realInsights) state.insights = state.realInsights;
+    state.appState = state.realAppState
+      ? state.realAppState
+      : Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
     void refreshStorage();
     const refreshRollups = () => {
       if (typeof VD.loadTrips === "function") VD.loadTrips(VD.forceLazyStorageRead);
       if (typeof VD.loadInsights === "function") VD.loadInsights(VD.forceLazyStorageRead);
     };
     void ensureInsightsModule().then(refreshRollups).catch(() => {});
+    updateStorageUi();
     renderRealV2Ui();
     renderMapIfLoaded();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
@@ -1436,7 +1469,11 @@ type SignalActions = {
       demoPreviewStorage: null,
       demoPreviewTrips: null,
       demoPreviewInsights: null,
-      demoPreviewAppState: null
+      demoPreviewAppState: null,
+      realStorage: null,
+      realTrips: null,
+      realInsights: null,
+      realAppState: null
     });
   }
 
@@ -1854,6 +1891,7 @@ type SignalActions = {
     setAppState: VD.setAppState,
     setRestoreProgress: VD.setRestoreProgress,
     updateTelemetry: VD.updateTelemetry,
+    backfillTelemetry: VD.backfillTelemetry,
     showToast: (message: unknown) => showToast(message),
     showTripUndo,
     setBackupReceipt: (payload: unknown) => VD.setBackupReceipt?.(payload),

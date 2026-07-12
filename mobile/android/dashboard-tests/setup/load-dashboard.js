@@ -301,7 +301,7 @@ const REQUIRED_DOM = `
 // jsdom doesn't implement window.scrollTo/scrollBy; the bootstrap path calls
 // them during init and view switches, which would otherwise log noisy "Not
 // implemented" stderr lines. No-ops keep CI logs readable and timings stable.
-function installScrollShim() {
+export function installScrollShim() {
   if (typeof window.scrollTo === 'function' && window.scrollTo.__voltShim) return;
   const noop = () => {};
   noop.__voltShim = true;
@@ -309,7 +309,7 @@ function installScrollShim() {
   window.scrollBy = noop;
 }
 
-function installCanvasShim() {
+export function installCanvasShim() {
   const proto = window.HTMLCanvasElement && window.HTMLCanvasElement.prototype;
   if (!proto || proto.__voltCanvasShim) return;
   const noop = () => {};
@@ -356,6 +356,11 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
   installCanvasShim();
   installScrollShim();
   delete window.VoltDashboardActionModules;
+  // prefs.ts boots its preference UI at most once per document (the
+  // __voltPrefsUiBooted guard — C1 lazy-chunk defense). Each loadDashboard()
+  // swaps document.body wholesale, so the previous run's per-element listeners
+  // are gone with the old nodes; clear the flag so the fresh DOM boots again.
+  delete document.__voltPrefsUiBooted;
   const bridgeImpl = withBridge ? (bridge ?? createVoltBridgeFixture()) : null;
   // The Android side exposes the bridge as `window.VoltTrackerAndroid` before
   // the dashboard's scripts run, so do the same here.

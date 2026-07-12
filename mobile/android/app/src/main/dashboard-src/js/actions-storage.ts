@@ -1,4 +1,8 @@
-import { confirmAppDialog, promptAppDialog } from "./app-dialog";
+// NOTE: this file is a LAZY chunk (its own esbuild bundle). Dialogs go through
+// the VD registry (VD.confirmAppDialog / VD.promptAppDialog /
+// VD.choiceAppDialog, registered by the eager app-dialog.ts) — importing
+// app-dialog here would bundle a second copy of its mutable dialog state into
+// this chunk, stacking focus traps and settling two promises with one Confirm.
 import { actionModulesRegistry } from "./vd-registry";
 
 export type BusyButton = HTMLElement & {
@@ -86,7 +90,7 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
 
   function clearStorage(button?: BusyButton | null) {
     if (!bridge || typeof bridge.clearStoredData !== "function") return;
-    void confirmAppDialog({
+    void VD.confirmAppDialog({
       title: "Clear stored data",
       message: "Clear local OBD sessions, samples, and debug events from this phone?",
       confirmLabel: "Clear data"
@@ -109,14 +113,26 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       VD.setStatus({ state: "idle", detail: "Backup is only available inside the Android app." });
       return;
     }
-    void confirmAppDialog({
-      title: "Share plaintext backup",
+    // E2: the plain backup is the full un-redacted database (GPS location
+    // history, VIN, adapter MACs). Lead with the encrypted option as the
+    // primary action; the un-encrypted share is the explicit secondary button,
+    // and dismissing the dialog (Escape / the X) does neither.
+    void VD.choiceAppDialog({
+      title: "Backup contains sensitive data",
       message:
-        "Plaintext backup includes your GPS routes, every OBD sample, and adapter history.\n\n" +
-        "Use encrypted backup unless another tool specifically needs the raw database. Continue?",
-      confirmLabel: "Share plaintext"
-    }).then((ok) => {
-      if (!ok) {
+        "This unencrypted backup includes your location history (GPS routes), VIN, " +
+        "every OBD sample, and adapter identifiers.\n\n" +
+        "Prefer an encrypted backup? It protects the file with a passphrase you choose.",
+      confirmLabel: "Use encrypted backup",
+      cancelLabel: "Share unencrypted"
+    }).then((choice) => {
+      if (choice === true) {
+        // Routes into the passphrase prompt; its own cancel messaging applies.
+        shareEncryptedBackup(button);
+        return;
+      }
+      if (choice !== false) {
+        // Dismissed (Escape / X / backdrop) — no share of either kind.
         VD.setStatus({ state: "ready", detail: "Backup cancelled." });
         return;
       }
@@ -135,7 +151,7 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       VD.setStatus({ state: "idle", detail: "Encrypted backup is only available inside the Android app." });
       return;
     }
-    void promptAppDialog({
+    void VD.promptAppDialog({
       title: "Encrypt backup",
       message: "Choose a passphrase for this encrypted backup. You will need it to restore.",
       inputLabel: "Backup passphrase",
@@ -186,7 +202,7 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       VD.setStatus({ state: "idle", detail: "Encrypted restore is only available inside the Android app." });
       return;
     }
-    void promptAppDialog({
+    void VD.promptAppDialog({
       title: "Restore encrypted backup",
       message: "Enter the passphrase for this encrypted backup.",
       inputLabel: "Backup passphrase",
