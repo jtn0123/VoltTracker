@@ -94,15 +94,36 @@ describe('drive.ts', () => {
     const VD = window.VoltDashboard;
     VD.state.appState = {
       adapter: { connected: true, name: 'OBDLink MX+' },
-      session: { state: 'connected', sampleCount: 42, runtimeMs: 90_000 },
+      session: { state: 'connected', sampleCount: 42, sessionMs: 90_000 },
     };
     VD.renderDriveNowChips();
     const rec = document.getElementById('driveRecording');
     expect(rec.hidden).toBe(false);
     expect(rec.textContent).toContain('Recording');
     expect(rec.textContent).toContain('42 samples');
+    // The session duration comes through too — see the fallback test below for why this
+    // asserts the value rather than just the sample count.
+    expect(rec.textContent).toContain('1m 30s');
     // The full-width strip is no longer a live-status surface.
     expect(document.getElementById('driveNowChips').children.length).toBe(0);
+  });
+
+  // drive.ts used to fall back to `session.runtimeMs`, which NO native builder emits —
+  // AppStatePayload#sessionJson sends `sessionMs`. So whenever telemetry carried no
+  // sessionMs of its own the duration silently read 0, and the fixtures hid it by seeding
+  // the nonexistent field. This pins the real payload shape: session duration with an
+  // empty telemetry bag must still render.
+  it('takes the session duration from appState when telemetry has no sessionMs', () => {
+    const VD = window.VoltDashboard;
+    VD.state.telemetry = { sampleCount: 0 };
+    VD.state.appState = {
+      adapter: { connected: true, name: 'OBDLink MX+' },
+      session: { state: 'connected', sampleCount: 7, sessionMs: 90_000 },
+    };
+    VD.renderDriveNowChips();
+    const rec = document.getElementById('driveRecording');
+    expect(rec.hidden).toBe(false);
+    expect(rec.textContent).toContain('1m 30s');
   });
 
   it('shows a real "live" placeholder when Recording has evidence but no counted metrics yet', () => {

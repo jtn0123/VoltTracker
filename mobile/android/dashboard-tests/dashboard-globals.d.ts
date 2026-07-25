@@ -314,7 +314,6 @@ interface VoltSessionState {
   detail?: string;
   sampleCount?: number;
   sessionMs?: number;
-  runtimeMs?: number;
   backgroundSampleCount?: number;
   sampleGapCount?: number;
   maxSampleGapMs?: number;
@@ -600,6 +599,11 @@ interface VoltStatus {
   lastAddress?: string;
   lastName?: string;
   lastVoltage?: number | string | null;
+  /** Session log path, and the wall-clock stamp of the status itself. Both are written by
+   *  StatusPayload#toJson; they were undeclared until native-payload-contract.test.js
+   *  compared the two sides. */
+  logFile?: string;
+  updatedAt?: number;
   [key: string]: unknown;
 }
 

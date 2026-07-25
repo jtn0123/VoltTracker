@@ -139,7 +139,7 @@ test('renderDriveLive drives every live surface in one frame', async ({ page }) 
     const VD = window.VoltDashboard;
     VD.state.appState = {
       adapter: { connected: true, name: 'OBDLink MX+' },
-      session: { state: 'connected', sampleCount: 64, runtimeMs: 120_000 },
+      session: { state: 'connected', sampleCount: 64, sessionMs: 120_000 },
     };
     VD.state.telemetry = { soc: 76.5, powerKw: 18.2, sampleCount: 64, sessionMs: 120_000 };
     VD.state.sessionStartSoc = 78.4;

@@ -116,7 +116,12 @@ type ChartPoint = {
     const sessionName = String(session.state || "").toLowerCase();
     const stateName = statusName || sessionName;
     const samples = Number(session.sampleCount || tm.sampleCount || 0);
-    const runtimeMs = Number(tm.sessionMs || session.runtimeMs || 0);
+    // `session.sessionMs`, not `session.runtimeMs`: AppStatePayload#sessionJson emits
+    // sessionMs, and no native builder has ever emitted runtimeMs — so this fallback was
+    // dead and the duration read 0 whenever telemetry had no sessionMs of its own. Found by
+    // native-payload-contract.test.js; the fixtures had been seeding runtimeMs, which is why
+    // the tests covered a shape production cannot produce.
+    const runtimeMs = Number(tm.sessionMs || session.sessionMs || 0);
     const distance = Number(state.sessionDistanceM || 0);
     const hasLiveEvidence = Boolean(
       samples ||
