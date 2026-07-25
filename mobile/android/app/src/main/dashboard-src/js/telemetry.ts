@@ -32,14 +32,50 @@ import { VD } from "./vd-registry";
   // omission is how an old road speed could remain visible after foreground catch-up. Metadata and
   // forward-compatible unknown keys still merge normally, while every known sensor field is cleared
   // before the new sample is applied.
+  //
+  // This list must stay equal to "every key native writes into a live sample, minus the sample
+  // envelope and the session-health counters" — native-sample-contract.test.js derives that from
+  // the Kotlin sources and fails when the two drift. It used to be hand-maintained and had fallen
+  // ~70 keys behind: every enhanced reading below (motor, charger, thermal, oil, PRNDL, …) kept its
+  // last value on screen after its PID stopped answering, which is the exact bug this list exists
+  // to prevent. Do not prune a key because it "looks unused" — the contract test is the authority.
   const AUTHORITATIVE_READING_KEYS = [
-    "speedKph", "speedRejectedKph", "rpm", "voltage", "coolantC", "loadPct", "throttlePct",
-    "soc", "batteryTemp", "powerKw", "powerKwStaleMs", "packVoltage", "packCurrentA",
-    "packEnergyKwh", "chargerPowerKw", "capacityAh", "sohPct", "cellBalanceMv", "odometerMiles",
-    "minCellVoltage", "maxCellVoltage", "minCellNumber", "maxCellNumber", "socVariationPct", "cellVoltages",
+    // Base OBD readings.
+    "speedKph", "speedRejectedKph", "speedKphStaleMs", "rpm", "rpmStaleMs", "voltage",
+    "voltageStaleMs", "coolantC", "coolantCStaleMs", "loadPct", "loadPctStaleMs", "throttlePct",
+    "throttlePctStaleMs", "throttleSource", "soc", "socStaleMs", "intakeAirTempC",
+    "intakeAirTempStaleMs", "engineRunTimeSec", "engineRunTimeStaleMs", "fuelLevelPct",
+    "fuelLevelStaleMs", "controlModuleVoltage", "controlModuleVoltageStaleMs",
+    // Pack / battery.
+    "batteryTemp", "batteryTempStaleMs", "packVoltage", "packVoltageStaleMs", "packCurrentA",
+    "packCurrentAStaleMs", "packEnergyKwh", "packEnergyKwhStaleMs", "capacityAh",
+    "capacityAhStaleMs", "sohPct", "sohPctStaleMs", "cellBalanceMv", "cellBalanceStaleMs",
+    "minCellVoltage", "minCellVoltageStaleMs", "maxCellVoltage", "maxCellVoltageStaleMs",
+    "minCellNumber", "minCellNumberStaleMs", "maxCellNumber", "maxCellNumberStaleMs",
+    "socVariationPct", "socVariationStaleMs", "cellVoltages", "hvBatteryRawSoc",
+    "hvBatteryRawSocStaleMs", "hvBatteryChargeCount", "hvBatteryChargeCountStaleMs",
+    // Power / charging.
+    "powerKw", "powerKwStaleMs", "chargerPowerKw", "chargerPowerStaleMs", "chargerHvVoltage",
+    "chargerHvVoltageStaleMs", "chargerHvCurrent", "chargerHvCurrentStaleMs", "chargingLevel",
+    "chargingLevelStaleMs", "chargingMode", "chargingModeStaleMs", "chargeTransitionHint",
+    "lastChargeEnergyWh", "lastChargeEnergyStaleMs",
+    // Motor & drive.
+    "motorAPowerKw", "motorAVoltage", "motorACurrentA", "motorAStaleMs", "motorBPowerKw",
+    "motorBVoltage", "motorBCurrentA", "motorBStaleMs", "prndlState", "prndlStateStaleMs",
+    "evDistanceThisCycleKm", "evDistanceThisCycleStaleMs", "odometerKm", "odometerMiles",
+    "odometerStaleMs",
+    // Thermal & fluids.
+    "outsideTempC", "outsideTempRawC", "outsideTempStaleMs", "transmissionTempC",
+    "transmissionTempStaleMs", "engineOilTempC", "engineOilTempStaleMs", "engineOilLifePct",
+    "engineOilLifeStaleMs", "batteryCoolantPumpRpm", "batteryCoolantPumpStaleMs",
+    "batteryCoolantValveRaw", "batteryCoolantValveStaleMs", "batteryHeaterPowerW",
+    "batteryHeaterPowerStaleMs",
+    // Location. appendLocation() early-returns with no fix, so the whole group must clear
+    // together or a tunnel leaves a stale position behind a fresh-looking provider label.
     "latitude", "longitude", "accuracyM", "gpsSpeedMps", "bearingDeg", "locationAgeMs",
-    "locationProvider", "chargeTransitionHint", "vehicleState", "vehicleStateConfidence",
-    "vehicleStateReasons", "throttleSource", "vin"
+    "locationProvider", "provider",
+    // Vehicle identity / classification.
+    "vehicleState", "vehicleStateConfidence", "vehicleStateReasons", "vin"
   ] as const;
 
   function asPayloadRecord(value: unknown): PayloadRecord {
