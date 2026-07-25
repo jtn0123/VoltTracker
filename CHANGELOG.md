@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.32.5 (2026-07-25)
+
+### 🔺 Fix
+
+- **dashboard**: Read the session duration native actually sends
+  ([#359](https://github.com/jtn0123/VoltTracker/pull/359),
+  [`d379f9f`](https://github.com/jtn0123/VoltTracker/commit/d379f9f7ae00e5e2799c959f1c3b0ec544261d08))
+
+
 ## v0.32.4 (2026-07-25)
 
 ### 🔺 Fix
