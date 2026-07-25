@@ -191,112 +191,11 @@ jobs:
         run: ./gradlew --no-daemon --configuration-cache verifyDashboardBundleSize
       - name: Publish performance trend snapshot
         if: always()
-        run: |
-          python3 - <<'PY'
-          import json
-          import os
-          import re
-          from pathlib import Path
-
-          root = Path("app/src/main/assets/dashboard")
-          report_dir = Path("build/reports/performance-trends")
-          report_dir.mkdir(parents=True, exist_ok=True)
-
-          # Budgets are read from their single source of truth in build.gradle
-          # (the verifyDashboardBundleSize gate) — mirroring the read_budget sed
-          # helper in the dashboard-tests bundle report — so this snapshot can
-          # never drift from the Gradle gate again (it previously hardcoded a
-          # stale startup budget).
-          budget_gradle = Path("build.gradle").read_text(encoding="utf-8")
-
-          def read_budget(name):
-              # Matches e.g. `def dashboardStartupBudgetBytes = 412_000L`; strips
-              # Groovy's underscore digit separators.
-              match = re.search(rf"^def {name} = ([0-9_]+)L", budget_gradle, flags=re.M)
-              if not match:
-                  print(f"::error title=Performance trend snapshot::could not extract {name} from build.gradle (declaration renamed/reformatted?)")
-                  raise SystemExit(1)
-              return int(match.group(1).replace("_", ""))
-
-          startup_budget = read_budget("dashboardStartupBudgetBytes")
-          lazy_support_budget = read_budget("dashboardLazySupportBudgetBytes")
-          lazy_panel_budget = read_budget("dashboardLazyPanelBudgetBytes")
-          dtc_budget = read_budget("dashboardDtcDataBudgetBytes")
-          lazy_panel_files = {root / "js/insights-panel.js"}
-          dtc_files = {root / "js/dtc-lookup.js", root / "js/dtc-causes.js"}
-
-          def size(path):
-              return path.stat().st_size if path.exists() else 0
-
-          js_files = list((root / "js").glob("*.js")) if (root / "js").exists() else []
-          css_files = list((root / "css").glob("*.css")) if (root / "css").exists() else []
-          leaflet_files = [p for p in (root / "lib/leaflet").rglob("*") if p.is_file()] if (root / "lib/leaflet").exists() else []
-          eager_js = size(root / "js/app.js")
-          lazy_js = sum(size(p) for p in js_files if p.name != "app.js")
-          css = sum(size(p) for p in css_files)
-          leaflet = sum(size(p) for p in leaflet_files)
-          html = size(root / "index.html")
-          dtc = sum(size(p) for p in dtc_files)
-          startup = eager_js + css
-          lazy_panel = sum(size(p) for p in lazy_panel_files)
-          lazy_support = sum(size(p) for p in js_files if p.name != "app.js" and p not in dtc_files and p not in lazy_panel_files)
-
-          payload = {
-              "run_id": os.environ.get("GITHUB_RUN_ID", ""),
-              "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),
-              "sha": os.environ.get("GITHUB_SHA", ""),
-              "startup_probe": {
-                  "macrobenchmark_task": "./gradlew verifyStartupPerformance --no-configuration-cache",
-                  "ready_description": "VoltTracker dashboard ready",
-                  "device_required": True,
-              },
-              "asset_bytes": {
-                  "eager_js": eager_js,
-                  "lazy_js": lazy_js,
-                  "css": css,
-                  "leaflet": leaflet,
-                  "generated_html": html,
-                  "startup_js_css": startup,
-                  "lazy_support_js": lazy_support,
-                  "lazy_panel_js": lazy_panel,
-                  "dtc_data": dtc,
-              },
-              "budgets": {
-                  "startup_js_css": startup_budget,
-                  "lazy_support_js": lazy_support_budget,
-                  "lazy_panel_js": lazy_panel_budget,
-                  "dtc_data": dtc_budget,
-              },
-              "headroom": {
-                  "startup_js_css": startup_budget - startup,
-                  "lazy_support_js": lazy_support_budget - lazy_support,
-                  "lazy_panel_js": lazy_panel_budget - lazy_panel,
-                  "dtc_data": dtc_budget - dtc,
-              },
-          }
-          (report_dir / "performance-summary.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-
-          lines = [
-              "### Performance trend snapshot",
-              "",
-              "| Metric | Bytes | Budget/headroom |",
-              "|---|---:|---:|",
-              f"| Eager JS | {eager_js} | |",
-              f"| Lazy JS | {lazy_js} | |",
-              f"| CSS | {css} | |",
-              f"| Leaflet assets | {leaflet} | lazy |",
-              f"| Generated HTML | {html} | |",
-              f"| Startup JS/CSS | {startup} | {startup_budget} / {startup_budget - startup} |",
-              f"| Lazy support JS | {lazy_support} | {lazy_support_budget} / {lazy_support_budget - lazy_support} |",
-              f"| DTC data | {dtc} | {dtc_budget} / {dtc_budget - dtc} |",
-              "",
-          ]
-          (report_dir / "performance-summary.md").write_text("\n".join(lines), encoding="utf-8")
-          summary = os.environ.get("GITHUB_STEP_SUMMARY")
-          if summary:
-              with open(summary, "a", encoding="utf-8") as fh:
-                  fh.write("\n".join([""] + lines))
-          PY
+        # Measurement + grouping live in tools/dashboard_bundle_report.py, which reads the
+        # budgets AND the chunk groupings from build.gradle. Re-declaring the groupings here
+        # is how this step came to report -40294 bytes of lazy-support headroom against a
+        # real +7496: it still charged the expert/detail chunks to the support allowance.
+        run: python3 tools/dashboard_bundle_report.py snapshot
       - name: JaCoCo coverage report
         run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestReport
       - name: Verify coverage thresholds
@@ -536,79 +435,14 @@ jobs:
           if-no-files-found: ignore
       - name: Report dashboard bundle size and budget headroom
         if: always()
-        working-directory: mobile/android/app/src/main/assets/dashboard
-        run: |
-          {
-            echo "## Dashboard bundle size"
-            echo ""
-            echo "| Path | Bytes |"
-            echo "|------|-------|"
-            for f in js/*.js css/*.css; do
-              if [ -f "$f" ]; then
-                size=$(wc -c < "$f" | tr -d ' ')
-                echo "| $f | $size |"
-              fi
-            done
-          } >> "$GITHUB_STEP_SUMMARY"
-          # Split budget (build.gradle:verifyDashboardBundleSize): startup JS/CSS,
-          # non-DTC lazy support JS, and lazy DTC data. The budgets are read from
-          # their single source of truth in mobile/android/build.gradle, so this
-          # report can't drift from the Gradle gate.
-          # The Gradle task is the hard gate (it fails the unit-tests job when a budget is
-          # exceeded); this report is advisory only — it surfaces remaining headroom and
-          # warns when a bundle is within 15 KB of its budget, without failing the build.
-          budget_gradle="$GITHUB_WORKSPACE/mobile/android/build.gradle"
-          read_budget() {
-            # Matches e.g. `def dashboardStartupBudgetBytes = 360_000L`; strips Groovy's
-            # underscore digit separators.
-            sed -n "s/^def $1 = \([0-9_][0-9_]*\)L.*$/\1/p" "$budget_gradle" | tr -d '_'
-          }
-          startup_budget="$(read_budget dashboardStartupBudgetBytes)"
-          lazy_support_budget="$(read_budget dashboardLazySupportBudgetBytes)"
-          lazy_panel_budget="$(read_budget dashboardLazyPanelBudgetBytes)"
-          dtc_budget="$(read_budget dashboardDtcDataBudgetBytes)"
-          if [ -z "$startup_budget" ] || [ -z "$lazy_support_budget" ] || [ -z "$lazy_panel_budget" ] || [ -z "$dtc_budget" ]; then
-            echo "::error title=Dashboard bundle budget::could not extract budget constants from $budget_gradle (declaration renamed/reformatted?)"
-            exit 1
-          fi
-          warn_floor=15000
-          dtc=$(cat js/dtc-lookup.js js/dtc-causes.js | wc -c | tr -d ' ')
-          eager=$(wc -c < js/app.js | tr -d ' ')
-          css_bytes=$(find css -type f -name "*.css" -exec cat {} + | wc -c | tr -d ' ')
-          startup=$((eager + css_bytes))
-          lazy_panel=$(wc -c < js/insights-panel.js | tr -d ' ')
-          lazy_support=$(find js -type f -name "*.js" ! -name "app.js" ! -name "insights-panel.js" ! -name "dtc-lookup.js" ! -name "dtc-causes.js" -exec cat {} + | wc -c | tr -d ' ')
-          startup_headroom=$((startup_budget - startup))
-          lazy_support_headroom=$((lazy_support_budget - lazy_support))
-          lazy_panel_headroom=$((lazy_panel_budget - lazy_panel))
-          dtc_headroom=$((dtc_budget - dtc))
-          {
-            echo ""
-            echo "### Budget headroom"
-            echo ""
-            echo "| Bundle | Bytes | Budget | Headroom |"
-            echo "|--------|------:|-------:|---------:|"
-            echo "| startup JS/CSS (app.js + CSS) | $startup | $startup_budget | $startup_headroom |"
-            echo "| lazy support JS (non-DTC chunks) | $lazy_support | $lazy_support_budget | $lazy_support_headroom |"
-            echo "| lazy panel JS (deferred panel chunks) | $lazy_panel | $lazy_panel_budget | $lazy_panel_headroom |"
-            echo "| dtc data (dtc-lookup.js + dtc-causes.js) | $dtc | $dtc_budget | $dtc_headroom |"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$startup_headroom" -lt "$warn_floor" ]; then
-            echo "::warning title=Dashboard bundle headroom::startup headroom is ${startup_headroom} bytes (under 15 KB of the ${startup_budget}-byte budget)"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "WARNING: startup headroom is ${startup_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ "$lazy_support_headroom" -lt "$warn_floor" ]; then
-            echo "::warning title=Dashboard bundle headroom::lazy support headroom is ${lazy_support_headroom} bytes (under 15 KB of the ${lazy_support_budget}-byte budget)"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "WARNING: lazy support headroom is ${lazy_support_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
-          fi
-          if [ "$dtc_headroom" -lt "$warn_floor" ]; then
-            echo "::warning title=Dashboard bundle headroom::DTC data headroom is ${dtc_headroom} bytes (under 15 KB of the ${dtc_budget}-byte budget)"
-            echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "WARNING: DTC data headroom is ${dtc_headroom} bytes (under 15 KB)." >> "$GITHUB_STEP_SUMMARY"
-          fi
-
+        working-directory: mobile/android
+        # Advisory only -- the Gradle verifyDashboardBundleSize task is the hard gate. This
+        # step shares tools/dashboard_bundle_report.py with the perf-trend snapshot so there
+        # is ONE implementation of the grouping, read from build.gradle. It previously
+        # re-declared the grouping in `find ! -name ...` and had drifted: lazy support
+        # excluded only insights-panel + the DTC pair, and startup counted the two
+        # lazy-injected stylesheets that build.gradle deliberately leaves out.
+        run: python3 tools/dashboard_bundle_report.py report
   dashboard-e2e:
     needs: [build-dashboard]
     # Playwright renders the REAL dashboard (index.html + css + js) in headless Chromium and
@@ -999,23 +833,25 @@ jobs:
           # No -no-snapshot here: this boot exists to write the snapshot.
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: echo "Generated AVD snapshot for caching."
-      # Two attempts, because the emulator itself is the flaky part — not the app.
+      # NOTE ON RETRIES: an in-job retry was tried here (a second android-emulator-runner
+      # step gated on the first failing) and REVERTED — it made things worse.
       #
-      # Observed failure mode (2 of 3 runs on PR #351): the qemu process dies partway
-      # through connectedDebugAndroidTest and every subsequent adb call reports
-      # `device offline` / `device 'emulator-5554' not found`, with
-      # `Test run failed to complete. Expected 3 tests, received 0` and NO assertion
-      # message from any test. The shell smoke ahead of it had already passed on the same
-      # boot. That is infrastructure death, not a regression, and it cannot be recovered
-      # in-process — the device is gone — so the only fix is a fresh boot.
+      # A second invocation of the action in the same job boots fine, but the app then fails
+      # `adb shell run-as <pkg>` with "package not debuggable", so emulator-smoke.sh dies in
+      # start_service_as_app long before it reaches the flaky part. The first attempt runs the
+      # same script past that point without trouble, so something about the second boot leaves
+      # the guest unable to service run-as. Net effect: the original flake was still not
+      # absorbed, and a second, unrelated failure mode was added on top of it.
       #
-      # A REAL failure still fails the job: it reproduces on the second boot too. The retry
-      # only absorbs the case where the emulator vanishes. When it is used, the summary step
-      # below says so loudly, so a genuinely degrading test surfaces instead of hiding behind
-      # a green tick.
+      # The flake being chased: the qemu process dies partway through
+      # connectedDebugAndroidTest and every adb call after that reports `device offline` /
+      # `device 'emulator-5554' not found`, with `Test run failed to complete. Expected 3
+      # tests, received 0` and NO assertion message from any test. That signature means the
+      # emulator went away, not that a test failed — re-run the job.
+      #
+      # If this is worth automating, it belongs at the JOB level (re-run failed jobs), not as
+      # two emulator-runner steps in one job.
       - name: Launch app and assert the dashboard JS comes alive
-        id: emulator_smoke
-        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
@@ -1031,34 +867,6 @@ jobs:
           script: |
             bash mobile/android/scripts/emulator-smoke.sh
             cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
-      - name: Retry on a fresh emulator (first attempt failed)
-        id: emulator_smoke_retry
-        if: steps.emulator_smoke.outcome == 'failure'
-        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_2
-          force-avd-creation: false
-          emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
-          script: |
-            bash mobile/android/scripts/emulator-smoke.sh
-            cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
-      - name: Surface a consumed emulator retry
-        # Deliberately noisy. A retry that nobody sees is how a test rots into permanently
-        # flaky while CI stays green; this keeps the cost visible in the run summary.
-        if: always() && steps.emulator_smoke.outcome == 'failure' && steps.emulator_smoke_retry.outcome == 'success'
-        run: |
-          echo "::warning title=Emulator smoke retried::First emulator boot failed and the retry passed. If this recurs, check whether the emulator is dying (device offline / 0 tests received) or a test is genuinely degrading."
-          {
-            echo ""
-            echo "### Emulator smoke retried"
-            echo ""
-            echo "The first emulator boot failed; a second, fresh boot passed."
-            echo "Check the failed step's log for \`device offline\` / \`Expected N tests, received 0\` —"
-            echo "that signature is the emulator dying, not a test failing."
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

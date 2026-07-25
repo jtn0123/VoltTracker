@@ -154,6 +154,20 @@ describe('M4 trip-list controls (rendered)', () => {
     expect(rowIds()).toEqual(['b', 'a', 'c']);
     expect(document.querySelector('[data-map-sort="distance"]').getAttribute('aria-pressed')).toBe('true');
     expect(document.querySelector('[data-map-sort="recent"]').getAttribute('aria-pressed')).toBe('false');
+    expect(window.VoltDashboard.state.mapSessionSort).toBe('distance');
+  });
+
+  // The sort used to be read back off whichever button carried `is-active`, so anything
+  // that rebuilt or restyled the button strip silently reset the list to "recent". State
+  // is the truth now; the class is only an output.
+  it('keeps the chosen sort when the active class is stripped off the buttons', () => {
+    seed();
+    document.querySelector('[data-map-sort="distance"]').click();
+    document
+      .querySelectorAll('[data-map-sort]')
+      .forEach((node) => node.classList.remove('is-active'));
+    window.VoltDashboard.refreshMapSessionList();
+    expect(rowIds()).toEqual(['b', 'a', 'c']);
   });
 
   it('toggles favorites-only and shows the favorites empty hint when none qualify', () => {

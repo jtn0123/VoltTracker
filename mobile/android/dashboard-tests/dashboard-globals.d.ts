@@ -430,6 +430,14 @@ interface DashboardState {
   mapRemoteTilesEnabled: boolean;
   mapFull: boolean;
   mapBrowserOpen: boolean;
+  /** Drive-browser filter toggles. Previously read back off each button's `data-on`
+   *  attribute, which made the DOM the source of truth for them. */
+  mapFavoritesOnly: boolean;
+  mapLongOnly: boolean;
+  /** Drive-browser sort selection. Previously derived from which sort button carried
+   *  the `is-active` class; the class is still written for CSS, but the truth is here.
+   *  Structurally the same union as MapSessionSort in map-session-list.ts. */
+  mapSessionSort: "recent" | "distance";
   tripReceiptMode: boolean;
   liveSignalsFilter: string;
   mapFollowLive: boolean;

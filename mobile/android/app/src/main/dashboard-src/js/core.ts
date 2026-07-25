@@ -1056,6 +1056,14 @@ import { VD } from "./vd-registry";
     // recorded-drive browser explicitly; keeping that intent in state prevents a
     // storage refresh from hiding the destination again while it is in use.
     mapBrowserOpen: false,
+    // Drive-browser filter toggles. These used to live on each button's `data-on`
+    // attribute and be read back from it; the attribute is still written for CSS,
+    // but the truth is here.
+    mapFavoritesOnly: false,
+    mapLongOnly: false,
+    // Same story for the sort selection: it used to be read back off whichever sort
+    // button carried `is-active`. Must match the button marked active in map.html.
+    mapSessionSort: "recent",
     tripReceiptMode: false,
     // Live-signals panel filter: "reporting" (default — only PIDs the car is
     // answering), "all", or "missing" (only PIDs it isn't answering) — see

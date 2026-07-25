@@ -391,6 +391,21 @@ describe('actions.ts — bridge dispatch', () => {
     expect(bridge.disconnect).toHaveBeenCalledTimes(1);
   });
 
+  // The handler used to read data-primary-action back off the button, so whatever the last
+  // render happened to leave there decided what a tap did. It derives from state now; the
+  // attribute is only an output. Clobbering it must not change the behaviour.
+  it('the primary button ignores a stale data-primary-action and follows state', () => {
+    bridge.disconnect = vi.fn();
+    VD.setStatus({ state: 'connected', detail: 'Logging live OBD data.' });
+
+    const primary = document.getElementById('connectBtn');
+    primary.dataset.primaryAction = 'connect';
+    primary.click();
+
+    expect(bridge.disconnect).toHaveBeenCalledTimes(1);
+    expect(bridge.connect).not.toHaveBeenCalled();
+  });
+
   it('deleteSignalLog() uses the app dialog before deleting one evidence row', async () => {
     await VD.actions.deleteSignalLog(5);
     expect(appDialog().hidden).toBe(false);

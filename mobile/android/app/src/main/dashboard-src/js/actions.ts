@@ -4,6 +4,7 @@ import { VD, actionModulesRegistry } from "./vd-registry";
 import { prefs, scrollToSettingsSection } from "./prefs";
 import {
   cellGridHasFull,
+  currentPrimaryAction,
   getLastDevice,
   getSelectedDevice,
   isCellGridOpen,
@@ -1173,9 +1174,9 @@ type SignalActions = {
   }
 
   // ---- M4 trip-list search / sort / favorites controls ---------------------
-  // Each handler mutates only the control's own UI state (input value lives on
-  // the input; the active sort button + favorites toggle carry their state in
-  // class/data attrs) and then re-renders ONLY the list via refreshMapSessionList
+  // Each handler updates the filter's truth (sort selection + favorites/long toggles
+  // live in `state`; the input value stays on the native input) and then re-renders
+  // ONLY the list via refreshMapSessionList
   // so the map view isn't tugged. Defensive about the bridge-less/older host: the
   // controls are pure client-side, so they always work.
   function refreshTripList() {
@@ -1196,7 +1197,12 @@ type SignalActions = {
     const button = target && (target.closest("[data-map-sort]") as HTMLElement | null);
     if (!button) return;
     event.preventDefault();
+    // Which button was clicked is a property of the event, not stored state — reading
+    // `data-map-sort` off the clicked node is fine. What moved into state is the *answer*:
+    // the class/aria below are written as output so CSS and screen readers follow, but
+    // readMapSessionFilter no longer reads them back.
     const chosen = button.dataset.mapSort === "distance" ? "distance" : "recent";
+    setState({ mapSessionSort: chosen });
     document.querySelectorAll<HTMLElement>("[data-map-sort]").forEach((node) => {
       const on = node.dataset.mapSort === chosen;
       node.classList.toggle("is-active", on);
@@ -1210,7 +1216,10 @@ type SignalActions = {
     const button = target && (target.closest("[data-map-favorites-only]") as HTMLElement | null);
     if (!button) return;
     event.preventDefault();
-    const next = button.dataset.on !== "true";
+    // The next value comes from state, not from the button's own `data-on`. The attribute
+    // is still written below because CSS keys off it — the DOM stays an output.
+    const next = !state.mapFavoritesOnly;
+    setState({ mapFavoritesOnly: next });
     button.dataset.on = String(next);
     button.setAttribute("aria-pressed", String(next));
     button.setAttribute("aria-label", next ? "Showing favorites only" : "Show favorites only");
@@ -1223,7 +1232,8 @@ type SignalActions = {
     const button = target && (target.closest("[data-map-long-only]") as HTMLElement | null);
     if (!button) return;
     event.preventDefault();
-    const next = button.dataset.on !== "true";
+    const next = !state.mapLongOnly;
+    setState({ mapLongOnly: next });
     button.dataset.on = String(next);
     button.setAttribute("aria-pressed", String(next));
     button.setAttribute("aria-label", next ? "Showing long trips only" : "Show long trips only");
@@ -1786,9 +1796,9 @@ type SignalActions = {
       withBusy(event.currentTarget as BusyButton, () => { void exportSignalLogs(); });
     }, opts);
     bindListenerGuarded("connectBtn", "click", (event) => {
-      const btn = el("connectBtn");
-      const action = (btn && btn.dataset.primaryAction) || "connect";
-      handleAction(action, event.currentTarget as BusyButton);
+      // Derived from state, not read back off the button's own data-primary-action —
+      // see telemetry.ts#currentPrimaryAction.
+      handleAction(currentPrimaryAction().action, event.currentTarget as BusyButton);
     }, opts);
     bindPageDragScroll(VD, opts);
   }

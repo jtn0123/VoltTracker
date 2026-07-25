@@ -1406,19 +1406,24 @@ import { VD } from "./vd-registry";
     return true;
   }
 
-  // Read the M4 search / sort / favorites controls off the DOM. The controls are
-  // the single source of truth (no extra state slot): the input value, the active
-  // sort button, and the favorites toggle's data-on attribute.
+  // Assemble the M4 search / sort / favorites filter.
+  //
+  // The two boolean toggles and the sort selection now come from `state` rather than from
+  // the buttons themselves (`data-on` for the toggles, the `is-active` class for sort).
+  // Those were the clearest DOM-as-state cases left: JS wrote the attribute/class and then
+  // read it back as the truth, so the filter silently depended on the button still existing
+  // and still carrying the value a previous render put there.
+  //
+  // The search box is different and deliberately still read from the DOM: `<input>.value` is
+  // browser-owned state for a native control (IME composition, autofill, undo stack), and
+  // mirroring it into `state` would create the second copy this work exists to remove.
   function readMapSessionFilter(): MapSessionFilter {
     const search = el("mapSessionSearch") as HTMLInputElement | null;
-    const activeSort = document.querySelector("[data-map-sort].is-active") as HTMLElement | null;
-    const favToggle = el("mapSessionFavoritesOnly");
-    const longToggle = el("mapSessionLongOnly");
     return {
       query: search ? String(search.value || "") : "",
-      sort: activeSort && activeSort.dataset.mapSort === "distance" ? "distance" : "recent",
-      favoritesOnly: Boolean(favToggle && favToggle.dataset.on === "true"),
-      longOnly: Boolean(longToggle && longToggle.dataset.on === "true"),
+      sort: state.mapSessionSort === "distance" ? "distance" : "recent",
+      favoritesOnly: state.mapFavoritesOnly === true,
+      longOnly: state.mapLongOnly === true,
     };
   }
 

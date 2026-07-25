@@ -165,4 +165,44 @@ describe('stale-tile indicator', () => {
     chip.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(bridge.tryReconnectNow).toHaveBeenCalledTimes(1);
   });
+
+  // The chip's click listener is bound once and outlives every state the chip passes
+  // through. It used to gate on data-reconnect-active, i.e. on whatever the last render
+  // left on the element; it re-derives staleness now, so a clobbered attribute can neither
+  // suppress a legitimate reconnect nor fire one while telemetry is healthy.
+  it('gates the rate-chip reconnect on live staleness, not the chip attribute', async () => {
+    document.body.innerHTML = '';
+    delete window.VoltDashboard;
+    delete window.VoltTrackerNative;
+    delete window.VoltTrackerAndroid;
+    const bridge = createVoltBridgeFixture({ tryReconnectNow: vi.fn() });
+    await loadDashboard({ bridge });
+    const chip = document.getElementById('liveRateChip');
+
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'real',
+      speedKph: 42,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+    });
+    vi.advanceTimersByTime(4100);
+    expect(chip.dataset.state).toBe('stale');
+
+    // Attribute says "no" but the feed really is stale — the tap must still reconnect.
+    chip.dataset.reconnectActive = 'false';
+    chip.click();
+    expect(bridge.tryReconnectNow).toHaveBeenCalledTimes(1);
+
+    // Fresh sample: the feed is healthy again, so an attribute left saying "yes" must not
+    // fire a second reconnect.
+    window.VoltTrackerNative.updateTelemetry({
+      source: 'real',
+      speedKph: 44,
+      sampleCount: 2,
+      updatedAt: Date.now(),
+    });
+    chip.dataset.reconnectActive = 'true';
+    chip.click();
+    expect(bridge.tryReconnectNow).toHaveBeenCalledTimes(1);
+  });
 });

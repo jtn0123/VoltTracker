@@ -23,6 +23,9 @@ const REQUIRED_STATE_KEYS = [
   'mapLayer',
   'mapFull',
   'mapBrowserOpen',
+  'mapFavoritesOnly',
+  'mapLongOnly',
+  'mapSessionSort',
   'tripReceiptMode',
   'mapRemoteTilesEnabled',
   'selectedMapSessionId',
@@ -88,6 +91,14 @@ describe('window.VoltDashboard.state shape', () => {
     expect(state.mapLayer).toBe('eff');
     expect(state.mapFull).toBe(false);
     expect(state.mapBrowserOpen).toBe(false);
+    // Booleans, not just present. map.ts gates each filter on `=== true`, so seeding either
+    // of these as undefined or a string would silently leave the filter permanently off —
+    // and REQUIRED_STATE_KEYS above only checks that the key exists.
+    expect(state.mapFavoritesOnly).toBe(false);
+    expect(state.mapLongOnly).toBe(false);
+    // Must match the sort button marked `is-active` in map.html — the class is now an
+    // output of this value, so a mismatch would render the wrong button highlighted.
+    expect(state.mapSessionSort).toBe('recent');
     expect(state.tripReceiptMode).toBe(false);
     expect(state.mapRemoteTilesEnabled).toBe(true);
     expect(state.liveRouteStartedAtMs).toBe(null);

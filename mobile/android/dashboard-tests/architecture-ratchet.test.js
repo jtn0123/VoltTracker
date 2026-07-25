@@ -71,11 +71,27 @@ const BUILD_SCRIPT = resolve('./build.mjs');
 // 2026-07-25 (Phase 3): datasetStateReads 21 -> 15. `body[data-active-view]` is no longer
 //   read back as the current view — that fact is `state.view`. The attribute is still
 //   WRITTEN by setView for CSS to hook; the DOM stays an output, just not an input.
+// 2026-07-25 (Phase 3): datasetStateReads 15 -> 11. The drive-browser favourites/long-trip
+//   toggles no longer read their own `data-on` back as the truth — that pair now lives in
+//   state (mapFavoritesOnly / mapLongOnly). The attribute is still written for CSS.
+// 2026-07-25 (Phase 3): datasetStateReads 11 -> 9. Two handler-side reads removed. The
+//   primary connect button no longer reads `data-primary-action` back off itself to decide
+//   what it does (telemetry.ts#currentPrimaryAction derives it from state, and the renderer
+//   paints the same answer), and the live-rate chip's reconnect gate no longer reads
+//   `data-reconnect-active` (it re-derives staleness at click time). Both attributes are
+//   still written as outputs. The drive-browser sort selection moved to state in the same
+//   commit (state.mapSessionSort) but does not move this number: the read it removed was of
+//   `data-map-sort`, an allowlisted markup-config key.
+// 2026-07-25 (Phase 3): datasetStateReads is now pinned BY KEY as well as by count — see
+//   EXPECTED_DATASET_STATE_READ_KEYS. The 9 survivors were each examined and kept (lifecycle
+//   guards, one redundant-write guard, pagination depth, per-row trip metadata), so this
+//   metric's floor is a reviewed inventory rather than unfinished work. A count alone could
+//   stay flat while the residue changed underneath it; the inventory cannot.
 // ---------------------------------------------------------------------------
 const BASELINE = Object.freeze({
   directStateWrites: 0,
   eagerToEagerVdCalls: 58,
-  datasetStateReads: 15,
+  datasetStateReads: 9,
   aliasNestedWrites: 0,
   manualRenderCalls: 0,
 });
@@ -255,6 +271,40 @@ const DELEGATION_AND_CONFIG_KEYS = new Set([
   'drivePreset', 'level',
 ]);
 
+// The reads that survive the allowlist above, pinned by key. These are NOT a to-do list —
+// each was examined during Phase 3 and kept, for the reasons grouped below. Keeping the
+// inventory here (rather than only a total) is what lets the ratchet tell "someone converted
+// one" apart from "someone added a new one and the count happened to stay flat".
+//
+// Counts, not just names, so a second read of an already-listed key still has to be argued.
+const EXPECTED_DATASET_STATE_READ_KEYS = Object.freeze({
+  // --- element-lifecycle guards ---------------------------------------------------------
+  // The element IS the thing being guarded: "is THIS button mid-action", "has THIS <link>
+  // finished loading", "is THIS scrubber already bound". Moving these into `state` would mean
+  // keying global state by element identity, which is strictly worse than the attribute.
+  busy: 2, // actions.ts#withBusy, connection-tools.ts
+  voltLoaded: 1, // lazy-styles.ts — stylesheet load-once
+  scrubBound: 1, // scrubber.ts — listener bind-once
+  // --- redundant-write guard -------------------------------------------------------------
+  // connection-status.ts reads back its own last write purely to skip an identical DOM write.
+  // It is not a decision input: delete the read and behaviour is unchanged, only write volume.
+  state: 1,
+  // --- pagination depth ------------------------------------------------------------------
+  // How far the user has expanded a list, colocated with the list element that owns it. Open
+  // design question — `state` would work, but the depth is meaningless without the list, and
+  // it resets with the list on re-render, which is the behaviour we want.
+  mapSessionLimit: 1, // map-session-list.ts
+  sessionLimit: 1, // storage-status.ts
+  // --- per-row trip metadata --------------------------------------------------------------
+  // Resolving a routeKey back to its trip needs routeCoversTrip() and the route OBJECT —
+  // recentRoutes ids are window-bounded while trip ids are point-clipped, so the same drive
+  // can carry two keys — and only the lazy map module holds those. The row already did that
+  // resolution at render time; the handler reading it back off its own row is the cheap,
+  // correct answer, and a state lookup by key alone would silently mis-resolve clipped ids.
+  tripRenameLabel: 1, // actions.ts#onTripRenameClick
+  tripFavoriteState: 1, // actions.ts#onTripFavoriteClick
+});
+
 function datasetStateReads(files) {
   // `.dataset.foo` NOT followed by `=`. The trailing-char guard is load-bearing: a bare
   // `\w+` backtracks, so `el.dataset.on = "true"` would match `.dataset.o` and a WRITE would
@@ -408,6 +458,25 @@ describe('architecture ratchet', () => {
   it('does not add application state read back out of the DOM', () => {
     const { total, perFile } = datasetStateReads(files);
     expectRatchet('datasetStateReads', total, perFile.join(', ') || 'none');
+  });
+
+  // The count alone can stay flat while the residue changes underneath it — convert one site,
+  // add a different one, and the ratchet never notices. Pinning the surviving reads BY KEY is
+  // what makes the number mean something: each key below has been looked at and kept for a
+  // stated reason, so anything not on this list is new and unreviewed.
+  it('keeps the surviving DOM-as-state reads to the reviewed set', () => {
+    const { perKey } = datasetStateReads(files);
+    const actual = Object.fromEntries([...perKey.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    const expected = Object.fromEntries(
+      Object.entries(EXPECTED_DATASET_STATE_READ_KEYS).sort(([a], [b]) => a.localeCompare(b)),
+    );
+    expect(
+      actual,
+      'The set of DOM-as-state reads changed.\n' +
+        'If you REMOVED one: drop it from EXPECTED_DATASET_STATE_READ_KEYS and lower the baseline.\n' +
+        'If you ADDED one: that is the regression this metric exists to catch — read the\n' +
+        'reasoning above each group before arguing the new site belongs with them.',
+    ).toEqual(expected);
   });
 
   it('reads the bundle lists from build.mjs rather than a stale copy', () => {

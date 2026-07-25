@@ -484,17 +484,13 @@ import { VD } from "./vd-registry";
     const storage = state.storage || {};
     const status = state.status || {};
     const selected = getSelectedDevice();
-    const statusName = String(status.state || "").toLowerCase();
     const adapterName = state.demoActive
       ? "Demo telemetry"
       : (adapter.name || (selected && selected.name) || "No adapter selected");
-    const remembered = adapter.remembered || Boolean((getLastDevice() || {}).address);
-    const connecting = ["connecting", "initializing"].includes(statusName);
-    const scanning = statusName === "scanning";
-    const connected =
-      state.demoActive ||
-      Boolean(adapter.connected) ||
-      ["connected", "connecting", "initializing", "scanning", "demo"].includes(statusName);
+    // Called for its side effect: it refreshes state.lastDevice from the bridge, which is
+    // what connectionFlags() reads for `remembered`.
+    getLastDevice();
+    const { remembered, connecting, scanning, connected } = connectionFlags();
     const sessionState = session.state || status.state || "idle";
     const samples = Number(session.sampleCount || state.telemetry.sampleCount || 0);
     if (typeof VD.refreshConnectionToolsAvailability === "function") {
@@ -538,35 +534,80 @@ import { VD } from "./vd-registry";
     primary.classList.toggle("is-stop", connected);
     primary.classList.toggle("primary", !connected);
     primary.setAttribute("aria-busy", connecting || scanning ? "true" : "false");
+    // The decision lives in currentPrimaryAction() below; here we only paint it. It reads
+    // the same connectionFlags() the locals above came from, so label and behaviour agree.
+    const primaryView = currentPrimaryAction();
+    primary.dataset.primaryAction = primaryView.action;
+    primary.setAttribute("aria-label", primaryView.ariaLabel);
+    primary.textContent = primaryView.text;
+  }
+
+  // The connection facts every "is the car hooked up?" decision keys off, derived from
+  // `state` in one place. renderOperationalState and currentPrimaryAction both read these,
+  // so the button's label can no longer disagree with what the button does.
+  //
+  // `remembered` reads state.lastDevice rather than polling the bridge: getLastDevice()
+  // refreshes that slot, and the renderer calls it before reading these flags.
+  function connectionFlags() {
+    const adapter = (state.appState || {}).adapter || {};
+    const statusName = String((state.status || {}).state || "").toLowerCase();
+    return {
+      remembered:
+        Boolean(adapter.remembered) || Boolean(state.lastDevice && state.lastDevice.address),
+      connecting: ["connecting", "initializing"].includes(statusName),
+      scanning: statusName === "scanning",
+      connected:
+        state.demoActive ||
+        Boolean(adapter.connected) ||
+        ["connected", "connecting", "initializing", "scanning", "demo"].includes(statusName)
+    };
+  }
+
+  /** What the big connect button does when tapped. */
+  export type PrimaryAction = "stopDemo" | "stop" | "demo" | "last" | "connect";
+
+  export interface PrimaryActionView {
+    action: PrimaryAction;
+    text: string;
+    ariaLabel: string;
+  }
+
+  // The primary button's behaviour used to be stashed on the element itself as
+  // `data-primary-action` by renderOperationalState and read straight back out by the click
+  // handler in actions.ts — the button was the source of truth for what the button did, so a
+  // render that hadn't run yet (or a button replaced by other markup) silently downgraded
+  // every tap to "connect". The decision is derived from `state` here instead, and both the
+  // renderer and the handler call it. The attribute is still written, purely as an output:
+  // CSS and the unit suite key off it.
+  export function currentPrimaryAction(): PrimaryActionView {
+    const { remembered, connecting, scanning, connected } = connectionFlags();
     if (state.demoActive) {
-      primary.dataset.primaryAction = "stopDemo";
-      primary.setAttribute("aria-label", "Stop Demo / Testing");
-      primary.textContent = "Stop demo";
-    } else if (connecting) {
-      primary.dataset.primaryAction = "stop";
-      primary.setAttribute("aria-label", "Connecting to OBD adapter. Tap to stop.");
-      primary.textContent = "Connecting…";
-    } else if (scanning) {
-      primary.dataset.primaryAction = "stop";
-      primary.setAttribute("aria-label", "Scanning with OBD adapter. Tap to stop.");
-      primary.textContent = "Scanning…";
-    } else if (connected) {
-      primary.dataset.primaryAction = "stop";
-      primary.setAttribute("aria-label", "Disconnect OBD adapter");
-      primary.textContent = "Disconnect";
-    } else if (!bridge) {
-      primary.dataset.primaryAction = "demo";
-      primary.setAttribute("aria-label", "Start Demo / Testing");
-      primary.textContent = "Start demo";
-    } else if (remembered) {
-      primary.dataset.primaryAction = "last";
-      primary.setAttribute("aria-label", "Resume last OBD adapter");
-      primary.textContent = "Resume";
-    } else {
-      primary.dataset.primaryAction = "connect";
-      primary.setAttribute("aria-label", "Connect selected OBD adapter");
-      primary.textContent = "Connect";
+      return { action: "stopDemo", text: "Stop demo", ariaLabel: "Stop Demo / Testing" };
     }
+    if (connecting) {
+      return {
+        action: "stop",
+        text: "Connecting…",
+        ariaLabel: "Connecting to OBD adapter. Tap to stop."
+      };
+    }
+    if (scanning) {
+      return {
+        action: "stop",
+        text: "Scanning…",
+        ariaLabel: "Scanning with OBD adapter. Tap to stop."
+      };
+    }
+    if (connected) {
+      return { action: "stop", text: "Disconnect", ariaLabel: "Disconnect OBD adapter" };
+    }
+    if (!bridge) {
+      return { action: "demo", text: "Start demo", ariaLabel: "Start Demo / Testing" };
+    }
+    if (remembered) {
+      return { action: "last", text: "Resume", ariaLabel: "Resume last OBD adapter" };
+    }
+    return { action: "connect", text: "Connect", ariaLabel: "Connect selected OBD adapter" };
   }
 
   export function dbRowCount(storage: PayloadRecord) {
@@ -873,9 +914,22 @@ import { VD } from "./vd-registry";
   // from a 1Hz tick so the indicator appears even without new samples.
   // Also append a screen-reader-only "(stale)" span so the aria-live
   // wrappers around the tile clusters announce when readings have gone quiet.
-  function applyStaleIndicator() {
+  // True when the live feed has gone quiet — no sample for STALE_THRESHOLD_MS, or none
+  // ever. Shared by the tile indicator and the rate chip's reconnect gate so the two
+  // cannot disagree.
+  function isTelemetryStale() {
     const last = Number(state.lastSampleAt || 0);
-    const isStale = last > 0 ? Date.now() - last > STALE_THRESHOLD_MS : true;
+    return last > 0 ? Date.now() - last > STALE_THRESHOLD_MS : true;
+  }
+
+  // Whether tapping the rate chip should actually try to reconnect: samples were seen,
+  // they have gone quiet, and there is a bridge to reconnect through.
+  function reconnectAvailable() {
+    return hasLiveSamples() && isTelemetryStale() && Boolean(bridge);
+  }
+
+  function applyStaleIndicator() {
+    const isStale = isTelemetryStale();
     LIVE_TILE_IDS.forEach((id) => {
       const node = el(id);
       if (!node) return;
@@ -979,7 +1033,11 @@ import { VD } from "./vd-registry";
     if (rateChipReconnectBound) return;
     rateChipReconnectBound = true;
     const run = () => {
-      if (chip.dataset.reconnectActive !== "true") return;
+      // Re-derived rather than read back off the chip's own data-reconnect-active. The
+      // listener is bound once and outlives every state the chip passes through, so the
+      // attribute was only as fresh as the last render; the attribute is still written
+      // below purely as a CSS/debug output.
+      if (!reconnectAvailable()) return;
       if (bridge && typeof bridge.tryReconnectNow === "function") {
         bridge.tryReconnectNow();
       } else if (bridge && typeof bridge.connectLast === "function") {
