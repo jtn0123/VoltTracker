@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.32.4 (2026-07-25)
+
+### 🔺 Fix
+
+- **dashboard**: Clear every native reading that ages out, not just the base ones
+  ([#353](https://github.com/jtn0123/VoltTracker/pull/353),
+  [`f616e2e`](https://github.com/jtn0123/VoltTracker/commit/f616e2e7616271bd81093052b001c670916ce780))
+
+### 🔷 Changed
+
+- Structural engine/service packages (A3) + BackupController decomposition
+  ([#341](https://github.com/jtn0123/VoltTracker/pull/341),
+  [`0b69045`](https://github.com/jtn0123/VoltTracker/commit/0b690459ea43f2eb194da8adfb415a10ca52ac1b))
+
+- Structural splits (A1/A2), out-of-order OBD batch probe (B11), local gate parity (I1/I2)
+  ([#340](https://github.com/jtn0123/VoltTracker/pull/340),
+  [`35cb615`](https://github.com/jtn0123/VoltTracker/commit/35cb61564650ce78d3a986b0823994868337fd1e))
+
+- **dashboard**: Move drive-browser filters, primary action, and reconnect gate into state
+  ([#352](https://github.com/jtn0123/VoltTracker/pull/352),
+  [`0d68f70`](https://github.com/jtn0123/VoltTracker/commit/0d68f701e28381a33e71008072f04937a25b41bf))
+
+- **dashboard**: Single-writer state seam, render pass, architecture ratchet
+  ([#351](https://github.com/jtn0123/VoltTracker/pull/351),
+  [`26a1dfa`](https://github.com/jtn0123/VoltTracker/commit/26a1dfa45855d1364d1d1a8bba8d6f8e828b2b72))
+
+
 ## v0.32.3 (2026-07-12)
 
 ### 🔺 Fix
