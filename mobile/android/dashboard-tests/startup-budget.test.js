@@ -213,6 +213,11 @@ describe('dashboard startup budget', () => {
   it('coalesces a high-rate telemetry burst into one render frame inside budget', async () => {
     await loadDashboard();
     const VD = window.VoltDashboard;
+    // Settle any frame boot left queued (a lazy chunk hydrating writes state, which asks the
+    // shared render pass for a repaint). Without this the burst below would coalesce onto
+    // that pending frame and schedule none of its own — still correct coalescing, but it
+    // would make this test measure boot rather than the burst.
+    VD.flushRender();
     const originalRaf = window.requestAnimationFrame;
     const callbacks = [];
     window.requestAnimationFrame = (callback) => {

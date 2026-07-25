@@ -368,7 +368,7 @@ import { VD } from "./vd-registry";
       const target = event.target instanceof Element ? event.target : null;
       const button = target ? target.closest<HTMLElement>("[data-signal-stage]") : null;
       if (!button) return;
-      state.signalProbeStage = button.dataset.signalStage || "tires";
+      VD.setState({ signalProbeStage: button.dataset.signalStage || "tires" });
       updateEnhancedCapabilityUi();
     });
   })();

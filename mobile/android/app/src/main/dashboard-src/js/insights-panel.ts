@@ -53,17 +53,17 @@ import { VD } from "./vd-registry";
     if (VD.isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       VD.reportNativeReadError(parsed, "Could not read logged trips.");
-      state.tripsLoaded = false;
-      state.tripsReadError = err.message || "Could not read logged trips.";
-      state.trips = [];
+      VD.setState({
+        tripsLoaded: false,
+        tripsReadError: err.message || "Could not read logged trips.",
+        trips: []
+      });
     } else if (state.demoActive && Array.isArray(state.demoPreviewTrips)) {
-      state.tripsLoaded = true;
+      VD.setState({ tripsLoaded: true });
       // Park real trips behind the demo preview (cross-module demo invariant).
       VD.setState({ realTrips: Array.isArray(parsed) ? parsed : [] });
     } else {
-      state.tripsLoaded = true;
-      state.tripsReadError = null;
-      state.trips = Array.isArray(parsed) ? parsed : [];
+      VD.setState({ tripsLoaded: true, tripsReadError: null, trips: Array.isArray(parsed) ? parsed : [] });
       allTripsLoaded = state.trips.length < TRIPS_PAGE_SIZE;
     }
     VD.renderMapIfLoaded();
@@ -84,9 +84,9 @@ import { VD } from "./vd-registry";
     const current = Array.isArray(state.trips) ? state.trips : [];
     const byId = new Map(current.map((trip) => [String(trip.id || ""), trip]));
     for (const trip of page) byId.set(String(trip.id || ""), trip);
-    state.trips = Array.from(byId.values()).sort(
-      (a, b) => Number(b.endedAtMs || 0) - Number(a.endedAtMs || 0)
-    );
+    VD.setState({ trips: Array.from(byId.values()).sort(
+        (a, b) => Number(b.endedAtMs || 0) - Number(a.endedAtMs || 0)
+      ) });
     allTripsLoaded = page.length < TRIPS_PAGE_SIZE || state.trips.length === current.length;
     VD.renderMapIfLoaded();
     if (!allTripsLoaded) window.setTimeout(loadAllTrips, 0);
@@ -124,9 +124,7 @@ import { VD } from "./vd-registry";
       },
       "Could not read logged trips."
     );
-    state.tripsLoaded = false;
-    state.tripsReadError = "Could not read logged trips.";
-    state.trips = [];
+    VD.setState({ tripsLoaded: false, tripsReadError: "Could not read logged trips.", trips: [] });
     VD.renderMapIfLoaded();
   }
 
@@ -142,7 +140,7 @@ import { VD } from "./vd-registry";
         applyTripsPayload(bridge.getTrips());
       } else {
         tripsRead.complete();
-        state.tripsLoaded = true;
+        VD.setState({ tripsLoaded: true });
       }
     } catch (_err) {
       handleTripsBridgeFailure();
@@ -156,17 +154,17 @@ import { VD } from "./vd-registry";
     if (VD.isNativeError(parsed)) {
       const err = parsed as VoltNativeError;
       VD.reportNativeReadError(parsed, "Could not read vehicle insights.");
-      state.insightsLoaded = false;
-      state.insightsReadError = err.message || "Could not read vehicle insights.";
-      state.insights = {};
+      VD.setState({
+        insightsLoaded: false,
+        insightsReadError: err.message || "Could not read vehicle insights.",
+        insights: {}
+      });
     } else if (state.demoActive && state.demoPreviewInsights) {
-      state.insightsLoaded = true;
+      VD.setState({ insightsLoaded: true });
       // Park real insights behind the demo preview (cross-module demo invariant).
       VD.setState({ realInsights: parsed });
     } else {
-      state.insightsLoaded = true;
-      state.insightsReadError = null;
-      state.insights = parsed;
+      VD.setState({ insightsLoaded: true, insightsReadError: null, insights: parsed });
     }
     renderInsightStats();
     renderInsightScatter();
@@ -182,9 +180,11 @@ import { VD } from "./vd-registry";
       },
       "Could not read vehicle insights."
     );
-    state.insightsLoaded = false;
-    state.insightsReadError = "Could not read vehicle insights.";
-    state.insights = {};
+    VD.setState({
+      insightsLoaded: false,
+      insightsReadError: "Could not read vehicle insights.",
+      insights: {}
+    });
     renderInsightStats();
     renderInsightScatter();
   }
@@ -205,7 +205,7 @@ import { VD } from "./vd-registry";
         applyInsightsPayload(bridge.getInsights());
       } else {
         insightsRead.complete();
-        state.insightsLoaded = true;
+        VD.setState({ insightsLoaded: true });
         renderInsightStats();
         renderInsightScatter();
       }

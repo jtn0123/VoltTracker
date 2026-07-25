@@ -999,7 +999,23 @@ jobs:
           # No -no-snapshot here: this boot exists to write the snapshot.
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect
           script: echo "Generated AVD snapshot for caching."
+      # Two attempts, because the emulator itself is the flaky part — not the app.
+      #
+      # Observed failure mode (2 of 3 runs on PR #351): the qemu process dies partway
+      # through connectedDebugAndroidTest and every subsequent adb call reports
+      # `device offline` / `device 'emulator-5554' not found`, with
+      # `Test run failed to complete. Expected 3 tests, received 0` and NO assertion
+      # message from any test. The shell smoke ahead of it had already passed on the same
+      # boot. That is infrastructure death, not a regression, and it cannot be recovered
+      # in-process — the device is gone — so the only fix is a fresh boot.
+      #
+      # A REAL failure still fails the job: it reproduces on the second boot too. The retry
+      # only absorbs the case where the emulator vanishes. When it is used, the summary step
+      # below says so loudly, so a genuinely degrading test surfaces instead of hiding behind
+      # a green tick.
       - name: Launch app and assert the dashboard JS comes alive
+        id: emulator_smoke
+        continue-on-error: true
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
@@ -1015,6 +1031,34 @@ jobs:
           script: |
             bash mobile/android/scripts/emulator-smoke.sh
             cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
+      - name: Retry on a fresh emulator (first attempt failed)
+        id: emulator_smoke_retry
+        if: steps.emulator_smoke.outcome == 'failure'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: false
+          emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
+          script: |
+            bash mobile/android/scripts/emulator-smoke.sh
+            cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
+      - name: Surface a consumed emulator retry
+        # Deliberately noisy. A retry that nobody sees is how a test rots into permanently
+        # flaky while CI stays green; this keeps the cost visible in the run summary.
+        if: always() && steps.emulator_smoke.outcome == 'failure' && steps.emulator_smoke_retry.outcome == 'success'
+        run: |
+          echo "::warning title=Emulator smoke retried::First emulator boot failed and the retry passed. If this recurs, check whether the emulator is dying (device offline / 0 tests received) or a test is genuinely degrading."
+          {
+            echo ""
+            echo "### Emulator smoke retried"
+            echo ""
+            echo "The first emulator boot failed; a second, fresh boot passed."
+            echo "Check the failed step's log for \`device offline\` / \`Expected N tests, received 0\` —"
+            echo "that signature is the emulator dying, not a test failing."
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

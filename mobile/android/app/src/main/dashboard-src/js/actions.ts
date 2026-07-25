@@ -2,7 +2,6 @@ import { confirmAppDialog, promptAppDialog } from "./app-dialog";
 import { bindPageDragScroll } from "./actions-page-scroll";
 import { VD, actionModulesRegistry } from "./vd-registry";
 import { prefs, scrollToSettingsSection } from "./prefs";
-import { renderRealV2Ui, updateDiagnosticCodeUi, updateStorageUi } from "./storage-status";
 import {
   cellGridHasFull,
   getLastDevice,
@@ -10,8 +9,7 @@ import {
   isCellGridOpen,
   setCellGridOpen,
   showToast,
-  updateDiagnostics,
-  updateLiveUi
+  updateDiagnostics
 } from "./telemetry";
 import {
   bindListenerGuarded,
@@ -37,6 +35,7 @@ import {
   setDemoActive,
   setDevices,
   setHistory,
+  flushRender,
   setState,
   setText,
   setView,
@@ -847,7 +846,7 @@ type SignalActions = {
         .catch(() => VD.setStatus({ state: "blocked", detail: "DTC examples could not be loaded." }));
     }
     const samples = Array.isArray(VD.dtcSampleCodes) ? VD.dtcSampleCodes : [];
-    const storage = state.storage || (state.storage = {});
+    const storage = state.storage || {};
     // Snapshot the real DTC cache once so Clear can put it back — Preview must not
     // destroy real cached codes on a real device. Skip re-snapshotting while a
     // preview is already active, or it would capture the sample data instead.
@@ -858,34 +857,42 @@ type SignalActions = {
         diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
       };
     }
-    storage.latestDiagnosticCodes = samples.map((s) => ({ ...s }));
-    storage.diagnosticCodeCount = samples.length;
-    storage.diagnosticCodeStatusCounts = samples.reduce((acc: Record<string, number>, s) => {
-      const k = String(s.status || "stored").toLowerCase();
-      acc[k] = (acc[k] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-    updateDiagnosticCodeUi();
+    // Replace the storage bag rather than mutating the aliased one: an alias write would
+    // slip past the setState() seam even though `state` itself is readonly (Readonly<> is
+    // shallow). Whole-object replacement is already how storage-status.ts and map.ts
+    // update this field, and updateDiagnosticCodeUi() re-reads state.storage on each call.
+    setState({
+      storage: {
+        ...storage,
+        latestDiagnosticCodes: samples.map((s) => ({ ...s })),
+        diagnosticCodeCount: samples.length,
+        diagnosticCodeStatusCounts: samples.reduce((acc: Record<string, number>, s) => {
+          const k = String(s.status || "stored").toLowerCase();
+          acc[k] = (acc[k] || 0) + 1;
+          return acc;
+        }, {} as Record<string, number>)
+      }
+    });
+    flushRender();
     VD.setStatus({ state: "ready", detail: "DTC example data loaded into the Insights view." });
     return undefined;
   }
 
   function clearPreviewDtcCodes() {
-    const storage = state.storage || (state.storage = {});
-    if (dtcPreviewSnapshot) {
-      // Restore the real cached DTCs that Preview shadowed, rather than blanking
-      // them until the next native push. A snapshot of an empty cache restores to
-      // the same empty shape.
-      storage.latestDiagnosticCodes = dtcPreviewSnapshot.latestDiagnosticCodes ?? [];
-      storage.diagnosticCodeCount = dtcPreviewSnapshot.diagnosticCodeCount ?? 0;
-      storage.diagnosticCodeStatusCounts = dtcPreviewSnapshot.diagnosticCodeStatusCounts ?? {};
-      dtcPreviewSnapshot = null;
-    } else {
-      storage.latestDiagnosticCodes = [];
-      storage.diagnosticCodeCount = 0;
-      storage.diagnosticCodeStatusCounts = {};
-    }
-    updateDiagnosticCodeUi();
+    // Restore the real cached DTCs that Preview shadowed, rather than blanking them until
+    // the next native push. A snapshot of an empty cache restores to the same empty shape;
+    // with no snapshot at all we clear. Same seam discipline as previewDtcCodes above —
+    // replace the bag, don't mutate the alias.
+    setState({
+      storage: {
+        ...(state.storage || {}),
+        latestDiagnosticCodes: dtcPreviewSnapshot?.latestDiagnosticCodes ?? [],
+        diagnosticCodeCount: dtcPreviewSnapshot?.diagnosticCodeCount ?? 0,
+        diagnosticCodeStatusCounts: dtcPreviewSnapshot?.diagnosticCodeStatusCounts ?? {}
+      }
+    });
+    dtcPreviewSnapshot = null;
+    flushRender();
     VD.setStatus({ state: "ready", detail: "DTC examples cleared." });
   }
 
@@ -1085,7 +1092,7 @@ type SignalActions = {
     event.stopPropagation();
     suppressNextMapClick = true;
     const routeKey = String(button.dataset.tripDetail || "").trim();
-    state.tripReceiptMode = false;
+    setState({ tripReceiptMode: false });
     if (!routeKey) return;
     openTripDetail(routeKey);
   }
@@ -1162,7 +1169,7 @@ type SignalActions = {
       }
     }
     tripDetailOpenerKey = null;
-    state.tripReceiptMode = false;
+    setState({ tripReceiptMode: false });
   }
 
   // ---- M4 trip-list search / sort / favorites controls ---------------------
@@ -1351,7 +1358,7 @@ type SignalActions = {
       // keeps demo active). clearLivePosition lives in the lazy map module; fall back to
       // clearing state directly when it hasn't loaded yet (map.ts seeds from state on load).
       if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
-      else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
+      else setState({ liveRoutePoints: [], liveRouteStartedAtMs: null });
       // Flip demoActive on ONLY AFTER the scenario seed has captured the demo
       // preview snapshot — mirrors the scenario-picker path in bindListeners.
       // Activating before the async map-module load resolved left a window
@@ -1402,7 +1409,7 @@ type SignalActions = {
 
   function refreshNativeDataAfterDemo() {
     if (!bridge) {
-      state.storage = {
+      setState({ storage: {
         database: "volttracker_obd_poc.db",
         databaseBytes: 4096,
         sessionCount: 0,
@@ -1417,10 +1424,12 @@ type SignalActions = {
         latestDiagnosticCodes: [],
         diagnosticCodeCount: 0,
         overview: {}
-      };
-      state.trips = [];
-      state.insights = {};
-      state.appState = Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
+      } });
+      setState({
+        trips: [],
+        insights: {},
+        appState: Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null })
+      });
       // Clear the demo-mode shadow copies (cross-module invariant: they gate
       // whether storage/trips/insights renders read real vs preview data) and
       // the parked real payloads (nothing to restore without a bridge).
@@ -1435,8 +1444,7 @@ type SignalActions = {
         realAppState: null,
         _mapSampleLoaded: false
       });
-      updateStorageUi();
-      renderRealV2Ui();
+      flushRender();
       renderMapIfLoaded();
       if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
       if (typeof VD.renderInsightScatter === "function") VD.renderInsightScatter();
@@ -1449,20 +1457,21 @@ type SignalActions = {
     // vehicle (VIN / odometer) lingered on the Settings card until the next
     // native broadcast. Storage/trips/insights repaint instantly from the
     // parked copies too, then re-request below for freshness.
-    if (state.realStorage) state.storage = state.realStorage;
-    if (Array.isArray(state.realTrips)) state.trips = state.realTrips;
-    if (state.realInsights) state.insights = state.realInsights;
-    state.appState = state.realAppState
-      ? state.realAppState
-      : Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null });
+    if (state.realStorage) setState({ storage: state.realStorage });
+    if (Array.isArray(state.realTrips)) setState({ trips: state.realTrips });
+    if (state.realInsights) setState({ insights: state.realInsights });
+    setState({
+      appState: state.realAppState
+        ? state.realAppState
+        : Object.assign({}, state.appState || {}, { vehicle: null, latestTelemetry: null })
+    });
     void refreshStorage();
     const refreshRollups = () => {
       if (typeof VD.loadTrips === "function") VD.loadTrips(VD.forceLazyStorageRead);
       if (typeof VD.loadInsights === "function") VD.loadInsights(VD.forceLazyStorageRead);
     };
     void ensureInsightsModule().then(refreshRollups).catch(() => {});
-    updateStorageUi();
-    renderRealV2Ui();
+    flushRender();
     renderMapIfLoaded();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
     setState({
@@ -1484,7 +1493,7 @@ type SignalActions = {
     if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
     setDemoActive(false);
     refreshNativeDataAfterDemo();
-    updateLiveUi();
+    flushRender();
     if (stopped) VD.setStatus({ state: "idle", detail: "Demo stopped. Real data and captured history will appear here." });
   }
 
@@ -1500,7 +1509,7 @@ type SignalActions = {
     // NOT storage, so without this the Settings DB card keeps showing demo counts next to real
     // trips until the next native push. Mirror stopDemo()'s cleanup.
     if (wasDemo) refreshNativeDataAfterDemo();
-    updateLiveUi();
+    flushRender();
     if (stopped) VD.setStatus({ state: "idle", detail: "Stopped." });
   }
 
@@ -1602,7 +1611,7 @@ type SignalActions = {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
         // The [data-map-layer] selector guarantees the attribute is present.
-        state.mapLayer = button.dataset.mapLayer as string;
+        setState({ mapLayer: button.dataset.mapLayer as string });
         prefs.set("mapLayer", state.mapLayer);
         button.blur();
         void requestMapRender()
@@ -1661,7 +1670,7 @@ type SignalActions = {
     bindListenerGuarded("mapDriveChips", "pointerleave", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapDriveChips", "pointercancel", onMapSessionPointerEnd, opts);
     bindListenerGuarded("mapAllDrivesBtn", "click", () => {
-      state.mapBrowserOpen = true;
+      setState({ mapBrowserOpen: true });
       if (typeof VD.loadAllTrips === "function") VD.loadAllTrips();
       const browser = document.querySelector<HTMLElement>("#view-map .map-layout");
       if (browser) {
@@ -1677,7 +1686,7 @@ type SignalActions = {
       });
     }, opts);
     bindListenerGuarded("mapSessionListCloseBtn", "click", () => {
-      state.mapBrowserOpen = false;
+      setState({ mapBrowserOpen: false });
       const browser = document.querySelector<HTMLElement>("#view-map .map-layout");
       if (browser) browser.hidden = true;
       browser?.classList.remove("is-open");
@@ -1696,20 +1705,20 @@ type SignalActions = {
     }, opts);
     bindListenerGuarded("mapDriveChips", "contextmenu", onMapSessionContextMenu, opts);
     bindListenerGuarded("mapFullBtn", "click", () => {
-      state.mapFull = !state.mapFull;
+      setState({ mapFull: !state.mapFull });
       void requestMapRender().catch(() => {});
     }, opts);
     // "Full map" in the scrubber action row (v2) — always opens (never toggles
     // closed: the row is unreachable while the map is fullscreen anyway).
     bindListenerGuarded("mapFullOpenBtn", "click", () => {
-      state.mapFull = true;
+      setState({ mapFull: true });
       void requestMapRender().catch(() => {});
     }, opts);
     bindListenerGuarded("liveSignalsFilter", "click", (event: Event) => {
       const target = (event.target as HTMLElement | null)?.closest("[data-live-signal-filter]") as HTMLElement | null;
       if (!target) return;
       const f = target.dataset.liveSignalFilter;
-      state.liveSignalsFilter = f === "missing" || f === "all" ? f : "reporting";
+      setState({ liveSignalsFilter: f === "missing" || f === "all" ? f : "reporting" });
       updateDiagnostics();
     }, opts);
     bindListenerGuarded("mapFollowBtn", "click", () => {
@@ -1968,11 +1977,12 @@ type SignalActions = {
   bindListeners();
   startupMark("actions_bind_listeners_done");
   setDemoActive(false);
-  // updateLiveUi() already renders operational state, validation, diagnostics,
-  // charge/cell panels, and the Drive live strip. Keep the first-paint path to
-  // the Drive dashboard; storage/map/diagnostic-code summaries render after the
-  // native ready handshake or when the storage payload arrives.
-  updateLiveUi();
+  // First paint goes through the render pass, which covers the live Drive dashboard
+  // (operational state, validation, diagnostics, charge/cell panels, live strip) plus every
+  // other registered renderer. Flushing synchronously here also settles the frame that boot's
+  // own setState calls queued, so the dashboard starts from a painted, non-pending state
+  // instead of one rAF behind.
+  flushRender();
   // Current Android builds publish devices/storage from onDashboardReady(). Only fall back to the
   // JS-side refresh path for browser preview or an older bridge that has no ready handshake.
   if (!bridge || typeof bridge.dashboardReady !== "function") refreshDevices();
@@ -1991,9 +2001,8 @@ type SignalActions = {
     // tab taps get priority; storage payloads and active views still render on
     // demand through their normal handlers.
     startupMark("actions_secondary_render_start");
-    renderRealV2Ui();
+    flushRender();
     if (typeof VD.renderMapIfLoaded === "function") renderMapIfLoaded();
-    updateDiagnosticCodeUi();
     startupMark("actions_secondary_render_end");
   };
   schedulePostStartupIdle(loadDeferredPanels);

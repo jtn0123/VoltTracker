@@ -16,6 +16,7 @@
 import {
   bridge,
   callBridge,
+  dtcDataLoaded,
   ensureDtcData,
   ensureDtcDetailModule,
   ensureInsightsModule,
@@ -23,6 +24,7 @@ import {
   formatRowCount,
   parsePayload,
   renderMapIfLoaded,
+  flushRender,
   setState,
   setSvgAttrs,
   setText,
@@ -33,6 +35,7 @@ import { setDataState } from "./dataset-state";
 import { createNativeRequestGate } from "./native-request-gate";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
+import { registerRenderer } from "./render-pass";
 import { storageRollupSignature } from "./render-signatures";
 
 // Module scope (the old IIFE wrapper is redundant under ESM and blocks
@@ -49,8 +52,7 @@ import { storageRollupSignature } from "./render-signatures";
   let lastRollupSig: string | null = null;
 
   function invalidateLazyRollups() {
-    state.tripsLoaded = false;
-    state.insightsLoaded = false;
+    setState({ tripsLoaded: false, insightsLoaded: false });
   }
 
   function loadRollupsForActiveView() {
@@ -184,9 +186,10 @@ import { storageRollupSignature } from "./render-signatures";
       }
       const storageError: VoltStorageSummary = { message: err.message || "" };
       if (err.error) storageError.error = err.error;
-      state.storage = storageError;
-      updateStorageUi();
-      renderRealV2Ui();
+      setState({ storage: storageError });
+      // setState scheduled a frame; flush it here so the error paints in the same tick the
+      // native push arrived, as it did when this was a hand-written render cluster.
+      flushRender();
       renderMapIfLoaded();
       VD.updateValidationUi();
       return;
@@ -209,17 +212,16 @@ import { storageRollupSignature } from "./render-signatures";
       return;
     }
     if (newRoutes.length > 0) {
-      state._mapSampleLoaded = false;
+      setState({ _mapSampleLoaded: false });
     }
     if (isDetails) {
       const details = { ...(parsed as Record<string, unknown>) };
       delete details.storageDetails;
-      state.storage = { ...(state.storage || {}), ...details };
+      setState({ storage: { ...(state.storage || {}), ...details } });
     } else {
-      state.storage = parsed;
+      setState({ storage: parsed });
     }
-    updateStorageUi();
-    renderRealV2Ui();
+    flushRender();
     renderMapIfLoaded();
     VD.updateValidationUi();
     if (!isDetails) {
@@ -277,7 +279,6 @@ import { storageRollupSignature } from "./render-signatures";
     setText("dbSummaryTitle", sessions ? (last ? `${sampleLabel} · ${VD.formatWhen(last)}` : sampleLabel) : "No stored sessions yet");
     const recent = Array.isArray(storage.recentSessions) ? storage.recentSessions : [];
     const list = el("dbSessionList");
-    updateDiagnosticCodeUi();
     // Detailed-signal rendering is an Advanced-only lazy chunk. Storage still
     // updates every tab before that chunk exists, so treat its renderer as an
     // optional subscriber; opening Advanced immediately renders the latest
@@ -408,7 +409,9 @@ import { storageRollupSignature } from "./render-signatures";
     if (needsDtcData) {
       ensureDtcData()
         .then(() => {
-          updateDiagnosticCodeUi();
+          // The chunk landing is a render input, not a state change — the signature below
+          // includes dtcDataLoaded(), so asking the pass to run is enough.
+          flushRender();
         })
         .catch(() => {
           setText("dtcReportBadge", "details unavailable");
@@ -1307,6 +1310,31 @@ import { storageRollupSignature } from "./render-signatures";
       })
       .catch(() => {});
   }
+
+  // ----- render-pass registration (Phase 2) --------------------------------
+  // These three used to be hand-called after every state write, as part of a four-call
+  // cluster repeated verbatim in six places across actions.ts / map.ts / this file. They are
+  // now driven by the shared pass in core.ts, so a caller only has to change state.
+  //
+  // Signatures are the state slices themselves: setState replaces these objects rather than
+  // mutating them (Phase 1), so an unchanged reference means unchanged content and the
+  // repaint can be skipped. That is what keeps the pass off the tab-switch mutation budget —
+  // switching tabs does not touch state.storage, so these three do no DOM work.
+  registerRenderer("storage:summary", updateStorageUi, () => [state.storage]);
+  // dtcDataLoaded() is part of the signature: the human-readable DTC descriptions only exist
+  // once the lazy dtc-lookup chunk resolves, so its arrival must repaint even though no state
+  // changed.
+  registerRenderer("storage:dtc", updateDiagnosticCodeUi, () => [
+    state.storage,
+    dtcDataLoaded()
+  ]);
+  registerRenderer("storage:v2", renderRealV2Ui, () => [
+    state.storage,
+    state.trips,
+    state.insights,
+    state.appState,
+    state.selectedMapSessionId
+  ]);
 
   Object.assign(VD, {
     isNativeError,

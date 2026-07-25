@@ -28,6 +28,14 @@ import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
 import { initialTelemetryState } from "./telemetry-state";
+import {
+  consumeRerunRequest,
+  invalidateRenderCache,
+  isRendering,
+  registerRenderer,
+  requestRerun,
+  runRenderPass
+} from "./render-pass";
 import { validatePayload } from "./payload-validators";
 import { applyDiagnosticsMode, prefs } from "./prefs";
 import { VD } from "./vd-registry";
@@ -1008,11 +1016,22 @@ import { VD } from "./vd-registry";
     return "https://www.google.com/search?q=" + q;
   }
 
-  // The central runtime/UI state bag. Fields are assigned across every dashboard
-  // file (telemetry samples, render selections, map layers); the closed
-  // DashboardState interface (dashboard-globals.d.ts) pins its shape, and
-  // state-shape.test.js pins the seeded key set.
-  export const state: DashboardState = {
+  // The central runtime/UI state bag. The closed DashboardState interface
+  // (dashboard-globals.d.ts) pins its shape and state-shape.test.js pins the seeded
+  // key set.
+  //
+  // `mutableState` is the real object and is PRIVATE to this module: it is the only
+  // binding through which fields may be assigned, and the only writer is setState()
+  // below. Every other module — and every other line in this file — sees the
+  // `Readonly<DashboardState>` view exported as `state`, so `state.foo = …` is a
+  // compile error rather than an invisible mutation nobody else can observe.
+  //
+  // Scope note: Readonly<> is shallow, which is the right depth here. There are no
+  // `state.x.y = …` writes and no in-place array mutation through `state` anywhere in
+  // the source (architecture-ratchet.test.js records the counts; map.ts deliberately
+  // holds its own reference to the live-route buffer and state-seam.test.js guards
+  // that seam separately). Deep readonly would only fight those documented owners.
+  const mutableState: DashboardState = {
     view: "drive",
     mode: "ev",
     selectedRealTripId: null,
@@ -1071,7 +1090,9 @@ import { VD } from "./vd-registry";
     rafPending: 0,
     telemetry: initialTelemetryState()
   };
-  VD.state = state;
+  /** Read-only view of the state bag. Write through setState(). */
+  export const state: Readonly<DashboardState> = mutableState;
+  VD.state = mutableState;
 
   // ----- shared-state accessor (C3) ----------------------------------------
   // The state bag is mutated from every module. The seam policy (enforced by
@@ -1085,10 +1106,104 @@ import { VD } from "./vd-registry";
   //   - selectedMapSessionId is a free scalar, read/written directly (not a cross-module invariant).
   // setState is a plain patch-merge (Object.assign), so behaviour is identical to a direct
   // assignment; the value is one typed, greppable seam for the invariants that matter.
+  //
+  // As of Phase 1 this is the ONLY writer: `state` is exported as Readonly<DashboardState>,
+  // so every module that used to assign a field directly now lands here. That makes the full
+  // set of state transitions observable from one place — which is what a later render pass
+  // needs in order to schedule itself, and what makes a stale-value bug greppable instead of
+  // archaeological. architecture-ratchet.test.js pins the direction.
   export function setState(patch: Partial<DashboardState>) {
-    Object.assign(state, patch);
+    // Only a patch that actually moves a value schedules a frame. Re-broadcasting an
+    // unchanged native payload (the storage push does this on every poll) is the common
+    // case, and repainting on it is exactly the redundant work the old hand-called render
+    // clusters produced. Reference equality is the right test: every writer replaces
+    // objects rather than mutating them (Phase 1), so a new object means new content.
+    const before = mutableState as unknown as Record<string, unknown>;
+    const next = patch as unknown as Record<string, unknown>;
+    let changed = false;
+    for (const key of Object.keys(next)) {
+      if (!Object.is(before[key], next[key])) {
+        changed = true;
+        break;
+      }
+    }
+    Object.assign(mutableState, patch);
+    if (changed) requestRender();
     return state;
   }
+
+  // ----- the single render pass (Phase 2) -----------------------------------
+  // One rAF for the whole dashboard. Every state change funnels through setState above,
+  // which asks for a frame; the frame runs every registered renderer once, in registration
+  // order (render-pass.ts explains why they all run and early-out on a signature rather
+  // than being filtered by declared state keys).
+  //
+  // The rAF id lives on `state.rafPending` because that field is part of the ABI —
+  // startup-budget.test.js asserts it returns to 0 and state-shape.test.js pins its
+  // presence. It is scheduler bookkeeping, so it is written through the private binding
+  // rather than setState(), which would recurse straight back into here.
+
+  // A renderer that writes state re-arms the pass. That is legitimate (a panel deriving a
+  // display field as it draws), but an unconditional write would loop forever, so the
+  // cascade is bounded and reported rather than allowed to spin.
+  const MAX_RENDER_CASCADE = 5;
+  let renderCascade = 0;
+
+  export function requestRender() {
+    // Mid-pass writes join the next frame instead of re-entering this one.
+    if (isRendering()) {
+      requestRerun();
+      return;
+    }
+    if (mutableState.rafPending) return;
+    // No rAF (older WebView, jsdom without a frame loop): paint synchronously rather than
+    // silently never painting. legacy-webview.test.js covers this host.
+    if (typeof window.requestAnimationFrame !== "function") {
+      flushRender();
+      return;
+    }
+    mutableState.rafPending = window.requestAnimationFrame(() => {
+      mutableState.rafPending = 0;
+      flushRender();
+    });
+  }
+
+  /** Run the pass now, outside a frame. Exposed as VD.flushRender (ABI). */
+  export function flushRender() {
+    // A synchronous flush CONSUMES any frame already queued — the work is happening now, and
+    // leaving the rAF armed would repaint everything a second time on the next frame (the
+    // double-render this whole file exists to eliminate). It also keeps `state.rafPending`
+    // honest: after a flush there is genuinely nothing pending.
+    if (mutableState.rafPending) {
+      if (typeof window.cancelAnimationFrame === "function") {
+        window.cancelAnimationFrame(mutableState.rafPending);
+      }
+      mutableState.rafPending = 0;
+    }
+    runRenderPass((name, error) => {
+      reportClientError("render:" + name, error);
+    });
+    if (!consumeRerunRequest()) {
+      renderCascade = 0;
+      return;
+    }
+    renderCascade += 1;
+    if (renderCascade > MAX_RENDER_CASCADE) {
+      renderCascade = 0;
+      // A renderer is writing state on every pass. Stop the cascade and report it — looping
+      // here would peg the frame loop and freeze the UI.
+      reportClientError(
+        "render:cascade",
+        "render pass re-armed itself " + MAX_RENDER_CASCADE + " times; dropping the cascade"
+      );
+      return;
+    }
+    requestRender();
+  }
+  VD.requestRender = requestRender;
+  VD.flushRender = flushRender;
+  VD.registerRenderer = registerRenderer;
+  VD.invalidateRenderCache = invalidateRenderCache;
   // Typed getters for the most cross-referenced invariant fields. Thin reads —
   // they exist so other modules can ask "is demo on?" / "which session?" without
   // reaching into the raw bag, mirroring setState on the write side.
@@ -1360,7 +1475,7 @@ import { VD } from "./vd-registry";
     } else {
       delete document.body.dataset.vtDir;
     }
-    state.view = view;
+    setState({ view });
     if (VD.bridge && typeof VD.bridge.setActiveDashboardView === "function") {
       try {
         VD.bridge.setActiveDashboardView(view);
@@ -1370,7 +1485,7 @@ import { VD } from "./vd-registry";
     }
     document.body.dataset.activeView = view;
     if (view !== "map" && state.mapFull) {
-      state.mapFull = false;
+      setState({ mapFull: false });
       document.body.classList.remove("map-full-active");
       renderMapIfLoaded();
     }
@@ -1416,8 +1531,7 @@ import { VD } from "./vd-registry";
   export function openTripFromNative(routeKey: string, receipt = false) {
     const clean = String(routeKey || "").trim();
     if (!clean) return;
-    state.selectedMapSessionId = clean;
-    state.tripReceiptMode = receipt;
+    setState({ selectedMapSessionId: clean, tripReceiptMode: receipt });
     setView("map");
     void ensureMapModule()
       .then(() => {
@@ -1552,7 +1666,7 @@ import { VD } from "./vd-registry";
       return true;
     }
     if (state.mapFull) {
-      state.mapFull = false;
+      setState({ mapFull: false });
       document.body.classList.remove("map-full-active");
       renderMapIfLoaded();
       return true;
@@ -1693,9 +1807,9 @@ import { VD } from "./vd-registry";
     historyController = controller;
     const parsed = parsePayload(payload, []);
     validatePayload("setHistory", parsed);
-    state.deviceHistory = Array.isArray(parsed)
-      ? parsed.filter(isHistoryDevice)
-      : [];
+    setState({
+      deviceHistory: Array.isArray(parsed) ? parsed.filter(isHistoryDevice) : []
+    });
     const card = el("historyCard");
     const list = el("historyList");
     if (!card || !list) return;

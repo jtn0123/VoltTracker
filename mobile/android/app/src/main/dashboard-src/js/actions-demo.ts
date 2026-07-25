@@ -60,7 +60,7 @@ const DEMO_SOC_START = 64.8;
 
 export function runBrowserDemoStream(
   VD: VoltDashboard,
-  state: DashboardState,
+  state: Readonly<DashboardState>,
 ) {
   // Defense in depth against the start→stop-during-chunk-load race: if the demo
   // was stopped before this lazily-loaded stream began, don't start the interval
@@ -72,7 +72,7 @@ export function runBrowserDemoStream(
   // Begin from an empty live route so a re-started browser demo doesn't append onto the
   // previous run's track (stopDemo/stopAll clear it, but a bare start would not).
   if (typeof VD.clearLivePosition === "function") VD.clearLivePosition();
-  else { state.liveRoutePoints = []; state.liveRouteStartedAtMs = null; }
+  else VD.setState({ liveRoutePoints: [], liveRouteStartedAtMs: null });
   window.clearInterval(window.__voltDemoTimer ?? undefined);
   const emitSample = () => {
     t += 1;
@@ -82,7 +82,7 @@ export function runBrowserDemoStream(
     // during the charge window instead of orbiting an unplugged charger.
     if (!charging) driveT += 1;
     const gas = !charging && Math.floor(driveT / 30) % 2 === 1;
-    state.mode = gas ? "gas" : "ev";
+    VD.setState({ mode: gas ? "gas" : "ev" });
     // EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
     // mostly drive with regen dips, peaking ~25 kW.
     const powerKw = charging ? 0

@@ -591,7 +591,11 @@ import { VD } from "./vd-registry";
   function updateSettingsScrollSpy(): void {
     settingsScrollSpyQueued = false;
     if (Date.now() < settingsScrollSpyHoldUntil) return;
-    if (document.body.dataset.activeView !== "settings") return;
+    // VD.state rather than an import: prefs evaluates BEFORE core in the eager bundle, so
+    // importing core here would flip the bundle's side-effect order (see the header note).
+    // `body[data-active-view]` is still written by setView for CSS to hook — it is just no
+    // longer the thing JS asks when it wants to know the current view.
+    if (VD.state?.view !== "settings") return;
     const buttons = Array.from(document.querySelectorAll<HTMLElement>(".settings-section-nav [data-settings-target]"));
     const sections = buttons
       .map((button) => document.getElementById(button.dataset.settingsTarget || ""))

@@ -5,12 +5,15 @@ import {
   formatRowCount,
   parsePayload,
   renderMapIfLoaded,
+  flushRender,
+  requestRender,
   setDemoActive,
   setMeter,
   setState,
   setText,
   state
 } from "./core";
+import { registerRenderer } from "./render-pass";
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
@@ -199,7 +202,7 @@ import { VD } from "./vd-registry";
     const parsed = parsePayload<unknown>(payload, {});
     validatePayload("setStatus", parsed);
     const status = asPayloadRecord(parsed) as VoltStatus;
-    state.status = status;
+    setState({ status });
     const badge = el("stateBadge");
     const next = status.state || "idle";
     setDataState(badge, asDataState(next));
@@ -215,7 +218,7 @@ import { VD } from "./vd-registry";
     setText("stateText", next);
     setText("statusCopy", status.detail || "Ready.");
     showStatusToast(status.detail, next);
-    if (status.lastAddress) state.lastDevice = { address: status.lastAddress, name: status.lastName || "" };
+    if (status.lastAddress) setState({ lastDevice: { address: status.lastAddress, name: status.lastName || "" } });
     renderOperationalState();
     updateDiagnostics();
     updateValidationUi();
@@ -229,15 +232,13 @@ import { VD } from "./vd-registry";
       // Park the real app-state behind the demo preview (cross-module demo invariant).
       setState({ realAppState: parsed });
       if (parsed.storage) setStorage(parsed.storage);
-      renderOperationalState();
-      updateLiveUi();
-      updateValidationUi();
+      flushRender();
       return;
     }
-    state.appState = parsed;
+    setState({ appState: parsed });
     const nextTelemetry = state.appState.latestTelemetry || {};
     if (shouldAcceptTelemetry(nextTelemetry)) {
-      state.telemetry = applyAuthoritativeSample(state.telemetry, nextTelemetry);
+      setState({ telemetry: applyAuthoritativeSample(state.telemetry, nextTelemetry) });
       // Status broadcasts re-deliver the last sample verbatim; only an
       // updatedAt that advances counts as freshness, and we stamp the sample's
       // own clock (the same wall clock updateTelemetry's Date.now() uses on
@@ -245,7 +246,7 @@ import { VD } from "./vd-registry";
       const updatedAt = Number(nextTelemetry.updatedAt || 0);
       if (Number.isFinite(updatedAt) && updatedAt > lastSeenSampleUpdatedAt) {
         lastSeenSampleUpdatedAt = updatedAt;
-        state.lastSampleAt = updatedAt;
+        setState({ lastSampleAt: updatedAt });
       }
     } else if (!isActiveStatus()) {
       resetTelemetry();
@@ -256,9 +257,7 @@ import { VD } from "./vd-registry";
       // appState push with empty storage wipes the sample we just loaded.
       setStorage(state.appState.storage);
     }
-    renderOperationalState();
-    updateLiveUi();
-    updateValidationUi();
+    flushRender();
   }
 
   function shouldAcceptTelemetry(sample: PayloadRecord) {
@@ -288,17 +287,19 @@ import { VD } from "./vd-registry";
   function resetTelemetry() {
     // Shared factory (telemetry-state.ts) so this reset can never drift from
     // the boot-time shape core.ts seeds.
-    state.telemetry = initialTelemetryState();
-    state.speedHistory = [];
-    state.powerHistory = [];
-    state.socHistory = [];
-    state.sessionStartSoc = null;
-    state.sessionDistanceM = 0;
-    state.sessionLastLat = null;
-    state.sessionLastLng = null;
-    state.liveRouteStartedAtMs = null;
-    state.liveRoutePoints = [];
-    state.lastSampleAt = 0;
+    setState({
+      telemetry: initialTelemetryState(),
+      speedHistory: [],
+      powerHistory: [],
+      socHistory: [],
+      sessionStartSoc: null,
+      sessionDistanceM: 0,
+      sessionLastLat: null,
+      sessionLastLng: null,
+      liveRouteStartedAtMs: null,
+      liveRoutePoints: [],
+      lastSampleAt: 0
+    });
     lastSeenSampleUpdatedAt = 0;
     liveRouteHydrated = false;
     liveRouteHydrationAttempts = 0;
@@ -387,11 +388,13 @@ import { VD } from "./vd-registry";
       recoveredDistanceM += haversineMetersJs(previous.lat, previous.lng, current.lat, current.lng);
     }
     const lastPoint = mapped[mapped.length - 1]!;
-    state.sessionDistanceM = recoveredDistanceM;
-    state.sessionLastLat = lastPoint.lat;
-    state.sessionLastLng = lastPoint.lng;
-    state.liveRouteStartedAtMs = firstPoint.atMs;
-    state.selectedMapSessionId = LIVE_ROUTE_ID;
+    setState({
+      sessionDistanceM: recoveredDistanceM,
+      sessionLastLat: lastPoint.lat,
+      sessionLastLng: lastPoint.lng,
+      liveRouteStartedAtMs: firstPoint.atMs,
+      selectedMapSessionId: LIVE_ROUTE_ID
+    });
     // If the map module is already loaded, route through its setter so its module-local
     // liveRoutePoints reference is updated too — a bare `state.liveRoutePoints = mapped`
     // reassignment would leave map.ts pointing at the old (empty) array, so the recovered
@@ -400,7 +403,7 @@ import { VD } from "./vd-registry";
     if (typeof VD.setLiveRoutePoints === "function") {
       VD.setLiveRoutePoints(mapped, firstPoint.atMs);
     } else {
-      state.liveRoutePoints = mapped;
+      setState({ liveRoutePoints: mapped });
     }
     renderMapIfLoaded();
     return true;
@@ -468,10 +471,9 @@ import { VD } from "./vd-registry";
     const result = appendLiveRoutePoint(points, point);
     if (result === "skipped") return;
     if (result === "first") {
-      state.liveRouteStartedAtMs = point.atMs;
-      state.selectedMapSessionId = LIVE_ROUTE_ID;
+      setState({ liveRouteStartedAtMs: point.atMs, selectedMapSessionId: LIVE_ROUTE_ID });
     }
-    state.liveRoutePoints = points;
+    setState({ liveRoutePoints: points });
   }
 
   function renderOperationalState() {
@@ -586,7 +588,20 @@ import { VD } from "./vd-registry";
 
   export function getLastDevice() {
     if (bridge && typeof bridge.getLastDevice === "function") {
-      state.lastDevice = parsePayload(bridge.getLastDevice(), state.lastDevice || {});
+      const parsed = parsePayload(bridge.getLastDevice(), state.lastDevice || {}) as VoltDevice;
+      const current = state.lastDevice;
+      // Write only on a real change. parsePayload allocates a fresh object on every call, so
+      // an unconditional setState here makes `lastDevice` look different to the render pass
+      // every single time — and because this accessor is itself called from inside a render,
+      // that re-arms the pass forever. (The pass caps the cascade and reports it rather than
+      // spinning, which is how this was found; the cap is a backstop, not a licence.)
+      const changed =
+        !current ||
+        current.address !== parsed.address ||
+        current.name !== parsed.name ||
+        current.candidate !== parsed.candidate ||
+        current.connectCount !== parsed.connectCount;
+      if (changed) setState({ lastDevice: parsed });
     }
     return state.lastDevice || {};
   }
@@ -708,8 +723,7 @@ import { VD } from "./vd-registry";
     ) {
       resetTelemetry();
     }
-    state.telemetry = applyAuthoritativeSample(state.telemetry, sample);
-    state.lastSampleAt = Date.now();
+    setState({ telemetry: applyAuthoritativeSample(state.telemetry, sample), lastSampleAt: Date.now() });
     // Record the sample's own timestamp so a later status broadcast that
     // re-delivers this exact sample (setAppState) is not mistaken for a fresh
     // one and cannot move lastSampleAt backwards.
@@ -741,7 +755,7 @@ import { VD } from "./vd-registry";
       // Capture the session-start SOC so the "Δ since session" chip on the
       // SOC micro-card always points at a stable baseline, independent of
       // whatever recent window the chart happens to be showing.
-      if (!Number.isFinite(state.sessionStartSoc)) state.sessionStartSoc = soc;
+      if (!Number.isFinite(state.sessionStartSoc)) setState({ sessionStartSoc: soc });
       // Push every sample (no value-change throttle): keeping the latest
       // sample in history at all times means the chart and the "Δ" chip
       // can never disagree, and the fixed cap below bounds memory. The old
@@ -767,10 +781,9 @@ import { VD } from "./vd-registry";
         );
         // Reject tiny GPS jitter and very large jumps (likely a fix
         // reacquisition) so the distance counter stays honest.
-        if (step >= 2 && step < 250) state.sessionDistanceM += step;
+        if (step >= 2 && step < 250) setState({ sessionDistanceM: state.sessionDistanceM + (step) });
       }
-      state.sessionLastLat = lat;
-      state.sessionLastLng = lon;
+      setState({ sessionLastLat: lat, sessionLastLng: lon });
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
       else recordQueuedLivePosition(lat, lon);
     }
@@ -818,21 +831,41 @@ import { VD } from "./vd-registry";
     scheduleRender();
   }
 
-  function scheduleRender() {
-    if (state.rafPending) return;
-    state.rafPending = window.requestAnimationFrame(() => {
-      state.rafPending = 0;
-      flushRender();
-    });
-  }
+  // The live-telemetry repaint is a renderer on the shared pass (core.ts) rather than a
+  // private rAF. updateLiveUi() already calls renderOperationalState() + updateValidationUi()
+  // plus renderDriveLive() at its tail (which draws the shipped #liveTraceCanvas speed
+  // trace), so this one registration covers the whole live burst — keep it in lockstep with
+  // the tail of updateLiveUi() if either ever needs to call something new.
+  //
+  // The signature is the set of state slices the live UI draws from. Unlike a key FILTER,
+  // getting this list slightly wrong is bounded and self-healing: samples land at ~1 Hz and
+  // every one of them replaces state.telemetry, so a missed slice costs at most one frame of
+  // staleness rather than a permanently stale tile. Without it, any unrelated flush (a
+  // storage broadcast, say) would repaint every live tile and re-run the stale-marker pass.
+  // NOTE: state.storage is deliberately absent. updateLiveUi's tree does read it
+  // (renderOperationalState / updateValidationUi / liveChargeSession), but a storage
+  // broadcast never repainted the live tiles before the pass existed — that path called
+  // VD.updateValidationUi() directly instead, and still does. Including storage here would
+  // repaint every live tile on each storage poll and re-run the stale-marker sweep, which
+  // is both new work and a visible change (tiles gaining "(stale)" before any sample lands).
+  registerRenderer("telemetry:live", updateLiveUi, () => [
+    state.telemetry,
+    state.appState,
+    state.status,
+    state.lastDevice,
+    state.lastSampleAt,
+    state.speedHistory,
+    state.powerHistory,
+    state.socHistory,
+    state.liveSignalsFilter,
+    state.demoActive
+  ]);
 
-  function flushRender() {
-    // updateLiveUi() already calls renderOperationalState() + updateValidationUi()
-    // (see below) plus renderDriveLive() at its tail (which draws the shipped
-    // #liveTraceCanvas speed trace), so the rAF burst is just this one call —
-    // keep it in lockstep with the tail of updateLiveUi() if either ever needs
-    // to call something new.
-    updateLiveUi();
+  // Kept as a named local so the call sites below read the same as before; every state
+  // write already schedules a frame on its own, so this is only for the paths that must
+  // repaint without having changed state.
+  function scheduleRender() {
+    requestRender();
   }
 
   // Toggle the `.stale` class on each live tile when no new sample has
@@ -2001,7 +2034,8 @@ import { VD } from "./vd-registry";
     hydrateLiveRouteIfActive,
     setCurrentSessionRoute: applyCurrentSessionRoutePayload,
     scheduleRender,
-    flushRender,
+    // flushRender is owned by core.ts now (the shared pass). Re-exporting it here would
+    // clobber core's binding with undefined — telemetry's IIFE evaluates after core's.
     applyStaleIndicator,
     updateLiveUi,
     updateDiagnostics,

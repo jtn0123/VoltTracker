@@ -221,7 +221,7 @@ import { VD } from "./vd-registry";
     try {
       parsed = VD.parsePayload<VoltMaintenanceEntry[] | VoltNativeError>(bridge.getMaintenanceLog(), []);
     } catch (_err) {
-      state.maintenanceLog = [];
+      VD.setState({ maintenanceLog: [] });
       renderMaintenanceList();
       VD.reportNativeReadError(
         {
@@ -234,12 +234,12 @@ import { VD } from "./vd-registry";
       return;
     }
     if (VD.isNativeError(parsed)) {
-      state.maintenanceLog = [];
+      VD.setState({ maintenanceLog: [] });
       renderMaintenanceList();
       VD.reportNativeReadError(parsed, "Could not read the maintenance log.");
       return;
     }
-    state.maintenanceLog = Array.isArray(parsed) ? parsed : [];
+    VD.setState({ maintenanceLog: Array.isArray(parsed) ? parsed : [] });
     renderMaintenanceList();
   }
 

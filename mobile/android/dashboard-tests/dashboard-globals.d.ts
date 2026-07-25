@@ -680,12 +680,31 @@ interface VoltRestoreProgress {
       demoLoaded: boolean;
       [key: string]: unknown;
     };
-    /** Mutable UI/runtime state bag. */
-    state: DashboardState;
-    /** Patch-merge writes into the shared state bag (C3 accessor seam). Used for
-     *  the fields with cross-module invariants (demo lifecycle, map/trip
-     *  selection); behaves like Object.assign(state, patch). */
-    setState(patch: Partial<DashboardState>): DashboardState;
+    /** Read-only view of the UI/runtime state bag.
+     *
+     *  Readonly is load-bearing, not decoration: the lazy chunks reach state through
+     *  this global (ESM imports cannot cross an esbuild chunk boundary), so typing it
+     *  mutable here would leave every chunk free to assign fields directly and reopen
+     *  the stale-copy bug class on the far side of the seam. Chunks write with
+     *  VD.setState(); core.ts holds the one mutable binding. */
+    state: Readonly<DashboardState>;
+    /** Patch-merge writes into the shared state bag (C3 accessor seam) — the ONLY
+     *  writer. Behaves like Object.assign(state, patch), and schedules a render
+     *  pass when the patch actually changes a value. */
+    setState(patch: Partial<DashboardState>): Readonly<DashboardState>;
+    /** Ask for a render pass on the next frame (coalesced; one rAF for the whole
+     *  dashboard). setState() calls this for you — reach for it only when the UI
+     *  must repaint without a state change. */
+    requestRender(): void;
+    /** Run the render pass synchronously, outside a frame. Used where a native push
+     *  must paint in the same tick it arrived, and by the unit suite. */
+    flushRender(): void;
+    /** Register a renderer with the pass (render-pass.ts). Lazy chunks register
+     *  through this; eager modules import registerRenderer directly. */
+    registerRenderer(name: string, run: () => void, signature?: () => readonly unknown[]): void;
+    /** Drop every cached render signature so the next pass repaints unconditionally.
+     *  Needed when the DOM is replaced underneath the pass (demo re-seed, restore). */
+    invalidateRenderCache(): void;
     /** True while demo telemetry is streaming. */
     isDemoActive(): boolean;
     /** The currently-selected map session id (or null). */
@@ -1105,7 +1124,7 @@ interface VoltRestoreProgress {
         VD: VoltDashboard;
         bridge: VoltBridge | null;
       }) => Record<string, (...args: any[]) => any>;
-      runBrowserDemoStream?: (dashboard: VoltDashboard, state: DashboardState) => void;
+      runBrowserDemoStream?: (dashboard: VoltDashboard, state: Readonly<DashboardState>) => void;
     };
     /** Interval handle for the demo-preview ticker (actions.ts). */
     __voltDemoTimer?: ReturnType<typeof setInterval> | null;

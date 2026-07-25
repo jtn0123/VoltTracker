@@ -128,8 +128,7 @@ import { VD } from "./vd-registry";
   let liveRoutePoints: MapRoutePoint[] = Array.isArray(state.liveRoutePoints)
     ? state.liveRoutePoints as MapRoutePoint[]
     : [];
-  state.liveRouteStartedAtMs = liveRouteStartedAtMs;
-  state.liveRoutePoints = liveRoutePoints;
+  VD.setState({ liveRouteStartedAtMs, liveRoutePoints });
 
   /** Store a demo/real GPS sample as the selectable Current route on the map. */
   function updateLivePosition(lat: unknown, lng: unknown) {
@@ -147,14 +146,13 @@ import { VD } from "./vd-registry";
     if (result === "skipped") return;
     if (result === "first") {
       liveRouteStartedAtMs = point.atMs;
-      state.liveRouteStartedAtMs = liveRouteStartedAtMs;
-      state.selectedMapSessionId = LIVE_ROUTE_ID;
+      VD.setState({ liveRouteStartedAtMs, selectedMapSessionId: LIVE_ROUTE_ID });
       mapFitKey = null;
       // A fresh drive re-arms follow so it tracks from the first fix, even if the
       // user had turned follow off while inspecting a previous/historical route.
-      state.mapFollowLive = true;
+      VD.setState({ mapFollowLive: true });
     }
-    state.liveRoutePoints = liveRoutePoints;
+    VD.setState({ liveRoutePoints });
     if (state.selectedMapSessionId === LIVE_ROUTE_ID && state.view === "map") {
       renderMap();
     }
@@ -165,9 +163,8 @@ import { VD } from "./vd-registry";
     const wasSelected = String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID;
     liveRouteStartedAtMs = null;
     liveRoutePoints = [];
-    state.liveRouteStartedAtMs = null;
-    state.liveRoutePoints = liveRoutePoints;
-    if (wasSelected) state.selectedMapSessionId = null;
+    VD.setState({ liveRouteStartedAtMs: null, liveRoutePoints });
+    if (wasSelected) VD.setState({ selectedMapSessionId: null });
     mapFitKey = null;
     if (state.view === "map") renderMap();
   }
@@ -181,13 +178,13 @@ import { VD } from "./vd-registry";
    */
   function setLiveRoutePoints(points: unknown, startedAtMs?: unknown) {
     liveRoutePoints = Array.isArray(points) ? (points as MapRoutePoint[]) : [];
-    state.liveRoutePoints = liveRoutePoints;
+    VD.setState({ liveRoutePoints });
     const started = Number(startedAtMs);
     liveRouteStartedAtMs = Number.isFinite(started)
       ? started
       : (liveRoutePoints[0] ? Number(liveRoutePoints[0].atMs) : null);
-    state.liveRouteStartedAtMs = liveRouteStartedAtMs;
-    if (liveRoutePoints.length) state.selectedMapSessionId = LIVE_ROUTE_ID;
+    VD.setState({ liveRouteStartedAtMs });
+    if (liveRoutePoints.length) VD.setState({ selectedMapSessionId: LIVE_ROUTE_ID });
     mapFitKey = null;
     if (state.view === "map") renderMap();
   }
@@ -341,7 +338,7 @@ import { VD } from "./vd-registry";
   function syncRemoteTiles() {
     const map = mapInstance;
     if (!map || typeof L === "undefined") return;
-    state.mapRemoteTilesEnabled = true;
+    VD.setState({ mapRemoteTilesEnabled: true });
     if (!remoteTileLayer) {
       remoteTileLayer = createRemoteTileLayer(map);
       remoteTileLayer.addTo(map);
@@ -378,7 +375,7 @@ import { VD } from "./vd-registry";
     // recenters. The Follow button re-arms it. No-op for historical routes.
     map.on("dragstart", () => {
       if (state.mapFollowLive && String(state.selectedMapSessionId || "") === LIVE_ROUTE_ID) {
-        state.mapFollowLive = false;
+        VD.setState({ mapFollowLive: false });
         updateFollowButton();
       }
     });
@@ -403,7 +400,7 @@ import { VD } from "./vd-registry";
    */
   function setMapFollowLive(on?: boolean) {
     const next = typeof on === "boolean" ? on : state.mapFollowLive === false;
-    state.mapFollowLive = next;
+    VD.setState({ mapFollowLive: next });
     updateFollowButton();
     if (next) {
       // Force the next render to reframe the track (mapFitKey gate is bypassed
@@ -2115,7 +2112,7 @@ import { VD } from "./vd-registry";
       if (selected) return selected;
       const firstRoute = routes[0]!;
       const firstId = (firstRoute.session || {}).id;
-      state.selectedMapSessionId = firstId == null ? null : String(firstId);
+      VD.setState({ selectedMapSessionId: firstId == null ? null : String(firstId) });
       return firstRoute;
     }
     return storage.latestRoute || {};
@@ -2440,24 +2437,24 @@ import { VD } from "./vd-registry";
     const demoAmbientC = [21, 3, 27];
     const demoMiPerKwh = [4.8, 3.7, 5.1];
 
-    state.trips = routes.map((r, i) => ({
-      id: r.session.id,
-      startedAtMs: r.session.startedAtMs,
-      endedAtMs: r.session.endedAtMs,
-      durationMs: r.session.endedAtMs - r.session.startedAtMs,
-      distanceMeters: r.distanceMeters,
-      maxSpeedKph: 105,
-      avgMovingSpeedKph: 47,
-      sampleCount: r.session.sampleCount,
-      pointCount: r.points.length,
-      hasRoute: true,
-      adapterName: r.session.adapterName,
-      status: "complete",
-      avgOutsideTempC: demoAmbientC[i] ?? 20,
-      // Plausible net HV energy so the demo exercises the v2 energy/cost
-      // surfaces (map sheet, trip rows, Drive strip, temp-vs-range scatter).
-      energyKwh: Math.round((r.distanceMeters / 1609.344 / (demoMiPerKwh[i] ?? 4.8)) * 10) / 10
-    }));
+    VD.setState({ trips: routes.map((r, i) => ({
+        id: r.session.id,
+        startedAtMs: r.session.startedAtMs,
+        endedAtMs: r.session.endedAtMs,
+        durationMs: r.session.endedAtMs - r.session.startedAtMs,
+        distanceMeters: r.distanceMeters,
+        maxSpeedKph: 105,
+        avgMovingSpeedKph: 47,
+        sampleCount: r.session.sampleCount,
+        pointCount: r.points.length,
+        hasRoute: true,
+        adapterName: r.session.adapterName,
+        status: "complete",
+        avgOutsideTempC: demoAmbientC[i] ?? 20,
+        // Plausible net HV energy so the demo exercises the v2 energy/cost
+        // surfaces (map sheet, trip rows, Drive strip, temp-vs-range scatter).
+        energyKwh: Math.round((r.distanceMeters / 1609.344 / (demoMiPerKwh[i] ?? 4.8)) * 10) / 10
+      })) });
 
     const totalDistance = routes.reduce((s, r) => s + r.distanceMeters, 0);
     const totalDrive = routes.reduce(
@@ -2519,63 +2516,65 @@ import { VD } from "./vd-registry";
       { header: "ATSH760", id: 13, command: "224051", pid: "4051", name: "tire pressure front-right", supported: false, responseCount: 0, lastSeenMs: now - 7 * hour, sample: { pollLane: "slow", scanStage: "tires", risk: "medium", validationStatus: "candidate", rawResponse: "NO DATA", category: "tpms" } }
     ];
 
-    state.storage = {
-      database: "volttracker_obd_poc.db",
-      databaseBytes: 21086208,
-      sessionCount: routes.length,
-      sampleCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
-      rawTelemetryCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
-      locationSampleCount: routes.reduce((s, r) => s + r.points.length, 0),
-      tripSegmentCount: routes.length,
-      eventCount: 7,
-      pidObservationCount: 1911,
-      lastEventAtMs: today.session.endedAtMs,
-      chargeSessionCount: sampleCharges.length,
-      batterySnapshotCount: 1,
-      fieldCapabilityCount: sampleCapabilities.length,
-      diagnosticCodeCount: sampleDtcs.length,
-      diagnosticCodeStatusCounts: { stored: 1, pending: 1 },
-      latestDiagnosticCodes: sampleDtcs,
-      latestReview: sampleReview,
-      recentRoutes: routes,
-      latestRoute: today,
-      recentSessions: routes.map((r) => ({
-        id: r.session.id,
-        mode: "drive",
-        adapterName: r.session.adapterName,
-        startedAtMs: r.session.startedAtMs,
-        status: "complete",
-        sampleCount: r.session.sampleCount,
-        usefulSampleCount: r.session.sampleCount,
-        emptySampleCount: 0
-      })),
-      overview: {
-        distanceMeters: totalDistance,
-        maxSpeedKph: 105,
-        chargingHints: 6,
-        latestTelemetry: { soc: sampleBattery.soc, powerKw: sampleBattery.packPowerKw, vehicleState: "idle" }
-      },
-      chargeSummary: {
+    VD.setState({ storage: {
+        database: "volttracker_obd_poc.db",
+        databaseBytes: 21086208,
+        sessionCount: routes.length,
+        sampleCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
+        rawTelemetryCount: routes.reduce((s, r) => s + r.session.sampleCount, 0),
+        locationSampleCount: routes.reduce((s, r) => s + r.points.length, 0),
+        tripSegmentCount: routes.length,
+        eventCount: 7,
+        pidObservationCount: 1911,
+        lastEventAtMs: today.session.endedAtMs,
         chargeSessionCount: sampleCharges.length,
-        chargingHintCount: 6,
-        maxPowerKw: 7.2,
-        latest: sampleCharges[0] ?? null,
-        recentSessions: sampleCharges
-      },
-      batterySummary: { snapshotCount: 1, cellSnapshotCount: 0, latestBatterySnapshot: sampleBattery },
-      detailedSignalCatalog: sampleSignalCatalog,
-      enhancedCapabilities: sampleCapabilities
-    };
-    state.insights = {
-      tripCount: routes.length,
-      totalDistanceMeters: totalDistance,
-      totalDriveMs: totalDrive,
-      longestTripMeters: Math.max.apply(null, routes.map((r) => r.distanceMeters)),
-      maxSpeedKph: 105,
-      gpsTripCount: routes.length
-    };
-    state.appState = Object.assign({}, state.appState, { vehicle: sampleVehicle });
-    state.demoScenario = "typical";
+        batterySnapshotCount: 1,
+        fieldCapabilityCount: sampleCapabilities.length,
+        diagnosticCodeCount: sampleDtcs.length,
+        diagnosticCodeStatusCounts: { stored: 1, pending: 1 },
+        latestDiagnosticCodes: sampleDtcs,
+        latestReview: sampleReview,
+        recentRoutes: routes,
+        latestRoute: today,
+        recentSessions: routes.map((r) => ({
+          id: r.session.id,
+          mode: "drive",
+          adapterName: r.session.adapterName,
+          startedAtMs: r.session.startedAtMs,
+          status: "complete",
+          sampleCount: r.session.sampleCount,
+          usefulSampleCount: r.session.sampleCount,
+          emptySampleCount: 0
+        })),
+        overview: {
+          distanceMeters: totalDistance,
+          maxSpeedKph: 105,
+          chargingHints: 6,
+          latestTelemetry: { soc: sampleBattery.soc, powerKw: sampleBattery.packPowerKw, vehicleState: "idle" }
+        },
+        chargeSummary: {
+          chargeSessionCount: sampleCharges.length,
+          chargingHintCount: 6,
+          maxPowerKw: 7.2,
+          latest: sampleCharges[0] ?? null,
+          recentSessions: sampleCharges
+        },
+        batterySummary: { snapshotCount: 1, cellSnapshotCount: 0, latestBatterySnapshot: sampleBattery },
+        detailedSignalCatalog: sampleSignalCatalog,
+        enhancedCapabilities: sampleCapabilities
+      } });
+    VD.setState({ insights: {
+        tripCount: routes.length,
+        totalDistanceMeters: totalDistance,
+        totalDriveMs: totalDrive,
+        longestTripMeters: Math.max.apply(null, routes.map((r) => r.distanceMeters)),
+        maxSpeedKph: 105,
+        gpsTripCount: routes.length
+      } });
+    VD.setState({
+      appState: Object.assign({}, state.appState, { vehicle: sampleVehicle }),
+      demoScenario: "typical"
+    });
     captureDemoPreview();
     VD.setDemoActive(true, "Demo / Testing sample drive loaded.");
     renderDemoSurfaces();
@@ -2596,8 +2595,13 @@ import { VD } from "./vd-registry";
   // insights) from the current state.storage. Shared by loadSampleData and the
   // scenario switcher so a mutated payload paints everywhere consistently.
   function renderDemoSurfaces() {
-    VD.updateStorageUi();
-    VD.renderRealV2Ui();
+    // The demo seeds state and then needs every surface repainted in the same tick. The
+    // storage-backed surfaces are renderers on the shared pass now, so flushing it replaces
+    // the old enumerate-every-renderer call list. The demo also swaps payloads underneath
+    // the pass, so drop the cached signatures first — the reference can be identical after
+    // a scenario re-seed while the DOM is not.
+    VD.invalidateRenderCache();
+    VD.flushRender();
     renderMap();
     if (typeof VD.renderInsightStats === "function") VD.renderInsightStats();
   }
@@ -2605,21 +2609,23 @@ import { VD } from "./vd-registry";
   function loadDemoScenario(name: string) {
     const scenario = String(name || "typical");
     if (scenario === "empty") {
-      state.storage = {
-        database: "volttracker_obd_poc.db",
-        databaseBytes: 4096,
-        sessionCount: 0, sampleCount: 0, rawTelemetryCount: 0,
-        recentRoutes: [], recentSessions: [],
-        chargeSummary: { chargeSessionCount: 0, chargingHintCount: 0 },
-        batterySummary: {}, detailedSignalCatalog: [], enhancedCapabilities: [],
-        latestDiagnosticCodes: [], diagnosticCodeCount: 0
-      };
+      VD.setState({ storage: {
+          database: "volttracker_obd_poc.db",
+          databaseBytes: 4096,
+          sessionCount: 0, sampleCount: 0, rawTelemetryCount: 0,
+          recentRoutes: [], recentSessions: [],
+          chargeSummary: { chargeSessionCount: 0, chargingHintCount: 0 },
+          batterySummary: {}, detailedSignalCatalog: [], enhancedCapabilities: [],
+          latestDiagnosticCodes: [], diagnosticCodeCount: 0
+        } });
       // Trips feed the map's stub rows, so the empty scenario must clear them
       // too or leftover real trips would repopulate the demo map.
-      state.trips = [];
-      state.insights = { tripCount: 0 };
-      state.appState = Object.assign({}, state.appState, { vehicle: null });
-      state.demoScenario = "empty";
+      VD.setState({
+        trips: [],
+        insights: { tripCount: 0 },
+        appState: Object.assign({}, state.appState, { vehicle: null }),
+        demoScenario: "empty"
+      });
       captureDemoPreview();
       VD.setDemoActive(true, "Demo scenario: empty (no logged data yet).");
       renderDemoSurfaces();
@@ -2640,41 +2646,58 @@ import { VD } from "./vd-registry";
           startSoc: 22 + (i % 6) * 6, endSoc: 88 + (i % 3) * 3, powerKw: i % 5 === 0 ? 1.3 : 7.0 + (i % 3) * 0.2, energyKwh: 8 + (i % 7)
         });
       }
-      // loadSampleData() above always seeds chargeSummary; keep a non-null
-      // local so the demo writes below typecheck against the optional slot.
-      const chargeSummary = (s.chargeSummary = s.chargeSummary || {});
-      chargeSummary.recentSessions = charges;
-      chargeSummary.chargeSessionCount = charges.length;
-      s.chargeSessionCount = charges.length;
-      s.sampleCount = 184213; s.rawTelemetryCount = 184213; s.pidObservationCount = 184213;
-      s.eventCount = 312; s.sessionCount = 96;
+      VD.setState({
+        storage: {
+          ...s,
+          chargeSummary: { ...(s.chargeSummary || {}), recentSessions: charges, chargeSessionCount: charges.length },
+          chargeSessionCount: charges.length,
+          sampleCount: 184213, rawTelemetryCount: 184213, pidObservationCount: 184213,
+          eventCount: 312, sessionCount: 96
+        }
+      });
       VD.setStatus({ state: "demo", detail: "Demo scenario: power user (months of data)." });
     } else if (scenario === "fault") {
-      s.latestDiagnosticCodes = [
-        { dtc: "P0420", status: "current", statusLabel: "current", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - hour, seenCount: 9 },
-        { dtc: "P0301", status: "permanent", statusLabel: "permanent", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 50 * hour, lastSeenMs: now - 2 * hour, seenCount: 5 },
-        { dtc: "P0128", status: "freeze-frame", statusLabel: "freeze-frame", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 30 * hour, lastSeenMs: now - 3 * hour, seenCount: 2, freezeFrame: { Speed: "43 mph", SOC: "12%", Engine: "1,840 RPM", Coolant: "148\u00B0F", Load: "31%", Odometer: "48,102 mi" } },
-        { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - hour, seenCount: 1 }
-      ];
-      s.diagnosticCodeCount = 4;
-      s.diagnosticCodeStatusCounts = { current: 1, permanent: 1, "freeze-frame": 1, pending: 1 };
-      state.demoScenario = "fault";
+      VD.setState({
+        storage: {
+          ...s,
+          latestDiagnosticCodes: [
+            { dtc: "P0420", status: "current", statusLabel: "current", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 72 * hour, lastSeenMs: now - hour, seenCount: 9 },
+            { dtc: "P0301", status: "permanent", statusLabel: "permanent", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 50 * hour, lastSeenMs: now - 2 * hour, seenCount: 5 },
+            { dtc: "P0128", status: "freeze-frame", statusLabel: "freeze-frame", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 30 * hour, lastSeenMs: now - 3 * hour, seenCount: 2, freezeFrame: { Speed: "43 mph", SOC: "12%", Engine: "1,840 RPM", Coolant: "148\u00B0F", Load: "31%", Odometer: "48,102 mi" } },
+            { dtc: "P0011", status: "pending", statusLabel: "pending", moduleName: "Powertrain", header: "7E8", firstSeenMs: now - 12 * hour, lastSeenMs: now - hour, seenCount: 1 }
+          ],
+          diagnosticCodeCount: 4,
+          diagnosticCodeStatusCounts: { current: 1, permanent: 1, "freeze-frame": 1, pending: 1 }
+        },
+        demoScenario: "fault"
+      });
       captureDemoPreview();
       renderDemoSurfaces();
       VD.setStatus({ state: "blocked", detail: "Adapter handshake failed after 3 retries — check the OBD dongle is seated." });
       return;
     } else if (scenario === "extreme") {
-      state.appState = Object.assign({}, state.appState, {
-        vehicle: { year: 2017, make: "Chevrolet", model: "Volt Premier Long-Range Special Edition", vin: "1G1RC6S52HU1234567", odometerMiles: 1234567 }
+      VD.setState({ appState: Object.assign({}, state.appState, {
+          vehicle: { year: 2017, make: "Chevrolet", model: "Volt Premier Long-Range Special Edition", vin: "1G1RC6S52HU1234567", odometerMiles: 1234567 }
+        }) });
+      // Copy the charge sessions before retargeting entry [1] so the demo edit lands on a
+      // fresh array rather than mutating the one already parked on state.
+      const extremeChargeSummary = s.chargeSummary && Array.isArray(s.chargeSummary.recentSessions)
+        ? {
+          ...s.chargeSummary,
+          recentSessions: s.chargeSummary.recentSessions.map((entry, i) =>
+            i === 1 ? { ...entry, chargerType: "DC fast (CCS, 150 kW pedestal)", energyKwh: 53.219 } : entry)
+        }
+        : s.chargeSummary;
+      VD.setState({
+        storage: {
+          ...s,
+          sampleCount: 9999999, rawTelemetryCount: 9999999, pidObservationCount: 9999999, sessionCount: 4096,
+          ...(extremeChargeSummary ? { chargeSummary: extremeChargeSummary } : {}),
+          overview: Object.assign({}, s.overview, { maxSpeedKph: 257 })
+        }
       });
-      s.sampleCount = 9999999; s.rawTelemetryCount = 9999999; s.pidObservationCount = 9999999; s.sessionCount = 4096;
-      if (s.chargeSummary && Array.isArray(s.chargeSummary.recentSessions) && s.chargeSummary.recentSessions[1]) {
-        s.chargeSummary.recentSessions[1].chargerType = "DC fast (CCS, 150 kW pedestal)";
-        s.chargeSummary.recentSessions[1].energyKwh = 53.219;
-      }
-      s.overview = Object.assign({}, s.overview, { maxSpeedKph: 257 });
     }
-    state.demoScenario = scenario;
+    VD.setState({ demoScenario: scenario });
     captureDemoPreview();
     renderDemoSurfaces();
     VD.setStatus({ state: "demo", detail: `Demo scenario: ${scenario}.` });

@@ -96,6 +96,13 @@ describe('window.VoltDashboard.state shape', () => {
     // lastSampleAt is the stale-tile clock; it starts at 0 so the first
     // tick reports stale until a real sample arrives.
     expect(state.lastSampleAt).toBe(0);
+    // rafPending is the shared render pass's frame handle (core.ts). It is no longer
+    // guaranteed to be 0 straight after load: a lazy chunk hydrating on boot
+    // (maintenance-panel's loadMaintenanceLog) writes state, which legitimately queues a
+    // repaint. The invariant that matters is that frames are not LEAKED — flushing settles
+    // it back to 0 — so assert that rather than a value that now depends on chunk timing.
+    expect(typeof state.rafPending).toBe('number');
+    window.VoltDashboard.flushRender();
     expect(state.rafPending).toBe(0);
     expect(Array.isArray(state.speedHistory)).toBe(true);
     expect(state.speedHistory.length).toBe(0);

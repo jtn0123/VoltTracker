@@ -113,7 +113,9 @@ import { VD } from "./vd-registry";
 
   // Internal trip-counter state. Lives on the VD.state object so refresh
   // cycles / tests can poke it.
-  state.troubleshooter = state.troubleshooter || {
+  // Built as a local first so `ts` below is non-optional without relying on
+  // assignment-narrowing through the readonly state view.
+  const ts: VoltTroubleshooterState = state.troubleshooter || {
     consecutiveFailedSessions: 0,
     retriesThisBurst: 0,
     autoOpened: false,
@@ -127,9 +129,7 @@ import { VD } from "./vd-registry";
     // can re-render on open even if the telemetry stream is quiescent.
     lastTelemetry: null
   };
-  // Non-optional alias to the bag seeded just above, so every reader below can
-  // touch its fields without re-narrowing the optional state.troubleshooter slot.
-  const ts = state.troubleshooter;
+  VD.setState({ troubleshooter: ts });
 
   // Listener discipline: every addEventListener attached from this file
   // passes { signal } so a single controller.abort() tears all bindings down.

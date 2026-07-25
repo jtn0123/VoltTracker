@@ -674,7 +674,7 @@ function installTelemetryObserver() {
         // high-rate-burst budget (startup-budget.test.js). Only refresh per-sample
         // when the user is actually looking at Diagnostics — the one case where
         // the live sample count / "waiting → flowing" flip needs to be live.
-        if (document.body.dataset.activeView === "diagnostics") {
+        if (state.view === "diagnostics") {
           renderDiagnosticsRecovery();
         }
       } catch (_err) {
