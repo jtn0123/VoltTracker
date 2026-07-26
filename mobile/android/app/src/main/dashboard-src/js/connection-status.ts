@@ -14,6 +14,7 @@ import { formatDuration, formatWhen, gpsText } from "./telemetry";
 // wraps below — those must re-read and re-assign the live registry slots so
 // every wrap in the chain (actions.ts / troubleshooter.ts) composes.
 import { VD } from "./vd-registry";
+import { meters, metersToKm } from "./unit-types";
 
 // Pick up the device locale once at module load so the demo-migrated copy below
 // resolves to a registered translation when one matches navigator.language. The
@@ -510,7 +511,7 @@ function tripRows(status: VoltStatus): StatusRow[] {
 
   const rows: StatusRow[] = [];
   const distanceM = Number(state.sessionDistanceM || 0);
-  if (distanceM > 0) rows.push(["Distance", units.distanceText(distanceM / 1000)]);
+  if (distanceM > 0) rows.push(["Distance", units.distanceText(metersToKm(meters(distanceM)))]);
   const durationMs = Number(telemetry.sessionMs || session.sessionMs || 0);
   if (durationMs > 0) {
     rows.push(["Duration", formatDuration(durationMs)]);

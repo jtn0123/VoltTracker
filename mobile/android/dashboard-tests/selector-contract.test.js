@@ -49,6 +49,13 @@ function referencedIds(text) {
   // backreference \1 keeps the closing quote matched to the opening one.
   const re = /(?:\bel|\bgetElementById)\(\s*(['"])([A-Za-z][\w-]*)\1\s*\)/g;
   for (const match of text.matchAll(re)) ids.add(match[2]);
+  // querySelector("#id …") reads an id just as much as getElementById does, and used to
+  // escape this contract entirely: four call sites scope a descendant query by id
+  // (#mapFrame, #view-map, #scrubStack) and a partial rename would have made each one
+  // silently match nothing. Only the leading #id is extracted — the rest of the selector is
+  // classes and structure, which this contract does not police.
+  const scoped = /\bquerySelector(?:All)?\(\s*(['"])#([A-Za-z][\w-]*)/g;
+  for (const match of text.matchAll(scoped)) ids.add(match[2]);
   return ids;
 }
 
@@ -107,6 +114,34 @@ describe('selector / partial contract', () => {
     expect(recording.closest('.topbar')).toBeNull();
     expect(recording.parentElement).toBe(preferences);
     expect(preferences.lastElementChild).toBe(recording);
+  });
+
+  it('extracts ids from every read form it claims to cover', () => {
+    // The contract is only as wide as this matcher. It silently covered nothing but
+    // el()/getElementById until querySelector("#id …") was added, so pin each shape —
+    // a narrowed matcher would otherwise leave the suite green while checking less.
+    const found = referencedIds(`
+      el("fromEl");
+      el('fromElSingle');
+      document.getElementById("fromGebi");
+      document.querySelector("#fromQuery .child");
+      document.querySelectorAll('#fromQueryAll .child');
+      document.querySelector(".class-only");
+    `);
+    expect([...found].sort()).toEqual(
+      ['fromEl', 'fromElSingle', 'fromGebi', 'fromQuery', 'fromQueryAll'],
+    );
+  });
+
+  it('actually reads the scoped-query ids present in the sources', () => {
+    // Guards the specific sites that motivated widening the matcher: if these stop being
+    // picked up, the widening has regressed and those partials are unprotected again.
+    const all = new Set();
+    for (const { text } of sources) for (const id of referencedIds(text)) all.add(id);
+    for (const id of ['mapFrame', 'view-map', 'scrubStack']) {
+      expect(all.has(id), `${id} should be collected from a querySelector call`).toBe(true);
+      expect(declared.has(id), `#${id} should exist in index.html`).toBe(true);
+    }
   });
 
   it('keeps the runtime-created allowlist honest (no stale entries)', () => {

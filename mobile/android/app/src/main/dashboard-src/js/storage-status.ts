@@ -37,6 +37,7 @@ import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { registerRenderer } from "./render-pass";
 import { storageRollupSignature } from "./render-signatures";
+import { kph } from "./unit-types";
 
 // Module scope (the old IIFE wrapper is redundant under ESM and blocks
 // `export` declarations).
@@ -702,7 +703,7 @@ import { storageRollupSignature } from "./render-signatures";
     setText("reviewTitle", hasSession
       ? `${session.mode || "session"} · ${session.adapterName || "OBD adapter"}`
       : "No real session yet");
-    setText("reviewMaxSpeed", maxSpeed ? units.speedText(maxSpeed) : "--");
+    setText("reviewMaxSpeed", maxSpeed ? units.speedText(kph(maxSpeed)) : "--");
     setText("reviewGpsCount", gpsCount ? `${gpsCount}` : "--");
     setText("reviewPidParse", (parsed || unknown) ? `${parsed}/${parsed + unknown}` : "--");
     setText("reviewInterval", interval ? VD.formatShortDuration(interval) : "--");
@@ -829,7 +830,7 @@ import { storageRollupSignature } from "./render-signatures";
     const hasDriving = Object.keys(stateCounts).some((key) => key.includes("driving"));
     return [
       {
-        title: maxSpeed ? `Max speed ${units.speedText(maxSpeed)}` : "No speed peak yet",
+        title: maxSpeed ? `Max speed ${units.speedText(kph(maxSpeed))}` : "No speed peak yet",
         detail: maxSpeed ? "Computed from accepted OBD speed samples for the latest session." : "Speed stays blank until accepted OBD speed samples are stored."
       },
       {
@@ -1186,7 +1187,7 @@ import { storageRollupSignature } from "./render-signatures";
     toggleHidden("insightsEmptyState", hasInsightContent());
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
-    setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(Number(overview.maxSpeedKph)) : "--");
+    setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(kph(Number(overview.maxSpeedKph))) : "--");
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
     renderThisTripCard(route, routeDistance);

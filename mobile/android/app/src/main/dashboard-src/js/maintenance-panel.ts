@@ -17,6 +17,7 @@
 // eager bundle and every entry point it publishes crosses the chunk boundary
 // through the VD registry (see vd-registry.ts).
 import { VD } from "./vd-registry";
+import { miles, milesToKm } from "./unit-types";
 (function () {
   "use strict";
 
@@ -38,7 +39,7 @@ import { VD } from "./vd-registry";
     const vehicleKm = Number(vehicle.odometerKm);
     if (Number.isFinite(vehicleKm) && vehicleKm > 0) return vehicleKm;
     const vehicleMiles = Number(vehicle.odometerMiles);
-    if (Number.isFinite(vehicleMiles) && vehicleMiles > 0) return vehicleMiles * 1.609344;
+    if (Number.isFinite(vehicleMiles) && vehicleMiles > 0) return milesToKm(miles(vehicleMiles));
     return null;
   }
 
@@ -391,7 +392,7 @@ import { VD } from "./vd-registry";
     if (!text) return { km: null, invalid: false };
     const value = Number(text);
     if (!Number.isFinite(value) || value <= 0) return { km: null, invalid: true };
-    return { km: units.distanceUnit() === "mi" ? value * 1.609344 : value, invalid: false };
+    return { km: units.distanceUnit() === "mi" ? milesToKm(miles(value)) : value, invalid: false };
   }
 
   Object.assign(VD, {

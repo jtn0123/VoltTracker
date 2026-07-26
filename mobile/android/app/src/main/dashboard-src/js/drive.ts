@@ -24,6 +24,7 @@ import { t } from "./i18n";
 import { numberSeriesSignature } from "./render-signatures";
 
 import { VD } from "./vd-registry";
+import { meters, metersToKm } from "./unit-types";
 
 type DriveChip = {
   tone: DataToneValue;
@@ -143,7 +144,7 @@ type ChartPoint = {
       const meta: string[] = [];
       if (samples) meta.push(samples.toLocaleString() + (samples === 1 ? " sample" : " samples"));
       if (runtimeMs) meta.push(fmtDuration(runtimeMs));
-      if (distance) meta.push(units.distanceText(distance / 1000));
+      if (distance) meta.push(units.distanceText(metersToKm(meters(distance))));
       // hasLiveEvidence can already be true from lastSampleAt / a populated
       // history buffer before any counted sample/runtime/distance exists, leaving
       // meta empty. renderDriveNowChips would then setText("driveRecordingMeta",

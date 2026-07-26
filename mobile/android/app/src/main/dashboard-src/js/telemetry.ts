@@ -22,6 +22,7 @@ import { prefs, units } from "./prefs";
 import { setStorage } from "./storage-status";
 import { initialTelemetryState } from "./telemetry-state";
 import { VD } from "./vd-registry";
+import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
 
   type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
@@ -32,6 +33,19 @@ import { VD } from "./vd-registry";
   // omission is how an old road speed could remain visible after foreground catch-up. Metadata and
   // forward-compatible unknown keys still merge normally, while every known sensor field is cleared
   // before the new sample is applied.
+  //
+  // Cumulative totals (odometerKm/odometerMiles, hvBatteryChargeCount, lastChargeEnergyWh)
+  // are cleared here like every other reading, and that is DECIDED (2026-07-25) rather than
+  // incidental. A total is still a measurement the car reports; when it stops reporting one,
+  // the honest readout is "--", not the last number we happened to see. Keeping totals sticky
+  // would recreate, for exactly the fields a user is most likely to trust, the stale-value
+  // behaviour this list exists to prevent — an odometer frozen at a plausible number is worse
+  // than a blank one, because nothing about it looks wrong. It also matches how odometerMiles,
+  // capacityAh, sohPct and vin were already treated before this list was completed.
+  //
+  // If a total should ever persist across a dropout, that belongs in the RENDERER as an
+  // explicit "last known, N minutes ago" affordance, not as an exemption here that silently
+  // presents old data as current.
   //
   // This list must stay equal to "every key native writes into a live sample, minus the sample
   // envelope and the session-health counters" — native-sample-contract.test.js derives that from
@@ -152,7 +166,7 @@ import { VD } from "./vd-registry";
   export function formatDistance(meters: unknown) {
     const m = Number(meters || 0);
     if (!Number.isFinite(m) || m <= 0) return "--";
-    const d = units.distanceMeters(m);
+    const d = units.distanceMeters(metersOf(m));
     // Group thousands ("12,345 mi") to match the odometer readout. Only rewrite
     // all-digit values: short distances come back as "4.3" (toFixed) and must
     // keep their trailing decimal.
@@ -1101,7 +1115,7 @@ import { VD } from "./vd-registry";
     // tracking the other system but stays hidden until the hero is tapped (C2:
     // preferred-unit-only, conversion on tap — see bindSpeedAltReveal).
     const metric = units.system() === "metric";
-    const primary = hasSpeed ? units.speed(kph) : null;
+    const primary = hasSpeed ? units.speed(kphOf(kph)) : null;
     const altValue = hasSpeed ? Math.round(metric ? kph * 0.621371 : kph) : null;
     const altUnit = metric ? "mph" : "km/h";
     setText("speedValue", primary ? primary.value : null);
@@ -1137,7 +1151,7 @@ import { VD } from "./vd-registry";
       "voltageValue",
       t.voltage == null || t.voltage === "" ? "--" : `${Number(t.voltage).toFixed(2)} V`
     );
-    setOptionalLiveText("coolantValue", t.coolantC != null ? units.tempText(Number(t.coolantC)) : "--");
+    setOptionalLiveText("coolantValue", t.coolantC != null ? units.tempText(celsius(Number(t.coolantC))) : "--");
     setOptionalLiveText("loadValue", t.loadPct != null ? `${t.loadPct}%` : "--");
     setOptionalLiveText("throttleValue", t.throttlePct != null ? `${t.throttlePct}%` : "--");
     const lat = Number(t.latitude);
@@ -1184,9 +1198,9 @@ import { VD } from "./vd-registry";
     liveNum("moreMotorB", t.motorBPowerKw, (n) => `${n.toFixed(1)} kW`);
     const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
     setOptionalLiveText("moreGear", gear || "--");
-    liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(n));
-    liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(n));
-    liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(n));
+    liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(km(n)));
+    liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(celsius(n)));
+    liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
     liveNum("moreTorque", t.engineTorqueNm, (n) => `${Math.round(n)} Nm`);
 
@@ -1201,7 +1215,7 @@ import { VD } from "./vd-registry";
     setText(
       "driveSocSub",
       evRangeKm != null && evRangeKm > 0
-        ? `≈ ${units.distanceText(evRangeKm)} EV range`
+        ? `≈ ${units.distanceText(km(evRangeKm))} EV range`
         : "state of charge"
     );
     // Pass the raw (possibly NaN) value through; setMeter clears the meter to an
@@ -1213,7 +1227,7 @@ import { VD } from "./vd-registry";
     if (socMeterEl) {
       socMeterEl.dataset.level = soc == null ? "" : soc <= 15 ? "bad" : soc <= 30 ? "warn" : "ok";
     }
-    setText("drivePackTempValue", batteryTemp != null ? units.tempText(batteryTemp) : "--");
+    setText("drivePackTempValue", batteryTemp != null ? units.tempText(celsius(batteryTemp)) : "--");
     const power = finiteNum(t.powerKw);
     // Typographic minus (U+2212) for negatives so the hero POWER readout matches
     // the signed pack-current/pack-power tiles below it — the ASCII hyphen has a

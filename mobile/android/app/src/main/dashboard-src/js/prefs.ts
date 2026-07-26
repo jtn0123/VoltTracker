@@ -17,6 +17,8 @@
 // importing those modules from here would flip the bundle's side-effect
 // evaluation order. See vd-registry.ts for the policy.
 import { VD } from "./vd-registry";
+import { metersToKm, milesToKm } from "./unit-types";
+import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
 
   const PREFIX = "vt.pref.";
   const keyListeners: Record<string, Array<(value: unknown) => void>> = {};
@@ -223,18 +225,26 @@ import { VD } from "./vd-registry";
   // Central unit formatting. Data crosses the bridge in SI-ish units (speed in
   // km/h, distance in km/m, temp in °C, efficiency in mi/kWh); renderers call
   // these so a single `units` preference flips every surface consistently.
+  // Kept at this rounded value deliberately. unit-types.ts carries the exact international
+  // mile (1/1.609344 = 0.6213711922…); swapping this to it shifts formatted output in the
+  // seventh decimal, which is invisible on screen but can tip a rounding boundary in a
+  // snapshot assertion. The display path keeps its historical constant; conversions that
+  // feed CALCULATIONS use the exact helpers in unit-types.ts.
   const KM_TO_MI = 0.621371;
 
   function unitSystem(): "imperial" | "metric" {
     return get<string>("units", "imperial") === "metric" ? "metric" : "imperial";
   }
 
-  function speed(kph: number): { value: number; unit: string } {
+  // These take branded quantities so a caller cannot hand `speed()` a value in mph, or
+  // `distanceKm()` a value in miles or metres — three of the entry points below differ only
+  // by the unit of their argument, and all of them used to accept a bare `number`.
+  function speed(kph: Kph): { value: number; unit: string } {
     const metric = unitSystem() === "metric";
     return { value: Math.round(metric ? kph : kph * KM_TO_MI), unit: metric ? "km/h" : "mph" };
   }
 
-  function distanceKm(km: number): { value: string; unit: string } {
+  function distanceKm(km: Km): { value: string; unit: string } {
     const metric = unitSystem() === "metric";
     const v = metric ? km : km * KM_TO_MI;
     // Sub-0.1 trips need two decimals: toFixed(1) rounds a real 0.03 mi trip to
@@ -242,7 +252,7 @@ import { VD } from "./vd-registry";
     return { value: v < 0.1 ? v.toFixed(2) : v < 10 ? v.toFixed(1) : String(Math.round(v)), unit: metric ? "km" : "mi" };
   }
 
-  function temp(celsius: number): { value: number; unit: string } {
+  function temp(celsius: Celsius): { value: number; unit: string } {
     const metric = unitSystem() === "metric";
     return { value: Math.round(metric ? celsius : celsius * 9 / 5 + 32), unit: metric ? "°C" : "°F" };
   }
@@ -259,22 +269,22 @@ import { VD } from "./vd-registry";
   export const units = {
     system: unitSystem,
     speed,
-    speedText: (kph: number) => {
-      const s = speed(kph);
+    speedText: (value: Kph) => {
+      const s = speed(value);
       return `${s.value} ${s.unit}`;
     },
     speedUnit: () => (unitSystem() === "metric" ? "km/h" : "mph"),
     distanceKm,
-    distanceText: (km: number) => {
-      const d = distanceKm(km);
+    distanceText: (value: Km) => {
+      const d = distanceKm(value);
       return `${d.value} ${d.unit}`;
     },
-    distanceMeters: (meters: number) => distanceKm(meters / 1000),
-    distanceMiles: (miles: number) => distanceKm(miles / KM_TO_MI),
+    distanceMeters: (value: Meters) => distanceKm(metersToKm(value)),
+    distanceMiles: (value: Miles) => distanceKm(milesToKm(value)),
     distanceUnit: () => (unitSystem() === "metric" ? "km" : "mi"),
     temp,
-    tempText: (celsius: number) => {
-      const t = temp(celsius);
+    tempText: (value: Celsius) => {
+      const t = temp(value);
       return `${t.value}${t.unit}`;
     },
     efficiencyText,

@@ -863,10 +863,48 @@ jobs:
           # state never leaks into the cache.
           emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu swiftshader_indirect
           # The shell smoke (logcat contract) plus the instrumented twin
-          # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator.
-          script: |
-            bash mobile/android/scripts/emulator-smoke.sh
-            cd mobile/android && ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest
+          # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator, wrapped
+          # in a streaming logcat so the instrumented phase is recorded too.
+          #
+          # ONE LINE, ON PURPOSE. This action runs `script:` one line at a time, each through
+          # a separate `/usr/bin/sh -c` (dash, not bash). Nothing survives between lines — no
+          # variable, no trap, no background PID — and a multi-line construct cannot even
+          # parse, because line one is handed over as a complete program. Everything that
+          # needs any of those lives in emulator-session.sh, which runs as a single process.
+          script: bash mobile/android/scripts/emulator-session.sh
+      # Host-side evidence for the emulator-death flake. The guest logcat cannot explain a
+      # qemu process that is killed from outside, so capture what can: OOM-killer verdicts
+      # and the memory picture at the time. Runs only on failure and never fails the job —
+      # its whole job is to make the NEXT occurrence diagnosable instead of opaque.
+      #
+      # Host memory pressure is already the LEAST likely explanation and is not worth
+      # "fixing" pre-emptively: this repo is public, so ubuntu-latest is 4 vCPU / 16 GB,
+      # while the peak here is roughly qemu 2.5 GB + Gradle 2 GB (-Xmx2048m) + Kotlin
+      # daemon ~1 GB. That is ~6.5 GB of 16. The dmesg grep below exists to confirm or kill
+      # that theory with evidence rather than to act on it — if it comes back empty again,
+      # the cause is inside qemu or the snapshot restore, not the host running out of room.
+      - name: Capture host diagnostics after an emulator failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          {
+            echo "### Emulator failure — host diagnostics"
+            echo
+            echo '```'
+            echo "== memory =="
+            free -m
+            echo
+            echo "== cpu =="
+            nproc
+            echo
+            echo "== kernel: OOM / qemu kills =="
+            sudo dmesg --time-format iso 2>/dev/null | grep -iE 'killed process|out of memory|oom-kill|qemu' | tail -30 \
+              || echo "(no OOM/qemu lines in dmesg)"
+            echo
+            echo "== adb devices =="
+            adb devices -l 2>&1 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -874,6 +912,7 @@ jobs:
           name: emulator-smoke-artifacts
           path: |
             mobile/android/build/emulator-smoke-logcat.txt
+            mobile/android/build/emulator-session-logcat.txt
             mobile/android/build/emulator-smoke/
           if-no-files-found: ignore
       - name: Report job wall-clock time

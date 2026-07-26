@@ -279,9 +279,15 @@ const DELEGATION_AND_CONFIG_KEYS = new Set([
 // Counts, not just names, so a second read of an already-listed key still has to be argued.
 const EXPECTED_DATASET_STATE_READ_KEYS = Object.freeze({
   // --- element-lifecycle guards ---------------------------------------------------------
-  // The element IS the thing being guarded: "is THIS button mid-action", "has THIS <link>
-  // finished loading", "is THIS scrubber already bound". Moving these into `state` would mean
-  // keying global state by element identity, which is strictly worse than the attribute.
+  // DECIDED (2026-07-25): these stay on the element. The element IS the thing being guarded —
+  // "is THIS button mid-action", "has THIS <link> finished loading", "is THIS scrubber
+  // already bound". Holding them centrally would mean keying global state by element
+  // identity (a WeakMap keyed on nodes), which is strictly worse than the attribute: it
+  // reintroduces the module-level mutable bag Phase 1 removed, and it has to be pruned as
+  // elements come and go, whereas an attribute dies with its node.
+  //
+  // Closed, not deferred. The counterargument would have to show a case where the guard
+  // outlives its element, which is exactly the case these do not have.
   busy: 2, // actions.ts#withBusy, connection-tools.ts
   voltLoaded: 1, // lazy-styles.ts — stylesheet load-once
   scrubBound: 1, // scrubber.ts — listener bind-once
@@ -290,9 +296,16 @@ const EXPECTED_DATASET_STATE_READ_KEYS = Object.freeze({
   // It is not a decision input: delete the read and behaviour is unchanged, only write volume.
   state: 1,
   // --- pagination depth ------------------------------------------------------------------
-  // How far the user has expanded a list, colocated with the list element that owns it. Open
-  // design question — `state` would work, but the depth is meaningless without the list, and
-  // it resets with the list on re-render, which is the behaviour we want.
+  // DECIDED (2026-07-25): these stay on the element. `state` would work, but the depth is
+  // meaningless without the list it belongs to, and colocating it gives the lifetime we
+  // actually want — the expansion resets when the list is rebuilt, which is the desired
+  // behaviour rather than something to work around. Holding it in `state` would mean
+  // remembering to clear it on every path that replaces the list, and a stale expansion
+  // depth surviving a refresh is a bug this placement cannot have.
+  //
+  // This is no longer an open question. Reopen it only with a case that beats the lifetime
+  // argument, not on general "state should hold everything" grounds — the same reasoning
+  // applies to the lifecycle guards above, and the two should move together or not at all.
   mapSessionLimit: 1, // map-session-list.ts
   sessionLimit: 1, // storage-status.ts
   // --- per-row trip metadata --------------------------------------------------------------
