@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.33.0 (2026-07-27)
+
+### ✳️ New
+
+- **dashboard**: Brand unit quantities, widen the selector contract, close deferred decisions
+  ([#360](https://github.com/jtn0123/VoltTracker/pull/360),
+  [`b22389b`](https://github.com/jtn0123/VoltTracker/commit/b22389bc9dbd4032a31a40dffbd79c37f8263f5a))
+
+
 ## v0.32.5 (2026-07-25)
 
 ### 🔺 Fix
