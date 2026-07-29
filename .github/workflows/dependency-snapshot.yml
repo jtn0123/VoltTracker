@@ -36,7 +36,16 @@ jobs:
       - name: Gradle dependency updates
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon dependencyUpdates -Drevision=release
+          # ben-manes.versions calls Task.project at execution time, which the
+          # Gradle configuration cache disallows, and it does not support
+          # parallel project execution. Both must be off for this task or the
+          # build fails outright:
+          #   invocation of 'Task.project' at execution time is unsupported
+          #   with the configuration cache
+          #   Parallel project execution is not supported, run this task with
+          #   --no-parallel
+          ./gradlew --no-daemon --no-configuration-cache --no-parallel \
+            dependencyUpdates -Drevision=release
       - name: npm dashboard dependency snapshot
         run: |
           cd dashboard-tests
