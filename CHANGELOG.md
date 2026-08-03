@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.34.0 (2026-08-03)
+
+### 🔷 Changed
+
+- Run dependencyUpdates without the configuration cache
+  ([#361](https://github.com/jtn0123/VoltTracker/pull/361),
+  [`67f0f4e`](https://github.com/jtn0123/VoltTracker/commit/67f0f4ef4158878fb2d2ecd501a65be56751ca60))
+
+### ✳️ New
+
+- **ui**: Compose rewrite of all six dashboard screens + screenshot pipeline
+  ([#366](https://github.com/jtn0123/VoltTracker/pull/366),
+  [`98c99b0`](https://github.com/jtn0123/VoltTracker/commit/98c99b0229faabf72e528ec06edf375454bcf812))
+
+
 ## v0.33.0 (2026-07-27)
 
 ### ✳️ New
