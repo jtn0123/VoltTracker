@@ -8,6 +8,9 @@ plugins {
     alias(libs.plugins.spotless) apply false
     alias(libs.plugins.test.retry) apply false
     alias(libs.plugins.detekt) apply false
+    // Compose compiler plugin — required by Kotlin 2.0+ when buildFeatures.compose is on.
+    // Its version must track the Kotlin that AGP's built-in support embeds (see the catalog).
+    alias(libs.plugins.kotlin.compose) apply false
     id "com.github.ben-manes.versions" version "0.54.0"
 }
 

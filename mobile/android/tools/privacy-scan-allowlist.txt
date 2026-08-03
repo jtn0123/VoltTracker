@@ -11,6 +11,10 @@
 # Fabricated Los Angeles route used only by the archived standalone dashboard demo.
 path:mobile/android/docs/archive/efficiency-demo.html
 
+# Fabricated Los Feliz loop for the Compose Map screen's demo/preview state.
+# Hand-authored for the demo — not copied from device logs.
+path:mobile/android/app/src/main/kotlin/com/volttracker/obdpoc/ui/map/DemoRoute.kt
+
 # Synthetic route/unit-test coordinates. These are not copied from device logs.
 path:mobile/android/app/src/test/java/com/volttracker/obdpoc/materialize/TripMaterializerTest.kt
 path:mobile/android/app/src/test/java/com/volttracker/obdpoc/data/QueryPlanIndexTest.kt

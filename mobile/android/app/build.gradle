@@ -4,6 +4,8 @@ plugins {
     // Kotlin is the language for Android production code. AGP 9.0+ has built-in Kotlin
     // support enabled by default, so no separate Kotlin plugin is applied. See CONTRIBUTING.md.
     id "com.android.application"
+    // Compose compiler (required for buildFeatures.compose with Kotlin 2.0+).
+    id "org.jetbrains.kotlin.plugin.compose"
 }
 
 apply plugin: "com.diffplug.spotless"
@@ -170,6 +172,10 @@ android {
 
     buildFeatures {
         buildConfig = true
+        // Jetpack Compose for the native dashboard rewrite (ui/ package). AGP 9
+        // supplies Kotlin support; the Compose compiler comes from the separately
+        // applied org.jetbrains.kotlin.plugin.compose plugin (plugins block above).
+        compose = true
     }
 
     testOptions {
@@ -181,6 +187,16 @@ android {
             jacoco.includeNoLocationClasses = true
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
             jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
+            // Roborazzi (Compose screenshot tests): `-ProborazziRecord` writes/updates the
+            // PNGs under build/outputs/roborazzi instead of comparing against them.
+            if (rootProject.hasProperty("roborazziRecord")) {
+                systemProperty "roborazzi.test.record", "true"
+            }
+            // Map screenshot tests fetch real CARTO basemap tiles only when
+            // `-PvoltLiveTiles` is passed; CI stays deterministic/offline.
+            if (rootProject.hasProperty("voltLiveTiles")) {
+                systemProperty "volt.screenshot.liveTiles", "true"
+            }
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {
                 systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
             }
@@ -233,6 +249,22 @@ apply from: "jacoco.gradle"
 
 dependencies {
     implementation libs.androidx.activity
+    // Jetpack Compose — the native dashboard rewrite (com.volttracker.obdpoc.ui).
+    // The BOM pins every androidx.compose artifact to one tested version set.
+    implementation platform(libs.compose.bom)
+    implementation libs.compose.ui
+    implementation libs.compose.ui.graphics
+    implementation libs.compose.foundation
+    implementation libs.compose.material3
+    implementation libs.compose.material.icons.extended
+    implementation libs.compose.ui.tooling.preview
+    implementation libs.androidx.activity.compose
+    // Renders @Preview composables in Android Studio; debug-only so release
+    // builds never package the tooling runtime.
+    debugImplementation libs.compose.ui.tooling
+    // Registers ComponentActivity in the debug manifest so createComposeRule()
+    // has a host activity under Robolectric (JVM screenshot tests).
+    debugImplementation libs.compose.ui.test.manifest
     // FileProvider, for handing the data-backup file to the Android share sheet.
     implementation libs.androidx.core
     // Branded launch splash (C6): Theme.VoltTracker.Splash + installSplashScreen()
@@ -246,6 +278,14 @@ dependencies {
     testImplementation libs.json
     // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
     testImplementation libs.robolectric
+    // Roborazzi renders Compose screens headlessly (Robolectric native graphics) and
+    // writes PNG screenshots — the JVM-only "after" screenshot pipeline for the
+    // Compose dashboard rewrite. No emulator needed.
+    testImplementation platform(libs.compose.bom)
+    testImplementation libs.compose.ui.test.junit4
+    testImplementation libs.roborazzi
+    testImplementation libs.roborazzi.compose
+    testImplementation libs.roborazzi.junit.rule
     // Instrumented smoke (src/androidTest): launches MainActivity on the emulator and waits
     // for the dashboard JS handshake. Run by the emulator-smoke CI job, not the JVM suite.
     androidTestImplementation libs.androidx.test.core

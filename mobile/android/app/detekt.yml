@@ -104,6 +104,9 @@ style:
   # a value's meaning isn't local (see ObdProbes, EnhancedPidProfiles).
   MagicNumber:
     active: false
+  # @Preview composables are entry points for Android Studio's preview pane, not dead code.
+  UnusedPrivateMember:
+    ignoreAnnotated: ['Preview']
   # ktlint (Spotless) owns formatting, including line length.
   MaxLineLength:
     active: false
@@ -122,3 +125,8 @@ style:
     active: false
   UseRequire:
     active: false
+
+naming:
+  # @Composable functions are conventionally PascalCase (Compose UI screens/components).
+  FunctionNaming:
+    ignoreAnnotated: ['Composable']
