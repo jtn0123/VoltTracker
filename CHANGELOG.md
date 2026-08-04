@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.36.0 (2026-08-04)
+
+### ✳️ New
+
+- **update**: In-app auto-update from GitHub Releases
+  ([#368](https://github.com/jtn0123/VoltTracker/pull/368),
+  [`c3624a2`](https://github.com/jtn0123/VoltTracker/commit/c3624a259c9696ffad58bb588fe1505efda9e3ce))
+
+
 ## v0.35.0 (2026-08-04)
 
 ### ✳️ New
