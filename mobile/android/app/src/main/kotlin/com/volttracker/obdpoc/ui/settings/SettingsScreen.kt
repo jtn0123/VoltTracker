@@ -39,6 +39,7 @@ fun SettingsScreen(
     state: SettingsUiState,
     modifier: Modifier = Modifier,
     onSelectTab: (VoltTab) -> Unit = {},
+    onOpenClassicDashboard: () -> Unit = {},
 ) {
     Box(
         modifier =
@@ -65,6 +66,8 @@ fun SettingsScreen(
             DisplayGroup(state)
             Spacer(Modifier.height(14.dp))
             DataGroup(state)
+            Spacer(Modifier.height(14.dp))
+            ClassicDashboardGroup(onOpenClassicDashboard)
             Spacer(Modifier.height(22.dp))
             Text(
                 text = state.versionLabel,
@@ -280,6 +283,23 @@ private fun DataGroup(state: SettingsUiState) {
             style = VoltType.caption,
             color = VoltColors.textTertiary,
         )
+    }
+}
+
+@Composable
+private fun ClassicDashboardGroup(onOpenClassicDashboard: () -> Unit) {
+    VoltPanel {
+        VoltLabel("Classic dashboard")
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text =
+                "Trips, charge history, insights, and full settings still live in the " +
+                    "classic dashboard while the new app fills in.",
+            style = VoltType.caption,
+            color = VoltColors.textSecondary,
+        )
+        Spacer(Modifier.height(14.dp))
+        VoltButton(text = "Open classic dashboard", onClick = onOpenClassicDashboard)
     }
 }
 

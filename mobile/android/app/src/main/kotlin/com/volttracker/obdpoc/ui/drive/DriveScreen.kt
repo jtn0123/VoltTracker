@@ -35,6 +35,7 @@ import com.volttracker.obdpoc.ui.components.PowerBar
 import com.volttracker.obdpoc.ui.components.SignedBars
 import com.volttracker.obdpoc.ui.components.Sparkline
 import com.volttracker.obdpoc.ui.components.VoltBottomNav
+import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltStat
@@ -51,6 +52,8 @@ fun DriveScreen(
     state: DriveUiState,
     modifier: Modifier = Modifier,
     onSelectTab: (VoltTab) -> Unit = {},
+    onConnect: () -> Unit = {},
+    onStartDemo: () -> Unit = {},
 ) {
     var detailed by remember(state.detailed) { mutableStateOf(state.detailed) }
     Box(
@@ -72,6 +75,11 @@ fun DriveScreen(
             SpeedHero(state)
             Spacer(Modifier.height(14.dp))
             StatusChips(state)
+            // Hidden mid-handshake so a second tap can't start a replacement session.
+            if (!state.connected && !state.connecting) {
+                Spacer(Modifier.height(18.dp))
+                ConnectRow(onConnect = onConnect, onStartDemo = onStartDemo)
+            }
             Spacer(Modifier.height(16.dp))
             DensityToggle(detailed = detailed, onChange = { detailed = it })
             Spacer(Modifier.height(22.dp))
@@ -166,6 +174,21 @@ private fun StatusChips(state: DriveUiState) {
         state.gpsAccuracyFt?.let {
             VoltStatusPill(text = "±$it ft", dotColor = VoltColors.textTertiary)
         }
+    }
+}
+
+/** Offered while no session is live: reconnect the last adapter, or preview with demo data. */
+@Composable
+private fun ConnectRow(
+    onConnect: () -> Unit,
+    onStartDemo: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+    ) {
+        VoltButton(text = "Connect", accent = true, onClick = onConnect)
+        VoltButton(text = "▶ Demo", onClick = onStartDemo)
     }
 }
 
@@ -366,8 +389,8 @@ private fun MoreSignalsGrid(state: DriveUiState) {
         VoltLabel("More signals")
         Spacer(Modifier.height(14.dp))
         Row(modifier = Modifier.fillMaxWidth()) {
-            KeyValue("Motor A", "${state.motorATempF}°F", modifier = Modifier.weight(1f))
-            KeyValue("Motor B", "${state.motorBTempF}°F", modifier = Modifier.weight(1f))
+            KeyValue("Motor A", String.format(Locale.US, "%.1f kW", state.motorAKw), modifier = Modifier.weight(1f))
+            KeyValue("Motor B", String.format(Locale.US, "%.1f kW", state.motorBKw), modifier = Modifier.weight(1f))
             KeyValue("Trans", "${state.transTempF}°F", modifier = Modifier.weight(1f))
             KeyValue("Torque", "${state.torqueNm} Nm", modifier = Modifier.weight(1f))
         }

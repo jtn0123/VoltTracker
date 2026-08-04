@@ -1,0 +1,13 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <!-- Debug-only launch handle for the CI emulator smoke: the harness must
+             shell-start the classic WebView dashboard to assert its JS handshake,
+             but MainActivity is not exported in the release manifest and API 34
+             rejects both plain shell `am start` and `run-as` for non-exported
+             activities. The alias exists only in debug builds. -->
+        <activity-alias
+            android:name=".DebugClassicDashboard"
+            android:exported="true"
+            android:targetActivity=".MainActivity" />
+    </application>
+</manifest>

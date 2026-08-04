@@ -34,7 +34,10 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PKG="com.volttracker.obdpoc"
-MAIN_ACTIVITY="$PKG/.MainActivity"
+# Debug-only exported alias for the non-exported classic dashboard activity —
+# see app/src/debug/AndroidManifest.xml. The smoke installs the debug APK, so
+# the alias is always present here.
+MAIN_ACTIVITY="$PKG/.DebugClassicDashboard"
 # Full component path: ObdService moved to the service/ subpackage in the A3 restructure.
 OBD_SERVICE="$PKG/.service.ObdService"
 ACTION_DEMO="$PKG.action.DEMO"

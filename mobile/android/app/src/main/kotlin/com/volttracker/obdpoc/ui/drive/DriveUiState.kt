@@ -9,6 +9,8 @@ enum class DriveMode { EV, GAS }
  */
 data class DriveUiState(
     val connected: Boolean = false,
+    /** A connect/scan handshake is underway — session-start actions must wait. */
+    val connecting: Boolean = false,
     val statusLabel: String = "No adapter",
     /** Signed pack power in kW: positive = drive (discharge), negative = regen. */
     val powerKw: Double = 0.0,
@@ -34,8 +36,9 @@ data class DriveUiState(
     val gpsAccuracyFt: Int? = null,
     val ambientF: Int = 0,
     val gear: String = "--",
-    val motorATempF: Int = 0,
-    val motorBTempF: Int = 0,
+    /** Motor A/B electrical power in kW — what the enhanced PIDs actually report. */
+    val motorAKw: Double = 0.0,
+    val motorBKw: Double = 0.0,
     val transTempF: Int = 0,
     val torqueNm: Int = 0,
     val oilLifePct: Int = 0,
@@ -163,8 +166,8 @@ data class DriveUiState(
                 gpsAccuracyFt = 13,
                 ambientF = 68,
                 gear = "D",
-                motorATempF = 104,
-                motorBTempF = 98,
+                motorAKw = 14.2,
+                motorBKw = 3.1,
                 transTempF = 141,
                 torqueNm = 118,
                 oilLifePct = 87,

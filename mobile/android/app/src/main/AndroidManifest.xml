@@ -51,8 +51,9 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
+        <!-- Native Compose dashboard — the launcher experience. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".ComposeDashboardActivity"
             android:exported="true"
             android:theme="@style/Theme.VoltTracker.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
@@ -60,6 +61,16 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+        </activity>
+
+        <!-- Classic WebView dashboard. Still hosts trips/history/settings and the
+             connection troubleshooter; reachable from the Compose Settings tab and
+             the home-screen widget until the native screens absorb those flows. -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="false"
+            android:theme="@style/Theme.VoltTracker.Splash"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
         </activity>
 
         <service
