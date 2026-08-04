@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.35.0 (2026-08-04)
+
+### ✳️ New
+
+- **ui**: Make the Compose dashboard the launcher, live-wired to ObdService
+  ([#367](https://github.com/jtn0123/VoltTracker/pull/367),
+  [`f5bd9fc`](https://github.com/jtn0123/VoltTracker/commit/f5bd9fc9edf2413f69526f313b5d605c0a6676cb))
+
+
 ## v0.34.0 (2026-08-03)
 
 ### 🔷 Changed
