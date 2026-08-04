@@ -150,6 +150,39 @@ class LiveUiStateStoreTest {
     }
 
     @Test
+    fun updateStateMutatorTouchesOnlyItsSettingsFields() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))
+
+        store.onUpdateState("v0.36.0 is available", "v0.36.0", 43)
+        val settings = store.state.value.settings
+
+        assertEquals("v0.36.0 is available", settings.updateStatusLabel)
+        assertEquals("v0.36.0", settings.updateAvailableTag)
+        assertEquals(43, settings.updateDownloadPercent ?: -1)
+        // Unrelated settings state is preserved.
+        assertTrue(settings.connected)
+        assertEquals("OBDLink MX+", settings.adapterLabel)
+
+        store.onUpdateState(null, null, null)
+        val cleared = store.state.value.settings
+        assertEquals(null, cleared.updateStatusLabel)
+        assertEquals(null, cleared.updateAvailableTag)
+        assertEquals(null, cleared.updateDownloadPercent)
+    }
+
+    @Test
+    fun versionLabelMutatorTouchesOnlyTheVersionLine() {
+        val store = LiveUiStateStore()
+        store.onUpdateState("Up to date", null, null)
+
+        store.onVersionLabel("Volt Tracker 0.36.0-abc1234")
+
+        assertEquals("Volt Tracker 0.36.0-abc1234", store.state.value.settings.versionLabel)
+        assertEquals("Up to date", store.state.value.settings.updateStatusLabel)
+    }
+
+    @Test
     fun statusUpdatesConnectionAcrossAllScreens() {
         val store = LiveUiStateStore()
         store.onStatus(
@@ -197,6 +230,25 @@ class LiveUiStateStoreTest {
         // Low rpm with no vehicleState keeps the prior mode rather than guessing.
         store.onTelemetry(JSONObject().put("updatedAt", 2_000L).put("rpm", 0))
         assertEquals(DriveMode.GAS, store.state.value.drive.mode)
+    }
+
+    @Test
+    fun nullAndNonNumericFieldsRetainPriorValues() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample())
+        store.onTelemetry(
+            JSONObject()
+                .put("updatedAt", 2_000L)
+                .put("soc", JSONObject.NULL)
+                .put("packVoltage", "not-a-number")
+                // No controlModuleVoltage: auxVolts falls back to base "voltage".
+                .put("voltage", 12.6),
+        )
+        val drive = store.state.value.drive
+
+        assertEquals(62.0, drive.socPercent, 1e-9) // JSON null → retained
+        assertEquals(364.0, drive.packVolts, 1e-9) // NaN → retained
+        assertEquals(12.6, drive.auxVolts, 1e-9) // fallback key used
     }
 
     @Test

@@ -21,6 +21,8 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.update.UpdateCoordinator
+import com.volttracker.obdpoc.update.UpdateManager
 import org.json.JSONObject
 
 /**
@@ -38,6 +40,9 @@ class ComposeDashboardActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var deviceCatalog: DeviceCatalog
     private lateinit var autoConnect: AutoConnectController
+
+    // Process-scoped: survives configuration recreation (see UpdateCoordinator).
+    private lateinit var updates: UpdateCoordinator
 
     private val serviceReceiver =
         object : BroadcastReceiver() {
@@ -64,6 +69,11 @@ class ComposeDashboardActivity : ComponentActivity() {
         prefs = getSharedPreferences(AppPrefs.FILE, MODE_PRIVATE)
         deviceCatalog = DeviceCatalog(this, prefs)
         autoConnect = AutoConnectController(prefs, deviceCatalog)
+        updates = UpdateCoordinator.shared(this)
+        store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
+        // A recreated Activity starts with a fresh store; the coordinator's
+        // retained result (an offered build, say) must not be forgotten.
+        updates.lastResult?.let(::publishUpdateResult)
         setContent {
             val state by store.state.collectAsState()
             VoltApp(
@@ -71,6 +81,8 @@ class ComposeDashboardActivity : ComponentActivity() {
                 onOpenClassicDashboard = ::openClassicDashboard,
                 onConnect = ::connectLastAdapter,
                 onStartDemo = { startObd(ObdService.ACTION_DEMO, null, null) },
+                onCheckForUpdate = ::checkForUpdate,
+                onInstallUpdate = ::installUpdate,
             )
         }
     }
@@ -89,6 +101,9 @@ class ComposeDashboardActivity : ComponentActivity() {
         replayServiceSnapshot()
         signalAppForeground(true)
         maybeAutoConnect()
+        // One silent update check per process start — the auto half of
+        // auto-update. Manual re-checks live in Settings.
+        updates.autoCheckOnce(::publishUpdateResult)
     }
 
     override fun onPause() {
@@ -104,6 +119,30 @@ class ComposeDashboardActivity : ComponentActivity() {
     /** Rebuilds live state from the service's in-process snapshot after a pause/relaunch. */
     private fun replayServiceSnapshot() {
         ComposeDashboardSupport.replayServiceSnapshot(store)
+    }
+
+    private fun publishUpdateResult(result: UpdateManager.CheckResult) {
+        val banner = ComposeDashboardSupport.updateBanner(result)
+        store.onUpdateState(banner.statusLabel, banner.availableTag, null)
+    }
+
+    private fun checkForUpdate() {
+        store.onUpdateState("Checking for updates…", null, null)
+        // The manager's busy path still answers (with Failed), so this status
+        // can never wedge on a dropped request.
+        updates.check(::publishUpdateResult)
+    }
+
+    private fun installUpdate() {
+        val build = updates.availableBuild() ?: return
+        store.onUpdateState("${build.tag} is available", build.tag, 0)
+        updates.downloadAndInstall { percent ->
+            when {
+                percent < 0 -> store.onUpdateState("Download failed — try again", build.tag, null)
+                percent >= 100 -> store.onUpdateState("Handing to Android's installer…", build.tag, null)
+                else -> store.onUpdateState("${build.tag} is available", build.tag, percent)
+            }
+        }
     }
 
     private fun openClassicDashboard() {

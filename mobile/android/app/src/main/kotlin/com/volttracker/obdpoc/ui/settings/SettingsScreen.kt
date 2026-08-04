@@ -40,6 +40,8 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     onSelectTab: (VoltTab) -> Unit = {},
     onOpenClassicDashboard: () -> Unit = {},
+    onCheckForUpdate: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
 ) {
     Box(
         modifier =
@@ -66,6 +68,8 @@ fun SettingsScreen(
             DisplayGroup(state)
             Spacer(Modifier.height(14.dp))
             DataGroup(state)
+            Spacer(Modifier.height(14.dp))
+            UpdatesGroup(state, onCheckForUpdate, onInstallUpdate)
             Spacer(Modifier.height(14.dp))
             ClassicDashboardGroup(onOpenClassicDashboard)
             Spacer(Modifier.height(22.dp))
@@ -283,6 +287,49 @@ private fun DataGroup(state: SettingsUiState) {
             style = VoltType.caption,
             color = VoltColors.textTertiary,
         )
+    }
+}
+
+/** App updates via GitHub Releases: version, check action, one-tap install. */
+@Composable
+private fun UpdatesGroup(
+    state: SettingsUiState,
+    onCheckForUpdate: () -> Unit,
+    onInstallUpdate: () -> Unit,
+) {
+    VoltPanel {
+        VoltLabel("App updates")
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = state.versionLabel.ifBlank { "Installed version unknown" },
+            style = VoltType.caption,
+            color = VoltColors.textSecondary,
+        )
+        if (state.updateStatusLabel != null) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = state.updateStatusLabel,
+                style = VoltType.caption,
+                color = if (state.updateAvailableTag != null) VoltColors.energy else VoltColors.textTertiary,
+            )
+        }
+        Spacer(Modifier.height(14.dp))
+        val downloading = state.updateDownloadPercent != null
+        when {
+            downloading ->
+                Text(
+                    text = "Downloading… ${state.updateDownloadPercent}%",
+                    style = VoltType.body,
+                    color = VoltColors.textPrimary,
+                )
+            state.updateAvailableTag != null ->
+                VoltButton(
+                    text = "Update to ${state.updateAvailableTag}",
+                    accent = true,
+                    onClick = onInstallUpdate,
+                )
+            else -> VoltButton(text = "Check for updates", onClick = onCheckForUpdate)
+        }
     }
 }
 

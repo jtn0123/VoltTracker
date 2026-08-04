@@ -39,4 +39,38 @@ class SettingsScreenshotTest {
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-disconnected.png")
     }
+
+    // App-updates section states: a newer build offered, and a download underway.
+    @Test
+    @Config(qualifiers = "w412dp-h1900dp-420dpi")
+    fun settingsScreenUpdateAvailable() {
+        compose.setContent {
+            VoltTheme {
+                SettingsScreen(
+                    SettingsUiState.demo.copy(
+                        updateStatusLabel = "v0.36.0 is available",
+                        updateAvailableTag = "v0.36.0",
+                    ),
+                )
+            }
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-update-available.png")
+    }
+
+    @Test
+    @Config(qualifiers = "w412dp-h1900dp-420dpi")
+    fun settingsScreenUpdateDownloading() {
+        compose.setContent {
+            VoltTheme {
+                SettingsScreen(
+                    SettingsUiState.demo.copy(
+                        updateStatusLabel = "v0.36.0 is available",
+                        updateAvailableTag = "v0.36.0",
+                        updateDownloadPercent = 43,
+                    ),
+                )
+            }
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-update-downloading.png")
+    }
 }

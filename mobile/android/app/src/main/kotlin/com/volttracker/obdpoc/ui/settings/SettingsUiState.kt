@@ -37,6 +37,12 @@ data class SettingsUiState(
     // Data
     val lastBackupLabel: String = "No backup recorded on this phone yet",
     val versionLabel: String = "",
+    // App updates (GitHub Releases). Null status = no check yet this session.
+    val updateStatusLabel: String? = null,
+    /** Tag of a newer published build, e.g. "v0.35.0"; null = none known. */
+    val updateAvailableTag: String? = null,
+    /** 0..99 while a download runs; null otherwise. */
+    val updateDownloadPercent: Int? = null,
 ) {
     companion object {
         /** Sample state mirroring the demo scenario. */

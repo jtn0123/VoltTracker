@@ -6,6 +6,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -115,6 +116,57 @@ class ComposeDashboardSupportTest {
             ),
         )
         assertEquals(0, store.state.value.drive.speedMph)
+    }
+
+    // --- updateBanner --------------------------------------------------------
+
+    @Test
+    fun updateBannerCoversEveryCheckOutcome() {
+        val build =
+            com.volttracker.obdpoc.update.UpdateFeed.AvailableBuild(
+                tag = "v0.36.0",
+                title = "v0.36.0",
+                versionCode = 36_000,
+                assetName = "volttracker-v0.36.0-release.apk",
+                downloadUrl = "https://example.invalid/apk",
+                sizeBytes = 1L,
+                pageUrl = "https://example.invalid/release",
+            )
+
+        val available =
+            ComposeDashboardSupport.updateBanner(
+                com.volttracker.obdpoc.update.UpdateManager.CheckResult
+                    .UpdateAvailable(build),
+            )
+        assertEquals("v0.36.0 is available", available.statusLabel)
+        assertEquals("v0.36.0", available.availableTag)
+
+        val upToDate =
+            ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.UpToDate)
+        assertEquals("Up to date", upToDate.statusLabel)
+        assertNull(upToDate.availableTag)
+        val noBuilds =
+            ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.NoBuilds)
+        assertEquals("No published builds yet", noBuilds.statusLabel)
+        assertNull(noBuilds.availableTag)
+        val unknown =
+            ComposeDashboardSupport.updateBanner(
+                com.volttracker.obdpoc.update.UpdateManager.CheckResult
+                    .Unknown(build),
+            )
+        assertEquals("Newest is v0.36.0 — can't compare to this build", unknown.statusLabel)
+        assertNull(unknown.availableTag)
+        val offline =
+            ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.Offline)
+        assertEquals("Couldn't reach GitHub — check connection", offline.statusLabel)
+        assertNull(offline.availableTag)
+        val failed =
+            ComposeDashboardSupport.updateBanner(
+                com.volttracker.obdpoc.update.UpdateManager.CheckResult
+                    .Failed("boom"),
+            )
+        assertEquals("boom", failed.statusLabel)
+        assertNull(failed.availableTag)
     }
 
     // --- replayServiceSnapshot ----------------------------------------------

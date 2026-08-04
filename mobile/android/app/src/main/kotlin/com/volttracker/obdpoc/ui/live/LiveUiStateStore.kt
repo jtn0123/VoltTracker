@@ -123,6 +123,31 @@ class LiveUiStateStore {
         )
     }
 
+    /** Updates the Settings tab's app-update section (status/available/progress). */
+    fun onUpdateState(
+        statusLabel: String?,
+        availableTag: String?,
+        downloadPercent: Int?,
+    ) {
+        _state.value =
+            _state.value.let { s ->
+                s.copy(
+                    settings =
+                        s.settings.copy(
+                            updateStatusLabel = statusLabel,
+                            updateAvailableTag = availableTag,
+                            updateDownloadPercent = downloadPercent,
+                        ),
+                )
+            }
+    }
+
+    /** Stamps the installed-version line shown in Settings. */
+    fun onVersionLabel(label: String) {
+        _state.value =
+            _state.value.let { s -> s.copy(settings = s.settings.copy(versionLabel = label)) }
+    }
+
     private fun statusLabel(
         stateName: String,
         adapter: String,

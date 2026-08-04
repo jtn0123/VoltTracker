@@ -26,6 +26,8 @@ fun VoltApp(
     onOpenClassicDashboard: () -> Unit = {},
     onConnect: () -> Unit = {},
     onStartDemo: () -> Unit = {},
+    onCheckForUpdate: () -> Unit = {},
+    onInstallUpdate: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     VoltTheme {
@@ -46,6 +48,8 @@ fun VoltApp(
                     state.settings,
                     onSelectTab = { tab = it },
                     onOpenClassicDashboard = onOpenClassicDashboard,
+                    onCheckForUpdate = onCheckForUpdate,
+                    onInstallUpdate = onInstallUpdate,
                 )
         }
     }

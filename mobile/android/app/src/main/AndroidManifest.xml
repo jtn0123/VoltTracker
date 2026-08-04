@@ -16,8 +16,13 @@
     <!-- Partial wake lock while a real adapter session records, so Doze can't suspend the
          CPU mid-drive and stall Bluetooth polling. Released on session stop. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- Remote map basemap tiles only; OBD/GPS data stays in app-private local storage. -->
+    <!-- Remote map basemap tiles + the GitHub Releases update check/download;
+         OBD/GPS data stays in app-private local storage. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-app updater: hands a downloaded release APK to the system installer.
+         Android still shows its own confirmation sheet and refuses any APK not
+         signed with the installed app's key. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Used by the troubleshooter's user-triggered force-stop button for known competing
          BT-OBD apps only. This is a normal-tier permission and is never used automatically. -->
