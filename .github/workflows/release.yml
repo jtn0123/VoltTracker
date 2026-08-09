@@ -36,10 +36,19 @@ jobs:
           # python-semantic-release needs the full history to walk commits
           # since the last tag and decide the bump type.
           fetch-depth: 0
-          # We push the version-bump commit + tag back, so the default
-          # `GITHUB_TOKEN` credential needs to persist on the checkout.
-          # Auto-triggered re-runs are not a risk: GitHub Actions does not
-          # trigger workflows from pushes made using the default GITHUB_TOKEN.
+          # We push the version-bump commit + tag back to protected main. The
+          # default GITHUB_TOKEN cannot bypass the main ruleset (GitHub does
+          # not allow the Actions app as a ruleset bypass actor on user-owned
+          # repos), so the checkout authenticates with the write deploy key
+          # stored in RELEASE_PUSH_DEPLOY_KEY — deploy keys are the ruleset's
+          # bypass actor.
+          ssh-key: ${{ secrets.RELEASE_PUSH_DEPLOY_KEY }}
+          # Deploy-key pushes DO trigger workflows (unlike GITHUB_TOKEN), and
+          # that is by design: the bump-commit push re-runs android.yml so the
+          # rolling latest-debug APK gets the new versionName baked in. It
+          # can't loop releases: the bump commit's subject ("X.Y.Z") is not a
+          # bumpable conventional-commits type, so the retriggered release run
+          # cuts nothing.
           persist-credentials: true
 
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
