@@ -33,6 +33,15 @@ assets = ["VERSION"]
 major_on_zero = true
 allow_zero_version = true
 
+[tool.semantic_release.remote]
+# release.yml's checkout authenticates git with a write deploy key (SSH) —
+# the main ruleset's bypass actor — because GITHUB_TOKEN cannot bypass main's
+# protection on a user-owned repo. Without this flag PSR rewrites the push
+# URL to token-over-HTTPS and the bump push bounces off the ruleset (GH013).
+# The token is still used for the GitHub API (release creation/upload) in
+# `semantic-release publish`.
+ignore_token_for_push = true
+
 [tool.semantic_release.changelog]
 # Custom changelog + GitHub-release-notes style, rendered from the Jinja
 # templates in ./templates/ (a copy of PSR 9.21's bundled angular/md templates
