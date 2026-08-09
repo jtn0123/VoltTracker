@@ -32,6 +32,17 @@ After changing release dependencies, regenerate and commit the lockfile:
 ./gradlew :app:dependencies --configuration releaseRuntimeClasspath --write-locks
 ```
 
+Check the lockfile is current without rewriting it:
+
+```sh
+./gradlew :app:verifyReleaseDependencyLock
+```
+
+That task resolves `releaseRuntimeClasspath` for real, so lock drift is fatal;
+CI runs it in the `gradle-dependency-audit` job. Do not substitute
+`:app:dependencies` — the report task prints `FAILED` rows for unresolvable
+entries and still exits 0, so it cannot detect a stale lockfile.
+
 Do not lock every test-host configuration just to quiet scanners. The OSV job
 reads `app/gradle.lockfile`, which represents the dependencies bundled into the
 release APK.

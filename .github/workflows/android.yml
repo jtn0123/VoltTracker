@@ -709,17 +709,22 @@ jobs:
         # app/gradle.lockfile is committed (see mobile/android/.gitignore) so the
         # OSV scan below reads it directly — no --write-locks regeneration. Only the
         # shipped `releaseRuntimeClasspath` is locked (see app/build.gradle), so this
-        # step resolves dependencies in lock-VERIFICATION mode (no --write-locks) and
-        # Gradle fails if that classpath drifted from the lock — a stale lockfile
-        # can't slip the scan. It only resolves dependencies (no Kotlin/Java compile).
+        # step resolves that classpath in lock-VERIFICATION mode (no --write-locks)
+        # and Gradle fails if it drifted from the lock — a stale lockfile can't slip
+        # the scan. It only resolves dependencies (no Kotlin/Java compile).
         # AGP's unified-test-platform configs are deliberately unlocked so their
         # build/test-host-only Netty (never shipped) stays out of the scan.
         # Regenerate after a release-dependency change with `./gradlew :app:dependencies
         # --configuration releaseRuntimeClasspath --write-locks` and commit the file.
+        #
+        # NOT `:app:dependencies` — that report task prints "FAILED" rows for
+        # unresolvable entries and still exits 0, which is how a lockfile missing
+        # every Compose dependency passed this gate while breaking the release APK
+        # build for three tagged releases in a row.
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:dependencies
+          ./gradlew --no-daemon :app:verifyReleaseDependencyLock
       - name: OSV vulnerability scan
         id: osv
         # Scans the committed Gradle lockfile (shipped release runtime classpath) for

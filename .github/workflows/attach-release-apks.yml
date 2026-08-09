@@ -30,7 +30,11 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Decode release keystore from secrets
+      - name: Decode release keystore from secrets (dev-mode fallback)
+        id: keystore
+        # Mirrors release.yml: all four secrets → stable-key signed APKs; none →
+        # debug APK only under the runner's throwaway debug key; a partial set
+        # is a hard error (misconfiguration, not a mode).
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
@@ -43,8 +47,13 @@ jobs:
               missing+=("${name}")
             fi
           done
+          if [ "${#missing[@]}" -eq 4 ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Dev-mode release (no signing secrets)::Publishing the debug APK only, signed with the runner's throwaway Android debug key."
+            exit 0
+          fi
           if [ "${#missing[@]}" -gt 0 ]; then
-            echo "::error title=Missing release signing secrets::${missing[*]} must be set for tagged APK releases."
+            echo "::error title=Incomplete release signing secrets::${missing[*]} missing while other signing secrets are set — configure all four or none."
             exit 1
           fi
           printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > app/release.keystore
@@ -56,33 +65,44 @@ jobs:
           EOF
           keytool -list -keystore app/release.keystore \
             -storepass "${ANDROID_KEYSTORE_PASSWORD}" >/dev/null
+          echo "signed=true" >> "$GITHUB_OUTPUT"
           echo "Keystore decoded; release build will be signed."
 
       - name: Assemble release and debug APKs
+        # Dev mode skips :app:assembleRelease — without a signingConfig the
+        # release variant comes out unsigned, and Android refuses to install
+        # unsigned APKs.
         run: |
           chmod +x ./gradlew
           TAG_SHA="$(git rev-parse HEAD)"
-          GITHUB_SHA="${TAG_SHA}" ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            GITHUB_SHA="${TAG_SHA}" ./gradlew --no-daemon :app:assembleRelease :app:assembleDebug
+          else
+            GITHUB_SHA="${TAG_SHA}" ./gradlew --no-daemon :app:assembleDebug
+          fi
 
       - name: Stage APKs
         env:
           TAG: ${{ inputs.tag }}
         run: |
           mkdir -p release
-          RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
-          RELEASE_NAME="volttracker-${TAG}-release.apk"
-          if [ ! -f "${RELEASE_SRC}" ]; then
-            echo "::error title=Signed release APK missing::Expected ${RELEASE_SRC}; release signing may be broken."
-            exit 1
-          fi
           DEBUG_SRC="app/build/outputs/apk/debug/app-debug.apk"
           DEBUG_NAME="volttracker-${TAG}-debug.apk"
-          cp "${RELEASE_SRC}" "release/${RELEASE_NAME}"
           cp "${DEBUG_SRC}" "release/${DEBUG_NAME}"
-          echo "Staged: ${RELEASE_NAME}"
           echo "Staged: ${DEBUG_NAME}"
+          if [ "${{ steps.keystore.outputs.signed }}" = "true" ]; then
+            RELEASE_SRC="app/build/outputs/apk/release/app-release.apk"
+            RELEASE_NAME="volttracker-${TAG}-release.apk"
+            if [ ! -f "${RELEASE_SRC}" ]; then
+              echo "::error title=Signed release APK missing::Expected ${RELEASE_SRC}; release signing may be broken."
+              exit 1
+            fi
+            cp "${RELEASE_SRC}" "release/${RELEASE_NAME}"
+            echo "Staged: ${RELEASE_NAME}"
+          fi
 
-      - name: Update release install notes
+      - name: Update release install notes (signed)
+        if: steps.keystore.outputs.signed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ inputs.tag }}
@@ -104,6 +124,33 @@ jobs:
 
           - \`volttracker-${TAG}-release.apk\` is the normal signed release build.
           - \`volttracker-${TAG}-debug.apk\` is the debuggable field build signed with the same stable app key, so it can update tagged release installs while still allowing \`adb run-as\` and WebView debugging.
+          ${END}
+          EOF
+          gh release edit "${TAG}" --repo "${{ github.repository }}" \
+            --notes-file release/body.md
+
+      - name: Update release install notes (dev mode)
+        if: steps.keystore.outputs.signed != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          gh release view "${TAG}" --repo "${{ github.repository }}" \
+            --json body --jq '.body // ""' > release/body.md
+          START="<!-- volttracker-android-apks:start -->"
+          END="<!-- volttracker-android-apks:end -->"
+          awk -v start="${START}" -v end="${END}" '
+            $0 == start { skip = 1; next }
+            $0 == end { skip = 0; next }
+            !skip { print }
+          ' release/body.md > release/body.clean.md
+          mv release/body.clean.md release/body.md
+          cat >> release/body.md <<EOF
+
+          ${START}
+          ## Android APKs
+
+          - \`volttracker-${TAG}-debug.apk\` is a dev-mode debug build: release signing secrets are not configured, so it is signed with the CI runner's throwaway Android debug key. Each run generates a fresh key, so Android may reject the install over an existing install — back up in-app data, uninstall, install, and restore when that happens.
           ${END}
           EOF
           gh release edit "${TAG}" --repo "${{ github.repository }}" \
