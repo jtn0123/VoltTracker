@@ -91,7 +91,10 @@ def validate_release_workflow(workflow_text: str) -> None:
         "Assemble release and debug APKs",
         "Stage APKs (version-tagged flavor filenames)",
         "Update release install notes",
-        "Missing release signing secrets",
+        # All four signing secrets → stable-key signed APKs; none → dev-mode
+        # debug-only fallback; a partial set must stay a hard error.
+        "Incomplete release signing secrets",
+        "Dev-mode release (no signing secrets)",
         "ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}",
         'printf \'%s\' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > app/release.keystore',
         "volttracker-${TAG}-release.apk",
