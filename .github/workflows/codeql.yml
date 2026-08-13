@@ -49,7 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
 
-      - uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4
+      - uses: github/codeql-action/init@5595ccaf912efad79be6eef63a5619ff05969be3 # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
