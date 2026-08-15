@@ -50,7 +50,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Detect paths that need WebView runtime smoke
-        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -729,7 +729,7 @@ jobs:
         id: osv
         # Scans the committed Gradle lockfile (shipped release runtime classpath) for
         # dependencies with known advisories in the OSV database.
-        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+        uses: google/osv-scanner-action/osv-scanner-action@8deb546fdb875b9996d27d4950be7312dac076a1 # v2.5.0
         with:
           scan-args: |-
             --lockfile=./mobile/android/app/gradle.lockfile
