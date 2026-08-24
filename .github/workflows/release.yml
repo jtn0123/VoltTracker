@@ -31,7 +31,7 @@ jobs:
       group: release
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # python-semantic-release needs the full history to walk commits
           # since the last tag and decide the bump type.
@@ -179,7 +179,7 @@ jobs:
       run:
         working-directory: mobile/android
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Check out the tagged commit, not whatever HEAD is now — keeps the
           # APK byte-for-byte tied to the release tag.
