@@ -12,7 +12,7 @@ androidx-test-uiautomator = "2.4.0"
 compose-bom = "2026.06.01"
 detekt = "1.23.8"
 junit = "4.13.2"
-json = "20260522"
+json = "20260814"
 # Must match the Kotlin AGP embeds (built-in Kotlin) — see kotlin-gradle-plugin in AGP's pom.
 kotlin = "2.4.10"
 robolectric = "4.16.1"
