@@ -1,5 +1,5 @@
 [versions]
-agp = "9.2.1"
+agp = "9.3.2"
 androidx-activity = "1.13.0"
 androidx-benchmark = "1.4.1"
 androidx-core = "1.19.0"
