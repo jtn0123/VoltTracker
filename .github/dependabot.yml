@@ -18,10 +18,38 @@ updates:
     directory: "/mobile/android/dashboard-tests"
     schedule:
       interval: "weekly"
+    # typescript 7.x is the native Go port of the compiler, published as a
+    # preview ("Preview CLI and JS API for the native TypeScript compiler
+    # port") with a limited JS API surface. Anything driving that API cannot
+    # resolve against it yet -- here typescript-eslint, which fails install
+    # outright:
+    #     npm error ERESOLVE could not resolve
+    #     While resolving: typescript-eslint@8.67.0
+    #     Found: typescript@7.0.2
+    # Dependabot reopens the bump as a permanently-red PR every week
+    # otherwise. Drop this once typescript-eslint supports 7.x.
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "npm"
     directory: "/mobile/android/dashboard-e2e"
     schedule:
       interval: "weekly"
+    # typescript 7.x is the native Go port of the compiler, published as a
+    # preview ("Preview CLI and JS API for the native TypeScript compiler
+    # port") with a limited JS API surface. Anything driving that API cannot
+    # resolve against it yet -- here typescript-eslint, which fails install
+    # outright:
+    #     npm error ERESOLVE could not resolve
+    #     While resolving: typescript-eslint@8.67.0
+    #     Found: typescript@7.0.2
+    # Dependabot reopens the bump as a permanently-red PR every week
+    # otherwise. Drop this once typescript-eslint supports 7.x.
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
