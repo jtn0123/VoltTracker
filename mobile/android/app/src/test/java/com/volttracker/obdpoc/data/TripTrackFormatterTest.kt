@@ -318,6 +318,93 @@ class TripTrackFormatterTest {
         assertTrue("trailing fields are blank", row.endsWith(",,,,,,,,"))
     }
 
+    // fileBaseName names the file a user ends up with in their downloads folder, and it is the only
+    // thing stopping two exports of different trips overwriting each other in the shared cache dir.
+    // Every branch below was uncovered: line 278's id-fallback alone had 10 missed branches and no
+    // covered ones, which is most of why the aggregate BRANCH ratchet slipped under its floor.
+
+    @Test
+    fun fileBaseNameStampsTheSessionStartAndSuffixesTheSessionId() {
+        // The point sits a minute later than the session start, so this also pins which one wins.
+        val route = routeWith(listOf(point(60_000L, 34.05, -118.25)))
+        route.getJSONObject("session").put("startedAtMs", 10_000L)
+
+        assertEquals("volt-trip-1970-01-01-0000-1", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameFallsBackToTheFirstPointWhenTheSessionHasNoStartTime() {
+        val route = routeWith(listOf(point(86_400_000L, 34.05, -118.25)))
+
+        assertEquals("volt-trip-1970-01-02-0000-1", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameSkipsUntimedPointsWhenLookingForTheStart() {
+        // A leading point with atMs = 0 must not be mistaken for the trip start.
+        val route =
+            routeWith(
+                listOf(
+                    point(0L, 34.05, -118.25),
+                    point(86_400_000L, 34.06, -118.26),
+                ),
+            )
+
+        assertEquals("volt-trip-1970-01-02-0000-1", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameStampsUnknownWhenNothingCarriesATimestamp() {
+        assertEquals("volt-trip-unknown-1", TripTrackFormatter.fileBaseName(routeWith(emptyList())))
+    }
+
+    @Test
+    fun fileBaseNameFallsBackToTheIdKeyWhenSessionIdIsBlank() {
+        val route = routeWith(listOf(point(10_000L, 34.05, -118.25)))
+        route.getJSONObject("session").put("sessionId", "")
+
+        // The route id "1:10000:30000" is not filesystem-safe, so its colons sanitize to dashes.
+        assertEquals("volt-trip-1970-01-01-0000-1-10000-30000", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameDropsTheSuffixWhenNeitherIdIsUsable() {
+        val route = routeWith(listOf(point(10_000L, 34.05, -118.25)))
+        route.getJSONObject("session").put("sessionId", "").put("id", "   ")
+
+        assertEquals("volt-trip-1970-01-01-0000", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameHandlesARouteWithNoSessionObject() {
+        val route = JSONObject().put("points", JSONArray().put(point(10_000L, 34.05, -118.25)))
+
+        assertEquals("volt-trip-1970-01-01-0000", TripTrackFormatter.fileBaseName(route))
+    }
+
+    @Test
+    fun fileBaseNameNeutralizesAHostileSessionId() {
+        val route = routeWith(listOf(point(10_000L, 34.05, -118.25)))
+        route.getJSONObject("session").put("sessionId", "../../etc/passwd")
+
+        val name = TripTrackFormatter.fileBaseName(route)
+
+        assertFalse("path separators must not survive into a file name", name.contains("/"))
+        assertFalse("no relative-path segments", name.contains(".."))
+        assertTrue("keeps the readable tail", name.endsWith("etc-passwd"))
+    }
+
+    @Test
+    fun fileBaseNameCapsAnOverlongSuffix() {
+        val route = routeWith(listOf(point(10_000L, 34.05, -118.25)))
+        route.getJSONObject("session").put("sessionId", "x".repeat(80))
+
+        assertEquals(
+            "volt-trip-1970-01-01-0000-" + "x".repeat(40),
+            TripTrackFormatter.fileBaseName(route),
+        )
+    }
+
     private companion object {
         private val SAMPLE_POINTS =
             listOf(
