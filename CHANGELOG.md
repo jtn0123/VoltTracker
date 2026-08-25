@@ -1,6 +1,86 @@
 # CHANGELOG
 
 
+## v0.36.2 (2026-08-25)
+
+### 🔺 Fix
+
+- **dependabot**: Group github/codeql-action so its sub-actions move together
+  ([#30](https://github.com/jtn0123/VoltTracker/pull/30),
+  [`0646e63`](https://github.com/jtn0123/VoltTracker/commit/0646e63c7f07bd7bd6e09b4683293434d8314bb9))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/setup-python from 6.3.0 to 7.0.0
+  ([#25](https://github.com/jtn0123/VoltTracker/pull/25),
+  [`9e0f354`](https://github.com/jtn0123/VoltTracker/commit/9e0f354c95bbc1c2b1d25a492d9750a7e094e9d7))
+
+- **deps**: Bump codeql-action to v4.37.6 (init + analyze together)
+  ([#20](https://github.com/jtn0123/VoltTracker/pull/20),
+  [`5762d53`](https://github.com/jtn0123/VoltTracker/commit/5762d53ed97d8dc87d5d48b4edd436b3ab59b92e))
+
+- **deps**: Bump com.github.ben-manes.versions in /mobile/android
+  ([#1](https://github.com/jtn0123/VoltTracker/pull/1),
+  [`da0b15e`](https://github.com/jtn0123/VoltTracker/commit/da0b15eb65a56a616e26cf0002f745048c51a4cc))
+
+- **deps**: Bump com.github.ben-manes.versions in /mobile/android
+  ([#18](https://github.com/jtn0123/VoltTracker/pull/18),
+  [`b4da62b`](https://github.com/jtn0123/VoltTracker/commit/b4da62b487ea7a8a1528a87c3a0d006752d7ee11))
+
+- **deps**: Bump dorny/paths-filter from 4.0.2 to 4.0.3
+  ([#16](https://github.com/jtn0123/VoltTracker/pull/16),
+  [`bd41912`](https://github.com/jtn0123/VoltTracker/commit/bd41912a5f0ad8be5b8ebf11d1e8453f0ccd19c8))
+
+- **deps**: Bump gitleaks/gitleaks-action from 2.3.9 to 3.0.0
+  ([#7](https://github.com/jtn0123/VoltTracker/pull/7),
+  [`0f8617d`](https://github.com/jtn0123/VoltTracker/commit/0f8617dae507321272de635bf4a95de985b1ce61))
+
+- **deps**: Bump google/osv-scanner-action/osv-scanner-action
+  ([#6](https://github.com/jtn0123/VoltTracker/pull/6),
+  [`8541e1d`](https://github.com/jtn0123/VoltTracker/commit/8541e1d9666bdd5dd6a913dc8498cef97cd3cf51))
+
+- **deps**: Bump gradle-wrapper from 9.6.1 to 9.7.0 in /mobile/android
+  ([#19](https://github.com/jtn0123/VoltTracker/pull/19),
+  [`9b21052`](https://github.com/jtn0123/VoltTracker/commit/9b21052d754b326940f5894f8a33f5eff9fbd534))
+
+- **deps**: Bump org.jetbrains.kotlin.plugin.compose in /mobile/android
+  ([#2](https://github.com/jtn0123/VoltTracker/pull/2),
+  [`f092c4e`](https://github.com/jtn0123/VoltTracker/commit/f092c4eb753a0c26b61e123a31da1d5dbce8f93e))
+
+- **deps**: Bump roborazzi from 1.70.0 to 1.71.0 in /mobile/android
+  ([#17](https://github.com/jtn0123/VoltTracker/pull/17),
+  [`695f4a7`](https://github.com/jtn0123/VoltTracker/commit/695f4a74e79db7d1638a2843fc365f46425898d4))
+
+- **deps**: Bump the codeql-action group with 2 updates
+  ([#34](https://github.com/jtn0123/VoltTracker/pull/34),
+  [`e4f5855`](https://github.com/jtn0123/VoltTracker/commit/e4f5855433ef13fb28566026babc70a92c4cb19d))
+
+- **deps-dev**: Bump @playwright/test in /mobile/android/dashboard-e2e
+  ([#10](https://github.com/jtn0123/VoltTracker/pull/10),
+  [`b2017eb`](https://github.com/jtn0123/VoltTracker/commit/b2017eba35ead91d7955fc54fe4f2bffef4f1ea0))
+
+- **deps-dev**: Bump axe-core in /mobile/android/dashboard-e2e
+  ([#8](https://github.com/jtn0123/VoltTracker/pull/8),
+  [`5ae4875`](https://github.com/jtn0123/VoltTracker/commit/5ae4875093835cbac0b5605636e9798dec2cff1d))
+
+- **deps-dev**: Bump esbuild in /mobile/android/dashboard-tests
+  ([#12](https://github.com/jtn0123/VoltTracker/pull/12),
+  [`45bfdc6`](https://github.com/jtn0123/VoltTracker/commit/45bfdc64ca4b8b6e4f41bac31fe6e5bb540af7fb))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#9](https://github.com/jtn0123/VoltTracker/pull/9),
+  [`ee7cf23`](https://github.com/jtn0123/VoltTracker/commit/ee7cf2322f7fe74e4870640ccbee2ce36da6bf9c))
+
+- **deps-dev**: Bump typescript-eslint ([#13](https://github.com/jtn0123/VoltTracker/pull/13),
+  [`8b8e553`](https://github.com/jtn0123/VoltTracker/commit/8b8e5539e73c83377b08e321c2de46da3bcf3975))
+
+### 🔷 Changed
+
+- **export**: Cover fileBaseName's branches to restore the BRANCH ratchet
+  ([#35](https://github.com/jtn0123/VoltTracker/pull/35),
+  [`10afe02`](https://github.com/jtn0123/VoltTracker/commit/10afe02b040cef3aee5330758174e40a9fef1fb3))
+
+
 ## v0.36.1 (2026-08-09)
 
 ### 🔺 Fix
