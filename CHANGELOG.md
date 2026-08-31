@@ -1,6 +1,40 @@
 # CHANGELOG
 
 
+## v0.36.3 (2026-08-25)
+
+### 🔺 Fix
+
+- **dependabot**: Stop reopening the typescript 7 major
+  ([#36](https://github.com/jtn0123/VoltTracker/pull/36),
+  [`dee145d`](https://github.com/jtn0123/VoltTracker/commit/dee145de02b250c591cc789d523828674d19d3cf))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/checkout from 7.0.0 to 7.0.1
+  ([#22](https://github.com/jtn0123/VoltTracker/pull/22),
+  [`aef8bf1`](https://github.com/jtn0123/VoltTracker/commit/aef8bf143ac50d952885f3afc7502ad04ffb5a32))
+
+- **deps**: Bump actions/setup-java from 5.5.0 to 5.7.0
+  ([#24](https://github.com/jtn0123/VoltTracker/pull/24),
+  [`9d73607`](https://github.com/jtn0123/VoltTracker/commit/9d7360745dedafde78faffe9a225dd60854df29c))
+
+- **deps**: Bump org.json:json ([#27](https://github.com/jtn0123/VoltTracker/pull/27),
+  [`2b5aa32`](https://github.com/jtn0123/VoltTracker/commit/2b5aa32c86cfca115caa7d0d0d78a4ccf0a9bb7e))
+
+- **deps**: Bump roborazzi from 1.71.0 to 1.72.0 in /mobile/android
+  ([#28](https://github.com/jtn0123/VoltTracker/pull/28),
+  [`aa8e869`](https://github.com/jtn0123/VoltTracker/commit/aa8e869fb4b76e64d98a3caf0045804e3d9a88c1))
+
+- **deps-dev**: Bump @vitest/coverage-istanbul
+  ([#31](https://github.com/jtn0123/VoltTracker/pull/31),
+  [`4ca36b9`](https://github.com/jtn0123/VoltTracker/commit/4ca36b94b9b1d28632bc377d42f4a4632d7007b8))
+
+- **deps-dev**: Bump vitest in /mobile/android/dashboard-tests
+  ([#32](https://github.com/jtn0123/VoltTracker/pull/32),
+  [`82ae80a`](https://github.com/jtn0123/VoltTracker/commit/82ae80ab850068eb38e2f4bee10e706fb2e52a1c))
+
+
 ## v0.36.2 (2026-08-25)
 
 ### 🔺 Fix
