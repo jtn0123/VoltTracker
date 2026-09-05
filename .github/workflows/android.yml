@@ -835,6 +835,7 @@ jobs:
           arch: x86_64
           profile: pixel_2
           force-avd-creation: true
+          pre-emulator-launch-script: bash mobile/android/scripts/install-emulator-diagnostics.sh
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator, wrapped
@@ -894,6 +895,7 @@ jobs:
             mobile/android/build/emulator-session-logcat.txt
             mobile/android/build/emulator-host-diagnostics.txt
             mobile/android/build/emulator-crash-data.tar.gz
+            mobile/android/build/emulator-process/
             mobile/android/build/emulator-smoke/
           if-no-files-found: ignore
       - name: Report job wall-clock time
