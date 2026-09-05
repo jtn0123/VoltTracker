@@ -18,6 +18,12 @@ updates:
     directory: "/mobile/android/dashboard-tests"
     schedule:
       interval: "weekly"
+    # The @typescript/native alias supplies TS 7 for type-checking. Keep TS 6
+    # under its normal name for typescript-eslint's compiler API dependency.
+    ignore:
+      - dependency-name: "typescript"
+        update-types:
+          - "version-update:semver-major"
   - package-ecosystem: "npm"
     directory: "/mobile/android/dashboard-e2e"
     schedule:
