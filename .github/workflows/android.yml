@@ -807,8 +807,37 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      # Use a fresh cold boot while investigating emulator exits after snapshot
-      # restoration. Keep the same image/profile and all runtime assertions.
+      # AVD snapshot caching (android-emulator-runner's documented pattern): a
+      # cache miss boots the emulator once, cleanly, and saves a post-boot
+      # snapshot; every later run restores that snapshot instead of paying the
+      # multi-minute cold boot — which also shrinks the window for the
+      # boot-time adb flakes this job occasionally hits. Bump the key suffix to
+      # force a fresh AVD after emulator/system-image behavior changes.
+      - name: AVD snapshot cache
+        id: avd-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          # Keep the snapshot tied to the phone profile below. Rotate the key whenever launch
+          # behavior changes so an older AVD configuration cannot mask the new setting.
+          key: avd-api34-google_apis-x86_64-pixel2-software-v6
+      - name: Create AVD and generate snapshot for caching
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: false
+          # Pixel 2 keeps a real 1080 px phone/WebView surface while rendering 20% fewer pixels
+          # than Pixel 6. The API 34 image enforces a 2560 MiB guest even when lower memory is
+          # requested, so use the smaller surface instead of carrying an ineffective memory flag.
+          # No -no-snapshot here: this boot exists to write the snapshot.
+          emulator-options: -no-window -no-audio -no-boot-anim -gpu software
+          script: echo "Generated AVD snapshot for caching."
       # NOTE ON RETRIES: an in-job retry was tried here (a second android-emulator-runner
       # step gated on the first failing) and REVERTED — it made things worse.
       #
@@ -834,11 +863,11 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_2
-          force-avd-creation: true
+          force-avd-creation: false
           pre-emulator-launch-script: bash mobile/android/scripts/install-emulator-diagnostics.sh
           # The forced legacy SwiftShader GLES path segfaulted on RenderThread.
           # Let the emulator select its supported software rendering backends.
-          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu software
+          emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu software
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator, wrapped
           # in a streaming logcat so the instrumented phase is recorded too.
