@@ -838,24 +838,10 @@ jobs:
           # No -no-snapshot here: this boot exists to write the snapshot.
           emulator-options: -no-window -no-audio -no-boot-anim -gpu software
           script: echo "Generated AVD snapshot for caching."
-      # NOTE ON RETRIES: an in-job retry was tried here (a second android-emulator-runner
-      # step gated on the first failing) and REVERTED — it made things worse.
-      #
-      # A second invocation of the action in the same job boots fine, but the app then fails
-      # `adb shell run-as <pkg>` with "package not debuggable", so emulator-smoke.sh dies in
-      # start_service_as_app long before it reaches the flaky part. The first attempt runs the
-      # same script past that point without trouble, so something about the second boot leaves
-      # the guest unable to service run-as. Net effect: the original flake was still not
-      # absorbed, and a second, unrelated failure mode was added on top of it.
-      #
-      # The flake being chased: the qemu process dies partway through
-      # connectedDebugAndroidTest and every adb call after that reports `device offline` /
-      # `device 'emulator-5554' not found`, with `Test run failed to complete. Expected 3
-      # tests, received 0` and NO assertion message from any test. That signature means the
-      # emulator went away, not that a test failed — re-run the job.
-      #
-      # If this is worth automating, it belongs at the JOB level (re-run failed jobs), not as
-      # two emulator-runner steps in one job.
+      # The previous SwiftShader GLES path segfaulted on a native RenderThread.
+      # Use the supported software backend for both snapshot creation and tests.
+      # Keep process/guest diagnostics and every runtime assertion; in-session
+      # retries can leave an inconsistent guest and are intentionally not used.
       - name: Launch app and assert the dashboard JS comes alive
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
@@ -878,17 +864,8 @@ jobs:
           # parse, because line one is handed over as a complete program. Everything that
           # needs any of those lives in emulator-session.sh, which runs as a single process.
           script: bash mobile/android/scripts/emulator-session.sh
-      # Host-side evidence for the emulator-death flake. The guest logcat cannot explain a
-      # qemu process that is killed from outside, so capture what can: OOM-killer verdicts
-      # and the memory picture at the time. Runs only on failure and never fails the job —
-      # its whole job is to make the NEXT occurrence diagnosable instead of opaque.
-      #
-      # Host memory pressure is already the LEAST likely explanation and is not worth
-      # "fixing" pre-emptively: this repo is public, so ubuntu-latest is 4 vCPU / 16 GB,
-      # while the peak here is roughly qemu 2.5 GB + Gradle 2 GB (-Xmx2048m) + Kotlin
-      # daemon ~1 GB. That is ~6.5 GB of 16. The dmesg grep below exists to confirm or kill
-      # that theory with evidence rather than to act on it — if it comes back empty again,
-      # the cause is inside qemu or the snapshot restore, not the host running out of room.
+      # Guest logcat cannot explain a native emulator exit. Preserve host and
+      # crash evidence alongside the process exit status for future regressions.
       - name: Capture host diagnostics after an emulator failure
         if: failure()
         continue-on-error: true

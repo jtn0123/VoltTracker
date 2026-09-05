@@ -22,7 +22,7 @@ fi
 {
   date -u '+exited=%Y-%m-%dT%H:%M:%SZ'
   printf 'exit_status=%s\n' "$result"
-  if [ "$result" -gt 128 ]; then
+  if [ "$result" -gt 128 ] && [ "$result" -le 192 ]; then
     printf 'signal=%s\n' "$((result - 128))"
   fi
 } >> "$log"
