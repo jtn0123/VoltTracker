@@ -807,8 +807,6 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Install native crash debugger
-        run: sudo apt-get update && sudo apt-get install -y gdb
       # Use a fresh cold boot while investigating emulator exits after snapshot
       # restoration. Keep the same image/profile and all runtime assertions.
       # NOTE ON RETRIES: an in-job retry was tried here (a second android-emulator-runner
@@ -838,7 +836,9 @@ jobs:
           profile: pixel_2
           force-avd-creation: true
           pre-emulator-launch-script: bash mobile/android/scripts/install-emulator-diagnostics.sh
-          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swiftshader_indirect
+          # The forced legacy SwiftShader GLES path segfaulted on RenderThread.
+          # Let the emulator select its supported software rendering backends.
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu software
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator, wrapped
           # in a streaming logcat so the instrumented phase is recorded too.

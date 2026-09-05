@@ -11,7 +11,6 @@ fi
 mv "$emulator" "$original"
 {
   printf '#!/usr/bin/env bash\n'
-  printf 'export VOLT_EMULATOR_GDB=1\n'
   printf 'export VOLT_EMULATOR_DIAGNOSTICS=%q\n' "$script_dir/../build/emulator-process"
   printf 'exec bash %q %q "$@"\n' "$script_dir/emulator-process.sh" "$original"
 } > "$emulator"
