@@ -807,6 +807,8 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
+      - name: Install native crash debugger
+        run: sudo apt-get update && sudo apt-get install -y gdb
       # Use a fresh cold boot while investigating emulator exits after snapshot
       # restoration. Keep the same image/profile and all runtime assertions.
       # NOTE ON RETRIES: an in-job retry was tried here (a second android-emulator-runner
