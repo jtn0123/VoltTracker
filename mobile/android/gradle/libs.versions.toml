@@ -17,7 +17,7 @@ json = "20260814"
 kotlin = "2.4.10"
 robolectric = "4.16.1"
 roborazzi = "1.73.0"
-spotless = "8.10.0"
+spotless = "8.10.1"
 test-retry = "1.6.5"
 
 [libraries]
