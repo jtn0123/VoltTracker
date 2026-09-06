@@ -777,6 +777,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      - name: Pin Android user directory
+        # Keep AGP debug signing at one location before and after emulator setup.
+        # Otherwise AGP can switch from ~/.android to ~/.config/.android mid-job.
+        run: echo "ANDROID_USER_HOME=$RUNNER_TEMP/volttracker-android" >> "$GITHUB_ENV"
       - name: Record job start time
         run: echo "JOB_STARTED_AT=$(date +%s)" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
