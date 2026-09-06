@@ -50,4 +50,5 @@ trap cleanup_session_logcat EXIT
 bash "$android_dir/scripts/emulator-smoke.sh" || exit $?
 
 cd "$android_dir" || exit 1
+./gradlew --no-daemon :app:signingReport || exit $?
 ./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest || exit $?
