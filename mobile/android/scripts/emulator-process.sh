@@ -11,7 +11,16 @@ log="$artifact_dir/process.log"
   date -u '+started=%Y-%m-%dT%H:%M:%SZ'
   printf 'command='; printf '%q ' "$binary" "$@"; printf '\n'
 } >> "$log"
-"$binary" "$@" > >(tee -a "$artifact_dir/stdout.log") 2>&1 &
+command=("$binary" "$@")
+if [ "${VOLT_EMULATOR_GDB:-0}" = 1 ]; then
+  command=(gdb --batch --return-child-result
+    -ex 'set pagination off'
+    -ex 'handle SIGPIPE nostop noprint pass'
+    -ex 'handle SIGUSR1 nostop noprint pass'
+    -ex 'handle SIGUSR2 nostop noprint pass'
+    -ex run -ex 'thread apply all bt' --args "${command[@]}")
+fi
+"${command[@]}" > >(tee -a "$artifact_dir/stdout.log") 2>&1 &
 emulator_pid=$!
 printf 'pid=%s\n' "$emulator_pid" >> "$log"
 if wait "$emulator_pid"; then
@@ -22,7 +31,7 @@ fi
 {
   date -u '+exited=%Y-%m-%dT%H:%M:%SZ'
   printf 'exit_status=%s\n' "$result"
-  if [ "$result" -gt 128 ] && [ "$result" -le 192 ]; then
+  if [ "$result" -gt 128 ]; then
     printf 'signal=%s\n' "$((result - 128))"
   fi
 } >> "$log"

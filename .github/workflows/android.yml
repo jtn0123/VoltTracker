@@ -805,6 +805,8 @@ jobs:
           # androidTest APK built here, outside the emulator session, so the
           # connectedDebugAndroidTest step below only installs and runs.
           ./gradlew --no-daemon --configuration-cache :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Install native crash debugger
+        run: sudo apt-get update -qq && sudo apt-get install -y gdb
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
