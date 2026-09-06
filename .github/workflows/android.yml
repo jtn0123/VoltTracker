@@ -853,7 +853,7 @@ jobs:
           pre-emulator-launch-script: bash mobile/android/scripts/install-emulator-diagnostics.sh
           # The forced legacy SwiftShader GLES path segfaulted on RenderThread.
           # Let the emulator select its supported software rendering backends.
-          emulator-options: -no-window -no-audio -no-snapshot-save -no-boot-anim -gpu software
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu software
           # The shell smoke (logcat contract) plus the instrumented twin
           # (app/src/androidTest MainActivitySmokeTest) on the same booted emulator, wrapped
           # in a streaming logcat so the instrumented phase is recorded too.
