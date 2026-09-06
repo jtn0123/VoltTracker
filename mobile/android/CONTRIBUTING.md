@@ -114,8 +114,14 @@ To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 
 ## Dashboard TypeScript type-checking
 
-`npm --prefix dashboard-tests run typecheck` runs `tsc` over the dashboard TypeScript
-source, and the check is gated in CI. **Full `strict` is on** (noImplicitAny +
+`npm --prefix dashboard-tests run typecheck` runs TypeScript 7 over the dashboard
+source, and the check is gated in CI. The script explicitly invokes the
+`@typescript/native` npm alias so it cannot accidentally run the TypeScript 6
+binary. The separate `typescript` dependency stays on 6.x for typed ESLint's
+compiler API; update these dependencies independently until typescript-eslint
+supports the native compiler API. esbuild still produces the shipped JavaScript.
+
+**Full `strict` is on** (noImplicitAny +
 strictNullChecks + strictFunctionTypes + useUnknownInCatchVariables + …), so: annotate
 every value whose type cannot be inferred, handle every possibly-null/undefined value by
 guarding or narrowing it (`x?.y`, `value ?? fallback`), and narrow `catch` variables before
