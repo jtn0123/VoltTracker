@@ -57,7 +57,7 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
-          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu software
+          emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swangle
           # The action runs `script` line-by-line, so the multi-line poll lives in a real script
           # file (also makes it shellcheck-able and locally testable). It installs the APK, launches
           # the app, asserts the dashboard's JS->native handshake reaches logcat, starts demo
