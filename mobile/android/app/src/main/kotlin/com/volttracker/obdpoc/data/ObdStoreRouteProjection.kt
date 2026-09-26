@@ -63,8 +63,64 @@ object ObdStoreRouteProjection {
         )
         if (windowStartMs != null && windowEndMs != null) {
             putParkStops(payload, DriveWindowDetector.parkStopsForWindow(db, session, windowStartMs, windowEndMs))
+            putUserSplitNeighbors(payload, db, session, windowStartMs, windowEndMs)
         }
         return payload
+    }
+
+    /**
+     * `userSplitBefore` / `userSplitAfter` (`{key, startMs, endMs}`) when this trip starts right
+     * after / ends right at a user split point ([ObdTripSplits]), so the trip-detail sheet can offer
+     * "merge back". Omitted otherwise — and always for legacy sessions, which cannot be split — so
+     * unsplit trips serialize exactly as before. The session's windows are only computed when it
+     * actually has an active split.
+     */
+    @Throws(JSONException::class)
+    private fun putUserSplitNeighbors(
+        payload: JSONObject,
+        db: SQLiteDatabase,
+        session: ObdSessionRecord,
+        startMs: Long,
+        endMs: Long,
+    ) {
+        if (!TripSplitRules.appliesTo(session.tripRulesVersion)) return
+        val splits = ObdTripSplits.activeSplits(db, session.id)
+        if (splits.isEmpty()) return
+        val window =
+            DriveWindowDetector
+                .windowsForSession(db, session)
+                .firstOrNull { it.startedAtMs <= startMs && endMs <= it.endedAtMs } ?: return
+        splits.firstOrNull { it.endMs + 1L == window.startedAtMs }?.let {
+            payload.put("userSplitBefore", userSplitJson(session.id, it))
+        }
+        splits.firstOrNull { it.startMs == window.endedAtMs }?.let {
+            payload.put("userSplitAfter", userSplitJson(session.id, it))
+        }
+    }
+
+    @Throws(JSONException::class)
+    private fun userSplitJson(
+        sessionId: Long,
+        span: TripSplitRules.Span,
+    ): JSONObject =
+        JSONObject()
+            .put("key", ObdTripSplits.splitKey(sessionId, span.startMs, span.endMs))
+            .put("startMs", span.startMs)
+            .put("endMs", span.endMs)
+
+    /**
+     * The trip-list id (`ObdStoreTrips.tripJson`) for [window]: point-clipped
+     * `sessionId:firstPointAtMs:lastPointAtMs`, or the window's own key when it has no points.
+     */
+    @JvmStatic
+    @Throws(JSONException::class)
+    fun tripKeyForWindow(
+        db: SQLiteDatabase,
+        window: DriveWindowDetector.DriveWindow,
+    ): String {
+        val points =
+            routePointsForSessionJson(db, window.sessionId, MAX_TRACK_POINTS, window.startedAtMs, window.endedAtMs)
+        return if (points.length() == 0) window.routeKey() else clippedRouteKey(window.sessionId, points, window)
     }
 
     /**

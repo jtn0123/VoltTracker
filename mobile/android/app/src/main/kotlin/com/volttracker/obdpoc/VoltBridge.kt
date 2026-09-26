@@ -330,6 +330,25 @@ class VoltBridge(
         tripEdits.setTripFavorite(routeKey, favorite)
     }
 
+    /**
+     * "Split trip here": after a confirm, splits the stored trip [routeKey] into two at its in-trip
+     * Park stop [stopStartMs]..[stopEndMs] (epoch-ms strings). Answers with `tripSplitChanged`.
+     */
+    @JavascriptInterface
+    fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: String?,
+        stopEndMs: String?,
+    ) {
+        tripEdits.splitTripAtStop(routeKey, stopStartMs, stopEndMs)
+    }
+
+    /** Merges a user-split trip back into one ([splitKey] from the route's `userSplitBefore/After`). */
+    @JavascriptInterface
+    fun mergeTripSplit(splitKey: String?) {
+        tripEdits.mergeTripSplit(splitKey)
+    }
+
     /** Records a maintenance-log entry from the Insights add-entry form (M5). */
     @JavascriptInterface
     fun addMaintenanceEntry(json: String?) {

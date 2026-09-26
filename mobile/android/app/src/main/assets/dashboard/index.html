@@ -1465,6 +1465,16 @@
       </header>
       <div id="tripDetailStops" class="trip-detail-stops"></div>
     </article>
+    <!-- Merge back a "Split trip here" split (map.ts#renderTripDetailMerge):
+         shown only when a user split bounds this drive. -->
+    <div class="trip-detail-merge" id="tripDetailMerge" hidden>
+      <button type="button" class="link-btn" id="tripDetailMergePrev" hidden>
+        Merge with previous trip
+      </button>
+      <button type="button" class="link-btn" id="tripDetailMergeNext" hidden>
+        Merge with next trip
+      </button>
+    </div>
     <div class="trip-detail-actions">
       <button
         type="button"

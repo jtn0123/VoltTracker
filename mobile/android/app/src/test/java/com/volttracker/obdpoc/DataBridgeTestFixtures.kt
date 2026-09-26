@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
 import com.volttracker.obdpoc.data.ObdSignalLogStore
 import com.volttracker.obdpoc.data.ObdTripEditStore
+import com.volttracker.obdpoc.data.TripSplitOutcome
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -35,6 +36,7 @@ class DataBridgeRecordingActivity : MainActivity() {
     var exportPayload = JSONObject().put("ok", true).toString()
     var appStatePayload = JSONObject().put("state", "idle").toString()
     var storageJson = JSONObject().put("sessions", 0).toString()
+    val dashboardPayloads = ArrayList<Pair<String, String?>>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         store = DataBridgeRecordingStore(this)
@@ -61,6 +63,13 @@ class DataBridgeRecordingActivity : MainActivity() {
 
     override fun publishStorageSummary() {
         storageSummaryCalls += 1
+    }
+
+    override fun publishDashboardPayload(
+        functionName: String,
+        jsonPayload: String?,
+    ) {
+        dashboardPayloads.add(functionName to jsonPayload)
     }
 
     override fun exportTripFromBridge(
@@ -124,6 +133,14 @@ class DataBridgeRecordingStore(
     var throwSetTripFavorite = false
     var lastFavoriteRouteKey: String? = null
     var lastFavoriteValue: Boolean? = null
+
+    var splitTripReturn: TripSplitOutcome? = null
+    var throwSplitTrip = false
+    var lastSplitRouteKey: String? = null
+    var lastSplitStopStartMs = Long.MIN_VALUE
+    var lastSplitStopEndMs = Long.MIN_VALUE
+    var mergeTripSplitReturn: TripSplitOutcome? = null
+    var lastMergedSplitKey: String? = null
 
     var addMaintenanceReturn = 7L
     var lastMaintenanceCreatedAtMs = Long.MIN_VALUE
@@ -212,6 +229,25 @@ class DataBridgeRecordingStore(
                     throw IllegalStateException("favorite failed")
                 }
                 return setTripFavoriteReturn
+            }
+
+            override fun splitTripAtStop(
+                routeKey: String?,
+                stopStartMs: Long,
+                stopEndMs: Long,
+            ): TripSplitOutcome? {
+                lastSplitRouteKey = routeKey
+                lastSplitStopStartMs = stopStartMs
+                lastSplitStopEndMs = stopEndMs
+                if (throwSplitTrip) {
+                    throw IllegalStateException("split failed")
+                }
+                return splitTripReturn
+            }
+
+            override fun mergeTripSplit(splitKey: String?): TripSplitOutcome? {
+                lastMergedSplitKey = splitKey
+                return mergeTripSplitReturn
             }
         }
 

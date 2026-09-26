@@ -97,7 +97,7 @@ object TripMaterializer {
             return result
         }
         val telemetry = data.readTelemetrySamples(input.sessionId)
-        val gear = TripSplitRules.analyze(input.tripRulesVersion, gearSamples(telemetry))
+        val gear = TripSplitRules.analyze(input.tripRulesVersion, gearSamples(telemetry), input.userSplits)
         val inactiveSpans = splitSpans(samples, telemetry, gear)
 
         var window = mutableListOf<LocationSample>()

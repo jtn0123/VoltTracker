@@ -97,6 +97,40 @@ class TripMaterializerGearTest {
     }
 
     @Test
+    fun aUserSplitAtAShortParkStopCutsTheTripThere() {
+        val data =
+            Drive()
+                .moving(0, 10)
+                .parkedWithClimate(10, 15)
+                .moving(15, 25)
+                .data
+        val stop =
+            TripMaterializer
+                .materialize(
+                    input(data, TripSplitRules.GEAR_AWARE),
+                    data,
+                ).single()
+                .parkStops
+                .single()
+        val base = input(data, TripSplitRules.GEAR_AWARE)
+        val split =
+            MaterializerInput(
+                base.sessionId,
+                base.startedAtMs,
+                base.closedAtMs,
+                TripSplitRules.GEAR_AWARE,
+                listOf(TripSplitRules.Span(stop.startMs, stop.endMs)),
+            )
+
+        val trips = TripMaterializer.materialize(split, data)
+
+        assertEquals(2, trips.size)
+        assertTrue(trips[0].endedAtMs <= stop.startMs)
+        assertTrue(trips[1].startedAtMs > stop.endMs)
+        assertTrue(trips.all { it.parkStops.isEmpty() })
+    }
+
+    @Test
     fun sittingInDriveNeverSplitsEvenWhenTheCarLooksInactive() {
         // 8 minutes stationary in D with no draw at all (the legacy heuristics would call that
         // car-off dwell and split). A known Drive gear overrides them.
