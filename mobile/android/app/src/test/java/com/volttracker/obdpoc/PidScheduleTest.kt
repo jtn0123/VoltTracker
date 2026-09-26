@@ -372,6 +372,33 @@ class PidScheduleTest {
         }
     }
 
+    @Test
+    fun ovmsReadingsPollTheNodesOvmsUsesAtSlowCadence() {
+        // Motor-generator temps live on the drive-unit nodes, not 7E1 (OVMS, MY2017).
+        assertEquals(Header.MOTOR_GEN_A_257, findByCommand("2228CB").header)
+        assertEquals(Header.MOTOR_GEN_B_258, findByCommand("22368F").header)
+        assertEquals(
+            "both motor temps share a phase so the receive filter is restored once",
+            findByCommand("2228CB").phaseOffset,
+            findByCommand("22368F").phaseOffset,
+        )
+        for (command in arrayOf("2228CB", "22368F", "221C43", "22439E")) {
+            assertEquals("$command cadence", 48, findByCommand(command).periodCycles)
+        }
+        for (command in arrayOf("2241A6", "221C43", "22439E", "224389")) {
+            assertEquals("$command must use the 7E4 battery header", Header.HV_PACK_7E4, findByCommand(command).header)
+        }
+        assertEquals(24, findByCommand("2241A6").periodCycles)
+        assertEquals(240, findByCommand("224389").periodCycles)
+        val sections = arrayOf("2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1")
+        for (command in sections) {
+            val spec = findByCommand(command)
+            assertEquals("$command must use the 7E7 BECM header", Header.CELL_BECM_7E7, spec.header)
+            assertEquals("$command section temps are a rare trend sample", 240, spec.periodCycles)
+            assertEquals("$command sections batch on one header switch", 60, spec.phaseOffset)
+        }
+    }
+
     private companion object {
         private fun findByCommand(command: String): PidSpec {
             for (spec in PidSchedule.SPECS) {
