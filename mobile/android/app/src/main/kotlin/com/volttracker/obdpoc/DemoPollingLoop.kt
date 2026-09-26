@@ -150,6 +150,16 @@ class DemoPollingLoop(
                 sample.put("motorAPowerKw", if (charging) 0.0 else ObdElmDecode.round1(drivePowerKw * 0.6))
                 sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
                 sample.put("prndlState", if (charging) "P" else "D")
+                sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
+                sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
+                sample.put("displayedSocPct", ObdElmDecode.round1(soc))
+                sample.put("packResistanceMohm", 148.5)
+                sample.put("hvIsolationKohm", 2000)
+                if (charging) {
+                    sample.put("chargerAcVoltage", 240)
+                    sample.put("chargerAcCurrentA", 14.0)
+                    sample.put("chargerAcPowerKw", 3.4)
+                }
                 // The position clock is driveT, so the marker parks during the
                 // charge window instead of orbiting an unplugged charger.
                 sample.put("latitude", 34.0522 + 0.009 * Math.sin(driveT / 28.0))

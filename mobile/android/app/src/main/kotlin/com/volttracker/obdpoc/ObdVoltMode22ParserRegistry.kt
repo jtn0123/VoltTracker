@@ -176,7 +176,8 @@ internal object ObdVoltMode22ParserRegistry {
             put("22432A", bytePid("minimum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("22432C", bytePid("maximum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("22435F", bytePid("SOC variation", "%", 1, 1.0 / 2.55, 0.0, PERCENT_RANGE))
-            put("2240E9", wordPid("pack resistance", "ohm", 1, 2.0, false, PACK_RESISTANCE_RANGE))
+            // Voltage app: (A*256+B)/2 shown as milliohms.
+            put("2240E9", wordPid("pack resistance", "mOhm", 1, 2.0, false, PACK_RESISTANCE_RANGE))
             put("22433B", wordLinearPid("minimum pack voltage", "V", 1, 0.52, 0.0, false, HV_VOLTAGE_RANGE))
             put("22433C", wordLinearPid("maximum pack voltage", "V", 1, 0.52, 0.0, false, HV_VOLTAGE_RANGE))
             put("224349", bytePid("HV battery max temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))

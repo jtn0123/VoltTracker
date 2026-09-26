@@ -366,6 +366,12 @@ class LiveSampleReader(
         putDerivedChargerPower(sample)
         putText(sample, "chargingMode", "224373")
         putText(sample, "chargingLevel", "224531")
+        putNumeric(sample, "chargerAcVoltage", "224368", 0)
+        putNumeric(sample, "chargerAcCurrentA", "224369", 1)
+        if (sample.has("chargerAcVoltage") && sample.has("chargerAcCurrentA")) {
+            val watts = sample.getDouble("chargerAcVoltage") * sample.getDouble("chargerAcCurrentA")
+            sample.put("chargerAcPowerKw", round1(watts / 1000.0))
+        }
     }
 
     @Throws(JSONException::class)
@@ -385,6 +391,11 @@ class LiveSampleReader(
         putNumeric(sample, "batteryHeaterPowerW", "2241B6", 0)
         putNumeric(sample, "outsideTempRawC", "22801E", 1)
         putNumeric(sample, "outsideTempC", "22801F", 1)
+        putNumeric(sample, "motorTempC", "2228CB", 0)
+        putNumeric(sample, "inverterTempC", "221C26", 0)
+        putNumeric(sample, "displayedSocPct", "228334", 1)
+        putNumeric(sample, "packResistanceMohm", "2240E9", 1)
+        putNumeric(sample, "hvIsolationKohm", "2243A6", 0)
     }
 
     @Throws(JSONException::class)
@@ -500,6 +511,12 @@ class LiveSampleReader(
             now,
         )
         putStaleMsForPresentValue(sample, "outsideTempC", "outsideTempStaleMs", "22801F", now)
+        putStaleMsForPresentValue(sample, "motorTempC", "motorTempStaleMs", "2228CB", now)
+        putStaleMsForPresentValue(sample, "inverterTempC", "inverterTempStaleMs", "221C26", now)
+        putStaleMsForPresentValue(sample, "displayedSocPct", "displayedSocStaleMs", "228334", now)
+        putStaleMsForPresentValue(sample, "packResistanceMohm", "packResistanceStaleMs", "2240E9", now)
+        putStaleMsForPresentValue(sample, "hvIsolationKohm", "hvIsolationStaleMs", "2243A6", now)
+        putStaleMsForPresentValue(sample, "chargerAcVoltage", "chargerAcStaleMs", "224368", now)
     }
 
     @Throws(JSONException::class)
