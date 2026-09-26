@@ -1659,7 +1659,7 @@ canvas {
 .dtc-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .dtc-status-grid div {
@@ -1673,7 +1673,7 @@ canvas {
   font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -2747,7 +2747,9 @@ header.signal-console-head {
 
 .dtc-item {
   display: grid;
-  grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto auto;
+  /* Code column is capped so a wide "permanent — won't clear" tag wraps
+       under the code instead of squeezing the description to one word/line. */
+  grid-template-columns: minmax(78px, 34%) minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 12px;
   /* v2: the row opens the detail sheet (causes/freeze frame moved there). */
