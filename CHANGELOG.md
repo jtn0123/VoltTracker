@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.36.5 (2026-09-26)
+
+### 🔺 Fix
+
+- **obd**: Retire refused PIDs and read the GM odometer
+  ([#68](https://github.com/jtn0123/VoltTracker/pull/68),
+  [`db19f24`](https://github.com/jtn0123/VoltTracker/commit/db19f2459a526f98dbdd2bab3cf7382d241edb90))
+
+### 🔷 Changed
+
+- **obd**: Virtual Volt adapter and per-PID scorecard
+  ([#67](https://github.com/jtn0123/VoltTracker/pull/67),
+  [`ccdc703`](https://github.com/jtn0123/VoltTracker/commit/ccdc7033c9f860302d7716ecde7507c50ce3ebf2))
+
+
 ## v0.36.4 (2026-09-26)
 
 ### 🔺 Fix
