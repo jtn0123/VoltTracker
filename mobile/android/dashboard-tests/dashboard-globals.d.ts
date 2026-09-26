@@ -449,6 +449,10 @@ interface DashboardState {
   socHistory: number[];
   sessionStartSoc: number | null;
   sessionDistanceM: number;
+  /** Live-drive running totals — see telemetry-state.ts#initialSessionTotals. */
+  sessionMaxSpeedKph: number;
+  sessionEnergyKwh: number;
+  sessionEnergyAtMs: number;
   sessionLastLat: number | null;
   sessionLastLng: number | null;
   lastSampleAt: number;

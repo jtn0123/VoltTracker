@@ -2239,14 +2239,22 @@ import { VD } from "./vd-registry";
     sheet.hidden = false;
     // Drops .app's layer-promotion transform (base.css) so the fixed sheet sits
     // over the viewport instead of the bottom of the long Map page.
-    document.body.classList.add("trip-detail-active");
+    setTripDetailActive(true);
     return true;
   }
 
   function closeTripDetail() {
     const sheet = el("tripDetailSheet");
     if (sheet) sheet.hidden = true;
-    document.body.classList.remove("trip-detail-active");
+    setTripDetailActive(false);
+  }
+
+  // Flagged on <body> for the sheet's own styling and on <html> (the page scroller) so the
+  // page underneath the scrim cannot scroll. A class, not html:has(): a :has() on the root
+  // re-matches on every DOM mutation, and on older Android WebViews that style churn on each
+  // live sample kept the UI thread from ever going idle.
+  function setTripDetailActive(on: boolean) {
+    for (const node of [document.body, document.documentElement]) node.classList.toggle("trip-detail-active", on);
   }
 
   function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {

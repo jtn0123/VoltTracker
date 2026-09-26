@@ -153,7 +153,7 @@
   background: var(--surface-map);
   box-shadow: var(--shadow-card);
   /* Keeps Leaflet's pane/control z-indices (400+) inside the map, so page
-       overlays like the trip-detail sheet (z-index 40) paint above it. */
+       overlays like the trip-detail sheet (z-index 42) paint above it. */
   isolation: isolate;
 }
 
@@ -577,7 +577,7 @@
 
 .charge-grid {
   display: grid;
-  /* Three tiles, one row (v2: Plug-ins / Peak power / Est. cost). */
+  /* Three tiles, one row (v2: Charges / Peak power / Est. cost). */
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
@@ -1373,12 +1373,32 @@ body.map-full-active .bottom-nav {
   max-height: 78vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  z-index: 40;
+  z-index: 42;
   padding: var(--card-pad-lg);
   /* Opaque sheet surface: .panel's raised card fill is slightly translucent,
        which let the trip list behind the sheet show through. */
   background: var(--surface-modal);
   box-shadow: 0 16px 48px var(--shadow);
+}
+
+/* Scrim behind the sheet: the shared --scrim token (light + dark) and the DTC
+     sheet's fade, over the bottom nav (z 40). While it is up the page under it
+     is scroll-locked; a tap on it closes the sheet (data-action). */
+.trip-detail-backdrop {
+  display: none;
+}
+
+body.trip-detail-active .trip-detail-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  background: var(--scrim);
+  animation: backdrop-fade 200ms ease both;
+}
+
+html.trip-detail-active {
+  overflow: hidden;
 }
 
 /* The sheet is centred with a transform; .panel's hover lift (pointer devices)

@@ -27,7 +27,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
 import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
-import { initialTelemetryState } from "./telemetry-state";
+import { initialSessionTotals, initialTelemetryState } from "./telemetry-state";
 import {
   consumeRerunRequest,
   invalidateRenderCache,
@@ -1113,6 +1113,7 @@ import { VD } from "./vd-registry";
     // Running session distance in meters, derived from haversine-stepped GPS
     // samples. Reset on session start; surfaced in the Drive "Recording" chip.
     sessionDistanceM: 0,
+    ...initialSessionTotals(),
     sessionLastLat: null,
     sessionLastLng: null,
     // Tracked by telemetry.js for the BT-disconnected stale-data indicator.
@@ -1594,9 +1595,10 @@ import { VD } from "./vd-registry";
 
   function swipeBlocked(target: EventTarget | null): boolean {
     if (document.body.classList.contains("map-full-active")) return true;
-    // The DTC detail sheet's backdrop is a plain sibling <div> (no dialog
-    // role), so a swipe starting on it wouldn't be caught by closest() below.
-    if (document.body.classList.contains("dtc-detail-active")) return true;
+    // The DTC and trip-detail sheets' backdrops are plain sibling <div>s (no
+    // dialog role), so a swipe starting on one wouldn't be caught by closest() below.
+    const sheetOpen = document.body.classList;
+    if (sheetOpen.contains("dtc-detail-active") || sheetOpen.contains("trip-detail-active")) return true;
     const node = target instanceof Element ? target : null;
     if (!node) return true;
     return Boolean(
@@ -1782,6 +1784,7 @@ import { VD } from "./vd-registry";
       socHistory: [],
       sessionStartSoc: null,
       sessionDistanceM: 0,
+      ...initialSessionTotals(),
       sessionLastLat: null,
       sessionLastLng: null,
       liveRouteStartedAtMs: null,
