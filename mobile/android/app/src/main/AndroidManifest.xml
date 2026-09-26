@@ -56,9 +56,10 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
-        <!-- Native Compose dashboard — the launcher experience. -->
+        <!-- WebView dashboard — the launcher experience. It is the only UI with every
+             feature (trips, charge, map, insights, diagnostics, backups, pairing). -->
         <activity
-            android:name=".ComposeDashboardActivity"
+            android:name=".MainActivity"
             android:exported="true"
             android:theme="@style/Theme.VoltTracker.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
@@ -68,11 +69,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Classic WebView dashboard. Still hosts trips/history/settings and the
-             connection troubleshooter; reachable from the Compose Settings tab and
-             the home-screen widget until the native screens absorb those flows. -->
+        <!-- Native Compose dashboard, in progress. Only its Drive tab is wired to live data,
+             so it is not the launcher; it returns once each tab reaches parity. -->
         <activity
-            android:name=".MainActivity"
+            android:name=".ComposeDashboardActivity"
             android:exported="false"
             android:theme="@style/Theme.VoltTracker.Splash"
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
