@@ -16,6 +16,7 @@ import com.volttracker.obdpoc.FailureClass
 import com.volttracker.obdpoc.LiveSampleReader
 import com.volttracker.obdpoc.OBDLog
 import com.volttracker.obdpoc.ObdElmDecode
+import com.volttracker.obdpoc.ObdMode01Batch
 import com.volttracker.obdpoc.ObdProbes
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.PidPollingState
@@ -918,7 +919,7 @@ open class ObdPollingEngine(
     private fun probeMode01Batch() {
         try {
             val probeResponse = sendCommand("010D0C", 1500)
-            val ok = ObdProtocol.splitMode01Batch(probeResponse, listOf("0D", "0C")) != null
+            val ok = ObdMode01Batch.split(probeResponse, listOf("0D", "0C")) != null
             pidPolling.setMode01BatchSupported(ok)
             service.recorder.logEvent(
                 "mode01_batch_probe",

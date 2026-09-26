@@ -145,68 +145,6 @@ object ObdProtocol {
     }
 
     /**
-     * Splits a batched mode-01 reply into one standalone `41<pid><data>` frame per requested PID,
-     * or returns null when any PID is missing. Accepts both reply shapes seen in the field:
-     * - per-PID markers (`41 0D 10 41 0C 00 00`), which some clones emit; and
-     * - SAE J1979 multi-PID form (`41 0D 10 0C 00 00`): one `41` followed by PID/data pairs. This is
-     *   what the target Volt sends (real log: `010D0C` -> `410D100C0000`).
-     * Multi-frame (ISO-TP "0:/1:") replies are reassembled first.
-     */
-    @JvmStatic
-    fun splitMode01Batch(
-        response: String?,
-        pidHex: List<String>,
-    ): Map<String, String>? {
-        if (response == null || pidHex.isEmpty()) {
-            return null
-        }
-        val cleanPids = pidHex.map { it.uppercase(Locale.US) }
-        if (responseContainsAllMode01Pids(response, cleanPids)) {
-            return cleanPids.associateWith { pid -> mode01Frame(response, pid) ?: return null }
-        }
-        val frames = HashMap<String, String>()
-        val sources = elmSegmentedHex(response)?.let(::listOf) ?: adapterHexLines(response)
-        for (hex in sources) {
-            collectJ1979Frames(hex, cleanPids.toSet(), frames)
-        }
-        return if (frames.keys.containsAll(cleanPids)) cleanPids.associateWith(frames::getValue) else null
-    }
-
-    /** First complete `41<pid><data>` frame for [pid] in a per-PID-marker reply. */
-    private fun mode01Frame(
-        response: String,
-        pid: String,
-    ): String? {
-        val bytes = mode01Bytes(response, pid, mode01PayloadBytes(pid)) ?: return null
-        return "41" + pid + bytes.joinToString("") { "%02X".format(Locale.US, it) }
-    }
-
-    /** Walks every `41` in [hex] as a J1979 multi-PID reply, keeping the first frame per PID. */
-    private fun collectJ1979Frames(
-        hex: String,
-        wanted: Set<String>,
-        frames: MutableMap<String, String>,
-    ) {
-        var start = hex.indexOf("41")
-        while (start >= 0) {
-            var cursor = start + 2
-            while (cursor + 2 <= hex.length) {
-                val pid = hex.substring(cursor, cursor + 2)
-                if (pid !in wanted) {
-                    break
-                }
-                val dataEnd = cursor + 2 + mode01PayloadBytes(pid) * 2
-                if (dataEnd > hex.length) {
-                    break
-                }
-                frames.getOrPut(pid) { "41" + hex.substring(cursor, dataEnd) }
-                cursor = dataEnd
-            }
-            start = hex.indexOf("41", maxOf(start + 2, cursor))
-        }
-    }
-
-    /**
      * Walks [lines] with a forward-only cursor consuming each PID's `41xx` marker plus its full
      * payload, in the given order. Consumption means a marker inside an already-consumed span
      * can never double-count.
@@ -499,7 +437,7 @@ object ObdProtocol {
     // 0C, 1F, 42 and 32 are the 2-byte batched Mode-01 PIDs and A6 is the 4-byte odometer; undercounting
     // a trailing multi-byte PID would let the completeness gate accept a frame truncated by a byte (the
     // multi-byte decoders then null). 32 is EVAP vapor pressure, decoded as a signed 2-byte word.
-    private fun mode01PayloadBytes(pid: String): Int =
+    internal fun mode01PayloadBytes(pid: String): Int =
         if (pid == "0C" || pid == "1F" || pid == "42" || pid == "32") {
             2
         } else if (pid == "A6") {
@@ -542,7 +480,7 @@ object ObdProtocol {
         offset: Int,
     ): Int? = mode01Bytes(response, pid, 1)?.let { it[0] + offset }
 
-    private fun mode01Bytes(
+    internal fun mode01Bytes(
         response: String?,
         pid: String,
         expectedBytes: Int,
@@ -572,7 +510,7 @@ object ObdProtocol {
      * as `NO DATA` or `SEARCHING`. Lines stay separate so a truncated frame cannot borrow payload
      * bytes from the next response line.
      */
-    private fun adapterHexLines(response: String): List<String> =
+    internal fun adapterHexLines(response: String): List<String> =
         response
             .uppercase(Locale.US)
             .split(Regex("[\\r\\n]+"))
