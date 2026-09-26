@@ -918,7 +918,7 @@ open class ObdPollingEngine(
     private fun probeMode01Batch() {
         try {
             val probeResponse = sendCommand("010D0C", 1500)
-            val ok = ObdProtocol.responseContainsAllMode01Pids(probeResponse, listOf("0D", "0C"))
+            val ok = ObdProtocol.splitMode01Batch(probeResponse, listOf("0D", "0C")) != null
             pidPolling.setMode01BatchSupported(ok)
             service.recorder.logEvent(
                 "mode01_batch_probe",

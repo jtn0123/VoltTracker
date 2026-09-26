@@ -1201,6 +1201,37 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun splitMode01Batch_readsTheJ1979MultiPidReplyTheVoltSends() {
+        // Real capture from the target car: "010D0C" -> one 41, then PID/data pairs.
+        val frames = ObdProtocol.splitMode01Batch("010D0C\r410D100C0000\r\r>", listOf("0D", "0C"))
+        assertEquals(mapOf("0D" to "410D10", "0C" to "410C0000"), frames)
+        assertEquals(16, ObdProtocol.parseSpeedKph(frames!!.getValue("0D")))
+        assertEquals(0f, ObdProtocol.parseRpm(frames.getValue("0C"))!!, 0.01f)
+    }
+
+    @Test
+    fun splitMode01Batch_reassemblesAMultiFrameReply() {
+        val response = "008\r0: 41 0D 32 0C 0B B8\r1: 49 80 00 00 00 00 00\r\r>"
+        val frames = ObdProtocol.splitMode01Batch(response, listOf("0D", "0C", "49"))
+        assertEquals(mapOf("0D" to "410D32", "0C" to "410C0BB8", "49" to "414980"), frames)
+    }
+
+    @Test
+    fun splitMode01Batch_keepsPerPidMarkerRepliesWorking() {
+        val frames = ObdProtocol.splitMode01Batch("41 0D 50 41 0C 0B B8\r\r>", listOf("0D", "0C"))
+        assertEquals(mapOf("0D" to "410D50", "0C" to "410C0BB8"), frames)
+    }
+
+    @Test
+    fun splitMode01Batch_missingOrTruncatedPidIsNull() {
+        assertNull(ObdProtocol.splitMode01Batch("410D10\r>", listOf("0D", "0C")))
+        assertNull(ObdProtocol.splitMode01Batch("410D100C00\r>", listOf("0D", "0C")))
+        assertNull(ObdProtocol.splitMode01Batch("NO DATA\r>", listOf("0D", "0C")))
+        assertNull(ObdProtocol.splitMode01Batch(null, listOf("0D")))
+        assertNull(ObdProtocol.splitMode01Batch("410D10", listOf()))
+    }
+
+    @Test
     fun responseContainsAllMode01Pids_missingPidReturnsFalse() {
         // Adapter only answered with 410D; 410C marker absent → batching must fall back.
         val response = "41 0D 50\r\r>"
