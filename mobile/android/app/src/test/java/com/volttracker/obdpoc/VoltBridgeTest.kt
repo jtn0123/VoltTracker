@@ -366,6 +366,11 @@ class VoltBridgeTest {
                 "setKeepScreenAwake",
                 "setTripSummaryNotify",
                 "setActiveDashboardView",
+                // Experimental car controls (native PIN + confirmation).
+                "getCarControlState",
+                "setCarControlsEnabled",
+                "requestCarControl",
+                "lockCarControls",
                 // M1 event notifications + M3 auto-scan settings.
                 "getEventNotificationState",
                 "setChargeCompleteNotify",

@@ -123,6 +123,27 @@ class VoltBridge(
         activity.runOnUiThread { activity.dashboardExperience().setActiveDashboardView(clean) }
     }
 
+    // Experimental car controls. JavaScript can only read state and ASK for a command by name:
+    // the PIN entry and the per-command confirmation are native dialogs owned by the delegate, and
+    // the engine re-checks the opt-in, the one-shot confirmation and the parked gate before sending.
+    @JavascriptInterface
+    fun getCarControlState(): String = activity.carControls().getCarControlStateJson()
+
+    @JavascriptInterface
+    fun setCarControlsEnabled(enabled: Boolean) {
+        activity.carControls().setCarControlsEnabled(enabled)
+    }
+
+    @JavascriptInterface
+    fun requestCarControl(command: String?) {
+        activity.carControls().requestCarControl(command)
+    }
+
+    @JavascriptInterface
+    fun lockCarControls() {
+        activity.carControls().relockCarControls()
+    }
+
     @JavascriptInterface
     fun getStorageSummary(): String = storage.getStorageSummary()
 

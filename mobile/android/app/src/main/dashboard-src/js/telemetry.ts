@@ -103,7 +103,11 @@ import { gearDisplayText } from "./gear";
     "coolantHeaterKw", "climateStaleMs", "peCoolantTempC", "peCoolantStaleMs",
     "chargeCurrentLimitA", "chargeLimitStaleMs", "clusterEvRangeKm", "fuelRangeKm", "rangeStaleMs",
     "cycleEnergyUsedKwh", "cycleEvDistanceKm", "cycleFuelDistanceKm", "cycleFuelUsedL",
-    "driveCycleStaleMs",
+    "driveCycleStaleMs", "remoteStartState",
+    // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
+    // present while controls are enabled, so they must blank when a sample omits them.
+    "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
+    "carControlLastOutcome", "carControlLastDetail", "carControlLastAtMs",
     // Location. appendLocation() early-returns with no fix, so the whole group must clear
     // together or a tunnel leaves a stale position behind a fresh-looking provider label.
     "latitude", "longitude", "accuracyM", "gpsSpeedMps", "bearingDeg", "locationAgeMs",

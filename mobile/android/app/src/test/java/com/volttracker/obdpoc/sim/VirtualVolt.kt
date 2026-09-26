@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.sim
 
 import android.bluetooth.BluetoothDevice
+import com.volttracker.obdpoc.CarControlFrames
 import com.volttracker.obdpoc.engine.ElmConnection
 import java.util.Collections
 import java.util.UUID
@@ -26,6 +27,10 @@ class VirtualVolt(
      * to single-wire CAN (`STP 61`) where `STM` hears [VirtualVoltCatalog.SWCAN_FRAMES]. While
      * switched off HS-CAN, every OBD request answers NO DATA, exactly like the real adapter, so a
      * listener that forgets to switch back breaks polling visibly.
+     *
+     * An STN adapter also accepts `STPX` transmits the way the car-controls path uses them: the
+     * body reacts only to the allowlisted OVMS frames ([CarControlFrames]) on the right bus, and the
+     * change shows up in the next `STM` read-back ([BodyState]).
      */
     private val stn: Boolean = false,
 ) : ElmConnection() {
@@ -57,6 +62,29 @@ class VirtualVolt(
 
     @Volatile
     private var protocol = HS_PROTOCOL
+
+    /** Every frame the app transmitted with `STPX`, as `"<bus>:<id>:<data>"`, in order. */
+    val transmitted: MutableList<String> = Collections.synchronizedList(ArrayList())
+
+    /**
+     * The simulated body: null fields mean "as the catalog broadcasts it" (locked by fob, no
+     * remote-start or window frames), so the listen-only tests see exactly the catalog.
+     */
+    class BodyState {
+        @Volatile var locked: Boolean? = null
+
+        @Volatile var remoteStart: Boolean? = null
+
+        @Volatile var windowsOpen: Boolean? = null
+
+        /** Set by the SW-CAN wake frame (sent under High Voltage Wakeup); body commands need it. */
+        @Volatile var awake = false
+    }
+
+    val body = BodyState()
+
+    @Volatile
+    private var highVoltageWakeup = false
 
     fun afterCommand(
         command: String,
@@ -100,8 +128,8 @@ class VirtualVolt(
             return MonitorResult("?\r>", true, true, false)
         }
         val frames =
-            if (protocol == SWCAN_PROTOCOL) {
-                VirtualVoltCatalog.SWCAN_FRAMES.getValue(mode).joinToString("\r") { it.line } + "\r"
+            if (protocol == SWCAN_PROTOCOL || protocol == SWCAN_29BIT_PROTOCOL) {
+                swcanLines().joinToString("\r") + "\r"
             } else {
                 ""
             }
@@ -125,8 +153,16 @@ class VirtualVolt(
                 "ELM327 v1.5"
             }
             command == "STI" -> if (stn) "STN2255 v5.10.3" else "?"
+            command.startsWith("STPX") -> if (stn) transmit(command) else "?"
+            // STPO opens the current protocol; it is not a preset.
+            command == "STPO" -> if (stn) "OK" else "?"
+            command.startsWith("STCSWM") && stn -> {
+                highVoltageWakeup = command == "STCSWM2"
+                "OK"
+            }
             command.startsWith("STP") && stn -> {
                 protocol = command.removePrefix("STP")
+                highVoltageWakeup = false
                 "OK"
             }
             command.startsWith("ST") -> if (stn) "OK" else "?"
@@ -156,6 +192,46 @@ class VirtualVolt(
             !replyPassesFilter() -> NO_DATA
             else -> VirtualVoltCatalog.find(header, command)?.replies?.get(mode) ?: NO_DATA
         }
+
+    /** The catalog's broadcasts with the body's current state swapped in (bus order: state last). */
+    private fun swcanLines(): List<String> {
+        val lines =
+            VirtualVoltCatalog.SWCAN_FRAMES
+                .getValue(mode)
+                .map { it.line }
+                .filterNot { body.locked != null && it.startsWith(LOCK_FRAME_PREFIX) }
+                .toMutableList()
+        body.locked?.let { lines.add(LOCK_FRAME_PREFIX + if (it) " 00 01 00 07" else " 00 00 00 07") }
+        body.remoteStart?.let { lines.add(REMOTE_START_FRAME_PREFIX + if (it) " 02" else " 00") }
+        body.windowsOpen?.let { lines.add(WINDOWS_FRAME_PREFIX + if (it) " 36 36" else " 00 00") }
+        return lines
+    }
+
+    /** `STPXH:<id>,D:<hex>,R:0` (spaces already stripped): the car reacts to allowlisted frames only. */
+    private fun transmit(command: String): String {
+        val match = STPX.matchEntire(command) ?: return "?"
+        val id = match.groupValues[1].toInt(16)
+        val data = match.groupValues[2].chunked(2).map { it.toInt(16) }
+        transmitted.add("$protocol:${match.groupValues[1]}:${match.groupValues[2]}")
+        val frame =
+            CarControlFrames.ALLOWED.firstOrNull {
+                it.id == id &&
+                    it.data == data &&
+                    it.bus.stnProtocol == protocol
+            }
+        when {
+            frame == null -> Unit
+            frame == CarControlFrames.WAKEUP -> body.awake = body.awake || highVoltageWakeup
+            frame == CarControlFrames.TELEMATICS_LOCK -> body.locked = true
+            frame == CarControlFrames.TELEMATICS_UNLOCK -> body.locked = false
+            !body.awake -> Unit
+            frame == CarControlFrames.TELEMATICS_REMOTE_START -> body.remoteStart = true
+            frame == CarControlFrames.TELEMATICS_REMOTE_STOP -> body.remoteStart = false
+            frame == CarControlFrames.BCM_WINDOWS_DOWN -> body.windowsOpen = true
+            frame == CarControlFrames.BCM_WINDOWS_UP -> body.windowsOpen = false
+        }
+        return "OK"
+    }
 
     /** Whether the addressed module's reply ID (request + 8, or + 0x400 off 7Ex) gets through. */
     private fun replyPassesFilter(): Boolean {
@@ -192,6 +268,13 @@ class VirtualVolt(
         const val NO_DATA = "NO DATA"
         const val HS_PROTOCOL = "6"
         const val SWCAN_PROTOCOL = "61"
+        const val SWCAN_29BIT_PROTOCOL = "62"
+        const val LOCK_FRAME_PREFIX = "0C 41 40 40"
+        const val REMOTE_START_FRAME_PREFIX = "10 39 00 40"
+
+        // GMLAN PID 0x325 (window positions) from the BCM: FL|RL<<3, FR|RR<<3; 6 = fully open.
+        const val WINDOWS_FRAME_PREFIX = "10 64 A0 CB"
+        val STPX = Regex("STPXH:([0-9A-F]+),D:([0-9A-F]*),R:\\d+")
 
         // 17 characters like a real VIN, but obviously synthetic (VINs never contain I, O or Q).
         const val VIN = "SYNTHETICVOLTVIN0"

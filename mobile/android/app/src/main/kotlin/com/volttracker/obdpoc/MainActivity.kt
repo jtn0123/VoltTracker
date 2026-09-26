@@ -252,6 +252,15 @@ open class MainActivity :
         )
     }
 
+    private val carControlHost by lazy {
+        CarControlHostDelegate(
+            activity = this,
+            prefs = { prefs },
+            publishAppState = publishAppStateCommand,
+            toast = { message -> callDashboard("showToast", message) },
+        )
+    }
+
     // Backs the EventNotificationCommands seam (M1/M3 settings). Kept off the Activity body so the
     // six toggle handlers don't swell MainActivity's surface; reads the prefs lazily because they
     // only exist after onCreate.
@@ -1072,6 +1081,8 @@ open class MainActivity :
     override fun eventNotifications(): EventNotificationCommands = eventNotificationHost
 
     override fun dashboardExperience(): DashboardExperienceCommands = dashboardExperienceHost
+
+    override fun carControls(): CarControlCommands = carControlHost
 
     private fun maybeAutoConnect(
         trigger: String,

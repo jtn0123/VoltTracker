@@ -308,4 +308,7 @@ interface DashboardHost :
     fun diagnostics(): DiagnosticsCommands
 
     fun dashboardExperience(): DashboardExperienceCommands = DashboardExperienceCommands.NONE
+
+    /** Experimental car controls (native PIN + confirmation dialogs); see [CarControlHostDelegate]. */
+    fun carControls(): CarControlCommands = CarControlCommands.UNAVAILABLE
 }

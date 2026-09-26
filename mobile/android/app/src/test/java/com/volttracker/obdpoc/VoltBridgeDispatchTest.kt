@@ -25,6 +25,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlertDialog
 
 /**
  * Exercises the actual dispatch behavior of the [VoltBridge] `@JavascriptInterface` surface — the
@@ -940,6 +941,39 @@ class VoltBridgeDispatchTest {
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
+    }
+
+    // ---- car controls ----------------------------------------------------------------------
+
+    @Test
+    fun carControlsAreOffByDefaultAndOnlyNativeDialogsTurnThemOn() {
+        CarControlAuth.resetForTest()
+        val state = JSONObject(bridge.getCarControlState())
+        assertTrue(state.getBoolean("available"))
+        assertFalse(state.getBoolean("enabled"))
+
+        ShadowAlertDialog.reset()
+        bridge.requestCarControl("lock")
+        drain()
+        assertNull("disabled controls show no command dialog", ShadowAlertDialog.getLatestAlertDialog())
+        assertNull(activity.lastServiceAction)
+
+        bridge.setCarControlsEnabled(true)
+        drain()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertEquals(CarControlHostDelegate.ENABLE_WARNING, shadowOf(dialog).message.toString())
+        assertFalse(
+            "nothing is enabled until a PIN is set",
+            JSONObject(bridge.getCarControlState()).getBoolean("enabled"),
+        )
+
+        CarControlAuth.recordPinAttempt(true, System.currentTimeMillis())
+        bridge.lockCarControls()
+        assertFalse(JSONObject(bridge.getCarControlState()).getBoolean("unlocked"))
+        bridge.setCarControlsEnabled(false)
+        drain()
+        assertFalse(JSONObject(bridge.getCarControlState()).getBoolean("enabled"))
+        CarControlAuth.resetForTest()
     }
 
     /**

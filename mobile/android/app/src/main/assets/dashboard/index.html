@@ -889,6 +889,92 @@
     </div>
   </article>
 
+  <!-- Experimental car controls. Hidden unless the user turned them on in
+       Settings (native PIN setup) or Demo / Testing is running. Buttons only
+       ASK: the native side shows the PIN + confirmation dialog, and the
+       polling engine re-checks the parked/adapter gate before sending.
+       Rendered by car-controls.ts. -->
+  <article
+    class="panel car-controls-card"
+    id="carControlsCard"
+    aria-labelledby="carControlsTitle"
+    hidden
+  >
+    <header class="card-head">
+      <div>
+        <span class="kicker">Controls</span>
+        <h3 id="carControlsTitle">Car controls</h3>
+      </div>
+      <span class="car-controls-badge">Experimental</span>
+    </header>
+    <p
+      id="carControlsGate"
+      class="car-controls-gate"
+      data-tone="warn"
+      role="status"
+      aria-live="polite"
+    >
+      Connect to the car to use controls.
+    </p>
+    <div class="car-controls-grid" role="group" aria-label="Car commands">
+      <button type="button" class="car-control-btn" data-car-control="lock">
+        Lock
+      </button>
+      <button type="button" class="car-control-btn" data-car-control="unlock">
+        Unlock
+      </button>
+      <button type="button" class="car-control-btn" data-car-control="flash">
+        Flash lights
+      </button>
+      <button type="button" class="car-control-btn" data-car-control="locate">
+        Horn + lights
+      </button>
+      <button
+        type="button"
+        class="car-control-btn"
+        data-car-control="remote_start"
+      >
+        Remote start
+      </button>
+      <button
+        type="button"
+        class="car-control-btn"
+        data-car-control="remote_stop"
+      >
+        Stop remote start
+      </button>
+      <button
+        type="button"
+        class="car-control-btn"
+        data-car-control="windows_down"
+      >
+        Windows down
+      </button>
+      <button
+        type="button"
+        class="car-control-btn"
+        data-car-control="windows_up"
+      >
+        Windows up
+      </button>
+    </div>
+    <p
+      id="carControlsResult"
+      class="car-controls-result"
+      role="status"
+      aria-live="polite"
+      hidden
+    ></p>
+    <div class="car-controls-foot">
+      <small id="carControlsPinState" class="status-copy"
+        >PIN needed for each command</small
+      >
+      <button type="button" class="link-btn" id="carControlsRelockBtn" hidden>
+        Lock PIN now
+      </button>
+    </div>
+  </article>
+
   <!-- Slim session/health footer (v2 design): one tappable row — session state
        dot + "OBD session · <state> · N samples" + "N/5 checks ok ›" — jumping
        to Diagnostics, where the full OBD-session card and Data health rows now
@@ -2863,6 +2949,47 @@
     </div>
     <small
       id="drivingDisplayStatus"
+      class="status-copy"
+      role="status"
+      aria-live="polite"
+    ></small>
+  </article>
+
+  <article id="carControlsSettingsCard" class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Car controls</span>
+        <h3>Car controls (experimental)</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Car controls (experimental)</strong>
+        <small
+          >Lock, unlock, lights, remote start and windows from the Drive tab.
+          OBDLink adapter only; car must be parked.</small
+        >
+      </div>
+      <button
+        type="button"
+        id="carControlsToggle"
+        class="tile-toggle pref-toggle"
+        data-on="false"
+        aria-pressed="false"
+        aria-describedby="carControlsWarning"
+      >
+        Off
+      </button>
+    </div>
+    <p id="carControlsWarning" class="car-controls-warning">
+      Sends body commands to your car over the OBD port. The command frames come
+      from the open-source OVMS project and have not been tested on your car.
+      Turning this on asks you to set a PIN; every command needs the PIN (valid
+      for 5 minutes) and a confirmation. Commands are refused unless the car is
+      parked and stopped. Off by default.
+    </p>
+    <small
+      id="carControlsSettingsStatus"
       class="status-copy"
       role="status"
       aria-live="polite"

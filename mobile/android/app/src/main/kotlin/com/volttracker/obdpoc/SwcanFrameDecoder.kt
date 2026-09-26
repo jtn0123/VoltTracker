@@ -64,6 +64,7 @@ enum class SwcanField(
     AC_EVAP_TEMP(SwcanGroup.CLIMATE),
     HEATER_CORE_TEMP(SwcanGroup.CLIMATE),
     COOLANT_HEATER_KW(SwcanGroup.CLIMATE),
+    REMOTE_START(SwcanGroup.CLIMATE),
     PE_COOLANT_TEMP(SwcanGroup.POWER_ELECTRONICS),
     CHARGE_LIMIT(SwcanGroup.CHARGE_LIMIT),
     CLUSTER_EV_RANGE(SwcanGroup.RANGE),
@@ -118,6 +119,7 @@ object SwcanFrameDecoder {
     const val ID_CLIMATE_GENERAL = 0x10734099
     const val ID_CLIMATE_BASIC = 0x10814099
     const val ID_CABIN_TEMP = 0x10440099
+    const val ID_REMOTE_START = 0x10390040
 
     // ---- 13-bit GMLAN parameter ids, matched regardless of priority/source bits ----
     const val PID_ENERGY_STORAGE = 0x0141
@@ -243,6 +245,7 @@ object SwcanFrameDecoder {
             ID_CLIMATE_GENERAL -> acState(d)
             ID_CLIMATE_BASIC -> if (d.size >= 2) listOf(num(SwcanField.BLOWER, d[1] * 0.39, 0)) else none()
             ID_CABIN_TEMP -> if (d.size >= 6) listOf(num(SwcanField.CABIN_TEMP, d[5] / 2.0 - 40.0, 1)) else none()
+            ID_REMOTE_START -> remoteStart(d)
             else -> null
         }
     }
@@ -355,6 +358,17 @@ object SwcanFrameDecoder {
             num(SwcanField.AC_EVAP_TEMP, d[1] * 0.5 - 40.0, 1),
             num(SwcanField.AC_COMPRESSOR_RPM, rpm.toDouble(), 0),
         )
+    }
+
+    // Remote start status (va_ac_preheat.cpp ClimateControlIncomingSWCAN, case 0x10390040): byte 0
+    // is 0 when remote start is off; bit 1 set is a remote start request / active preheat.
+    private fun remoteStart(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty()) return none()
+        return when {
+            d[0] == 0 -> listOf(text(SwcanField.REMOTE_START, "off"))
+            (d[0] shr 1) and 1 == 1 -> listOf(text(SwcanField.REMOTE_START, "on"))
+            else -> none()
+        }
     }
 
     // Climate control general status: byte 0 bits 4..5, 1 = A/C off, 2 = A/C on.

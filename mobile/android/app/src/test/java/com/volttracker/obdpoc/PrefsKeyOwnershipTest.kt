@@ -60,6 +60,9 @@ class PrefsKeyOwnershipTest {
         val otherKeys =
             listOf(
                 AutoConnectController.PREF_AUTO_CONNECT_ENABLED,
+                CarControlSettings.KEY_ENABLED,
+                CarControlSettings.KEY_PIN_HASH,
+                CarControlSettings.KEY_PIN_SALT,
                 "raw_retention_days",
             )
 

@@ -96,6 +96,9 @@ function nativeSampleKeys() {
     // SW-CAN broadcast values the engine appends to every live sample (ObdPollingEngine
     // appendSwcanReadings -> SwcanReadings.appendTo).
     ...sampleKeysIn(sliceFunction(read('SwcanReadings.kt'), 'fun appendTo(')),
+    // Car-controls gate + last outcome (ObdPollingEngine appendCarControlState ->
+    // CarControlRunner.appendTo), present only while controls are enabled.
+    ...sampleKeysIn(sliceFunction(read('engine/CarControlRunner.kt'), 'fun appendTo(')),
   ]);
 }
 
