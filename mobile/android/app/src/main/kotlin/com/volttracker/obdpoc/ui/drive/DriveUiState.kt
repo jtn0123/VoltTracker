@@ -24,7 +24,11 @@ data class DriveUiState(
     /** SOC samples (%) across the session, oldest first. */
     val socTrace: List<Float> = emptyList(),
     val socPercent: Double = 0.0,
-    val evRangeMiles: Double = 0.0,
+    /**
+     * The car's own EV range estimate (2241A6 `evRangeKm`) in miles, or null when it
+     * hasn't reported or has gone stale — never the distance driven this cycle.
+     */
+    val evRangeMiles: Double? = null,
     val packTempF: Int = 0,
     val packVolts: Double = 0.0,
     /** Signed pack current in A: positive = discharge, negative = charge/regen. */

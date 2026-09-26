@@ -149,6 +149,11 @@ import { gearDisplayText } from "./gear";
   // what tells us the fix is stale. Generous enough to ride out ordinary ~1 Hz
   // gaps without flapping.
   const GPS_FIX_STALE_MS = 15000;
+  // Max age (ms) of the car's own EV range estimate (2241A6, polled every 24
+  // cycles) before the Drive tiles stop presenting it. Native already ages the
+  // carry-forward out after ~its poll period; this guards replayed/backfilled
+  // samples so an old estimate never reads as the current range.
+  const EV_RANGE_STALE_MS = 120_000;
   // Below this duration, formatShortDuration shows one decimal (e.g. "1.5s").
   const SHORT_DURATION_DECIMAL_CUTOFF_MS = 10000;
   const LIVE_ROUTE_HYDRATION_RETRY_MS = 5_000;
@@ -1126,6 +1131,17 @@ import { gearDisplayText } from "./gear";
     });
   }
 
+  // The car's own EV range estimate (km), or null when it hasn't reported, is
+  // negative, or its last read is older than EV_RANGE_STALE_MS.
+  function freshEvRangeKm(t: VoltTelemetry): number | null {
+    const raw = t.evRangeKm;
+    const n = Number(raw);
+    if (raw == null || raw === "" || !Number.isFinite(n) || n < 0) return null;
+    const ageMs = Number(t.evRangeStaleMs);
+    if (t.evRangeStaleMs != null && Number.isFinite(ageMs) && ageMs > EV_RANGE_STALE_MS) return null;
+    return n;
+  }
+
   export function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
@@ -1221,7 +1237,11 @@ import { gearDisplayText } from "./gear";
     liveNum("moreMotorA", t.motorAPowerKw, (n) => `${n.toFixed(1)} kW`);
     liveNum("moreMotorB", t.motorBPowerKw, (n) => `${n.toFixed(1)} kW`);
     setOptionalLiveText("moreGear", gearDisplayText(t) || "--");
-    liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(km(n)));
+    // EV range is the car's own estimate (2241A6 → evRangeKm), never the
+    // distance driven this cycle (222487 → evDistanceThisCycleKm), which used
+    // to be mislabelled here. Missing or stale → hidden rather than guessed.
+    const evRangeKm = freshEvRangeKm(t);
+    liveNum("moreEvRange", evRangeKm, (n) => units.distanceText(km(n)));
     liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
@@ -1234,7 +1254,6 @@ import { gearDisplayText } from "./gear";
     // v2 design: the SOC caption doubles as the EV-range note ("≈ 26 mi EV
     // range") once the enhanced range signal reports; otherwise it stays the
     // static "state of charge" label so the number is never unexplained.
-    const evRangeKm = finiteNum(t.evDistanceThisCycleKm);
     setText(
       "driveSocSub",
       evRangeKm != null && evRangeKm > 0

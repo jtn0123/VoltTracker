@@ -170,7 +170,9 @@ private fun StatusChips(state: DriveUiState) {
         if (state.powerKw < -0.05) {
             VoltStatusPill(text = "⚡ Regen", dotColor = VoltColors.regen)
         }
-        VoltStatusPill(text = "${state.evRangeMiles.toInt()} mi range", dotColor = VoltColors.energyDim)
+        state.evRangeMiles?.let {
+            VoltStatusPill(text = "${it.toInt()} mi range", dotColor = VoltColors.energyDim)
+        }
         state.gpsAccuracyFt?.let {
             VoltStatusPill(text = "±$it ft", dotColor = VoltColors.textTertiary)
         }
@@ -345,11 +347,13 @@ private fun BatterySection(state: DriveUiState) {
                     style = VoltType.value,
                     color = VoltColors.textPrimary,
                 )
-                Text(
-                    text = "  ·  ${state.evRangeMiles.toInt()} mi",
-                    style = VoltType.valueSmall,
-                    color = VoltColors.energy,
-                )
+                state.evRangeMiles?.let {
+                    Text(
+                        text = "  ·  ${it.toInt()} mi",
+                        style = VoltType.valueSmall,
+                        color = VoltColors.energy,
+                    )
+                }
             }
             VoltLabel("HV Battery")
         }
@@ -399,7 +403,7 @@ private fun MoreSignalsGrid(state: DriveUiState) {
             KeyValue("Ambient", "${state.ambientF}°F", modifier = Modifier.weight(1f))
             KeyValue("Oil life", "${state.oilLifePct}%", modifier = Modifier.weight(1f))
             KeyValue("Gear", state.gear, modifier = Modifier.weight(1f))
-            KeyValue("EV range", "${state.evRangeMiles.toInt()} mi", modifier = Modifier.weight(1f))
+            KeyValue("EV range", state.evRangeMiles?.let { "${it.toInt()} mi" } ?: "--", modifier = Modifier.weight(1f))
         }
     }
 }

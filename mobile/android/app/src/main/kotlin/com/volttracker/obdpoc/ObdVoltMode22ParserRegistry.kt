@@ -53,7 +53,11 @@ internal object ObdVoltMode22ParserRegistry {
         return null
     }
 
-    /** Word PID: `(A*256+B) / divisor`, optionally two's-complement, bounded when [range] set. */
+    /**
+     * Word PID: `(A*256+B) / divisor`, optionally two's-complement, bounded when [range] set.
+     * When [notAvailableWord] is set, that raw word is the ECU's "not available" sentinel and
+     * decodes to no value instead of a real-looking number.
+     */
     private fun wordPid(
         name: String,
         unit: String,
@@ -61,12 +65,20 @@ internal object ObdVoltMode22ParserRegistry {
         divisor: Double,
         signed: Boolean,
         range: Range? = null,
+        notAvailableWord: Int? = null,
     ): Mode22Parser =
         Mode22Parser { command, response ->
             voltWordValue(response, command, divisor, signed)
+                ?.takeUnless { isNotAvailableWord(response, command, notAvailableWord) }
                 ?.let { if (range == null) it else bounded(it, range) }
                 ?.let { value(name, it, unit, decimals) }
         }
+
+    private fun isNotAvailableWord(
+        response: String?,
+        command: String,
+        sentinel: Int?,
+    ): Boolean = sentinel != null && mode22Word(response, command, false) == sentinel
 
     /** Word PID with a linear transform: `(A*256+B) * scale + offset`. */
     private fun wordLinearPid(
@@ -115,6 +127,7 @@ internal object ObdVoltMode22ParserRegistry {
     private val CAPACITY_AH_RANGE = Range(10.0, 60.0)
     private val CELL_NUMBER_RANGE = Range(1.0, 96.0)
     private val PERCENT_RANGE = Range(0.0, 100.0)
+    private const val WORD_NOT_AVAILABLE = 0xFFFF
     private val PACK_RESISTANCE_RANGE = Range(0.0, 10_000.0)
     private val ISOLATION_KOHM_RANGE = Range(0.0, 25_000.0)
     private val ISOLATION_OHM_RANGE = Range(0.0, 5_000_000.0)
@@ -155,7 +168,9 @@ internal object ObdVoltMode22ParserRegistry {
             put("22436B", wordPid("charger hv voltage", "V", 1, 2.0, true, HV_VOLTAGE_RANGE))
             put("22436C", wordPid("charger hv current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             put("224373", Mode22Parser { command, response -> chargeModeValue(response, command) })
-            put("22437D", wordPid("last charge energy", "Wh", 0, 0.1, false))
+            // OVMS treats 0xFFFF as "not available" (no charge recorded yet) — without the
+            // sentinel it decoded as a bogus 655,350 Wh.
+            put("22437D", wordPid("last charge energy", "Wh", 0, 0.1, false, notAvailableWord = WORD_NOT_AVAILABLE))
             put("2243A5", wordPid("hv battery charge count", "count", 0, 1.0, false))
             put(
                 "2243AF",
@@ -179,7 +194,9 @@ internal object ObdVoltMode22ParserRegistry {
             )
             put("22432A", bytePid("minimum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("22432C", bytePid("maximum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
-            put("22435F", bytePid("SOC variation", "%", 1, 1.0 / 2.55, 0.0, PERCENT_RANGE))
+            // OVMS writes A / 2.55, which floats to 100.00000000000001 at 0xFF and fails the 0–100 %
+            // range check; 100 / 255 is the same scale but lands exactly on 100 % (as 22439E does).
+            put("22435F", bytePid("SOC variation", "%", 1, 100.0 / 255.0, 0.0, PERCENT_RANGE))
             // Voltage app: (A*256+B)/2 shown as milliohms.
             put("2240E9", wordPid("pack resistance", "mOhm", 1, 2.0, false, PACK_RESISTANCE_RANGE))
             put("22433B", wordLinearPid("minimum pack voltage", "V", 1, 0.52, 0.0, false, HV_VOLTAGE_RANGE))
@@ -190,7 +207,7 @@ internal object ObdVoltMode22ParserRegistry {
             put("22434C", bytePid("HV battery min-temp module", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("221C43", bytePid("power electronics coolant loop temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("2241A4", bytePid("battery coolant temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
-            put("22433F", bytePid("minimum SOC limit", "%", 1, 1.0 / 2.55, 0.0, PERCENT_RANGE))
+            put("22433F", bytePid("minimum SOC limit", "%", 1, 100.0 / 255.0, 0.0, PERCENT_RANGE))
             put("2241B0", wordPid("APM output power", "W", 1, 16.0, false, HEATER_POWER_RANGE))
             put("22437E", wordPid("APM output current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             // 2243A6 and 2241EC are distinct PIDs in different units/magnitudes (~1000x apart); keep

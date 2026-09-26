@@ -313,6 +313,29 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun lastChargeEnergyNotAvailableSentinelDecodesAsNoValue() {
+        // Regression: OVMS treats 0xFFFF as "not available"; it used to decode as 655,350 Wh.
+        assertNull(ObdProtocol.parseKnownValue("22437D", "62437DFFFF"))
+        // The largest real word just below the sentinel still decodes.
+        val nearMax = ObdProtocol.parseKnownValue("22437D", "62437DFFFE")?.valueNumeric
+        assertEquals(655_340.0, nearMax ?: Double.NaN, 0.01)
+    }
+
+    @Test
+    fun byteOver2_55PercentPidsReachExactlyOneHundredAtFullScale() {
+        // Regression: A / 2.55 at 0xFF floated to 100.00000000000001 and failed the 0–100 % range
+        // check, dropping a legitimate full-scale reading. 100 / 255 lands exactly on 100.
+        for (command in listOf("22435F", "22433F", "22439E")) {
+            val reply = "6" + command.substring(1)
+            val full = ObdProtocol.parseKnownValue(command, reply + "FF")
+            assertNotNull("$command at 0xFF must decode", full)
+            assertEquals(command, 100.0, full?.valueNumeric ?: Double.NaN, 0.0)
+            val empty = ObdProtocol.parseKnownValue(command, reply + "00")?.valueNumeric
+            assertEquals(command, 0.0, empty ?: Double.NaN, 0.0)
+        }
+    }
+
+    @Test
     fun chargeAndSocDetailPidsDecode() {
         val count = ObdProtocol.parseKnownValue("2243A5", "7EC056243A506C9")
         assertNotNull(count)

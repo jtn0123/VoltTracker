@@ -148,10 +148,10 @@ export function runBrowserDemoStream(
       batteryTemp: 22.8 + 0.3 * Math.sin(t / 8),
       // GPS fix quality for the design's "±4 m" GPS tile (±13 ft imperial).
       accuracyM: 4,
-      // Remaining EV range, SOC-proportional off a ~66 km full-charge range —
-      // at the demo's ~63% SOC this reads "≈ 26 mi EV range" under the SOC
-      // number and in the enhanced-signals card, matching the design demo.
-      evDistanceThisCycleKm: Number(((soc / 100) * 66).toFixed(1)),
+      // EV distance driven this cycle (222487) — ~0.9 km/min over the drive
+      // phase. Distinct from the range estimate below; the UI must never label
+      // this one as "EV range".
+      evDistanceThisCycleKm: Number((Math.min(phase, DEMO_DRIVE_PHASE_S) * 0.015).toFixed(1)),
       minCellVoltage,
       maxCellVoltage,
       cellBalanceMv: cellSpreadMv,
@@ -185,7 +185,10 @@ export function runBrowserDemoStream(
       packResistanceMohm: 148.5,
       hvIsolationKohm: 2000,
       motorBTempC: Number((48 + 4 * Math.sin(t / 10)).toFixed(1)),
-      evRangeKm: Math.round(Math.max(0, soc - 15)),
+      // The car's own remaining EV range (2241A6), SOC-proportional off a
+      // ~66 km full-charge range — at the demo's ~63% SOC this reads
+      // "≈ 26 mi EV range" under the SOC number, matching the design demo.
+      evRangeKm: Math.round((soc / 100) * 66),
       batteryHeaterPct: 0,
       pemCoolantTempC: Number((38 + 2 * Math.sin(t / 11)).toFixed(1)),
       lifetimeChargeEnergyKwh: 2198.1,
