@@ -392,6 +392,11 @@ class ObdPollingEngineTest {
         assertTrue(log.contains("protocol_probe_pinned_miss"))
         assertTrue(log.contains("protocol_probe_no_prompt"))
         assertTrue(log.contains("reconnect_exhausted"))
+        assertTrue("a silent bus is reported as its own type", log.contains("VehicleBusSilentException"))
+        assertFalse(
+            "a session that never connected is never a benign vehicle-off end",
+            log.contains("ended_vehicle_off"),
+        )
     }
 
     @Test

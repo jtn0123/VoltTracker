@@ -80,6 +80,10 @@ open class ObdPollingEngine(
     // to sleep with the car" disconnect (parked/plugged/charging) apart from a real mid-drive drop.
     private var lastVehicleState = ""
 
+    // Last non-"unknown" vehicleState — the car's modules go quiet one by one as it powers down, so
+    // the final samples before an end-of-drive disconnect often read "unknown" right after "parked".
+    private var lastKnownVehicleState = ""
+
     // Set true by initializeElm327 on every (re)connect; the poll loop runs the deferred VIN/batch/
     // voltage probes once, right after the first sample is broadcast, then clears it.
     private var deferredInitProbesPending = false
@@ -137,6 +141,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
+        lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
         firstSampleTimingLogged = false
@@ -561,15 +566,15 @@ open class ObdPollingEngine(
         // A link drop while the car was last seen parked/plugged/charging is the adapter going to
         // sleep with the car, not a connection fault — record a clean end (drive saved) instead of a
         // red "reconnect failed" error so a normal drive isn't mislabeled as a failure.
-        if (failureClass == FailureClass.CONNECT_TIMEOUT &&
-            isVehicleOffDisconnect(decision.everConnected, lastVehicleState)
-        ) {
+        if (VehicleOffDisconnect.endsAsVehicleOff(failureClass, ex, decision.everConnected, lastKnownVehicleState)) {
             service.recorder.logEvent(
                 "ended_vehicle_off",
                 "phase",
                 "reconnect_exhausted",
                 "lastVehicleState",
                 lastVehicleState,
+                "lastKnownVehicleState",
+                lastKnownVehicleState,
             )
             service.clearLastFailureClass()
             service.broadcastStatus(
@@ -747,6 +752,7 @@ open class ObdPollingEngine(
             service.broadcastTelemetry(sample)
             logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
+            lastKnownVehicleState = VehicleOffDisconnect.stickyKnownState(lastKnownVehicleState, lastVehicleState)
             // First real data is on screen — now run the deferred connect-time probes (VIN, mode-01
             // batch capability, aux voltage) that we moved off the pre-first-sample critical path.
             if (deferredInitProbesPending) {
@@ -875,7 +881,7 @@ open class ObdPollingEngine(
             sendEscape(600)
             sendCommand("ATPC", 1400)
             sendCommand("ATSP0", 1400)
-            throw IOException("Adapter did not answer the standard OBD PID probe.")
+            throw VehicleBusSilentException("Adapter did not answer the standard OBD PID probe.")
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", mapOf("ok" to true))
         // The VIN, mode-01 batch-capability, and voltage probes used to run here — synchronously

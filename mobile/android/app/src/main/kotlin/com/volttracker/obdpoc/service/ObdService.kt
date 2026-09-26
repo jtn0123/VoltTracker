@@ -136,6 +136,10 @@ open class ObdService :
 
     override var sessionStartedAtMs = 0L
 
+    // Adapter address the current session was started for (null for demo / no session).
+    @Volatile
+    private var sessionAddress: String? = null
+
     // The session-outcome record (state/detail/failureClass/voltage/competingApps) is written by
     // broadcastStatus + the probe/detector setters on the poll/IO, side-effect, and main threads,
     // and read back as ONE consistent snapshot by closeSessionLog and every status broadcast.
@@ -370,6 +374,18 @@ open class ObdService :
             }
             ACTION_CONNECT -> {
                 val address = intent.getStringExtra(EXTRA_ADDRESS)
+                // A repeat CONNECT (double tap, auto-connect racing a manual one) while this same
+                // adapter is connected and polling must not tear down the working live session:
+                // field logs showed 5 healthy sessions discarded 6-35 s in exactly this way.
+                if (running.get() &&
+                    recorder.activeMode() == ObdLocalStore.MODE_OBD &&
+                    SessionStateMachine.isRedundantConnect(sessionStateMachine.phase(), sessionAddress, address)
+                ) {
+                    recorder.logEvent("duplicate_connect_ignored")
+                    val outcome = sessionOutcome.get()
+                    broadcastStatus(outcome.state, outcome.detail, false)
+                    return START_STICKY
+                }
                 activeName = adapterNameFrom(intent)
                 startObdSession(address, false)
                 return START_STICKY
@@ -612,6 +628,7 @@ open class ObdService :
             acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
+        sessionAddress = request.address
         // Anchor for the connect→first-sample latency spans (debug builds only; see StartupTrace).
         StartupTrace.mark("${StartupTrace.OBD_CONNECT_REQUEST}:${request.mode}")
         sessionStateMachine.start(request.phase, request.phaseDetail)
