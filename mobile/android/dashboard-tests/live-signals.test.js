@@ -75,7 +75,8 @@ describe('live-signals diagnostic panel', () => {
 
     const speed = rowFor('Speed');
     expect(speed.dataset.status).toBe('live');
-    expect(speed.querySelector('.live-signal-value').textContent).toBe('42 km/h');
+    // Default units are imperial: 42 km/h reads in mph like the Drive speed.
+    expect(speed.querySelector('.live-signal-value').textContent).toBe('26 mph');
     expect(speed.querySelector('.live-signal-age').textContent).toBe('now');
 
     const motor = rowFor('Motor A current');
@@ -154,5 +155,77 @@ describe('live-signals diagnostic panel', () => {
     expect(rowFor('Odometer')).toBeNull();
     // The badge still counts reporting/total over the full catalog.
     expect(document.getElementById('liveSignalsBadge').textContent).toMatch(/^2\/\d+$/);
+  });
+
+  describe('follows the unit setting', () => {
+    const SAMPLE = {
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      speedKph: 100,
+      coolantC: 90,
+      odometerKm: 1000,
+      tirePressureFlKpa: 262,
+      cabinTempEstC: 21.5,
+      cycleEvDistanceKm: 56.3,
+      cycleFuelUsedL: 3.8,
+      aux12vSocPct: 80,
+      windowFlPct: 40,
+    };
+    const valueOf = (label) => rowFor(label).querySelector('.live-signal-value').textContent;
+
+    function paint(units) {
+      const VD = window.VoltDashboard;
+      VD.prefs.set('units', units);
+      VD.updateTelemetry({ ...SAMPLE, updatedAt: Date.now() });
+      VD.updateDiagnostics();
+    }
+
+    it('converts to psi, miles, mph, °F and gallons for imperial', () => {
+      paint('imperial');
+      expect(valueOf('Speed')).toBe('62 mph');
+      expect(valueOf('Coolant temp')).toBe('194°F');
+      expect(valueOf('Odometer')).toBe('621 mi');
+      expect(valueOf('Tire front left')).toBe('38 psi');
+      expect(valueOf('Cabin temp (est.)')).toBe('71°F');
+      expect(valueOf('EV distance since full charge')).toBe('35 mi');
+      expect(valueOf('Fuel used (cycle)')).toBe('1.0 gal');
+      expect(valueOf('12V state of charge')).toBe('80%');
+      expect(valueOf('Window front left')).toBe('40% open');
+    });
+
+    it('keeps kPa, km, km/h, °C and litres for metric', () => {
+      paint('metric');
+      expect(valueOf('Speed')).toBe('100 km/h');
+      expect(valueOf('Coolant temp')).toBe('90°C');
+      expect(valueOf('Odometer')).toBe('1000 km');
+      expect(valueOf('Tire front left')).toBe('262 kPa');
+      expect(valueOf('EV distance since full charge')).toBe('56 km');
+      expect(valueOf('Fuel used (cycle)')).toBe('3.8 L');
+    });
+
+    it('repaints when only the unit setting changes', () => {
+      paint('metric');
+      expect(valueOf('Tire front left')).toBe('262 kPa');
+      window.VoltDashboard.prefs.set('units', 'imperial');
+      window.VoltDashboard.updateDiagnostics();
+      expect(valueOf('Tire front left')).toBe('38 psi');
+    });
+  });
+
+  it('shows a fresh gear on the Drive hero chip and hides a stale one', () => {
+    const VD = window.VoltDashboard;
+    const chip = document.getElementById('driveGearChip');
+    expect(chip.hidden).toBe(true);
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now(), prndlState: 'R', prndlRaw: 7, gearConfidence: 'tentative', prndlStateStaleMs: 2000 });
+    VD.updateLiveUi();
+    expect(chip.hidden).toBe(false);
+    expect(document.getElementById('driveGearValue').textContent).toBe('R');
+    expect(chip.dataset.confidence).toBe('tentative');
+    expect(chip.getAttribute('aria-label')).toContain('not yet confirmed');
+
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 2, updatedAt: Date.now(), prndlState: 'P', prndlStateStaleMs: 200_000 });
+    VD.updateLiveUi();
+    expect(chip.hidden).toBe(true);
   });
 });

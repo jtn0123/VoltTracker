@@ -182,6 +182,48 @@ describe('car controls', () => {
     expect(relock.hidden).toBe(true);
   });
 
+  it('counts the PIN window down and clears it on expiry without a live session', () => {
+    vi.useFakeTimers();
+    try {
+      native = { ...ON, unlocked: true, unlockedRemainingMs: 125000 };
+      VD.renderCarControls();
+      const pin = document.getElementById('carControlsPinState');
+      expect(pin.textContent).toContain('about 3 min');
+
+      // Native's window shrinks; the card re-reads it on its own once the minute count drops.
+      native = { ...ON, unlocked: true, unlockedRemainingMs: 119000 };
+      vi.advanceTimersByTime(5_300);
+      expect(pin.textContent).toContain('about 2 min');
+
+      native = { ...ON, unlocked: false, unlockedRemainingMs: 0 };
+      vi.advanceTimersByTime(60_000);
+      expect(pin.textContent).toBe('PIN needed for each command');
+      expect(document.getElementById('carControlsRelockBtn').hidden).toBe(true);
+
+      // Nothing left to count down: no more native reads.
+      const reads = bridge.getCarControlState.mock.calls.length;
+      vi.advanceTimersByTime(180_000);
+      expect(bridge.getCarControlState.mock.calls.length).toBe(reads);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('re-checks a PIN lockout until it lifts', () => {
+    vi.useFakeTimers();
+    try {
+      native = { ...ON, pinLockedOut: true };
+      VD.renderCarControls();
+      const pin = document.getElementById('carControlsPinState');
+      expect(pin.textContent).toContain('wrong attempts');
+      native = { ...ON };
+      vi.advanceTimersByTime(30_000);
+      expect(pin.textContent).toBe('PIN needed for each command');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('demo mode simulates success without touching the bridge', async () => {
     VD.setDemoActive(true);
     VD.renderCarControls();

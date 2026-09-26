@@ -37,6 +37,7 @@ describe('demo scenarios', () => {
     VD.state.insights = {};
 
     VD.renderRealV2Ui();
+    VD.flushRender();
 
     expect(document.getElementById('appEmptyState').hidden).toBe(true);
     expect(document.getElementById('insightsEmptyState').hidden).toBe(false);
@@ -45,6 +46,23 @@ describe('demo scenarios', () => {
     VD.renderRealV2Ui();
 
     expect(document.getElementById('insightsEmptyState').hidden).toBe(true);
+  });
+
+  it('hides the Drive "waiting for your car" empty state while samples stream, even with no stored rows', () => {
+    const VD = window.VoltDashboard;
+    VD.loadDemoScenario('empty');
+    VD.flushRender();
+    const empty = document.getElementById('appEmptyState');
+    expect(empty.hidden).toBe(false);
+
+    VD.setStatus({ state: 'connected', detail: 'Browser-only demo is running.' });
+    VD.updateTelemetry({ source: 'demo', connected: true, sampleCount: 1, updatedAt: Date.now(), speedKph: 40 });
+    VD.flushRender();
+    expect(empty.hidden).toBe(true);
+
+    VD.setStatus({ state: 'idle', detail: 'Stopped.' });
+    VD.flushRender();
+    expect(empty.hidden).toBe(false);
   });
 
   it('typical is the rich happy path', () => {

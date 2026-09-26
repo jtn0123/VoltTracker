@@ -112,7 +112,25 @@ class LiveUiStateStoreTest {
 
         assertEquals(19, drive.speedMph) // fresh
         assertEquals(364.0, drive.packVolts, 1e-9) // retained
-        assertEquals("D", drive.gear) // retained
+        // The gear is the one tile that is never carried forward: no reading means no gear.
+        assertEquals("--", drive.gear)
+    }
+
+    @Test
+    fun aStaleGearReadingClearsTheGearTile() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample { put("prndlStateStaleMs", 40_000L) })
+        assertEquals("D", store.state.value.drive.gear) // one missed ~37 s poll is still fresh
+
+        store.onTelemetry(sample { put("prndlState", "P").put("prndlStateStaleMs", 180_000L) })
+        assertEquals("--", store.state.value.drive.gear)
+    }
+
+    @Test
+    fun aTentativeGearDecodeShowsItsLetter() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample { put("prndlState", "R").put("prndlRaw", 7).put("gearConfidence", "tentative") })
+        assertEquals("R", store.state.value.drive.gear)
     }
 
     @Test

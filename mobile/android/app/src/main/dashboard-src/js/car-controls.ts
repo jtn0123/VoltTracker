@@ -125,21 +125,39 @@ import { VD } from "./vd-registry";
     return { command, outcome, detail };
   }
 
+  // Re-reads the native PIN state while a PIN window or lockout is running. Nothing else
+  // re-renders the card without a live session (the render pass only runs on telemetry/status
+  // changes), so without this the "valid for about N min" line froze and outlived the window.
+  let pinRefreshTimer: number | undefined;
+  const PIN_LOCKOUT_RECHECK_MS = 30_000;
+
+  function schedulePinRefresh(delayMs: number | null) {
+    window.clearTimeout(pinRefreshTimer);
+    pinRefreshTimer = undefined;
+    if (delayMs != null) pinRefreshTimer = window.setTimeout(renderCarControls, delayMs);
+  }
+
   function renderPinState(native: NativeCarControlState, demo: boolean) {
     const relock = el("carControlsRelockBtn");
     let text = "PIN needed for each command";
     let unlocked = false;
+    let refreshMs: number | null = null;
     if (demo) {
       text = "Demo: no PIN needed";
     } else if (native.pinLockedOut === true) {
       text = "PIN locked after wrong attempts. Try again in a few minutes.";
+      refreshMs = PIN_LOCKOUT_RECHECK_MS;
     } else if (native.unlocked === true) {
       unlocked = true;
-      const minutes = Math.max(1, Math.ceil(Number(native.unlockedRemainingMs || 0) / 60000));
+      const remainingMs = Math.max(0, Number(native.unlockedRemainingMs) || 0);
+      const minutes = Math.max(1, Math.ceil(remainingMs / 60000));
       text = "PIN entered · valid for about " + minutes + " min";
+      // Wake just after the rounded-up minute count drops (or the window closes).
+      refreshMs = ((Math.max(1, remainingMs) - 1) % 60000) + 1 + 250;
     }
     setText(el("carControlsPinState"), text);
     if (relock) relock.hidden = !unlocked;
+    schedulePinRefresh(refreshMs);
   }
 
   function renderCarControls() {
@@ -151,7 +169,10 @@ import { VD } from "./vd-registry";
     const enabled = native.available === true && native.enabled === true;
     const visible = enabled || demo;
     card.hidden = !visible;
-    if (!visible) return;
+    if (!visible) {
+      schedulePinRefresh(null);
+      return;
+    }
     const tm = (state.telemetry || {}) as VoltTelemetry;
     const gate = gateView(tm, demo);
     setText(el("carControlsGate"), gate.text, gate.tone);

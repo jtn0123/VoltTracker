@@ -501,20 +501,22 @@
      keep it viewport-relative. The ghost bug cannot occur here anyway -- the fullscreen map
      fully repaints the surface. */
   body.map-full-active .app,
-  /* Same escape hatch for the DTC detail bottom sheet (position: fixed). */
-  body.dtc-detail-active .app {
+  /* Same escape hatch for the DTC detail and trip-detail sheets (position: fixed). */
+  body.dtc-detail-active .app,
+  body.trip-detail-active .app {
     transform: none;
   }
 
   /* The view-enter/slide animations keep filling an identity transform after
      they finish (implicit-to keyframes interpolate to identity, not `none`),
      which would make the active section the containing block for the fixed
-     DTC sheet OR the fullscreen map (.map-card.is-fullscreen lives inside
-     #view-map.view.is-active). Neutralizing .app's transform above is not
-     enough on its own — the finished view animation still leaves a resolved
-     identity matrix on the active section. Drop the (already finished)
-     animation while either fixed surface is open. */
+     DTC or trip-detail sheet OR the fullscreen map (.map-card.is-fullscreen
+     lives inside #view-map.view.is-active). Neutralizing .app's transform above
+     is not enough on its own — the finished view animation still leaves a
+     resolved identity matrix on the active section. Drop the (already finished)
+     animation while any of these fixed surfaces is open. */
   body.dtc-detail-active .view.is-active,
+  body.trip-detail-active .view.is-active,
   body.map-full-active .view.is-active {
     animation: none;
   }
