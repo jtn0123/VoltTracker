@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.41.2 (2026-09-26)
+
+### 🔺 Fix
+
+- **dashboard**: Polish round 2 — gear chip, unit-aware live signals, trip-detail sheet
+  ([#82](https://github.com/jtn0123/VoltTracker/pull/82),
+  [`d4d43f6`](https://github.com/jtn0123/VoltTracker/commit/d4d43f62fc3ac8ea232e68d4d5a1d4ce7d088a41))
+
+### 🔷 Changed
+
+- Cut ~2-4 min off the Android PR critical path; always report ci-success
+  ([#83](https://github.com/jtn0123/VoltTracker/pull/83),
+  [`8484473`](https://github.com/jtn0123/VoltTracker/commit/84844739c1879d85876d43fa195633be7e0a8a4c))
+
+
 ## v0.41.1 (2026-09-26)
 
 ### 🔺 Fix
