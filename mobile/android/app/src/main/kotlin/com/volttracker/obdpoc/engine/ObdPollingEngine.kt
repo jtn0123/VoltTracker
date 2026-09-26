@@ -46,6 +46,7 @@ open class ObdPollingEngine(
     private val service: EngineHost,
     private val sleeper: LoopSleeper = LoopSleeper { millis -> defaultPollingSleep(millis) },
     private val extendedReconnectTier: ExtendedReconnectTier = ExtendedReconnectTier(),
+    swcanPolicy: SwcanListenRunner.Policy = SwcanListenRunner.Policy(),
 ) : LiveSampleReader.SampleContext {
     fun interface LoopSleeper {
         fun sleep(millis: Long): Boolean
@@ -61,6 +62,7 @@ open class ObdPollingEngine(
     private val sessionHealth: SessionHealthTracker
     private val pidPolling: PidPollingState
     private val liveSampleReader: LiveSampleReader
+    private val swcanListener: SwcanListenRunner
 
     // Written on the poll/IO thread, read on the main thread when closeSessionLog finalizes the
     // session row — @Volatile for the cross-thread visibility edge so the finalized row can't
@@ -91,6 +93,41 @@ open class ObdPollingEngine(
         tpmsDiscoveryRunner = TpmsDiscoveryRunner(service, this)
         cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
+        swcanListener = SwcanListenRunner(SwcanIo(), swcanPolicy)
+    }
+
+    /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
+    private inner class SwcanIo : SwcanListenRunner.Io {
+        override fun send(
+            command: String,
+            timeoutMs: Long,
+        ): String = sendCommand(command, timeoutMs)
+
+        override fun monitor(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+        ): ElmConnection.MonitorResult =
+            synchronized(service.ioLock) {
+                connection.monitor(command, listenMs, stopTimeoutMs, service.running::get)
+            }
+
+        override fun reinitialize() {
+            initializeElm327()
+        }
+
+        override fun liveCycleCount(): Long = pidPolling.liveCycleCount()
+
+        override fun msSinceLiveData(): Long = pidPolling.msSinceLastLiveData()
+
+        override fun <T> exclusive(block: () -> T): T = synchronized(service.ioLock) { block() }
+
+        override fun logEvent(
+            event: String,
+            vararg pairs: String,
+        ) {
+            service.recorder.logEvent(event, *pairs)
+        }
     }
 
     fun beginSession(supportedPidsSeed: String?) {
@@ -106,6 +143,7 @@ open class ObdPollingEngine(
         extendedReconnectTier.reset()
         pidPolling.reset()
         liveSampleReader.reset()
+        swcanListener.resetSession()
     }
 
     /**
@@ -705,6 +743,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
+            appendSwcanReadings(sample)
             service.broadcastTelemetry(sample)
             logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
@@ -714,6 +753,8 @@ open class ObdPollingEngine(
                 deferredInitProbesPending = false
                 runDeferredInitProbes()
             }
+            // Low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner).
+            swcanListener.afterSample()
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
             if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {
@@ -856,6 +897,15 @@ open class ObdPollingEngine(
         probeAndPersistVin()
         probeMode01Batch()
         service.maybeRunVoltageProbe(this)
+        swcanListener.probeAdapter()
+    }
+
+    private fun appendSwcanReadings(sample: JSONObject) {
+        try {
+            swcanListener.appendTo(sample, sample.optLong("updatedAt", System.currentTimeMillis()))
+        } catch (ex: JSONException) {
+            service.recorder.logError("swcan_sample_encoding_error", ex)
+        }
     }
 
     /**

@@ -130,6 +130,68 @@ object VirtualVoltCatalog {
             entry("258", "22368F", Evidence.GUESS, split("62368F58", null)), // 48 C
         )
 
+    /**
+     * SW-CAN (GMLAN) broadcast frames the virtual car puts on OBD pin 1, printed the way an OBDLink
+     * shows them in `STM` with `ATH1 ATS1` (29-bit id as four bytes, then data). All [Evidence.GUESS]:
+     * built from the OVMS vehicle_voltampera decoders at plausible values, never captured from this
+     * car. Each line's decoded value is noted beside it; SwcanFrameDecoderTest pins the same math.
+     */
+    class SwcanFrame(
+        val evidence: Evidence,
+        val line: String,
+        /** Live-sample fields this frame should produce. */
+        val fields: List<String>,
+    )
+
+    private val SWCAN_COMMON: List<SwcanFrame> =
+        listOf(
+            // 12.6 V, 85 %, -2.0 A
+            SwcanFrame(
+                Evidence.GUESS,
+                "10 24 80 40 00 00 60 D9 00 FC 00 00",
+                listOf("aux12vVoltage", "aux12vSocPct", "aux12vCurrentA"),
+            ),
+            // FL 260, RL 256, FR 264, RR 260 kPa
+            SwcanFrame(
+                Evidence.GUESS,
+                "10 3D 40 40 00 00 41 40 42 41 00 00",
+                listOf("tirePressureFlKpa", "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa"),
+            ),
+            // locked by fob
+            SwcanFrame(Evidence.GUESS, "0C 41 40 40 00 05 00 05", listOf("doorLockState", "doorLockSource")),
+            // power-electronics coolant 32 C
+            SwcanFrame(Evidence.GUESS, "10 63 40 CB 00 48", listOf("peCoolantTempC")),
+            // cabin (roof surface) estimate 21.0 C
+            SwcanFrame(Evidence.GUESS, "10 44 00 99 00 00 00 00 00 7A 00 00", listOf("cabinTempEstC")),
+            // A/C on
+            SwcanFrame(Evidence.GUESS, "10 73 40 99 20 00 00 00", listOf("acState")),
+            // cluster EV range 55 km (GMLAN PID 0x176)
+            SwcanFrame(Evidence.GUESS, "10 2E C0 CB 00 1B 80 00 00 00 00 00", listOf("clusterEvRangeKm")),
+            // gas range 471 km (GMLAN PID 0x224)
+            SwcanFrame(Evidence.GUESS, "10 44 80 CB 00 00 75 C0", listOf("fuelRangeKm")),
+            // 8.3 kWh used since the last full charge (GMLAN PID 0x141)
+            SwcanFrame(Evidence.GUESS, "10 28 20 CB 00 00 00 53 00 00 00 00", listOf("cycleEnergyUsedKwh")),
+            // 52.0 km on battery, 0 km on gas since the last full charge (GMLAN PID 0x225)
+            SwcanFrame(
+                Evidence.GUESS,
+                "10 44 A0 CB 06 80 00 00 00 00 00 00",
+                listOf("cycleEvDistanceKm", "cycleFuelDistanceKm"),
+            ),
+            // Traffic the app does not decode: must be ignored, not misread.
+            SwcanFrame(Evidence.GUESS, "10 00 20 97 01 02 03 04", emptyList()),
+            SwcanFrame(Evidence.GUESS, "621 00 40 00 00 00 00 00 00", emptyList()),
+        )
+
+    /** Frames on the bus per mode; the charge-current limit frame only appears while plugged in. */
+    val SWCAN_FRAMES: Map<Mode, List<SwcanFrame>> =
+        mapOf(
+            Mode.DRIVING to SWCAN_COMMON,
+            Mode.CHARGING to
+                SWCAN_COMMON +
+                // 12 A of offered levels [12, 8]
+                SwcanFrame(Evidence.GUESS, "10 86 C0 CB 00 00 00 06 20 00 00 00", listOf("chargeCurrentLimitA")),
+        )
+
     private val byKey: Map<String, Entry> = ENTRIES.associateBy { key(it.header, it.command) }
 
     fun key(

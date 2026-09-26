@@ -65,6 +65,10 @@ class PidPollingState(
     // insurance: it is written and read on the poll thread today, but the engine could move the
     // read off-thread without that being obviously unsafe.
     @Volatile private var lastLiveDataAtMs = 0L
+
+    // Cycles that returned at least one fresh value. Unlike [lastLiveDataAtMs] it cannot collide
+    // with a frozen test clock, so "did HS-CAN answer since X" is a plain counter comparison.
+    @Volatile private var liveCycleCount = 0L
     private var clock = Clock { System.currentTimeMillis() }
 
     /** Time source, overridable in tests. */
@@ -276,6 +280,7 @@ class PidPollingState(
         val anyLive = outcomes.any { it.second == PollOutcome.LIVE }
         if (anyLive) {
             lastLiveDataAtMs = now
+            liveCycleCount += 1
         }
         for ((command, outcome) in outcomes) {
             if (outcome == PollOutcome.LIVE) {
@@ -349,6 +354,9 @@ class PidPollingState(
         NO_DATA,
         ERROR,
     }
+
+    /** Monotonic count of poll cycles that returned at least one fresh PID value. */
+    fun liveCycleCount(): Long = liveCycleCount
 
     /** Milliseconds since the most recent cycle that returned any fresh PID value. */
     fun msSinceLastLiveData(): Long = maxOf(0L, clock.nowMs() - lastLiveDataAtMs)

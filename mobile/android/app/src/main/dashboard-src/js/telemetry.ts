@@ -91,6 +91,17 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     "pemCoolantStaleMs", "lifetimeChargeEnergyKwh", "lifetimeChargeEnergyStaleMs", "packSection1TempC",
     "packSection2TempC", "packSection3TempC", "packSection4TempC", "packSection5TempC",
     "packSection6TempC", "packSectionTempStaleMs",
+    // SW-CAN (GMLAN) broadcasts from the OBDLink listen window (SwcanReadings.kt).
+    "aux12vVoltage", "aux12vSocPct", "aux12vCurrentA", "aux12vStaleMs", "tirePressureFlKpa",
+    "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
+    "doorLockState", "doorLockSource", "doorLockStaleMs", "doorFlState", "doorFrState",
+    "doorRlState", "doorRrState", "hoodState", "trunkState", "doorStatusStaleMs", "alarmState",
+    "alarmStaleMs", "windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct", "windowStaleMs",
+    "cabinTempEstC", "blowerPct", "acState", "acCompressorRpm", "acEvapTempC", "heaterCoreTempC",
+    "coolantHeaterKw", "climateStaleMs", "peCoolantTempC", "peCoolantStaleMs",
+    "chargeCurrentLimitA", "chargeLimitStaleMs", "clusterEvRangeKm", "fuelRangeKm", "rangeStaleMs",
+    "cycleEnergyUsedKwh", "cycleEvDistanceKm", "cycleFuelDistanceKm", "cycleFuelUsedL",
+    "driveCycleStaleMs",
     // Location. appendLocation() early-returns with no fix, so the whole group must clear
     // together or a tunnel leaves a stale position behind a fresh-looking provider label.
     "latitude", "longitude", "accuracyM", "gpsSpeedMps", "bearingDeg", "locationAgeMs",
@@ -1399,7 +1410,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     text?: boolean;
     enhanced?: boolean;
   };
-  const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging"];
+  const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging", "Body & comfort"];
   const LIVE_SIGNALS: LiveSignalSpec[] = [
     { key: "speedKph", label: "Speed", group: "Core", unit: "km/h", staleKey: "speedKphStaleMs" },
     { key: "rpm", label: "Engine RPM", group: "Core", staleKey: "rpmStaleMs" },
@@ -1463,6 +1474,43 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     { key: "lastChargeEnergyWh", label: "Last charge energy", group: "Charging", unit: "Wh", staleKey: "lastChargeEnergyStaleMs", enhanced: true },
     { key: "lifetimeChargeEnergyKwh", label: "Lifetime charge energy", group: "Charging", unit: "kWh", staleKey: "lifetimeChargeEnergyStaleMs", enhanced: true },
     { key: "hvBatteryChargeCount", label: "Charge count", group: "Charging", staleKey: "hvBatteryChargeCountStaleMs", enhanced: true },
+    // SW-CAN (GMLAN) broadcasts: only an OBDLink (STN) adapter can hear these, in a short listen
+    // window every ~45 s, so their age is typically tens of seconds. Decodes are unconfirmed on the car.
+    { key: "chargeCurrentLimitA", label: "Charge current limit", group: "Charging", unit: "A", staleKey: "chargeLimitStaleMs", enhanced: true },
+    { key: "cycleEnergyUsedKwh", label: "Energy since full charge", group: "Charging", unit: "kWh", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleEvDistanceKm", label: "EV km since full charge", group: "Charging", unit: "km", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleFuelDistanceKm", label: "Gas km since full charge", group: "Charging", unit: "km", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleFuelUsedL", label: "Fuel used (cycle)", group: "Charging", unit: "L", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "clusterEvRangeKm", label: "EV range (cluster)", group: "Motor & drive", unit: "km", staleKey: "rangeStaleMs", enhanced: true },
+    { key: "fuelRangeKm", label: "Gas range", group: "Motor & drive", unit: "km", staleKey: "rangeStaleMs", enhanced: true },
+    { key: "peCoolantTempC", label: "Power electronics coolant (broadcast)", group: "Motor & drive", unit: "°C", staleKey: "peCoolantStaleMs", enhanced: true },
+    { key: "aux12vVoltage", label: "12V battery", group: "Body & comfort", unit: "V", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "aux12vSocPct", label: "12V state of charge", group: "Body & comfort", unit: "%", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "aux12vCurrentA", label: "12V current", group: "Body & comfort", unit: "A", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "tirePressureFlKpa", label: "Tire front left", group: "Body & comfort", unit: "kPa", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureFrKpa", label: "Tire front right", group: "Body & comfort", unit: "kPa", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureRlKpa", label: "Tire rear left", group: "Body & comfort", unit: "kPa", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureRrKpa", label: "Tire rear right", group: "Body & comfort", unit: "kPa", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "doorLockState", label: "Locks", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
+    { key: "doorLockSource", label: "Last lock source", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
+    { key: "doorFlState", label: "Door front left", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorFrState", label: "Door front right", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorRlState", label: "Door rear left", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorRrState", label: "Door rear right", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "hoodState", label: "Hood", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "trunkState", label: "Hatch", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "alarmState", label: "Alarm", group: "Body & comfort", text: true, staleKey: "alarmStaleMs", enhanced: true },
+    { key: "windowFlPct", label: "Window front left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowFrPct", label: "Window front right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowRrPct", label: "Window rear right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "cabinTempEstC", label: "Cabin temp (est.)", group: "Body & comfort", unit: "°C", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acState", label: "A/C", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
+    { key: "blowerPct", label: "Blower", group: "Body & comfort", unit: "%", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acCompressorRpm", label: "A/C compressor", group: "Body & comfort", unit: "rpm", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acEvapTempC", label: "Evaporator air temp", group: "Body & comfort", unit: "°C", staleKey: "climateStaleMs", enhanced: true },
+    { key: "heaterCoreTempC", label: "Heater core temp", group: "Body & comfort", unit: "°C", staleKey: "climateStaleMs", enhanced: true },
+    { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
   ];
 
   function formatSignalAge(ms: number) {
