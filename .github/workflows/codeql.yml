@@ -59,7 +59,11 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleDebug
+          # CodeQL only needs the compiler invocations (its Kotlin/Java extractors hook
+          # javac/kotlinc), not dex/merge/package — assembleDebug spent ~1-1.5 min on those.
+          # --no-build-cache is load-bearing: a FROM-CACHE compile task never runs the
+          # compiler, so CodeQL would silently extract no Java/Kotlin at all.
+          ./gradlew --no-daemon --no-build-cache :app:compileDebugKotlin :app:compileDebugJavaWithJavac
 
       - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
         with:

@@ -13,10 +13,11 @@ on:
       - '.github/workflows/android.yml'
       - 'VERSION'
       - 'pyproject.toml'
+  # No paths filter on pull_request: ci-success is a required check, so this workflow must
+  # report it on EVERY PR (a workflow-level filter would leave a docs-only PR's required check
+  # pending forever). The `changes` job below gates the heavy lanes instead; on a PR that
+  # touches nothing Android they skip and ci-success passes in well under a minute.
   pull_request:
-    paths:
-      - 'mobile/android/**'
-      - '.github/workflows/android.yml'
   workflow_dispatch:
 
 # Keep only the newest run for a PR branch or main push. PR branch pushes no
@@ -44,16 +45,22 @@ jobs:
   changes:
     runs-on: ubuntu-latest
     outputs:
+      android: ${{ steps.filter.outputs.android }}
       emulator_smoke: ${{ steps.filter.outputs.emulator_smoke }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Detect paths that need WebView runtime smoke
+      - name: Detect Android changes and paths that need WebView runtime smoke
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
+            # Gates every Android/dashboard lane on pull requests (pushes to main and manual
+            # runs always execute them). Mirrors the push trigger's paths.
+            android:
+              - 'mobile/android/**'
+              - '.github/workflows/android.yml'
             emulator_smoke:
               - '.github/workflows/android.yml'
               - 'mobile/android/build.gradle'
@@ -73,6 +80,8 @@ jobs:
               - 'mobile/android/scripts/emulator-smoke.sh'
 
   unit-tests:
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -177,9 +186,21 @@ jobs:
       # trades one repeated checkout+JDK+Gradle setup (~1 min, paid in parallel)
       # for ~2.5 min off the PR wall-clock.
       - name: Assemble debug APK
+        # emulator-smoke builds the identical debug APK (same variant, same GITHUB_SHA-derived
+        # versionName) and uploads it as volttracker-debug-apk whenever it runs — always on
+        # main/manual runs, and on PRs whose paths need the runtime smoke. Only build it here
+        # for the PRs where emulator-smoke is path-skipped, so the APK artifact still exists
+        # without paying ~1.5-2 min for a second assembleDebug on this lane.
+        if: github.event_name == 'pull_request' && needs.changes.outputs.emulator_smoke != 'true'
         run: ./gradlew --no-daemon --configuration-cache :app:assembleDebug
-      - name: Verify generated dashboard is committed
-        run: ./gradlew --no-daemon --configuration-cache verifyGeneratedDashboardClean
+      - name: Verify generated dashboard, bundle budget and coverage
+        # One Gradle invocation instead of four: each separate call forked a single-use daemon
+        # and missed the configuration cache (~12-15 s apiece). --continue still runs every
+        # gate after a failure, and Gradle's "Execution failed for task ..." names the lane.
+        run: >-
+          ./gradlew --no-daemon --configuration-cache --continue
+          verifyGeneratedDashboardClean verifyDashboardBundleSize
+          :app:jacocoTestReport :app:jacocoTestCoverageVerification
       - name: Upload generated dashboard diff
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -187,8 +208,6 @@ jobs:
           name: generated-dashboard-html-diff
           path: mobile/android/build/reports/dashboard-html-diff/
           if-no-files-found: ignore
-      - name: Verify dashboard bundle budget
-        run: ./gradlew --no-daemon --configuration-cache verifyDashboardBundleSize
       - name: Publish performance trend snapshot
         if: always()
         # Measurement + grouping live in tools/dashboard_bundle_report.py, which reads the
@@ -196,12 +215,9 @@ jobs:
         # is how this step came to report -40294 bytes of lazy-support headroom against a
         # real +7496: it still charged the expert/detail chunks to the support allowance.
         run: python3 tools/dashboard_bundle_report.py snapshot
-      - name: JaCoCo coverage report
-        run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestReport
-      - name: Verify coverage thresholds
-        run: ./gradlew --no-daemon --configuration-cache :app:jacocoTestCoverageVerification
       - name: Upload debug APK
-        if: always()
+        # Paired with the conditional assemble above; emulator-smoke uploads it otherwise.
+        if: always() && github.event_name == 'pull_request' && needs.changes.outputs.emulator_smoke != 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: volttracker-debug-apk
@@ -240,6 +256,8 @@ jobs:
     # ~2.5 min of style/lint work runs in parallel with the test execution
     # instead of extending the slowest required lane. Node is still needed:
     # lintDebug compiles the app, and preBuild runs buildDashboardJs (esbuild).
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -295,6 +313,10 @@ jobs:
     # re-running npm ci + esbuild in dashboard-tests. The Gradle jobs are left
     # alone on purpose: their preBuild -> buildDashboardJs rebuild happens inside
     # Gradle (with its own up-to-date checks) and stays authoritative for the APK.
+    # dashboard-tests / dashboard-e2e / dashboard-visual need this job, so gating it here
+    # skips all three on non-Android PRs.
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -693,6 +715,8 @@ jobs:
     # counterpart to the npm `npm audit --audit-level=high` gate in the
     # dashboard-tests job above. A known-vulnerable transitive dependency now
     # fails ci-success instead of landing as an advisory artifact only.
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -798,6 +822,20 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - name: Prefetch emulator SDK packages in the background
+        # The emulator action's own `sdkmanager` install (system image ~42 s + emulator ~10 s)
+        # used to run serially after the ~3 min Gradle build. Download them now, overlapped
+        # with the build; the action's install then finds them current and returns quickly.
+        # This is a package download only — NOT AVD snapshot caching (removed on purpose after
+        # snapshot restores crashed the emulator); boot stays cold with -no-snapshot.
+        # A background process started here survives into later steps (the runner only reaps
+        # orphans at job end).
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          nohup bash -c "yes | '$sdkmanager' --licenses >/dev/null 2>&1; \
+            '$sdkmanager' --install 'system-images;android-34;google_apis;x86_64' emulator --channel=0 \
+            >'$RUNNER_TEMP/sdk-prefetch.log' 2>&1; echo \$? >'$RUNNER_TEMP/sdk-prefetch.done'" \
+            >/dev/null 2>&1 &
       - name: Build debug APK and instrumented-test APK
         working-directory: mobile/android
         run: |
@@ -805,6 +843,28 @@ jobs:
           # androidTest APK built here, outside the emulator session, so the
           # connectedDebugAndroidTest step below only installs and runs.
           ./gradlew --no-daemon --configuration-cache :app:assembleDebug :app:assembleDebugAndroidTest
+      - name: Upload debug APK
+        # unit-tests no longer re-assembles this APK when emulator-smoke runs; this job is the
+        # volttracker-debug-apk source for main pushes (publish-debug-release) and runtime PRs.
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: volttracker-debug-apk
+          path: mobile/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+      - name: Wait for emulator SDK prefetch
+        # Normally already finished (it overlaps a ~3 min build). Capped so a stuck download
+        # cannot hang the job; on timeout or error the emulator action installs as before.
+        run: |
+          for _ in $(seq 1 300); do
+            [ -f "$RUNNER_TEMP/sdk-prefetch.done" ] && break
+            sleep 1
+          done
+          if [ -f "$RUNNER_TEMP/sdk-prefetch.done" ]; then
+            echo "SDK prefetch exit status: $(cat "$RUNNER_TEMP/sdk-prefetch.done")"
+          else
+            echo "::warning title=SDK prefetch::still running after 5 min; the emulator action will install instead"
+          fi
+          tail -n 5 "$RUNNER_TEMP/sdk-prefetch.log" 2>/dev/null || true
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -871,6 +931,7 @@ jobs:
           path: |
             mobile/android/build/emulator-smoke-logcat.txt
             mobile/android/build/emulator-session-logcat.txt
+            mobile/android/build/emulator-instrumentation.txt
             mobile/android/build/emulator-host-diagnostics.txt
             mobile/android/build/emulator-crash-data.tar.gz
             mobile/android/build/emulator-process/
@@ -909,21 +970,24 @@ jobs:
           NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value.result)"'
-          # emulator-smoke may be path-skipped on PRs; dependency-review only has a
-          # dependency diff to review on pull_request events, so it is skipped on
-          # main pushes. Both count as success when skipped.
-          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success" and (.key != "emulator-smoke" or .value.result != "skipped") and (.key != "dependency-review" or .value.result != "skipped")) | .key] | join(", ")')"
+          # "skipped" counts as success. Every job here is either path-gated on PRs (via the
+          # `changes` job's android / emulator_smoke outputs — a docs-only PR skips all of
+          # them) or event-gated (dependency-review only runs on pull_request). The only other
+          # way a job skips is a failed/cancelled upstream `needs`, and that upstream job is
+          # itself in this list with a non-success result, so real failures still fail here.
+          failed="$(echo "$NEEDS_JSON" | jq -r '[to_entries[] | select(.value.result != "success" and .value.result != "skipped") | .key] | join(", ")')"
           if [ -n "$failed" ]; then
             echo "::error::One or more required CI jobs did not succeed: $failed"
             exit 1
           fi
-          echo "All required CI jobs succeeded or were intentionally path-skipped."
+          echo "All required CI jobs succeeded or were intentionally path/event-skipped."
 
   publish-debug-release:
     # Rolling debug build of main, surfaced as a permanent download URL:
     # https://github.com/jtn0123/VoltTracker/releases/tag/latest-debug
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [unit-tests, ci-success]
+    # emulator-smoke uploads volttracker-debug-apk on main pushes (it always runs there).
+    needs: [emulator-smoke, ci-success]
     runs-on: ubuntu-latest
     permissions:
       contents: write
