@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.39.0 (2026-09-26)
+
+### ✳️ New
+
+- **trips**: Decode PRNDL gear and split trips on Park (new trips only)
+  ([#78](https://github.com/jtn0123/VoltTracker/pull/78),
+  [`3ad7a44`](https://github.com/jtn0123/VoltTracker/commit/3ad7a44210a6aeb1fc97877438745ee5c6616729))
+
+
 ## v0.38.0 (2026-09-26)
 
 ### 🔺 Fix
