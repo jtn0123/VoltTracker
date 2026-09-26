@@ -101,9 +101,9 @@ import { VD } from "./vd-registry";
   // Only a live OBD session can carry a command. The last sample (and its "ready" gate) outlives
   // the session for a while (telemetry.ts keeps recent samples after a disconnect), so the card
   // must not keep claiming "Ready" once the connection is gone.
+  // Fails closed before the first status push (no status yet = not live).
   function liveSession(): boolean {
-    const status = String((state.status || {}).state || ((state.appState || {}).session || {}).state || "");
-    return status.toLowerCase() === "connected";
+    return (state.status || {}).state === "connected";
   }
 
   function gateView(tm: VoltTelemetry, demo: boolean): { text: string; tone: string; ready: boolean } {
