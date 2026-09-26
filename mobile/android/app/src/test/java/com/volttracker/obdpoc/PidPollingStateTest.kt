@@ -481,6 +481,93 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun aPidThatAnsweredEarlierIsReprobedSoonAfterTheCarWakes() {
+        // Field log shape: speed/RPM/pack current answer while driving, go NO DATA once the car is
+        // parked (another module keeps answering, so the bus looks alive), then must come back when
+        // the car is driven off again in the same session.
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["22434F"] = "62 43 4F 48\r>" // BECM keeps answering while parked
+        engine.responses["010D"] = "41 0D 28\r>"
+        val due = specs("010D", "22434F")
+
+        state.runScheduledPolls(due, StringBuilder())
+        nowMs += 1_000
+        engine.responses["010D"] = "NO DATA\r>" // car parked: ECM asleep
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertTrue("a quiet PID is parked while its module sleeps", state.isCommandDisabled("010D"))
+        assertTrue(state.dueForCurrentCycle().none { it.command == "010D" })
+
+        nowMs += PidPollingState.REPROBE_ANSWERED_PID_MS
+        assertTrue(
+            "a PID that answered this session must be re-probed after the short back-off",
+            state.dueForCurrentCycle().any { it.command == "010D" },
+        )
+
+        engine.responses["010D"] = "41 0D 30\r>" // driving again
+        state.runScheduledPolls(due, StringBuilder())
+        assertFalse("a live re-probe answer restores the PID", state.isCommandDisabled("010D"))
+        assertEquals("41 0D 30\r>", state.lastRaw("010D"))
+    }
+
+    @Test
+    fun aPidThatNeverAnsweredWaitsTheLongBackoffAndStaysRetiredOnAMiss() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["015C"] = "NO DATA\r>"
+        val due = specs("010D", "015C")
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertTrue(state.isCommandDisabled("015C"))
+        // Move to the cycle slot where the deep-lane 015C is scheduled.
+        val slot = findSpec("015C").phaseOffset
+        repeat(slot) { state.advanceCycle() }
+        assertFalse(state.isInitialCycle())
+
+        nowMs += PidPollingState.REPROBE_ANSWERED_PID_MS
+        assertTrue(
+            "an unproven PID is not re-probed on the short back-off",
+            state.dueForCurrentCycle().none { it.command == "015C" },
+        )
+
+        nowMs += PidPollingState.REPROBE_SILENT_PID_MS
+        val reprobeDue = state.dueForCurrentCycle()
+        assertTrue("the long back-off eventually re-probes it", reprobeDue.any { it.command == "015C" })
+
+        // The re-probe misses again, even on a fully silent cycle: it goes straight back to sleep.
+        engine.responses.remove("010D")
+        engine.commandLog.clear()
+        state.runScheduledPolls(specs("015C"), StringBuilder())
+        assertEquals(listOf("015C"), engine.commandLog)
+        assertTrue("a missed re-probe keeps the PID retired", state.isCommandDisabled("015C"))
+        assertTrue(state.dueForCurrentCycle().none { it.command == "015C" })
+    }
+
+    @Test
+    fun resetForgetsRetiredAndProvenPids() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["015C"] = "NO DATA\r>"
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(specs("010D", "015C"), StringBuilder())
+            nowMs += 1_000
+        }
+        assertEquals(1, state.disabledCommandCount())
+
+        state.reset()
+
+        assertEquals("a new session re-probes every PID", 0, state.disabledCommandCount())
+        assertFalse(state.isCommandDisabled("015C"))
+    }
+
+    @Test
     fun msSinceLastLiveDataTracksTheLastFreshRead() {
         var nowMs = 10_000L
         state.setClockForTesting { nowMs }
