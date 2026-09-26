@@ -218,6 +218,19 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun hotLaneJ1979BatchReplyFillsEachPid() {
+        state.setMode01BatchSupported(true)
+        engine.responses["010D0C49"] = "410D320C0BB84980\r>"
+
+        state.runScheduledPolls(specs("010D", "010C", "0149"), StringBuilder())
+
+        assertEquals(listOf("010D0C49"), engine.commandLog.filter { it.startsWith("01") })
+        assertEquals("410D32", state.lastRaw("010D"))
+        assertEquals("410C0BB8", state.lastRaw("010C"))
+        assertEquals("414980", state.lastRaw("0149"))
+    }
+
+    @Test
     fun incompleteExtraBatchFallsBackToPerPidWithoutDisablingTier1() {
         state.setMode01BatchSupported(true)
         // The batched reply is missing the SOC (5B) frame, so the group batch must fail and the

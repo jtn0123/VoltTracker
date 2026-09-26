@@ -437,7 +437,7 @@ object ObdProtocol {
     // 0C, 1F, 42 and 32 are the 2-byte batched Mode-01 PIDs and A6 is the 4-byte odometer; undercounting
     // a trailing multi-byte PID would let the completeness gate accept a frame truncated by a byte (the
     // multi-byte decoders then null). 32 is EVAP vapor pressure, decoded as a signed 2-byte word.
-    private fun mode01PayloadBytes(pid: String): Int =
+    internal fun mode01PayloadBytes(pid: String): Int =
         if (pid == "0C" || pid == "1F" || pid == "42" || pid == "32") {
             2
         } else if (pid == "A6") {
@@ -480,7 +480,7 @@ object ObdProtocol {
         offset: Int,
     ): Int? = mode01Bytes(response, pid, 1)?.let { it[0] + offset }
 
-    private fun mode01Bytes(
+    internal fun mode01Bytes(
         response: String?,
         pid: String,
         expectedBytes: Int,
@@ -510,7 +510,7 @@ object ObdProtocol {
      * as `NO DATA` or `SEARCHING`. Lines stay separate so a truncated frame cannot borrow payload
      * bytes from the next response line.
      */
-    private fun adapterHexLines(response: String): List<String> =
+    internal fun adapterHexLines(response: String): List<String> =
         response
             .uppercase(Locale.US)
             .split(Regex("[\\r\\n]+"))
