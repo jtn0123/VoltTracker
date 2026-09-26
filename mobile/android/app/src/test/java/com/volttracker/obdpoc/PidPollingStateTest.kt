@@ -381,6 +381,52 @@ class PidPollingStateTest {
         }
     }
 
+    @Test
+    fun motorGeneratorNodesSetAndThenRestoreTheReceiveFilter() {
+        // 0x257 / 0x258 reply on 0x657 / 0x658, outside the adapter's automatic 7E8-7EF filter.
+        state.runScheduledPolls(specs("010D", "22434F", "2228CB", "22368F"), StringBuilder())
+
+        assertEquals(
+            listOf(
+                "010D",
+                "ATSH7E4",
+                "22434F",
+                "ATSH257",
+                "ATCRA657",
+                "2228CB",
+                "ATSH258",
+                "ATCRA658",
+                "22368F",
+                "ATAR",
+                "ATSH7DF",
+            ),
+            engine.commandLog,
+        )
+    }
+
+    @Test
+    fun headersWithoutACustomReceiveFilterNeverTouchIt() {
+        state.runScheduledPolls(specs("22434F", "2240D7"), StringBuilder())
+
+        assertEquals(listOf("ATSH7E4", "22434F", "ATSH7E7", "2240D7", "ATSH7DF"), engine.commandLog)
+    }
+
+    @Test
+    fun onlyNonDiagnosticRangeNodesDeclareAReceiveFilter() {
+        for (header in PidSchedule.Header.entries) {
+            val at = header.atCommand
+            val expectsFilter = at != null && !at.startsWith("ATSH7E")
+            assertEquals("receive filter for $header", expectsFilter, header.receiveFilterCommand != null)
+        }
+        // The engine only restores the auto filter at the end of a cycle, so every filtered header
+        // must come after every unfiltered one or a later 7Ex block would be deafened.
+        val firstFiltered = PidSchedule.Header.entries.indexOfFirst { it.receiveFilterCommand != null }
+        val lastUnfiltered = PidSchedule.Header.entries.indexOfLast { it.receiveFilterCommand == null }
+        assertTrue("filtered headers must be declared last", firstFiltered > lastUnfiltered)
+        assertEquals("ATCRA657", PidSchedule.Header.MOTOR_GEN_A_257.receiveFilterCommand)
+        assertEquals("ATCRA658", PidSchedule.Header.MOTOR_GEN_B_258.receiveFilterCommand)
+    }
+
     // ---- Negative-PID cache + idle-data clock ---------------------------------------
 
     @Test
