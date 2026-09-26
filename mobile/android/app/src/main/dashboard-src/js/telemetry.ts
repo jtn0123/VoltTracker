@@ -1526,6 +1526,7 @@ import { gearDisplayText } from "./gear";
     { key: "hoodState", label: "Hood", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
     { key: "trunkState", label: "Hatch", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
     { key: "alarmState", label: "Alarm", group: "Body & comfort", text: true, staleKey: "alarmStaleMs", enhanced: true },
+    { key: "remoteStartState", label: "Remote start", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
     { key: "windowFlPct", label: "Window front left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
     { key: "windowFrPct", label: "Window front right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
     { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },

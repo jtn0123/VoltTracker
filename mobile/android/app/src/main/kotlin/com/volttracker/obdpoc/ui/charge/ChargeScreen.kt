@@ -135,11 +135,14 @@ private fun ChargeHero(state: ChargeUiState) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = "${state.evRangeMiles.toInt()} mi range",
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
+            // Hidden (not "0 mi") until the car reports its range estimate.
+            state.evRangeMiles?.let {
+                Text(
+                    text = "${it.toInt()} mi range",
+                    style = VoltType.caption,
+                    color = VoltColors.textSecondary,
+                )
+            } ?: Spacer(Modifier)
             if (state.timeToFullLabel != null) {
                 Text(
                     text = state.timeToFullLabel,

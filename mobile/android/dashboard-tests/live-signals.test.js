@@ -35,6 +35,23 @@ describe('live-signals diagnostic panel', () => {
     expect(rowFor('Gear (PRNDL)').querySelector('.live-signal-value').textContent).toBe('? (code 13)');
   });
 
+  it('lists the SW-CAN remote-start state in Body & comfort', () => {
+    const VD = window.VoltDashboard;
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      remoteStartState: 'off',
+      climateStaleMs: 30000,
+    });
+    VD.updateDiagnostics();
+    const row = rowFor('Remote start');
+    expect(row.dataset.status).toBe('live');
+    expect(row.querySelector('.live-signal-value').textContent).toBe('off');
+    expect(row.querySelector('.live-signal-age').textContent).toBe('30s ago');
+  });
+
   it('marks present metrics reporting and absent ones as no data', () => {
     const VD = window.VoltDashboard;
     // A sample where speed/soc/motor/gear report but the odometer is absent (the

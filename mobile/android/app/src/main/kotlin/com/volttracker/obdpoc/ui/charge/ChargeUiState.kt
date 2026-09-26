@@ -27,7 +27,8 @@ data class ChargeUiState(
     val statusLabel: String = "No adapter",
     val charging: Boolean = false,
     val socPercent: Double = 0.0,
-    val evRangeMiles: Double = 0.0,
+    /** The car's own EV range estimate in miles; null (caption hidden) until it reports. */
+    val evRangeMiles: Double? = null,
     val chargeKw: Double = 0.0,
     val chargeLevel: String = "",
     val timeToFullLabel: String? = null,

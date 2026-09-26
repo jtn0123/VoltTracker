@@ -406,10 +406,16 @@ body[data-active-view="insights"] .empty-hints b {
   gap: 12px;
 }
 
+/* Lets the SOC column shrink so its caption wraps under the number (below). */
+.battery-head > :first-child {
+  min-width: 0;
+}
+
 .battery-soc {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   margin-top: 6px;
 }
 
@@ -422,9 +428,12 @@ body[data-active-view="insights"] .empty-hints b {
   font-variant-numeric: tabular-nums;
 }
 
+/* Stays one line: on a narrow phone the "≈ 26 mi EV range" caption drops under
+     the SOC number instead of wrapping into a three-line sliver beside it. */
 .battery-soc-sub {
   font-size: 12px;
   color: var(--soft);
+  white-space: nowrap;
 }
 
 /* Two right-hand head columns (v2 design): Pack temp + Pack kW side by side. */

@@ -52,7 +52,7 @@ class LiveUiStateStore {
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
     fun onTelemetry(payload: JSONObject) {
         appendTraces(payload)
-        _state.value = _state.value.let { it.copy(drive = mapDrive(it.drive, payload)) }
+        _state.value = withSample(_state.value, payload)
     }
 
     /**
@@ -67,9 +67,22 @@ class LiveUiStateStore {
         socTrace.clear()
         socTraceLastSampleAt = 0L
         samples.forEach(::appendTraces)
-        samples.lastOrNull()?.let { last ->
-            _state.value = _state.value.let { it.copy(drive = mapDrive(it.drive, last)) }
-        }
+        samples.lastOrNull()?.let { last -> _state.value = withSample(_state.value, last) }
+    }
+
+    /**
+     * Folds one sample into Drive, and mirrors the pack SOC and EV range onto the Charge hero so
+     * it shows the live pack instead of its "0%" / "0 mi range" defaults.
+     */
+    private fun withSample(
+        s: VoltAppUiState,
+        t: JSONObject,
+    ): VoltAppUiState {
+        val drive = mapDrive(s.drive, t)
+        return s.copy(
+            drive = drive,
+            charge = s.charge.copy(socPercent = drive.socPercent, evRangeMiles = drive.evRangeMiles),
+        )
     }
 
     private fun appendTraces(t: JSONObject) {
