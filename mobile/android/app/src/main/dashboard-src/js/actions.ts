@@ -1358,7 +1358,9 @@ type SignalActions = {
   // with #topDemoInfo's aria-label in topbar.html).
   const DEMO_RUNNING_DETAIL = "Demo / Testing is running.";
 
-  function startDemo() {
+  // `scenario` (the Demo / Testing picker) seeds that scenario; otherwise the current one.
+  // `onStarted` runs once the demo is active and its stream has been asked to start.
+  function startDemo(scenario?: string, onStarted?: () => void) {
     ensureDemoData((error) => {
       if (error) {
         VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
@@ -1388,16 +1390,17 @@ type SignalActions = {
         } else {
           void runBrowserDemo();
         }
+        if (onStarted) onStarted();
       };
-      const scenario = currentDemoScenario();
+      const seed = scenario || currentDemoScenario();
       if (typeof VD.loadDemoScenario === "function") {
-        VD.loadDemoScenario(scenario);
+        VD.loadDemoScenario(seed);
         activateAndStart();
         return;
       }
       void ensureMapModule()
         .then(() => {
-          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(seed);
           else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
           activateAndStart();
         })
@@ -1410,6 +1413,13 @@ type SignalActions = {
           VD.setStatus({ state: "blocked", detail: "Demo could not start — the demo module failed to load." });
         });
     });
+  }
+
+  // A real (non-demo) OBD session is connected or on its way up.
+  function realSessionLive() {
+    if (state.demoActive) return false;
+    const status = String((state.status || {}).state || "").toLowerCase();
+    return ["connected", "connecting", "initializing", "reconnecting"].includes(status);
   }
 
   function currentDemoScenario() {
@@ -1577,21 +1587,10 @@ type SignalActions = {
     document.querySelectorAll("[data-scenario]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
-        const scenario = button.dataset.scenario;
-        // Tapping a scenario is an explicit preview action; keep demo isolation
-        // active so native storage/app-state pushes cannot overwrite the sample.
-        // Flip demoActive on ONLY AFTER loadDemoScenario has captured the preview
-        // snapshot (captureDemoPreview populates demoPreviewStorage). Doing it
-        // before the async map-module load resolved left a window where
-        // demoActive was true but demoPreviewStorage was still null, so the demo
-        // isolation guard (state.demoActive && state.demoPreviewStorage) let a
-        // native setStorage push write real data over the demo view.
-        const activateDemo = () => {
-          setDemoActive(true, DEMO_RUNNING_DETAIL);
-        };
+        const scenario = button.dataset.scenario || "typical";
         // Only mark the tapped scenario button selected once the demo has actually
-        // activated — otherwise a rejected ensureMapModule() (swallowed below) would
-        // leave the picker showing a scenario as active that never loaded.
+        // activated — otherwise a failed module load would leave the picker showing
+        // a scenario as active that never loaded.
         const markScenarioActive = () => {
           const picker = el("demoScenarioPicker");
           if (picker) {
@@ -1601,21 +1600,32 @@ type SignalActions = {
             });
           }
         };
-        if (typeof VD.loadDemoScenario === "function") {
-          VD.loadDemoScenario(scenario);
-          activateDemo();
-          markScenarioActive();
-        } else {
-          void ensureMapModule()
-            .then(() => {
-              if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
-              activateDemo();
-              markScenarioActive();
-            })
-            .catch(() => {
-              VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
-            });
+        // Picking a scenario (re)starts the demo stream with it, exactly like
+        // Start: without a stream Drive sat on "demo · waiting" until Stop → Start.
+        // A real car session is never torn down by a scenario tap, though — then
+        // the scenario only previews its stored data, as before.
+        if (!realSessionLive()) {
+          startDemo(scenario, markScenarioActive);
+          return;
         }
+        // Preview only. Flip demoActive on ONLY AFTER loadDemoScenario has captured
+        // the preview snapshot (captureDemoPreview populates demoPreviewStorage), so
+        // the demo isolation guard (state.demoActive && state.demoPreviewStorage)
+        // never lets a native setStorage push write real data over the demo view.
+        const preview = () => {
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          setDemoActive(true, DEMO_RUNNING_DETAIL);
+          markScenarioActive();
+        };
+        if (typeof VD.loadDemoScenario === "function") {
+          preview();
+          return;
+        }
+        void ensureMapModule()
+          .then(preview)
+          .catch(() => {
+            VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
+          });
       }, opts);
     });
     document.querySelectorAll("[data-map-layer]").forEach((node) => {

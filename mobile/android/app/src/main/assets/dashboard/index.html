@@ -573,13 +573,27 @@
     <article id="liveHeroCard" class="panel live-card" data-power-state="coast">
       <div class="live-head">
         <span class="kicker">Vehicle speed</span>
-        <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
-             live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
-             updateRateChip() in telemetry.js. -->
-        <span id="liveRateChip" class="rate-chip" data-state="waiting"
-          ><span class="rate-dot"></span
-          ><span id="liveRateLabel">waiting</span></span
-        >
+        <span class="live-head-chips">
+          <!-- Gear selector (PRNDL) from the car's gear PID. Hidden with no
+               fresh reading; an unknown code shows "—" (gear.ts#driveGear). -->
+          <span
+            id="driveGearChip"
+            class="rate-chip gear-chip"
+            role="img"
+            aria-label="Gear"
+            data-live-tile="true"
+            hidden
+            ><span class="gear-chip-label" aria-hidden="true">Gear</span
+            ><strong id="driveGearValue" aria-hidden="true">--</strong></span
+          >
+          <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
+               live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
+               updateRateChip() in telemetry.js. -->
+          <span id="liveRateChip" class="rate-chip" data-state="waiting"
+            ><span class="rate-dot"></span
+            ><span id="liveRateLabel">waiting</span></span
+          >
+        </span>
       </div>
       <div
         class="speed-row"

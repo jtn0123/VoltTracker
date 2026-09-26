@@ -18,7 +18,7 @@
 // evaluation order. See vd-registry.ts for the policy.
 import { VD } from "./vd-registry";
 import { metersToKm, milesToKm } from "./unit-types";
-import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
+import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types";
 
   const PREFIX = "vt.pref.";
   const keyListeners: Record<string, Array<(value: unknown) => void>> = {};
@@ -257,6 +257,16 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     return { value: Math.round(metric ? celsius : celsius * 9 / 5 + 32), unit: metric ? "°C" : "°F" };
   }
 
+  // Tire pressure: kPa for metric, psi (whole numbers, like a gauge) for imperial.
+  function pressureText(value: Kpa): string {
+    return unitSystem() === "metric" ? `${Math.round(value)} kPa` : `${Math.round(value * 0.1450377)} psi`;
+  }
+
+  // Fuel volume: litres for metric, US gallons for imperial.
+  function volumeText(value: Liters): string {
+    return unitSystem() === "metric" ? `${value.toFixed(1)} L` : `${(value * 0.264172).toFixed(1)} gal`;
+  }
+
   // Efficiency source is always mi/kWh; metric shows km/kWh.
   function efficiencyText(miPerKwh: number): string {
     const metric = unitSystem() === "metric";
@@ -287,6 +297,8 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       const t = temp(value);
       return `${t.value}${t.unit}`;
     },
+    pressureText,
+    volumeText,
     efficiencyText,
     efficiencyUnit: () => (unitSystem() === "metric" ? "km/kWh" : "mi/kWh"),
   };

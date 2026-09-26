@@ -1173,15 +1173,25 @@ import { kph } from "./unit-types";
     }
   }
 
+  // Samples are streaming right now (a live or demo session). The Drive "Waiting for your
+  // car" empty state keys off stored rows, so without this it sat above live tiles until the
+  // first rows were written (forever in the Demo / Testing "empty" scenario).
+  function liveDataFlowing(): boolean {
+    const status = String((state.status || {}).state || "").toLowerCase();
+    return Number(state.lastSampleAt || 0) > 0 && ["connected", "demo", "scanning", "scan-complete"].includes(status);
+  }
+
+  function syncAppEmptyState(): void {
+    toggleHidden("appEmptyState", VD.dbRowCount(state.storage || {}) > 0 || liveDataFlowing());
+  }
+
   export function renderRealV2Ui() {
     const storage = state.storage || {};
     const overview: Record<string, unknown> = storage.overview || {};
     const charge = storage.chargeSummary || {};
     const route = selectedRouteForOverview(storage);
-    const hasRows = VD.dbRowCount(storage) > 0;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
     const latest = latestInsightReading(storage);
-    toggleHidden("appEmptyState", hasRows);
     toggleHidden("chargeEmptyState", hasCharge);
     toggleHidden("chargeSummaryGrid", !hasCharge);
     toggleHidden("insightsEmptyState", hasInsightContent());
@@ -1329,6 +1339,7 @@ import { kph } from "./unit-types";
     state.storage,
     dtcDataLoaded()
   ]);
+  registerRenderer("storage:empty", syncAppEmptyState, () => [state.storage, liveDataFlowing()]);
   registerRenderer("storage:v2", renderRealV2Ui, () => [
     state.storage,
     state.trips,

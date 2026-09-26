@@ -128,12 +128,7 @@ class LiveUiStateStore {
             coolantF = optDouble(t, "coolantC")?.let { cToF(it).toInt() } ?: current.coolantF,
             gpsAccuracyFt = optDouble(t, "accuracyM")?.let { (it * FT_PER_M).toInt() } ?: current.gpsAccuracyFt,
             ambientF = optDouble(t, "outsideTempC")?.let { cToF(it).toInt() } ?: current.ambientF,
-            gear =
-                t
-                    .optString("prndlState", "")
-                    .takeIf { it.isNotBlank() }
-                    ?.let { VoltGear.displayText(it, if (t.isNull("prndlRaw")) null else t.optInt("prndlRaw")) }
-                    ?: current.gear,
+            gear = gearText(t),
             motorAKw = optDouble(t, "motorAPowerKw") ?: current.motorAKw,
             motorBKw = optDouble(t, "motorBPowerKw") ?: current.motorBKw,
             transTempF = optDouble(t, "transmissionTempC")?.let { cToF(it).toInt() } ?: current.transTempF,
@@ -213,6 +208,18 @@ class LiveUiStateStore {
         return optDouble(t, "evRangeKm")?.takeIf { it >= 0.0 }?.let(::kmToMi) ?: current
     }
 
+    /**
+     * The gear from this sample alone. Unlike the numeric tiles it never carries the last letter
+     * forward: a sample with no gear reading, or one older than [VoltGear.FRESH_MS], reads
+     * [NO_GEAR] rather than a gear the car may have left.
+     */
+    private fun gearText(t: JSONObject): String {
+        val letter = t.optString("prndlState", "")
+        val ageMs = optDouble(t, "prndlStateStaleMs") ?: 0.0
+        if (letter.isBlank() || ageMs > VoltGear.FRESH_MS) return NO_GEAR
+        return VoltGear.displayText(letter, if (t.isNull("prndlRaw")) null else t.optInt("prndlRaw"))
+    }
+
     private fun kmToMi(km: Double): Double = km * MI_PER_KM
 
     private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
@@ -226,6 +233,9 @@ class LiveUiStateStore {
         /** Mirrors telemetry.ts EV_RANGE_STALE_MS. */
         const val EV_RANGE_STALE_MS = 120_000.0
         const val GAS_RPM_FLOOR = 300
+
+        /** Matches [DriveUiState.gear]'s empty default. */
+        const val NO_GEAR = "--"
         const val MI_PER_KM = 0.621371
         const val FT_PER_M = 3.28084
     }

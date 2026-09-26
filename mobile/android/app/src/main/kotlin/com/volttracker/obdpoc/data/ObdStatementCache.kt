@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.data
 
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteStatement
+import com.volttracker.obdpoc.VoltGear
 import org.json.JSONObject
 import java.io.Closeable
 
@@ -104,9 +105,6 @@ class ObdStatementCache : Closeable {
                 ") VALUES (" +
                 "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
 
-        /** A PRNDL reading older than this is not stored as the row's gear (TripSplitRules). */
-        private const val GEAR_FRESH_MS: Long = 120_000L
-
         /** SW-CAN door/hatch fields (SwcanReadings); any "open" marks the row door_open = 1. */
         private val DOOR_KEYS = arrayOf("doorFlState", "doorFrState", "doorRlState", "doorRrState", "trunkState")
 
@@ -149,13 +147,16 @@ class ObdStatementCache : Closeable {
             doorOpen(sample)?.let { stmt.bindLong(29, if (it) 1L else 0L) }
         }
 
-        /** The raw PRNDL code when the sample carries a reading at most [GEAR_FRESH_MS] old. */
+        /**
+         * The raw PRNDL code when the sample carries a reading at most [VoltGear.FRESH_MS] old; an
+         * older reading is not stored as the row's gear (TripSplitRules).
+         */
         private fun freshPrndlRaw(sample: JSONObject): Int? {
             if (!sample.has("prndlRaw") || sample.isNull("prndlRaw")) return null
             val raw = sample.optDouble("prndlRaw", Double.NaN)
             if (!raw.isFinite()) return null
             val staleMs = sample.optLong("prndlStateStaleMs", 0L)
-            return if (staleMs <= GEAR_FRESH_MS) raw.toInt() else null
+            return if (staleMs <= VoltGear.FRESH_MS) raw.toInt() else null
         }
 
         /** True if any door/hatch reads "open", false if some read and none is open, else null. */

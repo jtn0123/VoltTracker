@@ -1888,8 +1888,11 @@ import { VD } from "./vd-registry";
     }
     card.hidden = false;
     const splittable = canEditTripSplits(route);
+    // GPS stops are numbered on their own count so a Park stop between them
+    // doesn't leave a gap ("Stop 1", "Stopped 4 min", "Stop 2").
+    let gpsStopNumber = 0;
     list.replaceChildren(
-      ...stops.map((stop, i) => {
+      ...stops.map((stop) => {
         const row = document.createElement("div");
         row.className = "trip-detail-stop-row";
         const dot = document.createElement("span");
@@ -1904,7 +1907,8 @@ import { VD } from "./vd-registry";
           dur.textContent = "in Park";
           if (splittable) row.append(tripSplitButton({ startMs: stop.startMs, endMs: stop.endMs }));
         } else {
-          name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
+          gpsStopNumber += 1;
+          name.textContent = `Stop ${gpsStopNumber} · ${fmtClockTime(stop.startMs)}`;
           dur.textContent = VD.formatDuration(stop.durationMs);
         }
         return row;
@@ -2201,9 +2205,11 @@ import { VD } from "./vd-registry";
       receiptFavorite.textContent = favorite ? "Favorited" : "Favorite";
       receiptFavorite.setAttribute("aria-pressed", String(favorite));
     }
-    const fallback = `${session.mode || "Drive"} · ${session.adapterName || "OBD adapter"}`;
-    VD.setText("tripDetailTitle", label || fallback);
-    VD.setText("tripDetailSub", label ? fallback : "");
+    // Unnamed drives read "Evening drive" like the drive-picker chips, not the
+    // raw "obd · <adapter>" source line, which moves to the subtitle.
+    VD.setText("tripDetailTitle", label || daypartDriveLabel(stats.startedAtMs));
+    const sub = el("tripDetailSub");
+    if (sub) sub.textContent = session.adapterName || "OBD adapter";
     VD.setText("tripDetailDistance", stats.distanceMeters > 0 ? VD.formatDistance(stats.distanceMeters) : "--");
     VD.setText("tripDetailDuration", stats.durationMs > 0 ? VD.formatDuration(stats.durationMs) : "--");
     const avg = VD.units.speed(stats.avgKph);
@@ -2213,8 +2219,9 @@ import { VD } from "./vd-registry";
     VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
     renderTripDetailCost(stats, routeKey);
     VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
-    VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
-    VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");
+    // Absolute times, like the drive chips: "1d ago" for both ends told nothing.
+    VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? fmtChipDate(stats.startedAtMs) : "--");
+    VD.setText("tripDetailEnd", fmtClockTime(stats.endedAtMs));
     renderTripDetailEvSplit(routeKey);
     renderTripDetailScatter(route);
     renderTripDetailElevation(route);
@@ -2230,12 +2237,16 @@ import { VD } from "./vd-registry";
     // Reveal the sheet here so the function is self-contained; actions.ts then
     // layers the focus trap on top (it re-sets hidden=false too, harmlessly).
     sheet.hidden = false;
+    // Drops .app's layer-promotion transform (base.css) so the fixed sheet sits
+    // over the viewport instead of the bottom of the long Map page.
+    document.body.classList.add("trip-detail-active");
     return true;
   }
 
   function closeTripDetail() {
     const sheet = el("tripDetailSheet");
     if (sheet) sheet.hidden = true;
+    document.body.classList.remove("trip-detail-active");
   }
 
   function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {

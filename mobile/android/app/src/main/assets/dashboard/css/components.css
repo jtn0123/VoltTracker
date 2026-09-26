@@ -206,6 +206,31 @@ body[data-active-view="insights"] .empty-hints b {
   white-space: nowrap;
 }
 
+.live-head-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Gear chip (PRNDL): a .rate-chip in the plain text tone, the letter set
+     larger so it reads at a glance beside the live-rate chip. */
+.gear-chip {
+  color: var(--muted);
+}
+
+.gear-chip strong {
+  color: var(--text);
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+/* A tentative decode (not yet confirmed on the car) is dimmed. */
+.gear-chip[data-confidence="tentative"] strong,
+.gear-chip[data-confidence="unknown"] strong {
+  color: var(--muted);
+}
+
 .rate-dot {
   width: 7px;
   height: 7px;
@@ -1788,6 +1813,9 @@ header.signal-console-head {
 .diag-recovery {
   display: grid;
   gap: 12px;
+  /* .panel carries no padding of its own; without this the tone dot sat on
+       the card border and the copy/button ran to its edges. */
+  padding: 16px 20px;
 }
 
 .diag-recovery__head {

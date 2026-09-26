@@ -79,6 +79,48 @@ describe('dashboard demo data', () => {
     warn.mockRestore();
   });
 
+  // The real Diagnostics → Demo / Testing picker from the generated index.html.
+  describe('scenario picker', () => {
+    const pick = (name) =>
+      document
+        .querySelector(`[data-scenario="${name}"]`)
+        .dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+
+    async function boot() {
+      const bridge = await loadDashboard({ extras: ['demo-data.js'] });
+      bridge.demo = vi.fn();
+      await window.VoltDashboard.ensureMapModule();
+      return bridge;
+    }
+
+    it('starts the demo stream with the picked scenario, and restarts it on the next pick', async () => {
+      const bridge = await boot();
+      const VD = window.VoltDashboard;
+
+      pick('power-user');
+      expect(bridge.demo).toHaveBeenCalledTimes(1);
+      expect(VD.state.demoActive).toBe(true);
+      expect(VD.state.demoScenario).toBe('power-user');
+      expect(document.querySelector('[data-scenario="power-user"]').getAttribute('aria-pressed')).toBe('true');
+      expect(document.querySelector('[data-scenario="typical"]').classList.contains('is-active')).toBe(false);
+
+      pick('typical');
+      expect(bridge.demo).toHaveBeenCalledTimes(2);
+      expect(VD.state.demoScenario).toBe('typical');
+    });
+
+    it('never tears down a real car session: the pick only previews the scenario', async () => {
+      const bridge = await boot();
+      const VD = window.VoltDashboard;
+      VD.setStatus({ state: 'connected', detail: 'Live' });
+
+      pick('power-user');
+      expect(bridge.demo).not.toHaveBeenCalled();
+      expect(VD.state.demoActive).toBe(true);
+      expect(VD.state.demoScenario).toBe('power-user');
+    });
+  });
+
   it('seeds the selected sample scenario before starting the native demo stream', async () => {
     const bridge = await loadDashboard({ extras: ['demo-data.js', 'insights-panel.js'] });
     bridge.demo = vi.fn();

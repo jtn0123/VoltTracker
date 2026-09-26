@@ -50,6 +50,12 @@ object VoltGear {
     const val PARK: String = "P"
     const val UNKNOWN_LETTER: String = "?"
 
+    /**
+     * A gear reading older than this is treated as no reading (the PID is polled only about
+     * every 37 s, so this allows for a missed poll or two). Mirrors gear.ts `GEAR_FRESH_MS`.
+     */
+    const val FRESH_MS: Long = 120_000L
+
     /** Raw code for Park — the only code the trip splitter acts on. */
     const val PARK_RAW: Int = 8
 

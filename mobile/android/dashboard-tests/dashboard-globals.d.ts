@@ -701,6 +701,8 @@ interface VoltRestoreProgress {
       distanceUnit(): string;
       temp(celsius: number): { value: number; unit: string };
       tempText(celsius: number): string;
+      pressureText(kpa: number): string;
+      volumeText(liters: number): string;
       efficiencyText(miPerKwh: number): string;
       efficiencyUnit(): string;
     };
