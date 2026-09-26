@@ -98,10 +98,18 @@ import { VD } from "./vd-registry";
     toggle.textContent = enabled ? "On" : "Off";
   }
 
+  // Only a live OBD session can carry a command. The last sample (and its "ready" gate) outlives
+  // the session for a while (telemetry.ts keeps recent samples after a disconnect), so the card
+  // must not keep claiming "Ready" once the connection is gone.
+  // Fails closed before the first status push (no status yet = not live).
+  function liveSession(): boolean {
+    return (state.status || {}).state === "connected";
+  }
+
   function gateView(tm: VoltTelemetry, demo: boolean): { text: string; tone: string; ready: boolean } {
     if (demo) return { text: "Demo: commands are simulated. Nothing is sent to a car.", tone: "ok", ready: true };
     const gate = typeof tm.carControlGate === "string" ? tm.carControlGate : "";
-    if (!gate) return { text: "Connect to the car to use controls.", tone: "warn", ready: false };
+    if (!gate || !liveSession()) return { text: "Connect to the car to use controls.", tone: "warn", ready: false };
     if (gate === "ready") return { text: "Ready: the car is parked and the adapter can reach it.", tone: "ok", ready: true };
     if (gate === "busy") return { text: "Sending a command…", tone: "", ready: false };
     const detail = typeof tm.carControlGateDetail === "string" ? tm.carControlGateDetail : "";
@@ -147,8 +155,10 @@ import { VD } from "./vd-registry";
     const tm = (state.telemetry || {}) as VoltTelemetry;
     const gate = gateView(tm, demo);
     setText(el("carControlsGate"), gate.text, gate.tone);
+    // A PIN lockout refuses every command natively; don't offer buttons that can only fail.
+    const commandsOpen = gate.ready && (demo || native.pinLockedOut !== true);
     document.querySelectorAll<HTMLButtonElement>("#carControlsCard [data-car-control]").forEach((btn) => {
-      btn.disabled = !gate.ready;
+      btn.disabled = !commandsOpen;
     });
     const result = lastResult(tm, demo);
     const resultNode = el("carControlsResult");
@@ -209,6 +219,7 @@ import { VD } from "./vd-registry";
   VD.registerRenderer("carControls", renderCarControls, () => [
     state.telemetry,
     state.appState,
+    state.status,
     state.demoActive,
     demoVersion,
   ]);

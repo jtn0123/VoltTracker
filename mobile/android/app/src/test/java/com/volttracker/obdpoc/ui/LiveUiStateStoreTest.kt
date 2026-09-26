@@ -86,6 +86,24 @@ class LiveUiStateStoreTest {
     }
 
     @Test
+    fun chargeHeroMirrorsLivePackSocAndEvRange() {
+        val store = LiveUiStateStore()
+        // Before any range estimate the caption stays hidden rather than reading "0 mi range".
+        assertNull(store.state.value.charge.evRangeMiles)
+
+        store.onTelemetry(sample { put("evRangeKm", 42).put("evRangeStaleMs", 1_000) })
+        assertEquals(62.0, store.state.value.charge.socPercent, 1e-9)
+        assertEquals(26.1, store.state.value.charge.evRangeMiles ?: Double.NaN, 0.05) // 42 km
+
+        store.onTelemetry(sample { put("evRangeKm", 42).put("evRangeStaleMs", 180_000) })
+        assertNull(store.state.value.charge.evRangeMiles)
+
+        store.onTelemetryBackfill(listOf(sample { put("soc", 55).put("evRangeKm", 30) }))
+        assertEquals(55.0, store.state.value.charge.socPercent, 1e-9)
+        assertEquals(18.6, store.state.value.charge.evRangeMiles ?: Double.NaN, 0.05) // 30 km
+    }
+
+    @Test
     fun missingFieldsKeepPriorValuesInsteadOfZeroing() {
         val store = LiveUiStateStore()
         store.onTelemetry(sample())

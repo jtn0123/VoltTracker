@@ -50,6 +50,7 @@ class DemoPollingLoop(
 
         /** Raw PRNDL code for D (see [VoltGear]); the demo only ever shows P or D. */
         private const val DEMO_DRIVE_GEAR_RAW = 3
+        private const val DEMO_CLOSED = "closed"
 
         fun isChargingPhase(t: Double): Boolean = t.mod(CYCLE_SECONDS) >= DRIVE_PHASE_SECONDS
 
@@ -161,7 +162,9 @@ class DemoPollingLoop(
                 sample.put("packResistanceMohm", 148.5)
                 sample.put("hvIsolationKohm", 2000)
                 sample.put("motorBTempC", ObdElmDecode.round1(48.0 + 4.0 * Math.sin(t / 10.0)))
-                sample.put("evRangeKm", Math.round(maxOf(0.0, (soc - 15.0) * 1.0)))
+                // Same SOC-proportional ~66 km full-charge range as actions-demo.ts, so both demo
+                // streams show "≈ 26 mi EV range" and agree with the cluster range below.
+                sample.put("evRangeKm", Math.round(soc / 100.0 * 66.0))
                 sample.put("batteryHeaterPct", 0)
                 sample.put("pemCoolantTempC", ObdElmDecode.round1(38.0 + 2.0 * Math.sin(t / 11.0)))
                 sample.put("lifetimeChargeEnergyKwh", 2198.1)
@@ -178,6 +181,20 @@ class DemoPollingLoop(
                 sample.put("tirePressureRlKpa", 256.0)
                 sample.put("tirePressureRrKpa", 260.0)
                 sample.put("doorLockState", if (charging) "unlocked" else "locked")
+                sample.put("doorLockSource", "fob")
+                sample.put("doorFlState", DEMO_CLOSED)
+                sample.put("doorFrState", DEMO_CLOSED)
+                sample.put("doorRlState", DEMO_CLOSED)
+                sample.put("doorRrState", DEMO_CLOSED)
+                sample.put("hoodState", DEMO_CLOSED)
+                sample.put("trunkState", DEMO_CLOSED)
+                sample.put("alarmState", "disarmed")
+                sample.put("windowFlPct", 0)
+                sample.put("windowFrPct", 0)
+                sample.put("windowRlPct", 0)
+                sample.put("windowRrPct", 0)
+                sample.put("blowerPct", 35.0)
+                sample.put("remoteStartState", "off")
                 sample.put("cabinTempEstC", ObdElmDecode.round1(21.0 + Math.sin(t / 15.0)))
                 sample.put("acState", "on")
                 sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))

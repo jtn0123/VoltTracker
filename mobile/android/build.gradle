@@ -79,7 +79,11 @@ def dashboardStartupBudgetBytes = 412_000L
 // "map imagery loads from OpenStreetMap/CARTO" notice in the lazy map chunk
 // (map.ts#maybeShowMapPrivacyNotice, ~0.4 KB). Copy resolves through the eager
 // bundle's VD.t so the chunk does not re-bundle the i18n catalog.
-def dashboardLazySupportBudgetBytes = 90_500L
+// 90.5k → 91k (polish pass, 2026-09-26): #80's split-trip UI left the bucket
+// 24 B under its ceiling; funds the Demo / Testing stream's SW-CAN body fields
+// (doors, hood, hatch, alarm, windows, blower, remote start: ~0.26 KB in
+// actions-demo.js) so demo previews every Body & comfort row.
+def dashboardLazySupportBudgetBytes = 91_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyExpertBudgetBytes = 40_000L
 // Detail-panel chunks split OUT of the eager app.js in the G2 startup-headroom

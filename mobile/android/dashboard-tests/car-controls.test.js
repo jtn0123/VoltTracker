@@ -40,6 +40,7 @@ describe('car controls', () => {
   }
 
   function live(fields) {
+    VD.setStatus({ state: 'connected', detail: 'Live' });
     VD.updateTelemetry({ source: 'obd', updatedAt: Date.now(), speedKph: 0, ...fields });
     VD.renderCarControls();
   }
@@ -112,6 +113,33 @@ describe('car controls', () => {
 
     live({ carControlGate: 'busy', carControlGateDetail: 'Another command is still running.' });
     expect(gate().textContent).toContain('Sending');
+  });
+
+  it('stops offering commands once the live session ends, even with a recent "ready" sample', () => {
+    native = { ...ON };
+    live({ carControlGate: 'ready' });
+    expect(buttons().every((b) => !b.disabled)).toBe(true);
+
+    VD.setStatus({ state: 'error', detail: 'Adapter lost' });
+    VD.renderCarControls();
+    expect(gate().textContent).toContain('Connect to the car');
+    expect(gate().getAttribute('data-tone')).toBe('warn');
+    expect(buttons().every((b) => b.disabled)).toBe(true);
+
+    VD.setStatus({ state: 'idle', detail: 'Stopped.' });
+    VD.renderCarControls();
+    expect(buttons().every((b) => b.disabled)).toBe(true);
+  });
+
+  it('disables the commands while the PIN is locked out', () => {
+    native = { ...ON, pinLockedOut: true };
+    live({ carControlGate: 'ready' });
+    expect(document.getElementById('carControlsPinState').textContent).toContain('wrong attempts');
+    expect(buttons().every((b) => b.disabled)).toBe(true);
+
+    native = { ...ON };
+    VD.renderCarControls();
+    expect(buttons().every((b) => !b.disabled)).toBe(true);
   });
 
   it('reports the last outcome from the live sample', () => {
