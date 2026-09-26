@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.40.1 (2026-09-26)
+
+### 🔺 Fix
+
+- Ev range caption uses the car's estimate; 22437D 0xFFFF is "not available"
+  ([#79](https://github.com/jtn0123/VoltTracker/pull/79),
+  [`1c14219`](https://github.com/jtn0123/VoltTracker/commit/1c14219d4aa5741a044e9fadab45e0a23c71d365))
+
+
 ## v0.40.0 (2026-09-26)
 
 ### ✳️ New
