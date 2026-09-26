@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.41.3 (2026-09-26)
+
+### 🔺 Fix
+
+- **dashboard**: One-drive trip card, live-first SOC, consistent charge count, trip-detail scrim
+  ([#84](https://github.com/jtn0123/VoltTracker/pull/84),
+  [`704b572`](https://github.com/jtn0123/VoltTracker/commit/704b572442a36864a23629e34d8f0f18fe2dcf57))
+
+
 ## v0.41.2 (2026-09-26)
 
 ### 🔺 Fix
