@@ -258,7 +258,13 @@ open class ElmConnection
                     // since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
                     // almost certainly dropped the prompt — stop here instead of burning the rest of
                     // the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
-                    if (response.isNotEmpty() && clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS) {
+                    // Only real reply text starts the quiet clock: with echo on (e.g. ATE0 not yet
+                    // applied) the echoed command, or a "SEARCHING..." status, arrives at once while a
+                    // busy ECU can take 300 ms+ to answer. Cutting there loses the value and lets the
+                    // late reply bleed into the next command.
+                    if (hasReplyBeyondEcho(response, command) &&
+                        clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS
+                    ) {
                         break
                     }
                     if (!sleep(25)) {
@@ -326,18 +332,36 @@ open class ElmConnection
             }
         }
 
-        private companion object {
+        companion object {
             // Once a response has arrived, this much continued silence with still no '>' prompt means
             // the ELM327 v1.4b dropped the prompt (a known quirk). It is far longer than a normal
             // inter-frame gap (<100 ms), so a legitimate slow multi-frame reply is not truncated; it
             // just lets prompt-recovery start ~1 s+ sooner than waiting out the full command timeout.
-            const val NO_PROMPT_QUIET_PERIOD_MS = 250L
+            private const val NO_PROMPT_QUIET_PERIOD_MS = 250L
 
             // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
             // Keep a single command response bounded so it cannot exhaust the app process heap.
-            const val MAX_RESPONSE_CHARS = 64 * 1024
+            private const val MAX_RESPONSE_CHARS = 64 * 1024
 
-            fun sleep(millis: Long): Boolean =
+            /** True when [response] holds more than the echoed [command] and ELM status lines. */
+            @VisibleForTesting
+            internal fun hasReplyBeyondEcho(
+                response: CharSequence,
+                command: String,
+            ): Boolean {
+                var rest = response.trimStart()
+                if (rest.startsWith(command, ignoreCase = true)) {
+                    rest = rest.substring(command.length)
+                }
+                return rest
+                    .toString()
+                    .replace(SEARCHING_STATUS, "", ignoreCase = true)
+                    .any { !it.isWhitespace() }
+            }
+
+            private const val SEARCHING_STATUS = "SEARCHING..."
+
+            private fun sleep(millis: Long): Boolean =
                 try {
                     Thread.sleep(millis)
                     true
