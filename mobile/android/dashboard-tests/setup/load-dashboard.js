@@ -230,6 +230,7 @@ const REQUIRED_DOM = `
   <div id="appEmptyState"></div>
   <div id="chargeEmptyState"></div>
   <div id="insightsEmptyState"></div>
+  <div id="thisTripKicker"></div>
   <div id="overviewDistance"></div>
   <div id="overviewDistanceSub"></div>
   <div id="overviewMaxSpeed"></div>
@@ -237,7 +238,7 @@ const REQUIRED_DOM = `
   <div id="overviewBatterySub"></div>
   <div id="overviewChargeHints"></div>
   <div id="realChargeSessions"></div>
-  <div id="realChargeHints"></div>
+  <div id="realChargeCount"></div>
   <div id="realChargePower"></div>
   <div id="realChargeStatus"></div>
   <div id="chargeSessionsCard"><div id="chargeSessionsTitle"></div><div id="chargeSessionsList"></div></div>

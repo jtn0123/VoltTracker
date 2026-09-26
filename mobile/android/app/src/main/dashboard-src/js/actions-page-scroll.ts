@@ -38,6 +38,8 @@ function canStartPageDragScroll(VD: VoltDashboard, event: PointerEvent) {
   if (event.pointerType && event.pointerType !== "mouse") return false;
   const target = event.target as Element | null;
   if (target && target.closest(pageDragScrollBlockSelector)) return false;
+  // The trip-detail sheet scroll-locks the page under its scrim (screens.css).
+  if (document.body.classList.contains("trip-detail-active")) return false;
   return typeof VD.canScrollApp === "function"
     ? VD.canScrollApp()
     : document.documentElement.scrollHeight > window.innerHeight + 2;

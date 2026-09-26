@@ -291,6 +291,16 @@
     </div>
   </div>
 
+  <!-- Dimmed scrim behind the trip-detail sheet. Shown only while
+       body.trip-detail-active (set by map.ts on every open path); tapping it runs
+       the same closeTripDetail action as Done / Escape / Android back. -->
+  <div
+    id="tripDetailBackdrop"
+    class="trip-detail-backdrop"
+    data-action="closeTripDetail"
+    aria-hidden="true"
+  ></div>
+
   <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
        button; populated by map.ts#openTripDetail from the route projection +
        trip rollup. Modal dialog with a focus trap (actions.ts), so it overlays

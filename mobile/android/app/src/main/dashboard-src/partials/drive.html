@@ -356,14 +356,14 @@
     </div>
   </div>
 
-  <!-- "This trip" rollup (v2 design): one card for the latest drive — distance,
-       time, max speed, efficiency — with the net HV energy + estimated cost
-       footer. Distance/max come from the overview payload (ids kept from the
-       old overview grid); time/efficiency/energy come from the matching trip
-       rollup. Rendered by storage-status.ts#renderThisTripCard. -->
+  <!-- Trip card (v2 design): ONE drive — the one in progress while samples
+       stream ("Current drive"), else the most recent stored trip ("Last trip ·
+       2h ago") — distance, time, max speed, efficiency, with the net HV energy +
+       estimated cost footer. Every figure comes from that one drive (ids kept
+       from the old overview grid). Rendered by storage-status.ts#renderThisTripCard. -->
   <article class="panel trip-card" id="thisTripCard">
     <header class="card-head">
-      <span class="kicker">This trip</span>
+      <span class="kicker" id="thisTripKicker">Last trip</span>
       <button type="button" class="link-btn" data-nav-jump="map">
         View on map &#8594;
       </button>

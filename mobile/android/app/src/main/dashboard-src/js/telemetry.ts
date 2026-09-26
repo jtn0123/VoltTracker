@@ -20,7 +20,7 @@ import type { MapRoutePoint } from "./map-route-utils";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { setStorage } from "./storage-status";
-import { initialTelemetryState } from "./telemetry-state";
+import { initialSessionTotals, initialTelemetryState } from "./telemetry-state";
 import { VD } from "./vd-registry";
 import { celsius, km, kpa, kph as kphOf, liters, meters as metersOf } from "./unit-types";
 import { driveGear, gearDisplayText } from "./gear";
@@ -373,6 +373,7 @@ import { driveGear, gearDisplayText } from "./gear";
       socHistory: [],
       sessionStartSoc: null,
       sessionDistanceM: 0,
+      ...initialSessionTotals(),
       sessionLastLat: null,
       sessionLastLng: null,
       liveRouteStartedAtMs: null,
@@ -863,6 +864,7 @@ import { driveGear, gearDisplayText } from "./gear";
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       pushBounded(state.speedHistory, kph, 48);
+      if (kph > state.sessionMaxSpeedKph) setState({ sessionMaxSpeedKph: kph });
     }
     // Drive-tab live charts: power bars and SOC trace. Same fixed-window
     // discipline as the speed history.
@@ -870,6 +872,7 @@ import { driveGear, gearDisplayText } from "./gear";
     if (Number.isFinite(power)) {
       pushBounded(state.powerHistory, power, 60);
     }
+    accumulateSessionEnergy(sample, power);
     const soc = Number(sample.soc);
     if (Number.isFinite(soc)) {
       // Capture the session-start SOC so the "Δ since session" chip on the
@@ -907,6 +910,22 @@ import { driveGear, gearDisplayText } from "./gear";
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
       else recordQueuedLivePosition(lat, lon);
     }
+  }
+
+  // Net HV energy for the in-progress drive (the Drive "Current drive" card's energy,
+  // cost and efficiency): pack power integrated between consecutive samples on their own
+  // clocks. A gap over 10 s (adapter blip, paused WebView) or a plugged-in sample adds
+  // nothing, so a charge window or an outage never books phantom drive energy.
+  function accumulateSessionEnergy(sample: PayloadRecord, powerKw: number) {
+    const at = Number(sample.updatedAt);
+    if (!(at > 0)) return;
+    const stepS = (at - state.sessionEnergyAtMs) / 1000;
+    const counts = state.sessionEnergyAtMs > 0 && stepS > 0 && stepS <= 10 &&
+      Number.isFinite(powerKw) && !(Number(sample.chargerPowerKw) > 0);
+    setState({
+      sessionEnergyAtMs: at,
+      ...(counts ? { sessionEnergyKwh: state.sessionEnergyKwh + (powerKw * stepS) / 3600 } : {})
+    });
   }
 
   // Resume catch-up: the native side buffers the samples broadcast while the Activity was
