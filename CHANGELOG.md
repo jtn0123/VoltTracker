@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.41.1 (2026-09-26)
+
+### 🔺 Fix
+
+- **ui**: Polish pass over car controls, gear, SW-CAN and EV range UI
+  ([#81](https://github.com/jtn0123/VoltTracker/pull/81),
+  [`2df6652`](https://github.com/jtn0123/VoltTracker/commit/2df6652bd1da92843564d1f46c8dde2744c22ac7))
+
+
 ## v0.41.0 (2026-09-26)
 
 ### ✳️ New
