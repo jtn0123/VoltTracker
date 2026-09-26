@@ -17,6 +17,7 @@ import {
   bridge,
   clearDemoTelemetry,
   el,
+  ensureCarControlsModule,
   ensureChargeHistoryModule,
   ensureDemoData,
   ensureDtcData,
@@ -2013,6 +2014,7 @@ type SignalActions = {
     startupMark("actions_secondary_render_start");
     flushRender();
     if (typeof VD.renderMapIfLoaded === "function") renderMapIfLoaded();
+    void ensureCarControlsModule().catch(() => {});
     startupMark("actions_secondary_render_end");
   };
   schedulePostStartupIdle(loadDeferredPanels);

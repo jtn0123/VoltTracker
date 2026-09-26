@@ -32,6 +32,7 @@ const DASHBOARD_MODULE_LOADERS = {
   'actions-demo.js': () => import('../../app/src/main/dashboard-src/js/actions-demo.ts'),
   'actions-signals.js': () => import('../../app/src/main/dashboard-src/js/actions-signals.ts'),
   'actions-storage.js': () => import('../../app/src/main/dashboard-src/js/actions-storage.ts'),
+  'car-controls.js': () => import('../../app/src/main/dashboard-src/js/car-controls.ts'),
   'charge-history.js': () => import('../../app/src/main/dashboard-src/js/charge-history.ts'),
   'connection-status.js': () => import('../../app/src/main/dashboard-src/js/connection-status.ts'),
   'connection-tools.js': () => import('../../app/src/main/dashboard-src/js/connection-tools.ts'),

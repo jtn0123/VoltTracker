@@ -100,7 +100,7 @@ def dashboardLazyCssBudgetBytes = 23_500L
 def dashboardDtcDataBudgetBytes = 380_000L
 // Keep destination-specific controls in the matching bounded bucket instead of
 // charging every on-demand interaction to the generic support allowance.
-def dashboardLazyPanelFiles = ["js/insights-panel.js", "js/connection-tools.js"]
+def dashboardLazyPanelFiles = ["js/insights-panel.js", "js/connection-tools.js", "js/car-controls.js"]
 def dashboardLazyExpertFiles = ["js/signals-panel.js", "js/scrubber.js"]
 def dashboardLazyDetailFiles = ["js/charge-history.js", "js/maintenance-panel.js", "js/dtc-detail.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]

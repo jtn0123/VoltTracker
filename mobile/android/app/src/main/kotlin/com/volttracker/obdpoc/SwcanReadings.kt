@@ -75,6 +75,7 @@ class SwcanReadings(
         putReading(sample, "acEvapTempC", SwcanField.AC_EVAP_TEMP)
         putReading(sample, "heaterCoreTempC", SwcanField.HEATER_CORE_TEMP)
         putReading(sample, "coolantHeaterKw", SwcanField.COOLANT_HEATER_KW)
+        putReading(sample, "remoteStartState", SwcanField.REMOTE_START)
         putReading(sample, "peCoolantTempC", SwcanField.PE_COOLANT_TEMP)
         putReading(sample, "chargeCurrentLimitA", SwcanField.CHARGE_LIMIT)
         putReading(sample, "clusterEvRangeKm", SwcanField.CLUSTER_EV_RANGE)

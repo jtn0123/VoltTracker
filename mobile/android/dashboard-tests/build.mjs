@@ -113,6 +113,7 @@ const LAZY = [
   "signals-panel",
   "connection-tools",
   "scrubber",
+  "car-controls",
 ];
 
 function sourceFor(name) {

@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.engine
 
+import com.volttracker.obdpoc.CarControlGate
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.SwcanFrameDecoder
 import com.volttracker.obdpoc.SwcanReadings
@@ -88,6 +89,7 @@ class SwcanListenRunner(
     private var nextWindowAtMs = Long.MAX_VALUE
     private var consecutiveEmpty = 0
     private var windowCount = 0
+    private var okWindows = 0
     private var healthCheckPending = false
     private var liveCyclesAtWindowEnd = 0L
 
@@ -98,12 +100,26 @@ class SwcanListenRunner(
         nextWindowAtMs = Long.MAX_VALUE
         consecutiveEmpty = 0
         windowCount = 0
+        okWindows = 0
         healthCheckPending = false
     }
 
     fun isEnabled(): Boolean = identity == Identity.STN && disabledReason == null
 
     fun disabledReason(): String? = disabledReason
+
+    /**
+     * What car controls may assume about this adapter: only an STN adapter that has actually heard
+     * this car's SW-CAN traffic, and has not failed to switch buses cleanly, is [CarControlGate.Adapter.READY].
+     * A listener that went quiet because the car stopped broadcasting ("no_frames") keeps READY.
+     */
+    fun controlCapability(): CarControlGate.Adapter =
+        when {
+            identity == Identity.UNKNOWN -> CarControlGate.Adapter.UNKNOWN
+            identity == Identity.NOT_STN -> CarControlGate.Adapter.NOT_STN
+            okWindows > 0 && (disabledReason == null || disabledReason == "no_frames") -> CarControlGate.Adapter.READY
+            else -> CarControlGate.Adapter.STN_UNVERIFIED
+        }
 
     /**
      * Asks the adapter who it is (`STI`, adapter-local, nothing reaches the car). Runs once per
@@ -198,7 +214,10 @@ class SwcanListenRunner(
     private fun scheduleAfter(outcome: String) {
         nextWindowAtMs = clock() + policy.intervalMs
         when (outcome) {
-            "ok" -> consecutiveEmpty = 0
+            "ok" -> {
+                consecutiveEmpty = 0
+                okWindows += 1
+            }
             "empty" -> {
                 consecutiveEmpty += 1
                 if (consecutiveEmpty >= policy.maxConsecutiveEmpty) disable("no_frames")

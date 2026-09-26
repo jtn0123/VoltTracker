@@ -2,10 +2,13 @@ package com.volttracker.obdpoc.engine
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.BluetoothAdapters
+import com.volttracker.obdpoc.CarCommand
+import com.volttracker.obdpoc.CarControlSettings
 import com.volttracker.obdpoc.ConnectionFailureClassifier
 import com.volttracker.obdpoc.ConnectionRetryCoordinator
 import com.volttracker.obdpoc.DemoPollingLoop
@@ -47,6 +50,7 @@ open class ObdPollingEngine(
     private val sleeper: LoopSleeper = LoopSleeper { millis -> defaultPollingSleep(millis) },
     private val extendedReconnectTier: ExtendedReconnectTier = ExtendedReconnectTier(),
     swcanPolicy: SwcanListenRunner.Policy = SwcanListenRunner.Policy(),
+    carControlPolicy: CarControlRunner.Policy = CarControlRunner.Policy(),
 ) : LiveSampleReader.SampleContext {
     fun interface LoopSleeper {
         fun sleep(millis: Long): Boolean
@@ -63,6 +67,7 @@ open class ObdPollingEngine(
     private val pidPolling: PidPollingState
     private val liveSampleReader: LiveSampleReader
     private val swcanListener: SwcanListenRunner
+    private val carControl: CarControlSession
 
     // Written on the poll/IO thread, read on the main thread when closeSessionLog finalizes the
     // session row — @Volatile for the cross-thread visibility edge so the finalized row can't
@@ -98,7 +103,21 @@ open class ObdPollingEngine(
         cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
         swcanListener = SwcanListenRunner(SwcanIo(), swcanPolicy)
+        val carControlIo =
+            CarControlEngineIo(
+                adapter = SwcanIo(),
+                listener = swcanListener,
+                settings =
+                    CarControlSettings {
+                        service.androidContext.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+                    },
+                sleep = { ms -> sleeper.sleep(ms) && service.running.get() },
+            )
+        carControl = CarControlSession(CarControlRunner(carControlIo, carControlPolicy), service.recorder::logError)
     }
+
+    /** Queues a user-confirmed car command for the live poll loop; safe from any thread. */
+    fun requestCarControl(command: CarCommand) = carControl.request(command)
 
     /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
     private inner class SwcanIo : SwcanListenRunner.Io {
@@ -149,6 +168,7 @@ open class ObdPollingEngine(
         pidPolling.reset()
         liveSampleReader.reset()
         swcanListener.resetSession()
+        carControl.resetSession()
     }
 
     /**
@@ -742,6 +762,11 @@ open class ObdPollingEngine(
 
     @Throws(IOException::class)
     private fun pollUntilStoppedOrBroken() {
+        carControl.whileLive { pollLiveSamples() }
+    }
+
+    @Throws(IOException::class)
+    private fun pollLiveSamples() {
         while (service.isSessionRunnerActive()) {
             val sample = liveSampleReader.read(this)
             if (sample.length() == 0) {
@@ -749,6 +774,7 @@ open class ObdPollingEngine(
                 continue
             }
             appendSwcanReadings(sample)
+            carControl.appendTo(sample)
             service.broadcastTelemetry(sample)
             logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
@@ -761,6 +787,8 @@ open class ObdPollingEngine(
             }
             // Low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner).
             swcanListener.afterSample()
+            // A user-confirmed car command, if one is waiting (see CarControlRunner).
+            carControl.afterSample()
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
             if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {

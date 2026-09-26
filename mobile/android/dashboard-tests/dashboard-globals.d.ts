@@ -780,6 +780,10 @@ interface VoltRestoreProgress {
     ensureChargeHistoryModule(): Promise<VoltDashboard>;
     /** G2 split: the Insights maintenance log list + add-entry form. */
     ensureMaintenancePanelModule(): Promise<VoltDashboard>;
+    /** Experimental car controls card + Settings opt-in (lazy; loaded after startup). */
+    ensureCarControlsModule(): Promise<VoltDashboard>;
+    /** Registered by car-controls.ts once loaded. */
+    renderCarControls?(): void;
     /** G2 split: the DTC detail bottom sheet + scan-progress narration. */
     ensureDtcDetailModule(): Promise<VoltDashboard>;
     ensureSignalsModule(): Promise<VoltDashboard>;
@@ -1096,6 +1100,10 @@ interface VoltRestoreProgress {
     setKeepScreenAwake(enabled: boolean): void;
     setTripSummaryNotify(enabled: boolean): void;
     setActiveDashboardView(view: string): void;
+    getCarControlState(): string;
+    setCarControlsEnabled(enabled: boolean): void;
+    requestCarControl(command: string): void;
+    lockCarControls(): void;
     connectLast(): void;
     scanLast(): void;
     quickScanLast(): void;

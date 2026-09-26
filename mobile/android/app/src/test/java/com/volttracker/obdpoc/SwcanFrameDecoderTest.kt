@@ -261,4 +261,13 @@ class SwcanFrameDecoderTest {
         value: Boolean,
         message: String,
     ) = assertTrue(message, value)
+
+    @Test
+    fun remoteStartStatus() {
+        assertEquals("off", decode(SwcanFrameDecoder.ID_REMOTE_START, 0x00)[SwcanField.REMOTE_START])
+        assertEquals("on", decode(SwcanFrameDecoder.ID_REMOTE_START, 0x02)[SwcanField.REMOTE_START])
+        assertEquals("on", decode(SwcanFrameDecoder.ID_REMOTE_START, 0x03)[SwcanField.REMOTE_START])
+        assertTrue(decode(SwcanFrameDecoder.ID_REMOTE_START, 0x01).isEmpty())
+        assertTrue(decode(SwcanFrameDecoder.ID_REMOTE_START).isEmpty())
+    }
 }

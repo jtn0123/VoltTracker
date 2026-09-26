@@ -93,6 +93,7 @@ class SwcanReadingsTest {
                 "10 28 20 CB 00 00 00 53 00 00 00 00",
                 "10 44 A0 CB 06 80 00 20 00 00 00 00",
                 "10 44 60 CB 00 00 00 00 00 00 00 28",
+                "10 39 00 40 02",
             ),
             0L,
         )
@@ -108,5 +109,6 @@ class SwcanReadingsTest {
         assertEquals(SwcanGroup.entries.size, staleKeys.size)
         assertEquals(SwcanField.entries.size + SwcanGroup.entries.size, sample.length())
         assertTrue(sample.has("windowFrPct"))
+        assertEquals("on", sample.getString("remoteStartState"))
     }
 }

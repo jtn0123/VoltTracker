@@ -286,4 +286,29 @@ class SwcanListenRunnerTest {
         assertFalse(runner.isEnabled())
         assertEquals(0, runner.readings.size())
     }
+
+    @Test
+    fun controlCapabilityNeedsAnStnThatHeardTheCar() {
+        assertEquals(CarControlGate.Adapter.UNKNOWN, runner.controlCapability())
+        readyStn()
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+        cycle()
+        assertEquals(CarControlGate.Adapter.READY, runner.controlCapability())
+        runner.resetSession()
+        assertEquals(CarControlGate.Adapter.UNKNOWN, runner.controlCapability())
+    }
+
+    @Test
+    fun controlCapabilityForPlainElmAndBrokenListener() {
+        io.replies["STI"] = "?\r\r>"
+        runner.probeAdapter()
+        assertEquals(CarControlGate.Adapter.NOT_STN, runner.controlCapability())
+        runner.resetSession()
+        io.replies["STI"] = "STN2255 v5.10.3\r\r>"
+        io.monitorPrompt = false
+        readyStn()
+        cycle()
+        assertEquals("no_stop_prompt", runner.disabledReason())
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+    }
 }

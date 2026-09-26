@@ -1,14 +1,11 @@
 package com.volttracker.obdpoc.sim
 
-import android.content.Intent
 import com.volttracker.obdpoc.engine.SwcanListenRunner
-import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
 import com.volttracker.obdpoc.sim.VirtualVoltScorecardTest.VirtualVoltService
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -111,31 +108,17 @@ class VirtualVoltSwcanTest {
         controllers.add(controller)
         val service = controller.get()
         service.localStore!!.clearAllData()
-        service.onStartCommand(connectIntent(service), 0, 1)
+        service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
         waitFor("$mode drive to collect $SAMPLES samples") { service.engineSamples.size >= SAMPLES }
         service.running.set(false)
         waitFor("$mode adapter to close") { adapter.closeCalls.get() > 0 }
         return adapter to service
     }
 
-    private fun connectIntent(service: VirtualVoltService): Intent =
-        Intent(service, VirtualVoltService::class.java).apply {
-            action = ObdService.ACTION_CONNECT
-            putExtra(ObdService.EXTRA_ADDRESS, "AA:BB:CC:DD:EE:FF")
-            putExtra(ObdService.EXTRA_NAME, "Virtual OBDLink")
-        }
-
     private fun waitFor(
         label: String,
         condition: () -> Boolean,
-    ) {
-        val deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(20)
-        }
-        fail("Timed out waiting for $label")
-    }
+    ) = VirtualVoltTestSupport.waitFor(label, WAIT_TIMEOUT_MS, condition)
 
     private companion object {
         const val SAMPLES = 40

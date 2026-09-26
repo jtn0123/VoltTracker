@@ -105,6 +105,7 @@ describe('dashboard production script bundle', () => {
       'signals-panel',
       'connection-tools',
       'scrubber',
+      'car-controls',
     ]);
   });
 

@@ -17,6 +17,7 @@ import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.AutoScanController
 import com.volttracker.obdpoc.BluetoothStateReporter
+import com.volttracker.obdpoc.CarCommand
 import com.volttracker.obdpoc.CompetingAppDetector
 import com.volttracker.obdpoc.DatabaseOperationLease
 import com.volttracker.obdpoc.EnhancedPidProfiles
@@ -363,6 +364,14 @@ open class ObdService :
             ACTION_CANCEL_RETRY -> {
                 requestCancelRetry()
                 broadcastStatus("idle", getString(R.string.status_retry_cancelled), false)
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
+            }
+            ACTION_CAR_CONTROL -> {
+                // Never starts a session: only a live one can run a car command, and the engine
+                // refuses (recording why) when none is polling. Unknown names are ignored.
+                CarCommand.fromWireName(intent.getStringExtra(EXTRA_CAR_COMMAND))?.let(engine::requestCarControl)
                 val active = running.get()
                 if (!active) stopSelf(startId)
                 return if (active) START_STICKY else START_NOT_STICKY
@@ -1087,6 +1096,8 @@ open class ObdService :
         const val ACTION_APP_FOREGROUND = "com.volttracker.obdpoc.action.APP_FOREGROUND"
         const val ACTION_APP_BACKGROUND = "com.volttracker.obdpoc.action.APP_BACKGROUND"
         const val ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY"
+        const val ACTION_CAR_CONTROL = "com.volttracker.obdpoc.action.CAR_CONTROL"
+        const val EXTRA_CAR_COMMAND = "car_command"
         const val BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY"
         const val BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS"
         const val EXTRA_ADDRESS = "address"

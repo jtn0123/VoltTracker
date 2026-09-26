@@ -180,6 +180,7 @@ import { VD } from "./vd-registry";
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
   let signalsModulePromise: Promise<VoltDashboard> | null = null;
   let connectionToolsModulePromise: Promise<VoltDashboard> | null = null;
+  let carControlsModulePromise: Promise<VoltDashboard> | null = null;
 
   // Error-banner dedupe: an error storm (e.g. a reconnect loop, or a render
   // error repeating once per telemetry tick) calls reportClientError with the
@@ -860,6 +861,28 @@ import { VD } from "./vd-registry";
     return maintenancePanelModulePromise;
   }
 
+  // Experimental car controls (Drive card + Settings opt-in). Loaded after startup: the card is
+  // hidden unless the user opted in natively, and the opt-in toggle only needs to be live by
+  // the time Settings is opened.
+  export function ensureCarControlsModule() {
+    if (typeof VD.renderCarControls === "function") return Promise.resolve(VD);
+    if (!carControlsModulePromise) {
+      carControlsModulePromise = loadDashboardScript("js/car-controls.js")
+        .then(() => {
+          if (typeof VD.renderCarControls !== "function") {
+            throw new Error("Car controls script loaded but expected globals were not registered.");
+          }
+          return VD;
+        })
+        .catch((err) => {
+          carControlsModulePromise = null;
+          reportClientError("carControls.load", err && err.message);
+          throw err;
+        });
+    }
+    return carControlsModulePromise;
+  }
+
   function dtcDetailModuleLoaded() {
     return typeof VD.openDtcDetail === "function" && typeof VD.startDtcScanProgress === "function";
   }
@@ -952,6 +975,7 @@ import { VD } from "./vd-registry";
     if (insightsModulePromise) pending.push(insightsModulePromise.catch(() => undefined));
     if (signalsModulePromise) pending.push(signalsModulePromise.catch(() => undefined));
     if (connectionToolsModulePromise) pending.push(connectionToolsModulePromise.catch(() => undefined));
+    if (carControlsModulePromise) pending.push(carControlsModulePromise.catch(() => undefined));
     if (leafletRuntimePromise) pending.push(leafletRuntimePromise.catch(() => undefined));
     if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
     if (troubleshooterModulePromise) {
@@ -1895,6 +1919,7 @@ import { VD } from "./vd-registry";
     ensureInsightsModule,
     ensureChargeHistoryModule,
     ensureMaintenancePanelModule,
+    ensureCarControlsModule,
     ensureDtcDetailModule,
     ensureSignalsModule,
     hydrateConnectionTools,
