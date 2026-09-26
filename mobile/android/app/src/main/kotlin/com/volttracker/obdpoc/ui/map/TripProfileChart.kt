@@ -201,12 +201,12 @@ private fun DrawScope.drawElevationBand(
             lineTo(0f, rect.bottom)
             close()
         }
-    drawPath(fill, color = VoltColors.regen.copy(alpha = 0.16f))
-    drawPath(line, color = VoltColors.regen, style = Stroke(width = 5f, cap = StrokeCap.Round))
+    drawPath(fill, color = VoltColors.neutralSeries.copy(alpha = 0.16f))
+    drawPath(line, color = VoltColors.neutralSeries, style = Stroke(width = 5f, cap = StrokeCap.Round))
     // Peak marker.
     val peakIndex = values.indexOf(maxV)
     val peak = Offset(peakIndex * stepX, yInBand(rect, maxV, minV, maxV))
-    drawCircle(color = VoltColors.regen, radius = 7f, center = peak)
+    drawCircle(color = VoltColors.neutralSeries, radius = 7f, center = peak)
     drawCircle(color = VoltColors.bg, radius = 3.5f, center = peak)
 }
 

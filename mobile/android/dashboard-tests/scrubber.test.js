@@ -356,7 +356,7 @@ describe('scrubber.ts', () => {
     giveChartWidth();
     VD.renderScrubber(withNullEffRoute());
     // The eff trace is the lime path in the combo chart.
-    const effPath = document.querySelector('#scrubChart svg path[stroke="#b8e63b"]');
+    const effPath = document.querySelector('#scrubChart svg path[stroke="#5fd37a"]');
     expect(effPath).not.toBeNull();
     const d = effPath.getAttribute('d');
     // Points 1-2 are null: the line breaks and restarts (two M commands),
@@ -375,7 +375,7 @@ describe('scrubber.ts', () => {
     giveChartWidth();
     VD.renderScrubber(route);
     // Number(null) === 0 used to flip scrubHasEff on for all-null routes.
-    expect(document.querySelector('#scrubChart svg path[stroke="#b8e63b"]')).toBeNull();
+    expect(document.querySelector('#scrubChart svg path[stroke="#5fd37a"]')).toBeNull();
   });
 
   // ----- resize must re-bind the rebuilt detail tracks ------------------------

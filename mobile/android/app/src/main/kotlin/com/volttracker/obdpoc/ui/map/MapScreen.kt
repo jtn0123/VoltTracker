@@ -163,11 +163,11 @@ private fun segmentColor(
 ): Color =
     when (mode) {
         MapViewMode.EFFICIENCY -> qualityColor(point.quality)
-        MapViewMode.ROUTES, MapViewMode.STOPS -> VoltColors.energy
+        MapViewMode.ROUTES, MapViewMode.STOPS -> VoltColors.accent
         MapViewMode.HEAT -> {
             val f = point.speedFrac.coerceIn(0f, 1f)
             if (f < 0.5f) {
-                lerp(VoltColors.regen, VoltColors.warn, f * 2f)
+                lerp(VoltColors.accent, VoltColors.warn, f * 2f)
             } else {
                 lerp(VoltColors.warn, VoltColors.alert, (f - 0.5f) * 2f)
             }
@@ -281,11 +281,11 @@ private fun MapLegend(mode: MapViewMode) {
     ) {
         when (mode) {
             MapViewMode.HEAT -> {
-                LegendDot("Slow", VoltColors.regen)
+                LegendDot("Slow", VoltColors.accent)
                 LegendDot("Fast", VoltColors.alert)
             }
             MapViewMode.STOPS -> {
-                LegendDot("Route", VoltColors.energy)
+                LegendDot("Route", VoltColors.accent)
                 LegendDot("Stop", VoltColors.warn)
             }
             else -> {

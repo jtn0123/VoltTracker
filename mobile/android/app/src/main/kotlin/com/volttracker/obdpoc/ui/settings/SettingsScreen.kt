@@ -139,7 +139,7 @@ private fun TogglePill(on: Boolean) {
         modifier =
             Modifier
                 .clip(RoundedCornerShape(50))
-                .background(if (on) VoltColors.energyDim else VoltColors.surfaceElevated)
+                .background(if (on) VoltColors.accentDim else VoltColors.surfaceElevated)
                 .padding(horizontal = 10.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -148,7 +148,7 @@ private fun TogglePill(on: Boolean) {
             Modifier
                 .size(7.dp)
                 .clip(CircleShape)
-                .background(if (on) VoltColors.energy else VoltColors.textTertiary),
+                .background(if (on) VoltColors.accent else VoltColors.textTertiary),
         )
         Text(
             text = if (on) "On" else "Off",
@@ -310,7 +310,7 @@ private fun UpdatesGroup(
             Text(
                 text = state.updateStatusLabel,
                 style = VoltType.caption,
-                color = if (state.updateAvailableTag != null) VoltColors.energy else VoltColors.textTertiary,
+                color = if (state.updateAvailableTag != null) VoltColors.accent else VoltColors.textTertiary,
             )
         }
         Spacer(Modifier.height(14.dp))

@@ -132,7 +132,7 @@ fun VoltButton(
         modifier =
             modifier
                 .clip(RoundedCornerShape(50))
-                .background(if (accent) VoltColors.energy else VoltColors.surfaceElevated)
+                .background(if (accent) VoltColors.accent else VoltColors.surfaceElevated)
                 .clickable(onClick = onClick, role = androidx.compose.ui.semantics.Role.Button)
                 .padding(horizontal = 17.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center,

@@ -11,9 +11,21 @@
     src: url("../fonts/SpaceGroteskVar.woff2") format("woff2");
   }
 
-  /* Dark is the default (and primary, in-car) scheme; a light token palette
-     lives in the `prefers-color-scheme: light` block at the end of this file,
-     which also flips color-scheme to `light` so form controls follow. */
+  /* "Clean EV" design tokens. Dark is the default (and primary, in-car)
+     scheme; a light token palette lives in the `prefers-color-scheme: light`
+     block at the end of this file, which also flips color-scheme to `light`
+     so form controls follow.
+
+     Color carries meaning only — everything else stays neutral:
+       --volt / --accent  Volt teal: brand + interactive (buttons, links,
+                          selection, focus). One accent for every tab.
+       --ev / --ok        green: EV driving, charging, healthy.
+       --gas              amber: gas engine running.
+       --warn             yellow: caution (service soon, stale data).
+       --bad              red: faults, errors, destructive.
+       --mixed            violet: demo mode only (and mixed EV+gas).
+     Surfaces step bg -> panel -> panel-2; hierarchy comes from type and
+     spacing, not borders. */
   :root {
     color-scheme: dark;
     /* Touch-target + floating-nav layout tokens. --nav-safe already folds in
@@ -23,86 +35,75 @@
     --nav-h: 68px;
     --nav-gap: 10px;
     --nav-safe: calc(var(--nav-h) + var(--nav-gap) + env(safe-area-inset-bottom));
-    --bg: #050609;
-    --panel: #171820;
-    --panel-2: #20222c;
-    --panel-3: #101117;
-    --line: rgba(255,255,255,0.08); /* v2 design card hairline */
-    --line-strong: rgba(255,255,255,0.16);
-    --text: #f5f3ec;
-    --muted: #aaaab4;
-    --soft: #8b8c99;
-    --volt: #ff7a45;
-    /* RGB triplet of the DEFAULT --volt, for rgba(var(--volt-rgb), a) alpha
-       tints. Deliberately NOT overridden by the light scheme: the alpha-tint
-       rules always rendered the bright-orange literal in both schemes (light
-       re-tints the few surfaces it cares about with its own rules), so a
-       single value preserves that rendering exactly. */
-    --volt-rgb: 255, 122, 69;
-    --volt-deep: #e85a1f;
-    --ev: #b8e63b;
-    --ok: #35e6a0;
-    --warn: #ffb84a;
-    --bad: #ff6b5f;
-    --mixed: #a48cff;
-    --gas: #ff7141;
+    --bg: #0b0f14;
+    --panel: #141a21;
+    --panel-2: #1b222b;
+    --panel-3: #10151b;
+    --line: rgba(255,255,255,0.06); /* v2 design card hairline */
+    --line-strong: rgba(255,255,255,0.12);
+    --text: #e8edf2;
+    --muted: #9aa5b1;
+    --soft: #8793a0;
+    --volt: #2bd4c4;
+    /* RGB triplet of --volt, for rgba(var(--volt-rgb), a) alpha tints. The
+       light block overrides it (and every other -rgb triplet) with its own
+       deeper tone so tints read on white. */
+    --volt-rgb: 43, 212, 196;
+    --volt-deep: #1fb8a9;
+    --ev: #5fd37a;
+    --ok: #5fd37a;
+    --warn: #f2c94c;
+    --bad: #ff6b6b;
+    --mixed: #a78bfa;
+    --gas: #ff9f43;
+    --gas-rgb: 255, 159, 67;
     /* Darkened gradient starts for the battery meter (--ev-deep) and the DTC
-       scan bar (--ok-deep). Like --volt-rgb these are deliberately static
-       across schemes: the gradients always rendered these literals in both
-       schemes, so a single value preserves that rendering exactly. */
-    --ev-deep: #8fbf2e;
-    --ok-deep: #1f9c6c;
-    /* RGB triplets of the DEFAULT status tones above, for rgba(var(--x-rgb), a)
-       alpha tints. Like --volt-rgb they are deliberately static across schemes:
-       the alpha-tint rules always rendered these default-tone literals in both
-       schemes, so a single value preserves that rendering exactly. */
-    --ev-rgb: 184, 230, 59;
-    --ok-rgb: 53, 230, 160;
-    --warn-rgb: 255, 184, 74;
-    --bad-rgb: 255, 107, 95;
-    --mixed-rgb: 164, 140, 255;
-    --on-volt: #190a04;
+       scan bar (--ok-deep). Static across schemes. */
+    --ev-deep: #3faf5b;
+    --ok-deep: #3faf5b;
+    /* RGB triplets of the status tones above, for rgba(var(--x-rgb), a) alpha
+       tints (overridden per scheme, like --volt-rgb). */
+    --ev-rgb: 95, 211, 122;
+    --ok-rgb: 95, 211, 122;
+    --warn-rgb: 242, 201, 76;
+    --bad-rgb: 255, 107, 107;
+    --mixed-rgb: 167, 139, 250;
+    --on-volt: #04201d;
     /* White ink/ring on saturated control surfaces (chart dots, balance
        markers, route endpoints, primary-dialog text). Stays white in both
        schemes — the underlying fills are saturated tones in light mode too,
        so white keeps the contrast ring/legibility. Centralized so the literal
        lives in exactly one place rather than scattered across components. */
     --on-control: #fff;
-    /* NOTE: --accent is intentionally NOT defined in the dark scheme — the
-       `var(--accent, #4cc4ff)` fallback (focus ring) and the inherit behavior
-       of `.kicker[data-tone="accent"]` predate the token migration and must
-       not change dark rendering. The light scheme defines it. Blue map chrome
-       uses the explicit --map-accent pair below instead. */
+    /* The one interactive accent (focus ring, links, selection). Same hue as
+       --volt; the light scheme swaps in a deeper teal for AA contrast. */
+    --accent: #2bd4c4;
     /* ── Component role tokens ────────────────────────────────────────────
-       Dark values are the exact colors components shipped with (dark mode
-       must stay pixel-identical); the light block flips each role. The
-       Chrome 66 WebView has no color-mix(), so alpha pairs are spelled out. */
+       The light block flips each role. The Chrome 66 WebView has no color-mix(), so alpha pairs are spelled out. */
     /* Opaque-ish surfaces */
-    --surface-raised: rgba(27,28,37,0.96);   /* card body under gradients */
-    --surface-veil: rgba(20,20,27,0.55);     /* translucent sub-card */
-    --surface-float: rgba(20,21,29,0.97);    /* toast / popover / map popup */
-    --surface-modal: #15171f;                /* sheets + dialogs */
-    --surface-overlay: rgba(16,18,22,0.85);  /* glass chrome over the map */
-    --surface-chip: rgba(14,15,20,0.78);     /* trip/drive chips */
-    --surface-chip-strong: rgba(16,18,22,0.96);
-    --surface-map: #0a0b10;                  /* map frame behind tiles */
-    --surface-nav: rgba(21,23,32,0.92);      /* floating bottom nav */
-    --surface-nav-hi: rgba(43,45,56,0.94);
-    --surface-nav-lo: rgba(13,14,20,0.94);
-    --map-veil: rgba(9,10,14,0.9);           /* "no routes" cover over the map */
+    --surface-raised: #141a21;   /* card body under gradients */
+    --surface-veil: rgba(255,255,255,0.025);     /* translucent sub-card */
+    --surface-float: rgba(22,28,36,0.97);    /* toast / popover / map popup */
+    --surface-modal: #161d25;                /* sheets + dialogs */
+    --surface-overlay: rgba(14,19,25,0.86);  /* glass chrome over the map */
+    --surface-chip: rgba(16,21,27,0.8);     /* trip/drive chips */
+    --surface-chip-strong: rgba(16,21,27,0.96);
+    --surface-map: #0e1318;                  /* map frame behind tiles */
+    --surface-nav: rgba(20,26,33,0.92);      /* floating bottom nav */
+    --surface-nav-hi: rgba(36,44,54,0.94);
+    --surface-nav-lo: rgba(12,16,21,0.94);
+    --map-veil: rgba(11,15,20,0.9);           /* "no routes" cover over the map */
     /* Scrims + shadows */
-    --scrim: rgba(4,8,12,0.72);
-    --scrim-soft: rgba(10,12,18,0.62);
-    --scrim-strong: rgba(4,8,12,0.86);
-    --shadow: rgba(0,0,0,0.5);
-    --shadow-soft: rgba(0,0,0,0.34);
-    /* v2 design card depth: a top inset highlight + a near + a deep drop, so
-       cards read as raised planes rather than a single flat shadow. Overridden
-       lighter in the light-theme block below. */
+    --scrim: rgba(5,8,11,0.72);
+    --scrim-soft: rgba(8,11,15,0.62);
+    --scrim-strong: rgba(5,8,11,0.86);
+    --shadow: rgba(0,0,0,0.45);
+    --shadow-soft: rgba(0,0,0,0.3);
+    /* Clean-EV card depth: a quiet near drop only. Cards separate from the
+       page by surface tone, not by gloss or heavy shadow. */
     --shadow-card:
-      inset 0 1px 0 rgba(255,255,255,0.05),
-      0 2px 8px rgba(0,0,0,0.28),
-      0 18px 48px rgba(0,0,0,0.42);
+      0 1px 2px rgba(0,0,0,0.24),
+      0 8px 24px rgba(0,0,0,0.18);
     /* Neutral fills: lighten-on-dark, darken-on-light */
     --fill-ghost: rgba(255,255,255,0.025);
     --fill-soft: rgba(255,255,255,0.05);
@@ -112,23 +113,24 @@
     --fill-active: rgba(255,255,255,0.14);
     /* Hairlines + recessed wells */
     --line-soft: rgba(255,255,255,0.04);
-    --line-marker: rgba(255,255,255,0.28);   /* meter zero-line, neutral dots */
-    --inset: rgba(0,0,0,0.22);
-    --inset-strong: rgba(0,0,0,0.3);
-    --inset-deep: rgba(0,0,0,0.34);
-    /* Card-top gloss gradients (disabled in light) */
-    --sheen: rgba(255,255,255,0.065);
-    --sheen-soft: rgba(255,255,255,0.05);
-    --sheen-faint: rgba(255,255,255,0.04);
+    --line-marker: rgba(255,255,255,0.24);   /* meter zero-line, neutral dots */
+    --inset: rgba(0,0,0,0.18);
+    --inset-strong: rgba(0,0,0,0.24);
+    --inset-deep: rgba(0,0,0,0.28);
+    /* Card-top gloss gradients — retired in the clean-EV theme (kept as
+       transparent tokens so the gradient rules resolve to nothing). */
+    --sheen: rgba(255,255,255,0);
+    --sheen-soft: rgba(255,255,255,0);
+    --sheen-faint: rgba(255,255,255,0);
     /* Page background gradient stops */
-    --bg-top: #12131a;
-    --bg-glow: rgba(var(--volt-rgb), 0.14);
-    /* Map-tab blue accent */
-    --link: #9bdcff; /* v2 design link/action text */
-    --map-accent: #4cc4ff;
-    --map-accent-rgb: 76, 196, 255; /* RGB of --map-accent, for rgba(var(--map-accent-rgb), a) tints */
-    --on-map-accent: #04222e;
-    --accent-soft: #c7edff;
+    --bg-top: #0e131a;
+    --bg-glow: rgba(var(--volt-rgb), 0.05);
+    /* Accent aliases kept for the map chrome + links (same teal). */
+    --link: #2bd4c4; /* v2 design link/action text */
+    --map-accent: #2bd4c4;
+    --map-accent-rgb: 43, 212, 196; /* RGB of --map-accent, for rgba(var(--map-accent-rgb), a) tints */
+    --on-map-accent: #04201d;
+    --accent-soft: #9fede5;
     /* Contrast halo behind the mini route-preview trace (screens-map.css).
        Deliberately static across schemes for now — it renders over the card
        surface, and the light theme keeps the same soft white separation. */
@@ -142,36 +144,45 @@
        hexes in screens-map.css) because the C5 guard in layout-css.test.js
        ratchets that file hex-free, and CSS rules (not inline style="") because
        the dashboard CSP style-src has no 'unsafe-inline'. */
-    --map-paint-heat-slow: #ff6b4a;
-    --map-paint-heat-mid: #ffd23f;
-    --map-paint-heat-fast: #7ee06a;
-    --map-paint-eff-great: #b8e63b;
-    --map-paint-eff-avg: #ffb84a;
-    --map-paint-eff-poor: #ff6b5f;
-    --map-paint-eff-none: #6a6a72;
-    --map-paint-route-drive: #ff7a45;
-    --map-paint-route-live: #4cc4ff;
-    --map-paint-stop: #ff8a3d;
-    /* Stops layer draws the between-stops trail as the #ff7a45 route line at
-       opacity 0.4; --volt-rgb is that same triplet and is static per scheme. */
-    --map-paint-stop-moving: rgba(var(--volt-rgb), 0.4);
+    --map-paint-heat-slow: #ff6b6b;
+    --map-paint-heat-mid: #f2c94c;
+    --map-paint-heat-fast: #5fd37a;
+    --map-paint-eff-great: #5fd37a;
+    --map-paint-eff-avg: #f2c94c;
+    --map-paint-eff-poor: #ff6b6b;
+    --map-paint-eff-none: #6b7682;
+    --map-paint-route-drive: #2bd4c4;
+    --map-paint-route-live: #7ae8dc;
+    --map-paint-stop: #8793a0;
+    /* Stops layer draws the between-stops trail as the #2bd4c4 route line at
+       opacity 0.4 in every scheme. Its own invariant triplet, because
+       --volt-rgb flips to the deeper teal in light. */
+    --map-paint-route-rgb: 43, 212, 196;
+    --map-paint-stop-moving: rgba(var(--map-paint-route-rgb), 0.4);
+    /* Chart series palette — one meaning per color across every chart:
+       speed/distance = accent, battery + efficiency = EV greens, terrain =
+       slate. Read by the canvas/SVG charts via getComputedStyle. */
+    --chart-speed: #2bd4c4;
+    --chart-soc: #a8edb9;
+    --chart-eff: #5fd37a;
+    --chart-elev: #8793a0;
     /* Per-tone "soft" text: readable on that tone's alpha-tinted fills */
-    --volt-soft: #ffd3bf;
-    --volt-soft-dim: #ffad88;
-    --ev-soft: #e7ff9a;
-    --ok-soft: #a9ffd7;
-    --ok-bright: #74f2c2;
-    --on-ok: #06231a;
-    --warn-soft: #ffd37f;
-    --bad-soft: #ffc0bb;
+    --volt-soft: #9fede5;
+    --volt-soft-dim: #6fe3d6;
+    --ev-soft: #a8edb9;
+    --ok-soft: #a8edb9;
+    --ok-bright: #7fe39a;
+    --on-ok: #062312;
+    --warn-soft: #f8de8f;
+    --bad-soft: #ffb3b3;
     /* RGB triplet of --bad-soft for rgba(var(--bad-soft-rgb), a) alpha tints
        (hover/active fills on the error-copy actions). Unlike the static status
        -rgb triplets above, this one follows --bad-soft per scheme. */
-    --bad-soft-rgb: 255, 192, 187;
-    --bad-text: #ff8a7e;
-    --bad-line: rgba(255,192,187,0.5);
-    --bad-fill: rgba(255,192,187,0.12);
-    --mixed-soft: #d6ccff;
+    --bad-soft-rgb: 255, 179, 179;
+    --bad-text: #ff8a8a;
+    --bad-line: rgba(255,179,179,0.45);
+    --bad-fill: rgba(255,179,179,0.1);
+    --mixed-soft: #cfc0ff;
     --space-xs: 4px;
     --space-sm: 8px;
     --space-md: 14px;
@@ -184,8 +195,8 @@
     /* Standalone text inputs (.pref-price, .maint-field, .map-list-search)
        share one corner radius so form fields read as a family. */
     --radius-input: 10px;
-    --card-pad: 14px;
-    --card-pad-tight: 12px;
+    --card-pad: 18px;
+    --card-pad-tight: 16px;
     /* Roomier padding for hero-tier cards (live speed cluster, pack ring,
        empty states, trip-detail sheet) so they all breathe by the same amount. */
     --card-pad-lg: 20px;
@@ -201,6 +212,12 @@
     /* Brand voice for headings + hero numerals; falls back to the body stack
        until the woff2 is parsed (font-display: swap). */
     --font-display: "Space Grotesk", Inter, Roboto, system-ui, sans-serif;
+    /* Body/UI sans. Every numeral in the app renders tabular (body rule
+       below), so live values never jitter and no monospace is needed for
+       alignment. --font-mono is reserved for raw diagnostic data only: DTC
+       codes, VINs, PID tags and hex frames. */
+    --font-ui: Inter, Roboto, system-ui, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
     /* v2 design: a compact 340px map frame — the sheet + scrubber stay above
        the fold; the ⛶ full-map view covers immersive browsing. */
     --map-height: 340px;
@@ -235,17 +252,20 @@
     --line: rgba(255,255,255,0.34);
     --line-strong: rgba(255,255,255,0.5);
     --line-soft: rgba(255,255,255,0.26);
-    /* Status / severity hues — Okabe-Ito colorblind-safe palette. */
-    --volt: #ff9d3c;        /* orange */
-    --volt-deep: #f07f1a;
+    /* Status / severity hues — Okabe-Ito colorblind-safe palette. The accent
+       stays teal (brightened) so the brand reads the same in this mode. */
+    --volt: #4fe3d4;        /* bright teal accent */
+    --volt-deep: #2bd4c4;
     --ev: #f5e94b;          /* yellow (was lime green) */
     --ok: #4dd6a8;          /* bluish-green */
     --warn: #ffb000;        /* amber */
     --bad: #ff5a4d;         /* vermillion */
     --mixed: #c79bff;
-    --map-accent: #6ec6ff;  /* sky blue */
-    --map-accent-rgb: 110, 198, 255;
-    --accent: #6ec6ff;
+    --gas: #ff9d3c;         /* orange */
+    --map-accent: #4fe3d4;
+    --map-accent-rgb: 79, 227, 212;
+    --accent: #4fe3d4;
+    --link: #4fe3d4;
   }
 
   /* Light-scheme high contrast: the block above ships white text/lines that
@@ -259,6 +279,13 @@
       --line: rgba(15,18,28,0.5);
       --line-strong: rgba(15,18,28,0.7);
       --line-soft: rgba(15,18,28,0.4);
+      /* Deep teal accent: the bright dark-mode HC teal fails AA on white. */
+      --volt: #0b5f58;
+      --volt-deep: #084a45;
+      --map-accent: #0b5f58;
+      --accent: #0b5f58;
+      --link: #0b5f58;
+      --gas: #9a4506;
     }
   }
 
@@ -279,7 +306,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid var(--accent, #4cc4ff);
+    outline: 2px solid var(--accent, #2bd4c4);
     outline-offset: 2px;
   }
   button:focus:not(:focus-visible),
@@ -317,7 +344,8 @@
       radial-gradient(680px 430px at 68% -90px, var(--bg-glow), transparent 62%),
       linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 52%);
     color: var(--text);
-    font-family: Inter, Roboto, system-ui, sans-serif;
+    font-family: var(--font-ui);
+    font-variant-numeric: tabular-nums;
     -webkit-font-smoothing: antialiased;
   }
 
@@ -601,7 +629,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--soft);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-ui);
   }
 
   .settings-recording small::before {
@@ -610,152 +638,40 @@
     opacity: 0.6;
   }
 
-  /* X2: one accent per tab — active-state consumers read these tokens. */
+  /* One accent app-wide. Every tab used to carry its own hue (orange Drive,
+     blue Map, lime Charge, purple Insights, green Diagnostics, amber
+     Settings) — color that meant nothing. Active-state consumers still read
+     --tab-accent / --view-accent, but both now resolve to the Volt teal;
+     status colors (EV green, gas amber, fault red, demo violet) are applied
+     per element where they carry meaning. */
   :root {
     --tab-accent: var(--volt);
     --tab-accent-rgb: var(--volt-rgb);
     --tab-accent-soft: var(--volt-soft);
     --on-tab-accent: var(--on-volt);
-  }
-
-  body[data-active-view="map"] {
-    --tab-accent: var(--map-accent);
-    --tab-accent-rgb: var(--map-accent-rgb);
-    --tab-accent-soft: var(--accent-soft);
-    --on-tab-accent: var(--on-map-accent);
-  }
-
-  body[data-active-view="charge"] {
-    --tab-accent: var(--ev);
-    --tab-accent-rgb: var(--ev-rgb);
-    --tab-accent-soft: var(--ev-soft);
-    --on-tab-accent: var(--on-volt);
-  }
-
-  body[data-active-view="insights"] {
-    --tab-accent: var(--mixed);
-    --tab-accent-rgb: var(--mixed-rgb);
-    --tab-accent-soft: var(--mixed-soft);
-    --on-tab-accent: var(--on-volt);
-  }
-
-  body[data-active-view="diagnostics"] {
-    --tab-accent: var(--ok);
-    --tab-accent-rgb: var(--ok-rgb);
-    --tab-accent-soft: var(--ok-soft);
-    --on-tab-accent: var(--on-volt);
-  }
-
-  body[data-active-view="settings"] {
-    --tab-accent: var(--warn);
-    --tab-accent-rgb: var(--warn-rgb);
-    --tab-accent-soft: var(--warn-soft);
-    --on-tab-accent: var(--on-volt);
-  }
-
-  /* Same mapping scoped per view SECTION: in-page content (charts,
-     primaries, toggles) reads --view-accent so it keeps its own tab's color
-     even while another tab is active. Fallback keeps shared chrome orange. */
-  #view-drive {
     --view-accent: var(--volt);
     --view-accent-rgb: var(--volt-rgb);
     --on-view-accent: var(--on-volt);
   }
 
-  #view-map {
-    --view-accent: var(--map-accent);
-    --view-accent-rgb: var(--map-accent-rgb);
-    --on-view-accent: var(--on-map-accent);
-  }
-
-  #view-charge {
-    --view-accent: var(--ev);
-    --view-accent-rgb: var(--ev-rgb);
-    --on-view-accent: var(--on-volt);
-  }
-
-  #view-insights {
-    --view-accent: var(--mixed);
-    --view-accent-rgb: var(--mixed-rgb);
-    --on-view-accent: var(--on-volt);
-  }
-
-  #view-diagnostics,
-  #view-connection-tools {
-    --view-accent: var(--ok);
-    --view-accent-rgb: var(--ok-rgb);
-    --on-view-accent: var(--on-volt);
-  }
-
-  #view-settings {
-    --view-accent: var(--warn);
-    --view-accent-rgb: var(--warn-rgb);
-    --on-view-accent: var(--on-volt);
-  }
-
+  /* Screen title mark: a quiet neutral tile with the glyph in the accent —
+     the same on every tab. */
   .drive-title-mark {
     display: grid;
-    width: 26px;
-    height: 26px;
+    width: 28px;
+    height: 28px;
     flex: 0 0 auto;
     place-items: center;
-    border: 1px solid rgba(var(--volt-rgb), 0.34);
-    border-radius: 8px;
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--warn-rgb), 0.4), transparent 38%),
-      linear-gradient(145deg, rgba(var(--volt-rgb), 0.25), rgba(var(--ev-rgb), 0.08));
-    color: #ffd0b8;
+    border: 0;
+    border-radius: 9px;
+    background: rgba(var(--volt-rgb), 0.12);
+    color: var(--volt);
   }
 
   .drive-title-mark svg {
-    width: 14px;
-    height: 14px;
+    width: 15px;
+    height: 15px;
     fill: currentColor;
-  }
-
-  body[data-active-view="trips"] .drive-title-mark {
-    border-color: rgba(var(--volt-rgb), 0.34);
-    color: #ffb08f;
-  }
-
-  body[data-active-view="map"] .drive-title-mark {
-    border-color: rgba(var(--map-accent-rgb), 0.32);
-    color: #9bdcff;
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--map-accent-rgb), 0.28), transparent 38%),
-      linear-gradient(145deg, rgba(var(--map-accent-rgb), 0.18), rgba(var(--ev-rgb), 0.08));
-  }
-
-  body[data-active-view="charge"] .drive-title-mark {
-    border-color: rgba(var(--ev-rgb), 0.3);
-    color: #d8ff75;
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--ev-rgb), 0.28), transparent 38%),
-      linear-gradient(145deg, rgba(var(--ev-rgb), 0.16), rgba(var(--volt-rgb), 0.08));
-  }
-
-  body[data-active-view="insights"] .drive-title-mark {
-    border-color: rgba(var(--mixed-rgb), 0.34);
-    color: #c7b9ff;
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--mixed-rgb), 0.3), transparent 38%),
-      linear-gradient(145deg, rgba(var(--mixed-rgb), 0.2), rgba(var(--map-accent-rgb), 0.08));
-  }
-
-  body[data-active-view="settings"] .drive-title-mark {
-    border-color: rgba(var(--warn-rgb), 0.34);
-    color: var(--warn-soft);
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--warn-rgb), 0.32), transparent 38%),
-      linear-gradient(145deg, rgba(var(--warn-rgb), 0.2), rgba(var(--volt-rgb), 0.08));
-  }
-
-  body[data-active-view="signals"] .drive-title-mark {
-    border-color: rgba(var(--ok-rgb), 0.32);
-    color: var(--ok-soft);
-    background:
-      radial-gradient(circle at 35% 20%, rgba(var(--ok-rgb), 0.26), transparent 38%),
-      linear-gradient(145deg, rgba(var(--ok-rgb), 0.15), rgba(var(--volt-rgb), 0.1));
   }
 
   #screenKicker {
@@ -1137,7 +1053,7 @@
 
   .validation-row b {
     color: var(--muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-ui);
     font-size: 11px;
     white-space: nowrap;
   }
@@ -1390,9 +1306,9 @@
   }
 
   .pref-toggle[data-on="true"] {
-    border-color: var(--map-accent, #4cc4ff);
-    color: var(--map-accent, #4cc4ff);
-    background: rgba(var(--map-accent-rgb, 76, 196, 255), 0.12);
+    border-color: var(--map-accent, #2bd4c4);
+    color: var(--map-accent, #2bd4c4);
+    background: rgba(var(--map-accent-rgb, 43, 212, 196), 0.12);
   }
 
   .pref-price {
@@ -1574,94 +1490,98 @@
   @media (prefers-color-scheme: light) {
     :root {
       color-scheme: light;
-      --bg: #f3f2ee;
+      --bg: #f6f8fa;
       --panel: #ffffff;
-      --panel-2: #eceae4;
-      --panel-3: #f8f7f3;
-      --line: rgba(15,18,28,0.09);
-      --line-strong: rgba(15,18,28,0.28);
-      --text: #1b1c22;
-      --muted: #555661;
-      --soft: #62646f;
-      --volt: #b8410d;
-      --volt-deep: #92330a;
-      --ev: #4d7c0f;
-      --ok: #047857;
-      --warn: #946300;
-      --bad: #b42318;
-      --mixed: #6539c0;
-      --gas: #b8410d;
+      --panel-2: #eef1f4;
+      --panel-3: #f9fafb;
+      --line: rgba(15,23,32,0.08);
+      --line-strong: rgba(15,23,32,0.16);
+      --text: #0f1720;
+      --muted: #4b5663;
+      --soft: #5f6b78;
+      --volt: #0f766e;
+      --volt-deep: #0b5f58;
+      --ev: #147a3a;
+      --ok: #147a3a;
+      --warn: #8a5a06;
+      --bad: #c62828;
+      --mixed: #6d28d9;
+      --gas: #a84c07;
       --on-volt: #ffffff;
       /* Stays white: the saturated marker/dot/endpoint fills it sits on remain
          dark-enough tones in light mode, so white keeps its contrast ring. */
       --on-control: #ffffff;
-      /* The default #4cc4ff focus ring is below the 3:1 non-text minimum on a
-         light page; --accent exists only in this scheme (see the dark note). */
-      --accent: #0b6dc2;
+      /* Deeper teal: the dark scheme's #2bd4c4 is below AA on white. */
+      --accent: #0f766e;
       /* Component role tokens (light counterparts) */
       --surface-raised: #ffffff;
-      --surface-veil: rgba(0,0,0,0.03);
+      --surface-veil: rgba(15,23,32,0.025);
       --surface-float: rgba(255,255,255,0.98);
-      --surface-modal: #fbfaf7;
-      --surface-overlay: rgba(251,250,247,0.92);
-      --surface-chip: rgba(255,255,255,0.88);
+      --surface-modal: #ffffff;
+      --surface-overlay: rgba(255,255,255,0.9);
+      --surface-chip: rgba(255,255,255,0.9);
       --surface-chip-strong: rgba(255,255,255,0.97);
-      --surface-map: #e3e1db;
-      --surface-nav: rgba(251,250,247,0.94);
-      --surface-nav-hi: rgba(255,255,255,0.96);
-      --surface-nav-lo: rgba(243,242,238,0.94);
-      --map-veil: rgba(243,242,238,0.94);
-      --scrim: rgba(23,26,34,0.45);
-      --scrim-soft: rgba(23,26,34,0.38);
-      --scrim-strong: rgba(23,26,34,0.55);
-      --shadow: rgba(24,26,34,0.2);
-      --shadow-soft: rgba(24,26,34,0.1);
+      --surface-map: #e6eaee;
+      --surface-nav: rgba(255,255,255,0.94);
+      --surface-nav-hi: rgba(255,255,255,0.97);
+      --surface-nav-lo: rgba(246,248,250,0.94);
+      --map-veil: rgba(246,248,250,0.94);
+      --scrim: rgba(15,23,32,0.45);
+      --scrim-soft: rgba(15,23,32,0.38);
+      --scrim-strong: rgba(15,23,32,0.55);
+      --shadow: rgba(15,23,32,0.18);
+      --shadow-soft: rgba(15,23,32,0.08);
       /* Light theme: no dark inset highlight, softer drops. */
       --shadow-card:
-        0 1px 2px rgba(24,26,34,0.06),
-        0 12px 32px rgba(24,26,34,0.1);
-      --fill-ghost: rgba(0,0,0,0.02);
-      --fill-soft: rgba(0,0,0,0.03);
-      --fill: rgba(0,0,0,0.045);
-      --fill-strong: rgba(0,0,0,0.05);
-      --fill-bold: rgba(0,0,0,0.06);
-      --fill-active: rgba(0,0,0,0.09);
-      --line-soft: rgba(15,18,28,0.1);
-      --line-marker: rgba(15,18,28,0.3);
-      --inset: rgba(0,0,0,0.045);
-      --inset-strong: rgba(0,0,0,0.06);
-      --inset-deep: rgba(0,0,0,0.08);
+        0 1px 2px rgba(15,23,32,0.05),
+        0 4px 16px rgba(15,23,32,0.05);
+      --fill-ghost: rgba(15,23,32,0.02);
+      --fill-soft: rgba(15,23,32,0.03);
+      --fill: rgba(15,23,32,0.045);
+      --fill-strong: rgba(15,23,32,0.05);
+      --fill-bold: rgba(15,23,32,0.06);
+      --fill-active: rgba(15,23,32,0.09);
+      --line-soft: rgba(15,23,32,0.07);
+      --line-marker: rgba(15,23,32,0.28);
+      --inset: rgba(15,23,32,0.04);
+      --inset-strong: rgba(15,23,32,0.055);
+      --inset-deep: rgba(15,23,32,0.07);
       --sheen: rgba(255,255,255,0);
       --sheen-soft: rgba(255,255,255,0);
       --sheen-faint: rgba(255,255,255,0);
-      --bg-top: #fbfaf7;
-      --bg-glow: rgba(232,90,31,0.06);
-      --map-accent: #0b6dc2;
-      --map-accent-rgb: 11, 109, 194;
-      --link: #0b6dc2; /* readable blue link ink on light surfaces */
+      --bg-top: #f9fafb;
+      --bg-glow: rgba(15,118,110,0.035);
+      --map-accent: #0f766e;
+      --map-accent-rgb: 15, 118, 110;
+      --link: #0f766e; /* readable teal link ink on light surfaces */
       /* RGB companions for the light tones (rgba() tints otherwise keep
          the dark theme's neon hues). */
-      --volt-rgb: 184, 65, 13;
-      --ev-rgb: 77, 124, 15;
-      --ok-rgb: 4, 120, 87;
-      --warn-rgb: 148, 99, 0;
-      --bad-rgb: 180, 35, 24;
-      --mixed-rgb: 101, 57, 192;
+      --volt-rgb: 15, 118, 110;
+      --ev-rgb: 20, 122, 58;
+      --ok-rgb: 20, 122, 58;
+      --warn-rgb: 138, 90, 6;
+      --bad-rgb: 198, 40, 40;
+      --gas-rgb: 168, 76, 7;
+      --mixed-rgb: 109, 40, 217;
       --on-map-accent: #ffffff;
-      --accent-soft: #0a5e86;
-      --volt-soft: #9c3a10;
-      --volt-soft-dim: #9c3a10;
-      --ev-soft: #3f6212;
-      --ok-soft: #047857;
-      --ok-bright: #0a9a70;
+      --accent-soft: #0b5f58;
+      --volt-soft: #0b5f58;
+      --volt-soft-dim: #0b5f58;
+      --ev-soft: #136b33;
+      --ok-soft: #136b33;
+      --ok-bright: #17913f;
       --on-ok: #ffffff;
-      --warn-soft: #8a5a00;
+      --warn-soft: #7a4e05;
       --bad-soft: #b42318;
       --bad-soft-rgb: 180, 35, 24;
       --bad-text: #b42318;
       --bad-line: rgba(180,35,24,0.4);
-      --bad-fill: rgba(180,35,24,0.08);
-      --mixed-soft: #5b34b5;
+      --bad-fill: rgba(180,35,24,0.07);
+      --mixed-soft: #5b21b6;
+      --chart-speed: #0f766e;
+      --chart-soc: #3b7a57;
+      --chart-eff: #147a3a;
+      --chart-elev: #5f6b78;
     }
 
     .panel {
@@ -1678,20 +1598,6 @@
     .primary-action.is-stop {
       background: rgba(180,35,24,0.08);
     }
-
-    /* Per-view accent tints on the title mark: reuse the darkened tone tokens
-       so the glyph keeps AA contrast on the light chrome. */
-    .drive-title-mark,
-    body[data-active-view="trips"] .drive-title-mark {
-      color: var(--volt-deep);
-    }
-    /* Same ink as light --accent-soft (#0a5e86) — tokenized so the two can't
-       drift apart. */
-    body[data-active-view="map"] .drive-title-mark { color: var(--accent-soft); }
-    body[data-active-view="charge"] .drive-title-mark { color: var(--ev); }
-    body[data-active-view="insights"] .drive-title-mark { color: var(--mixed); }
-    body[data-active-view="settings"] .drive-title-mark { color: var(--warn); }
-    body[data-active-view="signals"] .drive-title-mark { color: var(--ok); }
 
     .error-banner {
       background: rgba(252,236,233,0.97);

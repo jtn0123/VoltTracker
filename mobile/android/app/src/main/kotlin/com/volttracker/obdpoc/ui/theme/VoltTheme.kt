@@ -12,39 +12,56 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 
 /**
- * VoltTracker design language for the native Compose dashboard.
+ * VoltTracker "Clean EV" design language for the native Compose dashboard —
+ * the same tokens as the WebView dashboard (assets/dashboard/css/base.css).
  *
- * Dark-first, near-black canvas with a single lime-green energy accent —
- * calm, high-contrast, and glanceable at arm's length in a moving car.
- * Panels are subtle elevation steps, not bordered boxes; hierarchy comes
- * from type scale and spacing, not chrome.
+ * Dark-first, cool near-black canvas; panels are subtle elevation steps, not
+ * bordered boxes, and hierarchy comes from type scale and spacing. Color
+ * carries meaning only:
+ *  - [accent] (Volt teal): interactive/brand — selection, primary actions,
+ *    drive power, route lines.
+ *  - [energy] (green): EV / battery / charging / regen / healthy.
+ *  - [gas] (amber): the gas engine is running.
+ *  - [warn] / [alert]: warnings and faults.
  */
 object VoltColors {
-    val bg = Color(0xFF0A0A0E)
-    val surface = Color(0xFF15151B)
-    val surfaceElevated = Color(0xFF1C1C24)
-    val hairline = Color(0xFF26262F)
+    val bg = Color(0xFF0B0F14)
+    val surface = Color(0xFF141A21)
+    val surfaceElevated = Color(0xFF1B222B)
+    val hairline = Color(0xFF232B35)
 
-    val textPrimary = Color(0xFFF2F3F5)
-    val textSecondary = Color(0xFF8F8F9C)
-    val textTertiary = Color(0xFF5C5C68)
+    val textPrimary = Color(0xFFE8EDF2)
+    val textSecondary = Color(0xFF9AA5B1)
+    val textTertiary = Color(0xFF8793A0)
 
-    /** Energy / battery / charging — the one brand accent. */
-    val energy = Color(0xFF8CE563)
-    val energyBright = Color(0xFFC6F178)
-    val energyDim = Color(0xFF3E6B2C)
+    /** The one brand/interactive accent (Volt teal). */
+    val accent = Color(0xFF2BD4C4)
 
-    /** Regenerative braking (power flowing back in). */
-    val regen = Color(0xFF57B8FF)
+    /** Filled-accent track (e.g. a switch that is on). */
+    val accentDim = Color(0xFF1B5E58)
 
-    /** Discharge / drive power (power flowing out). */
-    val drive = Color(0xFFFFA45C)
+    /** Text/icon color on top of the accent (buttons, filled chips). */
+    val onAccent = Color(0xFF04201D)
 
-    val warn = Color(0xFFFFC24B)
+    /** EV / battery / charging — electric energy. */
+    val energy = Color(0xFF5FD37A)
+    val energyBright = Color(0xFFA8EDB9)
+    val energyDim = Color(0xFF2E6B41)
+
+    /** Regenerative braking (power flowing back into the pack) is EV energy. */
+    val regen = energy
+
+    /** Discharge / drive power (power flowing out) — the accent, as on the web. */
+    val drive = accent
+
+    /** Gas engine running. */
+    val gas = Color(0xFFFF9F43)
+
+    /** Neutral chart series with no status meaning (terrain/elevation). */
+    val neutralSeries = Color(0xFF8793A0)
+
+    val warn = Color(0xFFF2C94C)
     val alert = Color(0xFFFF6B6B)
-
-    /** Text/icon color on top of the energy accent (buttons, filled chips). */
-    val onAccent = Color(0xFF10230A)
 }
 
 /** Type scale. The display size is the Tesla-style hero numeral. */
@@ -98,8 +115,8 @@ object VoltType {
 
 private val voltDarkScheme =
     darkColorScheme(
-        primary = VoltColors.energy,
-        onPrimary = Color(0xFF10230A),
+        primary = VoltColors.accent,
+        onPrimary = VoltColors.onAccent,
         background = VoltColors.bg,
         onBackground = VoltColors.textPrimary,
         surface = VoltColors.surface,

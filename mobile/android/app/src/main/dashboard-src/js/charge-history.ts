@@ -285,13 +285,12 @@ import { VD } from "./vd-registry";
     const maxV = Math.max(...values, 0) || 1;
     // Theme-aware colors: CSS variables don't cascade into SVG fill/stroke, so
     // resolve the tokens once (mirrors the insights scatter approach).
-    // Resolve on the chart's host so --view-accent cascades in: the same
-    // builder renders green bars on Charge and purple on Insights instead of
-    // painting Drive orange onto every tab.
+    // Series color follows meaning: charging energy passes colorVar "--ev"
+    // (green); everything else is the one accent (--view-accent = Volt teal).
     const tokens = getComputedStyle(host || document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const barColor = token(opts?.colorVar || "--view-accent", token("--volt", "#ff7a45"));
-    const axisColor = token("--muted", "#aaaab4");
+    const barColor = token(opts?.colorVar || "--view-accent", token("--volt", "#2bd4c4"));
+    const axisColor = token("--muted", "#9aa5b1");
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
     const make = (tag: string, attrs: Record<string, string | number>) =>
       setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
@@ -339,7 +338,7 @@ import { VD } from "./vd-registry";
         if (opts?.showValues && v > 0) {
           const valLabel = make("text", {
             x: cx.toFixed(1), y: Math.max(padT + 7, baselineY - barH - 4).toFixed(1), fill: axisColor,
-            "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+            "font-size": 10, "font-family": "inherit", "text-anchor": "middle",
           });
           valLabel.textContent = opts.valueFormat ? opts.valueFormat(v) : String(Math.round(v));
           svg.appendChild(valLabel);
@@ -347,7 +346,7 @@ import { VD } from "./vd-registry";
       }
       const label = make("text", {
         x: cx.toFixed(1), y: (h - padB + 16).toFixed(1), fill: axisColor,
-        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+        "font-size": 10, "font-family": "inherit", "text-anchor": "middle",
       });
       // Show every label when few buckets; thin to every other when crowded,
       // but always keep the most-recent (last) label so it's never dropped when
@@ -398,7 +397,9 @@ import { VD } from "./vd-registry";
       const aria = `Monthly charging ${showCost ? "cost" : "energy"} trend, latest ${
         showCost ? "$" + latest.toFixed(2) : latest.toFixed(1) + " kWh"
       }`;
-      chart.replaceChildren(buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart));
+      chart.replaceChildren(
+        buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart, { colorVar: "--ev" }),
+      );
     }
   }
 

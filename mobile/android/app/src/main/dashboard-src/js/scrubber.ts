@@ -120,11 +120,22 @@ import { VD } from "./vd-registry";
   let scrubHasEff = false;
   let scrubCursors: HTMLElement[] = [];
 
-  // v2 design: the scrub speed tone is the softer #ff9d6e, not full volt orange.
-  const SCRUB_SPEED = "#ff9d6e";
-  const SCRUB_ELEV = "#8b94ad";
-  const SCRUB_SOC = "#a48cff";
-  const SCRUB_EFF = "#b8e63b";
+  // Chart palette (base.css --chart-* tokens): speed is the Volt teal,
+  // battery/efficiency are EV greens, terrain is neutral slate. Resolved from
+  // the theme on each render so light mode gets its deeper, AA-safe inks;
+  // the literals are the dark defaults.
+  let SCRUB_SPEED = "#2bd4c4";
+  let SCRUB_ELEV = "#8793a0";
+  let SCRUB_SOC = "#a8edb9";
+  let SCRUB_EFF = "#5fd37a";
+  function syncScrubPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    SCRUB_SPEED = v("--chart-speed", SCRUB_SPEED);
+    SCRUB_ELEV = v("--chart-elev", SCRUB_ELEV);
+    SCRUB_SOC = v("--chart-soc", SCRUB_SOC);
+    SCRUB_EFF = v("--chart-eff", SCRUB_EFF);
+  }
 
   const scrubClamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
@@ -425,10 +436,10 @@ import { VD } from "./vd-registry";
         (h - padB) +
         " L0 " +
         (h - padB) +
-        ' Z" fill="rgba(139,148,173,0.16)"/>' +
+        ' Z" fill="rgba(135,147,160,0.16)"/>' +
         '<path d="' +
         tLine +
-        '" fill="none" stroke="rgba(139,148,173,0.5)" stroke-width="1.3"/>';
+        '" fill="none" stroke="rgba(135,147,160,0.5)" stroke-width="1.3"/>';
     }
     inner +=
       '<path d="' +
@@ -509,6 +520,7 @@ import { VD } from "./vd-registry";
   }
 
   function fillScrubReadout(s: ScrubSample) {
+    syncScrubPalette();
     const socValue = s.soc;
     const effValue = s.eff;
     const socText =
@@ -582,6 +594,7 @@ import { VD } from "./vd-registry";
   function renderScrubCharts() {
     const chart = el("scrubChart");
     if (!chart || !chart.clientWidth) return;
+    syncScrubPalette();
     paintScrub(chart, drawScrubCombo(chart.clientWidth));
     const stack = el("scrubStack");
     if (stack && scrubExpanded) {
@@ -590,13 +603,13 @@ import { VD } from "./vd-registry";
       // header label needs to reflect the user's unit preference).
       const metric = units.system() === "metric";
       const tracks: ScrubTrack[] = [
-        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", `SPEED ${units.speedUnit().toUpperCase()}`, false]
+        ["mph", SCRUB_SPEED, "rgba(43,212,196,0.16)", `SPEED ${units.speedUnit().toUpperCase()}`, false]
       ];
       if (scrubHasElev) {
         tracks.push([
           "elevFt",
           SCRUB_ELEV,
-          "rgba(139,148,173,0.18)",
+          "rgba(135,147,160,0.18)",
           `ELEVATION ${metric ? "M" : "FT"}`,
           true
         ]);
@@ -605,7 +618,7 @@ import { VD } from "./vd-registry";
         tracks.push([
           "soc",
           SCRUB_SOC,
-          "rgba(164,140,255,0.16)",
+          "rgba(168,237,185,0.16)",
           "BATTERY %",
           false
         ]);
@@ -614,7 +627,7 @@ import { VD } from "./vd-registry";
         tracks.push([
           "eff",
           SCRUB_EFF,
-          "rgba(184,230,59,0.16)",
+          "rgba(95,211,122,0.16)",
           `EFFICIENCY ${units.efficiencyUnit().toUpperCase()}`,
           false
         ]);
@@ -644,7 +657,7 @@ import { VD } from "./vd-registry";
       if (scrubHasElev) {
         paintScrub(
           elevStrip,
-          drawScrubTrack(chart.clientWidth, "elevFt", "#a48cff", "rgba(164,140,255,0.18)", "", true)
+          drawScrubTrack(chart.clientWidth, "elevFt", SCRUB_ELEV, "rgba(135,147,160,0.2)", "", true)
         );
         bindScrubChart(elevStrip);
       }
