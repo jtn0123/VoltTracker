@@ -105,7 +105,7 @@ class LiveUiStateStore {
             powerTrace = powerTrace.toList(),
             socTrace = socTrace.toList(),
             socPercent = optDouble(t, "soc") ?: current.socPercent,
-            evRangeMiles = optDouble(t, "evDistanceThisCycleKm")?.let(::kmToMi) ?: current.evRangeMiles,
+            evRangeMiles = evRangeMiles(t, current.evRangeMiles),
             packTempF = optDouble(t, "batteryTemp")?.let { cToF(it).toInt() } ?: current.packTempF,
             packVolts = optDouble(t, "packVoltage") ?: current.packVolts,
             packAmps = optDouble(t, "packCurrentA") ?: current.packAmps,
@@ -185,6 +185,21 @@ class LiveUiStateStore {
             null
         }
 
+    /**
+     * The car's own EV range estimate (2241A6 `evRangeKm`), in miles. A stale read
+     * (older than [EV_RANGE_STALE_MS]) clears it rather than presenting an old
+     * estimate; an absent key keeps the prior value like every other tile. The
+     * distance driven this cycle (`evDistanceThisCycleKm`) is never used here.
+     */
+    private fun evRangeMiles(
+        t: JSONObject,
+        current: Double?,
+    ): Double? {
+        val ageMs = optDouble(t, "evRangeStaleMs")
+        if (ageMs != null && ageMs > EV_RANGE_STALE_MS) return null
+        return optDouble(t, "evRangeKm")?.takeIf { it >= 0.0 }?.let(::kmToMi) ?: current
+    }
+
     private fun kmToMi(km: Double): Double = km * MI_PER_KM
 
     private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
@@ -194,6 +209,9 @@ class LiveUiStateStore {
         const val TRACE_CAP = 30
         const val SOC_TRACE_CAP = 60
         const val SOC_SAMPLE_MS = 30_000L
+
+        /** Mirrors telemetry.ts EV_RANGE_STALE_MS. */
+        const val EV_RANGE_STALE_MS = 120_000.0
         const val GAS_RPM_FLOOR = 300
         const val MI_PER_KM = 0.621371
         const val FT_PER_M = 3.28084

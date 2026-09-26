@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -64,6 +65,24 @@ class LiveUiStateStoreTest {
         assertEquals(87, drive.oilLifePct)
         assertEquals(13, drive.gpsAccuracyFt ?: -1) // 4 m ≈ 13.1 ft
         assertEquals(DriveMode.EV, drive.mode)
+    }
+
+    @Test
+    fun evRangeComesFromTheCarsEstimateNotThisCycleDistance() {
+        val store = LiveUiStateStore()
+        // Only this-cycle distance reported: must NOT be presented as range.
+        store.onTelemetry(sample { put("evDistanceThisCycleKm", 12.5) })
+        assertNull(store.state.value.drive.evRangeMiles)
+
+        // The car's own estimate (2241A6) is the range.
+        store.onTelemetry(
+            sample { put("evDistanceThisCycleKm", 12.5).put("evRangeKm", 42).put("evRangeStaleMs", 1_000) },
+        )
+        assertEquals(26.1, store.state.value.drive.evRangeMiles ?: Double.NaN, 0.05) // 42 km
+
+        // A stale estimate is hidden rather than shown as current.
+        store.onTelemetry(sample { put("evRangeKm", 42).put("evRangeStaleMs", 180_000) })
+        assertNull(store.state.value.drive.evRangeMiles)
     }
 
     @Test
