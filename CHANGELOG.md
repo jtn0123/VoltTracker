@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.37.0 (2026-09-26)
+
+### 🔺 Fix
+
+- **obd**: Read the standard J1979 multi-PID reply so batching works
+  ([#70](https://github.com/jtn0123/VoltTracker/pull/70),
+  [`d968e9e`](https://github.com/jtn0123/VoltTracker/commit/d968e9e5032caa91d572236a5b1f78cd36089c42))
+
+### ✳️ New
+
+- **obd**: Poll displayed SOC, pack resistance, isolation, motor/inverter temps and charger AC
+  ([#71](https://github.com/jtn0123/VoltTracker/pull/71),
+  [`6d7ed6f`](https://github.com/jtn0123/VoltTracker/commit/6d7ed6fdb60d607cc78cdb9fb8069b267fc63580))
+
+
 ## v0.36.6 (2026-09-26)
 
 ### 🔺 Fix
