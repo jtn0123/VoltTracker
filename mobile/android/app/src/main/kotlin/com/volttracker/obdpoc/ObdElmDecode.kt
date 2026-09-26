@@ -228,9 +228,19 @@ object ObdElmDecode {
                 clean.length - 1,
             )}"
             "0902" -> "vin"
-            else -> ""
+            else -> OVMS_MODE22_NAMES[clean].orEmpty()
         }
     }
+
+    // Mode-22 labels added from the OVMS Volt/Ampera poll list. A lookup rather than more `when`
+    // branches, which would push nameForCommand past the detekt complexity ratchet.
+    private val OVMS_MODE22_NAMES: Map<String, String> =
+        mapOf(
+            "22368F" to "motor B temperature",
+            "2241A6" to "ev range estimate",
+            "22439E" to "battery heater duty",
+            "224389" to "lifetime charge energy",
+        )
 
     @JvmStatic
     fun appendProbeLine(

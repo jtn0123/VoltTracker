@@ -81,7 +81,6 @@ object VirtualVoltCatalog {
             entry("7E1", "222885", Evidence.GUESS, both("6228858980")),
             entry("7E1", "222886", Evidence.GUESS, both("6228868980")),
             entry("7E1", "222889", Evidence.GUESS, both("62288904")),
-            entry("7E1", "2228CB", Evidence.GUESS, both("6228CB5A")), // 50 C
             entry("7E1", "221C26", Evidence.GUESS, both("621C2650")), // 40 C
             entry("7E1", "222487", Evidence.GUESS, both("62248704D2")),
             // --- Mode 22 on 7E2 (transmission) -----------------------------------------------
@@ -113,6 +112,22 @@ object VirtualVoltCatalog {
             entry("7E4", "2241A3", Evidence.GUESS, both("6241A30205")),
             entry("7E4", "2240E9", Evidence.GUESS, both("6240E9012C")), // 150 mOhm
             entry("7E4", "2243A6", Evidence.GUESS, both("6243A650")), // 2000 kOhm
+            // OVMS Volt/Ampera poll list (MY2017). 41A6 and 4389 are REAL: their replies turned up
+            // in the 2026 phone logs when another app on the bus asked for them (0 km at a 14 %
+            // SOC; 0x00218A49 Wh = 2198.1 kWh lifetime). The rest have never been read on this car.
+            entry("7E4", "2241A6", Evidence.REAL, both("6241A60000")),
+            entry("7E4", "224389", Evidence.REAL, both("62438900218A49")),
+            entry("7E4", "22439E", Evidence.GUESS, both("62439E00")), // heater off
+            entry("7E4", "221C43", Evidence.GUESS, both("621C4350")), // 40 C
+            entry("7E7", "2240D7", Evidence.GUESS, both("6240D73F")), // 23 C
+            entry("7E7", "2240D9", Evidence.GUESS, both("6240D940")),
+            entry("7E7", "2240DB", Evidence.GUESS, both("6240DB3E")),
+            entry("7E7", "2240DD", Evidence.GUESS, both("6240DD3F")),
+            entry("7E7", "2240DF", Evidence.GUESS, both("6240DF40")),
+            entry("7E7", "2240E1", Evidence.GUESS, both("6240E13E")),
+            // --- Mode 22 on the drive-unit motor-generator nodes (replies on 0x657 / 0x658) ------
+            entry("257", "2228CB", Evidence.GUESS, split("6228CB5A", null)), // 50 C; asleep off-drive
+            entry("258", "22368F", Evidence.GUESS, split("62368F58", null)), // 48 C
         )
 
     private val byKey: Map<String, Entry> = ENTRIES.associateBy { key(it.header, it.command) }
@@ -179,6 +194,17 @@ object VirtualVoltCatalog {
         224369 chargerAcCurrentA
         2240E9 packResistanceMohm
         2243A6 hvIsolationKohm
+        2241A6 evRangeKm
+        224389 lifetimeChargeEnergyKwh
+        22439E batteryHeaterPct
+        221C43 pemCoolantTempC
+        2240D7 packSection1TempC
+        2240D9 packSection2TempC
+        2240DB packSection3TempC
+        2240DD packSection4TempC
+        2240DF packSection5TempC
+        2240E1 packSection6TempC
+        22368F motorBTempC
         2241B2 batteryCoolantPumpRpm
         2241B4 batteryCoolantValveRaw
         2241B6 batteryHeaterPowerW
