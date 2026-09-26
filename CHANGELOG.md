@@ -1,6 +1,89 @@
 # CHANGELOG
 
 
+## v0.36.4 (2026-09-26)
+
+### 🔺 Fix
+
+- **ui**: Open the full dashboard at launch until Compose reaches parity
+  ([#66](https://github.com/jtn0123/VoltTracker/pull/66),
+  [`80dbf4b`](https://github.com/jtn0123/VoltTracker/commit/80dbf4b6797caa38a1007bb49795ca199c7e0754))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/setup-java from 5.7.0 to 6.0.0
+  ([#40](https://github.com/jtn0123/VoltTracker/pull/40),
+  [`b17765e`](https://github.com/jtn0123/VoltTracker/commit/b17765e8e6e850af6d4ccb48685cf248d26b70d1))
+
+- **deps**: Bump agp from 9.2.1 to 9.3.2 in /mobile/android
+  ([#38](https://github.com/jtn0123/VoltTracker/pull/38),
+  [`daf9568`](https://github.com/jtn0123/VoltTracker/commit/daf956849241bf1a3832bec85f7d480a3bc53a93))
+
+- **deps**: Bump agp from 9.3.2 to 9.4.0 in /mobile/android
+  ([#48](https://github.com/jtn0123/VoltTracker/pull/48),
+  [`75ec3ac`](https://github.com/jtn0123/VoltTracker/commit/75ec3aca64ca0e38c527157c214967a3279aeb32))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#29](https://github.com/jtn0123/VoltTracker/pull/29),
+  [`bd8bf45`](https://github.com/jtn0123/VoltTracker/commit/bd8bf457b6dd67735c8a95d4e465a1251b0b5e8d))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#49](https://github.com/jtn0123/VoltTracker/pull/49),
+  [`2a9ab6c`](https://github.com/jtn0123/VoltTracker/commit/2a9ab6cd3926f3d0f34f6c57a148750fc3da134a))
+
+- **deps**: Bump google/osv-scanner-action/osv-scanner-action
+  ([#26](https://github.com/jtn0123/VoltTracker/pull/26),
+  [`8387488`](https://github.com/jtn0123/VoltTracker/commit/83874885e4594c675b7773e38296db933a6f3dd4))
+
+- **deps**: Bump gradle-wrapper from 9.7.0 to 9.7.1 in /mobile/android
+  ([#33](https://github.com/jtn0123/VoltTracker/pull/33),
+  [`6c50dbc`](https://github.com/jtn0123/VoltTracker/commit/6c50dbce6139f8164d5d65f4a15b4f719567ec73))
+
+- **deps**: Bump gradle/actions/wrapper-validation from 6.2.0 to 6.3.0
+  ([#39](https://github.com/jtn0123/VoltTracker/pull/39),
+  [`82b0106`](https://github.com/jtn0123/VoltTracker/commit/82b0106489c76fccd66e31de927513caee005381))
+
+- **deps**: Bump roborazzi from 1.72.0 to 1.73.0 in /mobile/android
+  ([#45](https://github.com/jtn0123/VoltTracker/pull/45),
+  [`c33f9e7`](https://github.com/jtn0123/VoltTracker/commit/c33f9e79cc68ae7016a923a11c2d543ad8bfd170))
+
+- **deps**: Bump softprops/action-gh-release from 3.0.1 to 3.0.3
+  ([#44](https://github.com/jtn0123/VoltTracker/pull/44),
+  [`26cd2e6`](https://github.com/jtn0123/VoltTracker/commit/26cd2e6c9b803776ac4f73aa1b804fabdd7acc78))
+
+- **deps**: Bump the androidx group across 1 directory with 2 updates
+  ([#23](https://github.com/jtn0123/VoltTracker/pull/23),
+  [`f3d0d0b`](https://github.com/jtn0123/VoltTracker/commit/f3d0d0bf6019349256f8146e38c6468b51636440))
+
+- **deps**: Bump the codeql-action group with 2 updates
+  ([#43](https://github.com/jtn0123/VoltTracker/pull/43),
+  [`fe11e48`](https://github.com/jtn0123/VoltTracker/commit/fe11e4895c3c4471dc73846e4d006cda68d86708))
+
+- **deps-dev**: Bump browserslist ([#46](https://github.com/jtn0123/VoltTracker/pull/46),
+  [`abd61aa`](https://github.com/jtn0123/VoltTracker/commit/abd61aa988fe02b96c9a1bcea61ac2861067bfa3))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#37](https://github.com/jtn0123/VoltTracker/pull/37),
+  [`0f64fcd`](https://github.com/jtn0123/VoltTracker/commit/0f64fcd2162c4dc0ac00d6f19989fc998c2385f7))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#41](https://github.com/jtn0123/VoltTracker/pull/41),
+  [`240dfe7`](https://github.com/jtn0123/VoltTracker/commit/240dfe769a1894ae35ffe1824ee9eed2a103b048))
+
+- **deps-dev**: Bump typescript in /mobile/android/dashboard-tests
+  ([#11](https://github.com/jtn0123/VoltTracker/pull/11),
+  [`a3f5ca5`](https://github.com/jtn0123/VoltTracker/commit/a3f5ca50ab5df563cda19c5022c748bb886f929d))
+
+- **deps-dev**: Bump typescript-eslint ([#42](https://github.com/jtn0123/VoltTracker/pull/42),
+  [`3e1240f`](https://github.com/jtn0123/VoltTracker/commit/3e1240ff4ada75d144ded0246d78b03f9e8885ec))
+
+### 🔷 Changed
+
+- Fix emulator smoke renderer crashes and retain diagnostics
+  ([#47](https://github.com/jtn0123/VoltTracker/pull/47),
+  [`53d41e6`](https://github.com/jtn0123/VoltTracker/commit/53d41e6383815c04a3e00482b2a0bf929dbf0550))
+
+
 ## v0.36.3 (2026-08-25)
 
 ### 🔺 Fix
