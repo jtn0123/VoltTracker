@@ -228,6 +228,21 @@ class LiveSampleReaderParseFailureTest {
         assertTrue("sample should carry the current-cycle raw transcript", sample.has("raw"))
     }
 
+    @Test
+    fun gmOdometerIsPreferredOverTheStandardPid() {
+        scriptRichResponses()
+        // 0x003C4B00 / 64 = 61,740 km; 01A6 (123,456.7 km) is only the fallback.
+        engine.responses["2234B2"] = "62 34 B2 00 3C 4B 00\r>"
+
+        var sample = JSONObject()
+        repeat(241) {
+            sample = reader.read(context)
+        }
+
+        assertEquals(61740.0, sample.optDouble("odometerKm"), 0.01)
+        assertEquals(38363.4, sample.optDouble("odometerMiles"), 0.1)
+    }
+
     /** Counts `pid_parse_failed` event lines whose `command` payload matches [command]. */
     private fun countEvents(
         event: String,

@@ -30,4 +30,26 @@ class ObdElmDecodeNoDataTest {
         assertFalse("STOPPED is transient", ObdElmDecode.isNoDataResponse("STOPPED"))
         assertFalse("BUFFER FULL is transient", ObdElmDecode.isNoDataResponse("BUFFER FULL"))
     }
+
+    @Test
+    fun unsupportedNegativeRepliesAreRecognized() {
+        assertTrue("request out of range", ObdElmDecode.isUnsupportedNegativeResponse("7F 22 31\r>"))
+        assertTrue("service not supported", ObdElmDecode.isUnsupportedNegativeResponse("7F 22 11\r\r>"))
+        assertTrue("sub-function not supported", ObdElmDecode.isUnsupportedNegativeResponse("7F2212"))
+    }
+
+    @Test
+    fun situationalOrMixedNegativeRepliesAreNotUnsupported() {
+        assertFalse("conditions not correct is situational", ObdElmDecode.isUnsupportedNegativeResponse("7F 22 22"))
+        assertFalse("response pending is not a refusal", ObdElmDecode.isUnsupportedNegativeResponse("7F 22 78"))
+        assertFalse(
+            "another module answered positively",
+            ObdElmDecode.isUnsupportedNegativeResponse("7F 22 31\r62 34 B2 00 3C 4B 00"),
+        )
+        assertFalse("a positive frame is not negative", ObdElmDecode.isUnsupportedNegativeResponse("62 24 29 58 06"))
+        assertFalse("NO DATA is handled elsewhere", ObdElmDecode.isUnsupportedNegativeResponse("NO DATA"))
+        assertFalse(ObdElmDecode.isUnsupportedNegativeResponse(null))
+        assertTrue("situational refusals are still negative", ObdElmDecode.isNegativeResponse("7F 22 22"))
+        assertFalse(ObdElmDecode.isNegativeResponse("62 24 29 58 06"))
+    }
 }

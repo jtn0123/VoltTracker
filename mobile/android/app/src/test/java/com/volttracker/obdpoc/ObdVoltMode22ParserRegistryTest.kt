@@ -25,6 +25,15 @@ class ObdVoltMode22ParserRegistryTest {
     }
 
     @Test
+    fun decodesTheGmFourByteOdometer() {
+        val odometer = ObdVoltMode22ParserRegistry.parse("2234B2", "6234B2003C4B00")
+        assertNotNull(odometer)
+        assertEquals("odometer", odometer!!.name)
+        assertEquals(61740.0, odometer.valueNumeric!!, 0.001)
+        assertNull("a truncated frame must not decode", ObdVoltMode22ParserRegistry.parse("2234B2", "6234B2003C4B"))
+    }
+
+    @Test
     fun unmappedProbeDidFallsThroughToCellDecode() {
         // "224181" (cell 1) has no flat-map entry, so the registry falls through to the
         // 96-cell probe decoder for it.

@@ -123,6 +123,7 @@ internal object ObdVoltMode22ParserRegistry {
     private val PUMP_RPM_RANGE = Range(0.0, 10_000.0)
     private val HEATER_POWER_RANGE = Range(-100.0, 10_000.0)
     private val EV_DISTANCE_KM_RANGE = Range(0.0, 655.35)
+    private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
 
     private val mode22Parsers: Map<String, Mode22Parser> =
         buildMap {
@@ -220,6 +221,12 @@ internal object ObdVoltMode22ParserRegistry {
             )
             put("2240D4", wordPid("HD pack current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             put("224531", Mode22Parser { command, response -> chargeLevelValue(response, command) })
+            put(
+                "2234B2",
+                Mode22Parser { command, response ->
+                    odometerKmValue(response, command)?.let { value("odometer", it, "km", 1) }
+                },
+            )
             put("228334", bytePid("hv battery displayed soc", "%", 2, 100.0 / 255.0, 0.0))
             put("2241B2", wordPid("battery coolant pump rpm", "rpm", 0, 1.0, true, PUMP_RPM_RANGE))
             put(
@@ -279,6 +286,19 @@ internal object ObdVoltMode22ParserRegistry {
             word -= 0x10000
         }
         return word
+    }
+
+    /** GM odometer DID 34B2: 4-byte big-endian count of 1/64 km. */
+    private fun odometerKmValue(
+        response: String?,
+        command: String?,
+    ): Double? {
+        val payload = mode22Payload(response, command)
+        if (payload == null || payload.size < 4) {
+            return null
+        }
+        val raw = payload.take(4).fold(0L) { acc, byte -> acc * 256 + byte }
+        return bounded(raw / 64.0, ODOMETER_KM_RANGE)
     }
 
     private fun voltWordPercentValue(

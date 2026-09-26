@@ -159,7 +159,7 @@ class LiveSampleReader(
                 "221154",
                 "015C",
             )
-            putStaleMsForPresentValue(sample, "odometerKm", "odometerStaleMs", "01A6", now)
+            putStaleMsForFirstPresentValue(sample, "odometerKm", "odometerStaleMs", now, "2234B2", "01A6")
             pidPolling.putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now)
             pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now)
             pidPolling.putStaleMsIfTracked(sample, "packVoltageStaleMs", "222429", now)
@@ -269,7 +269,7 @@ class LiveSampleReader(
         putNumeric(sample, "engineRunTimeSec", "011F", 0)
         putNumeric(sample, "fuelLevelPct", "012F", 0)
         putNumericFirst(sample, "engineOilTempC", 0, "221154", "015C")
-        putNumeric(sample, "odometerKm", "01A6", 1)
+        putNumericFirst(sample, "odometerKm", 1, "2234B2", "01A6")
         if (sample.has("odometerKm")) {
             sample.put("odometerMiles", round1(sample.optDouble("odometerKm") * 0.621371))
         }
