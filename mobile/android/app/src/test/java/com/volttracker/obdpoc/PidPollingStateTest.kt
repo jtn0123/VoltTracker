@@ -393,6 +393,25 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun pidTheCarRefusesIsRetiredLikeNoData() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["221154"] = "7F 22 31\r>" // request out of range: module lacks this DID
+        engine.responses["222429"] = "7F 22 22\r>" // conditions not correct: situational
+        val due = specs("010D", "221154", "222429")
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+
+        assertTrue("an explicit 'not supported' reply must retire the PID", state.isCommandDisabled("221154"))
+        assertFalse("a situational refusal must not retire the PID", state.isCommandDisabled("222429"))
+        assertNull("a refusal is not a value to carry forward", state.lastRaw("222429"))
+    }
+
+    @Test
     fun conditionalPidIsExemptFromTheNegativeCache() {
         var nowMs = 1_000L
         state.setClockForTesting { nowMs }

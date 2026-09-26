@@ -30,6 +30,39 @@ object ObdElmDecode {
         return cleaned.none { it in '0'..'9' || it in 'A'..'F' }
     }
 
+    /**
+     * True when every ECU line in [response] is a UDS negative response (`7F <service> <NRC>`): the
+     * module answered, but with a refusal rather than a value.
+     */
+    @JvmStatic
+    fun isNegativeResponse(response: String?): Boolean = negativeResponseCodes(response) != null
+
+    /**
+     * True when [response] is a negative response whose code means "this module does not support
+     * that request": 0x11 service not supported, 0x12 sub-function not supported, 0x31 request out
+     * of range. The negative-PID cache treats these like NO DATA so an unsupported PID stops being
+     * polled. Other codes (0x22 conditions not correct, 0x78 response pending, …) are situational.
+     */
+    @JvmStatic
+    fun isUnsupportedNegativeResponse(response: String?): Boolean =
+        negativeResponseCodes(response)?.all { it in UNSUPPORTED_NRCS } == true
+
+    /** The NRC of every line when all ECU lines are negative responses, else `null`. */
+    private fun negativeResponseCodes(response: String?): List<String>? {
+        val lines =
+            (response ?: "")
+                .uppercase(Locale.US)
+                .split('\r', '\n')
+                .map { line -> line.filter { it in '0'..'9' || it in 'A'..'F' } }
+                .filter { it.isNotEmpty() }
+        if (lines.isEmpty() || lines.any { it.length < 6 || !it.startsWith("7F") }) {
+            return null
+        }
+        return lines.map { it.substring(4, 6) }
+    }
+
+    private val UNSUPPORTED_NRCS = setOf("11", "12", "31")
+
     /** True for adapter/transport status text that contains no usable ECU payload. */
     @JvmStatic
     fun isElmErrorResponse(response: String?): Boolean {

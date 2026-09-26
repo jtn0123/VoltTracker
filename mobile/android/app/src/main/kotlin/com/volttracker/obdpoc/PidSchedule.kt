@@ -128,6 +128,9 @@ object PidSchedule {
             PidSpec("011F", Header.BROADCAST, 24, 12), // engine run time
             PidSpec("015C", Header.BROADCAST, 48, 36), // engine oil temp
             PidSpec("012F", Header.BROADCAST, 48, 30), // fuel level
+            // GM odometer (4 bytes, km * 64): the command the open-source Voltage app reads on
+            // the Volt. 01A6 stays as the fallback; whichever the car refuses gets retired.
+            PidSpec("2234B2", Header.BROADCAST, 240, 150), // odometer, GM
             PidSpec("01A6", Header.BROADCAST, 240, 186), // odometer, if supported
             // 22203F (engine torque) dropped: this gen-2 Volt answers with a single byte the 2-byte
             // voltWordValue decoder can't read, so engineTorqueNm was permanently null. The real

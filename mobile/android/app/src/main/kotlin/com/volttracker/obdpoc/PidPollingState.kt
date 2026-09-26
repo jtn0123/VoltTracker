@@ -258,6 +258,8 @@ class PidPollingState(
     private fun classifyOutcome(response: String): PollOutcome =
         when {
             ObdElmDecode.isNoDataResponse(response) -> PollOutcome.NO_DATA
+            ObdElmDecode.isUnsupportedNegativeResponse(response) -> PollOutcome.NO_DATA
+            ObdElmDecode.isNegativeResponse(response) -> PollOutcome.ERROR
             ObdElmDecode.isElmErrorResponse(response) -> PollOutcome.ERROR
             else -> PollOutcome.LIVE
         }
