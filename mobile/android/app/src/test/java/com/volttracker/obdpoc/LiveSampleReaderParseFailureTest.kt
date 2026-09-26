@@ -243,6 +243,33 @@ class LiveSampleReaderParseFailureTest {
         assertEquals(38363.4, sample.optDouble("odometerMiles"), 0.1)
     }
 
+    @Test
+    fun prndlCodeIsDecodedToAGearLetterAndTheRawCodeIsKept() {
+        engine.responses["222889"] = "62 28 89 08\r>"
+        val park = readUntil("prndlRaw")
+        assertEquals("P", park.optString("prndlState"))
+        assertEquals(8, park.optInt("prndlRaw"))
+        assertEquals("confirmed", park.optString("gearConfidence"))
+    }
+
+    @Test
+    fun anUnseenPrndlCodeShowsAsUnknownNotAGuess() {
+        engine.responses["222889"] = "62 28 89 0D\r>"
+        val sample = readUntil("prndlRaw")
+        assertEquals("?", sample.optString("prndlState"))
+        assertEquals(13, sample.optInt("prndlRaw"))
+        assertEquals("unknown", sample.optString("gearConfidence"))
+    }
+
+    /** Reads until the slow-cadence PID feeding [key] has been polled (bounded). */
+    private fun readUntil(key: String): JSONObject {
+        repeat(400) {
+            val sample = reader.read(context)
+            if (sample.has(key)) return sample
+        }
+        throw AssertionError("$key never appeared")
+    }
+
     /** Counts `pid_parse_failed` event lines whose `command` payload matches [command]. */
     private fun countEvents(
         event: String,

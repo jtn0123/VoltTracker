@@ -23,6 +23,7 @@ import { setStorage } from "./storage-status";
 import { initialTelemetryState } from "./telemetry-state";
 import { VD } from "./vd-registry";
 import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
+import { gearDisplayText } from "./gear";
 
   type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
@@ -75,7 +76,8 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     "lastChargeEnergyWh", "lastChargeEnergyStaleMs",
     // Motor & drive.
     "motorAPowerKw", "motorAVoltage", "motorACurrentA", "motorAStaleMs", "motorBPowerKw",
-    "motorBVoltage", "motorBCurrentA", "motorBStaleMs", "prndlState", "prndlStateStaleMs",
+    "motorBVoltage", "motorBCurrentA", "motorBStaleMs", "prndlState", "prndlRaw", "gearConfidence",
+    "prndlStateStaleMs",
     "evDistanceThisCycleKm", "evDistanceThisCycleStaleMs", "odometerKm", "odometerMiles",
     "odometerStaleMs",
     // Thermal & fluids.
@@ -1214,8 +1216,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     };
     liveNum("moreMotorA", t.motorAPowerKw, (n) => `${n.toFixed(1)} kW`);
     liveNum("moreMotorB", t.motorBPowerKw, (n) => `${n.toFixed(1)} kW`);
-    const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
-    setOptionalLiveText("moreGear", gear || "--");
+    setOptionalLiveText("moreGear", gearDisplayText(t) || "--");
     liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(km(n)));
     liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(celsius(n)));
@@ -1409,6 +1410,8 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     staleKey?: string;
     text?: boolean;
     enhanced?: boolean;
+    /** Display text for a reporting row, when the raw value is not shown as-is. */
+    display?: (t: PayloadRecord) => string | null;
   };
   const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging", "Body & comfort"];
   const LIVE_SIGNALS: LiveSignalSpec[] = [
@@ -1454,7 +1457,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     { key: "motorBCurrentA", label: "Motor B current", group: "Motor & drive", unit: "A", staleKey: "motorBStaleMs", enhanced: true },
     { key: "motorAPowerKw", label: "Motor A power", group: "Motor & drive", unit: "kW", enhanced: true },
     { key: "motorBPowerKw", label: "Motor B power", group: "Motor & drive", unit: "kW", enhanced: true },
-    { key: "prndlState", label: "Gear (PRNDL)", group: "Motor & drive", text: true, staleKey: "prndlStateStaleMs", enhanced: true },
+    { key: "prndlState", label: "Gear (PRNDL)", group: "Motor & drive", text: true, staleKey: "prndlStateStaleMs", enhanced: true, display: gearDisplayText },
     { key: "evDistanceThisCycleKm", label: "EV distance (cycle)", group: "Motor & drive", unit: "km", staleKey: "evDistanceThisCycleStaleMs", enhanced: true },
     { key: "engineTorqueNm", label: "Engine torque", group: "Motor & drive", unit: "Nm", staleKey: "engineTorqueStaleMs", enhanced: true },
     { key: "transmissionTempC", label: "Transmission temp", group: "Motor & drive", unit: "°C", staleKey: "transmissionTempStaleMs", enhanced: true },
@@ -1563,7 +1566,8 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
       LIVE_SIGNALS
         .map((spec) => {
           const raw = t[spec.key];
-          const v = raw === undefined || raw === null ? "" : String(raw);
+          const shown = spec.display ? spec.display(t) : null;
+          const v = shown ?? (raw === undefined || raw === null ? "" : String(raw));
           const age = spec.staleKey ? String(t[spec.staleKey] ?? "") : "";
           return `${v}:${age}`;
         })
@@ -1607,7 +1611,9 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
         // Degree units hug the number ("85°C", matching units.tempText); all
         // other units get the usual space ("3.4 kW").
         value.textContent = has
-          ? (spec.text
+          ? (spec.display
+              ? spec.display(t) ?? String(raw)
+              : spec.text
               ? String(raw)
               : `${formatSignalValue(raw)}${spec.unit ? (spec.unit.startsWith("°") ? "" : " ") + spec.unit : ""}`)
           : "no data";

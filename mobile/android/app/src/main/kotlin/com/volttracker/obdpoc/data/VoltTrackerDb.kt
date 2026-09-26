@@ -188,6 +188,37 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 }
             }
         }
+        if (oldVersion < 17) {
+            runMigrationStep(db, oldVersion, 17, "gear-aware-trip-split-columns") { target ->
+                addGearAwareTripColumns(target)
+            }
+        }
+    }
+
+    /**
+     * v17 (gear-aware trip splitting, see TripSplitRules): the PRNDL code and door-open flag per
+     * telemetry row, plus the rules version a session was recorded under. Existing sessions get
+     * version 0 (legacy) and existing rows NULL gear/door — deliberately NOT backfilled from the
+     * row JSON, so trips saved before this version keep their exact windows and route keys.
+     * Guarded ADD COLUMNs: a table that already has the column (base tables built from the
+     * current DDL) or is missing entirely (a partial/legacy schema, same rationale as the v12
+     * step) must not abort the step.
+     */
+    private fun addGearAwareTripColumns(db: SQLiteDatabase) {
+        addColumnIfMissing(db, TABLE_SESSIONS, "trip_rules_version", "INTEGER NOT NULL DEFAULT 0")
+        addColumnIfMissing(db, TABLE_TELEMETRY, "prndl_raw", "INTEGER")
+        addColumnIfMissing(db, TABLE_TELEMETRY, "door_open", "INTEGER")
+    }
+
+    private fun addColumnIfMissing(
+        db: SQLiteDatabase,
+        table: String,
+        column: String,
+        type: String,
+    ) {
+        if (hasTable(db, table) && !hasColumn(db, table, column)) {
+            db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
+        }
     }
 
     fun interface MigrationStep {
@@ -196,7 +227,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 16
+        const val DATABASE_VERSION = 17
 
         // v5 backfill batch: bounds migration memory on large telemetry histories (B10).
         private const val BACKFILL_BATCH_SIZE = 500

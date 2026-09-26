@@ -489,10 +489,20 @@ interface PowerTrackSample {
   powerKw: number | string;
 }
 
+/** An in-trip stop in Park (native TripSplitRules): >= 2 min, too short to end the trip. */
+interface VoltParkStop {
+  startMs: number;
+  endMs: number;
+  durationMs?: number;
+  doorOpened?: boolean;
+}
+
 /** A logged drive/route the map renders and the scrubber walks. */
 interface VoltRoute {
   points?: VoltRoutePoint[];
   powerTrack?: PowerTrackSample[];
+  /** Gear-aware routes only; absent on routes recorded before gear-aware trip splitting. */
+  parkStops?: VoltParkStop[];
   session?: { id?: string | number; [key: string]: unknown };
   pointCount?: number;
   distanceMeters?: number;

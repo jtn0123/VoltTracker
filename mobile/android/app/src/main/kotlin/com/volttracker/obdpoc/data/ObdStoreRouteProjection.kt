@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.data
 
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import com.volttracker.obdpoc.materialize.TripSplitRules
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -60,7 +61,33 @@ object ObdStoreRouteProjection {
             "powerTrack",
             scalarTrackForSessionJson(db, session.id, limit, windowStartMs, windowEndMs, "power_kw", "powerKw"),
         )
+        if (windowStartMs != null && windowEndMs != null) {
+            putParkStops(payload, DriveWindowDetector.parkStopsForWindow(db, session, windowStartMs, windowEndMs))
+        }
         return payload
+    }
+
+    /**
+     * In-trip Park stops ("Stopped N min") for the trip-detail sheet and map. Omitted when there
+     * are none, so legacy trips serialize exactly as before.
+     */
+    @Throws(JSONException::class)
+    private fun putParkStops(
+        payload: JSONObject,
+        stops: List<TripSplitRules.ParkStop>,
+    ) {
+        if (stops.isEmpty()) return
+        val array = JSONArray()
+        for (stop in stops) {
+            array.put(
+                JSONObject()
+                    .put("startMs", stop.startMs)
+                    .put("endMs", stop.endMs)
+                    .put("durationMs", stop.durationMs)
+                    .put("doorOpened", stop.doorOpened),
+            )
+        }
+        payload.put("parkStops", array)
     }
 
     @JvmStatic

@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.live
 
+import com.volttracker.obdpoc.VoltGear
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -114,7 +115,12 @@ class LiveUiStateStore {
             coolantF = optDouble(t, "coolantC")?.let { cToF(it).toInt() } ?: current.coolantF,
             gpsAccuracyFt = optDouble(t, "accuracyM")?.let { (it * FT_PER_M).toInt() } ?: current.gpsAccuracyFt,
             ambientF = optDouble(t, "outsideTempC")?.let { cToF(it).toInt() } ?: current.ambientF,
-            gear = t.optString("prndlState", "").ifBlank { current.gear },
+            gear =
+                t
+                    .optString("prndlState", "")
+                    .takeIf { it.isNotBlank() }
+                    ?.let { VoltGear.displayText(it, if (t.isNull("prndlRaw")) null else t.optInt("prndlRaw")) }
+                    ?: current.gear,
             motorAKw = optDouble(t, "motorAPowerKw") ?: current.motorAKw,
             motorBKw = optDouble(t, "motorBPowerKw") ?: current.motorBKw,
             transTempF = optDouble(t, "transmissionTempC")?.let { cToF(it).toInt() } ?: current.transTempF,

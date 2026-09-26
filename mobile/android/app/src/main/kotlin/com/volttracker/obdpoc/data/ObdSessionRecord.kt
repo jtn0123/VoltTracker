@@ -11,6 +11,8 @@ class ObdSessionRecord(
     supportedPids: String?,
     @JvmField val sampleCount: Int,
     @JvmField val lastEventAtMs: Long,
+    /** `trip_rules_version` the session was recorded under (TripSplitRules); 0 = legacy. */
+    @JvmField val tripRulesVersion: Int = 0,
 ) {
     @JvmField val mode: String = mode ?: ""
 

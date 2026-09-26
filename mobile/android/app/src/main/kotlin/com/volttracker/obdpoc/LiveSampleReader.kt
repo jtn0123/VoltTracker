@@ -386,7 +386,7 @@ class LiveSampleReader(
         putDerivedMotorPower(sample, "motorAPowerKw", "222885", "222883")
         putDerivedMotorPower(sample, "motorBPowerKw", "222886", "222884")
         putNumeric(sample, "evDistanceThisCycleKm", "222487", 2)
-        putText(sample, "prndlState", "222889")
+        putGear(sample)
         putNumericFirst(sample, "transmissionTempC", 0, "22194001", "221940")
         putNumeric(sample, "batteryCoolantPumpRpm", "2241B2", 0)
         putNumeric(sample, "batteryCoolantValveRaw", "2241B4", 0)
@@ -701,6 +701,20 @@ class LiveSampleReader(
         if (parsed?.valueText != null && parsed.valueText.isNotEmpty()) {
             sample.put(key, parsed.valueText)
         }
+    }
+
+    /**
+     * PRNDL: `prndlState` carries the decoded letter (`?` for a code we have never seen),
+     * `prndlRaw` the raw code so the [VoltGear] table can be confirmed from logs, and
+     * `gearConfidence` how sure that decode is.
+     */
+    @Throws(JSONException::class)
+    private fun putGear(sample: JSONObject) {
+        val raw = ObdProtocol.parseKnownValue("222889", pidPolling.lastRaw("222889"))?.valueNumeric ?: return
+        val gear = VoltGear.decode(raw.toInt()) ?: return
+        sample.put("prndlState", gear.letter)
+        sample.put("prndlRaw", gear.raw)
+        sample.put("gearConfidence", gear.confidence.wireName)
     }
 
     @Throws(JSONException::class)

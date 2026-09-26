@@ -7,13 +7,18 @@ in
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.
 
-Current `VoltTrackerDb.DATABASE_VERSION` is **14**. Migrations are append-only and
+Current `VoltTrackerDb.DATABASE_VERSION` is **17**. Migrations are append-only and
 non-destructive; v11 → v12 added the `maintenance_log` table and the
 `trip_segments.label` column, v12 → v13 added the nullable
 `maintenance_log.interval_km` (`REAL`) and `interval_months` (`INTEGER`) service-interval
 columns (M1/C4) via guarded `ALTER TABLE ADD COLUMN` (existing rows keep them `NULL`),
 and v13 → v14 added the `charge_session_rollups` cache table (G2) via
 `CREATE TABLE IF NOT EXISTS` (no existing data touched; it backfills lazily on read).
+v16 → v17 added gear-aware trip splitting's columns: `sessions.trip_rules_version`
+(`INTEGER NOT NULL DEFAULT 0`) and `telemetry.prndl_raw` / `door_open` (nullable
+`INTEGER`). Existing sessions stay at version 0 and existing rows keep `NULL` gear —
+deliberately not backfilled — so trips saved before the cutover keep their exact
+windows and route keys (see `materialize/TripSplitRules.kt`).
 
 ## Table overview
 
@@ -49,12 +54,16 @@ Tables fall into two buckets:
 
 - **`sessions`** — PK `_id`. Columns include `mode`, `adapter_address`,
   `adapter_name`, `started_at_ms`, `ended_at_ms`, `status`, `supported_pids`,
-  `sample_count`, `last_event_at_ms`, `created_at_ms`. Parent of nearly
+  `sample_count`, `last_event_at_ms`, `created_at_ms`, `trip_rules_version`
+  (v17; the `TripSplitRules` version the session is split under — 0 = legacy,
+  stamped at session start). Parent of nearly
   everything; most child FKs point here.
 - **`telemetry`** — PK `_id`. The decoded per-sample stream: `speed_kph`, `rpm`,
   `coolant_c`, `load_pct`, `throttle_pct`, `voltage`, `soc`, `battery_temp`,
   `power_kw`, `pack_voltage`, `pack_current_a`, GPS fields, `sample_number`,
-  `session_ms`, plus `raw` and `json` (the latter `NOT NULL`).
+  `session_ms`, plus `raw` and `json` (the latter `NOT NULL`), and (v17)
+  `prndl_raw` (fresh raw PRNDL code, `NULL` when missing or stale) and `door_open`
+  (1 if any SW-CAN door/hatch read open, 0 if read closed, `NULL` if unheard).
   FK `session_id → sessions(_id) ON DELETE CASCADE`.
 - **`status_events`** — PK `_id`. `occurred_at_ms` (`NOT NULL`), `kind`, `state`,
   `detail`, `blocked`, `payload`.
@@ -83,7 +92,8 @@ Tables fall into two buckets:
   FK `vehicle_id → vehicles(_id) ON DELETE SET NULL`.
 - **`trip_segments`** (derived) — PK `_id`. Detected trips with `distance_m`,
   `max_speed_kph`, `avg_speed_kph`, `energy_kwh`, `classification`, `confidence`,
-  `label` (nullable; added v12 — see the trip-label note below), `summary_json`.
+  `label` (nullable; added v12 — see the trip-label note below), `summary_json`
+  (gear-aware trips: `{"parkStops":[{startMs,endMs,durationMs,doorOpened}]}`).
   FKs:
   `session_id → sessions(_id) ON DELETE SET NULL`,
   `vehicle_id → vehicles(_id) ON DELETE SET NULL`,

@@ -19,6 +19,22 @@ describe('live-signals diagnostic panel', () => {
     return names.find((row) => row.querySelector('.live-signal-name').textContent.startsWith(label)) || null;
   }
 
+  it('shows an unseen gear code as unknown with its raw number', () => {
+    const VD = window.VoltDashboard;
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      prndlState: '?',
+      prndlRaw: 13,
+      gearConfidence: 'unknown',
+    });
+    VD.state.liveSignalsFilter = 'all';
+    VD.updateDiagnostics();
+    expect(rowFor('Gear (PRNDL)').querySelector('.live-signal-value').textContent).toBe('? (code 13)');
+  });
+
   it('marks present metrics reporting and absent ones as no data', () => {
     const VD = window.VoltDashboard;
     // A sample where speed/soc/motor/gear report but the odometer is absent (the

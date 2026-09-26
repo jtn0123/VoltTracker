@@ -48,6 +48,9 @@ class DemoPollingLoop(
         // hero could not hide mid-window even if the constants drift apart.
         private const val SOC_CHARGE_CAP = 95.0
 
+        /** Raw PRNDL code for D (see [VoltGear]); the demo only ever shows P or D. */
+        private const val DEMO_DRIVE_GEAR_RAW = 3
+
         fun isChargingPhase(t: Double): Boolean = t.mod(CYCLE_SECONDS) >= DRIVE_PHASE_SECONDS
 
         /** Seconds spent driving in [0, t) — the route/sine clock, frozen while charging. */
@@ -149,7 +152,9 @@ class DemoPollingLoop(
                 sample.put("socVariationPct", 0.4)
                 sample.put("motorAPowerKw", if (charging) 0.0 else ObdElmDecode.round1(drivePowerKw * 0.6))
                 sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
-                sample.put("prndlState", if (charging) "P" else "D")
+                sample.put("prndlState", if (charging) VoltGear.PARK else "D")
+                sample.put("prndlRaw", if (charging) VoltGear.PARK_RAW else DEMO_DRIVE_GEAR_RAW)
+                sample.put("gearConfidence", GearConfidence.CONFIRMED.wireName)
                 sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
                 sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
                 sample.put("displayedSocPct", ObdElmDecode.round1(soc))

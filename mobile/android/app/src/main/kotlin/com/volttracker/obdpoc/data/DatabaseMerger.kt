@@ -701,6 +701,7 @@ object DatabaseMerger {
             "sample_count",
             "last_event_at_ms",
             "created_at_ms",
+            "trip_rules_version",
         )
     private val TELEMETRY_COLUMNS =
         arrayOf(
@@ -732,6 +733,8 @@ object DatabaseMerger {
             "app_foreground",
             "raw",
             "json",
+            "prndl_raw",
+            "door_open",
         )
     private val EVENT_COLUMNS =
         arrayOf("_id", "session_id", "occurred_at_ms", "kind", "state", "detail", "blocked", "payload")

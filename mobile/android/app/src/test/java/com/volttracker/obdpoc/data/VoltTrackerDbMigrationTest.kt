@@ -833,6 +833,55 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV16_addsGearAwareTripColumnsWithoutTouchingExistingTrips() {
+        // The v16->v17 migration adds the gear-aware trip-split columns (TripSplitRules). Existing
+        // sessions must come out as legacy (trip_rules_version 0) and existing telemetry rows with
+        // NULL gear/door — no backfill from the row JSON, even when it carries a PRNDL reading —
+        // so trips saved before the cutover keep their exact windows and route keys. The two
+        // tables are created with their v16-era DDL, because the current DDL has the columns.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v16_v17.db"
+        context.deleteDatabase(name)
+
+        val v16Helper =
+            object : LegacyHelper(context, name, 16) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    super.onCreate(db)
+                    db.execSQL(
+                        "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS}" +
+                            " (mode, started_at_ms, status, created_at_ms) VALUES ('obd', 1000, 'complete', 1000)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO ${VoltTrackerDb.TABLE_TELEMETRY} (session_id, captured_at_ms, json)" +
+                            " VALUES (1, 2000, '{\"prndlRaw\":8,\"prndlState\":\"P\"}')",
+                    )
+                }
+            }
+        val v16Db = v16Helper.writableDatabase
+        assertFalse(readColumnNames(v16Db, VoltTrackerDb.TABLE_SESSIONS).contains("trip_rules_version"))
+        assertFalse(readColumnNames(v16Db, VoltTrackerDb.TABLE_TELEMETRY).contains("prndl_raw"))
+        v16Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, newDb.version)
+        assertTrue(readColumnNames(newDb, VoltTrackerDb.TABLE_TELEMETRY).containsAll(listOf("prndl_raw", "door_open")))
+        newDb.rawQuery("SELECT trip_rules_version FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { cursor ->
+            assertTrue("pre-existing session must survive", cursor.moveToFirst())
+            assertEquals("existing sessions keep the legacy trip rules", 0, cursor.getInt(0))
+        }
+        newDb.rawQuery("SELECT prndl_raw, door_open FROM ${VoltTrackerDb.TABLE_TELEMETRY}", null).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue("no backfill of the gear column", cursor.isNull(0))
+            assertTrue(cursor.isNull(1))
+        }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -977,7 +1026,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 16
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 17
 
         private val V7_INDEXES =
             arrayOf(

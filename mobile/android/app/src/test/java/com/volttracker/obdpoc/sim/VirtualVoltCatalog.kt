@@ -80,7 +80,7 @@ object VirtualVoltCatalog {
             entry("7E1", "222884", Evidence.GUESS, split("6228840064", "6228840000")),
             entry("7E1", "222885", Evidence.GUESS, both("6228858980")),
             entry("7E1", "222886", Evidence.GUESS, both("6228868980")),
-            entry("7E1", "222889", Evidence.GUESS, both("62288904")),
+            entry("7E1", "222889", Evidence.SEEN, split("62288903", "62288908")), // D / P (VoltGear)
             entry("7E1", "221C26", Evidence.GUESS, both("621C2650")), // 40 C
             entry("7E1", "222487", Evidence.GUESS, both("62248704D2")),
             // --- Mode 22 on 7E2 (transmission) -----------------------------------------------
