@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.materialize
 
+import com.volttracker.obdpoc.VehicleActivityThresholds
+
 /**
  * Conservative charge-session materializer.
  *
@@ -179,6 +181,8 @@ object ChargeSessionMaterializer {
      * makes `speed_kph` NULL for most of the session). For weaker signals we still require a valid
      * stationary speed reading because the aux-voltage heuristic is too noisy to trust on its own.
      */
+    private fun isEngineRunning(rpm: Int?): Boolean = rpm != null && rpm > VehicleActivityThresholds.ENGINE_READY_RPM
+
     private fun isPluggedSample(sample: TelemetrySample?): PluggedReason {
         if (sample == null) {
             return PluggedReason.NOT_PLUGGED
@@ -190,7 +194,10 @@ object ChargeSessionMaterializer {
                 packCurrent.isFinite() &&
                 packCurrent <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD
         val clearlyMoving = speed != null && speed.isFinite() && speed > Tunables.STATIONARY_SPEED_KPH
-        if (clearlyMoving) {
+        if (clearlyMoving || isEngineRunning(sample.rpm)) {
+            // A running engine at a standstill (range-extender idling, e.g. warming up or
+            // hold/mountain mode) pushes tens of amps INTO the pack with no EVSE attached; field
+            // logs showed that as phantom OBSERVED "charges". An EVSE charge never spins the engine.
             return PluggedReason.NOT_PLUGGED
         }
         if (strongCharging) {

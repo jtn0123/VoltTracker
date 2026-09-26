@@ -68,6 +68,13 @@ order:
    this rejects the sparse two-sample windows a transient break can leave behind
    (which a duration-only check would otherwise accept as a tiny "charge").
 
+7. **Engine-running veto (added 2026-09-25).** A sample whose `rpm` exceeds
+   `VehicleActivityThresholds.ENGINE_READY_RPM` (300) is never plugged, before
+   either the pack-current or aux-voltage signal is consulted. Field logs showed
+   the range extender idling at a standstill (~1200–1400 rpm, speed 0) pushing
+   ~20 A into the pack, which rule 1 read as five phantom `OBSERVED` charges
+   across four sessions. An EVSE charge never spins the engine.
+
 ## Consequences
 
 - **Volt + mode-22 adapter (the target)** gets `OBSERVED`-confidence sessions

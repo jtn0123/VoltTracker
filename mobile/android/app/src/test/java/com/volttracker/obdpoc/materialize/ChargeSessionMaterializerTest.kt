@@ -446,6 +446,67 @@ class ChargeSessionMaterializerTest {
         assertEquals("unknown", session.chargerType)
     }
 
+    @Test
+    fun engineIdlingAtAStandstillIsNotACharge() {
+        // Field regression: the range extender idling in a parked car (~1300 rpm, speed 0) pushes
+        // ~20 A into the pack. Pack current alone read that as an OBSERVED charge; a running
+        // engine must veto it because an EVSE charge never spins the engine.
+        val data = StubData()
+        for (i in 0..9) {
+            data.telemetry.add(
+                TelemetrySample(T_BASE + i * ONE_MINUTE_MS, 0.0, 1300 + i * 10, 14.3, 370.0, -20.0, -7.4, 40.0),
+            )
+        }
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size)
+    }
+
+    @Test
+    fun engineIdlingVetoesTheAuxVoltageFallbackToo() {
+        // Without pack current the aux-voltage fallback would call a warm, stationary, engine-on
+        // car "plugged" (WEAK). The engine veto applies before either signal.
+        val data = StubData()
+        for (i in 0..9) {
+            data.telemetry.add(TelemetrySample(T_BASE + i * ONE_MINUTE_MS, 0.0, 1250, 14.4, null, null))
+        }
+
+        assertEquals(0, ChargeSessionMaterializer.materialize(input(), data).size)
+    }
+
+    @Test
+    fun engineStartingMidChargeEndsTheChargeOnceSustained() {
+        // A real EVSE charge (rpm 0) followed by a sustained engine-idle stretch still produces exactly
+        // the one real charge — the idle tail is not glued onto it.
+        val data = StubData()
+        for (i in 0..4) {
+            data.telemetry.add(telWithPackCurrent(T_BASE + i * ONE_MINUTE_MS, 0.0, -20.0))
+        }
+        for (i in 5..14) {
+            data.telemetry.add(
+                TelemetrySample(T_BASE + i * ONE_MINUTE_MS, 0.0, 1300, null, null, -20.0, null, null),
+            )
+        }
+
+        val sessions = ChargeSessionMaterializer.materialize(input(), data)
+
+        assertEquals(1, sessions.size)
+        assertEquals(T_BASE, sessions[0].startedAtMs)
+        assertEquals(T_BASE + 4 * ONE_MINUTE_MS, sessions[0].endedAtMs)
+    }
+
+    @Test
+    fun rpmAtOrBelowTheReadyThresholdDoesNotVetoACharge() {
+        // Low/garbage rpm readings (<= ENGINE_READY_RPM) must not suppress a genuine charge.
+        val data = StubData()
+        for (i in 0..4) {
+            data.telemetry.add(
+                TelemetrySample(T_BASE + i * ONE_MINUTE_MS, 0.0, 300, null, null, -20.0, null, null),
+            )
+        }
+
+        assertEquals(1, ChargeSessionMaterializer.materialize(input(), data).size)
+    }
+
     // ---- helpers ------------------------------------------------------------------
 
     class StubData : MaterializerData {
