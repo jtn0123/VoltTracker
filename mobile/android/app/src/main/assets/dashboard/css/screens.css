@@ -1397,7 +1397,7 @@ body.trip-detail-active .trip-detail-backdrop {
   animation: backdrop-fade 200ms ease both;
 }
 
-html:has(body.trip-detail-active) {
+html.trip-detail-active {
   overflow: hidden;
 }
 
