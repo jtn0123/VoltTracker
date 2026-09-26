@@ -1,9 +1,11 @@
 package com.volttracker.obdpoc.sim
 
 import android.content.Intent
+import com.volttracker.obdpoc.ExtendedReconnectTier
 import com.volttracker.obdpoc.PidSchedule
 import com.volttracker.obdpoc.TelemetryPayload
 import com.volttracker.obdpoc.engine.ObdPollingEngine
+import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Evidence
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
@@ -213,7 +215,8 @@ class VirtualVoltScorecardTest {
     class VirtualVoltEngine(
         service: VirtualVoltService,
         connection: VirtualVolt,
-    ) : ObdPollingEngine(service, LoopSleeper { true }) {
+        swcanPolicy: SwcanListenRunner.Policy,
+    ) : ObdPollingEngine(service, LoopSleeper { true }, ExtendedReconnectTier(), swcanPolicy) {
         val openCount = AtomicInteger()
 
         init {
@@ -233,7 +236,11 @@ class VirtualVoltScorecardTest {
         val wirePayloads: MutableList<JSONObject> = Collections.synchronizedList(ArrayList())
 
         override fun createPollingEngine(): ObdPollingEngine =
-            VirtualVoltEngine(this, nextConnection ?: error("Install a VirtualVolt before onCreate"))
+            VirtualVoltEngine(
+                this,
+                nextConnection ?: error("Install a VirtualVolt before onCreate"),
+                nextSwcanPolicy ?: SwcanListenRunner.Policy(),
+            )
 
         override fun broadcastTelemetry(payload: JSONObject?) {
             if (payload != null) engineSamples.add(JSONObject(payload.toString()))
@@ -248,6 +255,9 @@ class VirtualVoltScorecardTest {
         companion object {
             @Volatile
             var nextConnection: VirtualVolt? = null
+
+            @Volatile
+            var nextSwcanPolicy: SwcanListenRunner.Policy? = null
         }
     }
 

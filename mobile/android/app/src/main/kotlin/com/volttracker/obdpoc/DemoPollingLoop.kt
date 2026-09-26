@@ -163,7 +163,23 @@ class DemoPollingLoop(
                 for (section in 1..6) {
                     sample.put("packSection${section}TempC", 22 + section % 3)
                 }
+                // SW-CAN (GMLAN) broadcasts the listen window hears on an OBDLink (mirrors
+                // actions-demo.ts; SwcanReadings).
+                sample.put("aux12vVoltage", if (charging) 13.9 else 14.1)
+                sample.put("aux12vSocPct", 86.0)
+                sample.put("aux12vCurrentA", if (charging) 3.5 else 6.0)
+                sample.put("tirePressureFlKpa", 260.0)
+                sample.put("tirePressureFrKpa", 264.0)
+                sample.put("tirePressureRlKpa", 256.0)
+                sample.put("tirePressureRrKpa", 260.0)
+                sample.put("doorLockState", if (charging) "unlocked" else "locked")
+                sample.put("cabinTempEstC", ObdElmDecode.round1(21.0 + Math.sin(t / 15.0)))
+                sample.put("acState", "on")
+                sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))
+                sample.put("clusterEvRangeKm", ObdElmDecode.round1(soc / 100.0 * 66.0))
+                sample.put("fuelRangeKm", 471.0)
                 if (charging) {
+                    sample.put("chargeCurrentLimitA", 12.0)
                     sample.put("chargerAcVoltage", 240)
                     sample.put("chargerAcCurrentA", 14.0)
                     sample.put("chargerAcPowerKw", 3.4)

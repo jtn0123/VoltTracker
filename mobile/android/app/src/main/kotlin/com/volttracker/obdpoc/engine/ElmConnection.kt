@@ -283,6 +283,83 @@ open class ElmConnection
             return text
         }
 
+        /** Result of a [monitor] call. */
+        class MonitorResult(
+            /** Everything the adapter printed, including any `STOPPED` marker and `>` prompt. */
+            @JvmField val text: String,
+            /** True when the adapter returned to its `>` prompt (on its own or after the stop byte). */
+            @JvmField val gotPrompt: Boolean,
+            /** True when the adapter ended monitoring by itself before the listen window closed. */
+            @JvmField val endedEarly: Boolean,
+            /** True when the output hit the response cap and was cut short. */
+            @JvmField val capped: Boolean,
+        )
+
+        /**
+         * Runs an adapter monitor command (OBDLink `STM`) for [listenMs], then stops it the way the
+         * OBDLink manual prescribes — send any single character, then wait up to [stopTimeoutMs]
+         * for `STOPPED` and the `>` prompt. The stop byte is consumed by the adapter and never
+         * reaches the vehicle bus. Output is bounded like [transact].
+         */
+        @Throws(IOException::class)
+        open fun monitor(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            keepWaiting: KeepWaiting,
+        ): MonitorResult {
+            val out = output ?: throw IOException("Adapter stream is not open")
+            val inputStream = input ?: throw IOException("Adapter stream is not open")
+            lastTransactTruncated = false
+            drainInput()
+            out.write((command + "\r").toByteArray(StandardCharsets.US_ASCII))
+            out.flush()
+            val response = StringBuilder()
+            responseCapped = false
+            if (readUntilPrompt(inputStream, response, clock.nowMs() + maxOf(0L, listenMs), keepWaiting)) {
+                lastTransactTruncated = responseCapped
+                return MonitorResult(response.toString(), true, true, responseCapped)
+            }
+            out.write('\r'.code)
+            out.flush()
+            val stopped = readUntilPrompt(inputStream, response, clock.nowMs() + maxOf(0L, stopTimeoutMs), keepWaiting)
+            lastTransactTruncated = responseCapped
+            return MonitorResult(response.toString(), stopped, false, responseCapped)
+        }
+
+        // Set by readUntilPrompt when output past MAX_RESPONSE_CHARS was discarded.
+        private var responseCapped = false
+
+        /**
+         * Appends adapter output to [response] (discarding anything past the cap, but still reading
+         * so the prompt is found) until the `>` prompt, [deadline], or [keepWaiting] going false.
+         * Returns true when the prompt arrived.
+         */
+        private fun readUntilPrompt(
+            inputStream: InputStream,
+            response: StringBuilder,
+            deadline: Long,
+            keepWaiting: KeepWaiting,
+        ): Boolean {
+            val buffer = ByteArray(128)
+            while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (!sleep(20)) break
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                if (read == 0) continue
+                val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
+                val remaining = maxOf(0, MAX_RESPONSE_CHARS - response.length)
+                response.append(chunk, 0, minOf(chunk.length, remaining))
+                if (chunk.length > remaining) responseCapped = true
+                if (chunk.indexOf('>') >= 0) return true
+            }
+            return false
+        }
+
         /** Sends the ELM escape byte and drains whatever the adapter echoes back. */
         @Throws(IOException::class)
         open fun sendEscape(settleMs: Long) {

@@ -93,6 +93,9 @@ function nativeSampleKeys() {
     ...sampleKeysIn(read('LiveSampleReader.kt')),
     ...sampleKeysIn(sliceFunction(read('engine/ObdPollingEngine.kt'), 'override fun appendLocation(')),
     ...sampleKeysIn(sliceFunction(read('SessionHealthTracker.kt'), 'fun append(')),
+    // SW-CAN broadcast values the engine appends to every live sample (ObdPollingEngine
+    // appendSwcanReadings -> SwcanReadings.appendTo).
+    ...sampleKeysIn(sliceFunction(read('SwcanReadings.kt'), 'fun appendTo(')),
   ]);
 }
 
