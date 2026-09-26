@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.40.0 (2026-09-26)
+
+### ✳️ New
+
+- **controls**: Safety-gated experimental car controls (untested on car)
+  ([#77](https://github.com/jtn0123/VoltTracker/pull/77),
+  [`e1a5f00`](https://github.com/jtn0123/VoltTracker/commit/e1a5f00d26a37dee5eeae915cf7dabae82a9a990))
+
+
 ## v0.39.0 (2026-09-26)
 
 ### ✳️ New
