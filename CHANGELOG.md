@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.36.6 (2026-09-26)
+
+### 🔺 Fix
+
+- **elm**: Don't cut replies short on the adapter's echo
+  ([#69](https://github.com/jtn0123/VoltTracker/pull/69),
+  [`6c30646`](https://github.com/jtn0123/VoltTracker/commit/6c306469ee211a1011ef6e1eca6db6ff8f066f1d))
+
+
 ## v0.36.5 (2026-09-26)
 
 ### 🔺 Fix

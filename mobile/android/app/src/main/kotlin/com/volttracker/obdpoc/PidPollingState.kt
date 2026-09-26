@@ -294,7 +294,8 @@ class PidPollingState(
         }
         val batched = ObdProtocol.buildMode01MultiCommand(PidSchedule.MODE_01_BATCH_PIDS_HEX)
         val response = engine.sendRecoverableCommand(batched, 1500)
-        if (!ObdProtocol.responseContainsAllMode01Pids(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
+        val frames = ObdMode01Batch.split(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)
+        if (frames == null) {
             consecutiveBatchMisses += 1
             if (consecutiveBatchMisses >= MAX_CONSECUTIVE_BATCH_MISSES) {
                 mode01BatchSupported = false
@@ -324,7 +325,7 @@ class PidPollingState(
         val now = clock.nowMs()
         appendRawTo(rawThisCycle, batched, response)
         for (command in PidSchedule.MODE_01_BATCH_COMMANDS) {
-            putLastRaw(command, response, now)
+            putLastRaw(command, frames.getValue(command.substring(2)), now)
             lastPolledAtMsByCommand[command] = now
         }
         return true
@@ -338,13 +339,11 @@ class PidPollingState(
         val pidHex = group.map { it.command.substring(2) }
         val batched = ObdProtocol.buildMode01MultiCommand(pidHex)
         val response = engine.sendRecoverableCommand(batched, 1500)
-        if (!ObdProtocol.responseContainsAllMode01Pids(response, pidHex)) {
-            return false
-        }
+        val frames = ObdMode01Batch.split(response, pidHex) ?: return false
         val now = clock.nowMs()
         appendRawTo(rawThisCycle, batched, response)
         for (spec in group) {
-            putLastRaw(spec.command, response, now)
+            putLastRaw(spec.command, frames.getValue(spec.command.substring(2)), now)
             lastPolledAtMsByCommand[spec.command] = now
         }
         return true
