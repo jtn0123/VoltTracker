@@ -160,6 +160,7 @@ class PidPollingState(
         }
         val specsByHeader = groupByHeader(due)
         var switched = false
+        var receiveFilterSet = false
         for (header in Header.entries) {
             val headerSpecs = specsByHeader[header] ?: continue
             if (header != Header.BROADCAST) {
@@ -174,7 +175,7 @@ class PidPollingState(
                     )
                     continue
                 }
-                engine.sendCommand(headerCommand, 1500)
+                receiveFilterSet = selectHeader(header, headerCommand, receiveFilterSet)
                 switched = true
             }
             val extraBatch =
@@ -209,10 +210,31 @@ class PidPollingState(
                 outcomes.add(spec.command to outcome)
             }
         }
+        if (receiveFilterSet) {
+            engine.sendCommand(PidSchedule.RESTORE_AUTO_RECEIVE_COMMAND, 1500)
+        }
         if (switched) {
             engine.sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500)
         }
         applyNoDataCache(outcomes)
+    }
+
+    /**
+     * Switches to [header] and, for a node outside the 7E0-7E7 range, points the receive filter at
+     * its reply ID. Such headers are declared last in [Header], so the filter never has to be undone
+     * before another 7Ex block; the caller restores it once at the end of the cycle. Returns whether
+     * a custom receive filter is active afterwards.
+     */
+    @Throws(IOException::class)
+    private fun selectHeader(
+        header: Header,
+        headerCommand: String,
+        receiveFilterSet: Boolean,
+    ): Boolean {
+        engine.sendCommand(headerCommand, 1500)
+        val filterCommand = header.receiveFilterCommand ?: return receiveFilterSet
+        engine.sendCommand(filterCommand, 1500)
+        return true
     }
 
     /**

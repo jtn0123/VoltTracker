@@ -529,6 +529,34 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun ovmsPollListPidsDecode() {
+        // Scales from the OVMS Volt/Ampera module (vehicle_voltampera.cpp, tested on a MY2017).
+        val motorB = ObdProtocol.parseKnownValue("22368F", "62368F58")
+        assertEquals("motor B temperature", motorB!!.name)
+        assertEquals(48.0, motorB.valueNumeric!!, 0.01)
+
+        // Real reply seen on the target car at a 14 % SOC: the cluster's EV range bottoms out at 0.
+        assertEquals(0.0, ObdProtocol.parseKnownValue("2241A6", "6241A60000")!!.valueNumeric!!, 0.01)
+        val range = ObdProtocol.parseKnownValue("2241A6", "6241A61400")
+        assertEquals("km", range!!.unit)
+        assertEquals(80.0, range.valueNumeric!!, 0.01) // 0x1400 / 64
+        assertNull("an implausible range is decode garbage", ObdProtocol.parseKnownValue("2241A6", "6241A6FFFF"))
+
+        assertEquals(100.0, ObdProtocol.parseKnownValue("22439E", "62439EFF")!!.valueNumeric!!, 0.01)
+        assertEquals(50.2, ObdProtocol.parseKnownValue("22439E", "62439E80")!!.valueNumeric!!, 0.1)
+
+        // Real reply seen on the target car: 0x00218A49 Wh = 2198.089 kWh lifetime.
+        val lifetime = ObdProtocol.parseKnownValue("224389", "62438900218A49")
+        assertEquals("lifetime charge energy", lifetime!!.name)
+        assertEquals("kWh", lifetime.unit)
+        assertEquals(2198.089, lifetime.valueNumeric!!, 0.001)
+        assertNull("a 4-byte DID needs all four bytes", ObdProtocol.parseKnownValue("224389", "624389218A"))
+
+        val pem = ObdProtocol.parseKnownValue("221C43", "621C4350")
+        assertEquals(40.0, pem!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
     fun cellBecmLayoutProbePidsDecode() {
         val section = ObdProtocol.parseKnownValue("2240D7", "6240D740")
         assertNotNull(section)
