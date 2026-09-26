@@ -87,6 +87,7 @@ class DashboardPublisher(
                 "setRestoreProgress",
                 "showToast",
                 "showTripUndo",
+                "tripSplitChanged",
                 "applyRestoredPreferences",
                 "openTrip",
                 "openTripReceipt",

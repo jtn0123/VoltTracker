@@ -2,12 +2,14 @@ package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
 import android.database.Cursor
+import android.database.sqlite.SQLiteDatabase
 import androidx.core.database.sqlite.transaction
 import com.volttracker.obdpoc.materialize.ChargeSession
 import com.volttracker.obdpoc.materialize.LocationSample
 import com.volttracker.obdpoc.materialize.PidObservation
 import com.volttracker.obdpoc.materialize.TelemetrySample
 import com.volttracker.obdpoc.materialize.Trip
+import com.volttracker.obdpoc.materialize.TripSplitRules
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -132,6 +134,54 @@ class ObdStoreMaterialize(
                 arrayOf(sessionId.toString()),
             ).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else 0 }
 
+    /** The session's active user split points ([ObdTripSplits]); empty for legacy sessions. */
+    fun readUserTripSplits(sessionId: Long): List<TripSplitRules.Span> =
+        ObdTripSplits.activeSplits(helper.readableDatabase, sessionId)
+
+    fun hasTripSegments(sessionId: Long): Boolean =
+        ObdStoreSupport.countRowsWhere(
+            helper.readableDatabase,
+            VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+            "session_id = ?",
+            arrayOf(sessionId.toString()),
+        ) > 0
+
+    /**
+     * Atomically swaps a session's saved trip segments for [trips] (a user split/merge re-cut), then
+     * re-stamps the best-effort `label` column from the session's route-key label events so the
+     * re-cut rows don't silently lose names the user gave.
+     */
+    fun replaceTrips(
+        sessionId: Long,
+        trips: List<Trip>?,
+    ) {
+        val db = helper.writableDatabase
+        db.transaction {
+            db.delete(VoltTrackerDb.TABLE_TRIP_SEGMENTS, "session_id = ?", arrayOf(sessionId.toString()))
+            insertTrips(db, sessionId, trips.orEmpty())
+            restampLabels(db, sessionId)
+        }
+    }
+
+    private fun restampLabels(
+        db: SQLiteDatabase,
+        sessionId: Long,
+    ) {
+        for ((routeKey, label) in ObdTripLabels.labelsByRouteKey(db, listOf(sessionId))) {
+            val parsed = DriveWindowDetector.parseRouteKey(routeKey) ?: continue
+            val startedAtMs = parsed.startedAtMs ?: continue
+            val endedAtMs = parsed.endedAtMs ?: continue
+            val values = ContentValues()
+            values.put("label", label)
+            db.update(
+                VoltTrackerDb.TABLE_TRIP_SEGMENTS,
+                values,
+                "session_id = ? AND started_at_ms <= ? AND (ended_at_ms IS NULL OR ended_at_ms >= ?)",
+                arrayOf(sessionId.toString(), endedAtMs.toString(), startedAtMs.toString()),
+            )
+        }
+    }
+
     fun persistTrips(
         sessionId: Long,
         trips: List<Trip>?,
@@ -139,31 +189,37 @@ class ObdStoreMaterialize(
         if (trips.isNullOrEmpty()) {
             return
         }
-        val createdAt = System.currentTimeMillis()
         val db = helper.writableDatabase
-        db.transaction {
-            for (trip in trips) {
-                val values = ContentValues()
-                values.put("session_id", sessionId)
-                values.put("started_at_ms", trip.startedAtMs)
-                values.put("ended_at_ms", trip.endedAtMs)
-                values.put("route_available", if (trip.hasRoute) 1 else 0)
-                values.put("distance_m", trip.distanceMeters)
-                values.put("max_speed_kph", trip.maxSpeedKph)
-                if (trip.durationMs > 0L) {
-                    values.put("avg_speed_kph", (trip.distanceMeters / 1000.0) / (trip.durationMs / 3_600_000.0))
-                }
-                values.put("classification", trip.classification)
-                values.put("confidence", trip.confidence.asScore())
-                if (trip.energyKwh != null) {
-                    values.put("energy_kwh", trip.energyKwh)
-                }
-                if (trip.parkStops.isNotEmpty()) {
-                    values.put("summary_json", parkStopsSummaryJson(trip))
-                }
-                values.put("created_at_ms", createdAt)
-                db.insertOrThrow(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, values)
+        db.transaction { insertTrips(db, sessionId, trips) }
+    }
+
+    private fun insertTrips(
+        db: SQLiteDatabase,
+        sessionId: Long,
+        trips: List<Trip>,
+    ) {
+        val createdAt = System.currentTimeMillis()
+        for (trip in trips) {
+            val values = ContentValues()
+            values.put("session_id", sessionId)
+            values.put("started_at_ms", trip.startedAtMs)
+            values.put("ended_at_ms", trip.endedAtMs)
+            values.put("route_available", if (trip.hasRoute) 1 else 0)
+            values.put("distance_m", trip.distanceMeters)
+            values.put("max_speed_kph", trip.maxSpeedKph)
+            if (trip.durationMs > 0L) {
+                values.put("avg_speed_kph", (trip.distanceMeters / 1000.0) / (trip.durationMs / 3_600_000.0))
             }
+            values.put("classification", trip.classification)
+            values.put("confidence", trip.confidence.asScore())
+            if (trip.energyKwh != null) {
+                values.put("energy_kwh", trip.energyKwh)
+            }
+            if (trip.parkStops.isNotEmpty()) {
+                values.put("summary_json", parkStopsSummaryJson(trip))
+            }
+            values.put("created_at_ms", createdAt)
+            db.insertOrThrow(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, values)
         }
     }
 

@@ -422,6 +422,8 @@ class VoltBridgeTest {
                 "restoreTrip",
                 "setTripLabel",
                 "setTripFavorite",
+                "splitTripAtStop",
+                "mergeTripSplit",
                 "addMaintenanceEntry",
                 "getMaintenanceLog",
                 "deleteMaintenanceEntry",

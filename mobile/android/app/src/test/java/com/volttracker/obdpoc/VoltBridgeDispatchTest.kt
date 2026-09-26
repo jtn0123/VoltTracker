@@ -8,6 +8,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
 import com.volttracker.obdpoc.data.ObdSignalLogStore
 import com.volttracker.obdpoc.data.ObdTripEditStore
+import com.volttracker.obdpoc.data.TripSplitOutcome
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.PermissionGate
 import org.json.JSONArray
@@ -752,6 +753,14 @@ class VoltBridgeDispatchTest {
         assertEquals("12:1000:2000", activity.store.lastTripFavoriteRouteKey)
         assertEquals(true, activity.store.lastTripFavorite)
 
+        bridge.splitTripAtStop("12:1000:2000", "1500", "1600")
+        drain()
+        assertEquals("12:1000:2000", activity.store.lastSplitTripRouteKey)
+
+        bridge.mergeTripSplit("12:1500:1600")
+        drain()
+        assertEquals("12:1500:1600", activity.store.lastMergedSplitKey)
+
         bridge.addMaintenanceEntry(JSONObject().put("type", "Coolant").put("note", "Flush").toString())
         drain()
         assertEquals("Coolant", activity.store.lastMaintenanceType)
@@ -1329,6 +1338,8 @@ class VoltBridgeDispatchTest {
         var setTripFavoriteReturn = false
         var lastTripFavoriteRouteKey: String? = null
         var lastTripFavorite: Boolean? = null
+        var lastSplitTripRouteKey: String? = null
+        var lastMergedSplitKey: String? = null
         var addMaintenanceReturn = -1L
         var lastMaintenanceType: String? = null
         var lastMaintenanceNote: String? = null
@@ -1384,6 +1395,20 @@ class VoltBridgeDispatchTest {
                     lastTripFavoriteRouteKey = routeKey
                     lastTripFavorite = favorite
                     return setTripFavoriteReturn
+                }
+
+                override fun splitTripAtStop(
+                    routeKey: String?,
+                    stopStartMs: Long,
+                    stopEndMs: Long,
+                ): TripSplitOutcome? {
+                    lastSplitTripRouteKey = routeKey
+                    return null
+                }
+
+                override fun mergeTripSplit(splitKey: String?): TripSplitOutcome? {
+                    lastMergedSplitKey = splitKey
+                    return null
                 }
             }
 

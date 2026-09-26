@@ -1,7 +1,10 @@
 package com.volttracker.obdpoc
 
 import android.util.Log
+import com.volttracker.obdpoc.data.ObdTripEditStore
 import com.volttracker.obdpoc.data.ObdTripLabels
+import com.volttracker.obdpoc.data.TripSplitOutcome
+import org.json.JSONArray
 import org.json.JSONObject
 
 /**
@@ -140,6 +143,87 @@ internal class VoltBridgeTripEdits(
             }
         }
     }
+
+    /**
+     * "Split trip here" on an in-trip Park stop: confirms, then persists a user split point at the
+     * stop [stopStartMs]..[stopEndMs] of the trip [routeKey] and tells the dashboard (via
+     * `tripSplitChanged`) so it reloads the trip list and closes the stale trip sheet. The first
+     * half keeps the trip's label and favorite; see `ObdStoreTripSplitEdits`.
+     */
+    fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: String?,
+        stopEndMs: String?,
+    ) {
+        val cleanRouteKey = bridgeSafe(routeKey, BRIDGE_MAX_LABEL_LEN)
+        val startMs = stopStartMs?.trim()?.toLongOrNull()
+        val endMs = stopEndMs?.trim()?.toLongOrNull()
+        if (cleanRouteKey.isEmpty() || startMs == null || endMs == null || endMs < startMs) {
+            activity.runOnUiThread {
+                activity.publishActionConfirmation("blocked", "Choose a stop inside a stored trip to split at.", true)
+            }
+            return
+        }
+        activity.confirmBridgeAction(
+            "Split trip here?",
+            "This drive becomes two trips at this stop. The first keeps its name and favorite. " +
+                "You can merge them back from either trip.",
+            "Split trip",
+        ) {
+            runTripSplitEdit("splitTripAtStop", "Trip split into two.", "That trip could not be split here.") {
+                it.splitTripAtStop(cleanRouteKey, startMs, endMs)
+            }
+        }
+    }
+
+    /** Undoes a user split ([splitKey] is the split's stop key): the two trips merge back into one. */
+    fun mergeTripSplit(splitKey: String?) {
+        val cleanSplitKey = bridgeSafe(splitKey, BRIDGE_MAX_LABEL_LEN)
+        if (cleanSplitKey.isEmpty()) {
+            activity.runOnUiThread {
+                activity.publishActionConfirmation("blocked", "Choose a split trip to merge back.", true)
+            }
+            return
+        }
+        runTripSplitEdit("mergeTripSplit", "Trips merged back into one.", "Those trips could not be merged.") {
+            it.mergeTripSplit(cleanSplitKey)
+        }
+    }
+
+    private fun runTripSplitEdit(
+        name: String,
+        okMessage: String,
+        failMessage: String,
+        edit: (ObdTripEditStore) -> TripSplitOutcome?,
+    ) {
+        activity.runOnBackground {
+            val outcome =
+                try {
+                    activity.localStore?.tripEdits?.let(edit)
+                } catch (ex: RuntimeException) {
+                    Log.w(AppPrefs.LOG_TAG, "$name failed", ex)
+                    null
+                }
+            activity.runOnUiThread {
+                activity.publishStorageSummary()
+                if (outcome != null) {
+                    activity.publishDashboardPayload("tripSplitChanged", tripSplitPayload(outcome))
+                }
+                activity.publishActionConfirmation(
+                    if (outcome != null) "ready" else "blocked",
+                    if (outcome != null) okMessage else failMessage,
+                    outcome == null,
+                )
+            }
+        }
+    }
+
+    private fun tripSplitPayload(outcome: TripSplitOutcome): String =
+        JSONObject()
+            .put("splitKey", outcome.splitKey)
+            .put("merged", outcome.merged)
+            .put("routeKeys", JSONArray(outcome.routeKeys))
+            .toString()
 
     private fun markTripNotTripConfirmed(routeKey: String) {
         activity.runOnBackground {

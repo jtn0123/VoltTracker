@@ -497,12 +497,23 @@ interface VoltParkStop {
   doorOpened?: boolean;
 }
 
+/** A user split point ("Split trip here") bounding a route; `key` is what mergeTripSplit takes. */
+interface VoltUserSplit {
+  key: string;
+  startMs: number;
+  endMs: number;
+}
+
 /** A logged drive/route the map renders and the scrubber walks. */
 interface VoltRoute {
   points?: VoltRoutePoint[];
   powerTrack?: PowerTrackSample[];
   /** Gear-aware routes only; absent on routes recorded before gear-aware trip splitting. */
   parkStops?: VoltParkStop[];
+  /** Set when a user split ends the previous trip where this one starts (merge back across it). */
+  userSplitBefore?: VoltUserSplit;
+  /** Set when a user split ends this trip (merge back with the next one). */
+  userSplitAfter?: VoltUserSplit;
   session?: { id?: string | number; [key: string]: unknown };
   pointCount?: number;
   distanceMeters?: number;
@@ -985,6 +996,8 @@ interface VoltRestoreProgress {
     shareTripCard?(): boolean;
     /** Hide the per-trip detail sheet (M7). */
     closeTripDetail?(): void;
+    /** Native `tripSplitChanged` answer to splitTripAtStop / mergeTripSplit: refresh trips + the open sheet. */
+    onTripSplitChanged?(payload: unknown): void;
     setMapTileError(show: boolean, detail?: string): void;
     retryMapTiles(): void;
     loadSampleData(): void;
@@ -1079,6 +1092,10 @@ interface VoltRestoreProgress {
     restoreTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;
     setTripFavorite(routeKey: string, favorite: boolean): void;
+    /** "Split trip here": confirms, then splits the stored trip at its in-trip Park stop (epoch-ms strings). Answers via VoltTrackerNative.tripSplitChanged. */
+    splitTripAtStop(routeKey: string, stopStartMs: string, stopEndMs: string): void;
+    /** Merges a user-split trip back into one; `splitKey` comes from a route's userSplitBefore/After. */
+    mergeTripSplit(splitKey: string): void;
     addMaintenanceEntry(json: string): void;
     getMaintenanceLog(): string;
     deleteMaintenanceEntry(id: string): void;

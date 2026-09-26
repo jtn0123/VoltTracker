@@ -1914,6 +1914,19 @@ type SignalActions = {
     backfillTelemetry: VD.backfillTelemetry,
     showToast: (message: unknown) => showToast(message),
     showTripUndo,
+    // "Split trip here" / merge-back answer: trip keys changed, so re-read the
+    // trip + insight rollups; the lazy map chunk (when loaded) drops its route
+    // cache and moves the open trip sheet.
+    tripSplitChanged: (payload: unknown) => {
+      setState({ tripsLoaded: false, insightsLoaded: false });
+      void ensureInsightsModule()
+        .then(() => {
+          if (typeof VD.loadTrips === "function") VD.loadTrips(true);
+          if (typeof VD.loadInsights === "function") VD.loadInsights(true);
+        })
+        .catch(() => {});
+      if (typeof VD.onTripSplitChanged === "function") VD.onTripSplitChanged(payload);
+    },
     setBackupReceipt: (payload: unknown) => VD.setBackupReceipt?.(payload),
     applyRestoredPreferences: (payload: unknown) => {
       if (prefs.restoreFromBackup(payload)) showToast("Backup settings restored");

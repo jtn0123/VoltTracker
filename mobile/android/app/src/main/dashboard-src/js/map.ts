@@ -25,6 +25,8 @@ import {
 import type { MapSessionFilter } from "./map-session-list";
 import { loadStylesheetWithRetry } from "./lazy-styles";
 import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signatures";
+import { mergeDemoTrip, parseTripSplitChange, splitDemoTrip, userSplitKey } from "./trip-split";
+import type { DemoTripRow, DemoTripSplitResult, TripSplitSpan } from "./trip-split";
 // VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
 // eager bundle and every entry point it publishes crosses the chunk boundary
 // through the VD registry (see vd-registry.ts).
@@ -1885,6 +1887,7 @@ import { VD } from "./vd-registry";
       return;
     }
     card.hidden = false;
+    const splittable = canEditTripSplits(route);
     list.replaceChildren(
       ...stops.map((stop, i) => {
         const row = document.createElement("div");
@@ -1894,18 +1897,126 @@ import { VD } from "./vd-registry";
         const name = document.createElement("span");
         name.className = "trip-detail-stop-name";
         const dur = document.createElement("b");
+        row.append(dot, name, dur);
         if (stop.parked) {
           row.dataset.stopKind = "park";
           name.textContent = `${parkStopLabel(stop.durationMs)} · ${fmtClockTime(stop.startMs)}`;
           dur.textContent = "in Park";
+          if (splittable) row.append(tripSplitButton({ startMs: stop.startMs, endMs: stop.endMs }));
         } else {
           name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
           dur.textContent = VD.formatDuration(stop.durationMs);
         }
-        row.append(dot, name, dur);
         return row;
       })
     );
+  }
+
+  // "Split trip here" / merge back (trip-split.ts). Offered only on stored trips
+  // the native side can re-cut (or any Demo / Testing trip — demo re-cuts its own
+  // in-memory sample data and never reaches the bridge).
+  function canEditTripSplits(route: MapRoute): boolean {
+    if (routeIsLive(route) || !tripDetailRouteKey) return false;
+    if (VD.isDemoActive()) return true;
+    return Boolean(bridge && typeof bridge.splitTripAtStop === "function");
+  }
+
+  function tripSplitButton(stop: TripSplitSpan): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "link-btn trip-detail-stop-split";
+    button.textContent = "Split trip here";
+    // A per-row closure (not a data attribute read back later): the stop span is
+    // this row's own data.
+    button.addEventListener("click", () => splitTripAtStop(stop));
+    return button;
+  }
+
+  function splitTripAtStop(stop: TripSplitSpan): void {
+    const routeKey = tripDetailRouteKey;
+    if (!routeKey) return;
+    if (VD.isDemoActive()) {
+      applyDemoTripSplit(splitDemoTrip(demoRoutes(), demoTrips(), routeKey, stop, routeDistanceMeters));
+      return;
+    }
+    if (!bridge) return;
+    try {
+      bridge.splitTripAtStop(routeKey, String(stop.startMs), String(stop.endMs));
+    } catch (_err) {
+      VD.setStatus({ state: "blocked", detail: "Could not split this drive." });
+    }
+  }
+
+  // Merge-back keys for the open sheet: the user splits bounding this trip.
+  const tripDetailMergeKeys = { before: "", after: "" };
+
+  function renderTripDetailMerge(route: MapRoute): void {
+    const editable = canEditTripSplits(route);
+    tripDetailMergeKeys.before = editable ? userSplitKey(route, "before") : "";
+    tripDetailMergeKeys.after = editable ? userSplitKey(route, "after") : "";
+    const prev = el("tripDetailMergePrev");
+    const next = el("tripDetailMergeNext");
+    if (prev) prev.hidden = !tripDetailMergeKeys.before;
+    if (next) next.hidden = !tripDetailMergeKeys.after;
+    const row = el("tripDetailMerge");
+    if (row) row.hidden = !tripDetailMergeKeys.before && !tripDetailMergeKeys.after;
+  }
+
+  function mergeTripSplit(splitKey: string): void {
+    if (!splitKey) return;
+    if (VD.isDemoActive()) {
+      applyDemoTripSplit(mergeDemoTrip(demoRoutes(), demoTrips(), splitKey, routeDistanceMeters));
+      return;
+    }
+    if (!bridge) return;
+    try {
+      bridge.mergeTripSplit(splitKey);
+    } catch (_err) {
+      VD.setStatus({ state: "blocked", detail: "Could not merge these drives." });
+    }
+  }
+
+  function demoRoutes(): MapRoute[] {
+    const routes = (state.storage || {}).recentRoutes;
+    return Array.isArray(routes) ? (routes as MapRoute[]) : [];
+  }
+
+  function demoTrips(): DemoTripRow[] {
+    return Array.isArray(state.trips) ? (state.trips as DemoTripRow[]) : [];
+  }
+
+  // Demo / Testing: swap the re-cut sample routes + trip rows into the demo
+  // payloads (never the bridge), repaint, then follow the same path a native
+  // tripSplitChanged answer takes.
+  function applyDemoTripSplit(result: DemoTripSplitResult | null): void {
+    if (!result) {
+      VD.setStatus({ state: "demo", detail: "Demo drive unchanged." });
+      return;
+    }
+    VD.setState({
+      storage: { ...(state.storage || {}), recentRoutes: result.routes },
+      trips: result.trips
+    });
+    captureDemoPreview();
+    renderDemoSurfaces();
+    onTripSplitChanged(result.change);
+    VD.setStatus({ state: "demo", detail: result.change.merged ? "Demo trips merged." : "Demo trip split." });
+  }
+
+  // Native answer to splitTripAtStop / mergeTripSplit (via actions.ts, which
+  // also reloads the rollups) and the demo path's equivalent: trip keys changed,
+  // so drop cached route geometry and move an open sheet onto the trip that now
+  // holds it (the first half, or the merged trip) — or close it when that trip
+  // is not loaded yet.
+  function onTripSplitChanged(payload: unknown): void {
+    const change = parseTripSplitChange(VD.parsePayload<unknown>(payload, null));
+    if (!change) return;
+    invalidateFetchedRouteCache();
+    const sheet = el("tripDetailSheet");
+    if (!sheet || sheet.hidden) return;
+    const nextKey = change.routeKeys[0] || "";
+    if (nextKey && openTripDetail(nextKey)) return;
+    el("tripDetailClose")?.click();
   }
 
   // The trip-list row for a route key (state.trips is the source the list
@@ -2109,6 +2220,7 @@ import { VD } from "./vd-registry";
     renderTripDetailElevation(route);
     renderTripDetailSpeed(route);
     renderTripDetailStops(route);
+    renderTripDetailMerge(route);
     // Footer actions carry the route key: View-on-map selects this drive via
     // the shared [data-map-session] path; export reuses the per-row CSV path.
     const viewBtn = el("tripDetailViewMap");
@@ -2783,6 +2895,9 @@ import { VD } from "./vd-registry";
     mapTileRetry.addEventListener("click", retryMapTiles);
   }
 
+  el("tripDetailMergePrev")?.addEventListener("click", () => mergeTripSplit(tripDetailMergeKeys.before));
+  el("tripDetailMergeNext")?.addEventListener("click", () => mergeTripSplit(tripDetailMergeKeys.after));
+
   Object.assign(VD, {
     renderMapLoaded: true,
     ensureMap,
@@ -2809,7 +2924,8 @@ import { VD } from "./vd-registry";
     loadSampleData,
     loadDemoScenario,
     setTripRoute: applyTripRoutePayload,
-    invalidateFetchedRouteCache
+    invalidateFetchedRouteCache,
+    onTripSplitChanged
   });
 
 export {};

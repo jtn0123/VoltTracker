@@ -85,7 +85,7 @@ object DriveWindowDetector {
         if (fallbackEndMs <= fallbackStartMs) {
             return emptyList()
         }
-        val spans = splitSpans(data, gearAnalysis(session.tripRulesVersion, data.activitySamples))
+        val spans = splitSpans(data, gearAnalysis(session.tripRulesVersion, data.activitySamples, data.userSplits))
         if (spans.isEmpty()) {
             return listOf(DriveWindow(session.id, 0, fallbackStartMs, fallbackEndMs))
         }
@@ -129,7 +129,8 @@ object DriveWindowDetector {
 
     /**
      * In-trip Park stops ([TripSplitRules]) between [startMs] and [endMs] of a gear-aware session;
-     * always empty for a legacy session, which is never queried.
+     * always empty for a legacy session, which is never queried. A stop the user split the trip at
+     * ([ObdTripSplits]) is a trip boundary now, not an in-trip stop, so it is never listed.
      */
     @JvmStatic
     fun parkStopsForWindow(
@@ -160,12 +161,14 @@ object DriveWindowDetector {
                     )
                 }
             }
-        return TripSplitRules.analyze(session.tripRulesVersion, samples).stopsWithin(startMs, endMs)
+        val userSplits = ObdTripSplits.activeSplits(db, session.id)
+        return TripSplitRules.analyze(session.tripRulesVersion, samples, userSplits).stopsWithin(startMs, endMs)
     }
 
     private fun gearAnalysis(
         rulesVersion: Int,
         samples: List<ActivitySample>,
+        userSplits: List<TripSplitRules.Span>,
     ): TripSplitRules.Analysis {
         if (!TripSplitRules.appliesTo(rulesVersion)) {
             return TripSplitRules.Analysis.NONE
@@ -173,6 +176,7 @@ object DriveWindowDetector {
         return TripSplitRules.analyze(
             rulesVersion,
             samples.map { TripSplitRules.GearSample(it.atMs, it.prndlRaw, it.doorOpen) },
+            userSplits,
         )
     }
 
@@ -396,6 +400,11 @@ object DriveWindowDetector {
             dataBySession[sessionId]?.locationSamples = samples
         }
         readTelemetrySamplesBySession(db, ids, dataBySession)
+        // User split points only ever apply to gear-aware sessions, so legacy sessions skip the read.
+        val gearAwareIds = sessions.filter { TripSplitRules.appliesTo(it.tripRulesVersion) }.map { it.id }.distinct()
+        ObdTripSplits.activeSplitsBySession(db, gearAwareIds).forEach { (sessionId, spans) ->
+            dataBySession[sessionId]?.userSplits = spans
+        }
         return dataBySession
     }
 
@@ -612,6 +621,7 @@ object DriveWindowDetector {
         var locationSamples: List<RouteSample> = emptyList(),
         var telemetryRouteSamples: List<RouteSample> = emptyList(),
         var activitySamples: List<ActivitySample> = emptyList(),
+        var userSplits: List<TripSplitRules.Span> = emptyList(),
     )
 
     private class SessionSelection(

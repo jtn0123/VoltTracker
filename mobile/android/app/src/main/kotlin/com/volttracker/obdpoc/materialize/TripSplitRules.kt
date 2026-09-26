@@ -23,6 +23,10 @@ import com.volttracker.obdpoc.VoltGear
  * - Park stops of at least [PARK_STOP_MIN_MS] (2 min) that do not split, with driving on both
  *   sides, are reported as in-trip [ParkStop]s ("Stopped N min").
  *
+ * - A user split point ("Split trip here" on an in-trip Park stop, stored as a `trip_split` status
+ *   event — see `ObdTripSplits`) turns that stop into a split span, exactly as if the Park stretch
+ *   had been long enough to split on its own. Undoing it ("merge back") simply drops the span.
+ *
  * Only sessions stamped with [GEAR_AWARE] or later get these rules (see `obd_sessions`
  * `trip_rules_version`, written when a session starts): trips recorded before this version keep
  * the exact windows — and so the route keys their labels, favorites and hides are keyed on —
@@ -102,24 +106,32 @@ object TripSplitRules {
 
     /**
      * Analyzes [samples] (ordered oldest-first) under [rulesVersion]. Legacy sessions get
-     * [Analysis.NONE], which leaves the legacy splitters untouched.
+     * [Analysis.NONE], which leaves the legacy splitters untouched — including any [userSplits],
+     * so a trip recorded before gear-aware splitting can never be split by a stored user choice.
+     *
+     * [userSplits] are the session's active user split points: each becomes a split span, and a
+     * Park stop overlapping one is no longer reported as an in-trip stop (it now ends a trip).
      */
     @JvmStatic
     fun analyze(
         rulesVersion: Int,
         samples: List<GearSample>,
+        userSplits: List<Span> = emptyList(),
     ): Analysis {
-        if (!appliesTo(rulesVersion) || samples.isEmpty()) return Analysis.NONE
+        if (!appliesTo(rulesVersion) || (samples.isEmpty() && userSplits.isEmpty())) return Analysis.NONE
         val scan = Scan()
         for (sample in samples) {
             scan.accept(sample)
         }
         scan.finish()
-        return classify(scan)
+        return classify(scan, userSplits)
     }
 
-    private fun classify(scan: Scan): Analysis {
-        val splits = ArrayList<Span>()
+    private fun classify(
+        scan: Scan,
+        userSplits: List<Span>,
+    ): Analysis {
+        val splits = ArrayList<Span>(userSplits)
         val stops = ArrayList<ParkStop>()
         for (run in scan.parkRuns) {
             val durationMs = run.endMs - run.startMs
@@ -129,7 +141,9 @@ object TripSplitRules {
                 durationMs >= PARK_DOOR_SPLIT_MS && doorOpened -> splits.add(Span(run.startMs, run.endMs))
                 durationMs >= PARK_STOP_MIN_MS &&
                     run.drivenBefore &&
-                    scan.lastNonParkAtMs > run.endMs -> stops.add(ParkStop(run.startMs, run.endMs, doorOpened))
+                    scan.lastNonParkAtMs > run.endMs &&
+                    userSplits.none { it.startMs <= run.endMs && it.endMs >= run.startMs } ->
+                    stops.add(ParkStop(run.startMs, run.endMs, doorOpened))
             }
         }
         if (splits.isEmpty() && stops.isEmpty() && scan.knownRuns.isEmpty()) return Analysis.NONE

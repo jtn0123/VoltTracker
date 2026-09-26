@@ -185,6 +185,27 @@ Tables fall into two buckets:
   stamped onto each trip's JSON (`trip.favorite`) at read time in
   `ObdStoreTrips.applyLabels`, alongside the label.
 
+- **User trip splits** ("Split trip here" on an in-trip Park stop) are stored the
+  same way — **no schema change**: `status_events` rows of `kind = "trip_split"`,
+  keyed by the stop (`sessionId:stopStartMs:stopEndMs`), by `ObdTripSplits`. The
+  latest event per split key wins (`state = "split"` or `"merged"`). Active splits
+  feed `TripSplitRules.analyze` from both `DriveWindowDetector` (trip list, map,
+  route keys) and `TripMaterializer` (saved trips; a split/merge re-materializes an
+  already-finalized session's `trip_segments`), so every surface cuts the session
+  the same way. They only apply to gear-aware sessions (`trip_rules_version >= 1`);
+  the rules ignore them for legacy sessions and the write path refuses them there.
+
+  Labels and favorites hang off trip keys, and a split changes the keys:
+  - **Split:** the *first* half inherits the original trip's label and favorite
+    (written as events on its new key); the *second* half is a new trip with
+    neither. The original key's own events are left as they were.
+  - **Merge back:** the merged trip takes the *first* half's label and favorite, so
+    a rename made while split survives. The second half's label/favorite events are
+    kept (they just match no trip), so splitting at the same stop again brings them
+    back.
+  - Hidden ("not a trip") state is not carried in either direction. Every other
+    trip's labels, favorites and keys are untouched.
+
 ## Foreign-key delete behavior at a glance
 
 - **CASCADE** (child removed with parent): `telemetry`, `pid_observations`,

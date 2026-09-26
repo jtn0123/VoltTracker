@@ -28,6 +28,35 @@ class TripSplitRulesTest {
     }
 
     @Test
+    fun aUserSplitAtAShortStopBecomesASplitAndNoLongerAStop() {
+        val samples =
+            Timeline()
+                .gear(DRIVE, 0, 5)
+                .gear(PARK, 5, 10)
+                .gear(DRIVE, 10, 15)
+                .samples
+        val stop = TripSplitRules.analyze(gearAware, samples).stops.single()
+        val userSplit = TripSplitRules.Span(stop.startMs, stop.endMs)
+
+        val analysis = TripSplitRules.analyze(gearAware, samples, listOf(userSplit))
+
+        assertEquals(listOf(stop.startMs to stop.endMs), analysis.splitSpans.map { it.startMs to it.endMs })
+        assertTrue("the split stop is a trip boundary now", analysis.stops.isEmpty())
+    }
+
+    @Test
+    fun userSplitsAreIgnoredForLegacySessionsAndStandAloneWithoutGear() {
+        val userSplit = TripSplitRules.Span(minute(5), minute(9))
+        assertSame(
+            TripSplitRules.Analysis.NONE,
+            TripSplitRules.analyze(TripSplitRules.LEGACY, emptyList(), listOf(userSplit)),
+        )
+        val analysis = TripSplitRules.analyze(gearAware, emptyList(), listOf(userSplit))
+        assertEquals(1, analysis.splitSpans.size)
+        assertTrue(analysis.stops.isEmpty())
+    }
+
+    @Test
     fun tenMinutesInParkSplits() {
         val analysis =
             TripSplitRules.analyze(

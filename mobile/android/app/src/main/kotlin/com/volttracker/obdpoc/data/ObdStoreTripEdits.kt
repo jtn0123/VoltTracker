@@ -7,9 +7,21 @@ package com.volttracker.obdpoc.data
  * (audit item A2).
  */
 internal class ObdStoreTripEdits(
+    helper: VoltTrackerDb,
     private val writer: ObdStoreWriter,
     private val trips: ObdStoreTrips,
+    rematerializeTrips: (ObdSessionRecord) -> Unit,
 ) : ObdTripEditStore {
+    private val splits = ObdStoreTripSplitEdits(helper, writer, trips, this, rematerializeTrips)
+
+    override fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: Long,
+        stopEndMs: Long,
+    ): TripSplitOutcome? = splits.splitTripAtStop(routeKey, stopStartMs, stopEndMs)
+
+    override fun mergeTripSplit(splitKey: String?): TripSplitOutcome? = splits.mergeTripSplit(splitKey)
+
     override fun setTripLabel(
         routeKey: String?,
         label: String?,

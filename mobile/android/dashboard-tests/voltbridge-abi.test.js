@@ -26,6 +26,7 @@ const NATIVE_METHODS = [
   'backfillTelemetry',
   'showToast',
   'showTripUndo',
+  'tripSplitChanged',
   'setBackupReceipt',
   'applyRestoredPreferences',
   'openTrip',
