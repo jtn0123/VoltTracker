@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.38.0 (2026-09-26)
+
+### 🔺 Fix
+
+- **charge**: An idling engine at a standstill is not an EVSE charge
+  ([#74](https://github.com/jtn0123/VoltTracker/pull/74),
+  [`1cb74e6`](https://github.com/jtn0123/VoltTracker/commit/1cb74e600123542579338676e38cab2201fdc30d))
+
+- **obd**: End-of-drive drops end cleanly; ignore a redundant CONNECT
+  ([#76](https://github.com/jtn0123/VoltTracker/pull/76),
+  [`b38f750`](https://github.com/jtn0123/VoltTracker/commit/b38f750af31eab015eb1c4eefbd1b52fc29a8a72))
+
+- **obd**: Re-probe retired PIDs so a parked-then-driven session gets speed back
+  ([#73](https://github.com/jtn0123/VoltTracker/pull/73),
+  [`132f547`](https://github.com/jtn0123/VoltTracker/commit/132f54727087ed1bbc3e8d8dbc7a3766f03c25de))
+
+### ✳️ New
+
+- **obd**: Listen-only SW-CAN (GMLAN) broadcast reading on OBDLink adapters
+  ([#75](https://github.com/jtn0123/VoltTracker/pull/75),
+  [`eba6dc3`](https://github.com/jtn0123/VoltTracker/commit/eba6dc3fd5ba7febcf210d03dc460a502f71a214))
+
+- **obd**: Poll the OVMS Volt readings we skipped; read motor temps from their own nodes
+  ([#72](https://github.com/jtn0123/VoltTracker/pull/72),
+  [`f346b56`](https://github.com/jtn0123/VoltTracker/commit/f346b565619a857aa33212296082b594eccfc9d5))
+
+
 ## v0.37.0 (2026-09-26)
 
 ### 🔺 Fix
