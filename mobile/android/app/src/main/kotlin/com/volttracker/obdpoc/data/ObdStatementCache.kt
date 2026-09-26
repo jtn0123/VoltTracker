@@ -98,9 +98,17 @@ class ObdStatementCache : Closeable {
                 "charge_transition_hint," +
                 "app_foreground," +
                 "raw," +
-                "json" +
+                "json," +
+                "prndl_raw," +
+                "door_open" +
                 ") VALUES (" +
-                "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+                "?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+
+        /** A PRNDL reading older than this is not stored as the row's gear (TripSplitRules). */
+        private const val GEAR_FRESH_MS: Long = 120_000L
+
+        /** SW-CAN door/hatch fields (SwcanReadings); any "open" marks the row door_open = 1. */
+        private val DOOR_KEYS = arrayOf("doorFlState", "doorFrState", "doorRlState", "doorRrState", "trunkState")
 
         private fun bindTelemetry(
             stmt: SQLiteStatement,
@@ -137,6 +145,28 @@ class ObdStatementCache : Closeable {
             bindOptionalBool(stmt, 25, sample, "appForeground")
             stmt.bindString(26, ObdStoreSupport.clean(sample.optString("raw", "")))
             stmt.bindString(27, sample.toString())
+            freshPrndlRaw(sample)?.let { stmt.bindLong(28, it.toLong()) }
+            doorOpen(sample)?.let { stmt.bindLong(29, if (it) 1L else 0L) }
+        }
+
+        /** The raw PRNDL code when the sample carries a reading at most [GEAR_FRESH_MS] old. */
+        private fun freshPrndlRaw(sample: JSONObject): Int? {
+            if (!sample.has("prndlRaw") || sample.isNull("prndlRaw")) return null
+            val raw = sample.optDouble("prndlRaw", Double.NaN)
+            if (!raw.isFinite()) return null
+            val staleMs = sample.optLong("prndlStateStaleMs", 0L)
+            return if (staleMs <= GEAR_FRESH_MS) raw.toInt() else null
+        }
+
+        /** True if any door/hatch reads "open", false if some read and none is open, else null. */
+        private fun doorOpen(sample: JSONObject): Boolean? {
+            var seen = false
+            for (key in DOOR_KEYS) {
+                val state = sample.optString(key, "")
+                if (state == "open") return true
+                if (state.isNotEmpty()) seen = true
+            }
+            return if (seen) false else null
         }
 
         private fun bindOptionalInt(

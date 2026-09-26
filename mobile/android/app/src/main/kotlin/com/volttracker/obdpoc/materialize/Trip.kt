@@ -15,6 +15,8 @@ class Trip(
     confidence: Confidence?,
     classification: String? = CLASSIFICATION_UNKNOWN,
     @JvmField val energyKwh: Double? = null,
+    /** In-trip Park stops too short to split the trip (gear-aware sessions only). */
+    @JvmField val parkStops: List<TripSplitRules.ParkStop> = emptyList(),
 ) {
     @JvmField val confidence: Confidence = confidence ?: Confidence.UNKNOWN
 

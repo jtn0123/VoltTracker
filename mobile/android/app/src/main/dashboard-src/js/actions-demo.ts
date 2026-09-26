@@ -176,6 +176,9 @@ export function runBrowserDemoStream(
       motorAPowerKw: charging ? 0 : Number((powerKw * 0.6).toFixed(1)),
       transmissionTempC: Number((68 + 3 * Math.sin(t / 7)).toFixed(1)),
       prndlState: charging ? "P" : "D",
+      // Raw PRNDL codes (VoltGear.kt): 8 = Park, 3 = Drive, both confirmed from field logs.
+      prndlRaw: charging ? 8 : 3,
+      gearConfidence: "confirmed",
       motorTempC: Number((55 + 5 * Math.sin(t / 9)).toFixed(1)),
       inverterTempC: Number((42 + 3 * Math.sin(t / 8)).toFixed(1)),
       displayedSocPct: Number(soc.toFixed(1)),

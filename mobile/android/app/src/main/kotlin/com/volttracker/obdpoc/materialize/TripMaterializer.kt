@@ -97,36 +97,48 @@ object TripMaterializer {
             return result
         }
         val telemetry = data.readTelemetrySamples(input.sessionId)
-        val inactiveSpans = splitSpans(samples, telemetry)
+        val gear = TripSplitRules.analyze(input.tripRulesVersion, gearSamples(telemetry))
+        val inactiveSpans = splitSpans(samples, telemetry, gear)
 
         var window = mutableListOf<LocationSample>()
         for (sample in samples) {
             if (insideInactiveSpan(sample.capturedAtMs, inactiveSpans)) {
-                appendTripsCapped(result, window, telemetry)
+                appendTripsCapped(result, window, telemetry, gear)
                 window = mutableListOf()
                 continue
             }
             if (window.isNotEmpty()) {
                 val gap = sample.capturedAtMs - window.last().capturedAtMs
                 if (gap > Tunables.MAX_GAP_MS) {
-                    appendTripsCapped(result, window, telemetry)
+                    appendTripsCapped(result, window, telemetry, gear)
                     window = mutableListOf()
                 }
             }
             window.add(sample)
         }
         if (window.isNotEmpty()) {
-            appendTripsCapped(result, window, telemetry)
+            appendTripsCapped(result, window, telemetry, gear)
         }
         return result
     }
 
+    private fun gearSamples(telemetry: List<TelemetrySample>?): List<TripSplitRules.GearSample> =
+        telemetry.orEmpty().map { TripSplitRules.GearSample(it.capturedAtMs, it.prndlRaw, it.doorOpen) }
+
+    /**
+     * Legacy stop/inactivity spans, minus any the gear rules govern (a known gear throughout), plus
+     * the gear rules' own Park splits. For a legacy session [gear] is [TripSplitRules.Analysis.NONE]
+     * and this is exactly the legacy span set.
+     */
     private fun splitSpans(
         samples: List<LocationSample>,
         telemetry: List<TelemetrySample>?,
+        gear: TripSplitRules.Analysis,
     ): List<InactiveSpan> {
         val spans = gpsStopSpans(samples, telemetry).toMutableList()
         spans.addAll(inactiveSpans(telemetry))
+        spans.removeAll { gear.governs(it.startMs, it.endMs) }
+        gear.splitSpans.mapTo(spans) { InactiveSpan(it.startMs, it.endMs) }
         spans.sortBy { it.startMs }
 
         val merged = mutableListOf<InactiveSpan>()
@@ -315,13 +327,14 @@ object TripMaterializer {
         result: MutableList<Trip>,
         window: List<LocationSample>,
         telemetry: List<TelemetrySample>?,
+        gear: TripSplitRules.Analysis,
     ) {
         if (window.size < 2) {
             return
         }
         val duration = window.last().capturedAtMs - window.first().capturedAtMs
         if (duration <= Tunables.MAX_TRIP_DURATION_MS) {
-            buildTrip(window, telemetry)?.let(result::add)
+            buildTrip(window, telemetry, gear)?.let(result::add)
             return
         }
 
@@ -339,16 +352,17 @@ object TripMaterializer {
             }
         }
         if (splitIndex <= 0) {
-            buildTrip(window, telemetry)?.let(result::add)
+            buildTrip(window, telemetry, gear)?.let(result::add)
             return
         }
-        appendTripsCapped(result, ArrayList(window.subList(0, splitIndex)), telemetry)
-        appendTripsCapped(result, ArrayList(window.subList(splitIndex, window.size)), telemetry)
+        appendTripsCapped(result, ArrayList(window.subList(0, splitIndex)), telemetry, gear)
+        appendTripsCapped(result, ArrayList(window.subList(splitIndex, window.size)), telemetry, gear)
     }
 
     private fun buildTrip(
         window: List<LocationSample>,
         telemetry: List<TelemetrySample>?,
+        gear: TripSplitRules.Analysis,
     ): Trip? {
         if (window.size < 2) {
             return null
@@ -401,6 +415,7 @@ object TripMaterializer {
             confidence,
             classification,
             energyKwh,
+            gear.stopsWithin(startedAtMs, endedAtMs),
         )
     }
 

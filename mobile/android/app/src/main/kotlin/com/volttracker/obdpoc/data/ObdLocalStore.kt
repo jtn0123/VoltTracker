@@ -404,7 +404,7 @@ open class ObdLocalStore(
         startedAtMs: Long,
         closedAtMs: Long,
     ) {
-        val input = MaterializerInput(sessionId, startedAtMs, closedAtMs)
+        val input = MaterializerInput(sessionId, startedAtMs, closedAtMs, materialize.readTripRulesVersion(sessionId))
         persistTrips(sessionId, TripMaterializer.materialize(input, this))
         persistChargeSessions(sessionId, ChargeSessionMaterializer.materialize(input, this))
     }

@@ -36,6 +36,13 @@ class LiveUiStateStoreTest {
             .apply(block)
 
     @Test
+    fun anUnseenGearCodeShowsAsUnknownWithItsNumber() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample { put("prndlState", "?").put("prndlRaw", 13).put("gearConfidence", "unknown") })
+        assertEquals("? (code 13)", store.state.value.drive.gear)
+    }
+
+    @Test
     fun telemetrySampleMapsUnitsIntoDriveState() {
         val store = LiveUiStateStore()
         store.onTelemetry(sample())

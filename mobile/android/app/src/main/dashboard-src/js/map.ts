@@ -51,6 +51,8 @@ import { VD } from "./vd-registry";
     durationMs: number;
     startMs: number;
     endMs: number;
+    /** A gear-confirmed stop in Park inside the trip (native TripSplitRules). */
+    parked?: boolean;
   };
 
   type MutablePolylineLayer = LeafletLayer & {
@@ -513,7 +515,8 @@ import { VD } from "./vd-registry";
     const isLiveRoute = routeIsLive(route);
     const hasMapContent = hasRoute || (isLiveRoute && points.some(isValidRoutePoint));
     const layer = isLiveRoute ? "routes" : state.mapLayer;
-    const stops = hasRoute ? detectStops(points.filter(isValidRoutePoint)) : [];
+    const parkStops = routeParkStops(route);
+    const stops = hasRoute ? stopsForRoute(points.filter(isValidRoutePoint), parkStops) : [];
 
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
@@ -626,7 +629,7 @@ import { VD } from "./vd-registry";
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     syncRemoteTiles();
     maybeShowMapPrivacyNotice();
-    drawMapRoute(points, hasRoute, layer, routeSession);
+    drawMapRoute(points, hasRoute, layer, routeSession, parkStops);
     if (hasRoute && typeof VD.renderScrubber === "function") VD.renderScrubber(route);
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();
     renderMapListsIfChanged(routes);
@@ -1076,7 +1079,13 @@ import { VD } from "./vd-registry";
   }
 
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
-  function drawMapRoute(points: VoltRoutePoint[], hasRoute: boolean, layer: string, routeSession: MapRouteSession) {
+  function drawMapRoute(
+    points: VoltRoutePoint[],
+    hasRoute: boolean,
+    layer: string,
+    routeSession: MapRouteSession,
+    parkStops: VoltParkStop[] = []
+  ) {
     const container = el("mapLeaflet");
     if (!container || !container.offsetWidth || !container.offsetHeight) return;
     const map = ensureMap();
@@ -1245,16 +1254,16 @@ import { VD } from "./vd-registry";
     mapLayerGroups.stops = L.layerGroup([
       L.polyline(latlngs, { color: routeColor, weight: 2.5, opacity: 0.4 })
     ]);
-    const stops = detectStops(drawable).slice(0, MAX_DRAWN_STOPS);
+    const stops = stopsForRoute(drawable, parkStops).slice(0, MAX_DRAWN_STOPS);
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       const marker = L.circleMarker([stop.lat, stop.lng], {
         radius, color: "#ffd7b0", weight: 3, fillColor: "#ff8a3d", fillOpacity: 0.38
-      }).bindTooltip(`Stop · ${VD.formatDuration(stop.durationMs)}`);
+      }).bindTooltip(stop.parked ? `${parkStopLabel(stop.durationMs)} · in Park` : `Stop · ${VD.formatDuration(stop.durationMs)}`);
       // Tap a stop -> arrived / back-on-road times in the detail card.
       marker.on("click", () => {
         showSegPop({
-          title: "Stop",
+          title: stop.parked ? "Stopped in Park" : "Stop",
           sub: `Arrived ${fmtClockTime(stop.startMs)} · back on road ${fmtClockTime(stop.endMs)}`,
           stat: VD.formatDuration(stop.durationMs),
           tone: "warn"
@@ -1863,12 +1872,13 @@ import { VD } from "./vd-registry";
   }
 
   // Stops along the drive (v2): same detection as the map's Stops layer,
-  // listed with arrive time + dwell duration.
+  // listed with arrive time + dwell duration. Stops the car spent in Park
+  // (gear-confirmed, native TripSplitRules) read "Stopped N min".
   function renderTripDetailStops(route: MapRoute): void {
     const card = el("tripDetailStopsCard");
     const list = el("tripDetailStops");
     if (!card || !list) return;
-    const stops = detectStops((route.points || []).filter(isValidRoutePoint)).slice(0, 6);
+    const stops = stopsForRoute((route.points || []).filter(isValidRoutePoint), routeParkStops(route)).slice(0, 6);
     if (!stops.length) {
       card.hidden = true;
       list.replaceChildren();
@@ -1883,9 +1893,15 @@ import { VD } from "./vd-registry";
         dot.className = "trip-detail-stop-dot";
         const name = document.createElement("span");
         name.className = "trip-detail-stop-name";
-        name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
         const dur = document.createElement("b");
-        dur.textContent = VD.formatDuration(stop.durationMs);
+        if (stop.parked) {
+          row.dataset.stopKind = "park";
+          name.textContent = `${parkStopLabel(stop.durationMs)} · ${fmtClockTime(stop.startMs)}`;
+          dur.textContent = "in Park";
+        } else {
+          name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
+          dur.textContent = VD.formatDuration(stop.durationMs);
+        }
         row.append(dot, name, dur);
         return row;
       })
@@ -2231,6 +2247,53 @@ import { VD } from "./vd-registry";
     });
   }
 
+  // In-trip Park stops native attaches to a gear-aware route (>= 2 min in Park,
+  // too short to end the trip). Absent on older routes, which keep GPS-only stops.
+  function routeParkStops(route: VoltRoute | null | undefined): VoltParkStop[] {
+    const raw = route ? route.parkStops : null;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((stop): stop is VoltParkStop => {
+      if (!stop || typeof stop !== "object") return false;
+      const s = stop as VoltParkStop;
+      return Number.isFinite(Number(s.startMs)) && Number(s.endMs) > Number(s.startMs);
+    });
+  }
+
+  function parkStopLabel(durationMs: number): string {
+    return `Stopped ${Math.max(1, Math.round(durationMs / 60000))} min`;
+  }
+
+  // GPS-detected stops with the gear-confirmed Park stops merged in: a GPS stop
+  // overlapping a Park stop is replaced by it; a Park stop GPS missed is placed at
+  // the route point nearest its middle. Without Park stops this is detectStops.
+  function stopsForRoute(points: VoltRoutePoint[], parkStops: VoltParkStop[]): MapStop[] {
+    const gps = detectStops(points);
+    if (!parkStops.length) return gps;
+    const merged = gps.filter((stop) =>
+      !parkStops.some((park) => stop.startMs <= Number(park.endMs) && stop.endMs >= Number(park.startMs)));
+    for (const park of parkStops) {
+      const startMs = Number(park.startMs);
+      const endMs = Number(park.endMs);
+      const at = pointNearestTime(points, (startMs + endMs) / 2);
+      if (!at) continue;
+      merged.push({ lat: at.lat, lng: at.lng, durationMs: endMs - startMs, startMs, endMs, parked: true });
+    }
+    return merged.sort((a, b) => a.startMs - b.startMs);
+  }
+
+  function pointNearestTime(points: VoltRoutePoint[], atMs: number): VoltRoutePoint | null {
+    let best: VoltRoutePoint | null = null;
+    let bestGap = Infinity;
+    for (const point of points) {
+      const gap = Math.abs(Number(point.atMs) - atMs);
+      if (Number.isFinite(gap) && gap < bestGap) {
+        best = point;
+        bestGap = gap;
+      }
+    }
+    return best;
+  }
+
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
   function detectStops(points: VoltRoutePoint[]): MapStop[] {
     const stops: MapStop[] = [];
@@ -2434,6 +2497,13 @@ import { VD } from "./vd-registry";
       startSoc: 73, socDrop: 18, accW: 380,  // morning descent
       elevShift: 4
     });
+    // A 4-min stop in Park mid-drive (native TripSplitRules: >= 2 min in Park but
+    // short of a trip split), so the demo exercises the "Stopped N min" trip-detail
+    // row and the map's Park stop. Kept off today's drive, the default map view.
+    const parkStartMs = yesterday.session.startedAtMs +
+      Math.round((yesterday.session.endedAtMs - yesterday.session.startedAtMs) * 0.45);
+    const parkMs = 4 * 60 * 1000;
+    yesterday.parkStops = [{ startMs: parkStartMs, endMs: parkStartMs + parkMs, durationMs: parkMs, doorOpened: false }];
     const routes = [today, yesterday, earlier];
 
     // Per-trip ambient + efficiency so the demo exercises the v2

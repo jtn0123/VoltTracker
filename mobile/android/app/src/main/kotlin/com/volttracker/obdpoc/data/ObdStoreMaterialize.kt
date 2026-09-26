@@ -8,6 +8,7 @@ import com.volttracker.obdpoc.materialize.LocationSample
 import com.volttracker.obdpoc.materialize.PidObservation
 import com.volttracker.obdpoc.materialize.TelemetrySample
 import com.volttracker.obdpoc.materialize.Trip
+import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 import java.util.Collections
@@ -93,6 +94,8 @@ class ObdStoreMaterialize(
                     "pack_current_a",
                     "power_kw",
                     "soc",
+                    "prndl_raw",
+                    "door_open",
                 ),
                 "session_id = ?",
                 arrayOf(sessionId.toString()),
@@ -112,12 +115,22 @@ class ObdStoreMaterialize(
                             nullableDouble(cursor, "pack_current_a"),
                             nullableDouble(cursor, "power_kw"),
                             nullableDouble(cursor, "soc"),
+                            nullableInt(cursor, "prndl_raw"),
+                            nullableInt(cursor, "door_open")?.let { it != 0 },
                         ),
                     )
                 }
             }
         return Collections.unmodifiableList(rows)
     }
+
+    /** The session's stamped TripSplitRules version; legacy (0) when unknown. */
+    fun readTripRulesVersion(sessionId: Long): Int =
+        helper.readableDatabase
+            .rawQuery(
+                "SELECT trip_rules_version FROM ${VoltTrackerDb.TABLE_SESSIONS} WHERE _id = ?",
+                arrayOf(sessionId.toString()),
+            ).use { cursor -> if (cursor.moveToFirst() && !cursor.isNull(0)) cursor.getInt(0) else 0 }
 
     fun persistTrips(
         sessionId: Long,
@@ -145,10 +158,28 @@ class ObdStoreMaterialize(
                 if (trip.energyKwh != null) {
                     values.put("energy_kwh", trip.energyKwh)
                 }
+                if (trip.parkStops.isNotEmpty()) {
+                    values.put("summary_json", parkStopsSummaryJson(trip))
+                }
                 values.put("created_at_ms", createdAt)
                 db.insertOrThrow(VoltTrackerDb.TABLE_TRIP_SEGMENTS, null, values)
             }
         }
+    }
+
+    /** `{"parkStops":[{startMs,endMs,durationMs,doorOpened}]}` for a trip's in-trip Park stops. */
+    private fun parkStopsSummaryJson(trip: Trip): String {
+        val stops = JSONArray()
+        for (stop in trip.parkStops) {
+            stops.put(
+                JSONObject()
+                    .put("startMs", stop.startMs)
+                    .put("endMs", stop.endMs)
+                    .put("durationMs", stop.durationMs)
+                    .put("doorOpened", stop.doorOpened),
+            )
+        }
+        return JSONObject().put("parkStops", stops).toString()
     }
 
     fun persistChargeSessions(
