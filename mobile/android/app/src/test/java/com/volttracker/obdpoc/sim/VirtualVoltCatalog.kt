@@ -122,52 +122,58 @@ object VirtualVoltCatalog {
      * fails if a PidSchedule entry is missing here, so a new PID can't silently skip the scorecard.
      */
     val FIELDS_BY_COMMAND: Map<String, List<String>> =
-        mapOf(
-            "010D" to listOf("speedKph"),
-            "010C" to listOf("rpm"),
-            "0149" to listOf("throttlePct"),
-            "0111" to listOf("throttlePct"),
-            "0104" to listOf("loadPct"),
-            "015B" to listOf("soc"),
-            "ATRV" to listOf("voltage"),
-            "0105" to listOf("coolantC"),
-            "010F" to listOf("intakeAirTempC"),
-            "0142" to listOf("controlModuleVoltage"),
-            "011F" to listOf("engineRunTimeSec"),
-            "015C" to listOf("engineOilTempC"),
-            "012F" to listOf("fuelLevelPct"),
-            "01A6" to listOf("odometerKm", "odometerMiles"),
-            "22119F" to listOf("engineOilLifePct"),
-            "22119F01" to listOf("engineOilLifePct"),
-            "221154" to listOf("engineOilTempC"),
-            "222414" to listOf("powerKw"),
-            "222429" to listOf("packVoltage", "powerKw"),
-            "222883" to listOf("motorACurrentA", "motorAPowerKw"),
-            "222884" to listOf("motorBCurrentA", "motorBPowerKw"),
-            "222885" to listOf("motorAVoltage", "motorAPowerKw"),
-            "222886" to listOf("motorBVoltage", "motorBPowerKw"),
-            "222889" to listOf("prndlState"),
-            "222487" to listOf("evDistanceThisCycleKm"),
-            "221940" to listOf("transmissionTempC"),
-            "22194001" to listOf("transmissionTempC"),
-            "22434F" to listOf("batteryTemp"),
-            "22436B" to listOf("chargerHvVoltage", "chargerPowerKw"),
-            "22436C" to listOf("chargerHvCurrent", "chargerPowerKw"),
-            "224373" to listOf("chargingMode"),
-            "224531" to listOf("chargingLevel"),
-            "2243AF" to listOf("hvBatteryRawSoc"),
-            "224329" to listOf("minCellVoltage", "cellBalanceMv"),
-            "22432B" to listOf("maxCellVoltage", "cellBalanceMv"),
-            "22432A" to listOf("minCellNumber"),
-            "22432C" to listOf("maxCellNumber"),
-            "22435F" to listOf("socVariationPct"),
-            "2241B2" to listOf("batteryCoolantPumpRpm"),
-            "2241B4" to listOf("batteryCoolantValveRaw"),
-            "2241B6" to listOf("batteryHeaterPowerW"),
-            "22801E" to listOf("outsideTempRawC"),
-            "22801F" to listOf("outsideTempC"),
-            "2243A5" to listOf("hvBatteryChargeCount"),
-            "22437D" to listOf("lastChargeEnergyWh"),
-            "2241A3" to listOf("capacityAh", "sohPct", "packEnergyKwh"),
-        )
+        """
+        010D speedKph
+        010C rpm
+        0149 throttlePct
+        0111 throttlePct
+        0104 loadPct
+        015B soc
+        ATRV voltage
+        0105 coolantC
+        010F intakeAirTempC
+        0142 controlModuleVoltage
+        011F engineRunTimeSec
+        015C engineOilTempC
+        012F fuelLevelPct
+        01A6 odometerKm odometerMiles
+        22119F engineOilLifePct
+        22119F01 engineOilLifePct
+        221154 engineOilTempC
+        222414 powerKw
+        222429 packVoltage powerKw
+        222883 motorACurrentA motorAPowerKw
+        222884 motorBCurrentA motorBPowerKw
+        222885 motorAVoltage motorAPowerKw
+        222886 motorBVoltage motorBPowerKw
+        222889 prndlState
+        222487 evDistanceThisCycleKm
+        221940 transmissionTempC
+        22194001 transmissionTempC
+        22434F batteryTemp
+        22436B chargerHvVoltage chargerPowerKw
+        22436C chargerHvCurrent chargerPowerKw
+        224373 chargingMode
+        224531 chargingLevel
+        2243AF hvBatteryRawSoc
+        224329 minCellVoltage cellBalanceMv
+        22432B maxCellVoltage cellBalanceMv
+        22432A minCellNumber
+        22432C maxCellNumber
+        22435F socVariationPct
+        2241B2 batteryCoolantPumpRpm
+        2241B4 batteryCoolantValveRaw
+        2241B6 batteryHeaterPowerW
+        22801E outsideTempRawC
+        22801F outsideTempC
+        2243A5 hvBatteryChargeCount
+        22437D lastChargeEnergyWh
+        2241A3 capacityAh sohPct packEnergyKwh
+        """.trimIndent()
+            .lines()
+            .filter(String::isNotBlank)
+            .associate { line ->
+                val parts = line.trim().split(" ")
+                parts.first() to parts.drop(1)
+            }
 }

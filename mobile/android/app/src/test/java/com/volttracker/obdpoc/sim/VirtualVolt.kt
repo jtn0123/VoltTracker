@@ -115,7 +115,9 @@ class VirtualVolt(
     private companion object {
         const val BROADCAST = "7DF"
         const val NO_DATA = "NO DATA"
-        const val VIN = "1G1RC6S5XJU000000"
+
+        // 17 characters like a real VIN, but obviously synthetic (VINs never contain I, O or Q).
+        const val VIN = "SYNTHETICVOLTVIN0"
 
         fun isHex(c: Char): Boolean = c in '0'..'9' || c in 'A'..'F'
 
