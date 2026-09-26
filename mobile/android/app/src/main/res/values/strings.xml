@@ -238,4 +238,11 @@
     <string name="widget_updated_days">Updated %1$dd ago</string>
     <string name="widget_updated_stale">%1$s (stale)</string>
     <string name="widget_content_description">Volt Tracker: %1$s state of charge, %2$s. %3$s</string>
+    <string name="update_offer_title">Update available</string>
+    <string name="update_offer_message">Volt Tracker %1$s is ready to install.</string>
+    <string name="update_offer_install">Install</string>
+    <string name="update_offer_later">Later</string>
+    <string name="update_downloading">Downloading %1$s…</string>
+    <string name="update_download_failed">Update download failed. It will be offered again next launch.</string>
+    <string name="update_opening_installer">Opening Android\'s installer…</string>
 </resources>
