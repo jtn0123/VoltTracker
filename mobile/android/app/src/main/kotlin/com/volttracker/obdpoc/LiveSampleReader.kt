@@ -133,6 +133,7 @@ class LiveSampleReader(
             appendCellBalanceFields(sample)
             appendChargingFields(sample)
             appendEnhancedContextFields(sample)
+            appendOvmsFields(sample)
 
             val now = System.currentTimeMillis()
             pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now)
@@ -169,6 +170,7 @@ class LiveSampleReader(
             putPowerStaleMsIfKnown(sample, now)
             putChargingStaleMs(sample, now)
             putEnhancedContextStaleMs(sample, now)
+            putOvmsStaleMs(sample, now)
 
             val sampleCount = context.incrementSampleCount()
             sample.put("source", "obd")
@@ -396,6 +398,53 @@ class LiveSampleReader(
         putNumeric(sample, "displayedSocPct", "228334", 1)
         putNumeric(sample, "packResistanceMohm", "2240E9", 1)
         putNumeric(sample, "hvIsolationKohm", "2243A6", 0)
+    }
+
+    /** Readings the OVMS Volt/Ampera module polls on a MY2017 that this app previously skipped. */
+    @Throws(JSONException::class)
+    private fun appendOvmsFields(sample: JSONObject) {
+        putNumeric(sample, "motorBTempC", "22368F", 0)
+        putNumeric(sample, "evRangeKm", "2241A6", 0)
+        putNumeric(sample, "batteryHeaterPct", "22439E", 0)
+        putNumeric(sample, "pemCoolantTempC", "221C43", 0)
+        putNumeric(sample, "lifetimeChargeEnergyKwh", "224389", 1)
+        // Spelled out rather than looped: the dashboard's sample-contract test reads keys literally.
+        putNumeric(sample, "packSection1TempC", "2240D7", 0)
+        putNumeric(sample, "packSection2TempC", "2240D9", 0)
+        putNumeric(sample, "packSection3TempC", "2240DB", 0)
+        putNumeric(sample, "packSection4TempC", "2240DD", 0)
+        putNumeric(sample, "packSection5TempC", "2240DF", 0)
+        putNumeric(sample, "packSection6TempC", "2240E1", 0)
+    }
+
+    @Throws(JSONException::class)
+    private fun putOvmsStaleMs(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        putStaleMsForPresentValue(sample, "motorBTempC", "motorBTempStaleMs", "22368F", now)
+        putStaleMsForPresentValue(sample, "evRangeKm", "evRangeStaleMs", "2241A6", now)
+        putStaleMsForPresentValue(sample, "batteryHeaterPct", "batteryHeaterPctStaleMs", "22439E", now)
+        putStaleMsForPresentValue(sample, "pemCoolantTempC", "pemCoolantStaleMs", "221C43", now)
+        putStaleMsForPresentValue(
+            sample,
+            "lifetimeChargeEnergyKwh",
+            "lifetimeChargeEnergyStaleMs",
+            "224389",
+            now,
+        )
+        // The six sections are read as one block, so one freshness figure (the stalest) covers them.
+        val present =
+            PACK_SECTION_TEMP_COMMANDS.filterIndexed {
+                index,
+                _,
+                ->
+                sample.has("packSection${index + 1}TempC")
+            }
+        val stalest = present.mapNotNull { pidPolling.staleMsFor(it, now) }.maxOrNull()
+        if (stalest != null) {
+            sample.put("packSectionTempStaleMs", stalest)
+        }
     }
 
     @Throws(JSONException::class)
@@ -715,5 +764,8 @@ class LiveSampleReader(
     private companion object {
         /** Consecutive 010D 0xFF sentinels required before treating it as a plugged hint. */
         private const val SPEED_SENTINEL_PLUGGED_CYCLES = 2
+
+        /** BECM (7E7) pack-section temperature DIDs, sections 1-6 in order. */
+        private val PACK_SECTION_TEMP_COMMANDS = listOf("2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1")
     }
 }

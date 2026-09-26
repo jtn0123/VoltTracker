@@ -11,6 +11,9 @@ import java.util.concurrent.atomic.AtomicInteger
  *
  * Unlike the command-keyed scripted fakes, it keeps adapter state the way real hardware does:
  * `ATSH` selects which module answers, so a Mode-22 DID only answers on the header that owns it.
+ * The CAN receive filter is modelled too: the automatic filter only accepts 7E8-7EF, so a node
+ * outside 7E0-7E7 (e.g. 0x257, replying on 0x657) is heard only after a matching `ATCRA`, and a
+ * leftover `ATCRA` deafens the adapter to the 7Ex modules until `ATAR` restores the auto filter.
  * Replies come from [VirtualVoltCatalog] and are formatted the way an ELM327 prints them with
  * `ATE0 ATS0 ATH0 ATCAF1` (the app's init): hex without spaces, ISO-TP multi-frame replies in
  * `NNN / 0: / 1:` segmented form, and `NO DATA` when the addressed module stays silent.
@@ -40,6 +43,10 @@ class VirtualVolt(
 
     @Volatile
     private var header = BROADCAST
+
+    /** Reply ID set by `ATCRA`, or null while the adapter's automatic 7E8-7EF filter is active. */
+    @Volatile
+    private var receiveFilter: String? = null
 
     fun afterCommand(
         command: String,
@@ -79,9 +86,21 @@ class VirtualVolt(
 
     private fun answer(command: String): String =
         when {
-            command == "ATZ" -> "ELM327 v1.5"
+            command == "ATZ" -> {
+                header = BROADCAST
+                receiveFilter = null
+                "ELM327 v1.5"
+            }
             command.startsWith("ATSH") -> {
                 header = command.removePrefix("ATSH")
+                "OK"
+            }
+            command.startsWith("ATCRA") -> {
+                receiveFilter = command.removePrefix("ATCRA").ifEmpty { null }
+                "OK"
+            }
+            command == "ATAR" -> {
+                receiveFilter = null
                 "OK"
             }
             command == "ATRV" -> VirtualVoltCatalog.find(BROADCAST, command)?.replies?.get(mode) ?: "?"
@@ -89,8 +108,19 @@ class VirtualVolt(
             command == "0100" && header == BROADCAST -> "4100BE3FA813"
             command == "0902" && header == BROADCAST -> segmented(vinPayload())
             isMode01Batch(command) && header == BROADCAST -> mode01Batch(command)
+            !replyPassesFilter() -> NO_DATA
             else -> VirtualVoltCatalog.find(header, command)?.replies?.get(mode) ?: NO_DATA
         }
+
+    /** Whether the addressed module's reply ID (request + 8, or + 0x400 off 7Ex) gets through. */
+    private fun replyPassesFilter(): Boolean {
+        val filter = receiveFilter
+        val autoFiltered = header == BROADCAST || header.startsWith("7E")
+        if (filter == null) return autoFiltered
+        if (autoFiltered) return false
+        val replyId = header.toIntOrNull(16)?.plus(0x400) ?: return false
+        return filter == "%03X".format(replyId)
+    }
 
     private fun isMode01Batch(command: String): Boolean =
         command.length > 4 && command.length % 2 == 0 && command.startsWith("01") && command.all(::isHex)
