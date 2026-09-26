@@ -21,6 +21,13 @@ import java.util.concurrent.atomic.AtomicInteger
 class VirtualVolt(
     private val mode: VirtualVoltCatalog.Mode,
     private val batchStyle: BatchStyle = BatchStyle.J1979,
+    /**
+     * True to behave like an OBDLink (STN chip): answers `STI`, accepts ST commands, and can switch
+     * to single-wire CAN (`STP 61`) where `STM` hears [VirtualVoltCatalog.SWCAN_FRAMES]. While
+     * switched off HS-CAN, every OBD request answers NO DATA, exactly like the real adapter, so a
+     * listener that forgets to switch back breaks polling visibly.
+     */
+    private val stn: Boolean = false,
 ) : ElmConnection() {
     /**
      * How the ECM answers a multi-PID Mode-01 request such as `010D0C49`.
@@ -48,6 +55,9 @@ class VirtualVolt(
     @Volatile
     private var receiveFilter: String? = null
 
+    @Volatile
+    private var protocol = HS_PROTOCOL
+
     fun afterCommand(
         command: String,
         hook: Runnable,
@@ -71,11 +81,33 @@ class VirtualVolt(
         timeoutMs: Long,
         keepWaiting: KeepWaiting,
     ): String {
-        val clean = command.trim().uppercase()
+        val clean = command.trim().uppercase().replace(" ", "")
         val reply = answer(clean)
         exchanges.add(Exchange(header, clean, reply))
         afterCommandHooks[clean]?.run()
         return "$reply\r>"
+    }
+
+    override fun monitor(
+        command: String,
+        listenMs: Long,
+        stopTimeoutMs: Long,
+        keepWaiting: KeepWaiting,
+    ): MonitorResult {
+        val clean = command.trim().uppercase()
+        if (!stn) {
+            exchanges.add(Exchange(header, clean, "?"))
+            return MonitorResult("?\r>", true, true, false)
+        }
+        val frames =
+            if (protocol == SWCAN_PROTOCOL) {
+                VirtualVoltCatalog.SWCAN_FRAMES.getValue(mode).joinToString("\r") { it.line } + "\r"
+            } else {
+                ""
+            }
+        val text = frames + "STOPPED\r\r>"
+        exchanges.add(Exchange(header, clean, text))
+        return MonitorResult(text, true, false, false)
     }
 
     override fun sendEscape(settleMs: Long) = Unit
@@ -89,7 +121,19 @@ class VirtualVolt(
             command == "ATZ" -> {
                 header = BROADCAST
                 receiveFilter = null
+                protocol = HS_PROTOCOL
                 "ELM327 v1.5"
+            }
+            command == "STI" -> if (stn) "STN2255 v5.10.3" else "?"
+            command.startsWith("STP") && stn -> {
+                protocol = command.removePrefix("STP")
+                "OK"
+            }
+            command.startsWith("ST") -> if (stn) "OK" else "?"
+            command == "ATDPN" -> protocol
+            command == "ATSP6" -> {
+                protocol = HS_PROTOCOL
+                "OK"
             }
             command.startsWith("ATSH") -> {
                 header = command.removePrefix("ATSH")
@@ -105,6 +149,7 @@ class VirtualVolt(
             }
             command == "ATRV" -> VirtualVoltCatalog.find(BROADCAST, command)?.replies?.get(mode) ?: "?"
             command.startsWith("AT") -> "OK"
+            protocol != HS_PROTOCOL -> NO_DATA
             command == "0100" && header == BROADCAST -> "4100BE3FA813"
             command == "0902" && header == BROADCAST -> segmented(vinPayload())
             isMode01Batch(command) && header == BROADCAST -> mode01Batch(command)
@@ -145,6 +190,8 @@ class VirtualVolt(
     private companion object {
         const val BROADCAST = "7DF"
         const val NO_DATA = "NO DATA"
+        const val HS_PROTOCOL = "6"
+        const val SWCAN_PROTOCOL = "61"
 
         // 17 characters like a real VIN, but obviously synthetic (VINs never contain I, O or Q).
         const val VIN = "SYNTHETICVOLTVIN0"
