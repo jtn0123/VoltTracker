@@ -18,6 +18,7 @@ import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
@@ -30,6 +31,9 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.service.ObdNotifications
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.PermissionGate
+import com.volttracker.obdpoc.update.UpdateCoordinator
+import com.volttracker.obdpoc.update.UpdateManager
+import com.volttracker.obdpoc.update.UpdatePrompt
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -431,6 +435,35 @@ open class MainActivity :
         }
     }
 
+    private fun offerUpdate(result: UpdateManager.CheckResult) {
+        val build = UpdatePrompt.offeredBuild(result) ?: return
+        if (!isActivityResumed || isFinishing || isDestroyed) return
+        try {
+            AlertDialog
+                .Builder(this)
+                .setTitle(R.string.update_offer_title)
+                .setMessage(getString(R.string.update_offer_message, build.tag))
+                .setPositiveButton(R.string.update_offer_install) { _, _ -> installOfferedUpdate(build.tag) }
+                .setNegativeButton(R.string.update_offer_later, null)
+                .show()
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "update dialog failed", ex)
+        }
+    }
+
+    private fun installOfferedUpdate(tag: String) {
+        Toast.makeText(this, getString(R.string.update_downloading, tag), Toast.LENGTH_SHORT).show()
+        UpdateCoordinator.shared(this).downloadAndInstall { percent ->
+            val message =
+                when (UpdatePrompt.progress(percent)) {
+                    UpdatePrompt.Progress.FAILED -> R.string.update_download_failed
+                    UpdatePrompt.Progress.INSTALLING -> R.string.update_opening_installer
+                    UpdatePrompt.Progress.NONE -> null
+                }
+            if (message != null) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // C6: branded splash. Must run before super.onCreate() — it swaps the
         // launch theme (Theme.VoltTracker.Splash: brand-dark background + the
@@ -642,6 +675,8 @@ open class MainActivity :
             mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
             mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
         }
+        // One silent release check per process start; an offered build gets a native dialog.
+        UpdateCoordinator.shared(this).autoCheckOnce(::offerUpdate)
         // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that
         // has newly gone overdue. Off the UI thread; failures must never crash a resume.
         submitBackground {
