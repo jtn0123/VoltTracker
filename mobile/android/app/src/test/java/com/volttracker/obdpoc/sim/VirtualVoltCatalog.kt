@@ -81,6 +81,8 @@ object VirtualVoltCatalog {
             entry("7E1", "222885", Evidence.GUESS, both("6228858980")),
             entry("7E1", "222886", Evidence.GUESS, both("6228868980")),
             entry("7E1", "222889", Evidence.GUESS, both("62288904")),
+            entry("7E1", "2228CB", Evidence.GUESS, both("6228CB5A")), // 50 C
+            entry("7E1", "221C26", Evidence.GUESS, both("621C2650")), // 40 C
             entry("7E1", "222487", Evidence.GUESS, both("62248704D2")),
             // --- Mode 22 on 7E2 (transmission) -----------------------------------------------
             entry("7E2", "221940", Evidence.DEAD, both(null)),
@@ -91,12 +93,16 @@ object VirtualVoltCatalog {
             entry("7E4", "22436C", Evidence.REAL, chargingOnly("62436C00C8")),
             entry("7E4", "224373", Evidence.SEEN, split("6243730000", "624373FFFF")),
             entry("7E4", "224531", Evidence.SEEN, split("62453100", "62453102")),
+            entry("7E4", "224368", Evidence.GUESS, chargingOnly("62436878")), // 240 V
+            entry("7E4", "224369", Evidence.GUESS, chargingOnly("62436946")), // 14 A
             entry("7E4", "2243AF", Evidence.SEEN, both("6243AF89F9")),
+            entry("7E4", "228334", Evidence.GUESS, both("6283348C")), // 54.9 %
             entry("7E4", "224329", Evidence.REAL, both("6243291687")),
             entry("7E4", "22432B", Evidence.REAL, both("62432B16A8")),
             entry("7E4", "22432A", Evidence.PLACEHOLDER, both("62432A00")),
             entry("7E4", "22432C", Evidence.PLACEHOLDER, both("62432C00")),
-            entry("7E4", "22435F", Evidence.GUESS, both("62435F05")),
+            // Real logs (2026-07): every read of 22435F came back 7F 22 31.
+            entry("7E4", "22435F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             entry("7E4", "2241B2", Evidence.REAL, both("6241B208E5")),
             entry("7E4", "2241B4", Evidence.GUESS, both("6241B402")),
             entry("7E4", "2241B6", Evidence.GUESS, both("6241B60000")),
@@ -105,6 +111,8 @@ object VirtualVoltCatalog {
             entry("7E4", "2243A5", Evidence.SEEN, both("6243A50456")),
             entry("7E4", "22437D", Evidence.SEEN, both("62437D0339")),
             entry("7E4", "2241A3", Evidence.GUESS, both("6241A30205")),
+            entry("7E4", "2240E9", Evidence.GUESS, both("6240E9012C")), // 150 mOhm
+            entry("7E4", "2243A6", Evidence.GUESS, both("6243A650")), // 2000 kOhm
         )
 
     private val byKey: Map<String, Entry> = ENTRIES.associateBy { key(it.header, it.command) }
@@ -150,6 +158,8 @@ object VirtualVoltCatalog {
         222885 motorAVoltage motorAPowerKw
         222886 motorBVoltage motorBPowerKw
         222889 prndlState
+        2228CB motorTempC
+        221C26 inverterTempC
         222487 evDistanceThisCycleKm
         221940 transmissionTempC
         22194001 transmissionTempC
@@ -164,6 +174,11 @@ object VirtualVoltCatalog {
         22432A minCellNumber
         22432C maxCellNumber
         22435F socVariationPct
+        228334 displayedSocPct
+        224368 chargerAcVoltage chargerAcPowerKw
+        224369 chargerAcCurrentA
+        2240E9 packResistanceMohm
+        2243A6 hvIsolationKohm
         2241B2 batteryCoolantPumpRpm
         2241B4 batteryCoolantValveRaw
         2241B6 batteryHeaterPowerW

@@ -145,6 +145,10 @@ object PidSchedule {
             PidSpec("222884", Header.HV_PACK_7E1, 12, 4), // motor B current
             PidSpec("222886", Header.HV_PACK_7E1, 12, 4), // motor B voltage
             PidSpec("222889", Header.HV_PACK_7E1, 24, 10), // PRNDL / gear state
+            // Readings Voltage shows but this app never asked for. Not yet confirmed on the target
+            // car; the negative-PID cache retires any the car refuses, and each decoder is bounded.
+            PidSpec("2228CB", Header.HV_PACK_7E1, 24, 10), // drive motor temperature
+            PidSpec("221C26", Header.HV_PACK_7E1, 24, 10), // inverter temperature
             PidSpec("222487", Header.HV_PACK_7E1, 48, 16, conditional = true), // EV distance this cycle
             PidSpec("221940", Header.TRANSMISSION_7E2, 48, 24), // trans temp
             PidSpec("22194001", Header.TRANSMISSION_7E2, 48, 34), // trans temp, GM selector variant
@@ -155,7 +159,10 @@ object PidSchedule {
             PidSpec("22436C", Header.HV_PACK_7E4, 24, 14, conditional = true), // charger HV current
             PidSpec("224373", Header.HV_PACK_7E4, 24, 18, conditional = true), // charging mode
             PidSpec("224531", Header.HV_PACK_7E4, 24, 18, conditional = true), // charging level
+            PidSpec("224368", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC voltage
+            PidSpec("224369", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC current
             PidSpec("2243AF", Header.HV_PACK_7E4, 24, 22), // raw precise SOC
+            PidSpec("228334", Header.HV_PACK_7E4, 24, 22), // dash-displayed SOC (read by Voltage)
             // Cell-balance trio shares phase 22 with 2243AF so they batch on the same 7E4 header
             // switch; balance changes slowly, so every 24 cycles is plenty.
             PidSpec("224329", Header.HV_PACK_7E4, 24, 22), // minimum cell voltage
@@ -173,6 +180,8 @@ object PidSchedule {
             PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84, conditional = true), // charge count
             PidSpec("22437D", Header.HV_PACK_7E4, 120, 90, conditional = true), // last charge energy
             PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample
+            PidSpec("2240E9", Header.HV_PACK_7E4, 240, 210), // pack internal resistance (read by Voltage)
+            PidSpec("2243A6", Header.HV_PACK_7E4, 240, 210), // HV isolation resistance (read by Voltage)
         )
 
     private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }
