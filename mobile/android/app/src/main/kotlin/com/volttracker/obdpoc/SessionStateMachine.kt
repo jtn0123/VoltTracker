@@ -83,5 +83,21 @@ class SessionStateMachine {
                 else -> Phase.IDLE
             }
         }
+
+        /**
+         * A CONNECT to the adapter a live session is already connected to and polling is redundant:
+         * restarting would drop the working link, split the drive into a throwaway session, and pay
+         * the full reconnect/init cost again. A CONNECT while still connecting/reconnecting, to a
+         * different adapter, or without an explicit address keeps the restart behaviour.
+         */
+        @JvmStatic
+        fun isRedundantConnect(
+            phase: Phase,
+            activeAddress: String?,
+            requestedAddress: String?,
+        ): Boolean =
+            phase == Phase.CONNECTED &&
+                !requestedAddress.isNullOrEmpty() &&
+                requestedAddress.equals(activeAddress, ignoreCase = true)
     }
 }

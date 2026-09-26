@@ -19,6 +19,7 @@ import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -165,6 +166,74 @@ class ObdServiceIntegrationTest {
         assertTrue(
             "foreground service type should include LOCATION when GPS permission is available",
             activeForegroundServiceType(service) and ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION != 0,
+        )
+    }
+
+    @Test
+    fun repeatConnectToTheConnectedAdapterKeepsTheLiveSession() {
+        // Field regression: a second CONNECT (double tap / auto-connect racing a manual one) tore down
+        // a healthy, polling session a few seconds in and restarted it as a new throwaway session.
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+        service.broadcastStatus("connected", "Live", false)
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        val captured = captureBroadcasts()
+
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "aa:bb:cc:dd:ee:ff", "Garage ELM", null),
+            ).startCommand(0, 2)
+
+        assertEquals("the live session must not be restarted", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+        assertTrue("the live session keeps running", service.running.get())
+        val status = captured.lastStatus()
+        assertNotNull("the ignored CONNECT re-publishes the current status so the UI re-syncs", status)
+        assertEquals("connected", status!!.optString("state"))
+        assertEquals("Live", status.optString("detail"))
+    }
+
+    @Test
+    fun connectWhileStillConnectingOrToAnotherAdapterStillRestarts() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+
+        // Still connecting (no "connected" status yet): a new CONNECT is a deliberate retry.
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            ).startCommand(0, 2)
+        assertNotEquals("a CONNECT while connecting restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+
+        // Connected, but the user picked a different adapter: switch to it.
+        service.broadcastStatus("connected", "Live", false)
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "11:22:33:44:55:66", "Other ELM", null),
+            ).startCommand(0, 3)
+        assertNotEquals("a CONNECT to another adapter restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+        assertEquals("Other ELM", service.activeName)
+    }
+
+    @Test
+    fun connectDuringAConnectedScanSessionStartsALiveSession() {
+        val controller = newController(intentFor(ObdService.ACTION_SCAN, "AA:BB:CC:DD:EE:FF", "Scanner", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+        service.broadcastStatus("connected", "Scanning", false)
+
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            ).startCommand(0, 2)
+
+        assertEquals(
+            "CONNECT replaces a scan with a live session",
+            ObdLocalStore.MODE_OBD,
+            service.recorder.activeMode(),
         )
     }
 
@@ -798,5 +867,9 @@ class ObdServiceIntegrationTest {
         override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) = Unit
 
         override fun maybeRunAutoDtcScan(engineRef: ObdPollingEngine?) = Unit
+    }
+
+    private companion object {
+        const val RESTART_SENTINEL_MS = 1L
     }
 }
