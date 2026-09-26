@@ -67,6 +67,8 @@ object VirtualVoltCatalog {
             // ATRV is answered by the adapter itself (battery voltage at the OBD port), not the car.
             entry("7DF", "ATRV", Evidence.REAL, both("14.9V")),
             entry("7DF", "01A6", Evidence.DEAD, both(null)),
+            // GM odometer as read by the open-source Voltage app; 0x003C4B00 / 64 = 61,740 km.
+            entry("7DF", "2234B2", Evidence.GUESS, both("6234B2003C4B00")),
             // --- Mode 22 on 7E0 (engine) ---------------------------------------------------
             entry("7E0", "22119F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             entry("7E0", "22119F01", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
@@ -137,6 +139,7 @@ object VirtualVoltCatalog {
         015C engineOilTempC
         012F fuelLevelPct
         01A6 odometerKm odometerMiles
+        2234B2 odometerKm odometerMiles
         22119F engineOilLifePct
         22119F01 engineOilLifePct
         221154 engineOilTempC
