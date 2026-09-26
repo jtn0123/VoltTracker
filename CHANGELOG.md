@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.41.0 (2026-09-26)
+
+### ✳️ New
+
+- **trips**: Split a trip at an in-trip park stop
+  ([#80](https://github.com/jtn0123/VoltTracker/pull/80),
+  [`5f09342`](https://github.com/jtn0123/VoltTracker/commit/5f09342e17e0f956b63285f0a63cbefba34fd666))
+
+
 ## v0.40.1 (2026-09-26)
 
 ### 🔺 Fix
