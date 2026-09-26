@@ -16,7 +16,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -234,7 +233,7 @@ class VirtualVoltCarControlTest {
         service.localStore!!.clearAllData()
         val settings = CarControlSettings { service.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE) }
         if (enabled) assertTrue(settings.enable("2468")) else settings.disable()
-        if (connect) service.onStartCommand(connectIntent(service), 0, 1)
+        if (connect) service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
         return adapter to service
     }
 
@@ -249,24 +248,10 @@ class VirtualVoltCarControlTest {
             putExtra(ObdService.EXTRA_CAR_COMMAND, command.wireName)
         }
 
-    private fun connectIntent(service: VirtualVoltService): Intent =
-        Intent(service, VirtualVoltService::class.java).apply {
-            action = ObdService.ACTION_CONNECT
-            putExtra(ObdService.EXTRA_ADDRESS, "AA:BB:CC:DD:EE:FF")
-            putExtra(ObdService.EXTRA_NAME, "Virtual OBDLink")
-        }
-
     private fun waitFor(
         label: String,
         condition: () -> Boolean,
-    ) {
-        val deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (condition()) return
-            Thread.sleep(20)
-        }
-        fail("Timed out waiting for $label")
-    }
+    ) = VirtualVoltTestSupport.waitFor(label, WAIT_TIMEOUT_MS, condition)
 
     private companion object {
         const val SAMPLES = 40

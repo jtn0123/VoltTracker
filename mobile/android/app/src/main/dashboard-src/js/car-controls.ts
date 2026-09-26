@@ -58,7 +58,8 @@ import { VD } from "./vd-registry";
     if (typeof fn !== "function") return undefined;
     try {
       return (fn as (...a: unknown[]) => unknown).apply(bridge, args);
-    } catch (ignored) {
+    } catch {
+      // A throwing bridge reads as "unavailable": the card stays hidden and nothing is sent.
       return undefined;
     }
   }
@@ -69,7 +70,8 @@ import { VD } from "./vd-registry";
     try {
       const parsed = JSON.parse(raw);
       return parsed && typeof parsed === "object" ? (parsed as NativeCarControlState) : {};
-    } catch (ignored) {
+    } catch {
+      // Unparseable native state fails closed: treated as "not available", controls stay off.
       return {};
     }
   }
@@ -81,8 +83,8 @@ import { VD } from "./vd-registry";
   function setText(node: HTMLElement | null, text: string, tone?: string) {
     if (!node) return;
     if (node.textContent !== text) node.textContent = text;
-    if (tone) node.setAttribute("data-tone", tone);
-    else node.removeAttribute("data-tone");
+    if (tone) node.dataset.tone = tone;
+    else delete node.dataset.tone;
   }
 
   function renderSettings(native: NativeCarControlState) {
@@ -91,7 +93,7 @@ import { VD } from "./vd-registry";
     const available = native.available === true;
     const enabled = available && native.enabled === true;
     toggle.disabled = !available;
-    toggle.setAttribute("data-on", String(enabled));
+    toggle.dataset.on = String(enabled);
     toggle.setAttribute("aria-pressed", String(enabled));
     toggle.textContent = enabled ? "On" : "Off";
   }

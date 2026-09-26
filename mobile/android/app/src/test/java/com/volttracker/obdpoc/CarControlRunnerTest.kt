@@ -166,7 +166,7 @@ class CarControlRunnerTest {
         assertEquals("confirmed", event["outcome"])
         assertEquals("5", event["framesSent"])
         assertEquals("true", event["restored"])
-        assertTrue(event["readback"]!!.contains("lock_state=locked"))
+        assertTrue(event["readback"].orEmpty().contains("lock_state=locked"))
         assertEquals("lock", io.event("car_control_request")!!["command"])
         assertTrue(io.readbacks.any { it.field == SwcanField.LOCK_STATE })
     }

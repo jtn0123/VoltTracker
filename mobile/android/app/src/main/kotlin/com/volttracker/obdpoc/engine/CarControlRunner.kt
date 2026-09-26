@@ -355,8 +355,9 @@ class CarControlRunner(
 
     /** Listens on SW-CAN for the car's reaction; returns a failure description or null. */
     private fun readBack(run: Run): String? {
-        if (run.bus != ControlBus.SWCAN_11BIT && run.bus != ControlBus.SWCAN_29BIT) {
-            if (!selectBus(run, ControlBus.SWCAN_11BIT)) return "protocol ${ControlBus.SWCAN_11BIT.stnProtocol}"
+        val onSwcan = run.bus == ControlBus.SWCAN_11BIT || run.bus == ControlBus.SWCAN_29BIT
+        if (!onSwcan && !selectBus(run, ControlBus.SWCAN_11BIT)) {
+            return "protocol ${ControlBus.SWCAN_11BIT.stnProtocol}"
         }
         val listenMs =
             if (run.command.readback == ControlReadback.WINDOWS_OPENING ||
