@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.42.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: "clean EV" theme — calm tokens, Volt-teal accent, color for meaning
+  ([#85](https://github.com/jtn0123/VoltTracker/pull/85),
+  [`260f071`](https://github.com/jtn0123/VoltTracker/commit/260f071d858696336692c6c88fa693f8933f7351))
+
+
 ## v0.41.3 (2026-09-26)
 
 ### 🔺 Fix
