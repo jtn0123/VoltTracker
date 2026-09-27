@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.44.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: Redesign theme tokens (dark + light), fonts, Appearance setting
+  ([#87](https://github.com/jtn0123/VoltTracker/pull/87),
+  [`2074fa3`](https://github.com/jtn0123/VoltTracker/commit/2074fa352e427cddb0f81aafe18f9ad2e5992e7b))
+
+
 ## v0.43.0 (2026-09-27)
 
 ### ✳️ New
