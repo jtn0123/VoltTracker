@@ -9,6 +9,8 @@ import com.volttracker.obdpoc.ui.theme.AppearanceMode
 data class SettingsUiState(
     val connected: Boolean = false,
     val statusLabel: String = "No adapter",
+    /** The service is streaming Demo / Testing data rather than a real car. */
+    val demoActive: Boolean = false,
     // Connection
     val adapterLabel: String = "--",
     val autoConnect: Boolean = true,
@@ -48,6 +50,18 @@ data class SettingsUiState(
     /** 0..99 while a download runs; null otherwise. */
     val updateDownloadPercent: Int? = null,
 ) {
+    /** How many alert notifications are switched on (the Settings index summary). */
+    val alertsOnCount: Int
+        get() =
+            listOf(
+                notifyChargingComplete,
+                notifyNewCode,
+                notifyBatteryLow,
+                notifyPackTempHigh,
+                notifyMaintenance,
+                endOfDriveRecap,
+            ).count { it }
+
     companion object {
         /** Sample state mirroring the demo scenario. */
         val demo =

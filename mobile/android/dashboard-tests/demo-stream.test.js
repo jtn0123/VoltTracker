@@ -55,8 +55,8 @@ describe('browser demo stream drive/charge cycle', () => {
     const t = VD.state.telemetry;
     expect(t.vehicleState).toBe('charging');
     expect(t.speedKph).toBe(0);
-    expect(t.chargerPowerKw).toBeGreaterThanOrEqual(6.5);
-    expect(t.chargerPowerKw).toBeLessThanOrEqual(8);
+    expect(t.chargerPowerKw).toBeGreaterThanOrEqual(3);
+    expect(t.chargerPowerKw).toBeLessThanOrEqual(4);
 
     const card = document.getElementById('liveChargeCard');
     expect(card.hidden).toBe(false);

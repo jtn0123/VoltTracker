@@ -78,7 +78,7 @@ class DemoPollingLoopTest {
     fun chargerPowerIsLevel2WhileChargingAndZeroWhileDriving() {
         assertEquals(0.0, DemoPollingLoop.demoChargerPowerKw(30.0), 1e-9)
         val charging = DemoPollingLoop.demoChargerPowerKw(75.0)
-        assertTrue("expected a plausible L2 draw, got $charging", charging in 6.5..8.0)
+        assertTrue("expected a plausible L2 draw, got $charging", charging in 3.0..4.0)
         assertEquals(0.0, DemoPollingLoop.demoChargerPowerKw(95.0), 1e-9)
     }
 }

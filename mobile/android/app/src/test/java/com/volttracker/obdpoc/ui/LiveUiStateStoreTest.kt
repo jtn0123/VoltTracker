@@ -212,6 +212,30 @@ class LiveUiStateStoreTest {
     }
 
     @Test
+    fun demoStatusMarksSettingsDemoActiveUntilTheSessionEnds() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "demo"))
+        assertTrue(store.state.value.settings.demoActive)
+
+        // Once running, the demo reports "connected"; its source-tagged samples keep the flag.
+        store.onStatus(JSONObject().put("state", "connected").put("adapter", "Demo stream"))
+        store.onTelemetry(JSONObject().put("source", "demo").put("speedKph", 40.0))
+        assertTrue(store.state.value.settings.demoActive)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertFalse(store.state.value.settings.demoActive)
+    }
+
+    @Test
+    fun realSamplesClearTheDemoFlag() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(JSONObject().put("source", "demo"))
+        assertTrue(store.state.value.settings.demoActive)
+        store.onTelemetry(JSONObject().put("source", "obd").put("speedKph", 12.0))
+        assertFalse(store.state.value.settings.demoActive)
+    }
+
+    @Test
     fun updateStateMutatorTouchesOnlyItsSettingsFields() {
         val store = LiveUiStateStore()
         store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))

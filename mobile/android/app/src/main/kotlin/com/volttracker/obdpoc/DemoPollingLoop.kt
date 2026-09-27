@@ -32,9 +32,10 @@ class DemoPollingLoop(
         // Mirrors actions-demo.ts's browser cycle; keep the two in step.
         const val DRIVE_PHASE_SECONDS = 60.0
         const val CYCLE_SECONDS = 90.0
-        const val CHARGER_KW = 7.2
+        const val CHARGER_KW = 3.6
 
-        // Exaggerated vs the real ~0.014 %/s a 7.2 kW charger manages, so the
+        // 3.6 kW is the 2017 Volt's onboard-charger ceiling on Level 2.
+        // Exaggerated vs the real ~0.007 %/s a 3.6 kW charger manages, so the
         // SOC visibly climbs within the 30 s demo charge window. The drive-phase
         // drain is matched so each cycle is SOC-neutral (0.06 * 60 == 0.12 * 30):
         // the sawtooth repeats forever instead of drifting into a cap.

@@ -1,7 +1,9 @@
 package com.volttracker.obdpoc.ui
 
+import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -23,16 +25,16 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Drives the [VoltApp] shell through every tab: each bottom-nav tap must land
- * on the matching screen. This is the navigation contract the activity relies
- * on — the screens themselves are covered by the screenshot suite.
+ * Drives the [VoltApp] shell: each of the five tabs lands on its screen, the gear opens Settings
+ * from anywhere, Car opens Health, and back (button or system) unwinds the pushed routes. This is
+ * the navigation contract the activity relies on — the screens are covered by the screenshot suite.
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w412dp-h915dp-420dpi")
 class VoltAppNavigationTest {
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val demoState =
         VoltAppUiState(
@@ -44,42 +46,132 @@ class VoltAppNavigationTest {
             settings = SettingsUiState.demo,
         )
 
+    private fun tab(label: String) = compose.onNodeWithContentDescription(label, substring = true)
+
     @Test
     fun tappingEachTabShowsItsScreen() {
         compose.setContent { VoltApp(demoState) }
 
-        compose.onNodeWithText("Map").performClick()
+        tab("Trips").performClick()
         compose.onNodeWithText("▶ Play").assertIsDisplayed()
 
-        compose.onNodeWithText("Charge").performClick()
-        compose.onNodeWithText("RECENT CHARGES").assertIsDisplayed()
+        tab("Charge").performClick()
+        compose.onNodeWithText("RECENT CHARGES").performScrollTo().assertIsDisplayed()
 
-        compose.onNodeWithText("Insights").performClick()
-        compose.onNodeWithText("MI / KWH LIFETIME").assertIsDisplayed()
+        tab("Insights").performClick()
+        compose.onNodeWithText("MI / KWH LIFETIME").performScrollTo().assertIsDisplayed()
 
-        compose.onNodeWithText("Diag").performClick()
-        compose.onNodeWithText("Scan now").assertIsDisplayed()
+        tab("Car").performClick()
+        compose.onNodeWithText("Vehicle health").assertIsDisplayed()
 
-        compose.onNodeWithText("Drive").performClick()
+        tab("Drive").performClick()
         compose.onNodeWithText("MPH").assertIsDisplayed()
     }
 
     @Test
-    fun settingsTabWiresTheClassicDashboardAction() {
+    fun gearOpensSettingsAndBackReturnsToTheTab() {
+        compose.setContent { VoltApp(demoState, initialTab = VoltTab.INSIGHTS) }
+
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("PREFERENCES").assertIsDisplayed()
+
+        compose.onNodeWithContentDescription("Back").performClick()
+        compose.onNodeWithText("MI / KWH LIFETIME").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun carOpensHealthAndSystemBackUnwindsTheStack() {
+        compose.setContent { VoltApp(demoState, initialTab = VoltTab.CAR) }
+
+        compose.onNodeWithText("Vehicle health").performClick()
+        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+
+        // Settings over Health, then two system backs: Settings → Health → Car.
+        compose.onNodeWithContentDescription("Settings").performClick()
+        compose.onNodeWithText("PREFERENCES").assertIsDisplayed()
+        systemBack()
+        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+        systemBack()
+        compose.onNodeWithText("Vehicle health").assertIsDisplayed()
+    }
+
+    @Test
+    fun switchingTabsClearsPushedRoutes() {
+        compose.setContent { VoltApp(demoState, initialTab = VoltTab.DRIVE) }
+
+        compose.onNodeWithContentDescription("Settings").performClick()
+        tab("Charge").performClick()
+        compose.onNodeWithText("RECENT CHARGES").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun settingsSubPageBackReturnsToTheIndex() {
+        compose.setContent { VoltApp(demoState, initialRoutes = listOf(VoltRoute.SETTINGS)) }
+
+        compose.onNodeWithText("Alerts").performClick()
+        compose.onNodeWithText("Charging complete").assertIsDisplayed()
+        systemBack()
+        compose.onNodeWithText("PREFERENCES").assertIsDisplayed()
+    }
+
+    @Test
+    fun carTabCarriesABadgeOnlyWhileCodesAreStored() {
+        compose.setContent { VoltApp(demoState) }
+        compose.onNodeWithContentDescription("Car, has warnings").assertIsDisplayed()
+    }
+
+    @Test
+    fun cleanCarHasNoBadge() {
+        compose.setContent { VoltApp(demoState.copy(diag = DiagUiState.demo.copy(codes = emptyList()))) }
+        compose.onNodeWithContentDescription("Car").assertIsDisplayed()
+    }
+
+    @Test
+    fun advancedWiresTheClassicDashboardAction() {
         var opened = false
         compose.setContent {
             VoltApp(
                 demoState,
-                initialTab = VoltTab.SETTINGS,
+                initialRoutes = listOf(VoltRoute.SETTINGS),
                 actions = VoltAppActions(onOpenClassicDashboard = { opened = true }),
             )
         }
 
-        compose
-            .onNodeWithText("Open classic dashboard")
-            .performScrollTo()
-            .performClick()
+        compose.onNodeWithText("Advanced diagnostics").performScrollTo().performClick()
+        compose.onNodeWithText("Open classic dashboard").performClick()
         assertTrue(opened)
+    }
+
+    @Test
+    fun demoPageStartsTheDemo() {
+        var started = false
+        compose.setContent {
+            VoltApp(
+                demoState,
+                initialRoutes = listOf(VoltRoute.SETTINGS),
+                actions = VoltAppActions(onStartDemo = { started = true }),
+            )
+        }
+
+        compose.onNodeWithText("Demo / testing").performScrollTo().performClick()
+        compose.onNodeWithText("Start demo").performClick()
+        assertTrue(started)
+    }
+
+    @Test
+    fun demoPageStopsARunningDemo() {
+        var stopped = false
+        compose.setContent {
+            VoltApp(
+                demoState.copy(settings = SettingsUiState.demo.copy(demoActive = true)),
+                initialRoutes = listOf(VoltRoute.SETTINGS),
+                actions = VoltAppActions(onStopDemo = { stopped = true }),
+            )
+        }
+
+        compose.onNodeWithText("Demo / testing").performScrollTo().performClick()
+        compose.onNodeWithText("Stop demo").performClick()
+        assertTrue(stopped)
     }
 
     @Test
@@ -88,14 +180,20 @@ class VoltAppNavigationTest {
         compose.setContent {
             VoltApp(
                 demoState,
-                initialTab = VoltTab.SETTINGS,
+                initialRoutes = listOf(VoltRoute.SETTINGS),
                 actions = VoltAppActions(onSetAppearance = { chosen = it }),
             )
         }
 
-        compose.onNodeWithText("Light").performScrollTo().performClick()
+        compose.onNodeWithText("Appearance").performClick()
+        compose.onNodeWithText("Light").performClick()
         assertEquals(AppearanceMode.LIGHT, chosen)
-        compose.onNodeWithText("Dark").performScrollTo().performClick()
+        compose.onNodeWithText("Dark").performClick()
         assertEquals(AppearanceMode.DARK, chosen)
+    }
+
+    private fun systemBack() {
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        compose.waitForIdle()
     }
 }

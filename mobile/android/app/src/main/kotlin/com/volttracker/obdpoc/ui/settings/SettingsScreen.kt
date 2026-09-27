@@ -1,370 +1,201 @@
 package com.volttracker.obdpoc.ui.settings
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.volttracker.obdpoc.ui.components.VoltBottomNav
+import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.ButtonStyle
+import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltButton
-import com.volttracker.obdpoc.ui.components.VoltLabel
+import com.volttracker.obdpoc.ui.components.VoltGroupLabel
+import com.volttracker.obdpoc.ui.components.VoltIcons
+import com.volttracker.obdpoc.ui.components.VoltListCard
+import com.volttracker.obdpoc.ui.components.VoltListDivider
+import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPanel
-import com.volttracker.obdpoc.ui.components.VoltSegmented
-import com.volttracker.obdpoc.ui.components.VoltStatusPill
-import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 
-/** The Settings tab: grouped list rows instead of the legacy checkbox forest. */
+/** Settings sub-pages. [MAIN] is the grouped index; the rest hold the detailed controls. */
+enum class SettingsPage(
+    val title: String,
+) {
+    MAIN("Settings"),
+    CONNECTION("Adapter"),
+    COSTS("Costs & rates"),
+    UNITS("Units"),
+    APPEARANCE("Appearance"),
+    ALERTS("Alerts"),
+    DATA("Export & backup"),
+    DEMO("Demo / testing"),
+    ADVANCED("Advanced diagnostics"),
+    UPDATES("App updates"),
+}
+
+/** Host actions the Settings pages can trigger. Defaults are no-ops (previews, tests). */
+class SettingsActions(
+    val onOpenClassicDashboard: () -> Unit = {},
+    val onCheckForUpdate: () -> Unit = {},
+    val onInstallUpdate: () -> Unit = {},
+    val onSetAppearance: (AppearanceMode) -> Unit = {},
+    val onStartDemo: () -> Unit = {},
+    val onStopDemo: () -> Unit = {},
+)
+
+/**
+ * Settings, opened from the gear on any screen (mockups `S.settings`): the adapter card, then
+ * Costs / Preferences / Data / About groups whose rows open detail pages. Every setting from the
+ * previous single-page layout lives on one of those pages.
+ */
 @Composable
 fun SettingsScreen(
     state: SettingsUiState,
     modifier: Modifier = Modifier,
-    onSelectTab: (VoltTab) -> Unit = {},
-    onOpenClassicDashboard: () -> Unit = {},
-    onCheckForUpdate: () -> Unit = {},
-    onInstallUpdate: () -> Unit = {},
-    onSetAppearance: (AppearanceMode) -> Unit = {},
+    initialPage: SettingsPage = SettingsPage.MAIN,
+    onBack: () -> Unit = {},
+    actions: SettingsActions = SettingsActions(),
 ) {
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(VoltColors.bg),
+    var page by rememberSaveable { mutableStateOf(initialPage) }
+    BackHandler(enabled = page != SettingsPage.MAIN) { page = SettingsPage.MAIN }
+    val open: (SettingsPage) -> Unit = { page = it }
+    VoltScreen(
+        title = page.title,
+        modifier = modifier,
+        onBack = if (page == SettingsPage.MAIN) onBack else ({ page = SettingsPage.MAIN }),
+        showGear = false,
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 18.dp, bottom = 118.dp),
-        ) {
-            SettingsHeader(state)
-            Spacer(Modifier.height(26.dp))
-            ConnectionGroup(state)
-            Spacer(Modifier.height(14.dp))
-            AlertsGroup(state)
-            Spacer(Modifier.height(14.dp))
-            UnitsGroup(state)
-            Spacer(Modifier.height(14.dp))
-            DisplayGroup(state, onSetAppearance)
-            Spacer(Modifier.height(14.dp))
-            DataGroup(state)
-            Spacer(Modifier.height(14.dp))
-            UpdatesGroup(state, onCheckForUpdate, onInstallUpdate)
-            Spacer(Modifier.height(14.dp))
-            ClassicDashboardGroup(onOpenClassicDashboard)
-            Spacer(Modifier.height(22.dp))
-            Text(
-                text = state.versionLabel,
-                style = VoltType.caption,
-                color = VoltColors.textTertiary,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
-            )
+        when (page) {
+            SettingsPage.MAIN -> SettingsIndex(state, open)
+            SettingsPage.CONNECTION -> ConnectionPage(state)
+            SettingsPage.COSTS -> CostsPage(state)
+            SettingsPage.UNITS -> UnitsPage(state)
+            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onSetAppearance)
+            SettingsPage.ALERTS -> AlertsPage(state)
+            SettingsPage.DATA -> DataPage(state)
+            SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)
+            SettingsPage.ADVANCED -> AdvancedPage(actions.onOpenClassicDashboard)
+            SettingsPage.UPDATES -> UpdatesPage(state, actions.onCheckForUpdate, actions.onInstallUpdate)
         }
-        VoltBottomNav(
-            selected = VoltTab.SETTINGS,
-            onSelect = onSelectTab,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
     }
 }
 
 @Composable
-private fun SettingsHeader(state: SettingsUiState) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Settings", style = VoltType.screenTitle, color = VoltColors.textPrimary)
-        VoltStatusPill(
-            text = state.statusLabel,
-            dotColor = if (state.connected) VoltColors.energy else VoltColors.textTertiary,
-        )
-    }
-}
-
-/** One settings list row: label (+ optional subtitle) with a trailing control. */
-@Composable
-private fun SettingRow(
-    label: String,
-    subtitle: String? = null,
-    trailing: @Composable () -> Unit,
+private fun ColumnScope.SettingsIndex(
+    state: SettingsUiState,
+    open: (SettingsPage) -> Unit,
 ) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.padding(end = 16.dp)) {
-            Text(text = label, style = VoltType.body, color = VoltColors.textPrimary)
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(text = subtitle, style = VoltType.caption, color = VoltColors.textTertiary)
-            }
+    AdapterCard(state, onManage = { open(SettingsPage.CONNECTION) })
+    VoltGroupLabel("Costs")
+    VoltListCard {
+        VoltListRow(VoltIcons.Bolt, "Electricity rate", value = state.homeRateLabel, compact = true) {
+            open(SettingsPage.COSTS)
         }
-        trailing()
+        VoltListDivider()
+        VoltListRow(VoltIcons.Fuel, "Gas price", value = state.gasPriceLabel, compact = true) {
+            open(SettingsPage.COSTS)
+        }
     }
-}
-
-/** Compact on/off pill — reads as a switch without Material's large thumb. */
-@Composable
-private fun TogglePill(on: Boolean) {
-    Row(
-        modifier =
-            Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (on) VoltColors.accentDim else VoltColors.surfaceElevated)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Spacer(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (on) VoltColors.accent else VoltColors.textTertiary),
-        )
-        Text(
-            text = if (on) "On" else "Off",
-            style = VoltType.caption,
-            color = if (on) VoltColors.textPrimary else VoltColors.textSecondary,
-        )
+    VoltGroupLabel("Preferences")
+    VoltListCard {
+        VoltListRow(VoltIcons.Settings, "Units", value = state.unitsLabel, compact = true) { open(SettingsPage.UNITS) }
+        VoltListDivider()
+        VoltListRow(VoltIcons.Window, "Appearance", value = state.appearance.label, compact = true) {
+            open(SettingsPage.APPEARANCE)
+        }
+        VoltListDivider()
+        VoltListRow(VoltIcons.Alert, "Alerts", value = "${state.alertsOnCount} on", compact = true) {
+            open(SettingsPage.ALERTS)
+        }
     }
-}
-
-@Composable
-private fun ValueChevron(value: String) {
+    VoltGroupLabel("Data")
+    VoltListCard {
+        VoltListRow(VoltIcons.Share, "Export & backup", compact = true) { open(SettingsPage.DATA) }
+        VoltListDivider()
+        VoltListRow(VoltIcons.Play, "Demo / testing", value = if (state.demoActive) "On" else "Off", compact = true) {
+            open(SettingsPage.DEMO)
+        }
+        VoltListDivider()
+        VoltListRow(VoltIcons.Wrench, "Advanced diagnostics", value = "Logs, raw PIDs", compact = true) {
+            open(SettingsPage.ADVANCED)
+        }
+    }
+    VoltGroupLabel("About")
+    VoltListCard {
+        VoltListRow(
+            VoltIcons.Refresh,
+            "App updates",
+            value = state.updateAvailableTag?.let { "$it available" },
+            tone = if (state.updateAvailableTag != null) PillTone.VOLT else PillTone.NEUTRAL,
+            compact = true,
+        ) { open(SettingsPage.UPDATES) }
+    }
+    Spacer(Modifier.height(18.dp))
     Text(
-        text = "$value  ›",
-        style = VoltType.body,
-        color = VoltColors.textSecondary,
+        text = state.versionLabel,
+        style = VoltType.caption.copy(fontSize = 12.sp),
+        color = VoltColors.textTertiary,
+        modifier = Modifier.align(Alignment.CenterHorizontally),
     )
 }
 
+/** The paired adapter, its link state, and the way into connection settings. */
 @Composable
-private fun GroupDivider() {
-    HorizontalDivider(color = VoltColors.hairline, thickness = 1.dp)
-}
-
-@Composable
-private fun ConnectionGroup(state: SettingsUiState) {
-    VoltPanel {
-        VoltLabel("Connection")
-        SettingRow(label = "Adapter", subtitle = "Bluetooth OBD-II") { ValueChevron(state.adapterLabel) }
-        GroupDivider()
-        SettingRow(label = "Auto-connect", subtitle = "When the last adapter is seen") {
-            TogglePill(state.autoConnect)
-        }
-        GroupDivider()
-        SettingRow(label = "Wait for adapter", subtitle = "Keep checking in the background") {
-            ValueChevron(state.backgroundWaitLabel)
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoltButton(text = "Test connection", onClick = {})
-            VoltButton(text = "Send diagnostics", onClick = {})
-        }
-    }
-}
-
-@Composable
-private fun AlertsGroup(state: SettingsUiState) {
-    VoltPanel {
-        VoltLabel("Alerts")
-        SettingRow(label = "Charging complete") { TogglePill(state.notifyChargingComplete) }
-        GroupDivider()
-        SettingRow(label = "New car code found") { TogglePill(state.notifyNewCode) }
-        GroupDivider()
-        SettingRow(label = "Battery low", subtitle = state.batteryLowLabel) {
-            TogglePill(state.notifyBatteryLow)
-        }
-        GroupDivider()
-        SettingRow(label = "Pack temperature high", subtitle = state.packTempHighLabel) {
-            TogglePill(state.notifyPackTempHigh)
-        }
-        GroupDivider()
-        SettingRow(label = "Maintenance overdue") { TogglePill(state.notifyMaintenance) }
-        GroupDivider()
-        SettingRow(label = "End-of-drive recap") { TogglePill(state.endOfDriveRecap) }
-        GroupDivider()
-        SettingRow(label = "Auto-scan for codes", subtitle = "One background scan per connect") {
-            TogglePill(state.autoScanCodes)
-        }
-    }
-}
-
-@Composable
-private fun UnitsGroup(state: SettingsUiState) {
-    VoltPanel {
-        VoltLabel("Units & rates")
-        SettingRow(label = "Units") { ValueChevron(state.unitsLabel) }
-        GroupDivider()
-        SettingRow(label = "Home electricity rate", subtitle = "Charging cost + gas savings") {
-            ValueChevron(state.homeRateLabel)
-        }
-        GroupDivider()
-        SettingRow(label = "Public charging rate") { ValueChevron(state.publicRateLabel) }
-        GroupDivider()
-        SettingRow(label = "Gas vehicle MPG", subtitle = "For savings estimates") {
-            ValueChevron(state.gasMpgLabel)
-        }
-        GroupDivider()
-        SettingRow(label = "Gas price") { ValueChevron(state.gasPriceLabel) }
-        GroupDivider()
-        SettingRow(label = "Charge target", subtitle = "Notify at this state of charge") {
-            ValueChevron(state.chargeTargetLabel)
-        }
-    }
-}
-
-@Composable
-private fun DisplayGroup(
+private fun AdapterCard(
     state: SettingsUiState,
-    onSetAppearance: (AppearanceMode) -> Unit,
+    onManage: () -> Unit,
 ) {
+    val energy = VoltColors.energy
     VoltPanel {
-        VoltLabel("Display")
-        SettingRow(label = "Appearance", subtitle = "System follows your phone's dark theme") {}
-        VoltSegmented(
-            options = AppearanceMode.entries.map { it.label },
-            selectedIndex = state.appearance.ordinal,
-            onSelect = { onSetAppearance(AppearanceMode.entries[it]) },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        )
-        GroupDivider()
-        SettingRow(label = "Keep screen awake", subtitle = "While Drive or Map is live") {
-            TogglePill(state.keepScreenAwake)
-        }
-        GroupDivider()
-        SettingRow(label = "Quiet live data", subtitle = "Calmer TalkBack announcements") {
-            TogglePill(state.quietLiveData)
-        }
-        GroupDivider()
-        SettingRow(label = "Text size") { ValueChevron(state.textSizeLabel) }
-        GroupDivider()
-        SettingRow(label = "High contrast") { TogglePill(state.highContrast) }
-        GroupDivider()
-        SettingRow(label = "Drive tiles", subtitle = "Choose the live signals") {
-            ValueChevron(state.driveTilesLabel)
-        }
-    }
-}
-
-@Composable
-private fun DataGroup(state: SettingsUiState) {
-    VoltPanel {
-        VoltLabel("Data")
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = state.lastBackupLabel,
-            style = VoltType.caption,
-            color = VoltColors.textSecondary,
-        )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoltButton(text = "Back up", accent = true, onClick = {})
-            VoltButton(text = "Restore", onClick = {})
-            VoltButton(text = "Export", onClick = {})
-        }
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = "Backups are encrypted. All data stays on this phone.",
-            style = VoltType.caption,
-            color = VoltColors.textTertiary,
-        )
-    }
-}
-
-/** App updates via GitHub Releases: version, check action, one-tap install. */
-@Composable
-private fun UpdatesGroup(
-    state: SettingsUiState,
-    onCheckForUpdate: () -> Unit,
-    onInstallUpdate: () -> Unit,
-) {
-    VoltPanel {
-        VoltLabel("App updates")
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = state.versionLabel.ifBlank { "Installed version unknown" },
-            style = VoltType.caption,
-            color = VoltColors.textSecondary,
-        )
-        if (state.updateStatusLabel != null) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = state.updateStatusLabel,
-                style = VoltType.caption,
-                color = if (state.updateAvailableTag != null) VoltColors.accent else VoltColors.textTertiary,
-            )
-        }
-        Spacer(Modifier.height(14.dp))
-        val downloading = state.updateDownloadPercent != null
-        when {
-            downloading ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconSquare(VoltIcons.Bluetooth, tone = if (state.connected) PillTone.EV else PillTone.NEUTRAL)
+            Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(
-                    text = "Downloading… ${state.updateDownloadPercent}%",
-                    style = VoltType.body,
+                    text = state.adapterLabel.takeUnless { it == "--" } ?: "No adapter",
+                    style = VoltType.bodyStrong,
                     color = VoltColors.textPrimary,
                 )
-            state.updateAvailableTag != null ->
-                VoltButton(
-                    text = "Update to ${state.updateAvailableTag}",
-                    accent = true,
-                    onClick = onInstallUpdate,
+                Text(
+                    text =
+                        buildAnnotatedString {
+                            if (state.connected) {
+                                withStyle(SpanStyle(color = energy)) { append("Connected") }
+                            } else {
+                                append(state.statusLabel)
+                            }
+                            append(" · auto-connect ")
+                            append(if (state.autoConnect) "on" else "off")
+                        },
+                    style = VoltType.caption,
+                    color = VoltColors.textSecondary,
                 )
-            else -> VoltButton(text = "Check for updates", onClick = onCheckForUpdate)
+            }
+            VoltButton(text = "Manage", style = ButtonStyle.GHOST, height = 36.dp, onClick = onManage)
         }
     }
 }
 
-@Composable
-private fun ClassicDashboardGroup(onOpenClassicDashboard: () -> Unit) {
-    VoltPanel {
-        VoltLabel("Classic dashboard")
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text =
-                "Trips, charge history, insights, and full settings still live in the " +
-                    "classic dashboard while the new app fills in.",
-            style = VoltType.caption,
-            color = VoltColors.textSecondary,
-        )
-        Spacer(Modifier.height(14.dp))
-        VoltButton(text = "Open classic dashboard", onClick = onOpenClassicDashboard)
-    }
-}
-
-@Preview(widthDp = 412, heightDp = 1700)
+@Preview(widthDp = 412, heightDp = 1000)
 @Composable
 private fun SettingsScreenPreview() {
     VoltTheme { SettingsScreen(SettingsUiState.demo) }

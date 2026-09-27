@@ -7,6 +7,7 @@ data class VoltAppActions(
     val onOpenClassicDashboard: () -> Unit = {},
     val onConnect: () -> Unit = {},
     val onStartDemo: () -> Unit = {},
+    val onStopDemo: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
     val onSetAppearance: (AppearanceMode) -> Unit = {},

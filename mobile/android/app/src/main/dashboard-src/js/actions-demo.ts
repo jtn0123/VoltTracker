@@ -47,8 +47,9 @@ function demoRawFrames(sample: {
 // DemoPollingLoop.kt's native cycle; keep the two in step.
 const DEMO_DRIVE_PHASE_S = 60;
 const DEMO_CYCLE_S = 90;
-const DEMO_CHARGER_KW = 7.2;
-// Exaggerated vs the real ~0.014%/s a 7.2 kW charger manages, so the SOC
+// 3.6 kW is the 2017 Volt's onboard-charger ceiling on Level 2.
+const DEMO_CHARGER_KW = 3.6;
+// Exaggerated vs the real ~0.007%/s a 3.6 kW charger manages, so the SOC
 // visibly climbs within the 30 s demo charge window. The drive-phase drain is
 // matched so each cycle is SOC-neutral (0.06 * 60 == 0.12 * 30): the sawtooth
 // repeats forever instead of drifting into a cap and plateauing there.

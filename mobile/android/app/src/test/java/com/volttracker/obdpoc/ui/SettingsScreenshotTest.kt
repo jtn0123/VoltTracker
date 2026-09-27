@@ -1,9 +1,14 @@
 package com.volttracker.obdpoc.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.volttracker.obdpoc.ui.settings.SettingsPage
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.VoltTheme
@@ -21,10 +26,7 @@ class SettingsScreenshotTest {
     @get:Rule
     val compose = createComposeRule()
 
-    // Taller-than-viewport render so the full scrollable content is visible in
-    // the before/after review images (the real screen scrolls).
     @Test
-    @Config(qualifiers = "w412dp-h1850dp-420dpi")
     fun settingsScreenDemoState() {
         compose.setContent {
             VoltTheme { SettingsScreen(SettingsUiState.demo) }
@@ -40,9 +42,8 @@ class SettingsScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-disconnected.png")
     }
 
-    // App-updates section states: a newer build offered, and a download underway.
+    // App-updates page states: a newer build offered, and a download underway.
     @Test
-    @Config(qualifiers = "w412dp-h1900dp-420dpi")
     fun settingsScreenUpdateAvailable() {
         compose.setContent {
             VoltTheme {
@@ -51,6 +52,7 @@ class SettingsScreenshotTest {
                         updateStatusLabel = "v0.36.0 is available",
                         updateAvailableTag = "v0.36.0",
                     ),
+                    initialPage = SettingsPage.UPDATES,
                 )
             }
         }
@@ -58,7 +60,6 @@ class SettingsScreenshotTest {
     }
 
     @Test
-    @Config(qualifiers = "w412dp-h1900dp-420dpi")
     fun settingsScreenUpdateDownloading() {
         compose.setContent {
             VoltTheme {
@@ -68,9 +69,25 @@ class SettingsScreenshotTest {
                         updateAvailableTag = "v0.36.0",
                         updateDownloadPercent = 43,
                     ),
+                    initialPage = SettingsPage.UPDATES,
                 )
             }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-update-downloading.png")
+    }
+
+    // Every detail page composes (each holds settings moved off the former single page).
+    @Test
+    @Config(qualifiers = "w412dp-h1200dp-420dpi")
+    fun everySettingsPageRenders() {
+        var page by mutableStateOf(SettingsPage.MAIN)
+        compose.setContent {
+            VoltTheme { key(page) { SettingsScreen(SettingsUiState.demo, initialPage = page) } }
+        }
+        SettingsPage.entries.forEach {
+            page = it
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-settings-${it.name.lowercase()}.png")
+        }
     }
 }
