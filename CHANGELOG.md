@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.45.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: 5-tab redesign navigation, gear Settings, Car tab + Health route; demo charges at 3.6 kW
+  ([#88](https://github.com/jtn0123/VoltTracker/pull/88),
+  [`5a45e56`](https://github.com/jtn0123/VoltTracker/commit/5a45e56187326fa02784f21e01bcacca93646f7f))
+
+
 ## v0.44.0 (2026-09-27)
 
 ### ✳️ New
