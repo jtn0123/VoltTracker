@@ -20,7 +20,10 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.VoltApp
+import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.theme.AppearancePrefs
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
 import org.json.JSONObject
@@ -71,6 +74,7 @@ class ComposeDashboardActivity : ComponentActivity() {
         autoConnect = AutoConnectController(prefs, deviceCatalog)
         updates = UpdateCoordinator.shared(this)
         store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
+        store.onAppearance(AppearancePrefs.read(prefs))
         // A recreated Activity starts with a fresh store; the coordinator's
         // retained result (an offered build, say) must not be forgotten.
         updates.lastResult?.let(::publishUpdateResult)
@@ -78,11 +82,15 @@ class ComposeDashboardActivity : ComponentActivity() {
             val state by store.state.collectAsState()
             VoltApp(
                 state = state,
-                onOpenClassicDashboard = ::openClassicDashboard,
-                onConnect = ::connectLastAdapter,
-                onStartDemo = { startObd(ObdService.ACTION_DEMO, null, null) },
-                onCheckForUpdate = ::checkForUpdate,
-                onInstallUpdate = ::installUpdate,
+                actions =
+                    VoltAppActions(
+                        onOpenClassicDashboard = ::openClassicDashboard,
+                        onConnect = ::connectLastAdapter,
+                        onStartDemo = { startObd(ObdService.ACTION_DEMO, null, null) },
+                        onCheckForUpdate = ::checkForUpdate,
+                        onInstallUpdate = ::installUpdate,
+                        onSetAppearance = ::setAppearance,
+                    ),
             )
         }
     }
@@ -143,6 +151,11 @@ class ComposeDashboardActivity : ComponentActivity() {
                 else -> store.onUpdateState("${build.tag} is available", build.tag, percent)
             }
         }
+    }
+
+    private fun setAppearance(mode: AppearanceMode) {
+        AppearancePrefs.write(prefs, mode)
+        store.onAppearance(mode)
     }
 
     private fun openClassicDashboard() {

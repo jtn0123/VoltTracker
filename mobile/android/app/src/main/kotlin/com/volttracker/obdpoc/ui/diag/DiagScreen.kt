@@ -31,7 +31,9 @@ import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltStat
 import com.volttracker.obdpoc.ui.components.VoltStatusPill
 import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
@@ -139,11 +141,14 @@ private fun CodesPanel(state: DiagUiState) {
     }
 }
 
-private fun severityColor(severity: DtcSeverity): Color =
+private fun severityColor(
+    pal: VoltPalette,
+    severity: DtcSeverity,
+): Color =
     when (severity) {
-        DtcSeverity.INFO -> VoltColors.textSecondary
-        DtcSeverity.WARNING -> VoltColors.warn
-        DtcSeverity.ALERT -> VoltColors.alert
+        DtcSeverity.INFO -> pal.textSecondary
+        DtcSeverity.WARNING -> pal.warn
+        DtcSeverity.ALERT -> pal.alert
     }
 
 @Composable
@@ -158,7 +163,7 @@ private fun DtcRow(code: DtcCode) {
             Text(
                 text = code.code,
                 style = VoltType.valueSmall,
-                color = severityColor(code.severity),
+                color = severityColor(LocalVoltPalette.current, code.severity),
             )
             if (code.pending) {
                 Spacer(Modifier.size(8.dp))

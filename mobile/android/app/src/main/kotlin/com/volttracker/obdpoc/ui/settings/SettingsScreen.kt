@@ -27,8 +27,10 @@ import com.volttracker.obdpoc.ui.components.VoltBottomNav
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.VoltSegmented
 import com.volttracker.obdpoc.ui.components.VoltStatusPill
 import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
@@ -42,6 +44,7 @@ fun SettingsScreen(
     onOpenClassicDashboard: () -> Unit = {},
     onCheckForUpdate: () -> Unit = {},
     onInstallUpdate: () -> Unit = {},
+    onSetAppearance: (AppearanceMode) -> Unit = {},
 ) {
     Box(
         modifier =
@@ -65,7 +68,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(14.dp))
             UnitsGroup(state)
             Spacer(Modifier.height(14.dp))
-            DisplayGroup(state)
+            DisplayGroup(state, onSetAppearance)
             Spacer(Modifier.height(14.dp))
             DataGroup(state)
             Spacer(Modifier.height(14.dp))
@@ -244,9 +247,20 @@ private fun UnitsGroup(state: SettingsUiState) {
 }
 
 @Composable
-private fun DisplayGroup(state: SettingsUiState) {
+private fun DisplayGroup(
+    state: SettingsUiState,
+    onSetAppearance: (AppearanceMode) -> Unit,
+) {
     VoltPanel {
         VoltLabel("Display")
+        SettingRow(label = "Appearance", subtitle = "System follows your phone's dark theme") {}
+        VoltSegmented(
+            options = AppearanceMode.entries.map { it.label },
+            selectedIndex = state.appearance.ordinal,
+            onSelect = { onSetAppearance(AppearanceMode.entries[it]) },
+            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        )
+        GroupDivider()
         SettingRow(label = "Keep screen awake", subtitle = "While Drive or Map is live") {
             TogglePill(state.keepScreenAwake)
         }

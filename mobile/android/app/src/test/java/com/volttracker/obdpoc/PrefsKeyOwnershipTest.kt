@@ -63,6 +63,7 @@ class PrefsKeyOwnershipTest {
                 CarControlSettings.KEY_ENABLED,
                 CarControlSettings.KEY_PIN_HASH,
                 CarControlSettings.KEY_PIN_SALT,
+                com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_APPEARANCE,
                 "raw_retention_days",
             )
 

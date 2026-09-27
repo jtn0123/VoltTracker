@@ -13,6 +13,8 @@ import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
 import com.volttracker.obdpoc.ui.map.MapUiState
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
+import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -69,7 +71,7 @@ class VoltAppNavigationTest {
             VoltApp(
                 demoState,
                 initialTab = VoltTab.SETTINGS,
-                onOpenClassicDashboard = { opened = true },
+                actions = VoltAppActions(onOpenClassicDashboard = { opened = true }),
             )
         }
 
@@ -78,5 +80,22 @@ class VoltAppNavigationTest {
             .performScrollTo()
             .performClick()
         assertTrue(opened)
+    }
+
+    @Test
+    fun appearanceSegmentsReportTheChosenMode() {
+        var chosen: AppearanceMode? = null
+        compose.setContent {
+            VoltApp(
+                demoState,
+                initialTab = VoltTab.SETTINGS,
+                actions = VoltAppActions(onSetAppearance = { chosen = it }),
+            )
+        }
+
+        compose.onNodeWithText("Light").performScrollTo().performClick()
+        assertEquals(AppearanceMode.LIGHT, chosen)
+        compose.onNodeWithText("Dark").performScrollTo().performClick()
+        assertEquals(AppearanceMode.DARK, chosen)
     }
 }

@@ -4,6 +4,7 @@ import com.volttracker.obdpoc.VoltGear
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
@@ -154,6 +155,12 @@ class LiveUiStateStore {
                         ),
                 )
             }
+    }
+
+    /** Applies the Settings → Appearance choice (the theme follows it immediately). */
+    fun onAppearance(mode: AppearanceMode) {
+        _state.value =
+            _state.value.let { s -> s.copy(settings = s.settings.copy(appearance = mode)) }
     }
 
     /** Stamps the installed-version line shown in Settings. */

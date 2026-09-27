@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui.settings
 
+import com.volttracker.obdpoc.ui.theme.AppearanceMode
+
 /**
  * Everything the Settings screen renders, as one immutable value.
  * Pure data — previewable and screenshot-testable with no service running.
@@ -29,6 +31,8 @@ data class SettingsUiState(
     val gasPriceLabel: String = "not set",
     val chargeTargetLabel: String = "100%",
     // Display
+    // Appearance: follow the system theme, or pin light/dark.
+    val appearance: AppearanceMode = AppearanceMode.SYSTEM,
     val keepScreenAwake: Boolean = false,
     val quietLiveData: Boolean = true,
     val textSizeLabel: String = "Default",

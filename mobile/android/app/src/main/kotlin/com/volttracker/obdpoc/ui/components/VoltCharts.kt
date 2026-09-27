@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
 
@@ -40,6 +41,7 @@ fun Sparkline(
     strokeWidth: Dp = 2.5.dp,
     cursorFraction: Float? = null,
 ) {
+    val pal = LocalVoltPalette.current
     Canvas(modifier = modifier.fillMaxWidth()) {
         if (values.size < 2) return@Canvas
         val minV = values.min()
@@ -95,12 +97,12 @@ fun Sparkline(
             val i1 = (i0 + 1).coerceAtMost(values.size - 1)
             val v = values[i0] + (values[i1] - values[i0]) * (fIndex - i0)
             drawLine(
-                color = VoltColors.textSecondary.copy(alpha = 0.55f),
+                color = pal.textSecondary.copy(alpha = 0.55f),
                 start = Offset(cx, 0f),
                 end = Offset(cx, size.height),
                 strokeWidth = 2f,
             )
-            drawCircle(color = VoltColors.textPrimary, radius = 7f, center = Offset(cx, yAt(v)))
+            drawCircle(color = pal.textPrimary, radius = 7f, center = Offset(cx, yAt(v)))
             drawCircle(color = lineColor, radius = 4f, center = Offset(cx, yAt(v)))
         }
     }
@@ -118,6 +120,7 @@ fun PowerBar(
     modifier: Modifier = Modifier,
     height: Dp = 8.dp,
 ) {
+    val pal = LocalVoltPalette.current
     Canvas(
         modifier =
             modifier
@@ -127,14 +130,14 @@ fun PowerBar(
         val r = size.height / 2f
         val centerX = size.width / 2f
         drawRoundRect(
-            color = VoltColors.surfaceElevated,
+            color = pal.surfaceElevated,
             cornerRadius =
                 androidx.compose.ui.geometry
                     .CornerRadius(r, r),
         )
         // Center tick.
         drawLine(
-            color = VoltColors.hairline,
+            color = pal.hairline,
             start = Offset(centerX, 0f),
             end = Offset(centerX, size.height),
             strokeWidth = 2f,
@@ -144,7 +147,7 @@ fun PowerBar(
             drawRoundRect(
                 brush =
                     Brush.horizontalGradient(
-                        colors = listOf(VoltColors.drive.copy(alpha = 0.55f), VoltColors.drive),
+                        colors = listOf(pal.drive.copy(alpha = 0.55f), pal.drive),
                         startX = centerX,
                         endX = centerX + (size.width / 2f) * frac,
                     ),
@@ -162,7 +165,7 @@ fun PowerBar(
             drawRoundRect(
                 brush =
                     Brush.horizontalGradient(
-                        colors = listOf(VoltColors.regen, VoltColors.regen.copy(alpha = 0.55f)),
+                        colors = listOf(pal.regen, pal.regen.copy(alpha = 0.55f)),
                         startX = centerX - w,
                         endX = centerX,
                     ),
@@ -220,6 +223,7 @@ fun SignedBars(
     positiveColor: Color = VoltColors.drive,
     negativeColor: Color = VoltColors.regen,
 ) {
+    val pal = LocalVoltPalette.current
     Canvas(modifier = modifier.fillMaxWidth()) {
         if (values.isEmpty()) return@Canvas
         val maxAbs = values.maxOf { kotlin.math.abs(it) }.takeIf { it > 0f } ?: 1f
@@ -227,7 +231,7 @@ fun SignedBars(
         val slot = size.width / values.size
         val barW = slot * 0.6f
         drawLine(
-            color = VoltColors.hairline,
+            color = pal.hairline,
             start = Offset(0f, centerY),
             end = Offset(size.width, centerY),
             strokeWidth = 2f,
