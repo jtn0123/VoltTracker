@@ -315,8 +315,8 @@ import { VD } from "./vd-registry";
       return v || fallback;
     };
     const lineColor = token("--line-soft", "rgba(255,255,255,0.06)");
-    const axisColor = token("--soft", "#8b8c99");
-    const dotColor = token("--ev", "#b8e63b");
+    const axisColor = token("--soft", "#8793a0");
+    const dotColor = token("--ev", "#5fd37a");
     const svgNs = "http://www.w3.org/2000/svg";
     const w = 330;
     const h = 140;
@@ -355,9 +355,9 @@ import { VD } from "./vd-registry";
           x: padL - 5,
           y: yOf(r) + 3,
           fill: axisColor,
-          "font-size": 9,
+          "font-size": 10,
           "text-anchor": "end",
-          "font-family": "ui-monospace,monospace"
+          "font-family": "inherit"
         },
         units.distanceKm(r * KM_PER_MILE).value
       );
@@ -370,9 +370,9 @@ import { VD } from "./vd-registry";
           x: xOf(t),
           y: h - padB + 14,
           fill: axisColor,
-          "font-size": 9,
+          "font-size": 10,
           "text-anchor": "middle",
-          "font-family": "ui-monospace,monospace"
+          "font-family": "inherit"
         },
         units.tempText(t)
       );
@@ -411,7 +411,7 @@ import { VD } from "./vd-registry";
         r: 4,
         fill: dotColor,
         opacity: inPeak ? 1 : 0.45,
-        stroke: token("--bg-top", "#12131a"),
+        stroke: token("--bg-top", "#0e131a"),
         "stroke-width": 1.5
       });
     }
@@ -502,12 +502,13 @@ import { VD } from "./vd-registry";
     const chart = el("thisWeekChart");
     if (chart) {
       const aria = `${mode === "eff" ? "Efficiency" : "Distance"} per day this week; ${headline.replace(/ · /g, ", ")}`;
-      // v2 design week chart: green bars, today highlighted (others dimmed),
-      // per-day value labels, and dashed placeholders for no-drive days.
+      // Week chart: accent bars for distance, EV green for efficiency; today
+      // highlighted (others dimmed), per-day value labels, and dashed
+      // placeholders for no-drive days.
       const todayIdx = (today.getDay() + 6) % 7;
       chart.replaceChildren(
         VD.buildMonthlyTrendSvg(WEEK_DAY_LABELS, values, aria, chart, {
-          colorVar: "--ev",
+          colorVar: mode === "eff" ? "--ev" : "--volt",
           highlightIndex: todayIdx,
           showValues: true,
           valueFormat: (v: number) => (mode === "eff" ? v.toFixed(1) : String(Math.round(v))),
@@ -1213,17 +1214,16 @@ import { VD } from "./vd-registry";
     // literals — this keeps the scatter (gridlines, axis labels, grade-coded
     // dots, trend line) legible in BOTH the dark and light themes instead of
     // hardcoding dark-only colors. Fallbacks mirror the dark token defaults.
-    // Resolve on the chart host so --view-accent cascades in — the chart
-    // speaks its own tab's color (purple on Insights) instead of borrowing
-    // Drive orange. Blue stays as the secondary series color for dots.
+    // Resolve on the chart host so --view-accent (the one accent) cascades
+    // in for the trend path; EV green carries the efficiency series.
     const tokens = getComputedStyle(chart);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)"); // gridlines
-    const axisColor = token("--muted", "#aaaab4"); // axis tick labels
-    const trendColor = token("--view-accent", token("--volt", "#ff7a45")); // best-fit trend path
-    const evColor = token("--ev", "#b8e63b"); // bars/curve accent + headline
-    const dotColor = token("--map-accent", "#4cc4ff"); // grade-normalized scatter dots
+    const axisColor = token("--muted", "#9aa5b1"); // axis tick labels
+    const trendColor = token("--view-accent", token("--volt", "#2bd4c4")); // best-fit trend path
+    const evColor = token("--ev", "#5fd37a"); // bars/curve accent + headline
+    const dotColor = token("--map-accent", "#2bd4c4"); // grade-normalized scatter dots
     const w = Math.max(300, chart.clientWidth || 360);
     const h = 280;
     const padL = 38;
@@ -1270,7 +1270,7 @@ import { VD } from "./vd-registry";
         y: h - padB + 15,
         fill: axisColor,
         "font-size": 10.5,
-        "font-family": "ui-monospace,monospace",
+        "font-family": "inherit",
         "text-anchor": "middle"
       });
     }
@@ -1287,7 +1287,7 @@ import { VD } from "./vd-registry";
         y: yS(gy) + 3,
         fill: axisColor,
         "font-size": 10.5,
-        "font-family": "ui-monospace,monospace",
+        "font-family": "inherit",
         "text-anchor": "end"
       });
     }
@@ -1320,10 +1320,10 @@ import { VD } from "./vd-registry";
     // SVG presentation attributes can't read CSS vars, so resolve the extra
     // chrome tokens to literals here and pass them down. v2 design: non-peak
     // bars are translucent green (the same family as the peak), not grey.
-    const evRgb = token("--ev-rgb", "184, 230, 59");
+    const evRgb = token("--ev-rgb", "95, 211, 122");
     const idleBar = `rgba(${evRgb}, 0.28)`;
     const idleWhisker = token("--line-strong", "rgba(255,255,255,0.28)");
-    const bgColor = token("--bg", "#07080c");
+    const bgColor = token("--bg", "#0b0f14");
     const view = scatterView();
     if (view === "bars") {
       renderBuckets(svg, buckets, peak, xOf, yS, {
@@ -1344,7 +1344,7 @@ import { VD } from "./vd-registry";
       y: h - 4,
       fill: axisColor,
       "font-size": 10.5,
-      "font-family": "ui-monospace,monospace",
+      "font-family": "inherit",
       "text-anchor": "end"
     });
     // Y-axis unit annotation (efficiency), rotated to read up the left gutter so
@@ -1354,7 +1354,7 @@ import { VD } from "./vd-registry";
       y: padT + (h - padT - padB) / 2,
       fill: axisColor,
       "font-size": 10.5,
-      "font-family": "ui-monospace,monospace",
+      "font-family": "inherit",
       "text-anchor": "middle",
       transform: `rotate(-90 10 ${(padT + (h - padT - padB) / 2).toFixed(1)})`
     });

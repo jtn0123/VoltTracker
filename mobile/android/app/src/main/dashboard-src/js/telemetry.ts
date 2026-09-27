@@ -1340,7 +1340,7 @@ import { driveGear, gearDisplayText } from "./gear";
       setDataState(powerDetail, detailState);
     }
     // State-reactive hero (X1): the whole speed+power cluster tints from one
-    // accent — orange under drive power, green in regen, neutral coasting —
+    // accent — teal under drive power, green in regen, neutral coasting —
     // via the --hero-accent custom property keyed off this attribute
     // (components.css). The speed-trace canvas reads the same property.
     const heroCard = el("liveHeroCard");

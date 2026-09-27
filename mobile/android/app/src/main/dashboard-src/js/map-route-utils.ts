@@ -60,10 +60,10 @@ export function mapEffColor(eff: unknown) {
   // enrichRouteEff sets eff = null for regen / no-data segments; those must read
   // as "no data" (grey), not fall through Number(null) === 0 into the worst band.
   const value = numOrNaN(eff);
-  if (!Number.isFinite(value)) return "#6a6a72";
-  if (value >= 4) return "#b8e63b";
-  if (value >= 2.7) return "#ffb84a";
-  return "#ff6b5f";
+  if (!Number.isFinite(value)) return "#6b7682";
+  if (value >= 4) return "#5fd37a";
+  if (value >= 2.7) return "#f2c94c";
+  return "#ff6b6b";
 }
 
 export function isValidRoutePoint(point: unknown): point is MapRoutePoint {

@@ -141,7 +141,7 @@ private fun CodesPanel(state: DiagUiState) {
 
 private fun severityColor(severity: DtcSeverity): Color =
     when (severity) {
-        DtcSeverity.INFO -> VoltColors.regen
+        DtcSeverity.INFO -> VoltColors.textSecondary
         DtcSeverity.WARNING -> VoltColors.warn
         DtcSeverity.ALERT -> VoltColors.alert
     }

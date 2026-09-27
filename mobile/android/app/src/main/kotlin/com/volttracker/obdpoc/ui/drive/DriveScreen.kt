@@ -144,7 +144,7 @@ private fun SpeedHero(state: DriveUiState) {
         Spacer(Modifier.height(18.dp))
         Sparkline(
             values = state.speedTrace,
-            lineColor = if (state.mode == DriveMode.GAS) VoltColors.drive else VoltColors.energy,
+            lineColor = if (state.mode == DriveMode.GAS) VoltColors.gas else VoltColors.accent,
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -163,7 +163,7 @@ private fun StatusChips(state: DriveUiState) {
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         if (state.mode == DriveMode.GAS) {
-            VoltStatusPill(text = "Gas", dotColor = VoltColors.drive)
+            VoltStatusPill(text = "Gas", dotColor = VoltColors.gas)
         } else {
             VoltStatusPill(text = "EV", dotColor = VoltColors.energy)
         }

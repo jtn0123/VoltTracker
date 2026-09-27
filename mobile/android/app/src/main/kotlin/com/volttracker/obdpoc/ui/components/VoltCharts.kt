@@ -36,7 +36,7 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 fun Sparkline(
     values: List<Float>,
     modifier: Modifier = Modifier,
-    lineColor: Color = VoltColors.energy,
+    lineColor: Color = VoltColors.accent,
     strokeWidth: Dp = 2.5.dp,
     cursorFraction: Float? = null,
 ) {
@@ -266,7 +266,7 @@ fun MiniBars(
     labels: List<String>,
     modifier: Modifier = Modifier,
     barHeight: Dp = 96.dp,
-    accent: Color = VoltColors.energy,
+    accent: Color = VoltColors.accent,
     highlightIndex: Int? = null,
 ) {
     Column(modifier = modifier.fillMaxWidth()) {

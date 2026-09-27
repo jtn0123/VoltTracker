@@ -1148,7 +1148,7 @@ import { VD } from "./vd-registry";
         radius: 8,
         color: "#fff",
         weight: 2,
-        fillColor: isLiveRoute ? "#4cc4ff" : "#ff7a45",
+        fillColor: isLiveRoute ? "#7ae8dc" : "#2bd4c4",
         fillOpacity: 1
       });
       mapLayerGroups.routes = L.layerGroup([onlyMarker()]);
@@ -1163,13 +1163,13 @@ import { VD } from "./vd-registry";
       }
       return;
     }
-    const routeColor = isLiveRoute ? "#4cc4ff" : "#ff7a45";
-    const routeEndColor = isLiveRoute ? "#4cc4ff" : "#ff7141";
+    const routeColor = isLiveRoute ? "#7ae8dc" : "#2bd4c4";
+    const routeEndColor = isLiveRoute ? "#7ae8dc" : "#1fb8a9";
     // Direction-of-travel cue: a thin overlay of round dashes whose CSS animation
     // flows start -> end (chronological draw order = direction travelled). Subtle
     // (no extra weight, just a moving stipple) so it reads as "which way" without
     // shouting. The class drives the dash pattern + keyframes (screens.css).
-    const flowColor = isLiveRoute ? "#dff4ff" : "#fff0e6";
+    const flowColor = isLiveRoute ? "#f0fffd" : "#e6fffc";
 
     const outerRoute = L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }) as MutablePolylineLayer;
     const innerRoute = L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }) as MutablePolylineLayer;
@@ -1205,11 +1205,11 @@ import { VD } from "./vd-registry";
       };
     }
 
-    const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
+    const bands: Record<string, LatLngSegment[]> = { "#ff6b6b": [], "#f2c94c": [], "#5fd37a": [] };
     const heatStats: Record<string, { meters: number; seconds: number }> = {
-      "#ff6b4a": { meters: 0, seconds: 0 },
-      "#ffd23f": { meters: 0, seconds: 0 },
-      "#7ee06a": { meters: 0, seconds: 0 }
+      "#ff6b6b": { meters: 0, seconds: 0 },
+      "#f2c94c": { meters: 0, seconds: 0 },
+      "#5fd37a": { meters: 0, seconds: 0 }
     };
     for (let i = 1; i < drawable.length; i += 1) {
       const previousPoint = drawable[i - 1];
@@ -1218,7 +1218,7 @@ import { VD } from "./vd-registry";
       const latLng = latlngs[i];
       if (!previousPoint || !point || !previousLatLng || !latLng) continue;
       const speed = segmentSpeedMps(previousPoint, point);
-      const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
+      const color = speed < 8 ? "#ff6b6b" : (speed < 18 ? "#f2c94c" : "#5fd37a");
       const bucket = bands[color];
       if (bucket) bucket.push([previousLatLng, latLng]);
       const bandStat = heatStats[color];
@@ -1229,9 +1229,9 @@ import { VD } from "./vd-registry";
       }
     }
     const HEAT_BAND_LABELS: Record<string, { label: string; tone: string }> = {
-      "#ff6b4a": { label: "Slow stretches", tone: "bad" },
-      "#ffd23f": { label: "Steady stretches", tone: "warn" },
-      "#7ee06a": { label: "Fast stretches", tone: "ok" }
+      "#ff6b6b": { label: "Slow stretches", tone: "bad" },
+      "#f2c94c": { label: "Steady stretches", tone: "warn" },
+      "#5fd37a": { label: "Fast stretches", tone: "ok" }
     };
     mapLayerGroups.heat = L.layerGroup();
     Object.entries(bands).forEach(([color, segments]) => {
@@ -1260,7 +1260,7 @@ import { VD } from "./vd-registry";
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       const marker = L.circleMarker([stop.lat, stop.lng], {
-        radius, color: "#ffd7b0", weight: 3, fillColor: "#ff8a3d", fillOpacity: 0.38
+        radius, color: "#e8edf2", weight: 3, fillColor: "#8793a0", fillOpacity: 0.38
       }).bindTooltip(stop.parked ? `${parkStopLabel(stop.durationMs)} · in Park` : `Stop · ${VD.formatDuration(stop.durationMs)}`);
       // Tap a stop -> arrived / back-on-road times in the detail card.
       marker.on("click", () => {
@@ -1299,10 +1299,10 @@ import { VD } from "./vd-registry";
       }
     }
     const EFF_BAND_LABELS: Record<string, { label: string; tone: string }> = {
-      "#b8e63b": { label: "Efficient stretches", tone: "ok" },
-      "#ffb84a": { label: "Average-efficiency stretches", tone: "warn" },
-      "#ff6b5f": { label: "Low-efficiency stretches", tone: "bad" },
-      "#6a6a72": { label: "No power data", tone: "idle" }
+      "#5fd37a": { label: "Efficient stretches", tone: "ok" },
+      "#f2c94c": { label: "Average-efficiency stretches", tone: "warn" },
+      "#ff6b6b": { label: "Low-efficiency stretches", tone: "bad" },
+      "#6b7682": { label: "No power data", tone: "idle" }
     };
     mapLayerGroups.eff = L.layerGroup();
     // Soft white halo underneath the colored segments so the route reads
@@ -1327,8 +1327,8 @@ import { VD } from "./vd-registry";
       });
       line.addTo(mapLayerGroups.eff);
     });
-    L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
-    L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#5fd37a", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b6b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
 
     // Drive-event diamonds (hard braking / rapid accel) ride every layer
     // except Stops. Fresh marker instances per group — a Leaflet layer can
@@ -1615,10 +1615,10 @@ import { VD } from "./vd-registry";
     const tokens = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
-    const axisColor = token("--muted", "#aaaab4");
-    const evColor = token("--ev", "#b8e63b");
-    const downColor = token("--map-accent", "#4cc4ff");
-    const upColor = token("--bad", "#ff6b5f");
+    const axisColor = token("--muted", "#9aa5b1");
+    const evColor = token("--ev", "#5fd37a");
+    const downColor = token("--map-accent", "#2bd4c4");
+    const upColor = token("--bad", "#ff6b6b");
     const w = 320;
     const h = 220;
     const padL = 34;
@@ -1651,11 +1651,11 @@ import { VD } from "./vd-registry";
     };
     for (let gx = 0; gx <= axisMaxMph; gx += 15) {
       appendLine({ x1: xOf(gx), y1: padT, x2: xOf(gx), y2: h - padB, stroke: lineColor });
-      appendText(String(Math.round(speedToDisplay(gx))), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle" });
+      appendText(String(Math.round(speedToDisplay(gx))), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "middle" });
     }
     for (let gy = 0; gy <= 7; gy += 1) {
       appendLine({ x1: padL, y1: yS(gy), x2: w - padR, y2: yS(gy), stroke: lineColor });
-      appendText(String(Math.round(effToDisplay(gy))), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+      appendText(String(Math.round(effToDisplay(gy))), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "end" });
     }
     pool.forEach((p) => {
       svg.append(setSvgAttrs(document.createElementNS(ns, "circle"), {
@@ -1666,9 +1666,9 @@ import { VD } from "./vd-registry";
         "fill-opacity": 0.55,
       }));
     });
-    appendText(`speed (${speedUnitLabel}) ->`, { x: w - padR, y: h - 4, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    appendText(`speed (${speedUnitLabel}) ->`, { x: w - padR, y: h - 4, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "end" });
     // Y-axis (efficiency) unit annotation, rotated up the left gutter.
-    appendText(effUnitLabel, { x: 9, y: padT + (h - padT - padB) / 2, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle", transform: `rotate(-90 9 ${(padT + (h - padT - padB) / 2).toFixed(1)})` });
+    appendText(effUnitLabel, { x: 9, y: padT + (h - padT - padB) / 2, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "middle", transform: `rotate(-90 9 ${(padT + (h - padT - padB) / 2).toFixed(1)})` });
     return svg;
   }
 
@@ -1738,8 +1738,8 @@ import { VD } from "./vd-registry";
     const tokens = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
-    const axisColor = token("--muted", "#aaaab4");
-    const traceColor = token("--map-accent", "#4cc4ff");
+    const axisColor = token("--muted", "#9aa5b1");
+    const traceColor = token("--map-accent", "#2bd4c4");
     const ns = "http://www.w3.org/2000/svg";
     const setSvgAttrs = VD.setSvgAttrs;
     const w = 320;
@@ -1765,7 +1765,7 @@ import { VD } from "./vd-registry";
       }));
       const label = setSvgAttrs(document.createElementNS(ns, "text"), {
         x: padL - 5, y: (y + 3).toFixed(1), fill: axisColor,
-        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+        "font-size": 10, "font-family": "inherit", "text-anchor": "end",
       });
       label.textContent = altText(alt);
       svg.append(label);
@@ -1788,7 +1788,7 @@ import { VD } from "./vd-registry";
     }));
     const distLabel = setSvgAttrs(document.createElementNS(ns, "text"), {
       x: w - padR, y: h - 4, fill: axisColor,
-      "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+      "font-size": 10, "font-family": "inherit", "text-anchor": "end",
     });
     distLabel.textContent = `distance (${VD.units.distanceUnit()}) ->`;
     svg.append(distLabel);
@@ -1860,9 +1860,9 @@ import { VD } from "./vd-registry";
     ]);
     const d = "M" + coords.map((c) => `${(c[0] as number).toFixed(1)},${(c[1] as number).toFixed(1)}`).join(" L");
     const fill = document.createElementNS(ns, "path") as SVGElement;
-    VD.setSvgAttrs(fill, { d: `${d} L${w},${h} L0,${h} Z`, fill: "rgba(76,196,255,0.14)" });
+    VD.setSvgAttrs(fill, { d: `${d} L${w},${h} L0,${h} Z`, fill: "rgba(43,212,196,0.14)" });
     const line = document.createElementNS(ns, "path") as SVGElement;
-    VD.setSvgAttrs(line, { d, fill: "none", stroke: "#4cc4ff", "stroke-width": 2, "stroke-linejoin": "round" });
+    VD.setSvgAttrs(line, { d, fill: "none", stroke: "#2bd4c4", "stroke-width": 2, "stroke-linejoin": "round" });
     svg.append(fill, line);
     card.hidden = false;
     const maxSpeed = VD.units.speed(maxV * 3.6);

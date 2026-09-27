@@ -58,7 +58,7 @@ fun VoltBottomNav(
                 Icon(
                     imageVector = tab.icon,
                     contentDescription = tab.label,
-                    tint = if (active) VoltColors.energy else VoltColors.textSecondary,
+                    tint = if (active) VoltColors.accent else VoltColors.textSecondary,
                     modifier = Modifier.size(22.dp),
                 )
                 Spacer(Modifier.size(3.dp))

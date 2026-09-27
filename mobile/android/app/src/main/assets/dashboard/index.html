@@ -734,7 +734,7 @@
     </article>
 
     <!-- Live readout — same .scrub-readout pattern as the Map scrubber: 6
-         compact cells, monospace tabular-nums, color-coded kickers. Replaces
+         compact cells, tabular-nums, neutral labels (color is for status). Replaces
          the old .mini-grid + .drive-signal-grid clutter. -->
     <div
       id="liveReadout"
@@ -745,32 +745,32 @@
       aria-label="Live OBD signals"
     >
       <div data-live-cell="true" data-tile-key="rpm">
-        <span class="kicker" data-tone="volt">RPM</span>
+        <span class="kicker">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="aux12v">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
-        <span class="kicker" data-tone="muted">Aux 12V</span>
+        <span class="kicker">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="coolant">
-        <span class="kicker" data-tone="warn">Coolant</span>
+        <span class="kicker">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="throttle">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
-        <span class="kicker" data-tone="ev">Throttle</span>
+        <span class="kicker">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="load">
-        <span class="kicker" data-tone="ev">Load</span>
+        <span class="kicker">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="gps">
-        <span class="kicker" data-tone="mixed">GPS</span>
+        <span class="kicker">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
     </div>
@@ -819,35 +819,35 @@
     aria-label="Enhanced Volt signals"
   >
     <div data-live-cell="true">
-      <span class="kicker" data-tone="volt">Motor A</span>
+      <span class="kicker">Motor A</span>
       <strong id="moreMotorA" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="accent">Motor B</span>
+      <span class="kicker">Motor B</span>
       <strong id="moreMotorB" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="ev">Gear</span>
+      <span class="kicker">Gear</span>
       <strong id="moreGear" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="mixed">EV range</span>
+      <span class="kicker">EV range</span>
       <strong id="moreEvRange" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="warn">Trans temp</span>
+      <span class="kicker">Trans temp</span>
       <strong id="moreTransTemp" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="muted">Ambient</span>
+      <span class="kicker">Ambient</span>
       <strong id="moreAmbient" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="warn">Oil life</span>
+      <span class="kicker">Oil life</span>
       <strong id="moreOilLife" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="ev">Torque</span>
+      <span class="kicker">Torque</span>
       <strong id="moreTorque" data-live-tile="true">--</strong>
     </div>
   </div>
@@ -3494,7 +3494,7 @@
     <div class="dtc-status-grid">
       <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
       <div>
-        <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
+        <span>Current / stored</span><strong id="dtcStoredCount">0</strong>
       </div>
       <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
       <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>

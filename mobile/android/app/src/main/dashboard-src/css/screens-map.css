@@ -266,7 +266,7 @@
     background: var(--surface-overlay);
     color: var(--text);
     border-color: var(--line-marker);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-ui);
   }
 
   .map-legend {
