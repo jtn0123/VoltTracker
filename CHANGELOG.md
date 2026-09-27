@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.43.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: Bold layout pass — collapse empty fields, EV/gas chip, compact charts
+  ([#86](https://github.com/jtn0123/VoltTracker/pull/86),
+  [`0702475`](https://github.com/jtn0123/VoltTracker/commit/0702475653956918c1e2e5960a624659f53d921c))
+
+
 ## v0.42.0 (2026-09-27)
 
 ### ✳️ New
