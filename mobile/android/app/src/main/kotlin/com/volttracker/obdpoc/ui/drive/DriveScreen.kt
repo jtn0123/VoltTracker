@@ -41,7 +41,9 @@ import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltStat
 import com.volttracker.obdpoc.ui.components.VoltStatusPill
 import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
@@ -240,20 +242,23 @@ private data class PowerStatus(
     val color: androidx.compose.ui.graphics.Color,
 )
 
-private fun powerStatus(state: DriveUiState): PowerStatus =
+private fun powerStatus(
+    pal: VoltPalette,
+    state: DriveUiState,
+): PowerStatus =
     when {
-        state.powerKw < -0.05 -> PowerStatus("Regen", VoltColors.regen)
+        state.powerKw < -0.05 -> PowerStatus("Regen", pal.regen)
         state.powerKw > 0.05 ->
             PowerStatus(
                 if (state.mode == DriveMode.GAS) "Drive · Gas" else "Drive",
-                VoltColors.drive,
+                pal.drive,
             )
-        else -> PowerStatus("Idle", VoltColors.textTertiary)
+        else -> PowerStatus("Idle", pal.textTertiary)
     }
 
 @Composable
 private fun PowerSection(state: DriveUiState) {
-    val status = powerStatus(state)
+    val status = powerStatus(LocalVoltPalette.current, state)
     val kwText = String.format(Locale.US, "%.1f", kotlin.math.abs(state.powerKw))
     VoltPanel {
         Row(

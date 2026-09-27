@@ -9,5 +9,12 @@
             android:name=".DebugClassicDashboard"
             android:exported="true"
             android:targetActivity=".MainActivity" />
+        <!-- Debug-only launch handle for the native Compose dashboard, which has no in-app
+             entry point yet: lets `adb shell am start -n <pkg>/.DebugComposeDashboard` open it
+             for previews and screen recordings. Absent from release builds. -->
+        <activity-alias
+            android:name=".DebugComposeDashboard"
+            android:exported="true"
+            android:targetActivity=".ComposeDashboardActivity" />
     </application>
 </manifest>

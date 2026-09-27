@@ -41,7 +41,9 @@ import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltStat
 import com.volttracker.obdpoc.ui.components.VoltStatusPill
 import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
@@ -150,26 +152,30 @@ private fun TripChips(state: MapUiState) {
     }
 }
 
-private fun qualityColor(quality: RouteQuality): Color =
+private fun qualityColor(
+    pal: VoltPalette,
+    quality: RouteQuality,
+): Color =
     when (quality) {
-        RouteQuality.GREAT -> VoltColors.energy
-        RouteQuality.AVERAGE -> VoltColors.warn
-        RouteQuality.POOR -> VoltColors.alert
+        RouteQuality.GREAT -> pal.energy
+        RouteQuality.AVERAGE -> pal.warn
+        RouteQuality.POOR -> pal.alert
     }
 
 private fun segmentColor(
+    pal: VoltPalette,
     point: RoutePoint,
     mode: MapViewMode,
 ): Color =
     when (mode) {
-        MapViewMode.EFFICIENCY -> qualityColor(point.quality)
-        MapViewMode.ROUTES, MapViewMode.STOPS -> VoltColors.accent
+        MapViewMode.EFFICIENCY -> qualityColor(pal, point.quality)
+        MapViewMode.ROUTES, MapViewMode.STOPS -> pal.accent
         MapViewMode.HEAT -> {
             val f = point.speedFrac.coerceIn(0f, 1f)
             if (f < 0.5f) {
-                lerp(VoltColors.accent, VoltColors.warn, f * 2f)
+                lerp(pal.accent, pal.warn, f * 2f)
             } else {
-                lerp(VoltColors.warn, VoltColors.alert, (f - 0.5f) * 2f)
+                lerp(pal.warn, pal.alert, (f - 0.5f) * 2f)
             }
         }
     }
@@ -182,6 +188,7 @@ private fun RouteOverlay(
     drawFallbackGrid: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val pal = LocalVoltPalette.current
     val route = state.route
     Canvas(modifier = modifier) {
         if (drawFallbackGrid) {
@@ -190,7 +197,7 @@ private fun RouteOverlay(
             while (gx < size.width) {
                 var gy = gridStep / 2f
                 while (gy < size.height) {
-                    drawCircle(color = VoltColors.hairline, radius = 1.6f, center = Offset(gx, gy))
+                    drawCircle(color = pal.hairline, radius = 1.6f, center = Offset(gx, gy))
                     gy += gridStep
                 }
                 gx += gridStep
@@ -200,7 +207,7 @@ private fun RouteOverlay(
         // Soft glow pass under the colored trace.
         for (i in 1 until route.size) {
             drawLine(
-                color = segmentColor(route[i], state.viewMode).copy(alpha = 0.25f),
+                color = segmentColor(pal, route[i], state.viewMode).copy(alpha = 0.25f),
                 start = projectPoint(route[i - 1]),
                 end = projectPoint(route[i]),
                 strokeWidth = 22f,
@@ -209,7 +216,7 @@ private fun RouteOverlay(
         }
         for (i in 1 until route.size) {
             drawLine(
-                color = segmentColor(route[i], state.viewMode),
+                color = segmentColor(pal, route[i], state.viewMode),
                 start = projectPoint(route[i - 1]),
                 end = projectPoint(route[i]),
                 strokeWidth = 9f,
@@ -219,15 +226,15 @@ private fun RouteOverlay(
         // Stops (lights, parking) — always visible in Stops mode.
         if (state.viewMode == MapViewMode.STOPS) {
             route.filter { it.stop }.forEach { p ->
-                drawCircle(color = VoltColors.warn, radius = 13f, center = projectPoint(p))
-                drawCircle(color = VoltColors.bg, radius = 6f, center = projectPoint(p))
+                drawCircle(color = pal.warn, radius = 13f, center = projectPoint(p))
+                drawCircle(color = pal.bg, radius = 6f, center = projectPoint(p))
             }
         }
         // Start / end markers.
-        drawCircle(color = VoltColors.energy, radius = 16f, center = projectPoint(route.first()))
-        drawCircle(color = VoltColors.bg, radius = 8f, center = projectPoint(route.first()))
-        drawCircle(color = VoltColors.alert, radius = 16f, center = projectPoint(route.last()))
-        drawCircle(color = VoltColors.bg, radius = 8f, center = projectPoint(route.last()))
+        drawCircle(color = pal.energy, radius = 16f, center = projectPoint(route.first()))
+        drawCircle(color = pal.bg, radius = 8f, center = projectPoint(route.first()))
+        drawCircle(color = pal.alert, radius = 16f, center = projectPoint(route.last()))
+        drawCircle(color = pal.bg, radius = 8f, center = projectPoint(route.last()))
         // Scrubber position marker.
         val fIndex = state.scrubberFraction.coerceIn(0f, 1f) * (route.size - 1)
         val i0 = fIndex.toInt().coerceIn(0, route.size - 1)
@@ -236,9 +243,9 @@ private fun RouteOverlay(
         val b = projectPoint(route[i1])
         val t = fIndex - i0
         val pos = Offset(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
-        drawCircle(color = VoltColors.textPrimary, radius = 15f, center = pos)
-        drawCircle(color = VoltColors.bg, radius = 10f, center = pos)
-        drawCircle(color = VoltColors.textPrimary, radius = 5f, center = pos)
+        drawCircle(color = pal.textPrimary, radius = 15f, center = pos)
+        drawCircle(color = pal.bg, radius = 10f, center = pos)
+        drawCircle(color = pal.textPrimary, radius = 5f, center = pos)
     }
 }
 

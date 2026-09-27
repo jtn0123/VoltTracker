@@ -17,7 +17,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
-import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
+import com.volttracker.obdpoc.ui.theme.VoltPalette
 import java.util.Locale
 
 /**
@@ -30,6 +31,7 @@ fun TripProfileChart(
     state: MapUiState,
     modifier: Modifier = Modifier,
 ) {
+    val pal = LocalVoltPalette.current
     Canvas(
         modifier =
             modifier
@@ -60,20 +62,20 @@ fun TripProfileChart(
         stops.forEach { f ->
             val x = xFor(f)
             drawLine(
-                color = VoltColors.warn.copy(alpha = 0.30f),
+                color = pal.warn.copy(alpha = 0.30f),
                 start = Offset(x, speedRect.top),
                 end = Offset(x, socRect.bottom),
                 strokeWidth = 2f,
             )
-            drawCircle(color = VoltColors.warn, radius = 6f, center = Offset(x, axisY))
+            drawCircle(color = pal.warn, radius = 6f, center = Offset(x, axisY))
         }
 
-        drawSpeedBand(speedRect, state)
-        drawElevationBand(elevRect, state.elevationProfile)
-        drawPowerBand(powerRect, state.powerProfile)
-        drawSocBand(socRect, state.socProfile)
-        drawDistanceAxis(axisY, state.distanceMiles)
-        drawCursor(cursor, speedRect, socRect, state)
+        drawSpeedBand(pal, speedRect, state)
+        drawElevationBand(pal, elevRect, state.elevationProfile)
+        drawPowerBand(pal, powerRect, state.powerProfile)
+        drawSocBand(pal, socRect, state.socProfile)
+        drawDistanceAxis(pal, axisY, state.distanceMiles)
+        drawCursor(pal, cursor, speedRect, socRect, state)
     }
 }
 
@@ -101,14 +103,15 @@ private fun DrawScope.labelPaint(
     }
 
 private fun DrawScope.drawBandLabel(
+    pal: VoltPalette,
     rect: Rect,
     label: String,
     callout: String?,
 ) {
-    val paint = labelPaint(10f, VoltColors.textSecondary, bold = true)
+    val paint = labelPaint(10f, pal.textSecondary, bold = true)
     drawContext.canvas.nativeCanvas.drawText(label.uppercase(Locale.US), 0f, rect.top - 8.dp.toPx(), paint)
     if (callout != null) {
-        val calloutPaint = labelPaint(10f, VoltColors.textPrimary, bold = true)
+        val calloutPaint = labelPaint(10f, pal.textPrimary, bold = true)
         val w = calloutPaint.measureText(callout)
         drawContext.canvas.nativeCanvas.drawText(callout, size.width - w, rect.top - 8.dp.toPx(), calloutPaint)
     }
@@ -127,6 +130,7 @@ private fun yInBand(
 
 /** Speed line, colored per segment by route efficiency, with dashed avg line. */
 private fun DrawScope.drawSpeedBand(
+    pal: VoltPalette,
     rect: Rect,
     state: MapUiState,
 ) {
@@ -134,18 +138,18 @@ private fun DrawScope.drawSpeedBand(
     if (values.size < 2) return
     val minV = values.min()
     val maxV = values.max()
-    drawBandLabel(rect, "Speed · mph", String.format(Locale.US, "max %.0f", maxV))
+    drawBandLabel(pal, rect, "Speed · mph", String.format(Locale.US, "max %.0f", maxV))
     // Dashed average line.
     if (state.avgMph > 0 && state.avgMph.toFloat() in minV..maxV) {
         val avgY = yInBand(rect, state.avgMph.toFloat(), minV, maxV)
         drawLine(
-            color = VoltColors.textTertiary,
+            color = pal.textTertiary,
             start = Offset(0f, avgY),
             end = Offset(size.width, avgY),
             strokeWidth = 2f,
             pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 12f)),
         )
-        val paint = labelPaint(9f, VoltColors.textTertiary)
+        val paint = labelPaint(9f, pal.textTertiary)
         drawContext.canvas.nativeCanvas.drawText("avg ${state.avgMph}", 0f, avgY - 5.dp.toPx() + 0f, paint)
     }
     val route = state.route
@@ -160,9 +164,9 @@ private fun DrawScope.drawSpeedBand(
             }
         val color =
             when (quality) {
-                RouteQuality.GREAT -> VoltColors.energy
-                RouteQuality.AVERAGE -> VoltColors.warn
-                RouteQuality.POOR -> VoltColors.alert
+                RouteQuality.GREAT -> pal.energy
+                RouteQuality.AVERAGE -> pal.warn
+                RouteQuality.POOR -> pal.alert
             }
         drawLine(
             color = color,
@@ -176,6 +180,7 @@ private fun DrawScope.drawSpeedBand(
 
 /** Elevation area with peak/valley callouts. */
 private fun DrawScope.drawElevationBand(
+    pal: VoltPalette,
     rect: Rect,
     values: List<Float>,
 ) {
@@ -183,6 +188,7 @@ private fun DrawScope.drawElevationBand(
     val minV = values.min()
     val maxV = values.max()
     drawBandLabel(
+        pal,
         rect,
         "Elevation · ft",
         String.format(Locale.US, "%.0f–%.0f", minV, maxV),
@@ -201,17 +207,18 @@ private fun DrawScope.drawElevationBand(
             lineTo(0f, rect.bottom)
             close()
         }
-    drawPath(fill, color = VoltColors.neutralSeries.copy(alpha = 0.16f))
-    drawPath(line, color = VoltColors.neutralSeries, style = Stroke(width = 5f, cap = StrokeCap.Round))
+    drawPath(fill, color = pal.neutralSeries.copy(alpha = 0.16f))
+    drawPath(line, color = pal.neutralSeries, style = Stroke(width = 5f, cap = StrokeCap.Round))
     // Peak marker.
     val peakIndex = values.indexOf(maxV)
     val peak = Offset(peakIndex * stepX, yInBand(rect, maxV, minV, maxV))
-    drawCircle(color = VoltColors.neutralSeries, radius = 7f, center = peak)
-    drawCircle(color = VoltColors.bg, radius = 3.5f, center = peak)
+    drawCircle(color = pal.neutralSeries, radius = 7f, center = peak)
+    drawCircle(color = pal.bg, radius = 3.5f, center = peak)
 }
 
 /** Centered-zero power band: drive above (orange), regen below (blue). */
 private fun DrawScope.drawPowerBand(
+    pal: VoltPalette,
     rect: Rect,
     values: List<Float>,
 ) {
@@ -219,6 +226,7 @@ private fun DrawScope.drawPowerBand(
     val extent = values.maxOf { kotlin.math.abs(it) }.coerceAtLeast(1f)
     val regenKwh = values.filter { it < 0f }.sumOf { -it.toDouble() } / values.size
     drawBandLabel(
+        pal,
         rect,
         "Power · kW",
         if (regenKwh > 0.0) "regen shown in blue" else null,
@@ -231,7 +239,7 @@ private fun DrawScope.drawPowerBand(
         val x1 = i * stepX
         val y0 = zeroY - (values[i - 1] / extent) * (rect.height / 2f) * 0.9f
         val y1 = zeroY - (values[i] / extent) * (rect.height / 2f) * 0.9f
-        val color = if (values[i] >= 0f) VoltColors.drive else VoltColors.regen
+        val color = if (values[i] >= 0f) pal.drive else pal.regen
         val fill =
             Path().apply {
                 moveTo(x0, zeroY)
@@ -244,7 +252,7 @@ private fun DrawScope.drawPowerBand(
         drawLine(color = color, start = Offset(x0, y0), end = Offset(x1, y1), strokeWidth = 5f, cap = StrokeCap.Round)
     }
     drawLine(
-        color = VoltColors.hairline,
+        color = pal.hairline,
         start = Offset(0f, zeroY),
         end = Offset(size.width, zeroY),
         strokeWidth = 2f,
@@ -253,6 +261,7 @@ private fun DrawScope.drawPowerBand(
 
 /** Thin battery drain line with start/end percentages. */
 private fun DrawScope.drawSocBand(
+    pal: VoltPalette,
     rect: Rect,
     values: List<Float>,
 ) {
@@ -260,6 +269,7 @@ private fun DrawScope.drawSocBand(
     val minV = values.min()
     val maxV = values.max()
     drawBandLabel(
+        pal,
         rect,
         "Battery",
         String.format(Locale.US, "%.0f%% → %.0f%%", values.first(), values.last()),
@@ -267,7 +277,7 @@ private fun DrawScope.drawSocBand(
     val stepX = size.width / (values.size - 1)
     for (i in 1 until values.size) {
         drawLine(
-            color = VoltColors.energy,
+            color = pal.energy,
             start = Offset((i - 1) * stepX, yInBand(rect, values[i - 1], minV, maxV)),
             end = Offset(i * stepX, yInBand(rect, values[i], minV, maxV)),
             strokeWidth = 5f,
@@ -278,23 +288,24 @@ private fun DrawScope.drawSocBand(
 
 /** Mile-tick distance axis. */
 private fun DrawScope.drawDistanceAxis(
+    pal: VoltPalette,
     axisY: Float,
     distanceMiles: Double,
 ) {
     drawLine(
-        color = VoltColors.hairline,
+        color = pal.hairline,
         start = Offset(0f, axisY),
         end = Offset(size.width, axisY),
         strokeWidth = 2f,
     )
     if (distanceMiles <= 0) return
-    val paint = labelPaint(9f, VoltColors.textTertiary)
+    val paint = labelPaint(9f, pal.textTertiary)
     val tickCount = 4
     for (t in 0..tickCount) {
         val frac = t.toFloat() / tickCount
         val x = xFor(frac)
         drawLine(
-            color = VoltColors.hairline,
+            color = pal.hairline,
             start = Offset(x, axisY - 5.dp.toPx()),
             end = Offset(x, axisY),
             strokeWidth = 2f,
@@ -313,6 +324,7 @@ private fun DrawScope.drawDistanceAxis(
 
 /** Scrubber cursor through all bands + readout bubble. */
 private fun DrawScope.drawCursor(
+    pal: VoltPalette,
     cursor: Float,
     topRect: Rect,
     bottomRect: Rect,
@@ -320,7 +332,7 @@ private fun DrawScope.drawCursor(
 ) {
     val x = xFor(cursor)
     drawLine(
-        color = VoltColors.textPrimary.copy(alpha = 0.55f),
+        color = pal.textPrimary.copy(alpha = 0.55f),
         start = Offset(x, topRect.top),
         end = Offset(x, bottomRect.bottom),
         strokeWidth = 3f,
@@ -334,7 +346,7 @@ private fun DrawScope.drawCursor(
             stats.speedMph,
             stats.elevationFt,
         )
-    val paint = labelPaint(10f, VoltColors.textPrimary, bold = true)
+    val paint = labelPaint(10f, pal.textPrimary, bold = true)
     val textW = paint.measureText(text)
     val padH = 9.dp.toPx()
     val bubbleW = textW + padH * 2
@@ -342,7 +354,7 @@ private fun DrawScope.drawCursor(
     val bubbleX = (x - bubbleW / 2f).coerceIn(0f, size.width - bubbleW)
     val bubbleY = topRect.top - 26.dp.toPx()
     drawRoundRect(
-        color = VoltColors.surfaceElevated,
+        color = pal.surfaceElevated,
         topLeft = Offset(bubbleX, bubbleY),
         size =
             androidx.compose.ui.geometry
