@@ -340,6 +340,12 @@ function renderDiagnosticsRecovery() {
   setText("diagRecoveryAdapter", adapterName);
   setText("diagRecoveryBt", view.bt);
   setText("diagRecoverySource", view.source);
+  // A fact with no value (e.g. Bluetooth during the browser demo) hides its
+  // cell rather than printing "--".
+  for (const id of ["diagRecoveryAdapter", "diagRecoveryBt", "diagRecoverySource"]) {
+    const cell = el(id)?.parentElement;
+    if (cell) cell.hidden = (el(id)?.textContent || "--") === "--";
+  }
   const pill = el("diagRecoveryPill");
   if (pill) {
     if (pill.textContent !== view.pill) pill.textContent = view.pill;

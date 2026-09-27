@@ -539,40 +539,42 @@ import { VD } from "./vd-registry";
     const elevUnit = metricUnits ? "m" : "ft";
     // Value is the bare number; the unit lives in the label (like Speed) so a
     // large elevation like "1220 ft" isn't clipped by the nowrap readout cell.
-    const elevText = scrubHasElev
-      ? String(metricUnits ? Math.round(s.elevFt * 0.3048) : Math.round(s.elevFt))
-      : "--";
+    const elevText = String(metricUnits ? Math.round(s.elevFt * 0.3048) : Math.round(s.elevFt));
     const effDisplay =
       scrubHasEff && effValue !== null && Number.isFinite(effValue)
         ? metricUnits
           ? (effValue / 0.621371).toFixed(1)
           : effValue.toFixed(1)
         : effText;
-    node.replaceChildren(
+    // Tracks this drive didn't record (no elevation, no SOC) are left out of the
+    // readout instead of printing "--" cells.
+    const chips = [
       // Unit lives in the label (like Speed/Efficiency): baking it into the value
       // ("128.4 mi") clipped to "128.…" in the nowrap readout cell, losing the unit.
       scrubChip(`Distance ${dist.unit}`, String(dist.value)),
       // Unit lives in the label (like the efficiency chip below): "44 mph" was
       // one character too wide for the six-across readout cell and clipped to
       // "44 …" — the bare number always fits.
-      scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED }),
-      scrubChip(scrubHasElev ? `Elevation ${elevUnit}` : "Elevation", elevText, {
-        color: scrubHasElev ? SCRUB_ELEV : null
-      }),
-      scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
-      scrubChip(
-        "Battery",
-        socText,
-        { color: scrubHasSoc ? SCRUB_SOC : null }
-      ),
-      // The label already carries the unit, so the value is just the number —
-      // repeating the unit here overflowed the compact readout cell.
-      scrubChip(
-        units.efficiencyUnit(),
-        effDisplay,
-        { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
-      )
+      scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED })
+    ];
+    if (scrubHasElev) {
+      chips.push(
+        scrubChip(`Elevation ${elevUnit}`, elevText, { color: SCRUB_ELEV }),
+        scrubChip("Grade", scrubGrade(s.grade))
+      );
+    }
+    if (scrubHasSoc) chips.push(scrubChip("Battery", socText, { color: SCRUB_SOC }));
+    // The label already carries the unit, so the value is just the number —
+    // repeating the unit here overflowed the compact readout cell.
+    chips.push(
+      scrubChip(units.efficiencyUnit(), effDisplay, {
+        dim: !scrubHasEff,
+        color: scrubHasEff ? SCRUB_EFF : null
+      })
     );
+    node.replaceChildren(...chips);
+    // Four chips sit on one row; any other count keeps the three-column grid.
+    node.dataset.cols = String(chips.length);
   }
 
   // ----- render + interaction -----------------------------------------------

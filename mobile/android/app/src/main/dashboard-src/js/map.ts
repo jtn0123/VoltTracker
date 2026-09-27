@@ -614,12 +614,18 @@ import { VD } from "./vd-registry";
         ? `$${(tripEnergyKwh * homeRate).toFixed(2)}`
         : homeRate > 0 || !hasMapContent
           ? "--"
-          : "set rate"
+          : "Set rate"
     );
     // v2 design: a computed cost tints soft green (matches the Charge tab's
     // Est. cost treatment); placeholders stay quiet.
     const mapCostEl = el("mapCost");
     if (mapCostEl) mapCostEl.dataset.state = hasCost ? "recorded" : "empty";
+    // No pack energy for this drive: energy + cost have nothing to show, so their
+    // cells collapse instead of printing "--" (the text contract is unchanged).
+    const energyCell = el("mapEnergy")?.parentElement;
+    if (energyCell) energyCell.hidden = !hasTripEnergy;
+    const costCell = mapCostEl?.parentElement;
+    if (costCell) costCell.hidden = !hasTripEnergy;
     // Fullscreen drive summary mirrors the sheet header (which fullscreen hides).
     VD.setText("mapFsInfoTitle", textOf("mapTitle") || "Drive");
     VD.setText("mapFsInfoSub", [textOf("mapKicker"), textOf("mapDistance")].filter((part) => part && part !== "--").join(" · "));

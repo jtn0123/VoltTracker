@@ -1046,6 +1046,27 @@ import { driveGear, gearDisplayText } from "./gear";
       }
     });
     updateRateChip(isStale);
+    renderDriveMode();
+  }
+
+  // EV vs gas pill on the speed hero. Engine rpm is the signal that says the gas
+  // engine is turning (a Volt reports a real 0 in EV mode), so a fresh rpm >= this
+  // floor reads as "Gas engine"; a fresh lower reading as "Electric". No reading,
+  // or a stale one, hides the pill. Presentation only — no state is derived here.
+  const GAS_RPM_MIN = 300;
+  let lastDriveMode = "";
+  function renderDriveMode() {
+    const chip = el("driveModeChip");
+    if (!chip) return;
+    const raw = (state.telemetry || {}).rpm;
+    const rpm = Number(raw);
+    const known = raw != null && raw !== "" && Number.isFinite(rpm) && !isTelemetryStale();
+    chip.hidden = !known;
+    const mode = !known ? "unknown" : rpm >= GAS_RPM_MIN ? "gas" : "ev";
+    if (lastDriveMode === mode) return;
+    lastDriveMode = mode;
+    chip.dataset.driveMode = mode;
+    if (known) setText("driveModeLabel", mode === "gas" ? "Gas engine" : "Electric");
   }
 
   // True once any live data has been observed this session — either a counted
@@ -1075,11 +1096,11 @@ import { driveGear, gearDisplayText } from "./gear";
     const chip = el("liveRateChip");
     if (!chip) return;
     const samples = hasLiveSamples();
-    // The data-state / logic key stays the short token so the CSS state selectors
-    // and the checks below keep working; the visible label appends the ~1 Hz poll
-    // cadence when live to match the v2 design chip ("LIVE · 1 HZ").
+    // The data-state token doubles as the visible label ("live" / "stale" /
+    // "waiting"); the poll cadence was dropped from the chip to declutter the
+    // speed hero header.
     const state = samples && isStale ? "stale" : samples ? "live" : "waiting";
-    const label = state === "live" ? "live · 1 Hz" : state;
+    const label = state;
     setDataState(chip, state);
     chip.dataset.reconnectActive = samples && isStale && bridge ? "true" : "false";
     if (samples && isStale) {
@@ -1216,6 +1237,7 @@ import { driveGear, gearDisplayText } from "./gear";
     // a Volt, and the visible 0 keeps the 3×2 tile grid even); only a missing
     // value collapses the tile.
     setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : t.rpm);
+    renderDriveMode();
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(

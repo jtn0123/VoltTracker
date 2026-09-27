@@ -51,6 +51,8 @@ import { VD } from "./vd-registry";
   // Demo-only result; bumping the version re-runs the renderer through its signature.
   let demoResult: CommandResult | null = null;
   let demoVersion = 0;
+  // Demo folds the simulated controls behind a disclosure; the user can open it.
+  let demoExpanded = false;
 
   function bridgeCall(method: keyof VoltBridge, ...args: unknown[]): unknown {
     const bridge = VD.bridge || window.VoltTrackerAndroid || null;
@@ -173,6 +175,16 @@ import { VD } from "./vd-registry";
       schedulePinRefresh(null);
       return;
     }
+    const expand = el("carControlsExpand");
+    const body = el("carControlsBody");
+    const collapsed = demo && !demoExpanded;
+    if (expand) {
+      expand.hidden = !demo;
+      expand.setAttribute("aria-expanded", String(!collapsed));
+      expand.textContent = collapsed ? "Show" : "Hide";
+    }
+    card.dataset.collapsed = String(collapsed);
+    if (body) body.hidden = collapsed;
     const tm = (state.telemetry || {}) as VoltTelemetry;
     const gate = gateView(tm, demo);
     setText(el("carControlsGate"), gate.text, gate.tone);
@@ -233,6 +245,12 @@ import { VD } from "./vd-registry";
     if (relock) relock.addEventListener("click", () => bridgeCall("lockCarControls"));
     const toggle = el("carControlsToggle");
     if (toggle) toggle.addEventListener("click", () => onSettingsToggle(toggle));
+    const expand = el("carControlsExpand");
+    if (expand)
+      expand.addEventListener("click", () => {
+        demoExpanded = !demoExpanded;
+        VD.requestRender();
+      });
   }
 
   bind();
@@ -243,6 +261,7 @@ import { VD } from "./vd-registry";
     state.status,
     state.demoActive,
     demoVersion,
+    demoExpanded,
   ]);
   // First paint through the pass (the renderer is new, so its signature forces a run).
   VD.requestRender();

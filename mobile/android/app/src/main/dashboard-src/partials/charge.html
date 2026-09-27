@@ -207,6 +207,19 @@
         >--</strong
       >
       <small id="chargeEnergyHint">Set rate in Settings</small>
+      <!-- With no rate set the tile shows this subtle link in place of a "--"
+           value (charge-history.ts#renderChargeEnergy). -->
+      <button
+        type="button"
+        class="link-btn charge-kpi-link"
+        id="chargeRateLink"
+        data-nav-jump="settings"
+        data-settings-target="settingsDisplay"
+        data-settings-focus="pricePerKwhInput"
+        hidden
+      >
+        Set rate
+      </button>
     </article>
   </section>
 

@@ -1185,9 +1185,24 @@ import { kph } from "./unit-types";
     const miles = meters / 1609.344;
     setText("tripEffValue", hasEnergy && miles >= 0.1 ? units.efficiencyText(miles / energyKwh) : "--");
     setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
+    const rate = prefs.get<number>("pricePerKwh", 0);
+    // Placeholders collapse instead of printing "--": a stat without a value hides
+    // its cell (Distance stays as the card's anchor), and the energy/cost footer
+    // only shows once there is energy to price. The "--" text stays underneath
+    // so the value contract is unchanged.
+    let shown = 1;
+    for (const id of ["tripTimeValue", "overviewMaxSpeed", "tripEffValue"]) {
+      const cell = el(id)?.parentElement;
+      if (!cell) continue;
+      cell.hidden = el(id)?.textContent === "--";
+      if (!cell.hidden) shown += 1;
+    }
+    // Narrow phones wrap only a full set of four stats to 2 × 2; three or fewer stay on one row.
+    const stats = el("overviewDistance")?.closest<HTMLElement>(".trip-stats");
+    if (stats) stats.dataset.cols = String(shown);
+    toggleHidden("tripEnergyStrip", !hasEnergy);
     const cost = el("tripCostValue") as HTMLButtonElement | null;
     if (!cost) return;
-    const rate = prefs.get<number>("pricePerKwh", 0);
     if (hasEnergy && rate > 0) {
       cost.textContent = `≈ $${(energyKwh * rate).toFixed(2)}`;
       setDataState(cost, "recorded");
@@ -1198,7 +1213,7 @@ import { kph } from "./unit-types";
       setDataState(cost, "waiting");
       cost.disabled = true;
     } else {
-      cost.textContent = "set rate for cost";
+      cost.textContent = "Set rate";
       setDataState(cost, "waiting");
       cost.disabled = false;
     }

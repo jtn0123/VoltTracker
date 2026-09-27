@@ -42,10 +42,10 @@
   z-index: 12;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 6px;
-  padding: 6px;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: var(--surface-overlay);
   box-shadow: 0 10px 28px var(--shadow-soft);
   backdrop-filter: blur(16px);
@@ -53,23 +53,28 @@
 
 .diagnostics-mode-nav button {
   min-height: var(--touch-min);
-  border: 1px solid transparent;
-  border-radius: 11px;
+  border: 0;
+  border-radius: 999px;
   background: transparent;
   color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
 }
 
+/* Same flat accent-tint selection as every other segmented control. */
 .diagnostics-mode-nav button.is-active {
-  border-color: rgba(var(--tab-accent-rgb), 0.42);
-  background: rgba(var(--tab-accent-rgb), 0.14);
-  color: var(--text);
+  background: rgba(var(--volt-rgb), 0.16);
+  color: var(--volt-soft);
 }
 
+/* The mode hint moved out of the floating pill; it stays for screen readers. */
 .diagnostics-mode-nav small {
-  grid-column: 1 / -1;
-  padding: 0 8px 4px;
-  color: var(--soft);
-  text-align: center;
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
 }
 
 #view-diagnostics [data-diagnostics-expert] {
@@ -81,11 +86,11 @@
   top: 8px;
   z-index: 12;
   display: flex;
-  gap: 6px;
+  gap: 4px;
   overflow-x: auto;
-  padding: 6px;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
   background: var(--surface-overlay);
   box-shadow: 0 10px 28px var(--shadow-soft);
   scrollbar-width: none;
@@ -104,20 +109,20 @@
 .settings-section-nav button {
   min-width: max-content;
   min-height: var(--touch-min);
-  padding-inline: 14px;
+  padding-inline: 16px;
   border: 0;
-  border-radius: 11px;
-  background: var(--fill-soft);
+  border-radius: 999px;
+  background: transparent;
   color: var(--muted);
+  font-size: 14px;
+  font-weight: 600;
 }
-
+/* Same flat accent-tint selection as the Diagnostics mode pill. */
 .settings-section-nav button.is-active,
 .settings-section-nav button[aria-current="location"] {
-  background: rgba(var(--tab-accent-rgb), 0.18);
-  color: var(--tab-accent-soft);
-  box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.28);
+  background: rgba(var(--volt-rgb), 0.16);
+  color: var(--volt-soft);
 }
-
 .settings-section-nav button:last-child {
   margin-right: 14px;
 }

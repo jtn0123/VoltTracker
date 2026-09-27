@@ -46,7 +46,9 @@ export const DATA_STATE_VALUES = [
   "unknown",
   // Enhanced-signals badge tones (signals-panel.ts setEnhancedBadge).
   "working",
-  "saved"
+  "saved",
+  // Insights savings row: prefs not set yet (insights-panel.ts / screens.css).
+  "prompt"
 ] as const;
 
 export type DataStateValue = (typeof DATA_STATE_VALUES)[number];

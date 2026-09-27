@@ -697,6 +697,8 @@ import { VD } from "./vd-registry";
       // with a path to set them instead of leaving the advertised savings
       // permanently hidden.
       row.hidden = false;
+      // "prompt" collapses the "--" figure; the note + Settings link carry the row.
+      row.dataset.state = "prompt";
       VD.setText("insightSavings", "--");
       setSavingsNotePrompt();
       return;
@@ -717,6 +719,7 @@ import { VD } from "./vd-registry";
       ...(blendedEnergyKwh !== undefined ? { energyKwh: blendedEnergyKwh } : {})
     });
     row.hidden = false;
+    row.dataset.state = "ready";
     // Show the magnitude; a leading "-" would read as "you spent more" only when
     // EV electricity is pricier than the gas it replaced (rare but possible).
     VD.setText("insightSavings", formatSignedMoney(savings));

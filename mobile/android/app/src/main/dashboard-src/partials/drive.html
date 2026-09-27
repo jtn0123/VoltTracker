@@ -76,7 +76,21 @@
          aria-atomic="false" re-announced each changed text node separately. -->
     <article id="liveHeroCard" class="panel live-card" data-power-state="coast">
       <div class="live-head">
-        <span class="kicker">Vehicle speed</span>
+        <!-- EV / gas mode pill (telemetry.ts#renderDriveMode, from engine rpm):
+             green "Electric" while the engine is off, amber "Gas engine" while it
+             turns. Hidden with no fresh rpm reading; the plain kicker after it
+             shows instead (a sibling rule, not :has()). -->
+        <span
+          id="driveModeChip"
+          class="drive-mode-chip"
+          data-drive-mode="unknown"
+          role="status"
+          aria-live="polite"
+          hidden
+          ><span class="drive-mode-dot" aria-hidden="true"></span
+          ><span id="driveModeLabel">Electric</span></span
+        >
+        <span class="kicker live-head-kicker">Speed</span>
         <span class="live-head-chips">
           <!-- Gear selector (PRNDL) from the car's gear PID. Hidden with no
                fresh reading; an unknown code shows "—" (gear.ts#driveGear). -->
@@ -424,72 +438,86 @@
         <h3 id="carControlsTitle">Car controls</h3>
       </div>
       <span class="car-controls-badge">Experimental</span>
+      <!-- Demo keeps the simulated controls folded behind this disclosure so
+           they don't dominate the Drive tab; car-controls.ts owns the state. -->
+      <button
+        type="button"
+        class="link-btn car-controls-expand"
+        id="carControlsExpand"
+        aria-expanded="false"
+        aria-controls="carControlsBody"
+        hidden
+      >
+        Show
+      </button>
     </header>
-    <p
-      id="carControlsGate"
-      class="car-controls-gate"
-      data-tone="warn"
-      role="status"
-      aria-live="polite"
-    >
-      Connect to the car to use controls.
-    </p>
-    <div class="car-controls-grid" role="group" aria-label="Car commands">
-      <button type="button" class="car-control-btn" data-car-control="lock">
-        Lock
-      </button>
-      <button type="button" class="car-control-btn" data-car-control="unlock">
-        Unlock
-      </button>
-      <button type="button" class="car-control-btn" data-car-control="flash">
-        Flash lights
-      </button>
-      <button type="button" class="car-control-btn" data-car-control="locate">
-        Horn + lights
-      </button>
-      <button
-        type="button"
-        class="car-control-btn"
-        data-car-control="remote_start"
+    <div id="carControlsBody" class="car-controls-body">
+      <p
+        id="carControlsGate"
+        class="car-controls-gate"
+        data-tone="warn"
+        role="status"
+        aria-live="polite"
       >
-        Remote start
-      </button>
-      <button
-        type="button"
-        class="car-control-btn"
-        data-car-control="remote_stop"
-      >
-        Stop remote start
-      </button>
-      <button
-        type="button"
-        class="car-control-btn"
-        data-car-control="windows_down"
-      >
-        Windows down
-      </button>
-      <button
-        type="button"
-        class="car-control-btn"
-        data-car-control="windows_up"
-      >
-        Windows up
-      </button>
-    </div>
-    <p
-      id="carControlsResult"
-      class="car-controls-result"
-      role="status"
-      aria-live="polite"
-      hidden
-    ></p>
-    <div class="car-controls-foot">
-      <small id="carControlsPinState" class="status-copy"
-        >PIN needed for each command</small
-      >
-      <button type="button" class="link-btn" id="carControlsRelockBtn" hidden>
-        Lock PIN now
-      </button>
+        Connect to the car to use controls.
+      </p>
+      <div class="car-controls-grid" role="group" aria-label="Car commands">
+        <button type="button" class="car-control-btn" data-car-control="lock">
+          Lock
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="unlock">
+          Unlock
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="flash">
+          Flash lights
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="locate">
+          Horn + lights
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="remote_start"
+        >
+          Remote start
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="remote_stop"
+        >
+          Stop remote start
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="windows_down"
+        >
+          Windows down
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="windows_up"
+        >
+          Windows up
+        </button>
+      </div>
+      <p
+        id="carControlsResult"
+        class="car-controls-result"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+      <div class="car-controls-foot">
+        <small id="carControlsPinState" class="status-copy"
+          >PIN needed for each command</small
+        >
+        <button type="button" class="link-btn" id="carControlsRelockBtn" hidden>
+          Lock PIN now
+        </button>
+      </div>
     </div>
   </article>
 

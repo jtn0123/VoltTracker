@@ -177,6 +177,44 @@
   gap: 12px;
 }
 
+/* EV / gas mode pill — the hero's lead label while a fresh rpm reading says
+     which drivetrain is working: green = electric, amber = gas engine. */
+.drive-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: rgba(var(--ev-rgb), 0.14);
+  color: var(--ev-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.drive-mode-chip[data-drive-mode="gas"] {
+  background: rgba(var(--gas-rgb), 0.16);
+  color: var(--gas);
+}
+
+.drive-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ev);
+}
+
+.drive-mode-chip[data-drive-mode="gas"] .drive-mode-dot {
+  background: var(--gas);
+}
+
+/* The plain "Speed" kicker only stands in while the mode pill is hidden. */
+.drive-mode-chip:not([hidden]) + .live-head-kicker {
+  display: none;
+}
+
 /* Live-rate chip (v2 design): uppercase, tracked-out, and colored to match its
      dot — green while live, dimmed while waiting, warn when stale (below). */
 .rate-chip {
@@ -202,15 +240,27 @@
   min-width: 0;
 }
 
-/* Gear chip (PRNDL): a .rate-chip in the plain text tone, the letter set
-     larger so it reads at a glance beside the live-rate chip. */
+/* Gear chip (PRNDL): just the letter, in a quiet rounded square — the chip's
+     aria-label says "Gear", so the visible label is dropped to declutter. */
 .gear-chip {
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--fill-bold);
   color: var(--muted);
+}
+
+.gear-chip .gear-chip-label {
+  display: none;
 }
 
 .gear-chip strong {
   color: var(--text);
+  font-family: var(--font-display);
   font-size: 15px;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -569,10 +619,17 @@
 }
 
 .charge-kpi strong {
-  margin-top: 4px;
-  font-size: 22px;
-  font-weight: 700;
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* "Set rate" stands in for the Est. cost value while no rate is configured. */
+.charge-kpi .charge-kpi-link {
+  margin: 2px 0 0 -9px;
+  font-size: 15px;
 }
 
 /* Est. cost tints green once a rate/energy is known (design estCostColor). */
@@ -981,10 +1038,10 @@ canvas {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  /* v2 design: links are the light-blue accent (#9bdcff), 700 — a distinct
+  /* Links are the one accent (--link), 700 — a distinct
        "tappable" voice instead of plain body text. Token so light mode can
        swap in a darker ink (base.css). */
-  color: var(--link, #9bdcff);
+  color: var(--link, #2bd4c4);
   font-size: 12.5px;
   font-weight: 700;
   /* A header action must keep its intrinsic width and never wrap — otherwise a long title
@@ -1255,20 +1312,19 @@ canvas {
   background: rgba(var(--bad-rgb), 0.08);
 }
 
-/* v2 design: the DTC scan is a translucent green outline button (ghost), not a
-     solid fill — one filled primary per screen, and this row's real action is a
-     read, not a commit. */
+/* The DTC scan is a tinted accent button (not a solid fill — one filled
+     primary per screen, and this row's real action is a read, not a commit). */
 .dtc-action-row .scan {
-  border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.32);
-  background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.1);
-  color: var(--view-accent-soft, var(--ok-soft));
-  font-weight: 800;
+  border-color: transparent;
+  background: rgba(var(--volt-rgb), 0.14);
+  color: var(--volt-soft);
+  font-weight: 700;
 }
 
 /* Quick scan: a quiet sibling — subtle fill + full text tone (v2 design). */
 .dtc-action-row .scan-quick {
-  border-color: var(--line-strong);
-  background: var(--fill-soft);
+  border-color: transparent;
+  background: var(--fill-strong);
   color: var(--text);
   font-weight: 700;
 }
