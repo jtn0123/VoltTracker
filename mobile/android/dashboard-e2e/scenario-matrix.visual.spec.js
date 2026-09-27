@@ -34,6 +34,10 @@ test.describe('visual matrix — tab × demo scenario', () => {
         await openDashboard(page, { fixedTime: FIXED });
         await loadDemoScenario(page, scenario);
         await setView(page, tab);
+        // The car-controls card is a lazy chunk loaded on a post-startup idle callback, so
+        // whether it had painted by capture time depended on runner speed (the demo shows it
+        // collapsed on Drive). Load it explicitly so every run captures the same state.
+        await page.evaluate(() => window.VoltDashboard.ensureCarControlsModule());
         // rAF is throttled in a headless/occluded tab, so force the live
         // surfaces to paint their current state synchronously before capture.
         await page.evaluate(() => {
