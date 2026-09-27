@@ -40,7 +40,7 @@ data class ChargeUiState(
     val cellBalanceLabel: String? = null,
 ) {
     companion object {
-        /** Sample state mirroring the demo scenario mid-L2-charge. */
+        /** Sample state mirroring the demo scenario mid-L2-charge (a 2017 Volt tops out at 3.6 kW). */
         val demo =
             ChargeUiState(
                 connected = true,
@@ -48,14 +48,14 @@ data class ChargeUiState(
                 charging = true,
                 socPercent = 71.0,
                 evRangeMiles = 30.0,
-                chargeKw = 7.1,
+                chargeKw = 3.6,
                 chargeLevel = "Level 2",
-                timeToFullLabel = "1h 40m to full",
+                timeToFullLabel = "1h 15m to full",
                 recentCharges =
                     listOf(
-                        ChargeEntry("Now", "Level 2", 54, 71, 7.1, "charging", 3.0, active = true),
-                        ChargeEntry("Yesterday", "Level 2", 24, 91, 7.2, "3h 24m", 11.8),
-                        ChargeEntry("2 days ago", "Level 2", 36, 90, 7.0, "3h 00m", 9.6),
+                        ChargeEntry("Now", "Level 2", 54, 71, 3.6, "charging", 3.0, active = true),
+                        ChargeEntry("Yesterday", "Level 2", 24, 91, 3.6, "3h 24m", 11.8),
+                        ChargeEntry("2 days ago", "Level 2", 36, 90, 3.5, "2h 48m", 9.6),
                         ChargeEntry("4 days ago", "Level 1", 58, 88, 1.3, "4h 36m", 5.2),
                     ),
                 monthKwh = 24.4,

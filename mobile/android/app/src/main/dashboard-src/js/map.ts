@@ -2681,9 +2681,9 @@ import { VD } from "./vd-registry";
     // touches persisted real-device data.
     const sampleCharges = [
       // Newest is in-progress (no end time) so the active-charge state renders.
-      { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 7.1, energyKwh: 3.0 },
-      { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 7.2, energyKwh: 11.8 },
-      { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 7.0, energyKwh: 9.6 },
+      { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 3.6, energyKwh: 3.0 },
+      { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 3.6, energyKwh: 11.8 },
+      { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 3.5, energyKwh: 9.6 },
       { id: 1, startedAtMs: now - 96 * hour, endedAtMs: now - 96 * hour + Math.round(4.6 * hour), chargerType: "level1", startSoc: 58, endSoc: 88, powerKw: 1.3, energyKwh: 5.2 }
     ];
     // SOC kept close to the live browser-demo stream (~77%) so Drive's live tile
@@ -2767,7 +2767,7 @@ import { VD } from "./vd-registry";
         chargeSummary: {
           chargeSessionCount: sampleCharges.length,
           chargingHintCount: 6,
-          maxPowerKw: 7.2,
+          maxPowerKw: 3.6,
           latest: sampleCharges[0] ?? null,
           recentSessions: sampleCharges
         },

@@ -45,7 +45,13 @@ class LiveUiStateStore {
                     map = s.map.copy(connected = connected, statusLabel = label),
                     insights = s.insights.copy(connected = connected, statusLabel = label),
                     diag = s.diag.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
-                    settings = s.settings.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
+                    settings =
+                        s.settings.copy(
+                            connected = connected,
+                            statusLabel = label,
+                            adapterLabel = adapter,
+                            demoActive = demoAfterStatus(stateName, s.settings.demoActive),
+                        ),
                 )
             }
     }
@@ -53,8 +59,23 @@ class LiveUiStateStore {
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
     fun onTelemetry(payload: JSONObject) {
         appendTraces(payload)
-        _state.value = withSample(_state.value, payload)
+        val next = withSample(_state.value, payload)
+        val demo = payload.optString("source", "") == DEMO_SOURCE
+        _state.value =
+            if (next.settings.demoActive == demo) next else next.copy(settings = next.settings.copy(demoActive = demo))
     }
+
+    // The demo session reports "demo" while starting, then "connected" like a real link; its
+    // samples are tagged source=demo, so a connected status keeps whatever the samples said.
+    private fun demoAfterStatus(
+        stateName: String,
+        current: Boolean,
+    ): Boolean =
+        when (stateName) {
+            "demo" -> true
+            "connected" -> current
+            else -> false
+        }
 
     /**
      * A `backfillTelemetry` batch, oldest first: rebuilds traces without
@@ -232,6 +253,7 @@ class LiveUiStateStore {
     private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
 
     private companion object {
+        const val DEMO_SOURCE = "demo"
         val TRANSITION_STATES = setOf("connecting", "initializing", "reconnecting", "scanning", "scan-complete")
         const val TRACE_CAP = 30
         const val SOC_TRACE_CAP = 60

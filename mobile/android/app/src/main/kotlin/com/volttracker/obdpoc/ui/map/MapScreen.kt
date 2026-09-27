@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -34,13 +33,13 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.volttracker.obdpoc.ui.components.VoltBottomNav
+import com.volttracker.obdpoc.ui.components.SCREEN_MARGIN
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.VoltStat
-import com.volttracker.obdpoc.ui.components.VoltStatusPill
-import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
@@ -58,56 +57,23 @@ fun MapScreen(
     state: MapUiState,
     modifier: Modifier = Modifier,
     composedMap: ComposedMap? = null,
-    onSelectTab: (VoltTab) -> Unit = {},
 ) {
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(VoltColors.bg),
+    VoltScreen(
+        title = "Trips",
+        subtitle = state.statusLabel,
+        dot = connectionDot(state.connected),
+        contentPadding = 0.dp,
+        modifier = modifier,
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(top = 18.dp, bottom = 118.dp),
-        ) {
-            Box(Modifier.padding(horizontal = 20.dp)) { MapHeader(state) }
-            Spacer(Modifier.height(22.dp))
-            TripChips(state)
-            Spacer(Modifier.height(16.dp))
-            Box(Modifier.padding(horizontal = 20.dp)) { RoutePanel(state, composedMap) }
+        TripChips(state)
+        Spacer(Modifier.height(16.dp))
+        Box(Modifier.padding(horizontal = SCREEN_MARGIN)) { RoutePanel(state, composedMap) }
+        Spacer(Modifier.height(14.dp))
+        if (state.scrubberStats != null) {
+            Box(Modifier.padding(horizontal = SCREEN_MARGIN)) { ScrubberPanel(state, state.scrubberStats) }
             Spacer(Modifier.height(14.dp))
-            if (state.scrubberStats != null) {
-                Box(Modifier.padding(horizontal = 20.dp)) { ScrubberPanel(state, state.scrubberStats) }
-                Spacer(Modifier.height(14.dp))
-            }
-            Box(Modifier.padding(horizontal = 20.dp)) { TripDetail(state) }
         }
-        VoltBottomNav(
-            selected = VoltTab.MAP,
-            onSelect = onSelectTab,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
-    }
-}
-
-@Composable
-private fun MapHeader(state: MapUiState) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Map", style = VoltType.screenTitle, color = VoltColors.textPrimary)
-        VoltStatusPill(
-            text = state.statusLabel,
-            dotColor = if (state.connected) VoltColors.energy else VoltColors.textTertiary,
-        )
+        Box(Modifier.padding(horizontal = SCREEN_MARGIN)) { TripDetail(state) }
     }
 }
 
@@ -118,7 +84,7 @@ private fun TripChips(state: MapUiState) {
             Modifier
                 .fillMaxWidth()
                 .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 20.dp),
+                .padding(horizontal = SCREEN_MARGIN),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         state.trips.forEach { trip ->

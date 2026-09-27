@@ -87,6 +87,7 @@ class ComposeDashboardActivity : ComponentActivity() {
                         onOpenClassicDashboard = ::openClassicDashboard,
                         onConnect = ::connectLastAdapter,
                         onStartDemo = { startObd(ObdService.ACTION_DEMO, null, null) },
+                        onStopDemo = ::stopSession,
                         onCheckForUpdate = ::checkForUpdate,
                         onInstallUpdate = ::installUpdate,
                         onSetAppearance = ::setAppearance,
@@ -235,6 +236,17 @@ class ComposeDashboardActivity : ComponentActivity() {
             }
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "startObd blocked", ex)
+        }
+    }
+
+    /** Ends the running session (Settings → Demo / testing → Stop), as the classic Disconnect does. */
+    private fun stopSession() {
+        val service = Intent(this, ObdService::class.java)
+        service.action = ObdService.ACTION_DISCONNECT
+        try {
+            startService(service)
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "stopSession could not reach the service", ex)
         }
     }
 

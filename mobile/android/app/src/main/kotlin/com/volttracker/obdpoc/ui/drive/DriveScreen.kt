@@ -2,21 +2,17 @@ package com.volttracker.obdpoc.ui.drive
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,13 +30,13 @@ import com.volttracker.obdpoc.ui.components.BatteryBar
 import com.volttracker.obdpoc.ui.components.PowerBar
 import com.volttracker.obdpoc.ui.components.SignedBars
 import com.volttracker.obdpoc.ui.components.Sparkline
-import com.volttracker.obdpoc.ui.components.VoltBottomNav
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.VoltStat
 import com.volttracker.obdpoc.ui.components.VoltStatusPill
-import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
@@ -53,77 +49,42 @@ import java.util.Locale
 fun DriveScreen(
     state: DriveUiState,
     modifier: Modifier = Modifier,
-    onSelectTab: (VoltTab) -> Unit = {},
     onConnect: () -> Unit = {},
     onStartDemo: () -> Unit = {},
 ) {
     var detailed by remember(state.detailed) { mutableStateOf(state.detailed) }
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(VoltColors.bg),
+    VoltScreen(
+        title = "Drive",
+        subtitle = state.statusLabel,
+        dot = connectionDot(state.connected),
+        modifier = modifier,
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 18.dp, bottom = 118.dp),
-        ) {
-            DriveHeader(state)
-            Spacer(Modifier.height(30.dp))
-            SpeedHero(state)
-            Spacer(Modifier.height(14.dp))
-            StatusChips(state)
-            // Hidden mid-handshake so a second tap can't start a replacement session.
-            if (!state.connected && !state.connecting) {
-                Spacer(Modifier.height(18.dp))
-                ConnectRow(onConnect = onConnect, onStartDemo = onStartDemo)
-            }
-            Spacer(Modifier.height(16.dp))
-            DensityToggle(detailed = detailed, onChange = { detailed = it })
-            Spacer(Modifier.height(22.dp))
-            PowerSection(state)
-            if (detailed) {
-                Spacer(Modifier.height(14.dp))
-                ChartsRow(state)
-            }
-            Spacer(Modifier.height(14.dp))
-            BatterySection(state)
-            if (detailed) {
-                Spacer(Modifier.height(14.dp))
-                MoreSignalsGrid(state)
-                Spacer(Modifier.height(14.dp))
-                VitalsRow(state)
-            }
-            Spacer(Modifier.height(14.dp))
-            TripStrip(state)
+        SpeedHero(state)
+        Spacer(Modifier.height(14.dp))
+        StatusChips(state)
+        // Hidden mid-handshake so a second tap can't start a replacement session.
+        if (!state.connected && !state.connecting) {
+            Spacer(Modifier.height(18.dp))
+            ConnectRow(onConnect = onConnect, onStartDemo = onStartDemo)
         }
-        VoltBottomNav(
-            selected = VoltTab.DRIVE,
-            onSelect = onSelectTab,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
-    }
-}
-
-@Composable
-private fun DriveHeader(state: DriveUiState) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Drive", style = VoltType.screenTitle, color = VoltColors.textPrimary)
-        VoltStatusPill(
-            text = state.statusLabel,
-            dotColor = if (state.connected) VoltColors.energy else VoltColors.textTertiary,
-        )
+        Spacer(Modifier.height(16.dp))
+        DensityToggle(detailed = detailed, onChange = { detailed = it })
+        Spacer(Modifier.height(22.dp))
+        PowerSection(state)
+        if (detailed) {
+            Spacer(Modifier.height(14.dp))
+            ChartsRow(state)
+        }
+        Spacer(Modifier.height(14.dp))
+        BatterySection(state)
+        if (detailed) {
+            Spacer(Modifier.height(14.dp))
+            MoreSignalsGrid(state)
+            Spacer(Modifier.height(14.dp))
+            VitalsRow(state)
+        }
+        Spacer(Modifier.height(14.dp))
+        TripStrip(state)
     }
 }
 

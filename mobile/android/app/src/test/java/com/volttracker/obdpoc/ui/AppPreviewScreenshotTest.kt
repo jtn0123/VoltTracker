@@ -19,15 +19,18 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Every tab of the whole [VoltApp] at phone size, in the dark and the light theme — the
- * before/after preview set for UI changes (`-ProborazziRecord` writes the PNGs under
- * build/outputs/roborazzi/app-<tab>-<theme>.png), and a smoke proof each tab composes in both.
+ * Every tab and pushed route (Settings, Health) of the whole [VoltApp] at phone size, in the dark
+ * and the light theme — the before/after preview set for UI changes (`-ProborazziRecord` writes
+ * the PNGs under build/outputs/roborazzi/app-<page>-<theme>.png), and a smoke proof each page
+ * composes in both.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(qualifiers = "w412dp-h915dp-420dpi")
 class AppPreviewScreenshotTest(
+    private val page: String,
     private val tab: VoltTab,
+    private val routes: List<VoltRoute>,
     private val appearance: AppearanceMode,
 ) {
     @get:Rule
@@ -45,18 +48,25 @@ class AppPreviewScreenshotTest(
 
     @Test
     fun capture() {
-        compose.setContent { VoltApp(demo(appearance), initialTab = tab) }
+        compose.setContent { VoltApp(demo(appearance), initialTab = tab, initialRoutes = routes) }
         compose
             .onRoot()
-            .captureRoboImage("build/outputs/roborazzi/app-${tab.name.lowercase()}-${appearance.key}.png")
+            .captureRoboImage("build/outputs/roborazzi/app-$page-${appearance.key}.png")
     }
 
     companion object {
         @JvmStatic
-        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-{1}")
-        fun cases(): List<Array<Any>> =
-            VoltTab.entries.flatMap { tab ->
-                listOf(AppearanceMode.DARK, AppearanceMode.LIGHT).map { arrayOf<Any>(tab, it) }
+        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-{3}")
+        fun cases(): List<Array<Any>> {
+            val pages =
+                VoltTab.entries.map { Triple(it.name.lowercase(), it, emptyList<VoltRoute>()) } +
+                    listOf(
+                        Triple("settings", VoltTab.CAR, listOf(VoltRoute.SETTINGS)),
+                        Triple("health", VoltTab.CAR, listOf(VoltRoute.HEALTH)),
+                    )
+            return pages.flatMap { (page, tab, routes) ->
+                listOf(AppearanceMode.DARK, AppearanceMode.LIGHT).map { arrayOf<Any>(page, tab, routes, it) }
             }
+        }
     }
 }
