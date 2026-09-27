@@ -167,7 +167,13 @@ import { VD } from "./vd-registry";
     const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
     const costEl = el("chargeEnergyCost");
-    if (total > 0 && price > 0) {
+    const rateLink = el("chargeRateLink");
+    const hasCost = total > 0 && price > 0;
+    // No cost to show: the "--" value collapses; an unset rate becomes a subtle
+    // "Set rate" link, a set rate with no energy yet keeps its caption.
+    if (costEl) costEl.hidden = !hasCost;
+    if (rateLink) rateLink.hidden = hasCost || price > 0;
+    if (hasCost) {
       VD.setText("chargeEnergyCost", formatMoney(chargeCostFor(sessions)));
       if (costEl) costEl.dataset.state = "recorded";
       const rates = chargeRates();
@@ -200,7 +206,7 @@ import { VD } from "./vd-registry";
       // already set a $/kWh rate to "Set rate in Settings" is misleading — the cost
       // just can't be computed until a session records energy.
       VD.setText("chargeEnergyHint", price > 0 ? "No charge energy logged yet" : "Set rate in Settings");
-      if (hint) hint.hidden = false;
+      if (hint) hint.hidden = !(price > 0);
     }
     renderChargeCostTrend(sessions);
   }

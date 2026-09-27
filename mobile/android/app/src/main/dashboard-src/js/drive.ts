@@ -479,7 +479,9 @@ type ChartPoint = {
     }
     const ZERO_PCT = 0.55; // zero line a touch below center so regen has room.
     const zeroY = padT + ZERO_PCT * (h - padT - padB);
-    const cap = Math.max(60, samples.length);
+    // Bars start wide and settle to the full 60 s window as samples arrive, so a
+    // fresh session reads as a chart rather than a sliver at the right edge.
+    const cap = Math.max(30, samples.length);
     const chart = domNode("div", "live-dom-chart live-power-chart");
     chart.style.height = h + "px";
     const zero = domNode("span", "live-power-zero");
@@ -540,9 +542,6 @@ type ChartPoint = {
     if (!host) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 88; // microchart height (matches .live-dom-chart)
-    const padT = 14;
-    const padB = 12;
     const samples = state.socHistory || [];
     // Include the OLDEST sample: at the 240-sample cap the window scrolls while
     // length + newest value can stay identical (a repeated newest reading), so
@@ -563,6 +562,12 @@ type ChartPoint = {
     const obsLo = Math.min(...samples);
     const obsHi = Math.max(...samples);
     const observed = obsHi - obsLo;
+    // A session that has barely moved the pack (< 1%) gets a compact strip plus a
+    // plain-language note instead of a tall, mostly blank chart.
+    const flat = observed < 1;
+    const h = flat ? 44 : 88; // full height matches .live-dom-chart
+    const padT = flat ? 10 : 14;
+    const padB = flat ? 10 : 12;
     let lo: number;
     let hi: number;
     if (observed < MIN_RANGE) {
@@ -612,7 +617,14 @@ type ChartPoint = {
       chart.append(segment);
     });
     host.dataset.chartState = "ready";
-    host.replaceChildren(chart);
+    host.dataset.chartSize = flat ? "compact" : "full";
+    if (flat) {
+      const note = domNode("p", "live-chart-note");
+      note.textContent = `Steady around ${Math.round(samples[samples.length - 1]!)}% this session`;
+      host.replaceChildren(chart, note);
+    } else {
+      host.replaceChildren(chart);
+    }
   }
 
   // ----- top-level driver ---------------------------------------------------

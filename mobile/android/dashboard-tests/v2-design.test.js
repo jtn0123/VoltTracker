@@ -201,7 +201,8 @@ describe('Drive trip-energy strip', () => {
   it('prompts for the rate instead of inventing a cost', () => {
     seedRouteWithTrip(3.5);
     expect(document.getElementById('tripEnergyValue').textContent).toBe('3.5 kWh');
-    expect(document.getElementById('tripCostValue').textContent).toBe('set rate for cost');
+    expect(document.getElementById('tripCostValue').textContent).toBe('Set rate');
+    expect(document.getElementById('tripEnergyStrip').hidden).toBe(false);
   });
 
   it('never invents energy for a drive that logged no pack power', () => {
@@ -209,6 +210,8 @@ describe('Drive trip-energy strip', () => {
     seedRouteWithTrip(null);
     expect(document.getElementById('tripEnergyValue').textContent).toBe('--');
     expect(document.getElementById('tripCostValue').textContent).toBe('no energy logged');
+    // No energy to price: the footer collapses instead of showing placeholders.
+    expect(document.getElementById('tripEnergyStrip').hidden).toBe(true);
   });
 });
 

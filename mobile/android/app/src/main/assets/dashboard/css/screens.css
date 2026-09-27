@@ -477,10 +477,17 @@
 
 .map-sheet-savings strong {
   display: block;
-  margin-top: 2px;
-  font-size: 18px;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--ev);
+}
+
+/* Prefs not set yet: no "--" figure, just the prompt line + Settings link. */
+.map-sheet-savings[data-state="prompt"] strong {
+  display: none;
 }
 
 .map-sheet-savings small {
@@ -815,9 +822,16 @@
 /* Hairline divider above the connect card's state strip (scoped so
      #insightStatsCard .state-grid is unaffected). */
 .connect-card .state-grid {
+  /* Content-sized columns: four equal quarters clipped "21k rows" to "21k ro…". */
+  display: flex;
+  justify-content: space-between;
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.connect-card .state-grid div {
+  flex: 0 1 auto;
 }
 
 /* Demoted, compact backup/restore card; keeps all four real actions. */
@@ -1916,6 +1930,10 @@ html.trip-detail-active {
   background: transparent;
 }
 
+.scrubber .scrub-readout[data-cols="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .scrubber .scrub-readout div {
   padding: 0;
   text-align: left;
@@ -2498,10 +2516,27 @@ button.drive-now-chip:focus-visible {
   min-height: 88px;
 }
 
-/* Empty micro-chart placeholder matches the populated trace height. */
+/* Waiting micro-charts collapse to a slim skeleton strip instead of holding
+     88px of blank card; the chart grows to full height with real samples. */
+.live-micro .live-trace-chart[data-chart-state="empty"],
+.live-micro .live-trace-chart[data-chart-state="empty"] .live-chart-empty {
+  min-height: 44px;
+}
+
 .live-micro .live-chart-empty {
-  min-height: 88px;
-  padding: 8px;
+  padding: 6px 0;
+}
+
+/* A flat session (SOC moved < 1%) renders a compact strip + a one-line note. */
+.live-micro .live-trace-chart[data-chart-size="compact"],
+.live-trace-chart[data-chart-size="compact"] .live-dom-chart {
+  min-height: 44px;
+}
+
+.live-chart-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .live-micro header {
@@ -2721,17 +2756,20 @@ button.drive-now-chip:focus-visible {
   padding: 16px 20px;
 }
 
+/* Flex, not a fixed 4-column grid: stats with no value hide their cell, and
+     the remaining ones share the row instead of leaving holes. */
 .trip-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 12px;
+  margin-top: 12px;
 }
 
 .trip-stats > div {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -2743,7 +2781,7 @@ button.drive-now-chip:focus-visible {
   font-family: var(--font-display);
   /* Scales with the viewport so "4.7 mi/kWh" fits its quarter-width column
        on a narrow phone instead of ellipsizing the unit away. */
-  font-size: clamp(15px, 4.6vw, 20px);
+  font-size: clamp(18px, 5.4vw, 24px);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
@@ -2753,11 +2791,10 @@ button.drive-now-chip:focus-visible {
 }
 
 /* Narrow phones: four quarter-width columns clipped the "Efficiency" label at
-     the card edge, so the stats wrap to a 2 × 2 grid. */
+     the card edge, so a full set of four wraps to a 2 × 2 grid (three fit one row). */
 @media (max-width: 379px) {
-  .trip-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    row-gap: 12px;
+  .trip-stats[data-cols="4"] > div {
+    flex-basis: 40%;
   }
 }
 
@@ -3045,14 +3082,25 @@ button.drive-now-chip:focus-visible {
   display: none;
 }
 
+.car-controls-card .card-head {
+  align-items: center;
+  gap: 10px;
+}
+
+/* Badge + Show/Hide sit together on the trailing edge; the 44px tap box of the
+     disclosure bleeds into the card padding instead of growing the header. */
 .car-controls-badge {
-  align-self: flex-start;
+  margin-left: auto;
   padding: 2px 8px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   background: var(--fill-bold);
+}
+
+.car-controls-expand {
+  margin-block: -8px;
 }
 
 .car-controls-gate {
@@ -3094,11 +3142,12 @@ button.drive-now-chip:focus-visible {
 
 .car-control-btn {
   min-height: var(--touch-min);
-  padding: 8px 10px;
+  padding: 6px 10px;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   background: var(--fill-strong);
   color: var(--text);
+  font-size: 13.5px;
   font-weight: 600;
 }
 
@@ -3110,8 +3159,8 @@ button.drive-now-chip:focus-visible {
      grid rows read evenly. */
 @media (max-width: 379px) {
   .car-control-btn {
-    padding: 8px 6px;
-    font-size: 14px;
+    padding: 6px 6px;
+    font-size: 13px;
   }
 }
 
