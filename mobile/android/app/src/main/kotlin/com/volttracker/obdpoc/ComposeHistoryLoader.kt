@@ -4,10 +4,13 @@ import android.util.Log
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.charge.ChargeHistory
+import com.volttracker.obdpoc.ui.diag.DtcCatalog
+import com.volttracker.obdpoc.ui.diag.savedCodes
 import com.volttracker.obdpoc.ui.insights.INSIGHTS_TRIP_LIMIT
 import com.volttracker.obdpoc.ui.insights.InsightsHistory
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.window
+import com.volttracker.obdpoc.ui.live.HealthHistoryHolder
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.trips.TRIP_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.trips.TripHistory
@@ -20,6 +23,9 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
+/** Saved trouble codes Health reads (the classic dashboard lists as many). */
+private const val HEALTH_CODE_LIMIT = 50
+
 /**
  * Reads the Compose tabs' history — logged charges, logged drives, the selected drive's route —
  * off the main thread, each on a short-lived store of its own (the data tools' store is only
@@ -31,6 +37,10 @@ internal class ComposeHistoryLoader(
     private val store: LiveUiStateStore,
     private val post: (Runnable) -> Unit,
     openStore: () -> ObdLocalStore,
+    /** The DTC names and severities (read once, off the main thread), for Health. */
+    private val dtcCatalog: () -> DtcCatalog = { DtcCatalog.EMPTY },
+    /** When the car's codes were last read and last cleared, if ever. */
+    private val dtcChecks: () -> Pair<Long?, Long?> = { null to null },
 ) {
     /** Seams so tests can serve canned rows without a database. */
     var chargeReader: () -> JSONArray = {
@@ -52,13 +62,29 @@ internal class ComposeHistoryLoader(
         }
     }
 
+    /** The saved trouble codes, newest first, as the store's diagnostics summary. */
+    var healthReader: () -> JSONObject = { openStore().use { it.projections().diagnosticsSummary(HEALTH_CODE_LIMIT) } }
+
     private val chargesInFlight = AtomicBoolean(false)
+    private val healthInFlight = AtomicBoolean(false)
+    private val healthAgain = AtomicBoolean(false)
     private val insightsInFlight = AtomicBoolean(false)
     private val tripsInFlight = AtomicBoolean(false)
     private val routeInFlight = AtomicBoolean(false)
 
     fun loadCharges() {
         read(chargesInFlight, "charge history", chargeReader) { store.onChargeHistory(ChargeHistory.parse(it)) }
+    }
+
+    /** Health's saved codes, named and graded, with when they were last read or cleared. */
+    fun loadHealth() {
+        // A scan landing while the last read runs must not be lost: read again once it finishes.
+        if (healthInFlight.get()) healthAgain.set(true)
+        val reader = { savedCodes(healthReader(), dtcCatalog()) to dtcChecks() }
+        read(healthInFlight, "trouble codes", reader) { (codes, checks) ->
+            store.onHealthHistory(HealthHistoryHolder.Logged(codes, checks.first, checks.second))
+            if (healthAgain.getAndSet(false)) loadHealth()
+        }
     }
 
     /** The drive list, then the selected drive's route. */

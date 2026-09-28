@@ -28,10 +28,13 @@ import com.volttracker.obdpoc.ui.components.VoltNavActions
 import com.volttracker.obdpoc.ui.components.VoltNavBar
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagScreen
+import com.volttracker.obdpoc.ui.diag.HealthActions
+import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
+import com.volttracker.obdpoc.ui.settings.SettingsPage
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.theme.SystemBarsAppearance
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -84,7 +87,14 @@ fun VoltApp(
                     CompositionLocalProvider(LocalVoltNav provides nav) {
                         when (val route = routes.lastOrNull()) {
                             null -> VoltTabContent(tab = tab, state = state, actions = actions)
-                            else -> VoltRouteContent(route = route, state = state, actions = actions, onBack = pop)
+                            else ->
+                                VoltRouteContent(
+                                    route = route,
+                                    state = state,
+                                    actions = actions,
+                                    onBack = pop,
+                                    openAdapter = { push(VoltRoute.ADAPTER) },
+                                )
                         }
                     }
                 }
@@ -121,7 +131,7 @@ internal fun screenViewName(
     route: VoltRoute?,
 ): String =
     when (route) {
-        VoltRoute.SETTINGS -> "settings"
+        VoltRoute.SETTINGS, VoltRoute.ADAPTER -> "settings"
         VoltRoute.HEALTH -> "diagnostics"
         null ->
             when (tab) {
@@ -174,25 +184,52 @@ private fun VoltRouteContent(
     state: VoltAppUiState,
     actions: VoltAppActions,
     onBack: () -> Unit,
+    openAdapter: () -> Unit,
 ) {
     when (route) {
-        VoltRoute.HEALTH -> DiagScreen(state.diag, onBack = onBack)
-        VoltRoute.SETTINGS ->
-            SettingsScreen(
-                state.settings,
+        VoltRoute.HEALTH ->
+            DiagScreen(
+                state.diag,
+                battery = hvBattery(state.drive, state.charge.sohPct, state.charge.capacityAh),
+                drive = state.drive,
+                demo = state.settings.demoActive,
                 onBack = onBack,
                 actions =
-                    SettingsActions(
-                        onOpenClassicDashboard = actions.onOpenClassicDashboard,
-                        onCheckForUpdate = actions.onCheckForUpdate,
-                        onInstallUpdate = actions.onInstallUpdate,
-                        onStartDemo = actions.onStartDemo,
-                        onStopDemo = actions.onStopDemo,
-                        onChange = actions.onSettingChange,
-                        onCommand = actions.onSettingsCommand,
+                    HealthActions(
+                        onScan = actions.onScanCodes,
+                        onClear = actions.onClearCodes,
+                        onShare = actions.onShareHealthReport,
+                        onOpenClassic = actions.onOpenClassicDashboard,
+                        onOpenAdapter = openAdapter,
                     ),
             )
+        VoltRoute.SETTINGS -> Settings(state, actions, onBack, SettingsPage.MAIN)
+        VoltRoute.ADAPTER -> Settings(state, actions, onBack, SettingsPage.CONNECTION)
     }
+}
+
+@Composable
+private fun Settings(
+    state: VoltAppUiState,
+    actions: VoltAppActions,
+    onBack: () -> Unit,
+    initialPage: SettingsPage,
+) {
+    SettingsScreen(
+        state.settings,
+        initialPage = initialPage,
+        onBack = onBack,
+        actions =
+            SettingsActions(
+                onOpenClassicDashboard = actions.onOpenClassicDashboard,
+                onCheckForUpdate = actions.onCheckForUpdate,
+                onInstallUpdate = actions.onInstallUpdate,
+                onStartDemo = actions.onStartDemo,
+                onStopDemo = actions.onStopDemo,
+                onChange = actions.onSettingChange,
+                onCommand = actions.onSettingsCommand,
+            ),
+    )
 }
 
 /** Saves the route stack as enum names so it survives rotation and process death. */

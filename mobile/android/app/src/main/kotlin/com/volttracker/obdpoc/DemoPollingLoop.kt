@@ -206,6 +206,7 @@ class DemoPollingLoop(
                 sample.put("intakeAirTempC", ObdElmDecode.round1(22.0 + 3.0 * Math.sin(t / 11.0)))
                 sample.put("outsideTempC", ObdElmDecode.round1(18.0 + 2.0 * Math.sin(t / 13.0)))
                 sample.put("sohPct", 91.0)
+                sample.put("capacityAh", 47.3)
                 sample.put("packEnergyKwh", ObdElmDecode.round1(soc / 100.0 * 14.0))
                 sample.put("hvBatteryRawSoc", ObdElmDecode.round1(soc + 2.0))
                 // HV cell-group balance for the Battery-tab cell card (mirrors

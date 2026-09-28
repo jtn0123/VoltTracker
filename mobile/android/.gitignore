@@ -15,6 +15,7 @@ field-logs/
 # app/src/main/dashboard-src/js/; dashboard-tests/build.mjs (esbuild) compiles it
 # into this dir, which Gradle's buildDashboardJs runs as part of preBuild.
 app/src/main/assets/dashboard/js/
+app/src/main/assets/dtc/
 # Dependency-lock files. settings-gradle.lockfile stays ignored, but
 # app/gradle.lockfile is committed (un-ignored below) so the OSV scan and the
 # release build resolve the shipped releaseRuntimeClasspath against a reproducible,

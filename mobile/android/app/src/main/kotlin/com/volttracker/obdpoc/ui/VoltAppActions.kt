@@ -32,4 +32,10 @@ data class VoltAppActions(
     val onCarControl: (String) -> Unit = {},
     /** Car: turn car controls on (native warning + PIN) or off. */
     val onCarControlsEnabled: (Boolean) -> Unit = {},
+    /** Health: read the car's trouble codes (the demo only simulates it). */
+    val onScanCodes: () -> Unit = {},
+    /** Health: clear the car's trouble codes, after the host's confirmation. */
+    val onClearCodes: () -> Unit = {},
+    /** Health: share this plain-text report. */
+    val onShareHealthReport: (String) -> Unit = {},
 )

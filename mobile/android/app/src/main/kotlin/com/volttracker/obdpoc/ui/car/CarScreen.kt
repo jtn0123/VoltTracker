@@ -46,6 +46,7 @@ import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcSeverity
+import com.volttracker.obdpoc.ui.diag.summary
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.Meter
 import com.volttracker.obdpoc.ui.drive.NumberUnit
@@ -92,7 +93,12 @@ fun CarScreen(
         TileRow(
             {
                 val tires = tiresTile(drive, car)
-                val icon = if (drive.tires == null) VoltIcons.Car else VoltIcons.Check
+                val icon =
+                    when {
+                        drive.tires == null -> VoltIcons.Car
+                        tires.tone == PillTone.NEUTRAL || tires.tone == PillTone.EV -> VoltIcons.Check
+                        else -> VoltIcons.Alert
+                    }
                 Tile("Tires", icon, tires, it, iconTone = tires.tone)
             },
             { Tile("Windows", VoltIcons.Window, windowsTile(car), it) },
@@ -304,25 +310,18 @@ private fun ColumnScope.TileLines(lines: List<String>) {
     Spacer(Modifier.weight(1f, fill = false))
 }
 
-/** "No trouble codes · scanned 2 h ago" / "2 trouble codes · …" for the Health row. */
-fun healthSummary(diag: DiagUiState): String {
-    val count = diag.codes.size
-    val codes =
-        when (count) {
-            0 -> "No trouble codes"
-            1 -> "1 trouble code"
-            else -> "$count trouble codes"
-        }
-    return listOfNotNull(codes, diag.lastScanLabel).joinToString(" · ")
-}
+/** "No trouble codes · scanned 2 h ago" / "2 trouble codes · …" / "Not scanned yet" for the Health row. */
+fun healthSummary(diag: DiagUiState): String = diag.summary()
 
-/** Health row tint: green when clean, red for any alert-level code, amber otherwise. */
-fun healthTone(diag: DiagUiState): PillTone =
-    when {
-        diag.codes.isEmpty() -> PillTone.EV
-        diag.codes.any { it.severity == DtcSeverity.ALERT } -> PillTone.BAD
+/** Health row tint: muted before any scan, green when clean, red for any alert-level code, amber otherwise. */
+fun healthTone(diag: DiagUiState): PillTone {
+    val codes = diag.codes ?: return PillTone.NEUTRAL
+    return when {
+        codes.isEmpty() -> PillTone.EV
+        codes.any { it.severity == DtcSeverity.ALERT } -> PillTone.BAD
         else -> PillTone.WARN
     }
+}
 
 /** The Car tab's nav badge: shown only while trouble codes are stored. */
 fun carBadge(diag: DiagUiState): NavBadge? =

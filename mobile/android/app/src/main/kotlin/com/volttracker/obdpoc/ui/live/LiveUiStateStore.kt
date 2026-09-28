@@ -50,6 +50,7 @@ class LiveUiStateStore(
     private var demoCharges: List<ChargeSession>? = null
     private val tripHistory = TripHistoryHolder()
     private val insightsHistory = InsightsHistoryHolder()
+    private val healthHistory = HealthHistoryHolder()
 
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
@@ -74,7 +75,13 @@ class LiveUiStateStore(
                         charge = s.charge.copy(connected = connected, statusLabel = label),
                         trips = s.trips.copy(connected = connected, statusLabel = label),
                         insights = s.insights.copy(connected = connected, statusLabel = label),
-                        diag = s.diag.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
+                        diag =
+                            s.diag.copy(
+                                connected = connected,
+                                statusLabel = label,
+                                adapterLabel = adapter,
+                                busyLabel = busyLabel(stateName, payload.optString("detail", "")),
+                            ),
                         settings =
                             s.settings.copy(
                                 connected = connected,
@@ -151,7 +158,36 @@ class LiveUiStateStore(
     fun insightsPeriod(): InsightsPeriod = insightsHistory.period
 
     private fun withHistory(s: VoltAppUiState): VoltAppUiState =
-        insightsHistory.apply(tripHistory.apply(withChargeHistory(s), nowMs()), nowMs())
+        healthHistory.apply(insightsHistory.apply(tripHistory.apply(withChargeHistory(s), nowMs()), nowMs()), nowMs())
+
+    /** The saved trouble codes and when the car's codes were last read or cleared, for Health. */
+    internal fun onHealthHistory(history: HealthHistoryHolder.Logged) {
+        healthHistory.onHistory(history, nowMs())
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The demo's Scan now: nothing is sent, its codes are simply "found" again. */
+    fun onDemoScan() {
+        healthHistory.onDemoScan(nowMs())
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The demo's Clear codes: nothing is sent, its codes move to "earlier". */
+    fun onDemoClear() {
+        healthHistory.onDemoClear(nowMs())
+        _state.value = withHistory(_state.value)
+    }
+
+    /** What a scan or clear is doing, while one runs; null otherwise. */
+    private fun busyLabel(
+        stateName: String,
+        detail: String,
+    ): String? =
+        when (stateName) {
+            "scanning" -> detail.trim().ifEmpty { "Reading the car's trouble codes…" }
+            "clearing-codes" -> detail.trim().ifEmpty { "Clearing the car's trouble codes…" }
+            else -> null
+        }
 
     /**
      * The Charge tab lists the logged charges — or, while the demo runs, sample ones: demo data
@@ -216,6 +252,7 @@ class LiveUiStateStore(
                     displayedSocPercent = drive.displayedSocPercent,
                     evRangeMiles = drive.evRangeMiles,
                     sohPct = optDouble(t, "sohPct") ?: s.charge.sohPct,
+                    capacityAh = optDouble(t, "capacityAh") ?: s.charge.capacityAh,
                     chargeKw = drive.chargeKw,
                     acVolts = drive.chargeAcVolts,
                     acAmps = drive.chargeAcAmps,
