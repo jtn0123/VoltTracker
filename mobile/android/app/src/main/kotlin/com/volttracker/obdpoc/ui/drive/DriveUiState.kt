@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui.drive
 
+import com.volttracker.obdpoc.ui.units.VoltUnits
+
 /** Propulsion source for the moment: EV (battery) or extended-range (gas). */
 enum class DriveMode { EV, GAS }
 
@@ -26,7 +28,8 @@ data class LastDrive(
 /**
  * Everything the Drive screen renders, as one immutable value.
  * Pure data — previewable and screenshot-testable with no service running.
- * Nullable fields are "not reported / stale": the screen shows "--", never a guess.
+ * Nullable fields are "not reported / stale": the screen shows "—", never a guess. Readings are
+ * stored in miles, mph, °F and psi; [units] formats them in the chosen system.
  */
 data class DriveUiState(
     val connected: Boolean = false,
@@ -61,30 +64,31 @@ data class DriveUiState(
     val fuelPercent: Double? = null,
     /** The cluster's gas range (SW-CAN `fuelRangeKm`) in miles; null when not reported or stale. */
     val gasRangeMiles: Double? = null,
-    val packTempF: Int = 0,
-    val packVolts: Double = 0.0,
+    /** Pack temperature (°F); null when not reported or not connected. */
+    val packTempF: Int? = null,
+    val packVolts: Double? = null,
     /** Signed pack current in A: positive = discharge, negative = charge/regen. */
-    val packAmps: Double = 0.0,
+    val packAmps: Double? = null,
     val mode: DriveMode = DriveMode.EV,
     val rpm: Int = 0,
-    val auxVolts: Double = 0.0,
+    val auxVolts: Double? = null,
     /** SW-CAN 12 V battery monitor (OBDLink only); null when not reported or stale. */
     val aux12Volts: Double? = null,
     val aux12SocPercent: Int? = null,
     val aux12Amps: Double? = null,
-    val coolantF: Int = 0,
+    val coolantF: Int? = null,
     val gpsAccuracyFt: Int? = null,
-    val ambientF: Int = 0,
+    val ambientF: Int? = null,
     val gear: String = "--",
     /** Motor A/B electrical power in kW — what the enhanced PIDs actually report. */
-    val motorAKw: Double = 0.0,
-    val motorBKw: Double = 0.0,
+    val motorAKw: Double? = null,
+    val motorBKw: Double? = null,
     val motorTempF: Int? = null,
     val inverterTempF: Int? = null,
     val cabinTempF: Int? = null,
-    val transTempF: Int = 0,
-    val torqueNm: Int = 0,
-    val oilLifePct: Int = 0,
+    val transTempF: Int? = null,
+    val torqueNm: Int? = null,
+    val oilLifePct: Int? = null,
     /** SW-CAN tyre pressures; null when not reported or stale. */
     val tires: TirePressures? = null,
     /** Settings → Units & vehicle: the placard the tyres are judged against (psi). */
@@ -116,6 +120,10 @@ data class DriveUiState(
     val signalCount: Int = 0,
     /** Density: false = Focus (the Arc ring), true = Detailed (the cockpit). */
     val detailed: Boolean = false,
+    /** Settings → Units: show km, km/h, °C, kPa and kWh/100 km instead of the imperial units. */
+    val metricUnits: Boolean = false,
+    /** Settings → Costs → Charge target (%): where a charge is "full" for the ring and the ETA. */
+    val chargeTargetPct: Int = 100,
     val tripMiles: Double = 0.0,
     val tripDuration: String = "--",
     val tripMaxMph: Int = 0,
@@ -126,6 +134,9 @@ data class DriveUiState(
     val cycleMpg: Double? = null,
     val lastDrive: LastDrive? = null,
 ) {
+    /** Settings → Units, for formatting the readings. */
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     companion object {
         private val powerSamples =
             listOf(

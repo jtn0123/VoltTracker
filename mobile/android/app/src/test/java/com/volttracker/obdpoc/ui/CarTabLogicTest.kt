@@ -64,6 +64,8 @@ class CarTabLogicTest {
         val hood = car.copy(openings = Openings(listOf("Driver door", "Hood")))
         assertEquals("Driver door, hood open", carHeadline(parked, hood).text)
         assertEquals("A window is open", carHeadline(parked, car.copy(windowsPct = listOf(40, 0, 0, 0))).text)
+        // Doors reported but windows not: only the doors are known to be closed.
+        assertEquals("Locked · Doors closed", carHeadline(parked, car.copy(windowsPct = null)).text)
         val nothing = carHeadline(DriveUiState(), CarUiState())
         assertEquals("Lock and doors not reported", nothing.text)
         assertEquals(PillTone.NEUTRAL, nothing.tone)

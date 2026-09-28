@@ -18,13 +18,13 @@ import com.volttracker.obdpoc.ui.trips.fitViewport
 import com.volttracker.obdpoc.ui.trips.gasMiles
 import com.volttracker.obdpoc.ui.trips.groups
 import com.volttracker.obdpoc.ui.trips.miPerKwh
-import com.volttracker.obdpoc.ui.trips.milesText
 import com.volttracker.obdpoc.ui.trips.mode
 import com.volttracker.obdpoc.ui.trips.savedVsGas
 import com.volttracker.obdpoc.ui.trips.subtitle
 import com.volttracker.obdpoc.ui.trips.title
 import com.volttracker.obdpoc.ui.trips.whenLine
 import com.volttracker.obdpoc.ui.trips.wholeDollars
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -80,8 +80,13 @@ class TripsLogicTest {
         assertEquals("21% electric", trip("a", now, evShare = 0.21).efficiencyText())
         assertEquals("Gas", trip("a", now, evShare = 0.0).efficiencyText())
         assertEquals("Apr 30 · 184.2 mi · 21% electric", trip("a", now, miles = 184.2, evShare = 0.21).chipDetail(utc))
-        assertEquals("38 mi", milesText(38.2))
-        assertEquals("6.1 mi", milesText(6.14))
+        assertEquals("38 mi", VoltUnits.Imperial.distanceText(38.2))
+        assertEquals("6.1 mi", VoltUnits.Imperial.distanceText(6.14))
+        assertEquals(
+            "Apr 30 · 296.4 km · 21% electric",
+            trip("a", now, miles = 184.2, evShare = 0.21).chipDetail(utc, VoltUnits.Metric),
+        )
+        assertEquals("15.5 kWh/100 km", trip("a", now, miles = 10.0, kwh = 2.5).efficiencyText(VoltUnits.Metric))
         assertEquals("$38", wholeDollars(37.6))
         assertEquals("-$4", wholeDollars(-4.2))
     }

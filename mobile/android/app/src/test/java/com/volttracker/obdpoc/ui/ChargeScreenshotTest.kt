@@ -37,7 +37,7 @@ class ChargeScreenshotTest(
                 settings = theme.applyTo(SettingsUiState.demo),
             )
         // The full page, so the review images show every card (the real screen scrolls).
-        if (stateName == "charging") RuntimeEnvironment.setQualifiers("+h1240dp")
+        if (stateName in setOf("charging", "metric")) RuntimeEnvironment.setQualifiers("+h1240dp")
         compose.setContent { VoltApp(state, initialTab = VoltTab.CHARGE) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/charge-$stateName-${theme.key}.png")
     }
@@ -57,6 +57,8 @@ class ChargeScreenshotTest(
                         statusLabel = "Live · 1 Hz",
                     ),
                 "empty" to ChargeUiState(),
+                "loading" to ChargeUiState(history = HistoryLoad.LOADING),
+                "metric" to ChargeUiState.demo.copy(metricUnits = true, targetSoc = 80),
             )
 
         @JvmStatic

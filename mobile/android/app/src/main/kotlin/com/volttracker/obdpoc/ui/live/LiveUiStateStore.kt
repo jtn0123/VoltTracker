@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.live
 
 import com.volttracker.obdpoc.VoltGear
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Folds the service's JSON telemetry/status payloads (the same ones the WebView
@@ -36,7 +38,17 @@ import java.util.Locale
 class LiveUiStateStore(
     private val nowMs: () -> Long = System::currentTimeMillis,
 ) {
-    private val _state = MutableStateFlow(VoltAppUiState())
+    private val _state =
+        MutableStateFlow(
+            VoltAppUiState().let {
+                // Nothing is read yet: the tabs say "Loading" rather than "none logged".
+                it.copy(
+                    charge = it.charge.copy(history = HistoryLoad.LOADING),
+                    trips = it.trips.copy(history = HistoryLoad.LOADING),
+                    insights = it.insights.copy(history = HistoryLoad.LOADING, speedsLoaded = false),
+                )
+            },
+        )
     val state: StateFlow<VoltAppUiState> = _state
 
     private val speedTrace = ArrayDeque<Float>()
@@ -47,6 +59,7 @@ class LiveUiStateStore(
     private val socTrace = ArrayDeque<Float>()
     private var socTraceLastSampleAt = 0L
     private var loggedCharges: List<ChargeSession> = emptyList()
+    private var chargeLoad = HistoryLoad.LOADING
     private var demoCharges: List<ChargeSession>? = null
     private val tripHistory = TripHistoryHolder()
     private val insightsHistory = InsightsHistoryHolder()
@@ -66,7 +79,7 @@ class LiveUiStateStore(
                 .let { s ->
                     s.copy(
                         drive =
-                            s.drive.copy(
+                            (if (connected) s.drive else s.drive.withoutLiveReadings()).copy(
                                 connected = connected,
                                 connecting = transitioning,
                                 statusLabel = label,
@@ -93,6 +106,29 @@ class LiveUiStateStore(
                 }.let(::withHistory)
     }
 
+    /**
+     * Off the link, the last sample's instantaneous readings are no longer true: they read as
+     * not reported ("—") instead of a frozen figure until the next session reports them again.
+     */
+    private fun DriveUiState.withoutLiveReadings(): DriveUiState =
+        copy(
+            powerKw = 0.0,
+            packTempF = null,
+            packVolts = null,
+            packAmps = null,
+            auxVolts = null,
+            coolantF = null,
+            ambientF = null,
+            motorAKw = null,
+            motorBKw = null,
+            motorTempF = null,
+            inverterTempF = null,
+            transTempF = null,
+            torqueNm = null,
+            displayedSocPercent = null,
+            chargeEta = null,
+        )
+
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
     fun onTelemetry(payload: JSONObject) {
         appendTraces(payload)
@@ -113,12 +149,25 @@ class LiveUiStateStore(
     /** Logged charges read from the store (newest first), for the Charge tab's Recent sessions. */
     fun onChargeHistory(sessions: List<ChargeSession>) {
         loggedCharges = sessions
+        chargeLoad = HistoryLoad.LOADED
+        _state.value = withChargeHistory(_state.value)
+    }
+
+    /** The charge history couldn't be read (see [HistoryLoad.failed]). */
+    fun onChargeHistoryFailed() {
+        chargeLoad = chargeLoad.failed()
         _state.value = withChargeHistory(_state.value)
     }
 
     /** Logged drives read from the store (newest first), for the Trips tab. */
     fun onTripHistory(trips: List<TripSummary>) {
-        tripHistory.onHistory(trips, nowMs())
+        tripHistory.onHistory(trips)
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The drive list couldn't be read (see [HistoryLoad.failed]). */
+    fun onTripHistoryFailed() {
+        tripHistory.onHistoryFailed()
         _state.value = withHistory(_state.value)
     }
 
@@ -144,7 +193,13 @@ class LiveUiStateStore(
         speeds: List<SpeedEfficiency>,
         drift: CellDrift?,
     ) {
-        insightsHistory.onHistory(trips, readFor, speeds, drift, nowMs())
+        insightsHistory.onHistory(trips, readFor, speeds, drift)
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The Insights read failed (see [HistoryLoad.failed]). */
+    fun onInsightsHistoryFailed() {
+        insightsHistory.onHistoryFailed()
         _state.value = withHistory(_state.value)
     }
 
@@ -194,14 +249,20 @@ class LiveUiStateStore(
      * never touches real history, so the real list would be empty or out of place.
      */
     private fun withChargeHistory(s: VoltAppUiState): VoltAppUiState {
+        val demo = s.settings.demoActive
         val sessions =
-            if (s.settings.demoActive) {
+            if (demo) {
                 demoCharges ?: ChargeUiState.demoSessions(nowMs()).also { demoCharges = it }
             } else {
                 demoCharges = null
                 loggedCharges
             }
-        return if (s.charge.sessions == sessions) s else s.copy(charge = s.charge.copy(sessions = sessions))
+        val load = if (demo) HistoryLoad.LOADED else chargeLoad
+        return if (s.charge.sessions == sessions && s.charge.history == load) {
+            s
+        } else {
+            s.copy(charge = s.charge.copy(sessions = sessions, history = load))
+        }
     }
 
     // The demo session reports "demo" while starting, then "connected" like a real link; its
@@ -303,7 +364,8 @@ class LiveUiStateStore(
                 speedKph = optDouble(t, "speedKph"),
                 powerKw = optDouble(t, "powerKw"),
                 chargerKw = optDouble(t, "chargerPowerKw"),
-                soc = optDouble(t, "soc"),
+                // The charge line/from-SOC use the driver's scale, like the ring and time-to-full.
+                soc = optDouble(t, "displayedSocPct") ?: optDouble(t, "soc"),
                 sohPct = optDouble(t, "sohPct"),
                 lat = optDouble(t, "latitude"),
                 lon = optDouble(t, "longitude"),
@@ -324,6 +386,9 @@ class LiveUiStateStore(
         val chargerKw = optDouble(t, "chargerPowerKw")
         val charging = phase == DrivePhase.CHARGING
         val acVolts = optDouble(t, "chargerAcVoltage")
+        val displayedSoc = fresh(t, "displayedSocPct", "displayedSocStaleMs", current.displayedSocPercent)
+        // One SOC scale everywhere the driver reads a percentage: the cluster's, else the raw pack's.
+        val shownSoc = displayedSoc ?: optDouble(t, "soc")
         return current.copy(
             phase = phase,
             powerKw = optDouble(t, "powerKw") ?: current.powerKw,
@@ -333,7 +398,7 @@ class LiveUiStateStore(
             gasTrace = gasTrace.toList(),
             socTrace = socTrace.toList(),
             socPercent = soc,
-            displayedSocPercent = optDouble(t, "displayedSocPct") ?: current.displayedSocPercent,
+            displayedSocPercent = displayedSoc,
             evRangeMiles = evRangeMiles(t, current.evRangeMiles),
             fuelPercent = fresh(t, "fuelLevelPct", "fuelLevelStaleMs", current.fuelPercent),
             gasRangeMiles =
@@ -354,7 +419,9 @@ class LiveUiStateStore(
             aux12Amps = fresh(t, "aux12vCurrentA", "aux12vStaleMs", current.aux12Amps),
             coolantF = optDouble(t, "coolantC")?.let { cToF(it).toInt() } ?: current.coolantF,
             gpsAccuracyFt = optDouble(t, "accuracyM")?.let { (it * FT_PER_M).toInt() } ?: current.gpsAccuracyFt,
-            ambientF = optDouble(t, "outsideTempC")?.let { cToF(it).toInt() } ?: current.ambientF,
+            ambientF =
+                fresh(t, "outsideTempC", "outsideTempStaleMs", current.ambientF?.toDouble()?.let(::fToC))
+                    ?.let { cToF(it).roundToInt() },
             gear = gearText(t),
             motorAKw = optDouble(t, "motorAPowerKw") ?: current.motorAKw,
             motorBKw = optDouble(t, "motorBPowerKw") ?: current.motorBKw,
@@ -388,7 +455,12 @@ class LiveUiStateStore(
             chargeFromSoc = session.chargeFromSoc,
             chargeAddedKwh = session.chargeAddedKwh,
             chargeStartedAtMs = session.chargeStartedAtMs,
-            chargeEta = if (charging) chargeEta(optDouble(t, "soc"), chargerKw, optDouble(t, "sohPct")) else null,
+            chargeEta =
+                if (charging) {
+                    chargeEta(shownSoc, chargerKw, optDouble(t, "sohPct"), current.chargeTargetPct.toDouble())
+                } else {
+                    null
+                },
             sampleAtMs = if (at > 0) at else current.sampleAtMs,
             signalCount = signalCount(t),
             tripMiles = session.driveMiles,
@@ -548,6 +620,8 @@ class LiveUiStateStore(
                             detailed = settings.driveDetailed,
                             electricityRate = settings.homeRate,
                             tirePlacardPsi = settings.tirePlacardPsi,
+                            metricUnits = settings.metricUnits,
+                            chargeTargetPct = settings.chargeTargetPct,
                         ),
                     car = s.car.copy(metricUnits = settings.metricUnits, placardPsi = settings.tirePlacardPsi),
                     charge =
@@ -555,15 +629,18 @@ class LiveUiStateStore(
                             homeRate = settings.homeRate,
                             publicRate = settings.publicRate,
                             targetSoc = settings.chargeTargetPct,
+                            metricUnits = settings.metricUnits,
                         ),
                     trips =
                         s.trips.copy(
+                            metricUnits = settings.metricUnits,
                             homeRate = settings.homeRate,
                             gasMpg = settings.gasMpg,
                             gasPrice = settings.gasPrice,
                         ),
                     insights =
                         s.insights.copy(
+                            metricUnits = settings.metricUnits,
                             homeRate = settings.homeRate,
                             gasMpg = settings.gasMpg,
                             gasPrice = settings.gasPrice,

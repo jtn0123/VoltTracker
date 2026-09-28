@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.live
 
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.trips.TripRoute
 import com.volttracker.obdpoc.ui.trips.TripSummary
@@ -14,17 +15,19 @@ internal class TripHistoryHolder {
     private var logged: List<TripSummary> = emptyList()
     private var loggedRoute: TripRoute? = null
     private var loggedKey: String? = null
-    private var loggedAtMs = 0L
+    private var load = HistoryLoad.LOADING
     private var demoAtMs: Long? = null
     private var demoKey: String = TripsDemo.MIXED_KEY
 
-    fun onHistory(
-        trips: List<TripSummary>,
-        nowMs: Long,
-    ) {
+    fun onHistory(trips: List<TripSummary>) {
         logged = trips
-        loggedAtMs = nowMs
+        load = HistoryLoad.LOADED
         if (trips.none { it.routeKey == loggedKey }) loggedKey = null
+    }
+
+    /** The drive list couldn't be read: a list already shown stays; otherwise the tab says so. */
+    fun onHistoryFailed() {
+        load = load.failed()
     }
 
     fun onRoute(route: TripRoute) {
@@ -39,11 +42,15 @@ internal class TripHistoryHolder {
         if (demo) demoKey = key else loggedKey = key
     }
 
-    /** The logged drive whose route still has to be read, or null (demo, none, or already read). */
+    /**
+     * The logged drive whose route still has to be read, or null (demo, none, or already read).
+     * A route whose read failed is read again on the next request (the next visit to Trips).
+     */
     fun routeToRead(demo: Boolean): String? {
         if (demo) return null
         val key = loggedKey ?: logged.firstOrNull()?.routeKey ?: return null
-        return key.takeIf { loggedRoute?.routeKey != it }
+        val route = loggedRoute
+        return key.takeIf { route == null || route.routeKey != it || route.failed }
     }
 
     fun apply(
@@ -59,6 +66,7 @@ internal class TripHistoryHolder {
                     route = TripsDemo.route(demoKey, at),
                     nowMs = at,
                     exportable = false,
+                    history = HistoryLoad.LOADED,
                 )
             } else {
                 demoAtMs = null
@@ -66,8 +74,10 @@ internal class TripHistoryHolder {
                     trips = logged,
                     selectedKey = loggedKey,
                     route = loggedRoute,
-                    nowMs = loggedAtMs,
+                    // The real clock, so "Today" and the month stay right across midnight.
+                    nowMs = nowMs,
                     exportable = true,
+                    history = load,
                 )
             }
         return if (next == s.trips) s else s.copy(trips = next)

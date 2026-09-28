@@ -1,8 +1,9 @@
 package com.volttracker.obdpoc.ui.trips
 
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.drive.clockLabel
 import com.volttracker.obdpoc.ui.drive.durationLabel
-import com.volttracker.obdpoc.ui.drive.oneDecimal
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -70,26 +71,23 @@ fun TripSummary.whenLine(zone: TimeZone = TimeZone.getDefault()): String =
     "${clockLabel(startedAtMs, zone = zone)} · ${durationLabel(endedAtMs - startedAtMs)}"
 
 /** "4.1 mi/kWh" for an electric drive, "64% electric" for a mixed one, "Gas" when the engine drove it all. */
-fun TripSummary.efficiencyText(): String? =
+fun TripSummary.efficiencyText(units: VoltUnits = VoltUnits.Imperial): String? =
     when (mode) {
-        TripMode.EV -> miPerKwh?.let { "${oneDecimal(it)} mi/kWh" }
+        TripMode.EV -> miPerKwh?.let(units::efficiencyText)
         TripMode.MIXED -> "${percent(evShare ?: 0.0)}% electric"
         TripMode.GAS -> "Gas"
     }
 
 /** Map chip line: "Apr 28 · 184.2 mi · 21% electric". */
-fun TripSummary.chipDetail(zone: TimeZone = TimeZone.getDefault()): String =
-    listOfNotNull(dayLabel(startedAtMs, zone), "${oneDecimal(miles)} mi", efficiencyText()).joinToString(" · ")
-
-/** "38 mi" — whole miles from 10 up, one decimal below. */
-fun milesText(miles: Double): String =
-    if (miles >=
-        WHOLE_MILES
-    ) {
-        "${miles.roundToInt()} mi"
-    } else {
-        "${oneDecimal(miles)} mi"
-    }
+fun TripSummary.chipDetail(
+    zone: TimeZone = TimeZone.getDefault(),
+    units: VoltUnits = VoltUnits.Imperial,
+): String =
+    listOfNotNull(
+        dayLabel(startedAtMs, zone),
+        "${units.distanceOneDecimal(miles)} ${units.distanceUnit}",
+        efficiencyText(units),
+    ).joinToString(" · ")
 
 /** "Today", "Yesterday", else "Apr 28" (with the year when it isn't this year's). */
 fun dayGroupLabel(
@@ -141,13 +139,18 @@ fun TripsUiState.monthTrips(zone: TimeZone = TimeZone.getDefault()): List<TripSu
     }
 }
 
-/** "6 drives · 416 mi · April", or "No drives yet in April". */
+/** "6 drives · 416 mi · April", or "No drives yet in April"; no month until the drives are read. */
 fun TripsUiState.subtitle(zone: TimeZone = TimeZone.getDefault()): String {
+    when (history) {
+        HistoryLoad.LOADING -> return "Loading drives…"
+        HistoryLoad.FAILED -> return "Drives couldn't be read"
+        HistoryLoad.LOADED -> Unit
+    }
     val month = SimpleDateFormat("MMMM", Locale.US).apply { timeZone = zone }.format(Date(nowMs))
     val inMonth = monthTrips(zone)
     if (inMonth.isEmpty()) return "No drives yet in $month"
     val drives = if (inMonth.size == 1) "1 drive" else "${inMonth.size} drives"
-    return "$drives · ${inMonth.sumOf { it.miles }.roundToInt()} mi · $month"
+    return "$drives · ${units.distanceWhole(inMonth.sumOf { it.miles })} ${units.distanceUnit} · $month"
 }
 
 /** This month's share of classified driving done on electric, distance-weighted; null when none is classified. */
@@ -324,7 +327,6 @@ private const val ALL_GAS = 0.02
 private const val MIN_KWH = 0.05
 private const val MAX_MI_PER_KWH = 10.0
 private const val ASSUMED_MI_PER_KWH = 3.5
-private const val WHOLE_MILES = 10.0
 private const val PERCENT = 100
 private const val DAWN = 5
 private const val NOON = 12

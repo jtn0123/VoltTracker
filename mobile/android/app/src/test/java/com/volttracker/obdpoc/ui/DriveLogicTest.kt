@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.ui.drive.ChargeEta
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.MIN_EFFICIENCY_MILES
 import com.volttracker.obdpoc.ui.drive.PowerRole
 import com.volttracker.obdpoc.ui.drive.TirePressures
 import com.volttracker.obdpoc.ui.drive.atReserve
@@ -22,10 +23,11 @@ import com.volttracker.obdpoc.ui.drive.powerRole
 import com.volttracker.obdpoc.ui.drive.regenerating
 import com.volttracker.obdpoc.ui.drive.shortDurationLabel
 import com.volttracker.obdpoc.ui.drive.shownSocPercent
+import com.volttracker.obdpoc.ui.drive.shownTripMiPerKwh
 import com.volttracker.obdpoc.ui.drive.tireLow
 import com.volttracker.obdpoc.ui.drive.tireStatus
-import com.volttracker.obdpoc.ui.drive.totalRangeMiles
-import com.volttracker.obdpoc.ui.drive.wholeLabel
+import com.volttracker.obdpoc.ui.drive.totalRangeWhole
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -82,9 +84,29 @@ class DriveLogicTest {
 
     @Test
     fun totalRangeNeedsBothHalves() {
-        assertEquals(319.0, DriveUiState.demo.totalRangeMiles ?: -1.0, 0.0)
-        assertNull(DriveUiState.demo.copy(gasRangeMiles = null).totalRangeMiles)
-        assertNull(DriveUiState.demo.copy(evRangeMiles = null).totalRangeMiles)
+        assertEquals(319, DriveUiState.demo.totalRangeWhole(VoltUnits.Imperial))
+        assertNull(DriveUiState.demo.copy(gasRangeMiles = null).totalRangeWhole(VoltUnits.Imperial))
+        assertNull(DriveUiState.demo.copy(evRangeMiles = null).totalRangeWhole(VoltUnits.Imperial))
+    }
+
+    @Test
+    fun totalRangeIsTheSumOfTheRoundedParts() {
+        // 31.6 → "32" and 292.6 → "293" beside it, so the total must read 325, not round(324.2) = 324.
+        val state = DriveUiState.demo.copy(evRangeMiles = 31.6, gasRangeMiles = 292.6)
+        assertEquals(325, state.totalRangeWhole(VoltUnits.Imperial))
+        // In km each part is converted then rounded: 50.9 → 51, 470.9 → 471.
+        assertEquals(522, state.totalRangeWhole(VoltUnits.Metric))
+    }
+
+    @Test
+    fun efficiencyWaitsForAMeaningfulDistance() {
+        val early = DriveUiState.demo.copy(tripMiles = 0.7, tripMiPerKwh = 10.2)
+        assertNull(early.shownTripMiPerKwh)
+        assertEquals(
+            4.1,
+            early.copy(tripMiles = MIN_EFFICIENCY_MILES, tripMiPerKwh = 4.1).shownTripMiPerKwh ?: -1.0,
+            0.0,
+        )
     }
 
     @Test
@@ -155,8 +177,6 @@ class DriveLogicTest {
 
     @Test
     fun numberLabels() {
-        assertEquals("293", wholeLabel(292.6))
-        assertEquals("--", wholeLabel(null))
         assertEquals("18.4", oneDecimal(18.44))
     }
 

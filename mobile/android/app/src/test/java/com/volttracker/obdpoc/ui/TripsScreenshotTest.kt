@@ -35,7 +35,7 @@ class TripsScreenshotTest(
     fun capture() {
         val state = VoltAppUiState(trips = STATES.getValue(stateName), settings = theme.applyTo(SettingsUiState.demo))
         // The full page, so the review images show every drive (the real screen scrolls).
-        if (stateName == "mixed") RuntimeEnvironment.setQualifiers("+h1240dp")
+        if (stateName in setOf("mixed", "metric")) RuntimeEnvironment.setQualifiers("+h1240dp")
         compose.setContent { VoltApp(state, initialTab = VoltTab.TRIPS) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/trips-$stateName-${theme.key}.png")
     }
@@ -61,7 +61,11 @@ class TripsScreenshotTest(
                             },
                     ),
                 "noroute" to demo.copy(selectedKey = EV_KEY, route = TripRoute(EV_KEY, emptyList())),
+                "routefailed" to
+                    demo.copy(selectedKey = EV_KEY, route = TripRoute(EV_KEY, emptyList(), failed = true)),
                 "empty" to TripsUiState(nowMs = TripsUiState.DEMO_NOW_MS),
+                "loading" to TripsUiState(history = HistoryLoad.LOADING),
+                "metric" to demo.copy(metricUnits = true),
             )
 
         @JvmStatic

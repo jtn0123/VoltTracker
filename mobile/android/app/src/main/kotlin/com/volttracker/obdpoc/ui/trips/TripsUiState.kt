@@ -1,5 +1,8 @@
 package com.volttracker.obdpoc.ui.trips
 
+import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.units.VoltUnits
+
 /**
  * One logged drive, as the store's trip list reports it (`tripsPage` rows). [evShare] is the
  * speed-weighted share of its classified driving done on electric (0..1), null when the drive
@@ -23,10 +26,11 @@ data class TripPoint(
     val gas: Boolean = false,
 )
 
-/** The selected trip's GPS track, EV / gas marked per point. */
+/** The selected trip's GPS track, EV / gas marked per point; [failed] when it couldn't be read. */
 data class TripRoute(
     val routeKey: String,
     val points: List<TripPoint>,
+    val failed: Boolean = false,
 )
 
 /**
@@ -46,7 +50,13 @@ data class TripsUiState(
     val gasPrice: Double = 0.0,
     /** False for demo trips: they have nothing on disk to export. */
     val exportable: Boolean = true,
+    /** Whether the logged drives have been read yet (demo and previews are always loaded). */
+    val history: HistoryLoad = HistoryLoad.LOADED,
+    /** Settings → Units: how distances, speeds and temperatures are shown. */
+    val metricUnits: Boolean = false,
 ) {
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     /** The trip the map shows. */
     val selected: TripSummary?
         get() = trips.firstOrNull { it.routeKey == selectedKey } ?: trips.firstOrNull()

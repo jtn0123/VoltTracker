@@ -42,6 +42,7 @@ class DemoPollingLoop(
         const val CHARGE_SOC_PER_SECOND = 0.12
         private const val DRIVE_SOC_PER_SECOND = 0.06
         private const val SOC_START = 77.8
+        private const val DEMO_DISPLAYED_SOC_OFFSET = 3.0
         private const val SOC_FLOOR = 13.4
 
         // Safety bounds only — the periodic form ranges 74.2..77.8 and can
@@ -227,7 +228,12 @@ class DemoPollingLoop(
                 sample.put("gearConfidence", GearConfidence.CONFIRMED.wireName)
                 sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
                 sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
-                sample.put("displayedSocPct", ObdElmDecode.round1(soc))
+                // The cluster's SOC reads a few points above the raw pack SOC on a real Volt; keeping
+                // them apart in the demo shows any screen that mixes the two scales.
+                sample.put(
+                    "displayedSocPct",
+                    ObdElmDecode.round1((soc + DEMO_DISPLAYED_SOC_OFFSET).coerceAtMost(100.0)),
+                )
                 sample.put("packResistanceMohm", 148.5)
                 sample.put("hvIsolationKohm", 2000)
                 sample.put("motorBTempC", ObdElmDecode.round1(48.0 + 4.0 * Math.sin(t / 10.0)))

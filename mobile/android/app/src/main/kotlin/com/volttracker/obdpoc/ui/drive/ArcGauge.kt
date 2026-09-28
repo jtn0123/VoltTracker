@@ -251,7 +251,8 @@ private fun DrawScope.drawPowerRing(
         )
     }
     label(measurer, "0", g.polar(R - 40f, ArcGeometry.kwToDeg(0.0) + 3f), tickStyle(pal.faint))
-    label(measurer, "100", g.polar(R - 40f, ArcGeometry.kwToDeg(100.0) - 3f), tickStyle(pal.faint))
+    // "100 kW", not "100": the driving ring is a power gauge and must not read as a speedometer.
+    label(measurer, "100 kW", g.polar(R - 44f, ArcGeometry.kwToDeg(100.0) - 5f), tickStyle(pal.faint))
     val regenAt = g.polar(R - 42f, ArcGeometry.kwToDeg(-36.0))
     label(measurer, "REGEN", Offset(regenAt.x + g.px(4f), regenAt.y), tickStyle(pal.ev.copy(alpha = 0.8f), 10f))
 
@@ -309,7 +310,9 @@ private fun DrawScope.drawSocRing(
     val a = ArcGeometry.socToDeg(soc)
     val from = state.chargeFromSoc
     if (state.phase == DrivePhase.CHARGING) {
-        arc(g, R, ArcGeometry.socToDeg(from ?: soc), ArcGeometry.END_DEG, pal.ev.copy(alpha = CHARGE_TARGET_TINT), RING)
+        // The stretch still to charge, up to the Settings charge target (not always 100%).
+        val target = ArcGeometry.socToDeg(state.chargeTargetPct.toDouble())
+        arc(g, R, ArcGeometry.socToDeg(from ?: soc), target, pal.ev.copy(alpha = CHARGE_TARGET_TINT), RING)
     }
     glowArc(g, ArcGeometry.START_DEG, a, pal.ev, GLOW_SOC)
     if (shimmerPhase != null) {
@@ -409,15 +412,20 @@ private fun DriveCenter(
     pal: VoltPalette,
 ) {
     val color = powerColor(pal, state.powerRole)
+    val units = state.units
+    val speed = units.speed(state.speedMph.toDouble())
     Spacer(Modifier.height(10.dp))
     HeroNumber(
-        text = AnnotatedString("${state.speedMph}"),
+        text = AnnotatedString("$speed"),
         style = speedStyle,
         lineBox = SPEED_LINE_BOX,
-        modifier = Modifier.semantics { contentDescription = "${state.speedMph} miles per hour" },
+        modifier =
+            Modifier.semantics {
+                contentDescription = "$speed ${if (units.metric) "kilometres" else "miles"} per hour"
+            },
     )
     Text(
-        text = "mph",
+        text = units.speedUnit,
         style = VoltType.heroUnit,
         color = VoltColors.textSecondary,
         modifier = Modifier.padding(top = 4.dp),
@@ -488,7 +496,9 @@ private fun ParkedCenter(state: DriveUiState) {
     }
     SocNumber("${state.shownSocPercent.toInt()}")
     Text(
-        text = state.evRangeMiles?.let { "${it.toInt()} mi electric range" } ?: "Electric range not reported",
+        text =
+            state.evRangeMiles?.let { "${state.units.distanceWhole(it)} ${state.units.distanceUnit} electric range" }
+                ?: "Electric range not reported",
         style = VoltType.heroUnit,
         color = VoltColors.textSecondary,
         modifier = Modifier.padding(top = 4.dp),
@@ -504,14 +514,21 @@ private fun ChargeCenter(state: DriveUiState) {
             buildAnnotatedString {
                 when (val eta = state.chargeEta) {
                     is ChargeEta.Finish -> {
-                        append("Full by ")
+                        append(if (state.chargeTargetPct < FULL_PCT) "${state.chargeTargetPct}% by " else "Full by ")
                         withStyle(SpanStyle(color = text, fontWeight = FontWeight.SemiBold)) {
                             append(clockLabel(state.sampleAtMs, eta.remainingMs))
                         }
                         append(" · ${shortDurationLabel(eta.remainingMs)}")
                     }
-                    ChargeEta.NearlyFull -> append("Topping off — nearly full")
-                    ChargeEta.Estimating, null -> append("Estimating time to full…")
+                    ChargeEta.NearlyFull -> append("Topping off — nearly there")
+                    ChargeEta.Estimating, null ->
+                        append(
+                            if (state.chargeTargetPct < FULL_PCT) {
+                                "Estimating time to ${state.chargeTargetPct}%…"
+                            } else {
+                                "Estimating time to full…"
+                            },
+                        )
                 }
             },
         style = VoltType.heroUnit,
@@ -591,4 +608,5 @@ private const val HALO_OUTER_W = 14f
 private const val HALO_INNER_W = 6f
 private const val SHIMMER_PERIOD = 60f
 private const val SHIMMER_MS = 1600
+private const val FULL_PCT = 100
 private const val SHIMMER_ALPHA = 0.6f

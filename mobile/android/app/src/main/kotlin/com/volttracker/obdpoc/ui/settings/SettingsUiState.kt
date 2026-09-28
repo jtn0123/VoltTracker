@@ -4,6 +4,7 @@ import com.volttracker.obdpoc.ui.drive.TIRE_PLACARD_PSI
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.DarkStyle
 import com.volttracker.obdpoc.ui.theme.OledAccent
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -88,22 +89,25 @@ data class SettingsUiState(
 
     val unitsLabel: String get() = if (metricUnits) "Metric" else "Imperial"
 
+    /** Settings → Units, for formatting. */
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     /** "38 psi" / "262 kPa": the placard in the chosen units. */
-    val tirePlacardLabel: String
-        get() =
-            if (metricUnits) {
-                "${(tirePlacardPsi / PSI_PER_KPA).roundToInt()} kPa"
-            } else {
-                "${tirePlacardPsi.roundToInt()} psi"
-            }
+    val tirePlacardLabel: String get() = units.pressureText(tirePlacardPsi)
 
     val homeRateLabel: String get() = rateLabel(homeRate, "kWh")
 
     val publicRateLabel: String get() = if (publicRate > 0.0) rateLabel(publicRate, "kWh") else "same as home"
 
-    val gasPriceLabel: String get() = rateLabel(gasPrice, "gal")
+    /** "$4.29 / gal", or per litre in metric. */
+    val gasPriceLabel: String get() = rateLabel(units.gasPrice(gasPrice), units.gasVolumeUnit)
 
-    val gasMpgLabel: String get() = gasMpg?.let { "${formatNumber(it)} MPG" } ?: NOT_SET
+    /** "30 MPG", or "7.8 L/100 km" in metric. */
+    val gasMpgLabel: String
+        get() =
+            gasMpg?.let { mpg ->
+                if (metricUnits) units.economyText(mpg) else "${formatNumber(mpg)} MPG"
+            } ?: NOT_SET
 
     val chargeTargetLabel: String get() = "$chargeTargetPct%"
 
@@ -133,7 +137,6 @@ data class SettingsUiState(
         val TEXT_SIZES = listOf(1.0 to "Default", 1.25 to "Large", 1.5 to "Largest")
 
         private const val F_PER_C = 9.0 / 5.0
-        private const val PSI_PER_KPA = 0.145038
         private const val F_OFFSET = 32.0
 
         /** "$0.12 / kWh", or [NOT_SET] for 0. */

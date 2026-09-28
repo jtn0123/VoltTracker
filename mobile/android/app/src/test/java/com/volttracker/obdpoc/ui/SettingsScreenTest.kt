@@ -182,7 +182,7 @@ class SettingsScreenTest {
     @Test
     fun unitsSegmentsReportMetric() {
         show(SettingsPage.UNITS)
-        compose.onNodeWithText("mi · °F").assertIsDisplayed()
+        compose.onNodeWithText("mi · °F · psi").assertIsDisplayed()
         compose.onNodeWithText("Metric").performClick()
         assertEquals(listOf<SettingChange>(SettingChange.MetricUnits(true)), changes)
     }
@@ -256,7 +256,10 @@ class SettingsScreenTest {
         assertEquals("Metric", metric.unitsLabel)
         assertEquals("above 45°C", metric.packTempHighLabel)
         assertEquals("Largest", metric.textSizeLabel)
-        assertEquals("32.5 MPG", metric.gasMpgLabel)
+        assertEquals("7.2 L/100 km", metric.gasMpgLabel)
+        assertEquals("32.5 MPG", SettingsUiState(gasMpg = 32.5).gasMpgLabel)
+        assertEquals("$1.13 / L", SettingsUiState(metricUnits = true, gasPrice = 4.29).gasPriceLabel)
+        assertEquals("262 kPa", metric.tirePlacardLabel)
         assertEquals("not set", metric.homeRateLabel)
         assertEquals("Imperial", SettingsUiState().unitsLabel)
         assertEquals("above 113°F", SettingsUiState().packTempHighLabel)

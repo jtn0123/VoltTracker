@@ -8,6 +8,7 @@ import com.volttracker.obdpoc.ui.trips.gasMiles
 import com.volttracker.obdpoc.ui.trips.loggedKwh
 import com.volttracker.obdpoc.ui.trips.miles
 import com.volttracker.obdpoc.ui.trips.savedVsGas
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -232,7 +233,10 @@ fun List<SpeedEfficiency>.best(): SpeedEfficiency? = maxByOrNull { it.miPerKwh }
 val SpeedEfficiency.midMph: Int get() = mph + BAND_HALF_MPH
 
 /** "1,041". */
-fun wholeMiles(miles: Double): String = String.format(Locale.US, "%,d", miles.roundToInt())
+fun wholeMiles(
+    miles: Double,
+    units: VoltUnits = VoltUnits.Imperial,
+): String = String.format(Locale.US, "%,d", units.distance(miles).roundToInt())
 
 /** "$41" and ".20" — dollars and the cents set small; a minus sign leads a loss. */
 fun dollarsAndCents(value: Double): Pair<String, String> {

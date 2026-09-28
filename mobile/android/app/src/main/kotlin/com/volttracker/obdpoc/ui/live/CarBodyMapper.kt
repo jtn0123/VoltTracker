@@ -26,7 +26,13 @@ internal object CarBodyMapper {
             windowsPct = windows(t, current.windowsPct),
             acOn = onOff(t, "acState", CLIMATE_STALE, current.acOn),
             remoteStartOn = onOff(t, "remoteStartState", null, current.remoteStartOn),
-            outsideTempC = number(t, "outsideTempC") ?: current.outsideTempC,
+            outsideTempC =
+                if (stale(t, "outsideTempStaleMs")) {
+                    null
+                } else {
+                    number(t, "outsideTempC")
+                        ?: current.outsideTempC
+                },
             seenAtMs = seen(t, at, current.seenAtMs),
             nowMs = if (at > 0) at else current.nowMs,
             controls = controls(t, current.controls),

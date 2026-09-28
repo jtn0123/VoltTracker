@@ -96,7 +96,7 @@ class ChargeLogicTest {
 
     @Test
     fun labelsLeaveOutWhatWasNotRecorded() {
-        assertEquals("L2 · 41 → 71%", sessionDetail("L2", 41, 71))
+        assertEquals("L2 · 41% → 71%", sessionDetail("L2", 41, 71))
         assertEquals("to 71%", sessionDetail(null, null, 71))
         assertEquals("Charge", sessionDetail(null, null, null))
         assertEquals("Level 2", levelName("L2"))
@@ -143,7 +143,7 @@ class ChargeLogicTest {
         assertEquals(2, rows.size)
         assertTrue(rows[0].live)
         assertEquals("Tonight", rows[0].title)
-        assertEquals("L2 · 41 → 71%", rows[0].detail)
+        assertEquals("L2 · 41% → 71%", rows[0].detail)
         assertEquals("$0.52", rows[0].cost)
         assertEquals("Apr 29 · 9:42 PM", rows[1].title)
         assertFalse(rows[1].live)

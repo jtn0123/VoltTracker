@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.drive
 
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -62,13 +63,26 @@ val DriveUiState.gasDriving: Boolean get() = phase == DrivePhase.DRIVE && mode =
 val DriveUiState.atReserve: Boolean
     get() = mode == DriveMode.GAS && ((evRangeMiles ?: 1.0) < 0.5 || shownSocPercent < 1.0)
 
-/** EV + gas range, or null unless both are known — a half-known total would under-report. */
-val DriveUiState.totalRangeMiles: Double?
-    get() {
-        val ev = evRangeMiles ?: return null
-        val gas = gasRangeMiles ?: return null
-        return ev + gas
-    }
+/**
+ * EV + gas range in whole [units], or null unless both are known (a half-known total would
+ * under-report). It is the sum of the two rounded figures shown beside it, so "32" and "293"
+ * total "325" rather than a separately rounded "324".
+ */
+fun DriveUiState.totalRangeWhole(units: VoltUnits): Int? {
+    val ev = evRangeMiles ?: return null
+    val gas = gasRangeMiles ?: return null
+    return units.distance(ev).roundToInt() + units.distance(gas).roundToInt()
+}
+
+/**
+ * Below this distance a drive's efficiency is noise (a quarter-mile coast reads 10+ mi/kWh), so
+ * the screens show "—" until the drive has covered it.
+ */
+const val MIN_EFFICIENCY_MILES = 1.0
+
+/** This drive's mi/kWh once it is long enough to mean something (see [MIN_EFFICIENCY_MILES]). */
+val DriveUiState.shownTripMiPerKwh: Double?
+    get() = tripMiPerKwh?.takeIf { tripMiles >= MIN_EFFICIENCY_MILES }
 
 /** The ring/power color role for the moment: regen is EV green, gas amber, drive Volt teal. */
 enum class PowerRole { DRIVE, REGEN, GAS, IDLE }
@@ -214,9 +228,6 @@ fun chargeLevelLabel(
     }
 
 private const val L2_MIN_AC_V = 180.0
-
-/** Whole number with no grouping: "293". */
-fun wholeLabel(value: Double?): String = value?.roundToInt()?.toString() ?: "--"
 
 /** "$0.52": [kwh] at the home electricity rate; null when no rate is set (Settings → Costs). */
 fun costLabel(

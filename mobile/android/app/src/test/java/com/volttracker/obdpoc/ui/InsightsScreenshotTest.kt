@@ -49,6 +49,13 @@ class InsightsScreenshotTest(
                 "year" to demo.copy(period = InsightsPeriod.YEAR),
                 "bare" to demo.copy(gasMpg = null, speedEfficiency = emptyList(), cellDrift = null),
                 "empty" to InsightsUiState(nowMs = TripsUiState.DEMO_NOW_MS),
+                "loading" to
+                    InsightsUiState(
+                        nowMs = TripsUiState.DEMO_NOW_MS,
+                        history = HistoryLoad.LOADING,
+                        speedsLoaded = false,
+                    ),
+                "metric" to demo.copy(metricUnits = true),
             )
 
         @JvmStatic
