@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -19,6 +20,7 @@ import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
@@ -53,17 +55,21 @@ class ComposeDashboardActivity : ComponentActivity() {
                 context: Context,
                 intent: Intent,
             ) {
-                ComposeDashboardSupport.routeServiceBroadcast(
-                    intent.action,
-                    intent.getStringExtra(ObdService.EXTRA_JSON),
-                    store,
-                )
+                val json = intent.getStringExtra(ObdService.EXTRA_JSON)
+                ComposeDashboardSupport.routeServiceBroadcast(intent.action, json, store)
+                // The native screens only show a short status label, so a refused start (e.g. a
+                // missing Nearby devices permission) would otherwise vanish without a trace.
+                ComposeDashboardSupport.blockedStatusDetail(intent.action, json)?.let(::showMessage)
             }
         }
 
     private val connectPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) connectLastAdapter()
+            if (granted) {
+                connectLastAdapter()
+            } else {
+                showMessage(getString(R.string.status_bt_denied_open_settings))
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -229,14 +235,15 @@ class ComposeDashboardActivity : ComponentActivity() {
         if (address != null) service.putExtra(ObdService.EXTRA_ADDRESS, address)
         if (name != null) service.putExtra(ObdService.EXTRA_NAME, name)
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(service)
-            } else {
-                startService(service)
-            }
+            ObdServiceLauncher.start(this, service)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "startObd blocked", ex)
+            showMessage(getString(R.string.status_obd_start_blocked))
         }
+    }
+
+    private fun showMessage(text: String) {
+        Toast.makeText(this, text, Toast.LENGTH_LONG).show()
     }
 
     /** Ends the running session (Settings → Demo / testing → Stop), as the classic Disconnect does. */

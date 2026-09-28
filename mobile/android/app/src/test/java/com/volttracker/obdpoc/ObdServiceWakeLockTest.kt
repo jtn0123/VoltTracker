@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.Manifest
 import android.content.Intent
 import com.volttracker.obdpoc.service.ObdService
 import org.junit.After
@@ -13,6 +14,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.shadows.ShadowPowerManager
 
@@ -27,6 +29,8 @@ class ObdServiceWakeLockTest {
     @Before
     fun setUp() {
         ShadowPowerManager.clearWakeLocks()
+        // A set-up install: Android 14+ refuses real sessions without Nearby devices permission.
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
     }
 
     @After

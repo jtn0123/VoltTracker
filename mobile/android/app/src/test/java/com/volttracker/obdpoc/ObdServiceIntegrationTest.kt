@@ -120,7 +120,72 @@ class ObdServiceIntegrationTest {
         assertEquals("DEMO opens a 'demo'-mode session", ObdLocalStore.MODE_DEMO, service.recorder.activeMode())
         assertEquals("DEMO labels the adapter as the synthetic stream", "Demo stream", service.activeName)
         assertTrue("DEMO marks the session running", service.running.get())
-        assertTrue("DEMO brings up the foreground service", service.foregroundServiceActive)
+        assertFalse(
+            "DEMO runs as a plain started service: no FGS type fits a stream with no car/adapter/GPS",
+            service.foregroundServiceActive,
+        )
+    }
+
+    @Test
+    fun demoStartsOnAFreshInstallWithoutAnyRuntimePermission() {
+        // Regression: after `pm clear`, the demo asked for the connectedDevice FGS type, which
+        // Android 14+ refuses without Nearby devices permission, so "Start demo" did nothing.
+        val controller =
+            newController(
+                ForegroundRefusedObdService::class.java,
+                intentFor(ObdService.ACTION_DEMO, null, null, null),
+                grantNearbyDevices = false,
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        controller.startCommand(0, 1)
+
+        assertTrue("the demo must start without Bluetooth or location permission", service.running.get())
+        assertFalse("the demo never enters the foreground", service.foregroundServiceActive)
+        assertFalse("the demo must not stop itself", shadowOf(service).isStoppedBySelf)
+        assertTrue(
+            "no blocked status may be broadcast for the demo",
+            captured.status.none { it.optBoolean("blocked") },
+        )
+    }
+
+    @Test
+    fun demoAfterALiveSessionDropsTheForegroundState() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.create().startCommand(0, 1).get()
+        assertTrue("precondition: the live session is in the foreground", service.foregroundServiceActive)
+
+        controller.withIntent(intentFor(ObdService.ACTION_DEMO, null, null, null)).startCommand(0, 2)
+
+        assertEquals(ObdLocalStore.MODE_DEMO, service.recorder.activeMode())
+        assertFalse("switching to the demo leaves the foreground", service.foregroundServiceActive)
+        assertEquals("the FGS type is cleared with it", 0, activeForegroundServiceType(service))
+    }
+
+    @Test
+    fun connectWithoutNearbyDevicesPermissionBlocksWithAnActionableMessage() {
+        val controller =
+            newController(
+                TestObdService::class.java,
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+                grantNearbyDevices = false,
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        controller.startCommand(0, 1)
+
+        assertFalse("no session may run without Nearby devices permission", service.running.get())
+        assertFalse(service.foregroundServiceActive)
+        val status = captured.lastStatus()
+        assertNotNull("the refusal must be broadcast, not silent", status)
+        assertEquals("blocked", status?.optString("state"))
+        assertEquals(
+            service.getString(R.string.status_foreground_needs_nearby_devices),
+            status?.optString("detail"),
+        )
+        assertTrue("the orphaned service stops itself", shadowOf(service).isStoppedBySelf)
     }
 
     @Test
@@ -689,10 +754,18 @@ class ObdServiceIntegrationTest {
     private fun newController(intent: Intent?): ServiceController<TestObdService> =
         newController(TestObdService::class.java, intent)
 
+    /**
+     * Grants Nearby devices by default, as on a set-up install: without it, Android 14+ refuses the
+     * connectedDevice foreground type and the service blocks every real session up front.
+     */
     private fun <T : ObdService> newController(
         serviceClass: Class<T>,
         intent: Intent?,
+        grantNearbyDevices: Boolean = true,
     ): ServiceController<T> {
+        if (grantNearbyDevices) {
+            shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        }
         val controller =
             if (intent != null) {
                 Robolectric.buildService(serviceClass, intent)

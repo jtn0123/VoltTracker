@@ -106,6 +106,7 @@
     <!-- ObdService session statuses -->
     <string name="status_disconnected">Disconnected.</string>
     <string name="status_retry_cancelled">Retry cancelled.</string>
+    <string name="status_foreground_needs_nearby_devices">Volt Tracker needs the \"Nearby devices\" permission to talk to your OBD adapter. Open Android Settings &gt; Apps &gt; Volt Tracker &gt; Permissions, allow Nearby devices, then try again. Demo mode works without it.</string>
     <string name="status_foreground_blocked">Android blocked foreground logging. Check notification and nearby-device permissions, then try again.</string>
     <string name="status_worker_start_failed">Could not start the OBD logging worker.</string>
     <string name="status_service_stopped">Service stopped.</string>

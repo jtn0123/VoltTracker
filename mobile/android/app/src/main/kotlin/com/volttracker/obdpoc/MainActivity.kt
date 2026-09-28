@@ -30,6 +30,7 @@ import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.service.ObdNotifications
 import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.service.PermissionGate
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
@@ -908,11 +909,7 @@ open class MainActivity :
             service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(service)
-            } else {
-                startService(service)
-            }
+            ObdServiceLauncher.start(this, service)
         } catch (ex: RuntimeException) {
             Log.w(TAG, "startObdService blocked", ex)
             troubleshooter?.clearPendingTestConnectionStop()
