@@ -28,4 +28,8 @@ data class VoltAppActions(
     val onExportTrip: (TripExport) -> Unit = {},
     /** Insights: summarise this span. */
     val onInsightsPeriod: (InsightsPeriod) -> Unit = {},
+    /** Car: ask for a car command by wire name (the host confirms it and checks every gate). */
+    val onCarControl: (String) -> Unit = {},
+    /** Car: turn car controls on (native warning + PIN) or off. */
+    val onCarControlsEnabled: (Boolean) -> Unit = {},
 )

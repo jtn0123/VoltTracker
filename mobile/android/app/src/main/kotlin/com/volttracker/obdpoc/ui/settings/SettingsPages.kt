@@ -164,8 +164,41 @@ internal fun UnitsPage(
             options = listOf("Imperial", "Metric"),
             selectedIndex = if (state.metricUnits) 1 else 0,
         ) { onChange(SettingChange.MetricUnits(it == 1)) }
+        VoltListDivider()
+        var editing by rememberSaveable { mutableStateOf(false) }
+        ValueRow(
+            "Tire placard pressure",
+            state.tirePlacardLabel,
+            subtitle = "Cold pressure on the driver's door jamb; tires read low 4 psi under it",
+        ) { editing = true }
+        if (editing) {
+            val field = placardField(state.metricUnits)
+            val shown = if (state.metricUnits) state.tirePlacardPsi / PSI_PER_KPA else state.tirePlacardPsi
+            NumberEditor(field, shown, onDismiss = { editing = false }) { value ->
+                value?.let { onChange(SettingChange.TirePlacard(if (state.metricUnits) it * PSI_PER_KPA else it)) }
+                editing = false
+            }
+        }
     }
 }
+
+/** The placard editor in the chosen units, over the same 20–60 psi the store accepts. */
+private fun placardField(metric: Boolean): NumberField =
+    if (metric) {
+        NumberField(
+            "Tire placard",
+            "kPa",
+            PLACARD_MIN_PSI / PSI_PER_KPA,
+            PLACARD_MAX_PSI / PSI_PER_KPA,
+            clearable = false,
+        )
+    } else {
+        NumberField("Tire placard", "psi", PLACARD_MIN_PSI, PLACARD_MAX_PSI, clearable = false)
+    }
+
+private const val PSI_PER_KPA = 0.145038
+private const val PLACARD_MIN_PSI = 20.0
+private const val PLACARD_MAX_PSI = 60.0
 
 @Composable
 internal fun AppearancePage(

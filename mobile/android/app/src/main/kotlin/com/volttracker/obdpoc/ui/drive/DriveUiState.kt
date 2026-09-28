@@ -87,6 +87,8 @@ data class DriveUiState(
     val oilLifePct: Int = 0,
     /** SW-CAN tyre pressures; null when not reported or stale. */
     val tires: TirePressures? = null,
+    /** Settings → Units & vehicle: the placard the tyres are judged against (psi). */
+    val tirePlacardPsi: Double = TIRE_PLACARD_PSI,
     /** SW-CAN door-lock state; null when unknown. */
     val locked: Boolean? = null,
     val cellSpreadMv: Double? = null,

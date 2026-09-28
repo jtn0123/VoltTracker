@@ -116,6 +116,7 @@ class ComposeSettingsStoreTest {
             SettingChange.GasPrice(4.29),
             SettingChange.GasMpg(32.5),
             SettingChange.ChargeTarget(80),
+            SettingChange.TirePlacard(35.0),
             SettingChange.Appearance(AppearanceMode.LIGHT),
             SettingChange.DarkTheme(DarkStyle.SADDLE),
             SettingChange.Accent(OledAccent.VIOLET),
@@ -143,6 +144,7 @@ class ComposeSettingsStoreTest {
         assertEquals(4.29, s.gasPrice, 0.0)
         assertEquals(32.5, s.gasMpg)
         assertEquals(80, s.chargeTargetPct)
+        assertEquals(35.0, s.tirePlacardPsi, 1e-6)
         assertEquals(AppearanceMode.LIGHT, s.appearance)
         assertEquals(DarkStyle.SADDLE, s.darkStyle)
         assertEquals(OledAccent.VIOLET, s.accent)
@@ -152,6 +154,15 @@ class ComposeSettingsStoreTest {
         assertTrue(s.highContrast)
         assertTrue(s.driveDetailed)
         assertTrue(s.driveEnergyFlow)
+    }
+
+    @Test
+    fun theTirePlacardDefaultsTo38AndIgnoresImplausibleValues() {
+        assertEquals(38.0, store.read(SettingsUiState()).tirePlacardPsi, 0.0)
+        store.apply(SettingChange.TirePlacard(90.0))
+        assertEquals("clamped to the plausible range", 60.0, store.read(SettingsUiState()).tirePlacardPsi, 0.0)
+        prefs.edit { putFloat(ComposeSettingsStore.PREF_TIRE_PLACARD_PSI, 5f) }
+        assertEquals(38.0, store.read(SettingsUiState()).tirePlacardPsi, 0.0)
     }
 
     @Test

@@ -251,7 +251,7 @@ internal fun FocusTiles(state: DriveUiState) {
                 val aux = aux12Status(volts, state.phase)
                 StatTile("12V battery", volts?.let(::oneDecimal) ?: "--", " V", aux.text, tile, aux.tone)
                 val tires = state.tires
-                val status = tireStatus(tires)
+                val status = tireStatus(tires, state.tirePlacardPsi)
                 StatTile(
                     "Tires",
                     tires?.let { wholeLabel(it.all.average()) } ?: "--",

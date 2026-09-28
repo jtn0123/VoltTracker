@@ -89,22 +89,29 @@ data class ToneText(
 )
 
 /**
- * The tyre-pressure placard this app assumes: 38 psi cold, the 2016–2019 Volt door-jamb figure
- * for the stock 17" tyres. It is an assumption, not a car reading — every tyre label that
- * depends on it says so. A tyre more than [TIRE_LOW_MARGIN_PSI] under it reads "low".
+ * The default tyre-pressure placard: 38 psi cold, the 2016–2019 Volt door-jamb figure for the
+ * stock 17" tyres. It is an assumption, not a car reading — Settings → Units & vehicle changes it,
+ * and every tyre label that depends on it names it. A tyre more than [TIRE_LOW_MARGIN_PSI] under
+ * the placard reads "low".
  */
 const val TIRE_PLACARD_PSI = 38.0
 const val TIRE_LOW_MARGIN_PSI = 4.0
 
 private val TIRE_NAMES = listOf("FL", "FR", "RL", "RR")
 
-fun tireLow(psi: Double): Boolean = psi < TIRE_PLACARD_PSI - TIRE_LOW_MARGIN_PSI
+fun tireLow(
+    psi: Double,
+    placardPsi: Double = TIRE_PLACARD_PSI,
+): Boolean = psi < placardPsi - TIRE_LOW_MARGIN_PSI
 
-fun tireStatus(tires: TirePressures?): ToneText {
+fun tireStatus(
+    tires: TirePressures?,
+    placardPsi: Double = TIRE_PLACARD_PSI,
+): ToneText {
     if (tires == null) return ToneText("Not reported", PillTone.NEUTRAL)
     val low =
         tires.all.indices
-            .filter { tireLow(tires.all[it]) }
+            .filter { tireLow(tires.all[it], placardPsi) }
             .map { TIRE_NAMES[it] }
     return when {
         low.isEmpty() -> ToneText("All normal", PillTone.EV)

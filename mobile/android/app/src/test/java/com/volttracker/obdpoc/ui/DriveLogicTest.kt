@@ -97,6 +97,9 @@ class DriveLogicTest {
         val two = tireStatus(TirePressures(30.0, 38.0, 30.0, 37.0))
         assertEquals("2 tyres low", two.text)
         assertEquals(PillTone.WARN, two.tone)
+        // A placard set in Settings moves the line.
+        assertTrue(tireLow(36.0, placardPsi = 41.0))
+        assertEquals("All normal", tireStatus(TirePressures(30.0, 30.0, 30.0, 30.0), placardPsi = 32.0).text)
     }
 
     @Test

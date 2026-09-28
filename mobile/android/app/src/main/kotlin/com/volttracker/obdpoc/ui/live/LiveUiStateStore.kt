@@ -207,6 +207,7 @@ class LiveUiStateStore(
         val drive = mapDrive(s.drive, t)
         val charging = drive.phase == DrivePhase.CHARGING
         return s.copy(
+            car = CarBodyMapper.map(s.car, t),
             drive = drive,
             charge =
                 s.charge.copy(
@@ -505,7 +506,13 @@ class LiveUiStateStore(
                 val settings = update(s.settings)
                 s.copy(
                     settings = settings,
-                    drive = s.drive.copy(detailed = settings.driveDetailed, electricityRate = settings.homeRate),
+                    drive =
+                        s.drive.copy(
+                            detailed = settings.driveDetailed,
+                            electricityRate = settings.homeRate,
+                            tirePlacardPsi = settings.tirePlacardPsi,
+                        ),
+                    car = s.car.copy(metricUnits = settings.metricUnits, placardPsi = settings.tirePlacardPsi),
                     charge =
                         s.charge.copy(
                             homeRate = settings.homeRate,
@@ -523,6 +530,32 @@ class LiveUiStateStore(
                             homeRate = settings.homeRate,
                             gasMpg = settings.gasMpg,
                             gasPrice = settings.gasPrice,
+                        ),
+                )
+            }
+    }
+
+    /** The host's car-control state (opt-in, PIN lockout), re-read after every change it makes. */
+    fun onCarControlState(json: JSONObject) {
+        _state.value =
+            _state.value.let { s ->
+                s.copy(car = s.car.copy(controls = CarBodyMapper.nativeState(s.car.controls, json)))
+            }
+    }
+
+    /** A demo command, confirmed in the demo's own dialog: simulated, nothing is sent to a car. */
+    fun onDemoCarControl(command: String) {
+        _state.value =
+            _state.value.let { s ->
+                s.copy(
+                    car =
+                        s.car.copy(
+                            controls =
+                                s.car.controls.copy(
+                                    lastCommand = command,
+                                    lastOutcome = DEMO_OUTCOME,
+                                    lastDetail = null,
+                                ),
                         ),
                 )
             }
@@ -600,6 +633,9 @@ class LiveUiStateStore(
 
     private companion object {
         const val DEMO_SOURCE = "demo"
+
+        /** A demo command's outcome (see [com.volttracker.obdpoc.ui.car.lastResultLine]). */
+        const val DEMO_OUTCOME = "simulated"
         val TRANSITION_STATES = setOf("connecting", "initializing", "reconnecting", "scanning", "scan-complete")
         const val TRACE_CAP = 30
 
@@ -639,6 +675,14 @@ class LiveUiStateStore(
                 "gearConfidence",
                 "throttleSource",
                 "doorLockSource",
+                // Car-control bookkeeping, not readings.
+                "carControlGate",
+                "carControlGateDetail",
+                "carControlBusy",
+                "carControlLastCommand",
+                "carControlLastOutcome",
+                "carControlLastDetail",
+                "carControlLastAtMs",
             )
 
         /** Matches [DriveUiState.gear]'s empty default. */
