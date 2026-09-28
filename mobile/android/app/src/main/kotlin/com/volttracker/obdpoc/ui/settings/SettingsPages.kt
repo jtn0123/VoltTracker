@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -16,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.VoltButton
@@ -33,12 +35,13 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 @Composable
 private fun SettingRow(
     label: String,
+    modifier: Modifier = Modifier,
     subtitle: String? = null,
     trailing: @Composable () -> Unit,
 ) {
     Row(
         modifier =
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -141,6 +144,7 @@ internal fun UnitsPage(state: SettingsUiState) {
 internal fun AppearancePage(
     state: SettingsUiState,
     onSetAppearance: (AppearanceMode) -> Unit,
+    onSetDriveEnergyFlow: (Boolean) -> Unit,
 ) {
     VoltPanel {
         SettingRow(label = "Theme", subtitle = "System follows your phone's dark theme") {}
@@ -164,6 +168,17 @@ internal fun AppearancePage(
         SettingRow(label = "High contrast") { TogglePill(state.highContrast) }
         VoltListDivider()
         SettingRow(label = "Drive tiles", subtitle = "Choose the live signals") { Value(state.driveTilesLabel) }
+        VoltListDivider()
+        SettingRow(
+            label = "Energy flow on Drive",
+            subtitle = "Grid · battery · drive unit · engine",
+            modifier =
+                Modifier.toggleable(
+                    value = state.driveEnergyFlow,
+                    role = Role.Switch,
+                    onValueChange = onSetDriveEnergyFlow,
+                ),
+        ) { TogglePill(state.driveEnergyFlow) }
     }
 }
 
