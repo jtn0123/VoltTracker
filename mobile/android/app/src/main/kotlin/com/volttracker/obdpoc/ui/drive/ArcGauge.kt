@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -55,6 +54,7 @@ import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltPalette
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
 import kotlin.math.abs
@@ -318,7 +318,7 @@ private fun DrawScope.drawSocRing(
             R,
             ArcGeometry.START_DEG,
             a,
-            Color.White.copy(alpha = 0.35f),
+            pal.evBright.copy(alpha = SHIMMER_ALPHA),
             RING,
             PathEffect.dashPathEffect(floatArrayOf(g.px(2f), g.px(SHIMMER_PERIOD - 2f)), -g.px(shimmerPhase)),
         )
@@ -557,7 +557,7 @@ fun Gears(
                         .size(24.dp, 26.dp)
                         .background(
                             if (on) VoltColors.surfaceElevated else Color.Transparent,
-                            RoundedCornerShape(7.dp),
+                            VoltShapes.inner,
                         ),
                 contentAlignment = Alignment.Center,
             ) {
@@ -569,7 +569,7 @@ fun Gears(
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 15.sp,
                         ),
-                    color = if (on) VoltColors.textPrimary else VoltColors.textTertiary.copy(alpha = 0.55f),
+                    color = if (on) VoltColors.textPrimary else VoltColors.textTertiary,
                 )
             }
         }
@@ -591,3 +591,4 @@ private const val HALO_OUTER_W = 14f
 private const val HALO_INNER_W = 6f
 private const val SHIMMER_PERIOD = 60f
 private const val SHIMMER_MS = 1600
+private const val SHIMMER_ALPHA = 0.6f

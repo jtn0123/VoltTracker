@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -38,6 +37,7 @@ import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import kotlinx.coroutines.delay
@@ -188,7 +188,7 @@ private fun OutsideTempChip(ambientF: Int) {
         modifier =
             Modifier
                 .height(26.dp)
-                .background(VoltColors.surfaceElevated, RoundedCornerShape(13.dp))
+                .background(VoltColors.surfaceElevated, VoltShapes.chip)
                 .padding(horizontal = 10.dp),
         contentAlignment = Alignment.Center,
     ) {

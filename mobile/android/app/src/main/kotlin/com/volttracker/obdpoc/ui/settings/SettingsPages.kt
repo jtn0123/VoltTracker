@@ -13,8 +13,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltListDivider
@@ -263,9 +263,11 @@ private fun ThemeRows(
         options = DarkStyle.entries.map { it.label },
         selectedIndex = state.darkStyle.ordinal,
     ) { onChange(SettingChange.DarkTheme(DarkStyle.entries[it])) }
-    if (state.darkStyle == DarkStyle.OLED) {
+    // The accent only exists in OLED Black, and does nothing while Light pins Latte.
+    if (state.darkStyle == DarkStyle.OLED && state.appearance != AppearanceMode.LIGHT) {
         VoltListDivider()
-        SettingRow(label = "Accent", subtitle = state.accent.label) {}
+        val whenUsed = if (state.appearance == AppearanceMode.SYSTEM) " · used when your phone is dark" else ""
+        SettingRow(label = "Accent", subtitle = state.accent.label + whenUsed) {}
         AccentSwatches(selected = state.accent, onSelect = { onChange(SettingChange.Accent(it)) })
     }
 }
@@ -332,8 +334,9 @@ private fun ThresholdChoice(
     VoltSegmented(
         options = choices.map(label),
         selectedIndex = choices.indexOf(selected),
+        role = Role.RadioButton,
         onSelect = { onSelect(choices[it]) },
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
     )
 }
 
@@ -354,7 +357,7 @@ internal fun DataPage(
         }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoltButton(text = "Back up", accent = true, onClick = { step = DataStep.BACK_UP })
+            VoltButton(text = "Back up", onClick = { step = DataStep.BACK_UP })
             VoltButton(text = "Restore", onClick = { step = DataStep.RESTORE })
             VoltButton(text = "Export", onClick = { onCommand(SettingsCommand.ExportTrips) })
         }
@@ -401,7 +404,7 @@ internal fun DemoPage(
         )
         Spacer(Modifier.height(14.dp))
         if (state.demoActive) {
-            VoltButton(text = "Stop demo", style = ButtonStyle.GHOST, onClick = onStopDemo)
+            VoltButton(text = "Stop demo", onClick = onStopDemo)
         } else {
             VoltButton(text = "Start demo", accent = true, icon = VoltIcons.Play, onClick = onStartDemo)
         }

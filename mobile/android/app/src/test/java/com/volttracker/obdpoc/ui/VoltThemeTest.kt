@@ -125,6 +125,16 @@ class VoltThemeTest {
     }
 
     @Test
+    fun highContrastIsAppliedOnTopOfThePinnedPalette() {
+        var provided: VoltPalette? = null
+        compose.setContent {
+            VoltTheme(appearance = AppearanceMode.LIGHT, highContrast = true) { provided = LocalVoltPalette.current }
+        }
+        compose.waitForIdle()
+        assertEquals(VoltPalette.Latte.highContrast(), provided)
+    }
+
+    @Test
     fun paletteSelectionFollowsModeThenStyleThenAccent() {
         // Light is always Latte; Saddle has its own accent; OLED takes the chosen one.
         OledAccent.entries.forEach { accent ->
@@ -181,7 +191,7 @@ class VoltThemeTest {
             assertEquals(Color(0xFFEFE6DA), bg)
             assertEquals(Color(0xFF8A5A2B), volt)
             assertEquals(Color.White, onVolt)
-            assertEquals(Color(0xFFC0392B), bad)
+            assertEquals(Color(0xFFB0342A), bad)
         }
         // Dark cards sit flat (`--shadow: none`); Latte keeps its soft card shadow.
         assertEquals(0f, VoltPalette.Oled.cardShadow.alpha)

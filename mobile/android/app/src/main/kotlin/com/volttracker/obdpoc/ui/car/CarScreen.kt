@@ -29,7 +29,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.NavBadge
@@ -178,21 +177,15 @@ private fun Controls(
         when {
             demo -> Unit
             car.controls.enabled ->
-                Text(
+                VoltButton(
                     text = "Turn off car controls",
-                    style = VoltType.caption,
-                    color = VoltColors.textTertiary,
-                    modifier =
-                        Modifier
-                            .clickable(role = Role.Button, onClick = actions.onDisableControls)
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                    modifier = Modifier.padding(top = 4.dp),
+                    onClick = actions.onDisableControls,
                 )
             else ->
                 VoltButton(
                     text = "Turn on car controls",
-                    style = ButtonStyle.GHOST,
-                    height = 36.dp,
-                    modifier = Modifier.padding(top = 8.dp),
+                    modifier = Modifier.padding(top = 4.dp),
                     onClick = actions.onEnableControls,
                 )
         }
@@ -221,8 +214,15 @@ private fun ControlButton(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
+    // Mono White can't tint "on" apart from "off", so its on-state is filled with on-accent content.
+    val filledOn = on && VoltColors.monoAccent
     val ring = if (on) VoltColors.accent.copy(alpha = ON_BORDER_ALPHA) else VoltColors.hairline
-    val fill = if (on) VoltColors.accent.copy(alpha = ON_FILL_ALPHA) else VoltColors.surface
+    val fill =
+        when {
+            filledOn -> VoltColors.accent
+            on -> VoltColors.accent.copy(alpha = ON_FILL_ALPHA)
+            else -> VoltColors.surface
+        }
     Column(
         modifier =
             Modifier
@@ -241,7 +241,12 @@ private fun ControlButton(
             Icon(
                 icon,
                 contentDescription = null,
-                tint = if (on) VoltColors.accent else VoltColors.textPrimary,
+                tint =
+                    when {
+                        filledOn -> VoltColors.onAccent
+                        on -> VoltColors.accent
+                        else -> VoltColors.textPrimary
+                    },
                 modifier = Modifier.size(22.dp),
             )
         }

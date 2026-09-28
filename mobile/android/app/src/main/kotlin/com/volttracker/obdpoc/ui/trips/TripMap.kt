@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -43,6 +42,7 @@ import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltPalette
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
@@ -64,7 +64,7 @@ fun TripMapCard(
     val trip = state.selected ?: return
     val route = state.selectedRoute
     val pal = LocalVoltPalette.current
-    val shape = RoundedCornerShape(22.dp)
+    val shape = VoltShapes.card
     val density = LocalDensity.current
     BoxWithConstraints(
         modifier =
@@ -263,7 +263,7 @@ private fun MapChip(
     trip: TripSummary,
     modifier: Modifier,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = VoltShapes.tile
     Row(
         modifier =
             modifier

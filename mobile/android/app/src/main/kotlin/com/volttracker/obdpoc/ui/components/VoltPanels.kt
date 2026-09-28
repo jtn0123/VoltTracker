@@ -11,12 +11,14 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,12 +32,14 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltShapes
+import com.volttracker.obdpoc.ui.theme.VoltSpacing
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
 
 /** Card chrome (mockups `.card`): 20dp corners, hairline border, the theme's shadow (none in dark). */
 @Composable
-fun Modifier.voltCard(radius: Dp = 20.dp): Modifier {
+fun Modifier.voltCard(radius: Dp = VoltShapes.CardRadius): Modifier {
     val shape = RoundedCornerShape(radius)
     val tint = VoltColors.cardShadow
     val lifted =
@@ -54,7 +58,7 @@ fun Modifier.voltCard(radius: Dp = 20.dp): Modifier {
 @Composable
 fun VoltPanel(
     modifier: Modifier = Modifier,
-    padding: PaddingValues = PaddingValues(16.dp),
+    padding: PaddingValues = PaddingValues(VoltSpacing.card),
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -182,7 +186,7 @@ private fun PillShell(
         modifier =
             modifier
                 .height(if (small) 22.dp else 28.dp)
-                .clip(RoundedCornerShape(50))
+                .clip(VoltShapes.chip)
                 .background(background)
                 .padding(start = if (small) 8.dp else 10.dp, end = if (small) 8.dp else 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -215,31 +219,37 @@ private fun PillText(
     )
 }
 
-/** Visual weight of a [VoltButton] (mockups `.btn`, `.btn.primary`, `.btn.ghost`). */
-enum class ButtonStyle { PRIMARY, TONAL, GHOST }
+/**
+ * Visual weight of a [VoltButton]: [PRIMARY] (mockups `.btn.primary`) for the one main action of a
+ * screen, [SECONDARY] for everything else — the grey `.btn` fill plus a hairline so it stays
+ * visible on any container (cards, the canvas, or a grey inline editor).
+ */
+enum class ButtonStyle { PRIMARY, SECONDARY }
 
-/** 44dp button. Accent (primary) for the one main action of a screen. */
+/**
+ * 44dp button, laid out in a 48dp touch target. Accent (primary) for the one main action of a
+ * screen; grows taller for large text instead of clipping.
+ */
 @Composable
 fun VoltButton(
     text: String,
     modifier: Modifier = Modifier,
     accent: Boolean = false,
-    style: ButtonStyle = if (accent) ButtonStyle.PRIMARY else ButtonStyle.TONAL,
+    style: ButtonStyle = if (accent) ButtonStyle.PRIMARY else ButtonStyle.SECONDARY,
     icon: ImageVector? = null,
-    height: Dp = 44.dp,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(14.dp)
+    val shape = VoltShapes.control
     val fg = if (style == ButtonStyle.PRIMARY) VoltColors.onAccent else VoltColors.textPrimary
     val base =
         modifier
-            .height(height)
+            .minimumInteractiveComponentSize()
+            .heightIn(min = BUTTON_HEIGHT)
             .clip(shape)
     val filled =
         when (style) {
             ButtonStyle.PRIMARY -> base.background(VoltColors.accent)
-            ButtonStyle.TONAL -> base.background(VoltColors.surfaceElevated)
-            ButtonStyle.GHOST -> base.border(1.dp, VoltColors.line2, shape)
+            ButtonStyle.SECONDARY -> base.background(VoltColors.surfaceElevated).border(1.dp, VoltColors.line2, shape)
         }
     Row(
         modifier =
@@ -259,3 +269,5 @@ fun VoltButton(
         )
     }
 }
+
+private val BUTTON_HEIGHT = 44.dp

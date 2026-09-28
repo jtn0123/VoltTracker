@@ -22,6 +22,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.theme.OledAccent
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.contrastRatio
 
 /**
  * Settings → Appearance → Accent: one color swatch per [OledAccent]. The chosen one gets a ring
@@ -51,6 +52,10 @@ private fun AccentSwatch(
     onClick: () -> Unit,
 ) {
     val ring = if (chosen) VoltColors.textPrimary else Color.Transparent
+    // A swatch close to the card color (Mono White on a light card) gets a visible outline.
+    val surface = VoltColors.surface
+    val outline =
+        if (contrastRatio(accent.volt, surface) < SWATCH_MIN_CONTRAST) VoltColors.textTertiary else VoltColors.line2
     Box(
         modifier =
             Modifier
@@ -63,9 +68,11 @@ private fun AccentSwatch(
                 .padding(5.dp)
                 .clip(CircleShape)
                 .background(accent.volt)
-                .border(1.dp, VoltColors.line2, CircleShape),
+                .border(1.dp, outline, CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         if (chosen) Box(Modifier.size(10.dp).clip(CircleShape).background(accent.onVolt))
     }
 }
+
+private const val SWATCH_MIN_CONTRAST = 1.5

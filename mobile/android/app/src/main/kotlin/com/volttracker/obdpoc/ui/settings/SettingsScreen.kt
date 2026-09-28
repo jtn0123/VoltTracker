@@ -21,7 +21,6 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltButton
@@ -192,7 +191,7 @@ private fun AdapterCard(
                     color = VoltColors.textSecondary,
                 )
             }
-            VoltButton(text = "Manage", style = ButtonStyle.GHOST, height = 36.dp, onClick = onManage)
+            VoltButton(text = "Manage", onClick = onManage)
         }
     }
 }

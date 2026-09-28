@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -54,6 +53,7 @@ import com.volttracker.obdpoc.ui.drive.shortDurationLabel
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import kotlin.math.cos
@@ -305,7 +305,7 @@ private fun Chip(text: String) {
         color = VoltColors.textSecondary,
         modifier =
             Modifier
-                .clip(RoundedCornerShape(50))
+                .clip(VoltShapes.chip)
                 .background(VoltColors.surfaceElevated)
                 .padding(horizontal = 10.dp, vertical = 5.dp),
     )

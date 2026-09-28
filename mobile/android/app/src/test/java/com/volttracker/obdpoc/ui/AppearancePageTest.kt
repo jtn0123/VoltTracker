@@ -1,8 +1,13 @@
 package com.volttracker.obdpoc.ui
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -73,5 +78,31 @@ class AppearancePageTest {
         compose.onAllNodes(hasContentDescription("Cyan accent")).assertCountEquals(0)
         compose.onNodeWithText("OLED Black").performClick()
         assertEquals(SettingChange.DarkTheme(DarkStyle.OLED), changes.last())
+    }
+
+    @Test
+    fun lightModeHidesTheAccentAndSystemExplainsWhenItApplies() {
+        show(SettingsUiState.demo.copy(appearance = AppearanceMode.LIGHT, darkStyle = DarkStyle.OLED))
+        compose.onAllNodesWithText("Accent").assertCountEquals(0)
+        compose.onAllNodes(hasContentDescription("Cyan accent")).assertCountEquals(0)
+    }
+
+    @Test
+    fun systemModeLabelsTheAccentAsTheDarkModeOne() {
+        show(SettingsUiState.demo.copy(appearance = AppearanceMode.SYSTEM, darkStyle = DarkStyle.OLED))
+        compose.onNodeWithText("Cyan · used when your phone is dark").assertExists()
+    }
+
+    @Test
+    fun choicesAnnounceAsRadioButtonsAndTogglesAsSwitches() {
+        show(SettingsUiState.demo.copy(appearance = AppearanceMode.DARK))
+        compose
+            .onNode(hasText("Dark") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.RadioButton))
+            .assertIsSelected()
+        compose
+            .onNode(hasText("High contrast") and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Switch))
+            .assertIsOff()
+            .performClick()
+        assertEquals(SettingChange.HighContrast(true), changes.last())
     }
 }

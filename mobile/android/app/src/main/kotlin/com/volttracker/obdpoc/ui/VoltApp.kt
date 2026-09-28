@@ -71,6 +71,7 @@ fun VoltApp(
         appearance = state.settings.appearance,
         darkStyle = state.settings.darkStyle,
         accent = state.settings.accent,
+        highContrast = state.settings.highContrast,
     ) {
         ScaledText(state.settings.fontScale) {
             SystemBarsAppearance()

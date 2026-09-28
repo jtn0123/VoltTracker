@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -31,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 
 /**
  * Full-width bottom navigation (mockups `.nav`): a hairline-topped bar on the page color, one
@@ -83,21 +83,32 @@ private fun NavItem(
                 .semantics { contentDescription = tab.label + badgeText },
         contentAlignment = Alignment.TopCenter,
     ) {
+        // Mono White: a white tint behind a white icon barely reads, so the pill is filled instead.
+        val mono = VoltColors.monoAccent
         Box(
             modifier =
                 Modifier
                     .padding(top = 9.dp)
                     .size(width = 56.dp, height = 30.dp)
                     .background(
-                        if (active) VoltColors.accent.copy(alpha = INDICATOR_ALPHA) else Color.Transparent,
-                        RoundedCornerShape(15.dp),
+                        when {
+                            !active -> Color.Transparent
+                            mono -> VoltColors.accent
+                            else -> VoltColors.accent.copy(alpha = INDICATOR_ALPHA)
+                        },
+                        VoltShapes.chip,
                     ),
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 12.5.dp)) {
             Icon(
                 imageVector = tab.icon(),
                 contentDescription = null,
-                tint = if (active) VoltColors.accent else VoltColors.textTertiary,
+                tint =
+                    when {
+                        !active -> VoltColors.textTertiary
+                        mono -> VoltColors.onAccent
+                        else -> VoltColors.accent
+                    },
                 modifier = Modifier.size(23.dp),
             )
             Spacer(Modifier.height(4.dp))
