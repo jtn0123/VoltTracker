@@ -379,6 +379,8 @@ class VoltBridgeTest {
                 "setHighPackTempNotify",
                 // M2 charge target SOC.
                 "setChargeTargetSoc",
+                "getSharedPrefs",
+                "setSharedPref",
                 "setAutoScanOnConnect",
                 // M2 maintenance-overdue alert toggle.
                 "setMaintenanceDueNotify",

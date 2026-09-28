@@ -46,6 +46,39 @@ class BackupSettingsManifestTest {
     }
 
     @Test
+    fun sharedDisplayPrefsTravelInTheDashboardBlockWithNativeWinning() {
+        val prefs = context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        val shared = SharedDisplayPrefs(prefs)
+        shared.setPricePerKwh(0.14)
+        shared.setUnits(SharedDisplayPrefs.Units.METRIC)
+        // The WebView's copy is stale for the rate and lacks the units; its own keys still ride along.
+        val dashboard = """{"schemaVersion":1,"preferences":{"pricePerKwh":0.1,"mapLayer":"satellite"}}"""
+
+        BackupSettingsManifest.embed(context, databaseFile, dashboard, includeIdentitySecrets = false)
+        val manifest = requireNotNull(BackupSettingsManifest.read(databaseFile))
+        val saved = manifest.getJSONObject("dashboard").getJSONObject("preferences")
+        assertEquals(0.14, saved.getDouble("pricePerKwh"), 0.0)
+        assertEquals("metric", saved.getString("units"))
+        assertEquals("satellite", saved.getString("mapLayer"))
+
+        prefs.edit().clear().commit()
+        BackupSettingsManifest.applyNative(context, manifest)
+        assertEquals(0.14, shared.pricePerKwh(), 0.0)
+        assertEquals(SharedDisplayPrefs.Units.METRIC, shared.units())
+    }
+
+    @Test
+    fun aComposeStartedBackupStillCarriesTheSharedPrefs() {
+        val prefs = context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        SharedDisplayPrefs(prefs).setGasPricePerGal(4.29)
+
+        BackupSettingsManifest.embed(context, databaseFile, null, includeIdentitySecrets = false)
+        val dashboard = requireNotNull(BackupSettingsManifest.read(databaseFile)).getJSONObject("dashboard")
+        assertEquals(1, dashboard.getInt("schemaVersion"))
+        assertEquals(4.29, dashboard.getJSONObject("preferences").getDouble("gasPricePerGal"), 0.0)
+    }
+
+    @Test
     fun manifestCapturesAppliesAndThenLeavesNoTransportTable() {
         val prefs = context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
         prefs

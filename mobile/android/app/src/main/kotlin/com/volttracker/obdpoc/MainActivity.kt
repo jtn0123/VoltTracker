@@ -1079,6 +1079,8 @@ open class MainActivity :
 
     override fun dashboardExperience(): DashboardExperienceCommands = dashboardExperienceHost
 
+    override fun sharedDisplayPrefs(): SharedDisplayPrefs? = prefs?.let(::SharedDisplayPrefs)
+
     override fun carControls(): CarControlCommands = carControlHost
 
     private fun maybeAutoConnect(

@@ -195,3 +195,98 @@ describe('prefs store', () => {
     expect(toggles.map((button) => button.textContent)).toEqual(expect.arrayContaining(['Shown']));
   });
 });
+
+describe('shared display prefs (native source of truth)', () => {
+  function installBridge(snapshot = {}) {
+    const native = { ...snapshot };
+    const setSharedPref = vi.fn((key, json) => {
+      native[key] = JSON.parse(json);
+      return true;
+    });
+    window.VoltTrackerAndroid = {
+      getSharedPrefs: vi.fn(() => JSON.stringify(native)),
+      setSharedPref,
+    };
+    return { native, setSharedPref };
+  }
+
+  beforeEach(() => window.localStorage.clear());
+  beforeEach(() => {
+    delete document.__voltPrefsResyncBound;
+  });
+  afterEach(() => {
+    delete window.VoltTrackerAndroid;
+    window.localStorage.clear();
+    document.body.innerHTML = '';
+  });
+
+  it('adopts native values over the local cache at boot', async () => {
+    window.localStorage.setItem('vt.pref.units', '"imperial"');
+    window.localStorage.setItem('vt.pref.pricePerKwh', '0.1');
+    installBridge({ units: 'metric', pricePerKwh: 0.14 });
+    const prefs = await loadPrefs({ clear: false });
+    expect(prefs.get('units', 'imperial')).toBe('metric');
+    expect(prefs.get('pricePerKwh', 0)).toBe(0.14);
+    expect(window.localStorage.getItem('vt.pref.units')).toBe('"metric"');
+  });
+
+  it('migrates a local value native has never seen, and leaves unset keys alone', async () => {
+    window.localStorage.setItem('vt.pref.gasPricePerGal', '4.29');
+    window.localStorage.setItem('vt.pref.weekChartMode', '"kwh"');
+    const { native, setSharedPref } = installBridge({});
+    await loadPrefs({ clear: false });
+    expect(native.gasPricePerGal).toBe(4.29);
+    expect(setSharedPref).toHaveBeenCalledTimes(1);
+    // A WebView-only pref never crosses the bridge.
+    expect(native.weekChartMode).toBeUndefined();
+  });
+
+  it('writes shared keys through on set(), but not WebView-only keys', async () => {
+    const { native, setSharedPref } = installBridge({});
+    const prefs = await loadPrefs();
+    prefs.set('highContrast', true);
+    prefs.set('mapLayer', 'satellite');
+    expect(native.highContrast).toBe(true);
+    expect(setSharedPref).toHaveBeenCalledWith('highContrast', 'true');
+    expect(setSharedPref).not.toHaveBeenCalledWith('mapLayer', expect.anything());
+  });
+
+  it('re-syncs on return to the foreground and notifies subscribers of changed keys', async () => {
+    const { native } = installBridge({ units: 'imperial' });
+    // Capture this load's handler directly: earlier module loads in this file left their own
+    // (once-per-document) listeners on the shared jsdom document.
+    const added = vi.spyOn(document, 'addEventListener');
+    const prefs = await loadPrefs();
+    const onVisibility = added.mock.calls.find(([type]) => type === 'visibilitychange')[1];
+    added.mockRestore();
+    const seen = [];
+    prefs.subscribe('units', (value) => seen.push(value));
+    native.units = 'metric';
+    const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+    onVisibility();
+    expect(seen).toEqual([]); // hidden: nothing to do yet
+    visibility.mockReturnValue('visible');
+    onVisibility();
+    expect(prefs.get('units', 'imperial')).toBe('metric');
+    expect(document.body.dataset.units).toBe('metric');
+    expect(seen).toEqual(['metric']);
+    // Nothing changed: no second notification.
+    onVisibility();
+    expect(seen).toEqual(['metric']);
+    visibility.mockRestore();
+  });
+
+  it('keeps working on a host without the shared-prefs bridge methods', async () => {
+    window.VoltTrackerAndroid = {};
+    const prefs = await loadPrefs();
+    prefs.set('units', 'metric');
+    expect(prefs.get('units', 'imperial')).toBe('metric');
+  });
+
+  it('ignores a malformed native snapshot', async () => {
+    window.localStorage.setItem('vt.pref.units', '"metric"');
+    window.VoltTrackerAndroid = { getSharedPrefs: () => 'not json', setSharedPref: vi.fn() };
+    const prefs = await loadPrefs({ clear: false });
+    expect(prefs.get('units', 'imperial')).toBe('metric');
+  });
+});

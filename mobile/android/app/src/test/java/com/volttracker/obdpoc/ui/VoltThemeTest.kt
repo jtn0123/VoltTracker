@@ -60,7 +60,7 @@ class VoltThemeTest {
     @Test
     fun storeCarriesTheAppearanceIntoSettingsState() {
         val store = LiveUiStateStore()
-        store.onAppearance(AppearanceMode.DARK)
+        store.onSettings { it.copy(appearance = AppearanceMode.DARK) }
         assertEquals(AppearanceMode.DARK, store.state.value.settings.appearance)
     }
 

@@ -237,8 +237,9 @@ class LiveDriveMappingTest {
     @Test
     fun drivePrefsLandInDriveAndSettingsState() {
         val store = LiveUiStateStore()
-        store.onDrivePrefs(detailed = true, energyFlow = false)
+        store.onSettings { it.copy(driveDetailed = true, driveEnergyFlow = false, homeRate = 0.14) }
         assertTrue(store.state.value.drive.detailed)
+        assertEquals(0.14, store.state.value.drive.electricityRate, 0.0)
         assertFalse(store.state.value.settings.driveEnergyFlow)
     }
 }

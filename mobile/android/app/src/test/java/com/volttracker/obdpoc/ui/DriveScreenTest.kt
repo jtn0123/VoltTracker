@@ -18,6 +18,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearancePrefs
 import com.volttracker.obdpoc.ui.theme.VoltTheme
@@ -131,17 +132,17 @@ class DriveScreenTest {
 
     @Test
     fun energyFlowSettingTogglesThroughTheAppearancePage() {
-        val chosen = mutableListOf<Boolean>()
+        val chosen = mutableListOf<SettingChange>()
         compose.setContent {
             VoltApp(
                 VoltAppUiState(drive = DriveUiState.demo, settings = SettingsUiState.demo.copy(driveEnergyFlow = true)),
                 initialRoutes = listOf(VoltRoute.SETTINGS),
-                actions = VoltAppActions(onSetDriveEnergyFlow = { chosen += it }),
+                actions = VoltAppActions(onSettingChange = { chosen += it }),
             )
         }
         compose.onNodeWithText("Appearance").performClick()
         compose.onNodeWithText("Energy flow on Drive").performScrollTo().performClick()
-        assertEquals(listOf(false), chosen)
+        assertEquals(listOf<SettingChange>(SettingChange.DriveEnergyFlow(false)), chosen)
     }
 
     @Test

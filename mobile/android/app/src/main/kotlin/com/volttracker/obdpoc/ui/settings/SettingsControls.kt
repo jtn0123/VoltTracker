@@ -1,0 +1,244 @@
+package com.volttracker.obdpoc.ui.settings
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.ui.components.ButtonStyle
+import com.volttracker.obdpoc.ui.components.VoltButton
+import com.volttracker.obdpoc.ui.components.VoltIcons
+import com.volttracker.obdpoc.ui.components.VoltSegmented
+import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltType
+
+// The building blocks the Settings detail pages are made of.
+
+/** One settings row: label (+ optional subtitle) with a trailing control. */
+@Composable
+internal fun SettingRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    subtitle: String? = null,
+    trailing: @Composable () -> Unit,
+) {
+    Row(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
+            Text(text = label, style = VoltType.body, color = VoltColors.textPrimary)
+            if (subtitle != null) {
+                Spacer(Modifier.height(2.dp))
+                Text(text = subtitle, style = VoltType.caption, color = VoltColors.textTertiary)
+            }
+        }
+        trailing()
+    }
+}
+
+/** Compact on/off pill — reads as a switch without Material's large thumb. */
+@Composable
+internal fun TogglePill(on: Boolean) {
+    Row(
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .background(if (on) VoltColors.accentDim else VoltColors.surfaceElevated)
+                .padding(horizontal = 10.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Spacer(
+            Modifier
+                .size(7.dp)
+                .clip(CircleShape)
+                .background(if (on) VoltColors.accent else VoltColors.textTertiary),
+        )
+        Text(
+            text = if (on) "On" else "Off",
+            style = VoltType.caption,
+            color = if (on) VoltColors.textPrimary else VoltColors.textSecondary,
+        )
+    }
+}
+
+/** A whole row that flips a switch: TalkBack reads it as one switch with its label. */
+@Composable
+internal fun ToggleRow(
+    label: String,
+    on: Boolean,
+    subtitle: String? = null,
+    onChange: (Boolean) -> Unit,
+) {
+    SettingRow(
+        label = label,
+        subtitle = subtitle,
+        modifier = Modifier.toggleable(value = on, role = Role.Switch, onValueChange = onChange),
+    ) { TogglePill(on) }
+}
+
+@Composable
+internal fun Value(value: String) {
+    Text(text = value, style = VoltType.body, color = VoltColors.textSecondary)
+}
+
+@Composable
+internal fun Note(text: String) {
+    Text(text = text, style = VoltType.caption, color = VoltColors.textSecondary)
+}
+
+/** A row showing a stored value; tapping it opens the editor. */
+@Composable
+internal fun ValueRow(
+    label: String,
+    value: String,
+    subtitle: String? = null,
+    onClick: () -> Unit,
+) {
+    SettingRow(
+        label = label,
+        subtitle = subtitle,
+        modifier = Modifier.clickable(role = Role.Button, onClickLabel = "Edit $label", onClick = onClick),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Value(value)
+            Icon(
+                VoltIcons.ChevronRight,
+                contentDescription = null,
+                tint = VoltColors.textTertiary,
+                modifier = Modifier.padding(start = 4.dp).size(18.dp),
+            )
+        }
+    }
+}
+
+/** A label over a segmented choice (units, text size, thresholds). */
+@Composable
+internal fun ChoiceRow(
+    label: String,
+    options: List<String>,
+    selectedIndex: Int,
+    subtitle: String? = null,
+    onSelect: (Int) -> Unit,
+) {
+    SettingRow(label = label, subtitle = subtitle) {}
+    VoltSegmented(
+        options = options,
+        selectedIndex = selectedIndex,
+        onSelect = onSelect,
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+    )
+}
+
+/** What a [NumberEditor] edits: its title, the allowed range, and how to show the unit. */
+internal data class NumberField(
+    val title: String,
+    val unit: String,
+    val min: Double,
+    val max: Double,
+    /** Whether "Clear" is offered (the value may be unset). */
+    val clearable: Boolean = true,
+) {
+    /** The typed text as a value inside the range, or null when it isn't a number. */
+    fun parse(text: String): Double? =
+        text
+            .trim()
+            .removePrefix("$")
+            .toDoubleOrNull()
+            ?.takeIf { it.isFinite() }
+            ?.coerceIn(min, max)
+
+    val rangeLabel: String
+        get() = "${SettingsUiState.formatNumber(min)}–${SettingsUiState.formatNumber(max)} $unit"
+}
+
+/**
+ * An inline number editor that opens under the row it edits. Out-of-range entries are clamped, and
+ * the range is shown up front, as in the classic dashboard's inputs. [onSave] gets null for "Clear".
+ */
+@Composable
+internal fun NumberEditor(
+    field: NumberField,
+    initial: Double?,
+    onDismiss: () -> Unit,
+    onSave: (Double?) -> Unit,
+) {
+    var text by rememberSaveable(field.title) { mutableStateOf(initial?.let(SettingsUiState::formatNumber).orEmpty()) }
+    val parsed = field.parse(text)
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(VoltColors.surfaceElevated)
+                .padding(14.dp),
+    ) {
+        Text(text = field.rangeLabel, style = VoltType.caption, color = VoltColors.textTertiary)
+        Spacer(Modifier.height(8.dp))
+        BasicTextField(
+            value = text,
+            onValueChange = { text = it.take(MAX_CHARS) },
+            singleLine = true,
+            textStyle = VoltType.value.copy(color = VoltColors.textPrimary),
+            cursorBrush = SolidColor(VoltColors.accent),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, VoltColors.line2, RoundedCornerShape(12.dp))
+                    .padding(horizontal = 14.dp, vertical = 10.dp)
+                    .semantics { contentDescription = field.title }
+                    .testTag("settings-number-input"),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (field.clearable) {
+                VoltButton(text = "Clear", style = ButtonStyle.GHOST, height = 38.dp, onClick = { onSave(null) })
+            }
+            Spacer(Modifier.weight(1f))
+            VoltButton(text = "Cancel", style = ButtonStyle.GHOST, height = 38.dp, onClick = onDismiss)
+            VoltButton(
+                text = "Save",
+                accent = parsed != null,
+                height = 38.dp,
+                onClick = { if (parsed != null) onSave(parsed) },
+            )
+        }
+    }
+}
+
+private const val MAX_CHARS = 8

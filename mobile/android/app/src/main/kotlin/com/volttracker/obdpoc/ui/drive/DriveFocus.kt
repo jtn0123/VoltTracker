@@ -266,7 +266,10 @@ internal fun FocusTiles(state: DriveUiState) {
                     "Added",
                     oneDecimal(state.chargeAddedKwh),
                     " kWh",
-                    state.chargeStartedAtMs?.let { "since ${clockLabel(it, short = true)}" } ?: "this charge",
+                    listOfNotNull(
+                        costLabel(state.chargeAddedKwh, state.electricityRate),
+                        state.chargeStartedAtMs?.let { "since ${clockLabel(it, short = true)}" } ?: "this charge",
+                    ).joinToString(" · "),
                     tile,
                 )
                 StatTile(

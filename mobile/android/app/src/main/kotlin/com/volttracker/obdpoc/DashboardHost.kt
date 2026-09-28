@@ -300,6 +300,13 @@ interface DashboardHost :
     fun eventNotifications(): EventNotificationCommands
 
     /**
+     * The display preferences both dashboards share (units, rates, charge target, accessibility).
+     * Null until the Activity's prefs exist; the bridge then answers with an empty snapshot and
+     * the dashboard keeps its local values.
+     */
+    fun sharedDisplayPrefs(): SharedDisplayPrefs? = null
+
+    /**
      * The troubleshooter-forward + setup-guide cluster, exposed as one accessor instead of ten
      * flat host overrides (see [DiagnosticsCommands]). `MainActivity` returns its
      * [DiagnosticsHostDelegate] here, so every forward body lives on the delegate and the
