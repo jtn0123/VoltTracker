@@ -37,12 +37,14 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.ambientAlpha
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.drive.ArcGeometry
 import com.volttracker.obdpoc.ui.drive.ChargeEta
@@ -273,35 +275,9 @@ private fun ChargeFigures(state: ChargeUiState) {
     val rate = last?.let { state.rateFor(it) } ?: state.homeRate
     Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
         val kwhLabel = if (state.charging) "Added" else "Last charge"
-        Figure(kwhLabel, kwh?.let(::oneDecimal) ?: "--", "kWh", Modifier.weight(1f))
-        Figure("Cost", costText(kwh, rate) ?: "--", null, Modifier.weight(1f))
-        Figure("Pack", state.packTempF?.toString() ?: "--", "°F", Modifier.weight(1f))
-    }
-}
-
-@Composable
-private fun Figure(
-    label: String,
-    value: String,
-    unit: String?,
-    modifier: Modifier,
-) {
-    Column(modifier = modifier) {
-        VoltLabel(label)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text =
-                buildAnnotatedString {
-                    append(value)
-                    if (unit != null && value != "--") {
-                        withStyle(unitStyle(13)) {
-                            append(" $unit")
-                        }
-                    }
-                },
-            style = VoltType.value.copy(fontSize = 26.sp),
-            color = VoltColors.textPrimary,
-        )
+        VoltFigure(kwhLabel, kwh?.let(::oneDecimal) ?: "--", "kWh", Modifier.weight(1f))
+        VoltFigure("Cost", costText(kwh, rate) ?: "--", null, Modifier.weight(1f))
+        VoltFigure("Pack", state.packTempF?.toString() ?: "--", "°F", Modifier.weight(1f))
     }
 }
 
@@ -433,10 +409,6 @@ private fun SocBar(
 }
 
 /** A unit after a number ("kWh", "°F"): prose face, muted. */
-@Composable
-private fun unitStyle(sizeSp: Int): SpanStyle =
-    SpanStyle(fontFamily = VoltFonts.hanken, fontSize = sizeSp.sp, color = VoltColors.textSecondary)
-
 private const val RING_DP = 152
 private const val RING_STROKE = 12
 private const val FROM_TINT = 0.14f

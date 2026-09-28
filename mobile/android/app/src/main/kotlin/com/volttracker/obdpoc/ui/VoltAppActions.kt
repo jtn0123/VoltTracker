@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.ui
 
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
+import com.volttracker.obdpoc.ui.trips.TripExport
 
 /** Everything the dashboard can ask its host to do. Defaults are no-ops (previews, tests). */
 data class VoltAppActions(
@@ -20,4 +21,8 @@ data class VoltAppActions(
      * "insights", "diagnostics", "settings"), so the keep-screen-awake rule is shared.
      */
     val onScreenShown: (String) -> Unit = {},
+    /** Trips: show this drive (by route key) on the map. */
+    val onSelectTrip: (String) -> Unit = {},
+    /** Trips: export one drive (GPX / CSV) or all of them. */
+    val onExportTrip: (TripExport) -> Unit = {},
 )

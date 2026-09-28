@@ -8,8 +8,8 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
-import com.volttracker.obdpoc.ui.map.MapUiState
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
+import com.volttracker.obdpoc.ui.trips.TripsUiState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -39,7 +39,7 @@ class AppPreviewScreenshotTest(
         VoltAppUiState(
             drive = DriveUiState.demo,
             charge = ChargeUiState.demo,
-            map = MapUiState.demo,
+            trips = TripsUiState.demo,
             insights = InsightsUiState.demo,
             diag = DiagUiState.demo,
             settings = theme.applyTo(SettingsUiState.demo),

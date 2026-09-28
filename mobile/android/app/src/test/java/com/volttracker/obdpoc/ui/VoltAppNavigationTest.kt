@@ -13,10 +13,10 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
-import com.volttracker.obdpoc.ui.map.MapUiState
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.trips.TripsUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -41,7 +41,7 @@ class VoltAppNavigationTest {
         VoltAppUiState(
             drive = DriveUiState.demo,
             charge = ChargeUiState.demo,
-            map = MapUiState.demo,
+            trips = TripsUiState.demo,
             insights = InsightsUiState.demo,
             diag = DiagUiState.demo,
             settings = SettingsUiState.demo,
@@ -54,7 +54,7 @@ class VoltAppNavigationTest {
         compose.setContent { VoltApp(demoState) }
 
         tab("Trips").performClick()
-        compose.onNodeWithText("▶ Play").assertIsDisplayed()
+        compose.onNodeWithText("ELECTRIC").assertIsDisplayed()
 
         tab("Charge").performClick()
         compose.onNodeWithText("RECENT SESSIONS").performScrollTo().assertIsDisplayed()

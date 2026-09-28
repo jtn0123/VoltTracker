@@ -15,6 +15,13 @@ interface ObdRouteQueryStore {
     fun getTripRouteJson(routeKey: String?): JSONObject
 
     /**
+     * Where a trip ran on electric vs gas: its classified driving samples (`driving_ev` /
+     * `driving_gas`) collapsed to the points where the mode changes, oldest first, as
+     * `[{atMs, gas}]`. Empty for an unknown or hidden trip, or one with no classified samples.
+     */
+    fun getTripDriveModesJson(routeKey: String?): JSONArray = JSONArray()
+
+    /**
      * Route projection for the in-progress (status = [ObdLocalStore.STATUS_ACTIVE]) session, or an
      * empty object when nothing is recording. Lets the dashboard rehydrate the live track after
      * the WebView is torn down and recreated mid-drive (the foreground service keeps writing

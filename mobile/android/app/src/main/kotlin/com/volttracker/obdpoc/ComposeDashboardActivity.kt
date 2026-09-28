@@ -25,14 +25,12 @@ import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.VoltAppUiState
-import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
-import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
+import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
-import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -57,7 +55,6 @@ class ComposeDashboardActivity :
     private val store = LiveUiStateStore()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val exportInFlight = AtomicBoolean(false)
-    private val chargeHistoryInFlight = AtomicBoolean(false)
 
     /** The classic dashboard's name for the visible screen ("charge", …), from [VoltApp]. */
     private var shownView: String? = null
@@ -177,6 +174,8 @@ class ComposeDashboardActivity :
                         onSettingChange = ::changeSetting,
                         onSettingsCommand = ::runCommand,
                         onScreenShown = ::onScreenShown,
+                        onSelectTrip = ::selectTrip,
+                        onExportTrip = ::exportTrip,
                     ),
             )
         }
@@ -194,7 +193,7 @@ class ComposeDashboardActivity :
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         replayServiceSnapshot()
-        if (shownView == CHARGE_VIEW) loadChargeHistory()
+        loadHistoryFor(shownView)
         // The classic dashboard may have changed a shared setting while this screen was away.
         refreshSettings()
         experience.onResume()
@@ -460,12 +459,22 @@ class ComposeDashboardActivity :
         }
     }
 
-    private fun exportTrips() {
+    private fun exportTrips() = runTripExport { tripExports.exportAllTrips() }
+
+    private fun exportTrip(export: TripExport) {
+        when (export) {
+            TripExport.All -> exportTrips()
+            is TripExport.One -> runTripExport { tripExports.exportAndShare(export.routeKey, export.format) }
+        }
+    }
+
+    /** Runs a trip export off the main thread (it reads the database and writes the file), one at a time. */
+    private fun runTripExport(export: () -> String) {
         if (!ensureLocalStore() || !exportInFlight.compareAndSet(false, true)) return
         store.onSettings { it.copy(dataTaskLabel = getString(R.string.compose_export_running)) }
         try {
             backgroundExecutor.execute {
-                val result = MainActivityUtils.parseJson(tripExports.exportAllTrips())
+                val result = MainActivityUtils.parseJson(export())
                 exportInFlight.set(false)
                 runOnUiThread {
                     store.onSettings { it.copy(dataTaskLabel = null) }
@@ -484,41 +493,27 @@ class ComposeDashboardActivity :
     private fun onScreenShown(view: String) {
         shownView = view
         experience.setActiveDashboardView(view)
-        if (view == CHARGE_VIEW) loadChargeHistory()
+        loadHistoryFor(view)
     }
 
-    /**
-     * Reads the logged charges for the Charge tab off the main thread, on a short-lived store of
-     * its own (the data tools' store is only open while one runs). Skipped while a backup or
-     * restore holds the database.
-     */
-    internal fun loadChargeHistory() {
-        if (DatabaseOperationLease.isHeld() || !chargeHistoryInFlight.compareAndSet(false, true)) return
-        try {
-            backgroundExecutor.execute {
-                val rows =
-                    try {
-                        chargeHistoryReader()
-                    } catch (ex: RuntimeException) {
-                        Log.w(AppPrefs.LOG_TAG, "charge history read failed", ex)
-                        null
-                    } finally {
-                        chargeHistoryInFlight.set(false)
-                    }
-                rows?.let { runOnUiThread { store.onChargeHistory(ChargeHistory.parse(it)) } }
-            }
-        } catch (ex: RejectedExecutionException) {
-            Log.w(AppPrefs.LOG_TAG, "charge history read not started", ex)
-            chargeHistoryInFlight.set(false)
+    private fun loadHistoryFor(view: String?) {
+        when (view) {
+            CHARGE_VIEW -> history.loadCharges()
+            TRIPS_VIEW -> history.loadTrips()
         }
+    }
+
+    private fun selectTrip(routeKey: String) {
+        store.selectTrip(routeKey)
+        history.loadRoute()
     }
 
     /** The state the screens render (tests read it back). */
     internal fun uiState(): VoltAppUiState = store.state.value
 
-    /** Reads the charge rows; a seam so tests can serve canned rows without a database. */
-    internal var chargeHistoryReader: () -> JSONArray = {
-        ObdLocalStore(applicationContext).use { it.projections().chargeSessionsForExport(CHARGE_HISTORY_LIMIT) }
+    /** Reads the Charge and Trips tabs' history (tests swap its readers). */
+    internal val history by lazy {
+        ComposeHistoryLoader(backgroundExecutor, store, ::runOnUiThread) { ObdLocalStore(applicationContext) }
     }
 
     /** Opens the database for a data tool; false (with a message) when it can't be opened. */
@@ -605,6 +600,7 @@ class ComposeDashboardActivity :
 
     private companion object {
         const val CHARGE_VIEW = "charge"
+        const val TRIPS_VIEW = "map"
         const val BACKUP_RECEIPT = "setBackupReceipt"
     }
 }

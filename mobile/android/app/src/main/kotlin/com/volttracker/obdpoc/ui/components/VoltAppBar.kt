@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.components
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -135,7 +136,8 @@ fun IconCircleButton(
 
 /**
  * The standard scrolling page: [VoltAppBar] on top, then [content] with the mockups' 16dp side
- * margin. Pass `contentPadding = 0.dp` for full-bleed rows (the content then pads itself).
+ * margin. Pass `contentPadding = 0.dp` for full-bleed rows (the content then pads itself), and a
+ * [scrollState] to move the page from outside.
  */
 @Composable
 fun VoltScreen(
@@ -146,6 +148,7 @@ fun VoltScreen(
     onBack: (() -> Unit)? = null,
     showGear: Boolean = true,
     contentPadding: Dp = SCREEN_MARGIN,
+    scrollState: ScrollState = rememberScrollState(),
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -153,7 +156,7 @@ fun VoltScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(scrollState)
                 .padding(bottom = 20.dp),
     ) {
         VoltAppBar(
