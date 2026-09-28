@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.45.1 (2026-09-28)
+
+### 🔺 Fix
+
+- **service**: Demo mode starts without Bluetooth/location permissions
+  ([#89](https://github.com/jtn0123/VoltTracker/pull/89),
+  [`d69604b`](https://github.com/jtn0123/VoltTracker/commit/d69604ba8e43463035919ac6c82b37d49d3fe7d5))
+
+
 ## v0.45.0 (2026-09-27)
 
 ### ✳️ New
