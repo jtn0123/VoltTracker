@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,8 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -30,11 +30,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.charge.costText
+import com.volttracker.obdpoc.ui.charge.levelName
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.announceChanges
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -42,7 +48,11 @@ import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
 import kotlin.math.roundToInt
 
-/** Number + small muted unit, the mockups' `<b>12.4</b><small> mi</small>` pairing. */
+/**
+ * Number + small muted unit, the mockups' `<b>12.4</b><small> mi</small>` pairing. A [DASH]
+ * placeholder drops the unit and reads "Not reported"; a figure too wide for a narrow tile at a
+ * large text size steps down in size instead of clipping.
+ */
 @Composable
 internal fun NumberUnit(
     value: String,
@@ -57,7 +67,7 @@ internal fun NumberUnit(
         text =
             buildAnnotatedString {
                 append(value)
-                if (unit.isNotEmpty()) {
+                if (unit.isNotEmpty() && value != DASH) {
                     withStyle(
                         SpanStyle(fontSize = unitSize.sp, color = muted, fontWeight = FontWeight.Medium),
                     ) { append(unit) }
@@ -67,7 +77,8 @@ internal fun NumberUnit(
         color = color,
         maxLines = 1,
         softWrap = false,
-        modifier = modifier,
+        autoSize = TextAutoSize.StepBased(minFontSize = (size * MIN_FIT).sp, maxFontSize = size.sp),
+        modifier = if (value == DASH) modifier.semantics { contentDescription = NOT_REPORTED } else modifier,
     )
 }
 
@@ -112,14 +123,14 @@ internal fun RangeCard(state: DriveUiState) {
         ) {
             VoltLabel("Range")
             NumberUnit(
-                value = state.totalRangeWhole(state.units)?.toString() ?: "--",
+                value = state.totalRangeWhole(state.units)?.toString() ?: DASH,
                 unit = " ${state.units.distanceUnit} total",
                 size = 17f,
             )
         }
         val evSub =
             when {
-                !state.connected -> "--"
+                !state.connected -> DASH
                 gasMode && state.atReserve -> "Battery at reserve · holding ${state.socPercent.toInt()}%"
                 else -> "${soc.toInt()}% battery"
             }
@@ -176,7 +187,7 @@ private fun RangeRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(text = title, style = VoltType.bodyStrong.copy(fontSize = 14.sp), color = VoltColors.textPrimary)
-                NumberUnit(value = distance ?: "--", unit = " $unit", size = 20f)
+                NumberUnit(value = distance ?: DASH, unit = " $unit", size = 20f)
             }
             if (fraction != null) {
                 Meter(
@@ -208,7 +219,7 @@ internal fun StatTile(
                 .voltCard(radius = VoltShapes.TileRadius)
                 .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 11.dp),
     ) {
-        VoltLabel(label)
+        VoltLabel(label, ellipsize = true)
         NumberUnit(value = value, unit = unit, size = 22f, modifier = Modifier.padding(top = 5.dp))
         Text(
             text = sub,
@@ -221,14 +232,14 @@ internal fun StatTile(
     }
 }
 
-/** "368 V · 42 A" from whichever of the pack's volts and amps are known; "--" when neither is. */
+/** "368 V · 42 A" from whichever of the pack's volts and amps are known; a dash when neither is. */
 internal fun packElectrics(
     volts: Double?,
     amps: Double?,
 ): String =
     listOfNotNull(volts?.let { "${it.roundToInt()} V" }, amps?.let { "${it.roundToInt()} A" })
         .joinToString(" · ")
-        .ifEmpty { "--" }
+        .ifEmpty { DASH }
 
 /** The three state-dependent tiles under the range card (mockups `tilesA`). */
 @Composable
@@ -239,6 +250,7 @@ internal fun FocusTiles(state: DriveUiState) {
     ) {
         val tile = Modifier.weight(1f)
         val units = state.units
+        val h24 = LocalVoltPrefs.current.clock24h
         when (state.phase) {
             DrivePhase.DRIVE -> {
                 StatTile(
@@ -253,12 +265,12 @@ internal fun FocusTiles(state: DriveUiState) {
                     val sub = state.cycleEvPercent?.let { "$it% electric" } ?: "this cycle"
                     // A third-width tile has no room for "L/100 km" beside the figure: it moves below.
                     if (units.metric) {
-                        StatTile("Efficiency", units.economyValue(mpg) ?: "--", "", units.economyUnit, tile)
+                        StatTile("Efficiency", units.economyValue(mpg) ?: DASH, "", units.economyUnit, tile)
                     } else {
-                        StatTile("Efficiency", units.economyValue(mpg) ?: "--", " ${units.economyUnit}", sub, tile)
+                        StatTile("Efficiency", units.economyValue(mpg) ?: DASH, " ${units.economyUnit}", sub, tile)
                     }
                 } else {
-                    val value = units.efficiencyValue(state.shownTripMiPerKwh) ?: "--"
+                    val value = units.efficiencyValue(state.shownTripMiPerKwh) ?: DASH
                     if (units.metric) {
                         StatTile("Efficiency", value, "", "${units.efficiencyUnit} avg", tile)
                     } else {
@@ -267,7 +279,7 @@ internal fun FocusTiles(state: DriveUiState) {
                 }
                 StatTile(
                     "Battery",
-                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: DASH,
                     units.tempUnit,
                     packElectrics(state.packVolts, state.packAmps),
                     tile,
@@ -277,24 +289,24 @@ internal fun FocusTiles(state: DriveUiState) {
                 val last = state.lastDrive
                 StatTile(
                     "Last drive",
-                    last?.let { units.distanceOneDecimal(it.miles) } ?: "--",
+                    last?.let { units.distanceOneDecimal(it.miles) } ?: DASH,
                     " ${units.distanceUnit}",
                     last?.let { d ->
                         listOfNotNull(
                             d.miPerKwh?.takeIf { d.miles >= MIN_EFFICIENCY_MILES }?.let(units::efficiencyText),
-                            clockLabel(d.endedAtMs, short = true),
+                            clockLabel(d.endedAtMs, short = true, h24 = h24),
                         ).joinToString(" · ")
                     } ?: "none this session",
                     tile,
                 )
                 val volts = state.aux12Volts ?: state.auxVolts?.takeIf { state.connected && it > 0 }
                 val aux = aux12Status(volts, state.phase)
-                StatTile("12V battery", volts?.let(::oneDecimal) ?: "--", " V", aux.text, tile, aux.tone)
+                StatTile("12V battery", volts?.let(::oneDecimal) ?: DASH, " V", aux.text, tile, aux.tone)
                 val tires = state.tires
                 val status = tireStatus(tires, state.tirePlacardPsi)
                 StatTile(
                     "Tires",
-                    tires?.let { units.pressure(it.all.average()).toString() } ?: "--",
+                    tires?.let { units.pressure(it.all.average()).toString() } ?: DASH,
                     " ${units.pressureUnit}",
                     status.text,
                     tile,
@@ -307,21 +319,22 @@ internal fun FocusTiles(state: DriveUiState) {
                     oneDecimal(state.chargeAddedKwh),
                     " kWh",
                     listOfNotNull(
-                        costLabel(state.chargeAddedKwh, state.electricityRate),
-                        state.chargeStartedAtMs?.let { "since ${clockLabel(it, short = true)}" } ?: "this charge",
+                        costText(state.chargeAddedKwh, state.electricityRate),
+                        state.chargeStartedAtMs?.let { "since ${clockLabel(it, short = true, h24 = h24)}" }
+                            ?: "this charge",
                     ).joinToString(" · "),
                     tile,
                 )
                 StatTile(
                     "Battery",
-                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: DASH,
                     units.tempUnit,
-                    state.cellSpreadMv?.let { "Cell Δ ${it.toInt()} mV" } ?: "--",
+                    state.cellSpreadMv?.let(::cellBalanceText) ?: DASH,
                     tile,
                 )
                 StatTile(
                     "Charger",
-                    state.chargeLevel ?: "--",
+                    levelName(state.chargeLevel) ?: DASH,
                     "",
                     "${oneDecimal(state.chargeKw)} kW onboard",
                     tile,
@@ -353,7 +366,7 @@ internal fun EngineOnToast(
                 .background(bg)
                 .border(1.dp, VoltColors.gas.copy(alpha = 0.35f), shape)
                 .padding(horizontal = 14.dp, vertical = 12.dp)
-                .semantics { liveRegion = LiveRegionMode.Polite },
+                .announceChanges(LocalVoltPrefs.current),
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -379,3 +392,6 @@ internal fun EngineOnToast(
 }
 
 private const val DIM_ALPHA = 0.5f
+
+/** The smallest a [NumberUnit] figure shrinks to fit, as a share of its size. */
+private const val MIN_FIT = 0.7f

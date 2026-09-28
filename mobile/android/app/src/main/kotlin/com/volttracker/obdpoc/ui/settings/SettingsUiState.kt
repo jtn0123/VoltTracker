@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.settings
 
+import com.volttracker.obdpoc.BuildConfig
 import com.volttracker.obdpoc.ui.drive.TIRE_PLACARD_PSI
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.DarkStyle
@@ -102,11 +103,11 @@ data class SettingsUiState(
     /** "$4.29 / gal", or per litre in metric. */
     val gasPriceLabel: String get() = rateLabel(units.gasPrice(gasPrice), units.gasVolumeUnit)
 
-    /** "30 MPG", or "7.8 L/100 km" in metric. */
+    /** "38 mpg", or "6.2 L/100 km" in metric. */
     val gasMpgLabel: String
         get() =
             gasMpg?.let { mpg ->
-                if (metricUnits) units.economyText(mpg) else "${formatNumber(mpg)} MPG"
+                if (metricUnits) units.economyText(mpg) else "${formatNumber(mpg)} mpg"
             } ?: NOT_SET
 
     val chargeTargetLabel: String get() = "$chargeTargetPct%"
@@ -126,6 +127,9 @@ data class SettingsUiState(
     companion object {
         const val NOT_SET = "not set"
         const val NO_BACKUP = "No backup recorded on this phone yet"
+
+        /** The update check found nothing newer. */
+        const val UP_TO_DATE = "You're up to date"
 
         // The choices the classic dashboard offers for these alerts (alerts.html).
         val BATTERY_LOW_CHOICES = listOf(10, 15, 20, 30)
@@ -153,14 +157,19 @@ data class SettingsUiState(
         val demo =
             SettingsUiState(
                 connected = true,
-                statusLabel = "Live · 1 Hz",
+                statusLabel = "Live",
                 adapterLabel = "OBDLink MX+",
                 autoConnect = true,
                 notifyBatteryLow = true,
-                homeRate = 0.12,
-                gasPrice = 4.29,
-                gasMpg = 30.0,
-                versionLabel = "Volt Tracker 0.33.0",
+                homeRate = DEMO_HOME_RATE,
+                gasPrice = DEMO_GAS_PRICE,
+                gasMpg = DEMO_GAS_MPG,
+                versionLabel = "Volt Tracker ${BuildConfig.VERSION_NAME}",
             )
+
+        // One set of demo costs for every tab's sample state, so Settings and Insights agree.
+        const val DEMO_HOME_RATE = 0.12
+        const val DEMO_GAS_PRICE = 4.29
+        const val DEMO_GAS_MPG = 38.0
     }
 }

@@ -215,7 +215,7 @@ data class DriveUiState(
             DriveUiState(
                 connected = true,
                 electricityRate = 0.12,
-                statusLabel = "Live · 1 Hz",
+                statusLabel = "Live",
                 adapterLabel = "OBDLink MX+",
                 phase = DrivePhase.DRIVE,
                 powerKw = 18.4,

@@ -4,11 +4,8 @@ import com.volttracker.obdpoc.ui.charge.SocPoint
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.LastDrive
 import com.volttracker.obdpoc.ui.drive.usableKwh
-import kotlin.math.asin
-import kotlin.math.cos
-import kotlin.math.pow
-import kotlin.math.sin
-import kotlin.math.sqrt
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
+import com.volttracker.obdpoc.ui.units.haversineMeters
 
 /**
  * Running figures for the drive and charge in progress, folded from live samples the same way
@@ -178,7 +175,7 @@ internal class DriveSessionTracker {
         val lat = sample.lat ?: return
         val lon = sample.lon ?: return
         if (!lastLat.isNaN() && sample.phase == DrivePhase.DRIVE) {
-            val step = haversineM(lastLat, lastLon, lat, lon)
+            val step = haversineMeters(lastLat, lastLon, lat, lon)
             if (step >= MIN_STEP_M && step < MAX_STEP_M) distanceM += step
         }
         lastLat = lat
@@ -199,7 +196,6 @@ internal class DriveSessionTracker {
     )
 
     private companion object {
-        const val METERS_PER_MILE = 1609.344
         const val MIN_STEP_M = 2.0
         const val MAX_STEP_M = 250.0
         const val MAX_STEP_S = 10.0
@@ -207,21 +203,8 @@ internal class DriveSessionTracker {
         const val S_PER_HOUR = 3600.0
         const val MIN_ENERGY_KWH = 0.05
         const val MIN_MILES = 0.1
-        const val EARTH_RADIUS_M = 6_371_000.0
         const val CHARGE_POINT_MS = 15_000L
         const val PERCENT = 100.0
         const val MAX_CHARGE_POINTS = 240
-
-        fun haversineM(
-            lat1: Double,
-            lon1: Double,
-            lat2: Double,
-            lon2: Double,
-        ): Double {
-            val dLat = Math.toRadians(lat2 - lat1)
-            val dLon = Math.toRadians(lon2 - lon1)
-            val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
-            return 2 * EARTH_RADIUS_M * asin(sqrt(a))
-        }
     }
 }

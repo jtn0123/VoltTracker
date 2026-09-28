@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -112,14 +113,20 @@ private fun NavItem(
                 modifier = Modifier.size(23.dp),
             )
             Spacer(Modifier.height(4.dp))
-            Text(
-                text = tab.label,
-                fontFamily = VoltFonts.hanken,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 11.5.sp,
-                lineHeight = 14.sp,
-                color = if (active) VoltColors.textPrimary else VoltColors.textTertiary,
-            )
+            // The bar is a fixed 67dp, so the label's text scale is capped (it fits at 1.3×) and a
+            // long label ellipsizes rather than pushing out of the bar.
+            CappedTextScale {
+                Text(
+                    text = tab.label,
+                    fontFamily = VoltFonts.hanken,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 11.5.sp,
+                    lineHeight = 14.sp,
+                    color = if (active) VoltColors.textPrimary else VoltColors.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
         if (badge != null) {
             Box(

@@ -54,7 +54,7 @@ class ChargeScreenshotTest(
                         startedAtMs = null,
                         socPoints = emptyList(),
                         addedKwh = 0.0,
-                        statusLabel = "Live · 1 Hz",
+                        statusLabel = "Live",
                     ),
                 "empty" to ChargeUiState(),
                 "loading" to ChargeUiState(history = HistoryLoad.LOADING),

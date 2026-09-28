@@ -1,7 +1,7 @@
 package com.volttracker.obdpoc.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -57,9 +57,13 @@ internal fun ConnectionPage(
             choices = SettingsUiState.ADAPTER_WAIT_CHOICES,
             selected = state.adapterWaitMins,
             label = { "$it min" },
+            enabled = state.waitingForAdapter,
         ) { onCommand(SettingsCommand.WaitForAdapter(state.waitingForAdapter, it)) }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             VoltButton(text = "Test connection", onClick = { onCommand(SettingsCommand.TestConnection) })
             VoltButton(text = "Send diagnostics", onClick = { onCommand(SettingsCommand.SendDiagnostics) })
         }
@@ -89,7 +93,7 @@ private enum class CostField {
                 if (units.metric) {
                     NumberField("Gas vehicle economy", units.economyUnit, economyMin(units), economyMax(units))
                 } else {
-                    NumberField("Gas vehicle MPG", "MPG", MIN_MPG, MAX_MPG)
+                    NumberField("Gas vehicle mpg", "mpg", MIN_MPG, MAX_MPG)
                 }
             CHARGE_TARGET -> NumberField("Charge target", "%", MIN_TARGET, FULL_TARGET, clearable = false)
         }
@@ -136,7 +140,7 @@ internal fun CostsPage(
         editor(CostField.GAS_PRICE)
         VoltListDivider()
         ValueRow(
-            if (state.metricUnits) "Gas vehicle economy" else "Gas vehicle MPG",
+            if (state.metricUnits) "Gas vehicle economy" else "Gas vehicle mpg",
             state.gasMpgLabel,
             subtitle = "For savings estimates",
         ) {
@@ -364,12 +368,14 @@ private fun ThresholdChoice(
     choices: List<Int>,
     selected: Int,
     label: (Int) -> String,
+    enabled: Boolean = true,
     onSelect: (Int) -> Unit,
 ) {
     VoltSegmented(
         options = choices.map(label),
         selectedIndex = choices.indexOf(selected),
         role = Role.RadioButton,
+        enabled = enabled,
         onSelect = { onSelect(choices[it]) },
         modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
     )
@@ -391,7 +397,10 @@ internal fun DataPage(
             Text(text = it, style = VoltType.caption, color = VoltColors.accent)
         }
         Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             VoltButton(text = "Back up", onClick = { step = DataStep.BACK_UP })
             VoltButton(text = "Restore", onClick = { step = DataStep.RESTORE })
             VoltButton(text = "Export", onClick = { onCommand(SettingsCommand.ExportTrips) })
@@ -419,7 +428,7 @@ internal fun DataPage(
             null -> Unit
         }
         Text(
-            text = "All data stays on this phone until you share it. Export saves every trip as a CSV.",
+            text = "All data stays on this phone until you share it. Export saves every drive as a CSV.",
             style = VoltType.caption,
             color = VoltColors.textTertiary,
         )
@@ -451,7 +460,7 @@ internal fun DemoPage(
 internal fun AdvancedPage(onOpenClassicDashboard: () -> Unit) {
     VoltPanel {
         Note(
-            "Troubleshooting logs, raw PID reads, the signal workspace, and the full settings forest " +
+            "Connection logs, live readings from every sensor, and the rarely used settings " +
                 "live in the classic dashboard.",
         )
         Spacer(Modifier.height(14.dp))

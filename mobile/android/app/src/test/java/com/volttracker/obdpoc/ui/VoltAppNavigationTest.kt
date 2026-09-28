@@ -66,7 +66,7 @@ class VoltAppNavigationTest {
         compose.onNodeWithText("Vehicle health").assertIsDisplayed()
 
         tab("Drive").performClick()
-        compose.onNodeWithContentDescription("47 miles per hour").assertIsDisplayed()
+        compose.onNodeWithContentDescription("47 miles per hour", substring = true).assertIsDisplayed()
     }
 
     @Test

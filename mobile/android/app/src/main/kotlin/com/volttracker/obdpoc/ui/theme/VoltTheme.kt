@@ -62,6 +62,12 @@ data class VoltPalette(
     /** Receded [ev] (chart fills behind the line): toward the canvas. */
     val evDim: Color = lerp(ev, if (isDark) Color.Black else Color.White, EV_DIM)
 
+    /**
+     * Demo / Testing (the classic dashboard's violet `--mixed`): deepened on the light theme so the
+     * "DEMO" pill text keeps 4.5:1 on Latte's cards.
+     */
+    val demo: Color = if (isDark) DEMO_DARK else DEMO_LIGHT
+
     /** Neutral chart series with no status meaning (terrain/elevation). */
     val neutralSeries: Color = if (isDark) lerp(muted, faint, NEUTRAL_MIX) else faint
 
@@ -122,6 +128,8 @@ data class VoltPalette(
         private const val MONO_ACCENT_CHROMA = 0.1f
         private const val HC_MUTED_TO_TEXT = 0.4f
         private const val HC_LINE_GAIN = 2.2f
+        private val DEMO_DARK = Color(0xFFA78BFA)
+        private val DEMO_LIGHT = Color(0xFF6D4AC4)
     }
 }
 
@@ -189,6 +197,11 @@ object VoltColors {
     val accentDim: Color
         @Composable @ReadOnlyComposable
         get() = p.volt.copy(alpha = ACCENT_DIM_ALPHA)
+
+    /** Demo / Testing data (the header's "Demo" pill). */
+    val demo: Color
+        @Composable @ReadOnlyComposable
+        get() = p.demo
 
     /** Text/icon color on top of the accent (buttons, filled chips). */
     val onAccent: Color

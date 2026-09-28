@@ -19,6 +19,7 @@ import com.volttracker.obdpoc.ui.car.statusLine
 import com.volttracker.obdpoc.ui.car.tiresTile
 import com.volttracker.obdpoc.ui.car.updatedLabel
 import com.volttracker.obdpoc.ui.car.windowsTile
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -81,9 +82,9 @@ class CarTabLogicTest {
     fun updatedAndMissingLinesSayHowLongAgo() {
         assertEquals("Updated 1 min ago", car.updatedLabel())
         assertEquals("Updated just now", car.copy(seenAtMs = mapOf(BodyGroup.LOCK to now - 5_000L)).updatedLabel())
-        assertEquals("Updated 2 h ago", car.copy(seenAtMs = mapOf(BodyGroup.LOCK to now - 7_300_000L)).updatedLabel())
+        assertEquals("Updated 2 hr ago", car.copy(seenAtMs = mapOf(BodyGroup.LOCK to now - 7_300_000L)).updatedLabel())
         assertNull(CarUiState().updatedLabel())
-        assertEquals("Not reported · OBDLink only", CarUiState().missingLine(BodyGroup.TIRES))
+        assertEquals("Needs OBDLink adapter", CarUiState().missingLine(BodyGroup.TIRES))
         assertEquals("Not reported", CarUiState().missingLine(BodyGroup.AUX12))
         assertEquals(
             "No reading for 4 min",
@@ -102,7 +103,7 @@ class CarTabLogicTest {
         assertEquals(listOf("resting · low", "At the OBD port"), port.lines)
         assertNull(port.meter)
         assertEquals(PillTone.WARN, port.tone)
-        assertEquals("--", aux12Tile(DriveUiState()).value)
+        assertEquals(DASH, aux12Tile(DriveUiState()).value)
         assertEquals("86% · plugged in · charging", aux12Tile(parked.copy(phase = DrivePhase.CHARGING)).lines.first())
     }
 
@@ -117,8 +118,8 @@ class CarTabLogicTest {
         assertEquals("°C cabin", metric.unit)
         assertEquals(listOf("Outside 18°C · A/C on", "Remote start running"), metric.lines)
         val none = climateTile(DriveUiState(), CarUiState())
-        assertEquals("--", none.value)
-        assertEquals(listOf("Not reported · OBDLink only"), none.lines)
+        assertEquals(DASH, none.value)
+        assertEquals(listOf("Needs OBDLink adapter"), none.lines)
     }
 
     @Test
@@ -138,7 +139,7 @@ class CarTabLogicTest {
         val metric = tiresTile(parked, car.copy(metricUnits = true))
         assertEquals(" kPa avg", metric.unit)
         assertEquals(listOf("Placard 262 kPa · all normal"), metric.lines)
-        assertEquals(listOf("Not reported · OBDLink only"), tiresTile(DriveUiState(), CarUiState()).lines)
+        assertEquals(listOf("Needs OBDLink adapter"), tiresTile(DriveUiState(), CarUiState()).lines)
     }
 
     @Test
@@ -150,7 +151,7 @@ class CarTabLogicTest {
         val hatch = windowsTile(car.copy(openings = Openings(listOf("Hatch"))))
         assertEquals(listOf("Hatch open"), hatch.lines)
         assertEquals(PillTone.WARN, hatch.tone)
-        assertEquals(listOf("Not reported · OBDLink only"), windowsTile(CarUiState()).lines)
+        assertEquals(listOf("Needs OBDLink adapter"), windowsTile(CarUiState()).lines)
     }
 
     @Test
@@ -213,8 +214,8 @@ class CarTabLogicTest {
 
     @Test
     fun batterySummaryUsesWhatWasReported() {
-        assertEquals("91% health · cell Δ 19 mV", batterySummary(91.2, 19.4))
-        assertEquals("cell Δ 8 mV", batterySummary(null, 8.0))
+        assertEquals("91% health · cells balanced (19 mV)", batterySummary(91.2, 19.4))
+        assertEquals("cells balanced (8 mV)", batterySummary(null, 8.0))
         assertEquals("Health appears after a battery read", batterySummary(null, null))
     }
 }

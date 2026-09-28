@@ -196,11 +196,11 @@ fun DiagUiState.freezeFrameLine(): String =
         ?.let { "Captured with ${it.code}" }
         ?: "None stored"
 
-/** The Live signals row: "78 reporting · 1 Hz", or why there are none. */
+/** The Live signals row: "78 readings coming in", or why there are none. */
 fun liveSignalsLine(drive: DriveUiState): String =
     when {
         !drive.connected -> "Not connected"
-        drive.signalCount > 0 -> "${drive.signalCount} reporting · 1 Hz"
+        drive.signalCount > 0 -> "${drive.signalCount} readings coming in"
         else -> "Waiting for data"
     }
 

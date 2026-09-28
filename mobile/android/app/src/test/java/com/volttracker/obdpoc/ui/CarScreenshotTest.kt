@@ -87,7 +87,7 @@ class CarScreenshotTest(
                     ),
                 "unreported" to
                     base.copy(
-                        drive = DriveUiState(connected = true, statusLabel = "Live · 1 Hz", auxVolts = 12.4),
+                        drive = DriveUiState(connected = true, statusLabel = "Live", auxVolts = 12.4),
                         car = CarUiState(outsideTempC = 12.0, nowMs = CarUiState.DEMO_NOW_MS),
                         charge = ChargeUiState(),
                         diag = DiagUiState(),

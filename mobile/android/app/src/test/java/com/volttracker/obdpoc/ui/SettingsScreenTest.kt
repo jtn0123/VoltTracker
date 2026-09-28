@@ -9,8 +9,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.volttracker.obdpoc.ui.charge.costText
 import com.volttracker.obdpoc.ui.components.VoltTab
-import com.volttracker.obdpoc.ui.drive.costLabel
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
@@ -86,16 +86,23 @@ class SettingsScreenTest {
         compose.onNodeWithText("Test connection").performClick()
         compose.onNodeWithText("Send diagnostics").performClick()
         compose.onNodeWithText("Wait for adapter").performClick()
+        // The minutes only apply while waiting: with the toggle off the picker ignores taps.
         compose.onNodeWithText("30 min").performClick()
         assertEquals(
             listOf(
                 SettingsCommand.TestConnection,
                 SettingsCommand.SendDiagnostics,
                 SettingsCommand.WaitForAdapter(on = true, minutes = 10),
-                SettingsCommand.WaitForAdapter(on = false, minutes = 30),
             ),
             commands,
         )
+    }
+
+    @Test
+    fun waitingForAdapterPicksNewMinutes() {
+        show(SettingsPage.CONNECTION, SettingsUiState.demo.copy(waitingForAdapter = true))
+        compose.onNodeWithText("30 min").performClick()
+        assertEquals(listOf<SettingsCommand>(SettingsCommand.WaitForAdapter(on = true, minutes = 30)), commands)
     }
 
     @Test
@@ -140,16 +147,16 @@ class SettingsScreenTest {
         show(SettingsPage.COSTS)
         compose.onNodeWithText("$0.12 / kWh").assertIsDisplayed()
         compose.onNodeWithText("$4.29 / gal").assertIsDisplayed()
-        compose.onNodeWithText("30 MPG").assertIsDisplayed()
+        compose.onNodeWithText("38 mpg").assertIsDisplayed()
         compose.onNodeWithText("same as home").assertIsDisplayed()
 
         compose.onNodeWithText("Home electricity rate").performClick()
-        compose.onNodeWithText("0–2 $/kWh").assertExists()
+        compose.onNodeWithText("From $0 to $2 per kWh").assertExists()
         typeAndTap("0.14", "Save")
         // Out-of-range entries clamp, like the classic dashboard's inputs.
         compose.onNodeWithText("Gas price").performClick()
         typeAndTap("25", "Save")
-        compose.onNodeWithText("Gas vehicle MPG").performClick()
+        compose.onNodeWithText("Gas vehicle mpg").performClick()
         typeAndTap(null, "Clear")
         assertEquals(
             listOf(SettingChange.HomeRate(0.14), SettingChange.GasPrice(10.0), SettingChange.GasMpg(null)),
@@ -257,7 +264,7 @@ class SettingsScreenTest {
         assertEquals("above 45°C", metric.packTempHighLabel)
         assertEquals("Largest", metric.textSizeLabel)
         assertEquals("7.2 L/100 km", metric.gasMpgLabel)
-        assertEquals("32.5 MPG", SettingsUiState(gasMpg = 32.5).gasMpgLabel)
+        assertEquals("32.5 mpg", SettingsUiState(gasMpg = 32.5).gasMpgLabel)
         assertEquals("$1.13 / L", SettingsUiState(metricUnits = true, gasPrice = 4.29).gasPriceLabel)
         assertEquals("262 kPa", metric.tirePlacardLabel)
         assertEquals("not set", metric.homeRateLabel)
@@ -268,10 +275,10 @@ class SettingsScreenTest {
     }
 
     @Test
-    fun costLabelNeedsARate() {
-        assertEquals("$0.52", costLabel(4.3, 0.12))
-        assertNull(costLabel(4.3, 0.0))
-        assertNull(costLabel(null, 0.12))
+    fun costTextNeedsARate() {
+        assertEquals("$0.52", costText(4.3, 0.12))
+        assertNull(costText(4.3, 0.0))
+        assertNull(costText(null, 0.12))
     }
 
     @Test

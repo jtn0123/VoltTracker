@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
@@ -37,6 +38,7 @@ import com.volttracker.obdpoc.ui.theme.VoltType
  *
  * [role] is how TalkBack announces each segment: [Role.Tab] where the control switches a view
  * (Drive's Focus / Detailed, Insights periods), [Role.RadioButton] for a stored choice (Settings).
+ * When not [enabled] (the setting it tunes is off) it dims and ignores taps.
  */
 @Composable
 fun VoltSegmented(
@@ -44,6 +46,7 @@ fun VoltSegmented(
     selectedIndex: Int,
     modifier: Modifier = Modifier,
     role: Role = Role.Tab,
+    enabled: Boolean = true,
     onSelect: (Int) -> Unit = {},
 ) {
     val track = VoltColors.surfaceElevated
@@ -59,6 +62,7 @@ fun VoltSegmented(
                         cornerRadius = CornerRadius(TRACK_RADIUS.toPx()),
                     )
                 }.padding(horizontal = 3.dp)
+                .alpha(if (enabled) 1f else DISABLED_ALPHA)
                 .selectableGroup(),
         horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
@@ -67,6 +71,7 @@ fun VoltSegmented(
                 label = label,
                 selected = index == selectedIndex,
                 role = role,
+                enabled = enabled,
                 onClick = { onSelect(index) },
                 modifier = Modifier.weight(1f),
             )
@@ -79,6 +84,7 @@ private fun Segment(
     label: String,
     selected: Boolean,
     role: Role,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -90,7 +96,7 @@ private fun Segment(
         modifier =
             modifier
                 .heightIn(min = 48.dp)
-                .selectable(selected = selected, onClick = onClick, role = role)
+                .selectable(selected = selected, enabled = enabled, onClick = onClick, role = role)
                 .padding(vertical = SEGMENT_INSET),
         contentAlignment = Alignment.Center,
     ) {

@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.update.UpdateManager
 
 /** What tapping Connect must do, given the remembered adapter and radio state. */
@@ -81,7 +82,7 @@ internal object ComposeDashboardSupport {
         when (result) {
             is UpdateManager.CheckResult.UpdateAvailable ->
                 UpdateBanner("${result.build.tag} is available", result.build.tag)
-            UpdateManager.CheckResult.UpToDate -> UpdateBanner("Up to date", null)
+            UpdateManager.CheckResult.UpToDate -> UpdateBanner(SettingsUiState.UP_TO_DATE, null)
             UpdateManager.CheckResult.NoBuilds -> UpdateBanner("No published builds yet", null)
             is UpdateManager.CheckResult.Unknown ->
                 UpdateBanner("Newest is ${result.build.tag} — can't compare to this build", null)

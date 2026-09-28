@@ -1,11 +1,14 @@
 package com.volttracker.obdpoc.ui.drive
 
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /** Time-to-full while charging (mirrors the WebView's `renderLiveCharge`). */
@@ -185,31 +188,53 @@ fun chargeEta(
     return if (ms > MAX_ETA_MS) ChargeEta.Estimating else ChargeEta.Finish(ms)
 }
 
-/** "22 min" under 100 minutes, else "1h 45m"; "--" when unknown. */
+/** One duration style app-wide: "47 min", "1 hr 5 min", "2 hr"; a dash when unknown. */
 fun durationLabel(ms: Long?): String {
-    if (ms == null || ms <= 0) return "--"
+    if (ms == null || ms <= 0) return DASH
     val minutes = (ms / 60_000.0).roundToInt()
-    return if (minutes < 100) "$minutes min" else "${minutes / 60}h ${"%02d".format(Locale.US, minutes % 60)}m"
+    val hours = minutes / 60
+    val rest = minutes % 60
+    return when {
+        hours == 0 -> "$minutes min"
+        rest == 0 -> "$hours hr"
+        else -> "$hours hr $rest min"
+    }
 }
 
-/** Compact "1h 26m" / "48m" for the charging line. */
-fun shortDurationLabel(ms: Long): String {
-    val minutes = (ms / 60_000.0).roundToInt()
-    return if (minutes >= 60) "${minutes / 60}h ${minutes % 60}m" else "${minutes}m"
-}
-
-/** Wall-clock time [offsetMs] after [atMs], e.g. "11:08 PM"; [short] drops the AM/PM for tight tile lines. */
+/**
+ * Wall-clock time [offsetMs] after [atMs]: "11:08 PM", or "23:08" when the phone uses a 24-hour
+ * clock ([h24]). [short] drops the AM/PM for tight tile lines.
+ */
 fun clockLabel(
     atMs: Long,
     offsetMs: Long = 0L,
     zone: TimeZone = TimeZone.getDefault(),
     short: Boolean = false,
+    h24: Boolean = false,
 ): String {
     // SimpleDateFormat, not java.time: minSdk 23 without core-library desugaring.
-    val format = SimpleDateFormat(if (short) "h:mm" else "h:mm a", Locale.US)
+    val pattern =
+        when {
+            h24 -> "H:mm"
+            short -> "h:mm"
+            else -> "h:mm a"
+        }
+    val format = SimpleDateFormat(pattern, Locale.US)
     format.timeZone = zone
     return format.format(Date(atMs + offsetMs))
 }
+
+/**
+ * The spread across the pack's cell groups in plain words: "Cells balanced (19 mV)" within the
+ * Health "watch" band, else "Cells 62 mV apart".
+ */
+fun cellBalanceText(spreadMv: Double): String {
+    val mv = spreadMv.roundToInt()
+    return if (spreadMv < CELL_WATCH_MV) "Cells balanced ($mv mV)" else "Cells $mv mV apart"
+}
+
+/** Cell spread at which the weakest group is called out (matches the Health "watch" band). */
+const val CELL_WATCH_MV = 50.0
 
 /**
  * The charging level the car reports (`AC_1` / `AC_2`), else one read off the AC supply
@@ -229,11 +254,88 @@ fun chargeLevelLabel(
 
 private const val L2_MIN_AC_V = 180.0
 
-/** "$0.52": [kwh] at the home electricity rate; null when no rate is set (Settings → Costs). */
-fun costLabel(
-    kwh: Double?,
-    ratePerKwh: Double,
-): String? = if (kwh == null || ratePerKwh <= 0.0) null else String.format(Locale.US, "$%.2f", kwh * ratePerKwh)
-
 /** One decimal: "18.4". */
 fun oneDecimal(value: Double): String = String.format(Locale.US, "%.1f", value)
+
+/** TalkBack's reading of the cockpit's power strip: where power is now, its peak and its deepest regen. */
+fun powerTraceDescription(trace: List<Float>): String {
+    val now = trace.lastOrNull() ?: return "Pack power over the last minute: no readings yet"
+    val current = if (now < 0f) "now ${(-now).roundToInt()} kilowatts regen" else "now ${now.roundToInt()} kilowatts"
+    val parts = mutableListOf(current)
+    val peak = trace.max()
+    val deepest = trace.min()
+    if (peak >= TRACE_NOTABLE_KW) parts += "peak ${peak.roundToInt()} kilowatts"
+    if (deepest <= -TRACE_NOTABLE_KW) parts += "regen up to ${(-deepest).roundToInt()} kilowatts"
+    return "Pack power over the last minute: ${parts.joinToString(", ")}"
+}
+
+private const val TRACE_NOTABLE_KW = 1f
+
+/** TalkBack's reading of the cockpit's cell histogram: the group count, the voltage span and the lowest group. */
+fun cellsDescription(state: DriveUiState): String {
+    val count = state.cellVoltages.count { it != null }
+    val span =
+        if (state.minCellVolts != null && state.maxCellVolts != null) {
+            String.format(Locale.US, " from %.3f to %.3f volts", state.minCellVolts, state.maxCellVolts)
+        } else {
+            ""
+        }
+    val lowest = state.minCellNumber?.let { ", lowest is group $it" }.orEmpty()
+    return "$count cell groups$span$lowest"
+}
+
+/** "Full by " or "80% by " ahead of the finish time, for the charge limit in Settings. */
+fun etaLead(targetPct: Int): String = if (targetPct >= FULL_PCT) "Full by " else "$targetPct% by "
+
+/** "Estimating time to full…", or to the charge limit when one is set below 100 %. */
+fun estimatingText(targetPct: Int): String =
+    if (targetPct >= FULL_PCT) "Estimating time to full…" else "Estimating time to $targetPct%…"
+
+const val NEARLY_FULL_TEXT = "Topping off — nearly there"
+
+private const val FULL_PCT = 100
+
+/**
+ * What TalkBack reads for the ring's centre, in words rather than the glyphs on screen: the
+ * speed and power while driving, the battery and range parked, the battery and finish time
+ * while charging.
+ */
+fun gaugeDescription(
+    state: DriveUiState,
+    h24: Boolean = false,
+): String {
+    val units = state.units
+    if (!state.connected) return "Battery $NOT_REPORTED. Connect to see your Volt live"
+    val battery = "Battery ${state.shownSocPercent.toInt()} percent"
+    return when (state.phase) {
+        DrivePhase.DRIVE -> {
+            val perHour = if (units.metric) "kilometres per hour" else "miles per hour"
+            val speed = "${units.speed(state.speedMph.toDouble())} $perHour"
+            val kw = oneDecimal(abs(state.powerKw))
+            val power = if (state.regenerating) "$kw kilowatts regen" else "$kw kilowatts power"
+            val engine = if (state.mode == DriveMode.GAS && state.rpm > 0) ", engine ${state.rpm} rpm" else ""
+            "$speed, $power$engine"
+        }
+        DrivePhase.PARKED -> {
+            val range =
+                state.evRangeMiles?.let { "${units.distanceText(it)} electric range" } ?: "electric range $NOT_REPORTED"
+            "$battery, $range"
+        }
+        DrivePhase.CHARGING -> {
+            val eta =
+                when (val e = state.chargeEta) {
+                    is ChargeEta.Finish ->
+                        etaLead(state.chargeTargetPct) + clockLabel(state.sampleAtMs, e.remainingMs, h24 = h24) +
+                            ", ${durationLabel(e.remainingMs)}"
+                    ChargeEta.NearlyFull -> NEARLY_FULL_TEXT
+                    ChargeEta.Estimating, null -> estimatingText(state.chargeTargetPct)
+                }
+            "$battery, $eta, charging at ${oneDecimal(state.chargeKw)} kilowatts"
+        }
+    }
+}
+
+/** A real PRNDL position (the store reports a placeholder before the car does). */
+val DriveUiState.gearKnown: Boolean get() = gear.length == 1 && gear in GEARS
+
+private const val GEARS = "PRNDL"

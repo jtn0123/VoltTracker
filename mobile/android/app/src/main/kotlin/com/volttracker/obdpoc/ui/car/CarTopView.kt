@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.drive.TirePressures
 import com.volttracker.obdpoc.ui.drive.tireLow
@@ -43,12 +45,12 @@ import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltType
-import java.util.Locale
 
 /**
  * The top-down 2016–2019 Volt, nose up (mockups `carTop`), with each tyre's pressure beside it
  * and the lock state on the roof. A tyre under the placard reads in the warning color; a missing
- * reading shows "--", never a guess.
+ * reading shows a bare dash, never a guess. The labels scale with the drawing, so their text
+ * scale is capped to keep them clear of the car at the largest font sizes.
  */
 @Composable
 fun CarTopView(
@@ -69,62 +71,65 @@ fun CarTopView(
                     null -> "Lock not reported"
                 },
             )
-            append(". Tires ")
-            append(tires?.all?.joinToString(", ") { pressureValue(it, metric) } ?: "not reported")
+            append(". ")
+            append(tiresDescription(tires, metric))
         }
-    BoxWithConstraints(
-        modifier
-            .fillMaxWidth()
-            .aspectRatio(VIEW_W / VIEW_H)
-            .semantics { contentDescription = description },
-    ) {
-        val unit = maxWidth / VIEW_W
-        Canvas(Modifier.fillMaxSize()) {
-            val k = size.width / VIEW_W
-            scale(k, pivot = Offset.Zero) {
-                drawGlow(pal.volt)
-                translate(CENTER_X, CENTER_Y) {
-                    WHEELS.forEach { (x, y) ->
-                        drawRoundRect(
-                            color = pal.text.copy(alpha = WHEEL_ALPHA),
-                            topLeft = Offset(x - WHEEL_W / 2, y - WHEEL_H / 2),
-                            size = Size(WHEEL_W, WHEEL_H),
-                            cornerRadius = CornerRadius(WHEEL_R),
-                        )
-                    }
-                    drawShape(shapes.body, pal.carBody, pal.carLine, BODY_STROKE)
-                    drawShape(shapes.windshield, pal.carGlass, pal.carLine, GLASS_STROKE)
-                    drawShape(shapes.roof, pal.carGlass.copy(alpha = pal.carGlass.alpha * ROOF_ALPHA), pal.carLine, 1f)
-                    drawShape(shapes.rearGlass, pal.carGlass, pal.carLine, GLASS_STROKE)
-                    shapes.lines.forEach { drawPath(it, pal.carLine, style = Stroke(1f)) }
-                    MIRRORS.forEach { x ->
-                        drawRoundRect(pal.carBody, Offset(x, MIRROR_Y), Size(MIRROR_W, MIRROR_H), CornerRadius(2f))
-                        drawRoundRect(
-                            pal.carLine,
-                            Offset(x, MIRROR_Y),
-                            Size(MIRROR_W, MIRROR_H),
-                            CornerRadius(2f),
-                            style = Stroke(BODY_STROKE),
-                        )
+    CappedTextScale {
+        BoxWithConstraints(
+            modifier
+                .fillMaxWidth()
+                .aspectRatio(VIEW_W / VIEW_H)
+                .semantics { contentDescription = description },
+        ) {
+            val unit = maxWidth / VIEW_W
+            Canvas(Modifier.fillMaxSize()) {
+                val k = size.width / VIEW_W
+                scale(k, pivot = Offset.Zero) {
+                    drawGlow(pal.volt)
+                    translate(CENTER_X, CENTER_Y) {
+                        WHEELS.forEach { (x, y) ->
+                            drawRoundRect(
+                                color = pal.text.copy(alpha = WHEEL_ALPHA),
+                                topLeft = Offset(x - WHEEL_W / 2, y - WHEEL_H / 2),
+                                size = Size(WHEEL_W, WHEEL_H),
+                                cornerRadius = CornerRadius(WHEEL_R),
+                            )
+                        }
+                        drawShape(shapes.body, pal.carBody, pal.carLine, BODY_STROKE)
+                        drawShape(shapes.windshield, pal.carGlass, pal.carLine, GLASS_STROKE)
+                        val roofGlass = pal.carGlass.copy(alpha = pal.carGlass.alpha * ROOF_ALPHA)
+                        drawShape(shapes.roof, roofGlass, pal.carLine, 1f)
+                        drawShape(shapes.rearGlass, pal.carGlass, pal.carLine, GLASS_STROKE)
+                        shapes.lines.forEach { drawPath(it, pal.carLine, style = Stroke(1f)) }
+                        MIRRORS.forEach { x ->
+                            drawRoundRect(pal.carBody, Offset(x, MIRROR_Y), Size(MIRROR_W, MIRROR_H), CornerRadius(2f))
+                            drawRoundRect(
+                                pal.carLine,
+                                Offset(x, MIRROR_Y),
+                                Size(MIRROR_W, MIRROR_H),
+                                CornerRadius(2f),
+                                style = Stroke(BODY_STROKE),
+                            )
+                        }
                     }
                 }
             }
-        }
-        LockBadge(locked, unit)
-        val corners = listOf(tires?.fl, tires?.fr, tires?.rl, tires?.rr)
-        LABELS.forEachIndexed { i, (x, y) ->
-            val psi = corners[i]
-            TireLabel(
-                value = psi?.let { pressureValue(it, metric) } ?: "--",
-                unitLabel = pressureUnit(metric),
-                warn = psi != null && tireLow(psi, placardPsi),
-                missing = psi == null,
-                x = x,
-                y = y,
-                endAnchored = i % 2 == 0,
-                unit = unit,
-                width = maxWidth,
-            )
+            LockBadge(locked, unit)
+            val corners = listOf(tires?.fl, tires?.fr, tires?.rl, tires?.rr)
+            LABELS.forEachIndexed { i, (x, y) ->
+                val psi = corners[i]
+                TireLabel(
+                    value = psi?.let { pressureValue(it, metric) } ?: DASH,
+                    unitLabel = pressureUnit(metric),
+                    warn = psi != null && tireLow(psi, placardPsi),
+                    missing = psi == null,
+                    x = x,
+                    y = y,
+                    endAnchored = i % 2 == 0,
+                    unit = unit,
+                    width = maxWidth,
+                )
+            }
         }
     }
 }
@@ -190,18 +195,32 @@ private fun TireLabel(
                     else -> VoltColors.textPrimary
                 },
         )
-        Text(
-            text = unitLabel.uppercase(Locale.US),
-            style =
-                VoltType.label.copy(
-                    fontFamily = VoltFonts.barlowSemiCondensed,
-                    fontSize = (TP_UNIT_SP * scale).sp,
-                    letterSpacing = 0.1.em,
-                ),
-            color = VoltColors.textTertiary,
-        )
+        if (!missing) {
+            Text(
+                text = unitLabel,
+                style =
+                    VoltType.label.copy(
+                        fontFamily = VoltFonts.barlowSemiCondensed,
+                        fontSize = (TP_UNIT_SP * scale).sp,
+                        letterSpacing = 0.1.em,
+                    ),
+                color = VoltColors.textTertiary,
+            )
+        }
     }
 }
+
+/** "Tires front left 38 psi, front right 38 psi, …" or "Tires not reported" for TalkBack. */
+internal fun tiresDescription(
+    tires: TirePressures?,
+    metric: Boolean,
+): String {
+    val all = tires?.all ?: return "Tires not reported"
+    val unit = pressureUnit(metric)
+    return "Tires " + all.indices.joinToString(", ") { "${TIRE_CORNERS[it]} ${pressureValue(all[it], metric)} $unit" }
+}
+
+private val TIRE_CORNERS = listOf("front left", "front right", "rear left", "rear right")
 
 private fun DrawScope.drawGlow(volt: Color) {
     val center = Offset(CENTER_X, CENTER_Y)

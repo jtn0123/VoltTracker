@@ -24,9 +24,11 @@ import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltNavActions
 import com.volttracker.obdpoc.ui.components.VoltNavBar
 import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.components.rememberSystemPrefs
 import com.volttracker.obdpoc.ui.diag.DiagScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.hvBattery
@@ -67,6 +69,7 @@ fun VoltApp(
     BackHandler(enabled = routes.isNotEmpty(), onBack = pop)
     val screen = screenViewName(tab, routes.lastOrNull())
     LaunchedEffect(screen) { actions.onScreenShown(screen) }
+    val prefs = rememberSystemPrefs(quietLiveData = state.settings.quietLiveData, demo = state.settings.demoActive)
     VoltTheme(
         appearance = state.settings.appearance,
         darkStyle = state.settings.darkStyle,
@@ -85,7 +88,7 @@ fun VoltApp(
                         .safeDrawingPadding(),
             ) {
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                    CompositionLocalProvider(LocalVoltNav provides nav) {
+                    CompositionLocalProvider(LocalVoltNav provides nav, LocalVoltPrefs provides prefs) {
                         when (val route = routes.lastOrNull()) {
                             null -> VoltTabContent(tab = tab, state = state, actions = actions)
                             else ->
@@ -160,7 +163,7 @@ private fun VoltTabContent(
                 onSetDetailed = { actions.onSettingChange(SettingChange.DriveDetailed(it)) },
             )
         VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
-        VoltTab.CHARGE -> ChargeScreen(state.charge)
+        VoltTab.CHARGE -> ChargeScreen(state.charge, onConnect = actions.onConnect, onStartDemo = actions.onStartDemo)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
         VoltTab.CAR ->
             CarScreen(

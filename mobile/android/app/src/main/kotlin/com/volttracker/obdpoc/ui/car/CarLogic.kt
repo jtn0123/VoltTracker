@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui.car
 
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -44,18 +46,18 @@ fun tempValue(
 
 fun tempUnit(metric: Boolean): String = VoltUnits.of(metric).tempUnit
 
-/** "Updated just now" / "Updated 4 min ago" / "Updated 2 h ago" from the newest body reading. */
+/** "Updated just now" / "Updated 4 min ago" / "Updated 2 hr ago" from the newest body reading. */
 fun CarUiState.updatedLabel(): String? {
     val newest = seenAtMs.values.maxOrNull() ?: return null
     return "Updated ${ago(nowMs - newest)}"
 }
 
 /**
- * Why a body reading is missing: never heard this session ("Not reported · OBDLink only", since
- * the SW-CAN body bus needs an OBDLink adapter), or heard and since gone stale.
+ * Why a body reading is missing: never heard this session ("Needs OBDLink adapter", since the
+ * SW-CAN body bus needs one), or heard and since gone stale.
  */
 fun CarUiState.missingLine(group: BodyGroup): String {
-    val at = seenAtMs[group] ?: return if (group == BodyGroup.AUX12) NOT_REPORTED else "$NOT_REPORTED · OBDLink only"
+    val at = seenAtMs[group] ?: return if (group == BodyGroup.AUX12) NOT_REPORTED else NEEDS_OBDLINK
     return "No reading for ${ago(nowMs - at).removeSuffix(" ago")}"
 }
 
@@ -99,7 +101,7 @@ fun aux12Tile(drive: DriveUiState): CarTile {
     val monitored = drive.aux12Volts
     val volts = monitored ?: drive.auxVolts?.takeIf { drive.connected && it > 0 }
     val status = aux12Status(volts, drive.phase)
-    if (volts == null) return CarTile("--", " V", listOf(NOT_REPORTED))
+    if (volts == null) return CarTile(DASH, " V", listOf(NOT_REPORTED))
     val soc = drive.aux12SocPercent.takeIf { monitored != null }
     val phase =
         when (drive.phase) {
@@ -139,7 +141,7 @@ fun climateTile(
             if (cabin == null) car.missingLine(BodyGroup.CLIMATE) else null,
         )
     return CarTile(
-        value = cabin?.let { tempValue(it, metric) } ?: "--",
+        value = cabin?.let { tempValue(it, metric) } ?: DASH,
         unit = "${tempUnit(metric)} cabin",
         lines = lines,
         tone = if (car.remoteStartOn == true) PillTone.EV else PillTone.NEUTRAL,
@@ -154,7 +156,7 @@ fun tiresTile(
     val metric = car.metricUnits
     val unit = pressureUnit(metric)
     val placard = "${pressureValue(car.placardPsi, metric)} $unit"
-    val tires = drive.tires ?: return CarTile("--", " $unit", listOf(car.missingLine(BodyGroup.TIRES)))
+    val tires = drive.tires ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES)))
     val low = tires.all.indices.filter { tireLow(tires.all[it], car.placardPsi) }
     if (low.isEmpty()) {
         return CarTile(
@@ -182,7 +184,7 @@ fun windowsTile(car: CarUiState): CarTile {
     val openCount = windows?.count { it > WINDOW_OPEN_PCT }
     val value =
         when {
-            openCount == null -> "--"
+            openCount == null -> DASH
             openCount == 0 -> "Closed"
             openCount == windows.size -> "All open"
             else -> "$openCount open"
@@ -297,7 +299,7 @@ private fun ago(ms: Long): String {
     return when {
         minutes < 1 -> "just now"
         minutes < MINUTES_PER_HOUR -> "$minutes min ago"
-        else -> "${minutes / MINUTES_PER_HOUR} h ago"
+        else -> "${minutes / MINUTES_PER_HOUR} hr ago"
     }
 }
 
@@ -305,7 +307,9 @@ const val GATE_READY = "ready"
 const val GATE_BUSY = "busy"
 
 private val TIRE_NAMES = listOf("front left", "front right", "rear left", "rear right")
-private const val NOT_REPORTED = "Not reported"
+
+/** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */
+const val NEEDS_OBDLINK = "Needs OBDLink adapter"
 
 /** A window more than this far down reads as open (the broadcast rounds a closed window to 0–1). */
 private const val WINDOW_OPEN_PCT = 2

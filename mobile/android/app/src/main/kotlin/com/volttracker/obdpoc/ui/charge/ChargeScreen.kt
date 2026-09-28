@@ -1,7 +1,6 @@
 package com.volttracker.obdpoc.ui.charge
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,7 +17,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -26,8 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -36,25 +34,36 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.ConnectRow
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltChip
+import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltLabel
+import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.ambientAlpha
+import com.volttracker.obdpoc.ui.components.announceChanges
 import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.drive.ArcGeometry
 import com.volttracker.obdpoc.ui.drive.ChargeEta
+import com.volttracker.obdpoc.ui.drive.NEARLY_FULL_TEXT
 import com.volttracker.obdpoc.ui.drive.clockLabel
+import com.volttracker.obdpoc.ui.drive.durationLabel
+import com.volttracker.obdpoc.ui.drive.estimatingText
+import com.volttracker.obdpoc.ui.drive.etaLead
 import com.volttracker.obdpoc.ui.drive.oneDecimal
-import com.volttracker.obdpoc.ui.drive.shortDurationLabel
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
-import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import kotlin.math.cos
@@ -70,6 +79,8 @@ import kotlin.math.sin
 fun ChargeScreen(
     state: ChargeUiState,
     modifier: Modifier = Modifier,
+    onConnect: () -> Unit = {},
+    onStartDemo: () -> Unit = {},
 ) {
     val pal = LocalVoltPalette.current
     val glow = if (state.charging) pal.ev.copy(alpha = ambientAlpha(pal)) else Color.Transparent
@@ -79,6 +90,7 @@ fun ChargeScreen(
             subtitle = state.subtitle,
             dot = connectionDot(state.connected),
         ) {
+            ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
             ChargeHero(state)
             Spacer(Modifier.height(10.dp))
             ChargeFigures(state)
@@ -107,7 +119,10 @@ private fun ChargeHero(state: ChargeUiState) {
 
 @Composable
 private fun ChargingSide(state: ChargeUiState) {
-    VoltPill("Charging", PillTone.EV)
+    val prefs = LocalVoltPrefs.current
+    Box(Modifier.announceChanges(prefs)) {
+        VoltPill(listOfNotNull("Charging", levelName(state.level)).joinToString(" · "), PillTone.EV)
+    }
     Spacer(Modifier.height(14.dp))
     val text = VoltColors.textPrimary
     when (val eta = state.eta) {
@@ -115,24 +130,24 @@ private fun ChargingSide(state: ChargeUiState) {
             Text(
                 text =
                     buildAnnotatedString {
-                        append(if (state.targetSoc >= FULL) "Full by " else "${state.targetSoc}% by ")
+                        append(etaLead(state.targetSoc))
                         val clock =
                             SpanStyle(color = text, fontWeight = FontWeight.SemiBold, fontFamily = VoltFonts.barlow)
                         withStyle(clock) {
-                            append(clockLabel(state.sampleAtMs, eta.remainingMs))
+                            append(clockLabel(state.sampleAtMs, eta.remainingMs, h24 = prefs.clock24h))
                         }
                     },
                 style = VoltType.bodyStrong.copy(fontSize = 17.sp, fontWeight = FontWeight.Normal),
                 color = VoltColors.textSecondary,
             )
             Text(
-                text = "${shortDurationLabel(eta.remainingMs)} remaining",
+                text = "${durationLabel(eta.remainingMs)} remaining",
                 style = VoltType.body,
                 color = VoltColors.textSecondary,
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        ChargeEta.NearlyFull -> SideLine("Topping off — nearly there")
+        ChargeEta.NearlyFull -> SideLine(NEARLY_FULL_TEXT)
         ChargeEta.Estimating -> SideLine(estimatingText(state.targetSoc))
         null -> {
             val atLimit = state.shownSocPercent >= state.targetSoc
@@ -163,15 +178,13 @@ private fun ChargingSide(state: ChargeUiState) {
 
 @Composable
 private fun IdleSide(state: ChargeUiState) {
-    if (state.connected) {
-        VoltPill("Not charging", PillTone.NEUTRAL)
-    } else {
-        VoltPill("Not connected", PillTone.NEUTRAL, dot = false)
+    Box(Modifier.announceChanges(LocalVoltPrefs.current)) {
+        VoltPill(if (state.connected) "Not charging" else "Not connected", PillTone.NEUTRAL)
     }
     Spacer(Modifier.height(12.dp))
     val last = state.sessions.firstOrNull()
     if (last != null) {
-        SideLine("Last charge ${sessionWhen(last.startedAtMs)}")
+        SideLine("Last charge ${sessionWhen(last.startedAtMs, h24 = LocalVoltPrefs.current.clock24h)}")
         Text(
             text = lastChargeDetail(last),
             style = VoltType.caption,
@@ -186,11 +199,7 @@ private fun IdleSide(state: ChargeUiState) {
     }
 }
 
-/** "Estimating time to full…", or to the charge limit when one is set below 100 %. */
-private fun estimatingText(targetSoc: Int): String =
-    if (targetSoc >= FULL) "Estimating time to full…" else "Estimating time to $targetSoc%…"
-
-/** "L2 · 24 → 91% · 11.8 kWh" for the unplugged hero. */
+/** "Level 2 · 24% → 91% · 11.8 kWh" for the unplugged hero. */
 private fun lastChargeDetail(last: ChargeSession): String =
     listOfNotNull(
         sessionDetail(last.level, last.fromSoc, last.toSoc),
@@ -208,11 +217,15 @@ private fun MiniRing(state: ChargeUiState) {
     val pal = LocalVoltPalette.current
     val soc = state.shownSocPercent
     val known = state.connected || state.socPercent > 0
+    val range = state.evRangeMiles?.let { ", ${state.units.distanceText(it)} electric range" }.orEmpty()
     Box(
         modifier =
             Modifier
                 .size(RING_DP.dp)
-                .semantics { contentDescription = "Battery ${soc.roundToInt()} percent" },
+                .clearAndSetSemantics {
+                    contentDescription =
+                        if (known) "Battery ${soc.roundToInt()} percent$range" else "Battery $NOT_REPORTED"
+                },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -231,19 +244,31 @@ private fun MiniRing(state: ChargeUiState) {
             }
             drawCircle(pal.bg, radius = 4.dp.toPx(), center = polar(r, ArcGeometry.socToDeg(soc)))
         }
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text =
-                    buildAnnotatedString {
-                        append(if (known) "${soc.toInt()}" else "--")
+        // The figure sits inside a fixed 152dp ring: cap its text scale so it stays inside.
+        CappedTextScale { RingFigure(state, known, soc) }
+    }
+}
+
+@Composable
+private fun RingFigure(
+    state: ChargeUiState,
+    known: Boolean,
+    soc: Double,
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text =
+                buildAnnotatedString {
+                    append(if (known) "${soc.toInt()}" else DASH)
+                    if (known) {
                         withStyle(SpanStyle(fontSize = 22.sp, color = VoltColors.textSecondary)) { append("%") }
-                    },
-                style = VoltType.display.copy(fontSize = 56.sp, lineHeight = 56.sp),
-                color = VoltColors.textPrimary,
-            )
-            state.evRangeMiles?.let {
-                Text(text = state.units.distanceText(it), style = VoltType.body, color = VoltColors.textSecondary)
-            }
+                    }
+                },
+            style = VoltType.display.copy(fontSize = 56.sp, lineHeight = 56.sp),
+            color = VoltColors.textPrimary,
+        )
+        state.evRangeMiles?.let {
+            Text(text = state.units.distanceText(it), style = VoltType.body, color = VoltColors.textSecondary)
         }
     }
 }
@@ -287,11 +312,11 @@ private fun ChargeFigures(state: ChargeUiState) {
     val units = state.units
     VoltPanel {
         Row(modifier = Modifier.fillMaxWidth()) {
-            VoltFigure("Added", kwh?.let(::oneDecimal) ?: "--", "kWh", Modifier.weight(1f))
-            VoltFigure("Cost", costText(kwh, rate) ?: "--", null, Modifier.weight(1f))
+            VoltFigure("Added", kwh?.let(::oneDecimal) ?: DASH, "kWh", Modifier.weight(1f))
+            VoltFigure("Cost", costText(kwh, rate) ?: DASH, null, Modifier.weight(1f))
             VoltFigure(
                 "Battery",
-                state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: DASH,
                 units.tempUnit,
                 Modifier.weight(1f),
             )
@@ -308,7 +333,7 @@ private fun SessionCard(state: ChargeUiState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             VoltLabel("This session")
-            Chip("Charge limit ${state.targetSoc}%")
+            VoltChip("Charge limit ${state.targetSoc}%")
         }
         Spacer(Modifier.height(10.dp))
         ChargeSessionChart(state)
@@ -316,22 +341,8 @@ private fun SessionCard(state: ChargeUiState) {
 }
 
 @Composable
-private fun Chip(text: String) {
-    Text(
-        text = text,
-        style = VoltType.caption,
-        color = VoltColors.textSecondary,
-        modifier =
-            Modifier
-                .clip(VoltShapes.chip)
-                .background(VoltColors.surfaceElevated)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-    )
-}
-
-@Composable
 private fun RecentSessions(state: ChargeUiState) {
-    val rows = state.sessionRows()
+    val rows = state.sessionRows(h24 = LocalVoltPrefs.current.clock24h)
     VoltPanel(padding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
@@ -344,19 +355,21 @@ private fun RecentSessions(state: ChargeUiState) {
             }
         }
         if (rows.isEmpty()) {
-            Text(
-                text =
-                    when (state.history) {
-                        HistoryLoad.LOADING -> "Loading charges…"
-                        HistoryLoad.FAILED ->
-                            "Charges couldn't be read. They'll load the next time you open Charge."
-                        HistoryLoad.LOADED ->
-                            "No charges logged yet. Sessions appear here after you charge with the adapter connected."
-                    },
-                style = VoltType.body,
-                color = VoltColors.textSecondary,
-                modifier = Modifier.padding(vertical = 12.dp),
-            )
+            when (state.history) {
+                HistoryLoad.LOADING -> VoltEmptyState("Loading charges…", inCard = false)
+                HistoryLoad.FAILED ->
+                    VoltEmptyState(
+                        "Charges couldn't be read",
+                        body = "Your logged charges are safe. They'll load the next time you open Charge.",
+                        inCard = false,
+                    )
+                HistoryLoad.LOADED ->
+                    VoltEmptyState(
+                        "No charges logged yet",
+                        body = "Sessions appear here after you charge with the adapter connected.",
+                        inCard = false,
+                    )
+            }
         }
         rows.forEach { row -> SessionRowView(row) }
     }
@@ -364,7 +377,7 @@ private fun RecentSessions(state: ChargeUiState) {
 
 @Composable
 private fun SessionRowView(row: SessionRow) {
-    Box(Modifier.fillMaxWidth().height(1.dp).background(VoltColors.hairline))
+    VoltListDivider()
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -389,10 +402,8 @@ private fun SessionRowView(row: SessionRow) {
             Text(
                 text =
                     buildAnnotatedString {
-                        append(row.energyKwh?.let(::oneDecimal) ?: "--")
-                        withStyle(unitStyle(11)) {
-                            append(" kWh")
-                        }
+                        append(row.energyKwh?.let(::oneDecimal) ?: DASH)
+                        if (row.energyKwh != null) withStyle(unitStyle(11)) { append(" kWh") }
                     },
                 style = VoltType.valueSmall,
                 color = VoltColors.textPrimary,
@@ -433,12 +444,10 @@ private fun SocBar(
     }
 }
 
-/** A unit after a number ("kWh", "°F"): prose face, muted. */
 private const val RING_DP = 152
 private const val RING_STROKE = 12
 private const val FROM_TINT = 0.14f
 private const val MIN_SWEEP = 0.5f
-private const val FULL = 100
 private const val PERCENT = 100
 private const val SOC_BAR_DP = 170
 

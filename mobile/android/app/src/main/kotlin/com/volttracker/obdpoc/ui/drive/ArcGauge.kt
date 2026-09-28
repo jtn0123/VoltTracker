@@ -1,27 +1,26 @@
 package com.volttracker.obdpoc.ui.drive
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.wrapContentHeight
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -31,6 +30,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -47,9 +47,15 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.charge.levelName
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltPill
+import com.volttracker.obdpoc.ui.components.announceChanges
+import com.volttracker.obdpoc.ui.components.rememberLoopPhase
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
@@ -70,6 +76,8 @@ private const val R = 152f
 private const val RING = 16f
 private const val ENGINE_RING_GAP = 17f
 private const val ENGINE_RING = 3f
+private const val CENTER_TOP = 78f
+private const val GEAR_TOP = 330f
 
 /** Ring color for the moment's power: regen EV green, engine amber, drive Volt teal. */
 fun powerColor(
@@ -95,19 +103,24 @@ fun ArcGauge(
 ) {
     val pal = LocalVoltPalette.current
     val measurer = rememberTextMeasurer()
-    val shimmer by rememberInfiniteTransition(label = "charge-shimmer").animateFloat(
-        initialValue = 0f,
-        targetValue = SHIMMER_PERIOD,
-        animationSpec = infiniteRepeatable(tween(SHIMMER_MS, easing = LinearEasing), RepeatMode.Restart),
-        label = "shimmer",
-    )
-    Box(
+    val shimmer =
+        rememberLoopPhase(
+            active = state.connected && state.phase == DrivePhase.CHARGING,
+            period = SHIMMER_PERIOD,
+            durationMs = SHIMMER_MS,
+            label = "charge-shimmer",
+        )
+    // The mockups' 380 × 350 box, scaled down to fit a narrower phone: every offset below follows
+    // the ring, so the centre text and the gear row stay where they belong on a 360dp screen.
+    BoxWithConstraints(
         modifier =
             modifier
                 .padding(top = 14.dp, bottom = 12.dp)
-                .size(BOX_W.dp, BOX_H.dp)
-                .semantics(mergeDescendants = true) {},
+                .widthIn(max = BOX_W.dp)
+                .fillMaxWidth()
+                .aspectRatio(BOX_W / BOX_H),
     ) {
+        val k = maxWidth.value / BOX_W
         Canvas(
             modifier =
                 Modifier
@@ -119,16 +132,23 @@ fun ArcGauge(
             if (state.phase == DrivePhase.DRIVE) {
                 drawPowerRing(g, pal, state, measurer)
             } else {
-                drawSocRing(g, pal, state, measurer, if (state.phase == DrivePhase.CHARGING) shimmer else null)
+                drawSocRing(g, pal, state, measurer, if (state.phase == DrivePhase.CHARGING) shimmer ?: 0f else null)
             }
         }
-        GaugeCenter(state, Modifier.fillMaxWidth().padding(top = 78.dp))
+        CappedTextScale {
+            GaugeCenter(state, k, Modifier.fillMaxWidth().padding(top = (CENTER_TOP * k).dp))
+        }
         if (state.phase != DrivePhase.CHARGING) {
-            Gears(
-                gear = state.gear,
-                // `.a-gear` sits 252 px into `.a-center`, which itself starts 78 px down.
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 330.dp),
-            )
+            // The letters sit in fixed 24 × 26dp cells under the ring, so their text scale is capped too.
+            CappedTextScale {
+                Gears(
+                    gear = state.gear,
+                    // `.a-gear` sits 252 px into `.a-center`, which itself starts 78 px down.
+                    // An offset, not top padding: padding would leave the row only the last few
+                    // dp of the box, clipping the letters at larger text sizes.
+                    modifier = Modifier.align(Alignment.TopCenter).offset(y = (GEAR_TOP * k).dp),
+                )
+            }
         }
     }
 }
@@ -346,7 +366,7 @@ fun ModePill(state: DriveUiState) {
     when {
         !state.connected -> VoltPill("Not connected", PillTone.NEUTRAL)
         state.phase == DrivePhase.CHARGING ->
-            VoltPill(listOfNotNull("Charging", state.chargeLevel).joinToString(" · "), PillTone.EV)
+            VoltPill(listOfNotNull("Charging", levelName(state.chargeLevel)).joinToString(" · "), PillTone.EV)
         state.phase == DrivePhase.PARKED ->
             when (state.locked) {
                 true -> VoltPill("Parked · Locked", PillTone.NEUTRAL, icon = VoltIcons.Lock)
@@ -358,14 +378,15 @@ fun ModePill(state: DriveUiState) {
     }
 }
 
-private val speedStyle =
-    TextStyle(
-        fontFamily = VoltFonts.barlow,
-        fontWeight = FontWeight.Light,
-        fontSize = 120.sp,
-        letterSpacing = (-0.04).em,
-        fontFeatureSettings = "tnum",
-    )
+/** The hero figures are sized to the ring in dp, not sp: the ring doesn't grow with the text size. */
+@Composable
+private fun heroStyle(
+    sizeDp: Float,
+    k: Float,
+): TextStyle {
+    val size = with(LocalDensity.current) { (sizeDp * k).dp.toSp() }
+    return VoltType.display.copy(fontSize = size, lineHeight = size)
+}
 
 /**
  * CSS `line-height: .9`: the number occupies a [lineBox]-tall slot with its glyphs centred in it
@@ -393,15 +414,24 @@ private fun HeroNumber(
 @Composable
 private fun GaugeCenter(
     state: DriveUiState,
+    k: Float,
     modifier: Modifier = Modifier,
 ) {
     val pal = LocalVoltPalette.current
+    val prefs = LocalVoltPrefs.current
     Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(Modifier.height(30.dp)) { ModePill(state) }
-        when {
-            state.phase == DrivePhase.DRIVE && state.connected -> DriveCenter(state, pal)
-            state.phase == DrivePhase.CHARGING && state.connected -> ChargeCenter(state)
-            else -> ParkedCenter(state)
+        // The mode is announced on its own when it changes; the figures below read as one line.
+        Box(Modifier.heightIn(min = 30.dp).announceChanges(prefs)) { ModePill(state) }
+        val described = gaugeDescription(state, prefs.clock24h)
+        Column(
+            modifier = Modifier.clearAndSetSemantics { contentDescription = described },
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            when {
+                state.phase == DrivePhase.DRIVE && state.connected -> DriveCenter(state, pal, k)
+                state.phase == DrivePhase.CHARGING && state.connected -> ChargeCenter(state, k, prefs.clock24h)
+                else -> ParkedCenter(state, k)
+            }
         }
     }
 }
@@ -410,6 +440,7 @@ private fun GaugeCenter(
 private fun DriveCenter(
     state: DriveUiState,
     pal: VoltPalette,
+    k: Float,
 ) {
     val color = powerColor(pal, state.powerRole)
     val units = state.units
@@ -417,12 +448,8 @@ private fun DriveCenter(
     Spacer(Modifier.height(10.dp))
     HeroNumber(
         text = AnnotatedString("$speed"),
-        style = speedStyle,
-        lineBox = SPEED_LINE_BOX,
-        modifier =
-            Modifier.semantics {
-                contentDescription = "$speed ${if (units.metric) "kilometres" else "miles"} per hour"
-            },
+        style = heroStyle(SPEED_DP, k),
+        lineBox = (SPEED_LINE_BOX * k).dp,
     )
     Text(
         text = units.speedUnit,
@@ -457,15 +484,16 @@ private fun DriveCenter(
     }
 }
 
-private val socStyle = speedStyle.copy(fontSize = 104.sp)
-
 @Composable
-private fun SocNumber(text: String) {
+private fun SocNumber(
+    text: String,
+    k: Float,
+) {
     HeroNumber(
         text =
             buildAnnotatedString {
                 append(text)
-                if (text != "--") {
+                if (text != DASH) {
                     withStyle(
                         SpanStyle(
                             fontSize = 40.sp,
@@ -476,16 +504,19 @@ private fun SocNumber(text: String) {
                     ) { append(" %") }
                 }
             },
-        style = socStyle,
-        lineBox = SOC_LINE_BOX,
-        modifier = Modifier.padding(top = 18.dp),
+        style = heroStyle(SOC_DP, k),
+        lineBox = (SOC_LINE_BOX * k).dp,
+        modifier = Modifier.padding(top = (SOC_TOP * k).dp),
     )
 }
 
 @Composable
-private fun ParkedCenter(state: DriveUiState) {
+private fun ParkedCenter(
+    state: DriveUiState,
+    k: Float,
+) {
     if (!state.connected) {
-        SocNumber("--")
+        SocNumber(DASH, k)
         Text(
             text = "Connect to see your Volt live",
             style = VoltType.heroUnit,
@@ -494,7 +525,7 @@ private fun ParkedCenter(state: DriveUiState) {
         )
         return
     }
-    SocNumber("${state.shownSocPercent.toInt()}")
+    SocNumber("${state.shownSocPercent.toInt()}", k)
     Text(
         text =
             state.evRangeMiles?.let { "${state.units.distanceWhole(it)} ${state.units.distanceUnit} electric range" }
@@ -506,34 +537,34 @@ private fun ParkedCenter(state: DriveUiState) {
 }
 
 @Composable
-private fun ChargeCenter(state: DriveUiState) {
-    SocNumber("${state.shownSocPercent.toInt()}")
+private fun ChargeCenter(
+    state: DriveUiState,
+    k: Float,
+    h24: Boolean,
+) {
+    SocNumber("${state.shownSocPercent.toInt()}", k)
     val text = VoltColors.textPrimary
     Text(
         text =
             buildAnnotatedString {
                 when (val eta = state.chargeEta) {
                     is ChargeEta.Finish -> {
-                        append(if (state.chargeTargetPct < FULL_PCT) "${state.chargeTargetPct}% by " else "Full by ")
+                        append(etaLead(state.chargeTargetPct))
                         withStyle(SpanStyle(color = text, fontWeight = FontWeight.SemiBold)) {
-                            append(clockLabel(state.sampleAtMs, eta.remainingMs))
+                            append(clockLabel(state.sampleAtMs, eta.remainingMs, h24 = h24))
                         }
-                        append(" · ${shortDurationLabel(eta.remainingMs)}")
+                        append(" · ${durationLabel(eta.remainingMs)}")
                     }
-                    ChargeEta.NearlyFull -> append("Topping off — nearly there")
-                    ChargeEta.Estimating, null ->
-                        append(
-                            if (state.chargeTargetPct < FULL_PCT) {
-                                "Estimating time to ${state.chargeTargetPct}%…"
-                            } else {
-                                "Estimating time to full…"
-                            },
-                        )
+                    ChargeEta.NearlyFull -> append(NEARLY_FULL_TEXT)
+                    ChargeEta.Estimating, null -> append(estimatingText(state.chargeTargetPct))
                 }
             },
         style = VoltType.heroUnit,
         color = VoltColors.textSecondary,
-        modifier = Modifier.padding(top = 4.dp),
+        // Inside the ring: one line that shrinks to fit rather than running into the arc.
+        maxLines = 1,
+        autoSize = TextAutoSize.StepBased(minFontSize = LINE_MIN_SP.sp, maxFontSize = VoltType.heroUnit.fontSize),
+        modifier = Modifier.padding(top = 4.dp).widthIn(max = (INNER_LINE_W * k).dp),
     )
     val parts =
         listOfNotNull(
@@ -552,9 +583,17 @@ private fun ChargeCenter(state: DriveUiState) {
             },
         style = VoltType.value,
         color = VoltColors.energy,
-        modifier = Modifier.padding(top = 12.dp),
+        maxLines = 1,
+        autoSize = TextAutoSize.StepBased(minFontSize = LINE_MIN_SP.sp, maxFontSize = VoltType.value.fontSize),
+        modifier = Modifier.padding(top = 12.dp).widthIn(max = (INNER_LINE_W * k).dp),
     )
 }
+
+/** How wide a line under the ring's big figure may run (mockup units) before it meets the arc. */
+private const val INNER_LINE_W = 240f
+
+/** The smallest a ring line shrinks to. */
+private const val LINE_MIN_SP = 10
 
 /** PRNDL with the current gear lit (mockups `.gears`). */
 @Composable
@@ -571,7 +610,8 @@ fun Gears(
             Box(
                 modifier =
                     Modifier
-                        .size(24.dp, 26.dp)
+                        .widthIn(min = 24.dp)
+                        .heightIn(min = 26.dp)
                         .background(
                             if (on) VoltColors.surfaceElevated else Color.Transparent,
                             VoltShapes.inner,
@@ -593,8 +633,11 @@ fun Gears(
     }
 }
 
-private val SPEED_LINE_BOX = 108.dp
-private val SOC_LINE_BOX = 94.dp
+private const val SPEED_DP = 120f
+private const val SOC_DP = 104f
+private const val SPEED_LINE_BOX = 108f
+private const val SOC_LINE_BOX = 94f
+private const val SOC_TOP = 18f
 private const val MIN_SWEEP = 0.01f
 private const val KNOB_R = 5f
 private const val TICK_CLEAR_DEG = 50f
@@ -608,5 +651,4 @@ private const val HALO_OUTER_W = 14f
 private const val HALO_INNER_W = 6f
 private const val SHIMMER_PERIOD = 60f
 private const val SHIMMER_MS = 1600
-private const val FULL_PCT = 100
 private const val SHIMMER_ALPHA = 0.6f

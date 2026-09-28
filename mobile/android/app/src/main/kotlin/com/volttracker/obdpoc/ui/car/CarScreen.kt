@@ -41,6 +41,7 @@ import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.diag.DiagUiState
@@ -49,6 +50,7 @@ import com.volttracker.obdpoc.ui.diag.summary
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.Meter
 import com.volttracker.obdpoc.ui.drive.NumberUnit
+import com.volttracker.obdpoc.ui.drive.cellBalanceText
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
@@ -72,7 +74,12 @@ fun CarScreen(
     actions: CarActions = CarActions(),
 ) {
     val nav = LocalVoltNav.current
-    VoltScreen(title = "Car", subtitle = "Chevrolet Volt", modifier = modifier) {
+    VoltScreen(
+        title = "Car",
+        subtitle = "Chevrolet Volt",
+        dot = connectionDot(drive.connected),
+        modifier = modifier,
+    ) {
         StatusRow(drive, car)
         CarTopView(
             tires = drive.tires,
@@ -336,14 +343,14 @@ fun carBadge(diag: DiagUiState): NavBadge? =
         else -> null
     }
 
-/** "91% health · cell Δ 19 mV", with whichever halves the car has reported. */
+/** "91% health · cells balanced (19 mV)", with whichever halves the car has reported. */
 fun batterySummary(
     sohPct: Double?,
     spreadMv: Double?,
 ): String =
     listOfNotNull(
         sohPct?.let { "${it.roundToInt()}% health" },
-        spreadMv?.let { "cell Δ ${it.toInt()} mV" },
+        spreadMv?.let { cellBalanceText(it).replaceFirstChar(Char::lowercaseChar) },
     ).joinToString(" · ").ifEmpty { "Health appears after a battery read" }
 
 @Composable

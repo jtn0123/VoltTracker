@@ -7,6 +7,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -18,7 +20,7 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
  * A labelled headline figure (mockups `.kv`): caps label over a 26sp value with a small muted
- * [unit]. The unit is left off a "--" placeholder.
+ * [unit]. The unit is left off a [DASH] placeholder, which TalkBack reads as "Not reported".
  */
 @Composable
 fun VoltFigure(
@@ -35,7 +37,7 @@ fun VoltFigure(
             text =
                 buildAnnotatedString {
                     append(value)
-                    if (unit != null && value != "--") {
+                    if (unit != null && value != DASH) {
                         withStyle(unitStyle(FIGURE_UNIT_SP)) {
                             append(" $unit")
                         }
@@ -43,6 +45,7 @@ fun VoltFigure(
                 },
             style = VoltType.value.copy(fontSize = FIGURE_VALUE_SP.sp),
             color = valueColor,
+            modifier = if (value == DASH) Modifier.semantics { contentDescription = NOT_REPORTED } else Modifier,
         )
     }
 }

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.trips
 
 import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.units.VoltUnits
 
 /**
@@ -74,14 +75,14 @@ data class TripsUiState(
             get() =
                 TripsUiState(
                     connected = true,
-                    statusLabel = "Live · 1 Hz",
+                    statusLabel = "Live",
                     trips = TripsDemo.trips(DEMO_NOW_MS),
                     selectedKey = TripsDemo.MIXED_KEY,
                     route = TripsDemo.route(TripsDemo.MIXED_KEY, DEMO_NOW_MS),
                     nowMs = DEMO_NOW_MS,
-                    homeRate = 0.12,
-                    gasMpg = 40.0,
-                    gasPrice = 4.50,
+                    homeRate = SettingsUiState.DEMO_HOME_RATE,
+                    gasMpg = SettingsUiState.DEMO_GAS_MPG,
+                    gasPrice = SettingsUiState.DEMO_GAS_PRICE,
                     exportable = false,
                 )
     }

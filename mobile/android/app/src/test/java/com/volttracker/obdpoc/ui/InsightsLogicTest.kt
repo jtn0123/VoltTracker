@@ -11,8 +11,8 @@ import com.volttracker.obdpoc.ui.insights.midMph
 import com.volttracker.obdpoc.ui.insights.summary
 import com.volttracker.obdpoc.ui.insights.wholeMiles
 import com.volttracker.obdpoc.ui.insights.window
-import com.volttracker.obdpoc.ui.trips.METERS_PER_MILE
 import com.volttracker.obdpoc.ui.trips.TripSummary
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals

@@ -18,6 +18,8 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.description
+import com.volttracker.obdpoc.ui.drive.energyFlow
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearancePrefs
@@ -56,10 +58,10 @@ class DriveScreenTest {
     fun energyFlowCardIsOptional() {
         var show by mutableStateOf(true)
         compose.setContent { VoltTheme { DriveScreen(DriveUiState.demo, showEnergyFlow = show) } }
-        compose.onNodeWithContentDescription("Energy flow: Battery → drive unit").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithContentDescription(flowDescription).performScrollTo().assertIsDisplayed()
         show = false
         compose.waitForIdle()
-        assertEquals(0, compose.onAllNodesWithContentDescriptionCount("Energy flow: Battery → drive unit"))
+        assertEquals(0, compose.onAllNodesWithContentDescriptionCount(flowDescription))
     }
 
     @Test
@@ -105,7 +107,7 @@ class DriveScreenTest {
                 )
             }
         }
-        compose.onNodeWithText("Connect to see your Volt live").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Connect to see your Volt live", substring = true).assertIsDisplayed()
         compose.onNodeWithText("Connect").performClick()
         compose.onNodeWithText("Demo").performClick()
         assertEquals(1, connect)
@@ -122,7 +124,7 @@ class DriveScreenTest {
     fun parkedAndChargingStatesRenderTheirCenters() {
         var state by mutableStateOf(DriveUiState.demoParked)
         compose.setContent { VoltTheme { DriveScreen(state) } }
-        compose.onNodeWithText("26 mi electric range").assertIsDisplayed()
+        compose.onNodeWithContentDescription("26 mi electric range", substring = true).assertIsDisplayed()
         compose.onNodeWithText("LAST DRIVE").assertIsDisplayed()
         state = DriveUiState.demoCharging
         compose.waitForIdle()
@@ -161,6 +163,8 @@ class DriveScreenTest {
         assertTrue(prefs.getBoolean(AppearancePrefs.KEY_DRIVE_DETAILED, false))
         assertTrue(prefs.getBoolean(AppearancePrefs.KEY_DRIVE_ENERGY_FLOW, false))
     }
+
+    private val flowDescription = energyFlow(DriveUiState.demo).description()
 
     private fun ComposeContentTestRule.onAllNodesWithTextCount(text: String): Int =
         onAllNodes(hasText(text)).fetchSemanticsNodes().size
