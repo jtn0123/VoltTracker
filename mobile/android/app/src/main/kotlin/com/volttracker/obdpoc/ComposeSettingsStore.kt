@@ -4,6 +4,8 @@ import android.content.SharedPreferences
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearancePrefs
+import java.text.DateFormat
+import java.util.Date
 import kotlin.math.roundToInt
 
 /**
@@ -21,6 +23,7 @@ class ComposeSettingsStore(
     private val autoConnect: AutoConnectController,
     private val events: EventNotificationCommands,
     private val experience: DashboardExperienceCommands,
+    private val formatDateTime: (Long) -> String = ::localDateTime,
 ) {
     private val shared = SharedDisplayPrefs(prefs)
 
@@ -51,6 +54,12 @@ class ComposeSettingsStore(
             highContrast = shared.highContrast(),
             driveDetailed = AppearancePrefs.readDriveDetailed(prefs),
             driveEnergyFlow = AppearancePrefs.readDriveEnergyFlow(prefs),
+            lastBackupLabel =
+                ComposeDataTools.lastBackupLabel(
+                    prefs.getLong(BackupController.PREF_LAST_BACKUP_AT_MS, 0L),
+                    prefs.getInt(BackupController.PREF_LAST_BACKUP_TRIPS, 0),
+                    formatDateTime,
+                ),
         )
     }
 
@@ -96,6 +105,9 @@ class ComposeSettingsStore(
     }
 
     private companion object {
+        fun localDateTime(ms: Long): String =
+            DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
+
         /** A stored scale outside the offered sizes snaps to the nearest one. */
         fun nearestTextSize(scale: Double): Double =
             SharedDisplayPrefs.FONT_SCALES.minBy { kotlin.math.abs(it - scale) }

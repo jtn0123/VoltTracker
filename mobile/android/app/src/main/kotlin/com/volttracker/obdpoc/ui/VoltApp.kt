@@ -171,6 +171,7 @@ private fun VoltRouteContent(
                         onStartDemo = actions.onStartDemo,
                         onStopDemo = actions.onStopDemo,
                         onChange = actions.onSettingChange,
+                        onCommand = actions.onSettingsCommand,
                     ),
             )
     }

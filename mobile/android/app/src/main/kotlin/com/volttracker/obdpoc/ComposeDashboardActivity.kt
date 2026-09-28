@@ -19,15 +19,21 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
+import com.volttracker.obdpoc.ui.settings.SettingsCommand
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
 import org.json.JSONObject
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Native Compose dashboard host — the app's launcher experience. Subscribes to
@@ -39,13 +45,31 @@ import org.json.JSONObject
  * one tap away (Settings → "Open classic dashboard") while the native screens
  * absorb its features phase by phase.
  */
-class ComposeDashboardActivity : ComponentActivity() {
+class ComposeDashboardActivity :
+    ComponentActivity(),
+    TroubleshooterHost,
+    BackupHost,
+    TripExportHost {
     private val store = LiveUiStateStore()
+    private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+    private val exportInFlight = AtomicBoolean(false)
+
+    /** Whether a session is logging; a seam so tests can hold one open without a real adapter. */
+    internal var loggingProbe: () -> Boolean = ObdService::hasActiveSession
+
+    /**
+     * Opened only while a backup, restore or export needs it ([ensureLocalStore]) and closed again
+     * when the screen stops, so the classic dashboard never restores underneath an open handle.
+     */
+    @Volatile override var localStore: ObdLocalStore? = null
     private lateinit var prefs: SharedPreferences
     private lateinit var deviceCatalog: DeviceCatalog
     private lateinit var autoConnect: AutoConnectController
     private lateinit var experience: DashboardExperienceHostDelegate
     private lateinit var settings: ComposeSettingsStore
+    private lateinit var troubleshooter: TroubleshooterBridge<ComposeDashboardActivity>
+    private lateinit var backups: BackupController<ComposeDashboardActivity>
+    private val tripExports by lazy { TripExportController(applicationContext, this) }
 
     // Process-scoped: survives configuration recreation (see UpdateCoordinator).
     private lateinit var updates: UpdateCoordinator
@@ -58,8 +82,12 @@ class ComposeDashboardActivity : ComponentActivity() {
             ) {
                 val json = intent.getStringExtra(ObdService.EXTRA_JSON)
                 ComposeDashboardSupport.routeServiceBroadcast(intent.action, json, store)
-                // Keep-screen-awake only holds while a session is logging.
-                if (intent.action == ObdService.BROADCAST_STATUS) experience.onLoggingStateChanged()
+                if (intent.action == ObdService.BROADCAST_STATUS) {
+                    // Keep-screen-awake only holds while a session is logging.
+                    experience.onLoggingStateChanged()
+                    troubleshooter.onAdapterStatusForReadyNotify(MainActivityUtils.parseJson(json))
+                    publishAdapterWait()
+                }
                 // The native screens only show a short status label, so a refused start (e.g. a
                 // missing Nearby devices permission) would otherwise vanish without a trace.
                 ComposeDashboardSupport.blockedStatusDetail(intent.action, json)?.let(::showMessage)
@@ -69,6 +97,13 @@ class ComposeDashboardActivity : ComponentActivity() {
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (!granted) showMessage(getString(R.string.compose_notifications_denied))
+        }
+
+    private val restorePicker =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            // The store was closed when the picker covered this screen; the restore needs it back.
+            ensureLocalStore()
+            backups.onRestorePickerResult(result.resultCode, result.data)
         }
 
     private val connectPermissionLauncher =
@@ -110,6 +145,9 @@ class ComposeDashboardActivity : ComponentActivity() {
                     ),
                 experience = experience,
             )
+        troubleshooter = TroubleshooterBridge(this)
+        backups = BackupController(this, DataBackup(this), backgroundExecutor)
+        backups.restoreState(savedInstanceState)
         updates = UpdateCoordinator.shared(this)
         store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
         refreshSettings()
@@ -124,11 +162,12 @@ class ComposeDashboardActivity : ComponentActivity() {
                     VoltAppActions(
                         onOpenClassicDashboard = ::openClassicDashboard,
                         onConnect = ::connectLastAdapter,
-                        onStartDemo = { startObd(ObdService.ACTION_DEMO, null, null) },
-                        onStopDemo = ::stopSession,
+                        onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
+                        onStopDemo = ::stopObdService,
                         onCheckForUpdate = ::checkForUpdate,
                         onInstallUpdate = ::installUpdate,
                         onSettingChange = ::changeSetting,
+                        onSettingsCommand = ::runCommand,
                         onScreenShown = experience::setActiveDashboardView,
                     ),
             )
@@ -155,6 +194,27 @@ class ComposeDashboardActivity : ComponentActivity() {
         // One silent update check per process start — the auto half of
         // auto-update. Manual re-checks live in Settings.
         updates.autoCheckOnce(::publishUpdateResult)
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        backups.saveState(outState)
+    }
+
+    override fun onStop() {
+        // Hand the database back unless a backup, restore or export is still using it.
+        if (!DatabaseOperationLease.isHeld() && !exportInFlight.get()) closeLocalStore()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        backups.dispose()
+        troubleshooter.shutdown()
+        backgroundExecutor.shutdownNow()
+        val storeToClose = localStore
+        localStore = null
+        ActivityStoreTeardown.closeWhenExecutorStops(backgroundExecutor, storeToClose)
+        super.onDestroy()
     }
 
     override fun onPause() {
@@ -227,7 +287,7 @@ class ComposeDashboardActivity : ComponentActivity() {
             observedAddress = null,
             bluetoothReady = hasConnectPermission() && BluetoothAdapters.get(this)?.isEnabled == true,
             loggingActive = ObdService.hasActiveSession(),
-            startConnect = { address, name -> startObd(ObdService.ACTION_CONNECT, address, name) },
+            startConnect = { address, name -> startObdService(ObdService.ACTION_CONNECT, address, name) },
             publishStatus = { state, detail, _ ->
                 store.onStatus(
                     JSONObject()
@@ -265,7 +325,7 @@ class ComposeDashboardActivity : ComponentActivity() {
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "Bluetooth enable prompt failed", ex)
                 }
-            ConnectAction.CONNECT -> startObd(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
+            ConnectAction.CONNECT -> startObdService(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
         }
     }
 
@@ -274,22 +334,33 @@ class ComposeDashboardActivity : ComponentActivity() {
             ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
             PackageManager.PERMISSION_GRANTED
 
-    private fun startObd(
-        action: String,
+    override fun startObdService(
+        action: String?,
         address: String?,
         name: String?,
+    ) = startObdService(action, address, name, null)
+
+    override fun startObdService(
+        action: String?,
+        address: String?,
+        name: String?,
+        detailStage: String?,
     ) {
         if (ObdService.isSessionStartAction(action) && DatabaseOperationLease.isHeld()) {
+            showMessage(getString(R.string.status_database_operation_running))
             return
         }
+        troubleshooter.clearPendingTestConnectionStop()
         val service = Intent(this, ObdService::class.java)
         service.action = action
         if (address != null) service.putExtra(ObdService.EXTRA_ADDRESS, address)
         if (name != null) service.putExtra(ObdService.EXTRA_NAME, name)
+        if (detailStage != null) service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         try {
             ObdServiceLauncher.start(this, service)
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "startObd blocked", ex)
+            troubleshooter.clearPendingTestConnectionStop()
             showMessage(getString(R.string.status_obd_start_blocked))
         }
     }
@@ -299,7 +370,7 @@ class ComposeDashboardActivity : ComponentActivity() {
     }
 
     /** Ends the running session (Settings → Demo / testing → Stop), as the classic Disconnect does. */
-    private fun stopSession() {
+    override fun stopObdService() {
         val service = Intent(this, ObdService::class.java)
         service.action = ObdService.ACTION_DISCONNECT
         try {
@@ -319,5 +390,171 @@ class ComposeDashboardActivity : ComponentActivity() {
             // Background start restrictions can reject this housekeeping signal; it is best-effort.
             Log.w(AppPrefs.LOG_TAG, "foreground signal skipped", ex)
         }
+    }
+
+    // ===== Settings tools: the same helpers the classic dashboard drives =====================
+
+    internal fun runCommand(command: SettingsCommand) {
+        when (command) {
+            SettingsCommand.TestConnection -> troubleshooter.startTestConnection()
+            SettingsCommand.SendDiagnostics -> troubleshooter.shareDiagnostics()
+            is SettingsCommand.WaitForAdapter -> waitForAdapter(command.on, command.minutes)
+            is SettingsCommand.BackUp -> backUp(command.passphrase)
+            is SettingsCommand.Restore -> restore(command.passphrase)
+            SettingsCommand.ExportTrips -> exportTrips()
+        }
+    }
+
+    private fun waitForAdapter(
+        on: Boolean,
+        minutes: Int,
+    ) {
+        if (!on) {
+            troubleshooter.cancelAdapterReadyNotify()
+        } else if (deviceCatalog.lastAddress().isBlank()) {
+            // Every probe would fail the same way; say so once instead of every 30 s.
+            showMessage(getString(R.string.status_no_remembered_adapter_yet))
+        } else {
+            if (!hasNotificationPermission()) requestNotificationPermission()
+            troubleshooter.scheduleAdapterReadyNotify(minutes)
+        }
+        store.onSettings { it.copy(adapterWaitMins = minutes) }
+        publishAdapterWait()
+    }
+
+    private fun publishAdapterWait() {
+        val waiting = troubleshooter.isAdapterReadyScheduled()
+        store.onSettings { it.copy(waitingForAdapter = waiting) }
+    }
+
+    private fun backUp(passphrase: String?) {
+        if (!ensureLocalStore()) return
+        if (passphrase == null) backups.launchShare() else backups.launchEncryptedShare(passphrase)
+    }
+
+    private fun restore(passphrase: String?) {
+        when (ComposeDataTools.restoreGate(isLoggingActive(), ClassicDashboardPresence.isAlive())) {
+            ComposeDataTools.RestoreGate.STOP_LOGGING ->
+                showMessage(getString(R.string.status_stop_logging_before_restore))
+            ComposeDataTools.RestoreGate.USE_CLASSIC -> {
+                showMessage(getString(R.string.compose_restore_use_classic))
+                openClassicDashboard()
+            }
+            ComposeDataTools.RestoreGate.OK ->
+                if (passphrase ==
+                    null
+                ) {
+                    backups.launchRestorePicker()
+                } else {
+                    backups.launchEncryptedRestorePicker(passphrase)
+                }
+        }
+    }
+
+    private fun exportTrips() {
+        if (!ensureLocalStore() || !exportInFlight.compareAndSet(false, true)) return
+        store.onSettings { it.copy(dataTaskLabel = getString(R.string.compose_export_running)) }
+        try {
+            backgroundExecutor.execute {
+                val result = MainActivityUtils.parseJson(tripExports.exportAllTrips())
+                exportInFlight.set(false)
+                runOnUiThread {
+                    store.onSettings { it.copy(dataTaskLabel = null) }
+                    if (!result.optBoolean("ok", false)) {
+                        result.optString("message", "").ifBlank { null }?.let(::showMessage)
+                    }
+                }
+            }
+        } catch (ex: RejectedExecutionException) {
+            Log.w(AppPrefs.LOG_TAG, "trip export not started", ex)
+            exportInFlight.set(false)
+            store.onSettings { it.copy(dataTaskLabel = null) }
+        }
+    }
+
+    /** Opens the database for a data tool; false (with a message) when it can't be opened. */
+    private fun ensureLocalStore(): Boolean {
+        if (localStore?.isOpen == true) return true
+        return try {
+            localStore = ObdLocalStore(this)
+            true
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "local store open failed", ex)
+            showMessage(getString(R.string.compose_storage_unavailable))
+            false
+        }
+    }
+
+    private fun closeLocalStore() {
+        val open = localStore ?: return
+        localStore = null
+        try {
+            open.close()
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "local store close failed", ex)
+        }
+    }
+
+    // ===== TroubleshooterHost / BackupHost / TripExportHost =================================
+
+    override fun requireDeviceCatalog(): DeviceCatalog = deviceCatalog
+
+    override fun rememberDevice(
+        address: String?,
+        name: String?,
+    ) {
+        deviceCatalog.remember(address, name)
+    }
+
+    override fun isLoggingActive(): Boolean = loggingProbe()
+
+    /** The native screens have no status line for tool results, so each one is a toast. */
+    override fun publishStatus(
+        state: String?,
+        detail: String?,
+        blocked: Boolean,
+    ) {
+        detail?.takeIf { it.isNotBlank() }?.let(::showMessage)
+    }
+
+    override fun publishRestoreProgress(
+        visible: Boolean,
+        busy: Boolean,
+        title: String?,
+        detail: String?,
+        tone: String?,
+        phase: String?,
+        bytesDone: Long,
+        bytesTotal: Long,
+        rowsDone: Long,
+        rowsTotal: Long,
+        percent: Int,
+        etaSeconds: Long,
+        operation: String?,
+    ) {
+        val label = ComposeDataTools.progressLabel(visible, busy, title, detail, percent)
+        store.onSettings { it.copy(dataTaskLabel = label) }
+    }
+
+    override fun publishDashboardPayload(
+        functionName: String,
+        jsonPayload: String?,
+    ) {
+        // The backup receipt updates the "Last backup" line; the rest only matter to the WebView.
+        if (functionName == BACKUP_RECEIPT) refreshSettings()
+    }
+
+    override fun publishDeviceList() = Unit
+
+    override fun publishStorageSummary() = Unit
+
+    override fun getStorageSummaryJson(): String = DashboardStorageReader { localStore }.storageSummaryJson()
+
+    override fun launchRestoreFilePicker(intent: Intent) {
+        restorePicker.launch(intent)
+    }
+
+    private companion object {
+        const val BACKUP_RECEIPT = "setBackupReceipt"
     }
 }

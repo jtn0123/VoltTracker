@@ -45,20 +45,28 @@ class SettingsPagesScreenshotTest(
                 Box(Modifier.fillMaxSize().background(VoltColors.bg)) { SettingsScreen(SAMPLE, initialPage = page) }
             }
         }
-        // The Costs page with its inline number editor open under the home rate.
-        if (editing) compose.onNodeWithText("Home electricity rate").performClick()
+        // Costs with its number editor open under the home rate; Data with the backup passphrase step.
+        if (editing) compose.onNodeWithText(EDIT_TARGETS.getValue(page)).performClick()
         val name = page.name.lowercase() + if (editing) "-editing" else ""
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/settings-$name-${appearance.key}.png")
     }
 
     companion object {
-        private val SAMPLE = SettingsUiState.demo.copy(publicRate = 0.42, notifyPackTempHigh = true)
+        private val SAMPLE =
+            SettingsUiState.demo.copy(
+                publicRate = 0.42,
+                notifyPackTempHigh = true,
+                lastBackupLabel = "Last backup Sep 27, 2026, 9:40 PM · 42 trips",
+            )
+
+        private val EDIT_TARGETS = mapOf(SettingsPage.COSTS to "Home electricity rate", SettingsPage.DATA to "Back up")
 
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-{1}-editing={2}")
         fun cases(): List<Array<Any>> =
-            (SettingsPage.entries.map { it to false } + (SettingsPage.COSTS to true)).flatMap { (page, editing) ->
-                listOf(AppearanceMode.DARK, AppearanceMode.LIGHT).map { arrayOf<Any>(page, it, editing) }
-            }
+            (SettingsPage.entries.map { it to false } + EDIT_TARGETS.keys.map { it to true })
+                .flatMap { (page, editing) ->
+                    listOf(AppearanceMode.DARK, AppearanceMode.LIGHT).map { arrayOf<Any>(page, it, editing) }
+                }
     }
 }

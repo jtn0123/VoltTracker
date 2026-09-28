@@ -76,6 +76,9 @@
     <!-- Event notifications (EventNotifier / EventNotificationDecider — M1) -->
     <string name="notification_events_channel_name">Volt Tracker alerts</string>
     <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, battery threshold, and overdue-maintenance alerts.</string>
+    <string name="compose_restore_use_classic">The classic dashboard is open, so restore from there: Settings → Data → Restore.</string>
+    <string name="compose_export_running">Exporting trips…</string>
+    <string name="compose_storage_unavailable">Local storage isn\'t ready. Try again in a moment.</string>
     <string name="compose_notifications_denied">Alerts are saved, but Android notifications are off for Volt Tracker. Turn them on in system settings to receive them.</string>
     <string name="notification_charge_complete_title">Charge complete</string>
     <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>

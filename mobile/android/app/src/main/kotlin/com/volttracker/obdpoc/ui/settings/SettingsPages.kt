@@ -31,6 +31,7 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 internal fun ConnectionPage(
     state: SettingsUiState,
     onChange: (SettingChange) -> Unit,
+    onCommand: (SettingsCommand) -> Unit,
 ) {
     VoltPanel {
         SettingRow(label = "Adapter", subtitle = "Bluetooth OBD-II") { Value(state.adapterLabel) }
@@ -39,13 +40,25 @@ internal fun ConnectionPage(
             onChange(SettingChange.AutoConnect(it))
         }
         VoltListDivider()
-        SettingRow(label = "Wait for adapter", subtitle = "Keep checking in the background") {
-            Value(state.backgroundWaitLabel)
-        }
+        ToggleRow(
+            label = "Wait for adapter",
+            subtitle =
+                if (state.waitingForAdapter) {
+                    "Checking every 30 s for ${state.adapterWaitLabel} · notifies when ready"
+                } else {
+                    "Keep checking in the background for ${state.adapterWaitLabel}"
+                },
+            on = state.waitingForAdapter,
+        ) { onCommand(SettingsCommand.WaitForAdapter(it, state.adapterWaitMins)) }
+        ThresholdChoice(
+            choices = SettingsUiState.ADAPTER_WAIT_CHOICES,
+            selected = state.adapterWaitMins,
+            label = { "$it min" },
+        ) { onCommand(SettingsCommand.WaitForAdapter(state.waitingForAdapter, it)) }
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoltButton(text = "Test connection", onClick = {})
-            VoltButton(text = "Send diagnostics", onClick = {})
+            VoltButton(text = "Test connection", onClick = { onCommand(SettingsCommand.TestConnection) })
+            VoltButton(text = "Send diagnostics", onClick = { onCommand(SettingsCommand.SendDiagnostics) })
         }
     }
 }
@@ -269,19 +282,51 @@ private fun ThresholdChoice(
     )
 }
 
+/** Which passphrase step the Data page has open. */
+private enum class DataStep { BACK_UP, RESTORE }
+
 @Composable
-internal fun DataPage(state: SettingsUiState) {
+internal fun DataPage(
+    state: SettingsUiState,
+    onCommand: (SettingsCommand) -> Unit,
+) {
+    var step by rememberSaveable { mutableStateOf<DataStep?>(null) }
     VoltPanel {
         Note(state.lastBackupLabel)
+        state.dataTaskLabel?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(text = it, style = VoltType.caption, color = VoltColors.accent)
+        }
         Spacer(Modifier.height(14.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            VoltButton(text = "Back up", accent = true, onClick = {})
-            VoltButton(text = "Restore", onClick = {})
-            VoltButton(text = "Export", onClick = {})
+            VoltButton(text = "Back up", accent = true, onClick = { step = DataStep.BACK_UP })
+            VoltButton(text = "Restore", onClick = { step = DataStep.RESTORE })
+            VoltButton(text = "Export", onClick = { onCommand(SettingsCommand.ExportTrips) })
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(12.dp))
+        when (step) {
+            DataStep.BACK_UP ->
+                PassphraseEditor(
+                    hint = "Add a passphrase (8+ characters) to encrypt the backup, or leave it blank.",
+                    confirmLabel = "Back up now",
+                    onDismiss = { step = null },
+                ) {
+                    onCommand(SettingsCommand.BackUp(it))
+                    step = null
+                }
+            DataStep.RESTORE ->
+                PassphraseEditor(
+                    hint = "Only needed if the backup was encrypted. You'll pick the file next.",
+                    confirmLabel = "Choose file",
+                    onDismiss = { step = null },
+                ) {
+                    onCommand(SettingsCommand.Restore(it))
+                    step = null
+                }
+            null -> Unit
+        }
         Text(
-            text = "Backups are encrypted. All data stays on this phone.",
+            text = "All data stays on this phone until you share it. Export saves every trip as a CSV.",
             style = VoltType.caption,
             color = VoltColors.textTertiary,
         )

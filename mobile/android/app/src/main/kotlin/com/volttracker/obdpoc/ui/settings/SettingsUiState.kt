@@ -20,7 +20,10 @@ data class SettingsUiState(
     // Connection
     val adapterLabel: String = "--",
     val autoConnect: Boolean = false,
-    val backgroundWaitLabel: String = "10 min",
+    /** A "wait for adapter" schedule is probing in the background. */
+    val waitingForAdapter: Boolean = false,
+    /** How long "wait for adapter" keeps checking once armed. */
+    val adapterWaitMins: Int = 10,
     // Alerts
     val notifyChargingComplete: Boolean = true,
     val notifyNewCode: Boolean = true,
@@ -51,7 +54,9 @@ data class SettingsUiState(
     /** Drive's Focus view shows the energy-flow card (opt-in). */
     val driveEnergyFlow: Boolean = false,
     // Data
-    val lastBackupLabel: String = "No backup recorded on this phone yet",
+    val lastBackupLabel: String = NO_BACKUP,
+    /** The running (or just finished) backup / restore / export, e.g. "Preparing backup · 42%". */
+    val dataTaskLabel: String? = null,
     val versionLabel: String = "",
     // App updates (GitHub Releases). Null status = no check yet this session.
     val updateStatusLabel: String? = null,
@@ -88,6 +93,8 @@ data class SettingsUiState(
 
     val packTempHighLabel: String get() = "above ${temperatureLabel(packTempHighC)}"
 
+    val adapterWaitLabel: String get() = "$adapterWaitMins min"
+
     val textSizeLabel: String get() = TEXT_SIZES.firstOrNull { it.first == fontScale }?.second ?: "Default"
 
     /** A whole-degree Celsius threshold in the chosen units. */
@@ -96,11 +103,15 @@ data class SettingsUiState(
 
     companion object {
         const val NOT_SET = "not set"
+        const val NO_BACKUP = "No backup recorded on this phone yet"
 
         // The choices the classic dashboard offers for these alerts (alerts.html).
         val BATTERY_LOW_CHOICES = listOf(10, 15, 20, 30)
         val PACK_TEMP_CHOICES = listOf(40, 45, 50, 55)
         val CHARGE_TARGET_PRESETS = listOf(80, 90, 100)
+
+        // The classic dashboard's "notify when ready" durations (connection-tools.html).
+        val ADAPTER_WAIT_CHOICES = listOf(5, 10, 15, 30)
         val TEXT_SIZES = listOf(1.0 to "Default", 1.25 to "Large", 1.5 to "Largest")
 
         private const val F_PER_C = 9.0 / 5.0

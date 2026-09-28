@@ -14,12 +14,12 @@ import org.json.JSONObject
  *
  * Holds the body off the `MainActivity` class surface (mirrors `EventNotificationHostDelegate`): the
  * host keeps a single instance and forwards [exportAndShare] in one line. Built around the
- * [DashboardHost] seam (store + UI hops + status) plus a [Context] for the file write / chooser, so
+ * [TripExportHost] seam (store + UI hops + status) plus a [Context] for the file write / chooser, so
  * it stays exercisable without a fully constructed Activity.
  */
 class TripExportController(
     private val context: Context,
-    private val host: DashboardHost,
+    private val host: TripExportHost,
 ) {
     /**
      * Reads the route for [routeKey], writes it as [formatKey] (`gpx`/`csv`), records the export,
@@ -73,6 +73,9 @@ class TripExportController(
         launchShare(shareIntent)
         return success(export)
     }
+
+    /** Every logged trip as one combined CSV, via the share sheet (the native Settings → Export). */
+    fun exportAllTrips(): String = exportAllTripsAndShare()
 
     /**
      * Bulk all-trips export (M6): reads every logged trip's route, serializes them into one combined
