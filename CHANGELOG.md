@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.48.0 (2026-09-28)
+
+### ✳️ New
+
+- **charge**: Redesign charge tab with session curve and logged sessions
+  ([#95](https://github.com/jtn0123/VoltTracker/pull/95),
+  [`005045d`](https://github.com/jtn0123/VoltTracker/commit/005045d249a9a8a6414c48bbe1c3ab40a5d5eda6))
+
+- **demo**: Drive arc with regen, a gas stretch and a park
+  ([#94](https://github.com/jtn0123/VoltTracker/pull/94),
+  [`c26c611`](https://github.com/jtn0123/VoltTracker/commit/c26c6119fbddcd89e880678171d7f814144ca533))
+
+- **settings**: Wire compose settings tools through shared helpers
+  ([#92](https://github.com/jtn0123/VoltTracker/pull/92),
+  [`236209a`](https://github.com/jtn0123/VoltTracker/commit/236209abc119c609ed896467061531b35d7aacca))
+
+- **ui**: Oled Black (5 accents), Saddle Leather and Latte themes
+  ([#93](https://github.com/jtn0123/VoltTracker/pull/93),
+  [`520beec`](https://github.com/jtn0123/VoltTracker/commit/520beec243ca904b63813d913ca10701d3647515))
+
+
 ## v0.47.0 (2026-09-28)
 
 ### ✳️ New
