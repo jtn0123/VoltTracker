@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.car.CarUiState
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -16,6 +17,7 @@ data class VoltAppUiState(
     val charge: ChargeUiState = ChargeUiState(),
     val trips: TripsUiState = TripsUiState(),
     val insights: InsightsUiState = InsightsUiState(),
+    val car: CarUiState = CarUiState(),
     val diag: DiagUiState = DiagUiState(),
     val settings: SettingsUiState = SettingsUiState(),
 )

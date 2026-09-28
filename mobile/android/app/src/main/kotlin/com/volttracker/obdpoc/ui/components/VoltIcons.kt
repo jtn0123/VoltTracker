@@ -57,6 +57,23 @@ object VoltIcons {
     val Doc by lazy { icon("M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z", "M14 3v6h6M8 13h8M8 17h5") }
     val Refresh by lazy { icon("M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7") }
     val Lock by lazy { icon(rect(5f, 11f, 14f, 10f, 2.5f), "M8 11V8a4 4 0 0 1 8 0v3") }
+    val Unlock by lazy { icon(rect(5f, 11f, 14f, 10f, 2.5f), "M8 11V8a4 4 0 0 1 7.8-1.2") }
+    val Power by lazy { icon("M12 3v8", "M6.3 6.8a8 8 0 1 0 11.4 0") }
+    val Horn by lazy { icon("M4 10v4h3l6 4V6l-6 4z", "M16.5 9a4 4 0 0 1 0 6M19 6.5a8 8 0 0 1 0 11") }
+    val Lights by lazy {
+        icon("M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z")
+    }
+    val Fan by lazy {
+        icon(
+            circle(12f, 12f, 1.5f),
+            "M12 10.5C12 6 13 3 15.5 3S19 6 12 10.5zM13.5 12c4.5 0 7.5 1 7.5 3.5S18 19 13.5 12z",
+            "M12 13.5c0 4.5-1 7.5-3.5 7.5S5 18 12 13.5zM10.5 12C6 12 3 11 3 8.5S6 5 10.5 12z",
+        )
+    }
+    val Check by lazy { icon("M5 12.5l4.5 4.5L19 7.5") }
+    val Scan by lazy {
+        icon("M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M4 12h16")
+    }
     val Plug by lazy { icon("M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4") }
     val Battery by lazy { icon(rect(3f, 7f, 16f, 10f, 2.5f), "M22 11v2") }
     val Motor by lazy {

@@ -19,9 +19,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import com.volttracker.obdpoc.ui.car.CarActions
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
-import com.volttracker.obdpoc.ui.car.cellBalanceLabel
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.VoltNavActions
@@ -151,7 +151,20 @@ private fun VoltTabContent(
         VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
-        VoltTab.CAR -> CarScreen(diag = state.diag, cellBalanceLabel = cellBalanceLabel(state.drive.cellSpreadMv))
+        VoltTab.CAR ->
+            CarScreen(
+                drive = state.drive,
+                car = state.car,
+                diag = state.diag,
+                sohPct = state.charge.sohPct,
+                demo = state.settings.demoActive,
+                actions =
+                    CarActions(
+                        onControl = actions.onCarControl,
+                        onEnableControls = { actions.onCarControlsEnabled(true) },
+                        onDisableControls = { actions.onCarControlsEnabled(false) },
+                    ),
+            )
     }
 }
 

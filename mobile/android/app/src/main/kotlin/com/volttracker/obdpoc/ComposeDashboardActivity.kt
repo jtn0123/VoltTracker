@@ -76,6 +76,7 @@ class ComposeDashboardActivity :
     private lateinit var troubleshooter: TroubleshooterBridge<ComposeDashboardActivity>
     private lateinit var backups: BackupController<ComposeDashboardActivity>
     private val tripExports by lazy { TripExportController(applicationContext, this) }
+    private val carControls by lazy { ComposeCarControls(this, { prefs }, store, ::showMessage) }
 
     // Process-scoped: survives configuration recreation (see UpdateCoordinator).
     private lateinit var updates: UpdateCoordinator
@@ -178,6 +179,8 @@ class ComposeDashboardActivity :
                         onSelectTrip = ::selectTrip,
                         onExportTrip = ::exportTrip,
                         onInsightsPeriod = ::selectInsightsPeriod,
+                        onCarControl = { carControls.request(it) },
+                        onCarControlsEnabled = { carControls.setEnabled(it) },
                     ),
             )
         }
@@ -198,6 +201,7 @@ class ComposeDashboardActivity :
         loadHistoryFor(shownView)
         // The classic dashboard may have changed a shared setting while this screen was away.
         refreshSettings()
+        carControls.refresh()
         experience.onResume()
         signalAppForeground(true)
         maybeAutoConnect()

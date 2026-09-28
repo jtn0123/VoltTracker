@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.settings
 
+import com.volttracker.obdpoc.ui.drive.TIRE_PLACARD_PSI
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.DarkStyle
 import com.volttracker.obdpoc.ui.theme.OledAccent
@@ -43,6 +44,8 @@ data class SettingsUiState(
     val gasMpg: Double? = null,
     val gasPrice: Double = 0.0,
     val chargeTargetPct: Int = 100,
+    /** The door-jamb tyre placard (cold, psi) the tyre readings are judged against. */
+    val tirePlacardPsi: Double = TIRE_PLACARD_PSI,
     // Display
     // Appearance: follow the system theme, or pin light/dark.
     val appearance: AppearanceMode = AppearanceMode.SYSTEM,
@@ -85,6 +88,15 @@ data class SettingsUiState(
 
     val unitsLabel: String get() = if (metricUnits) "Metric" else "Imperial"
 
+    /** "38 psi" / "262 kPa": the placard in the chosen units. */
+    val tirePlacardLabel: String
+        get() =
+            if (metricUnits) {
+                "${(tirePlacardPsi / PSI_PER_KPA).roundToInt()} kPa"
+            } else {
+                "${tirePlacardPsi.roundToInt()} psi"
+            }
+
     val homeRateLabel: String get() = rateLabel(homeRate, "kWh")
 
     val publicRateLabel: String get() = if (publicRate > 0.0) rateLabel(publicRate, "kWh") else "same as home"
@@ -121,6 +133,7 @@ data class SettingsUiState(
         val TEXT_SIZES = listOf(1.0 to "Default", 1.25 to "Large", 1.5 to "Largest")
 
         private const val F_PER_C = 9.0 / 5.0
+        private const val PSI_PER_KPA = 0.145038
         private const val F_OFFSET = 32.0
 
         /** "$0.12 / kWh", or [NOT_SET] for 0. */

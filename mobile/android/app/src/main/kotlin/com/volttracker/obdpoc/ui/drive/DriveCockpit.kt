@@ -70,7 +70,7 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
                 ).joinToString(" · ").ifEmpty { "Not reported" },
             )
         }
-        SmallCard("Tires psi", Modifier.weight(1f)) { TiresMini(state.tires) }
+        SmallCard("Tires psi", Modifier.weight(1f)) { TiresMini(state.tires, state.tirePlacardPsi) }
         SmallCard("Motors", Modifier.weight(1f)) {
             val a = if (state.phase == DrivePhase.DRIVE) state.motorAKw else 0.0
             val b = if (state.phase == DrivePhase.DRIVE) state.motorBKw else 0.0
@@ -541,7 +541,10 @@ private fun SmallCard(
 
 /** A tiny top-down car with each tyre tinted by its pressure (mockups `tiresMini`). */
 @Composable
-private fun TiresMini(tires: TirePressures?) {
+private fun TiresMini(
+    tires: TirePressures?,
+    placardPsi: Double,
+) {
     val pal = LocalVoltPalette.current
     Row(
         modifier = Modifier.padding(top = 3.dp),
@@ -567,7 +570,7 @@ private fun TiresMini(tires: TirePressures?) {
                 val color =
                     when {
                         psi == null -> pal.faint
-                        tireLow(psi) -> pal.warn
+                        tireLow(psi, placardPsi) -> pal.warn
                         else -> pal.ev
                     }
                 drawRoundRect(color, Offset(o.x * k, o.y * k), Size(5 * k, 10 * k), CornerRadius(2 * k))

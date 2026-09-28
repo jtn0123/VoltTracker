@@ -67,6 +67,11 @@ sealed interface SettingChange {
         val mpg: Double?,
     ) : SettingChange
 
+    /** The door-jamb tyre placard, in psi. */
+    data class TirePlacard(
+        val psi: Double,
+    ) : SettingChange
+
     data class ChargeTarget(
         val pct: Int,
     ) : SettingChange

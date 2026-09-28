@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc
 
 import android.content.SharedPreferences
+import androidx.core.content.edit
+import com.volttracker.obdpoc.ui.drive.TIRE_PLACARD_PSI
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearancePrefs
@@ -47,6 +49,7 @@ class ComposeSettingsStore(
             gasMpg = shared.mpg(),
             gasPrice = shared.gasPricePerGal(),
             chargeTargetPct = shared.chargeTargetSoc().roundToInt(),
+            tirePlacardPsi = tirePlacardPsi(prefs),
             appearance = AppearancePrefs.read(prefs),
             darkStyle = AppearancePrefs.readDarkStyle(prefs),
             accent = AppearancePrefs.readAccent(prefs),
@@ -81,6 +84,8 @@ class ComposeSettingsStore(
             is SettingChange.GasPrice -> shared.setGasPricePerGal(change.dollarsPerGal)
             is SettingChange.GasMpg -> shared.setMpg(change.mpg ?: 0.0)
             is SettingChange.ChargeTarget -> shared.setChargeTargetSoc(change.pct.toDouble())
+            is SettingChange.TirePlacard ->
+                prefs.edit { putFloat(PREF_TIRE_PLACARD_PSI, change.psi.coerceIn(PLACARD_RANGE).toFloat()) }
             is SettingChange.QuietLiveData -> shared.setQuietTelemetry(change.on)
             is SettingChange.TextSize -> shared.setFontScale(change.scale)
             is SettingChange.HighContrast -> shared.setHighContrast(change.on)
@@ -108,12 +113,24 @@ class ComposeSettingsStore(
         return true
     }
 
-    private companion object {
-        fun localDateTime(ms: Long): String =
+    companion object {
+        /** Compose-only: the door-jamb tyre placard (psi); the classic dashboard has no such setting. */
+        const val PREF_TIRE_PLACARD_PSI = "compose_tire_placard_psi"
+
+        /** Plausible passenger-car placards; anything outside is a typo, not a tyre. */
+        val PLACARD_RANGE = 20.0..60.0
+
+        fun tirePlacardPsi(prefs: SharedPreferences): Double =
+            prefs
+                .getFloat(PREF_TIRE_PLACARD_PSI, TIRE_PLACARD_PSI.toFloat())
+                .toDouble()
+                .takeIf { it in PLACARD_RANGE } ?: TIRE_PLACARD_PSI
+
+        private fun localDateTime(ms: Long): String =
             DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(ms))
 
         /** A stored scale outside the offered sizes snaps to the nearest one. */
-        fun nearestTextSize(scale: Double): Double =
+        private fun nearestTextSize(scale: Double): Double =
             SharedDisplayPrefs.FONT_SCALES.minBy { kotlin.math.abs(it - scale) }
     }
 }
