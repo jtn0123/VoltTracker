@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.46.0 (2026-09-28)
+
+### ✳️ New
+
+- **ui**: Drive redesign — Arc ring (Focus) + Cockpit (Detailed), live-wired
+  ([#90](https://github.com/jtn0123/VoltTracker/pull/90),
+  [`e9ffc5c`](https://github.com/jtn0123/VoltTracker/commit/e9ffc5c31ac019bf49166a40af339469aada4f16))
+
+
 ## v0.45.1 (2026-09-28)
 
 ### 🔺 Fix
