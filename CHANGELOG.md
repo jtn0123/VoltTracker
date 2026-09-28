@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.52.0 (2026-09-28)
+
+### ✳️ New
+
+- **map**: Replace the broken CARTO basemap with Stadia Maps
+  ([#99](https://github.com/jtn0123/VoltTracker/pull/99),
+  [`6bd32b8`](https://github.com/jtn0123/VoltTracker/commit/6bd32b888777c984720ab73011eef7ee5f739acb))
+
+
 ## v0.51.0 (2026-09-28)
 
 ### ✳️ New
