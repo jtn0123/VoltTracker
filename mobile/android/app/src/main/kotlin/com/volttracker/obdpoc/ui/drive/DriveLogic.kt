@@ -140,6 +140,10 @@ private const val MAX_ETA_MS = 24L * 3_600_000L
 private const val NEARLY_FULL_KWH = 0.05
 private const val NEARLY_FULL_SOC_GAP = 1.0
 
+/** Usable pack energy (kWh) scaled by state-of-health when the car reports a plausible one. */
+fun usableKwh(sohPct: Double?): Double =
+    if (sohPct != null && sohPct > 0 && sohPct <= 100) VOLT_USABLE_KWH * sohPct / 100 else VOLT_USABLE_KWH
+
 /**
  * Time to [targetSoc] at the current charger power — the same arithmetic and gates as the
  * WebView Charge card: usable energy scaled by state-of-health, no estimate under a real
@@ -153,7 +157,7 @@ fun chargeEta(
 ): ChargeEta? {
     if (socPercent == null || chargerKw == null || chargerKw < MIN_CHARGE_KW) return null
     if (socPercent < 0 || socPercent >= targetSoc) return null
-    val usable = if (sohPct != null && sohPct > 0 && sohPct <= 100) VOLT_USABLE_KWH * sohPct / 100 else VOLT_USABLE_KWH
+    val usable = usableKwh(sohPct)
     val remainingKwh = (usable * (targetSoc - socPercent) / 100).coerceAtLeast(0.0)
     if (remainingKwh < NEARLY_FULL_KWH || targetSoc - socPercent <= NEARLY_FULL_SOC_GAP) return ChargeEta.NearlyFull
     val ms = (remainingKwh / chargerKw * 3_600_000).toLong()

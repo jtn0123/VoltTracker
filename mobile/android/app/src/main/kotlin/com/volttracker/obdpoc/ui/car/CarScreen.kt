@@ -3,7 +3,6 @@ package com.volttracker.obdpoc.ui.car
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.NavBadge
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -23,7 +22,8 @@ import com.volttracker.obdpoc.ui.theme.VoltTheme
 @Composable
 fun CarScreen(
     diag: DiagUiState,
-    charge: ChargeUiState,
+    /** "Δ 8 mV across cell groups", or null before the first battery read. */
+    cellBalanceLabel: String?,
     modifier: Modifier = Modifier,
 ) {
     val nav = LocalVoltNav.current
@@ -40,7 +40,7 @@ fun CarScreen(
             VoltListRow(
                 icon = VoltIcons.Cells,
                 title = "HV battery",
-                subtitle = charge.cellBalanceLabel ?: "Cell balance appears after a battery read",
+                subtitle = cellBalanceLabel ?: "Cell balance appears after a battery read",
                 tone = PillTone.EV,
             )
         }
@@ -78,5 +78,8 @@ fun carBadge(diag: DiagUiState): NavBadge? =
 @Composable
 @Preview(widthDp = 412, heightDp = 915)
 private fun CarScreenPreview() {
-    VoltTheme { CarScreen(DiagUiState.demo, ChargeUiState.demo) }
+    VoltTheme { CarScreen(DiagUiState.demo, cellBalanceLabel = cellBalanceLabel(8.0)) }
 }
+
+/** The HV battery row's cell-balance line from the live cell spread; null before a read. */
+fun cellBalanceLabel(spreadMv: Double?): String? = spreadMv?.let { "Δ ${it.toInt()} mV across cell groups" }

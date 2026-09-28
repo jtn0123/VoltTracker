@@ -2,6 +2,8 @@ package com.volttracker.obdpoc.ui.live
 
 import com.volttracker.obdpoc.VoltGear
 import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.charge.ChargeSession
+import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -26,7 +28,9 @@ import java.util.Locale
  * typed on [com.volttracker.obdpoc.TelemetryPayload]; enhanced readings ride in
  * extras under the same names the JS consumes.
  */
-class LiveUiStateStore {
+class LiveUiStateStore(
+    private val nowMs: () -> Long = System::currentTimeMillis,
+) {
     private val _state = MutableStateFlow(VoltAppUiState())
     val state: StateFlow<VoltAppUiState> = _state
 
@@ -37,6 +41,8 @@ class LiveUiStateStore {
     private var trackedPhase = DrivePhase.PARKED
     private val socTrace = ArrayDeque<Float>()
     private var socTraceLastSampleAt = 0L
+    private var loggedCharges: List<ChargeSession> = emptyList()
+    private var demoCharges: List<ChargeSession>? = null
 
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
@@ -48,28 +54,29 @@ class LiveUiStateStore {
         // A fresh link starts a fresh session: the trip and charge figures restart with it.
         if (connected && !_state.value.drive.connected) session.reset()
         _state.value =
-            _state.value.let { s ->
-                s.copy(
-                    drive =
-                        s.drive.copy(
-                            connected = connected,
-                            connecting = transitioning,
-                            statusLabel = label,
-                            adapterLabel = adapter,
-                        ),
-                    charge = s.charge.copy(connected = connected, statusLabel = label),
-                    map = s.map.copy(connected = connected, statusLabel = label),
-                    insights = s.insights.copy(connected = connected, statusLabel = label),
-                    diag = s.diag.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
-                    settings =
-                        s.settings.copy(
-                            connected = connected,
-                            statusLabel = label,
-                            adapterLabel = adapter,
-                            demoActive = demoAfterStatus(stateName, s.settings.demoActive),
-                        ),
-                )
-            }
+            _state.value
+                .let { s ->
+                    s.copy(
+                        drive =
+                            s.drive.copy(
+                                connected = connected,
+                                connecting = transitioning,
+                                statusLabel = label,
+                                adapterLabel = adapter,
+                            ),
+                        charge = s.charge.copy(connected = connected, statusLabel = label),
+                        map = s.map.copy(connected = connected, statusLabel = label),
+                        insights = s.insights.copy(connected = connected, statusLabel = label),
+                        diag = s.diag.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
+                        settings =
+                            s.settings.copy(
+                                connected = connected,
+                                statusLabel = label,
+                                adapterLabel = adapter,
+                                demoActive = demoAfterStatus(stateName, s.settings.demoActive),
+                            ),
+                    )
+                }.let(::withChargeHistory)
     }
 
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
@@ -78,7 +85,36 @@ class LiveUiStateStore {
         val next = withSample(_state.value, payload)
         val demo = payload.optString("source", "") == DEMO_SOURCE
         _state.value =
-            if (next.settings.demoActive == demo) next else next.copy(settings = next.settings.copy(demoActive = demo))
+            withChargeHistory(
+                if (next.settings.demoActive ==
+                    demo
+                ) {
+                    next
+                } else {
+                    next.copy(settings = next.settings.copy(demoActive = demo))
+                },
+            )
+    }
+
+    /** Logged charges read from the store (newest first), for the Charge tab's Recent sessions. */
+    fun onChargeHistory(sessions: List<ChargeSession>) {
+        loggedCharges = sessions
+        _state.value = withChargeHistory(_state.value)
+    }
+
+    /**
+     * The Charge tab lists the logged charges — or, while the demo runs, sample ones: demo data
+     * never touches real history, so the real list would be empty or out of place.
+     */
+    private fun withChargeHistory(s: VoltAppUiState): VoltAppUiState {
+        val sessions =
+            if (s.settings.demoActive) {
+                demoCharges ?: ChargeUiState.demoSessions(nowMs()).also { demoCharges = it }
+            } else {
+                demoCharges = null
+                loggedCharges
+            }
+        return if (s.charge.sessions == sessions) s else s.copy(charge = s.charge.copy(sessions = sessions))
     }
 
     // The demo session reports "demo" while starting, then "connected" like a real link; its
@@ -118,9 +154,34 @@ class LiveUiStateStore {
         t: JSONObject,
     ): VoltAppUiState {
         val drive = mapDrive(s.drive, t)
+        val charging = drive.phase == DrivePhase.CHARGING
         return s.copy(
             drive = drive,
-            charge = s.charge.copy(socPercent = drive.socPercent, evRangeMiles = drive.evRangeMiles),
+            charge =
+                s.charge.copy(
+                    charging = charging,
+                    socPercent = drive.socPercent,
+                    displayedSocPercent = drive.displayedSocPercent,
+                    evRangeMiles = drive.evRangeMiles,
+                    sohPct = optDouble(t, "sohPct") ?: s.charge.sohPct,
+                    chargeKw = drive.chargeKw,
+                    acVolts = drive.chargeAcVolts,
+                    acAmps = drive.chargeAcAmps,
+                    level = drive.chargeLevel,
+                    fromSoc = drive.chargeFromSoc,
+                    addedKwh = drive.chargeAddedKwh,
+                    startedAtMs = drive.chargeStartedAtMs,
+                    sampleAtMs = drive.sampleAtMs,
+                    packTempF =
+                        if (optDouble(t, "batteryTemp") != null ||
+                            s.charge.packTempF != null
+                        ) {
+                            drive.packTempF
+                        } else {
+                            null
+                        },
+                    socPoints = if (charging) session.chargeSocPoints else emptyList(),
+                ),
         )
     }
 
@@ -154,6 +215,7 @@ class LiveUiStateStore {
                 powerKw = optDouble(t, "powerKw"),
                 chargerKw = optDouble(t, "chargerPowerKw"),
                 soc = optDouble(t, "soc"),
+                sohPct = optDouble(t, "sohPct"),
                 lat = optDouble(t, "latitude"),
                 lon = optDouble(t, "longitude"),
             ),
@@ -393,6 +455,12 @@ class LiveUiStateStore {
                 s.copy(
                     settings = settings,
                     drive = s.drive.copy(detailed = settings.driveDetailed, electricityRate = settings.homeRate),
+                    charge =
+                        s.charge.copy(
+                            homeRate = settings.homeRate,
+                            publicRate = settings.publicRate,
+                            targetSoc = settings.chargeTargetPct,
+                        ),
                 )
             }
     }

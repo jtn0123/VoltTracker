@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.ui.live.DriveSessionTracker.Sample
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** The running trip/charge figures the Drive tiles show, folded from live samples. */
@@ -105,20 +106,50 @@ class DriveSessionTrackerTest {
     }
 
     @Test
-    fun chargingRecordsTheStartSocAndTheEnergyAdded() {
+    fun chargingRecordsTheStartSocAndTheEnergyAddedFromTheSocGained() {
         val tracker = DriveSessionTracker()
-        tracker.apply(Sample(atMs = 2_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6, soc = 41.0))
+        tracker.apply(Sample(atMs = 2_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6, soc = 41.0, sohPct = 90.0))
         for (i in 1..10) {
             tracker.apply(
-                Sample(atMs = 2_000L + i * 10_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6, soc = 41.5),
+                Sample(atMs = 2_000L + i * 10_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6, soc = 41.0 + i * 0.5),
             )
         }
         assertEquals(41.0, tracker.chargeFromSoc ?: 0.0, 0.0)
         assertEquals(2_000L, tracker.chargeStartedAtMs)
-        // 3.6 kW for 100 s = 0.1 kWh.
-        assertEquals(0.1, tracker.chargeAddedKwh, 1e-9)
+        // 5 % of a 14 kWh pack at 90 % health = 0.63 kWh — agrees with the SOC on screen.
+        assertEquals(0.63, tracker.chargeAddedKwh, 1e-9)
         // Pack power while plugged in is never counted as driving energy.
         assertEquals(0.0, tracker.energyKwh, 0.0)
+    }
+
+    @Test
+    fun aCompressedDemoChargeStillShowsTheEnergyItsSocGainImplies() {
+        // Regression: the demo climbs ~3.6 % in 30 s at 3.6 kW; integrating the charger power
+        // gave 0.03 kWh ("0.0 kWh · $0.00") while the SOC visibly rose.
+        val tracker = DriveSessionTracker()
+        for (s in 0..29) {
+            tracker.apply(
+                Sample(
+                    atMs = 1_000L + s * 1000L,
+                    phase = DrivePhase.CHARGING,
+                    chargerKw = 3.6,
+                    soc =
+                        74.2 + s * 0.12,
+                ),
+            )
+        }
+        assertEquals(29 * 0.12 / 100 * 14.0, tracker.chargeAddedKwh, 1e-9)
+        assertTrue(tracker.chargeAddedKwh >= 0.45)
+    }
+
+    @Test
+    fun withoutSocReadingsTheAddedEnergyIntegratesChargerPower() {
+        val tracker = DriveSessionTracker()
+        for (i in 0..10) {
+            tracker.apply(Sample(atMs = 2_000L + i * 10_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6))
+        }
+        // 3.6 kW for 100 s = 0.1 kWh.
+        assertEquals(0.1, tracker.chargeAddedKwh, 1e-9)
     }
 
     @Test
@@ -135,5 +166,41 @@ class DriveSessionTrackerTest {
         // After a reset, an earlier timestamp is accepted again (a new adapter session).
         tracker.apply(drive(atS = 1, lat = 42.0))
         assertEquals(1_000L, tracker.driveStartedAtMs)
+    }
+
+    @Test
+    fun aChargeRecordsItsSocCurveAndTheNextChargeStartsFresh() {
+        val tracker = DriveSessionTracker()
+        for (s in 0..60 step 5) {
+            tracker.apply(
+                Sample(
+                    atMs = 1_000L + s * 1000L,
+                    phase = DrivePhase.CHARGING,
+                    chargerKw = 3.6,
+                    soc =
+                        40.0 + s / 10.0,
+                ),
+            )
+        }
+        // A reading every 15 s: 0, 15, 30, 45, 60.
+        assertEquals(listOf(40f, 41.5f, 43f, 44.5f, 46f), tracker.chargeSocPoints.map { it.soc })
+        tracker.apply(Sample(atMs = 100_000L, phase = DrivePhase.PARKED))
+        tracker.apply(Sample(atMs = 101_000L, phase = DrivePhase.CHARGING, chargerKw = 3.6, soc = 50.0))
+        assertEquals(listOf(50f), tracker.chargeSocPoints.map { it.soc })
+        tracker.reset()
+        assertEquals(0, tracker.chargeSocPoints.size)
+    }
+
+    @Test
+    fun aLongChargeThinsItsCurveInsteadOfGrowingWithoutBound() {
+        val tracker = DriveSessionTracker()
+        // Ten hours at 1 Hz.
+        for (s in 0..36_000) {
+            tracker.apply(Sample(atMs = 1_000L + s * 1000L, phase = DrivePhase.CHARGING, soc = s / 400.0))
+        }
+        val points = tracker.chargeSocPoints
+        assertTrue(points.size in 100..240)
+        assertEquals(1_000L, points.first().atMs)
+        assertTrue(points.zipWithNext().all { (a, b) -> b.atMs > a.atMs })
     }
 }

@@ -57,7 +57,7 @@ class VoltAppNavigationTest {
         compose.onNodeWithText("▶ Play").assertIsDisplayed()
 
         tab("Charge").performClick()
-        compose.onNodeWithText("RECENT CHARGES").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("RECENT SESSIONS").performScrollTo().assertIsDisplayed()
 
         tab("Insights").performClick()
         compose.onNodeWithText("MI / KWH LIFETIME").performScrollTo().assertIsDisplayed()
@@ -102,7 +102,7 @@ class VoltAppNavigationTest {
 
         compose.onNodeWithContentDescription("Settings").performClick()
         tab("Charge").performClick()
-        compose.onNodeWithText("RECENT CHARGES").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("RECENT SESSIONS").performScrollTo().assertIsDisplayed()
     }
 
     @Test

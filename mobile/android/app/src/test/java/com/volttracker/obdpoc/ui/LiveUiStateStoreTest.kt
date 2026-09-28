@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.charge.ChargeSession
+import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import org.json.JSONObject
@@ -356,5 +358,75 @@ class LiveUiStateStoreTest {
 
         assertFalse(s.drive.connected)
         assertEquals("Connecting…", s.drive.statusLabel)
+    }
+
+    @Test
+    fun chargingSamplesFeedTheChargeTab() {
+        val store = LiveUiStateStore()
+        val plugged: JSONObject.() -> Unit = {
+            put("vehicleState", "charging")
+            put("speedKph", 0)
+            put("chargerPowerKw", 3.6)
+            put("chargerAcVoltage", 240)
+            put("chargerAcCurrentA", 15)
+            put("sohPct", 91)
+        }
+        store.onTelemetry(sample(updatedAt = 10_000L, block = plugged))
+        store.onTelemetry(
+            sample(updatedAt = 11_000L) {
+                plugged()
+                put("soc", 63)
+            },
+        )
+        val charge = store.state.value.charge
+        assertTrue(charge.charging)
+        assertEquals(3.6, charge.chargeKw, 1e-9)
+        assertEquals(240.0, charge.acVolts ?: Double.NaN, 1e-9)
+        assertEquals(15.0, charge.acAmps ?: Double.NaN, 1e-9)
+        assertEquals("L2", charge.level)
+        assertEquals(62.0, charge.fromSoc ?: Double.NaN, 1e-9)
+        assertEquals(10_000L, charge.startedAtMs)
+        assertEquals(11_000L, charge.sampleAtMs)
+        assertEquals(91.0, charge.sohPct ?: Double.NaN, 1e-9)
+        assertEquals(73, charge.packTempF)
+        assertEquals(listOf(62f), charge.socPoints.map { it.soc })
+
+        store.onTelemetry(sample(updatedAt = 12_000L))
+        assertFalse(store.state.value.charge.charging)
+        assertTrue(
+            store.state.value.charge.socPoints
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun settingsCarryTheRatesAndChargeLimitToTheChargeTab() {
+        val store = LiveUiStateStore()
+        store.onSettings { it.copy(homeRate = 0.15, publicRate = 0.45, chargeTargetPct = 80) }
+        val charge = store.state.value.charge
+        assertEquals(0.15, charge.homeRate, 1e-9)
+        assertEquals(0.45, charge.publicRate, 1e-9)
+        assertEquals(80, charge.targetSoc)
+    }
+
+    @Test
+    fun loggedChargesShowUnlessTheDemoIsRunning() {
+        val store = LiveUiStateStore(nowMs = { 5_000_000_000L })
+        val logged = listOf(ChargeSession(1_000L, 2_000L, "L2", 40, 80, 5.6))
+        store.onChargeHistory(logged)
+        assertEquals(logged, store.state.value.charge.sessions)
+
+        store.onTelemetry(sample { put("source", "demo") })
+        val demo = store.state.value.charge.sessions
+        assertEquals(ChargeUiState.demoSessions(5_000_000_000L), demo)
+        // A later read while the demo runs is kept for after it stops, not shown now.
+        store.onChargeHistory(emptyList())
+        assertEquals(demo, store.state.value.charge.sessions)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertTrue(
+            store.state.value.charge.sessions
+                .isEmpty(),
+        )
     }
 }

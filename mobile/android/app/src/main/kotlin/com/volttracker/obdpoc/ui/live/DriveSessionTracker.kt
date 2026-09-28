@@ -1,7 +1,9 @@
 package com.volttracker.obdpoc.ui.live
 
+import com.volttracker.obdpoc.ui.charge.SocPoint
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.LastDrive
+import com.volttracker.obdpoc.ui.drive.usableKwh
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.pow
@@ -29,12 +31,37 @@ internal class DriveSessionTracker {
         private set
     var chargeFromSoc: Double? = null
         private set
-    var chargeAddedKwh = 0.0
-        private set
+
+    /**
+     * Energy this charge has put into the pack: the SOC gained times the usable pack energy (the
+     * same model as time-to-full and the logged charge sessions), so it always agrees with the
+     * SOC on screen. Before two SOC readings exist it falls back to the charger power integrated
+     * over time.
+     */
+    val chargeAddedKwh: Double
+        get() {
+            val from = chargeFromSoc
+            val last = chargeLastSoc
+            return if (from != null && last != null) {
+                ((last - from) / PERCENT * usableKwh(chargeSohPct)).coerceAtLeast(0.0)
+            } else {
+                chargeIntegratedKwh
+            }
+        }
+
+    private var chargeIntegratedKwh = 0.0
+    private var chargeLastSoc: Double? = null
+    private var chargeSohPct: Double? = null
     var chargeStartedAtMs: Long? = null
         private set
     var lastDrive: LastDrive? = null
         private set
+
+    /** Pack SOC across the charge in progress, oldest first (the Charge tab's session curve). */
+    val chargeSocPoints: List<SocPoint> get() = chargePoints.toList()
+
+    private val chargePoints = ArrayList<SocPoint>()
+    private var chargePointSpacingMs = CHARGE_POINT_MS
 
     private var lastAtMs = 0L
     private var lastLat = Double.NaN
@@ -61,8 +88,10 @@ internal class DriveSessionTracker {
     fun reset() {
         resetDrive()
         chargeFromSoc = null
-        chargeAddedKwh = 0.0
+        chargeIntegratedKwh = 0.0
+        chargeLastSoc = null
         chargeStartedAtMs = null
+        chargePoints.clear()
         lastDrive = null
         lastAtMs = 0L
         phase = null
@@ -79,8 +108,13 @@ internal class DriveSessionTracker {
             sample.powerKw?.let { energyKwh += it * stepS / S_PER_HOUR }
         }
         if (contiguous && sample.phase == DrivePhase.CHARGING) {
-            sample.chargerKw?.takeIf { it > 0 }?.let { chargeAddedKwh += it * stepS / S_PER_HOUR }
+            sample.chargerKw?.takeIf { it > 0 }?.let { chargeIntegratedKwh += it * stepS / S_PER_HOUR }
         }
+        if (sample.phase == DrivePhase.CHARGING) {
+            sample.soc?.let { chargeLastSoc = it }
+            sample.sohPct?.let { chargeSohPct = it }
+        }
+        if (sample.phase == DrivePhase.CHARGING) recordChargeSoc(sample)
         lastAtMs = sample.atMs
     }
 
@@ -97,10 +131,30 @@ internal class DriveSessionTracker {
             DrivePhase.CHARGING -> {
                 closeDriveIfAny()
                 chargeFromSoc = sample.soc
-                chargeAddedKwh = 0.0
+                chargeIntegratedKwh = 0.0
+                chargeLastSoc = sample.soc
                 chargeStartedAtMs = sample.atMs
+                chargePoints.clear()
+                chargePointSpacingMs = CHARGE_POINT_MS
             }
             DrivePhase.PARKED -> closeDriveIfAny()
+        }
+    }
+
+    /**
+     * Keeps a SOC reading every [chargePointSpacingMs]. A long charge halves the list and doubles
+     * the spacing whenever it outgrows [MAX_CHARGE_POINTS], so memory stays bounded.
+     */
+    private fun recordChargeSoc(sample: Sample) {
+        val soc = sample.soc ?: return
+        val last = chargePoints.lastOrNull()
+        if (last != null && sample.atMs - last.atMs < chargePointSpacingMs) return
+        chargePoints.add(SocPoint(sample.atMs, soc.toFloat()))
+        if (chargePoints.size > MAX_CHARGE_POINTS) {
+            val kept = chargePoints.filterIndexed { i, _ -> i % 2 == 0 }
+            chargePoints.clear()
+            chargePoints.addAll(kept)
+            chargePointSpacingMs *= 2
         }
     }
 
@@ -139,6 +193,7 @@ internal class DriveSessionTracker {
         val powerKw: Double? = null,
         val chargerKw: Double? = null,
         val soc: Double? = null,
+        val sohPct: Double? = null,
         val lat: Double? = null,
         val lon: Double? = null,
     )
@@ -153,6 +208,9 @@ internal class DriveSessionTracker {
         const val MIN_ENERGY_KWH = 0.05
         const val MIN_MILES = 0.1
         const val EARTH_RADIUS_M = 6_371_000.0
+        const val CHARGE_POINT_MS = 15_000L
+        const val PERCENT = 100.0
+        const val MAX_CHARGE_POINTS = 240
 
         fun haversineM(
             lat1: Double,

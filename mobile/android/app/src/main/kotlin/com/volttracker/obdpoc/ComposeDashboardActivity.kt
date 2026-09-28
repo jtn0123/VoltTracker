@@ -24,11 +24,15 @@ import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
+import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
+import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -53,6 +57,10 @@ class ComposeDashboardActivity :
     private val store = LiveUiStateStore()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val exportInFlight = AtomicBoolean(false)
+    private val chargeHistoryInFlight = AtomicBoolean(false)
+
+    /** The classic dashboard's name for the visible screen ("charge", …), from [VoltApp]. */
+    private var shownView: String? = null
 
     /** Whether a session is logging; a seam so tests can hold one open without a real adapter. */
     internal var loggingProbe: () -> Boolean = ObdService::hasActiveSession
@@ -168,7 +176,7 @@ class ComposeDashboardActivity :
                         onInstallUpdate = ::installUpdate,
                         onSettingChange = ::changeSetting,
                         onSettingsCommand = ::runCommand,
-                        onScreenShown = experience::setActiveDashboardView,
+                        onScreenShown = ::onScreenShown,
                     ),
             )
         }
@@ -186,6 +194,7 @@ class ComposeDashboardActivity :
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         replayServiceSnapshot()
+        if (shownView == CHARGE_VIEW) loadChargeHistory()
         // The classic dashboard may have changed a shared setting while this screen was away.
         refreshSettings()
         experience.onResume()
@@ -472,6 +481,46 @@ class ComposeDashboardActivity :
         }
     }
 
+    private fun onScreenShown(view: String) {
+        shownView = view
+        experience.setActiveDashboardView(view)
+        if (view == CHARGE_VIEW) loadChargeHistory()
+    }
+
+    /**
+     * Reads the logged charges for the Charge tab off the main thread, on a short-lived store of
+     * its own (the data tools' store is only open while one runs). Skipped while a backup or
+     * restore holds the database.
+     */
+    internal fun loadChargeHistory() {
+        if (DatabaseOperationLease.isHeld() || !chargeHistoryInFlight.compareAndSet(false, true)) return
+        try {
+            backgroundExecutor.execute {
+                val rows =
+                    try {
+                        chargeHistoryReader()
+                    } catch (ex: RuntimeException) {
+                        Log.w(AppPrefs.LOG_TAG, "charge history read failed", ex)
+                        null
+                    } finally {
+                        chargeHistoryInFlight.set(false)
+                    }
+                rows?.let { runOnUiThread { store.onChargeHistory(ChargeHistory.parse(it)) } }
+            }
+        } catch (ex: RejectedExecutionException) {
+            Log.w(AppPrefs.LOG_TAG, "charge history read not started", ex)
+            chargeHistoryInFlight.set(false)
+        }
+    }
+
+    /** The state the screens render (tests read it back). */
+    internal fun uiState(): VoltAppUiState = store.state.value
+
+    /** Reads the charge rows; a seam so tests can serve canned rows without a database. */
+    internal var chargeHistoryReader: () -> JSONArray = {
+        ObdLocalStore(applicationContext).use { it.projections().chargeSessionsForExport(CHARGE_HISTORY_LIMIT) }
+    }
+
     /** Opens the database for a data tool; false (with a message) when it can't be opened. */
     private fun ensureLocalStore(): Boolean {
         if (localStore?.isOpen == true) return true
@@ -555,6 +604,7 @@ class ComposeDashboardActivity :
     }
 
     private companion object {
+        const val CHARGE_VIEW = "charge"
         const val BACKUP_RECEIPT = "setBackupReceipt"
     }
 }
