@@ -4,6 +4,8 @@ import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import androidx.core.content.edit
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
+import com.volttracker.obdpoc.ui.insights.SpeedEfficiency
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
 import org.json.JSONArray
 import org.json.JSONObject
@@ -246,6 +248,36 @@ class ComposeDashboardToolsTest {
                 ?.points
                 ?.isEmpty() == true,
         )
+    }
+
+    @Test
+    fun showingInsightsReadsTheDrivesSpeedsAndCellsForTheShownPeriod() {
+        val windows = mutableListOf<Pair<Long, Long>>()
+        activity.history.insightsReader = { since, until ->
+            synchronized(windows) { windows += since to until }
+            Triple(
+                JSONArray().put(tripRow("1:100:200", 100L)),
+                JSONArray().put(JSONObject().put("mph", 40).put("miPerKwh", 4.7)),
+                JSONObject()
+                    .put("cell", 47)
+                    .put("belowMeanMv", 18)
+                    .put("driftMv", 12)
+                    .put("days", 14),
+            )
+        }
+        activity.history.loadInsights(nowMs = 1_777_585_320_000L)
+        waitFor { activity.uiState().insights.cellDrift != null }
+        val insights = activity.uiState().insights
+        assertEquals(listOf("1:100:200"), insights.trips.map { it.routeKey })
+        assertEquals(listOf(SpeedEfficiency(40, 4.7)), insights.speedEfficiency)
+        // The month on show, in local time: it starts before and ends after the given instant.
+        val (since, until) = synchronized(windows) { windows.single() }
+        assertTrue(since < 1_777_585_320_000L && until > 1_777_585_320_000L)
+
+        // Picking another period reads again, for that period.
+        activity.selectInsightsPeriod(InsightsPeriod.ALL)
+        waitFor { synchronized(windows) { windows.size } == 2 }
+        assertEquals(0L to Long.MAX_VALUE, synchronized(windows) { windows[1] })
     }
 
     private fun tripRow(

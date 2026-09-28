@@ -4,6 +4,10 @@ import android.util.Log
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.charge.ChargeHistory
+import com.volttracker.obdpoc.ui.insights.INSIGHTS_TRIP_LIMIT
+import com.volttracker.obdpoc.ui.insights.InsightsHistory
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
+import com.volttracker.obdpoc.ui.insights.window
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.trips.TRIP_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.trips.TripHistory
@@ -37,7 +41,19 @@ internal class ComposeHistoryLoader(
         openStore().use { it.routes.getTripRouteJson(key) to it.routes.getTripDriveModesJson(key) }
     }
 
+    /** The drives, [InsightsPeriod]'s efficiency by speed over `[since, until)`, and any cell drift. */
+    var insightsReader: (Long, Long) -> Triple<JSONArray, JSONArray, JSONObject> = { since, until ->
+        openStore().use {
+            Triple(
+                it.getTripsJson(INSIGHTS_TRIP_LIMIT),
+                it.insights.efficiencyBySpeedJson(since, until),
+                it.insights.cellDriftJson(),
+            )
+        }
+    }
+
     private val chargesInFlight = AtomicBoolean(false)
+    private val insightsInFlight = AtomicBoolean(false)
     private val tripsInFlight = AtomicBoolean(false)
     private val routeInFlight = AtomicBoolean(false)
 
@@ -75,6 +91,23 @@ internal class ComposeHistoryLoader(
         ) { (route, modes) ->
             store.onTripRoute(TripHistory.route(key, route, modes, fallbackGas))
             loadRoute()
+        }
+    }
+
+    /** Everything the Insights tab summarises, for the period it shows now. */
+    fun loadInsights(nowMs: Long = System.currentTimeMillis()) {
+        val period = store.insightsPeriod()
+        val window = period.window(nowMs, firstTripMs = null)
+        val (since, until) = if (period == InsightsPeriod.ALL) 0L to Long.MAX_VALUE else window.startMs to window.endMs
+        read(insightsInFlight, "insights", { insightsReader(since, until) }) { (trips, speeds, drift) ->
+            store.onInsightsHistory(
+                TripHistory.parse(trips),
+                period,
+                InsightsHistory.speeds(speeds),
+                InsightsHistory.cellDrift(drift),
+            )
+            // The period changed while this one was reading: read the one now showing.
+            if (store.insightsPeriod() != period) loadInsights(nowMs)
         }
     }
 

@@ -25,6 +25,7 @@ import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
@@ -176,6 +177,7 @@ class ComposeDashboardActivity :
                         onScreenShown = ::onScreenShown,
                         onSelectTrip = ::selectTrip,
                         onExportTrip = ::exportTrip,
+                        onInsightsPeriod = ::selectInsightsPeriod,
                     ),
             )
         }
@@ -500,7 +502,13 @@ class ComposeDashboardActivity :
         when (view) {
             CHARGE_VIEW -> history.loadCharges()
             TRIPS_VIEW -> history.loadTrips()
+            INSIGHTS_VIEW -> history.loadInsights()
         }
+    }
+
+    internal fun selectInsightsPeriod(period: InsightsPeriod) {
+        store.selectInsightsPeriod(period)
+        history.loadInsights()
     }
 
     private fun selectTrip(routeKey: String) {
@@ -511,7 +519,7 @@ class ComposeDashboardActivity :
     /** The state the screens render (tests read it back). */
     internal fun uiState(): VoltAppUiState = store.state.value
 
-    /** Reads the Charge and Trips tabs' history (tests swap its readers). */
+    /** Reads the Charge, Trips and Insights tabs' history (tests swap its readers). */
     internal val history by lazy {
         ComposeHistoryLoader(backgroundExecutor, store, ::runOnUiThread) { ObdLocalStore(applicationContext) }
     }
@@ -601,6 +609,7 @@ class ComposeDashboardActivity :
     private companion object {
         const val CHARGE_VIEW = "charge"
         const val TRIPS_VIEW = "map"
+        const val INSIGHTS_VIEW = "insights"
         const val BACKUP_RECEIPT = "setBackupReceipt"
     }
 }

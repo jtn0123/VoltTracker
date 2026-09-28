@@ -2,18 +2,12 @@ package com.volttracker.obdpoc.ui.components
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
@@ -22,12 +16,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
-import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
  * Smooth area sparkline: a soft line over a vertical gradient fill.
@@ -256,60 +248,6 @@ fun SignedBars(
                     androidx.compose.ui.geometry
                         .CornerRadius(barW / 2f, barW / 2f),
             )
-        }
-    }
-}
-
-/**
- * Minimal rounded bar chart with labels underneath. The last bar (current
- * period) renders in the accent color; earlier bars are muted.
- */
-@Composable
-fun MiniBars(
-    values: List<Float>,
-    labels: List<String>,
-    modifier: Modifier = Modifier,
-    barHeight: Dp = 96.dp,
-    accent: Color = VoltColors.accent,
-    highlightIndex: Int? = null,
-) {
-    Column(modifier = modifier.fillMaxWidth()) {
-        Row(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(barHeight),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            val maxV = values.maxOrNull()?.takeIf { it > 0f } ?: 1f
-            val accented = highlightIndex ?: values.lastIndex
-            values.forEachIndexed { i, v ->
-                val last = i == accented
-                Box(
-                    modifier =
-                        Modifier
-                            .weight(1f)
-                            .fillMaxHeight(fraction = (v / maxV).coerceIn(0.04f, 1f))
-                            .clip(RoundedCornerShape(topStart = 8.dp, topEnd = 8.dp))
-                            .background(if (last) accent else VoltColors.surfaceElevated),
-                )
-            }
-        }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-        ) {
-            labels.forEach { label ->
-                Text(
-                    text = label,
-                    style = VoltType.caption,
-                    color = VoltColors.textTertiary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
-            }
         }
     }
 }
