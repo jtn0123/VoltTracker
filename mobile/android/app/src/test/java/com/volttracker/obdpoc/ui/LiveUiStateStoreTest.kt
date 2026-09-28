@@ -3,6 +3,10 @@ package com.volttracker.obdpoc.ui
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
+import com.volttracker.obdpoc.ui.insights.CellDrift
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
+import com.volttracker.obdpoc.ui.insights.InsightsUiState
+import com.volttracker.obdpoc.ui.insights.SpeedEfficiency
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.trips.TripPoint
 import com.volttracker.obdpoc.ui.trips.TripRoute
@@ -497,5 +501,58 @@ class LiveUiStateStoreTest {
         assertEquals(0.14, trips.homeRate, 1e-9)
         assertEquals(38.0, trips.gasMpg ?: 0.0, 1e-9)
         assertEquals(4.25, trips.gasPrice, 1e-9)
+    }
+
+    @Test
+    fun loggedDrivesFeedInsightsWithSpeedsOnlyForTheirPeriod() {
+        val store = LiveUiStateStore(nowMs = { 5_000_000_000L })
+        val drive = TripSummary("1:10:20", 10L, 20L, 1_000.0)
+        val speeds = listOf(SpeedEfficiency(40, 4.7))
+        store.onInsightsHistory(listOf(drive), InsightsPeriod.MONTH, speeds, CellDrift(47, 18, 12, 14))
+        val insights = store.state.value.insights
+        assertEquals(listOf(drive), insights.trips)
+        assertEquals(speeds, insights.speedEfficiency)
+        assertEquals(47, insights.cellDrift?.cell)
+        assertEquals(5_000_000_000L, insights.nowMs)
+
+        // Another period shows no speeds until they are read for it.
+        store.selectInsightsPeriod(InsightsPeriod.YEAR)
+        assertEquals(InsightsPeriod.YEAR, store.insightsPeriod())
+        assertEquals(InsightsPeriod.YEAR, store.state.value.insights.period)
+        assertTrue(
+            store.state.value.insights.speedEfficiency
+                .isEmpty(),
+        )
+        store.onInsightsHistory(listOf(drive), InsightsPeriod.YEAR, speeds, null)
+        assertEquals(speeds, store.state.value.insights.speedEfficiency)
+        assertNull(store.state.value.insights.cellDrift)
+    }
+
+    @Test
+    fun theDemoShowsSampleInsightsAndLeavesTheLoggedOnesAlone() {
+        val store = LiveUiStateStore(nowMs = { 5_000_000_000L })
+        val logged = TripSummary("1:10:20", 10L, 20L, 1_000.0)
+        store.onInsightsHistory(listOf(logged), InsightsPeriod.MONTH, emptyList(), null)
+        store.selectInsightsPeriod(InsightsPeriod.WEEK)
+
+        store.onTelemetry(sample { put("source", "demo") })
+        val demo = store.state.value.insights
+        assertTrue(demo.trips.none { it.routeKey == logged.routeKey })
+        assertEquals(InsightsUiState.DEMO_SPEEDS, demo.speedEfficiency)
+        assertEquals(InsightsPeriod.WEEK, demo.period)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertEquals(listOf(logged), store.state.value.insights.trips)
+        assertNull(store.state.value.insights.cellDrift)
+    }
+
+    @Test
+    fun settingsCarryTheCostsToInsights() {
+        val store = LiveUiStateStore()
+        store.onSettings { it.copy(homeRate = 0.14, gasMpg = 38.0, gasPrice = 4.25) }
+        val insights = store.state.value.insights
+        assertEquals(0.14, insights.homeRate, 1e-9)
+        assertEquals(38.0, insights.gasMpg ?: 0.0, 1e-9)
+        assertEquals(4.25, insights.gasPrice, 1e-9)
     }
 }

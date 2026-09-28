@@ -18,6 +18,30 @@ internal object TripsDemo {
     private const val DAY = 24 * HOUR
     private const val WIGGLE = 0.00035
     private const val LEG_STEPS = 8
+    private const val FIRST_FILLER_DAY = 5
+    private const val LAST_FILLER_DAY = 58
+    private const val DAYS_IN_MONTH = 30
+    private const val WEEK = 7
+    private val WEEKEND = setOf(2, 3)
+    private const val BASE_MI_PER_KWH = 3.6
+    private const val EFF_STEPS = 5
+    private const val EFF_STEP = 0.2
+    private const val MIN_PER_MILE = 0.9
+    private const val ERRAND_MILES = 6.5
+    private const val ERRAND_STEPS = 4
+    private const val LAST_MONTH_GAS_EVERY = 4
+    private const val LAST_MONTH_COMMUTE_SHARE = 0.6
+
+    /** Days ago → (miles, EV share) of the longer drives that ran the engine. */
+    private val LONG_DRIVES =
+        mapOf(
+            12 to (64.0 to 0.55),
+            19 to (96.0 to 0.4),
+            33 to (120.0 to 0.3),
+            40 to (82.0 to 0.45),
+            47 to (150.0 to 0.25),
+            54 to (70.0 to 0.5),
+        )
 
     /** One demo drive: start before "now", duration, miles, kWh, EV share, label. */
     private class Drive(
@@ -41,8 +65,56 @@ internal object TripsDemo {
             Drive("demo:6", 4 * DAY + 3 * HOUR + 12 * MIN, 26 * MIN, 9.8, 2.28, 1.0),
         )
 
+    /**
+     * About two months of everyday driving behind the featured drives, so the month and year
+     * figures (Trips header, Insights) have a realistic history: weekday commutes, weekend
+     * errands, and a few longer drives that ran the engine — more of those last month.
+     */
+    private val filler: List<Drive> =
+        (FIRST_FILLER_DAY..LAST_FILLER_DAY).flatMap { day ->
+            val lastMonth = day > DAYS_IN_MONTH
+            val eff = BASE_MI_PER_KWH + (day % EFF_STEPS) * EFF_STEP
+            val long = LONG_DRIVES[day]
+            when {
+                long != null -> {
+                    val (miles, share) = long
+                    listOf(
+                        Drive(
+                            "demo:f$day",
+                            day * DAY - 2 * HOUR,
+                            (miles * MIN_PER_MILE).toLong() * MIN,
+                            miles,
+                            miles * share / eff,
+                            share,
+                        ),
+                    )
+                }
+                day % WEEK in WEEKEND -> {
+                    val miles = ERRAND_MILES + (day % ERRAND_STEPS) * 2.3
+                    listOf(Drive("demo:f$day", day * DAY - HOUR, (miles * 2.2).toLong() * MIN, miles, miles / eff, 1.0))
+                }
+                else -> {
+                    val share = if (lastMonth && day % LAST_MONTH_GAS_EVERY == 0) LAST_MONTH_COMMUTE_SHARE else 1.0
+                    listOf(
+                        Drive(
+                            "demo:f$day:am",
+                            day * DAY + 2 * HOUR,
+                            27 * MIN,
+                            18.2,
+                            18.2 * share / eff,
+                            share,
+                            "Commute",
+                        ),
+                        Drive("demo:f$day:pm", day * DAY - 6 * HOUR, 31 * MIN, 18.9, 18.9 * share / eff, share),
+                    )
+                }
+            }
+        }
+
+    private val history = drives + filler
+
     fun trips(nowMs: Long): List<TripSummary> =
-        drives.map { d ->
+        history.map { d ->
             val start = nowMs - d.agoMs
             TripSummary(
                 routeKey = d.key,
@@ -61,7 +133,7 @@ internal object TripsDemo {
         nowMs: Long,
     ): TripRoute? {
         val trip = trips(nowMs).firstOrNull { it.routeKey == key } ?: return null
-        val shape = if (drives.indexOfFirst { it.key == key } % 2 == 0) loop() else loop().reversed()
+        val shape = if (history.indexOfFirst { it.key == key } % 2 == 0) loop() else loop().reversed()
         // Switch to gas once the drive's electric share of the track is behind it, at a point placed
         // exactly there so the map's "Engine on" mark reads the same EV miles as the summary chip.
         val track = if (trip.mode == TripMode.EV) shape.map { it to false } else splitAt(shape, trip.evShare ?: 1.0)

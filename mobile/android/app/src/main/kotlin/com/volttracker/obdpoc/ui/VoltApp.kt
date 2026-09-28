@@ -150,7 +150,7 @@ private fun VoltTabContent(
             )
         VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
-        VoltTab.INSIGHTS -> InsightsScreen(state.insights)
+        VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
         VoltTab.CAR -> CarScreen(diag = state.diag, cellBalanceLabel = cellBalanceLabel(state.drive.cellSpreadMv))
     }
 }

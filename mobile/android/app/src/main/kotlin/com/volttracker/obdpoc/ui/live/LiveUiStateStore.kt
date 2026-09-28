@@ -11,6 +11,9 @@ import com.volttracker.obdpoc.ui.drive.TirePressures
 import com.volttracker.obdpoc.ui.drive.chargeEta
 import com.volttracker.obdpoc.ui.drive.chargeLevelLabel
 import com.volttracker.obdpoc.ui.drive.durationLabel
+import com.volttracker.obdpoc.ui.insights.CellDrift
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
+import com.volttracker.obdpoc.ui.insights.SpeedEfficiency
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.trips.TripRoute
 import com.volttracker.obdpoc.ui.trips.TripSummary
@@ -46,6 +49,7 @@ class LiveUiStateStore(
     private var loggedCharges: List<ChargeSession> = emptyList()
     private var demoCharges: List<ChargeSession>? = null
     private val tripHistory = TripHistoryHolder()
+    private val insightsHistory = InsightsHistoryHolder()
 
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
@@ -126,7 +130,28 @@ class LiveUiStateStore(
     /** The logged drive whose route the host still has to read for the map, or null. */
     fun tripRouteToRead(): String? = tripHistory.routeToRead(_state.value.settings.demoActive)
 
-    private fun withHistory(s: VoltAppUiState): VoltAppUiState = tripHistory.apply(withChargeHistory(s), nowMs())
+    /** The logged drives, the [readFor] period's efficiency by speed, and any drifting cell, for Insights. */
+    fun onInsightsHistory(
+        trips: List<TripSummary>,
+        readFor: InsightsPeriod,
+        speeds: List<SpeedEfficiency>,
+        drift: CellDrift?,
+    ) {
+        insightsHistory.onHistory(trips, readFor, speeds, drift, nowMs())
+        _state.value = withHistory(_state.value)
+    }
+
+    /** Picks the span Insights summarises. */
+    fun selectInsightsPeriod(period: InsightsPeriod) {
+        insightsHistory.select(period)
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The period Insights shows, so its efficiency by speed can be read for it. */
+    fun insightsPeriod(): InsightsPeriod = insightsHistory.period
+
+    private fun withHistory(s: VoltAppUiState): VoltAppUiState =
+        insightsHistory.apply(tripHistory.apply(withChargeHistory(s), nowMs()), nowMs())
 
     /**
      * The Charge tab lists the logged charges — or, while the demo runs, sample ones: demo data
@@ -489,6 +514,12 @@ class LiveUiStateStore(
                         ),
                     trips =
                         s.trips.copy(
+                            homeRate = settings.homeRate,
+                            gasMpg = settings.gasMpg,
+                            gasPrice = settings.gasPrice,
+                        ),
+                    insights =
+                        s.insights.copy(
                             homeRate = settings.homeRate,
                             gasMpg = settings.gasMpg,
                             gasPrice = settings.gasPrice,

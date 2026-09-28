@@ -55,6 +55,9 @@ open class ObdLocalStore(
     /** Route/track projections for the dashboard's map views and the pack-health trend. */
     open val routes: ObdRouteQueryStore = ObdStoreRoutes(helper, reports)
 
+    /** Insights aggregates the trip rows can't answer (efficiency by speed, cell drift). */
+    open val insights: ObdStoreInsights by lazy { ObdStoreInsights(helper) }
+
     /** Detailed enhanced-capability signal logs (list/export/delete + probe-history checks). */
     open val signalLogs: ObdSignalLogStore = ObdStoreSignalLogs(reports)
 

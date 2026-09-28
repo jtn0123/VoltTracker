@@ -151,30 +151,48 @@ fun TripsUiState.subtitle(zone: TimeZone = TimeZone.getDefault()): String {
 }
 
 /** This month's share of classified driving done on electric, distance-weighted; null when none is classified. */
-fun TripsUiState.electricPct(zone: TimeZone = TimeZone.getDefault()): Int? {
-    val classified = monthTrips(zone).filter { it.evShare != null }
-    val miles = classified.sumOf { it.miles }
-    if (miles <= 0.0) return null
-    return percent(classified.sumOf { it.evMiles } / miles)
-}
+fun TripsUiState.electricPct(zone: TimeZone = TimeZone.getDefault()): Int? = monthTrips(zone).electricPct()
 
 /** This month's electric efficiency: EV miles over the logged kWh of the drives that logged energy. */
-fun TripsUiState.avgMiPerKwh(zone: TimeZone = TimeZone.getDefault()): Double? {
-    val logged = monthTrips(zone).filter { it.miPerKwh != null }
+fun TripsUiState.avgMiPerKwh(zone: TimeZone = TimeZone.getDefault()): Double? = monthTrips(zone).avgMiPerKwh()
+
+/** What this month's electric miles saved against gas (see [savedVsGas] on a list of drives). */
+fun TripsUiState.savedVsGas(zone: TimeZone = TimeZone.getDefault()): Double? =
+    monthTrips(zone).savedVsGas(gasMpg, gasPrice, homeRate)
+
+/** The share (0..1) of these drives' classified miles driven on electric; null when none is classified. */
+fun List<TripSummary>.electricShare(): Double? {
+    val classified = filter { it.evShare != null }
+    val miles = classified.sumOf { it.miles }
+    return if (miles > 0.0) classified.sumOf { it.evMiles } / miles else null
+}
+
+fun List<TripSummary>.electricPct(): Int? = electricShare()?.let(::percent)
+
+/** EV miles over the logged kWh of the drives that logged a plausible amount. */
+fun List<TripSummary>.avgMiPerKwh(): Double? {
+    val logged = filter { it.miPerKwh != null }
     val kwh = logged.sumOf { it.energyKwh ?: 0.0 }
     return if (kwh > 0.0) logged.sumOf { it.evMiles } / kwh else null
 }
 
+/** The kWh these drives logged (drives without an energy reading add nothing). */
+fun List<TripSummary>.loggedKwh(): Double = sumOf { it.energyKwh?.takeIf { kwh -> kwh >= MIN_KWH } ?: 0.0 }
+
 /**
- * What this month's electric miles would have cost in gas, less the electricity they used
+ * What these drives' electric miles would have cost in gas, less the electricity they used
  * (cost-model.ts's formula, applied to the EV miles only: gas miles saved nothing). Energy that
  * wasn't logged is estimated at 3.5 mi/kWh, as the WebView does. Null until the home rate, gas
  * price and MPG are all set.
  */
-fun TripsUiState.savedVsGas(zone: TimeZone = TimeZone.getDefault()): Double? {
+fun List<TripSummary>.savedVsGas(
+    gasMpg: Double?,
+    gasPrice: Double,
+    homeRate: Double,
+): Double? {
     val mpg = gasMpg?.takeIf { it > 0.0 } ?: return null
     if (gasPrice <= 0.0 || homeRate <= 0.0) return null
-    return monthTrips(zone).sumOf { t ->
+    return sumOf { t ->
         val kwh = t.energyKwh?.takeIf { it >= MIN_KWH } ?: (t.evMiles / ASSUMED_MI_PER_KWH)
         t.evMiles / mpg * gasPrice - kwh * homeRate
     }

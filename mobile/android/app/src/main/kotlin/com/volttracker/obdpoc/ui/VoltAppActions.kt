@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
 import com.volttracker.obdpoc.ui.trips.TripExport
@@ -25,4 +26,6 @@ data class VoltAppActions(
     val onSelectTrip: (String) -> Unit = {},
     /** Trips: export one drive (GPX / CSV) or all of them. */
     val onExportTrip: (TripExport) -> Unit = {},
+    /** Insights: summarise this span. */
+    val onInsightsPeriod: (InsightsPeriod) -> Unit = {},
 )
