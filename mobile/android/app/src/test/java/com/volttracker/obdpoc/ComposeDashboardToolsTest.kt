@@ -5,10 +5,13 @@ import android.content.Intent
 import android.os.Looper
 import androidx.core.content.edit
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -19,6 +22,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.shadows.ShadowToast
+import java.util.concurrent.atomic.AtomicInteger
 
 /** The native Settings tools run through the shared helpers, with the restore guards in front. */
 @RunWith(RobolectricTestRunner::class)
@@ -137,5 +141,80 @@ class ComposeDashboardToolsTest {
     private companion object {
         const val WAIT_MS = 5_000L
         const val POLL_MS = 20L
+    }
+
+    @Test
+    fun showingTheChargeTabReadsTheLoggedChargesIntoTheScreen() {
+        activity.chargeHistoryReader = {
+            JSONArray().put(
+                JSONObject()
+                    .put("startedAtMs", 1_000L)
+                    .put("endedAtMs", 2_000L)
+                    .put("chargerType", "level2")
+                    .put("startSoc", 30)
+                    .put("endSoc", 90)
+                    .put("energyKwh", 8.4),
+            )
+        }
+        activity.loadChargeHistory()
+        waitFor {
+            activity
+                .uiState()
+                .charge.sessions
+                .isNotEmpty()
+        }
+        val sessions = activity.uiState().charge.sessions
+        assertEquals(1, sessions.size)
+        assertEquals("L2", sessions[0].level)
+        assertEquals(8.4, sessions[0].energyKwh ?: Double.NaN, 1e-9)
+    }
+
+    @Test
+    fun aFailedChargeReadLeavesTheListAloneAndCanBeRetried() {
+        val reads = AtomicInteger()
+        activity.chargeHistoryReader = {
+            reads.incrementAndGet()
+            throw IllegalStateException("database locked")
+        }
+        activity.loadChargeHistory()
+        waitFor { reads.get() == 1 }
+        assertTrue(
+            activity
+                .uiState()
+                .charge.sessions
+                .isEmpty(),
+        )
+        // Once the failed read has finished, the next visit reads again.
+        waitFor {
+            activity.loadChargeHistory()
+            reads.get() >= 2
+        }
+        assertTrue(reads.get() >= 2)
+    }
+
+    @Test
+    fun theChargeReadWaitsOutABackupOrRestore() {
+        val reads = AtomicInteger()
+        activity.chargeHistoryReader = {
+            reads.incrementAndGet()
+            JSONArray()
+        }
+        val lease = DatabaseOperationLease.tryAcquire("test") ?: error("lease expected")
+        try {
+            activity.loadChargeHistory()
+            Thread.sleep(WAIT_MS / 50)
+            assertEquals(0, reads.get())
+        } finally {
+            lease.close()
+        }
+    }
+
+    /** Polls [done] (running main-thread posts between tries) until it holds or [WAIT_MS] passes. */
+    private fun waitFor(done: () -> Boolean) {
+        val deadline = System.currentTimeMillis() + WAIT_MS
+        while (!done() && System.currentTimeMillis() < deadline) {
+            Thread.sleep(POLL_MS)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
     }
 }

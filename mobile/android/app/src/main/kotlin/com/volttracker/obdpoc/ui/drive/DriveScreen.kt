@@ -24,12 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,7 +32,9 @@ import com.volttracker.obdpoc.ui.components.IconCircleButton
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.ambientAlpha
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
@@ -69,7 +66,7 @@ fun DriveScreen(
         modifier =
             modifier
                 .fillMaxSize()
-                .drawBehind { drawAmbient(glow) },
+                .voltAmbient(glow),
     ) {
         VoltScreen(
             title = "Drive",
@@ -155,7 +152,7 @@ private fun ambientColor(
     pal: VoltPalette,
     state: DriveUiState,
 ): Color {
-    val a = if (pal.isDark) AMBIENT_DARK else AMBIENT_LIGHT
+    val a = ambientAlpha(pal)
     return when {
         !state.connected -> Color.Transparent
         state.phase == DrivePhase.CHARGING -> pal.ev.copy(alpha = a)
@@ -164,28 +161,7 @@ private fun ambientColor(
     }
 }
 
-/** CSS `radial-gradient(120% 55% at 50% -8%, glow, transparent 62%)`, drawn as a squashed circle. */
-private fun DrawScope.drawAmbient(glow: Color) {
-    if (glow.alpha == 0f) return
-    val rx = size.width * AMBIENT_RX
-    val ry = size.height * AMBIENT_RY
-    val center = Offset(size.width / 2, -size.height * AMBIENT_TOP)
-    scale(scaleX = 1f, scaleY = ry / rx, pivot = center) {
-        drawCircle(
-            brush = Brush.radialGradient(0f to glow, AMBIENT_STOP to Color.Transparent, center = center, radius = rx),
-            radius = rx,
-            center = center,
-        )
-    }
-}
-
-private const val AMBIENT_DARK = 0.16f
-private const val AMBIENT_LIGHT = 0.10f
 private const val PARKED_AMBIENT = 0.45f
-private const val AMBIENT_RX = 1.2f
-private const val AMBIENT_RY = 0.55f
-private const val AMBIENT_TOP = 0.08f
-private const val AMBIENT_STOP = 0.62f
 
 /** Offered while no session is live: reconnect the last adapter, or preview with demo data. */
 @Composable

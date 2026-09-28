@@ -21,6 +21,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
+import com.volttracker.obdpoc.ui.car.cellBalanceLabel
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.VoltNavActions
@@ -150,7 +151,7 @@ private fun VoltTabContent(
         VoltTab.TRIPS -> MapScreen(state.map)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights)
-        VoltTab.CAR -> CarScreen(diag = state.diag, charge = state.charge)
+        VoltTab.CAR -> CarScreen(diag = state.diag, cellBalanceLabel = cellBalanceLabel(state.drive.cellSpreadMv))
     }
 }
 
