@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.49.0 (2026-09-28)
+
+### ✳️ New
+
+- **trips**: Redesign trips tab with ev/gas route map and grouped drives
+  ([#96](https://github.com/jtn0123/VoltTracker/pull/96),
+  [`bac8e5b`](https://github.com/jtn0123/VoltTracker/commit/bac8e5b701321f8f85a8c9847c054d7cb5dd6ea5))
+
+
 ## v0.48.0 (2026-09-28)
 
 ### ✳️ New
