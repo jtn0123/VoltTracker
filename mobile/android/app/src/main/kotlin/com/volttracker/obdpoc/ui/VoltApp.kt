@@ -30,13 +30,13 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagScreen
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
-import com.volttracker.obdpoc.ui.map.MapScreen
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.theme.SystemBarsAppearance
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
+import com.volttracker.obdpoc.ui.trips.TripsScreen
 
 /**
  * The whole Compose dashboard: five tabs under a full-width nav bar, with Settings and Health
@@ -148,7 +148,7 @@ private fun VoltTabContent(
                 showEnergyFlow = state.settings.driveEnergyFlow,
                 onSetDetailed = { actions.onSettingChange(SettingChange.DriveDetailed(it)) },
             )
-        VoltTab.TRIPS -> MapScreen(state.map)
+        VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights)
         VoltTab.CAR -> CarScreen(diag = state.diag, cellBalanceLabel = cellBalanceLabel(state.drive.cellSpreadMv))

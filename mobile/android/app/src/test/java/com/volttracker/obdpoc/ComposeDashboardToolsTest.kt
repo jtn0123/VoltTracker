@@ -145,7 +145,7 @@ class ComposeDashboardToolsTest {
 
     @Test
     fun showingTheChargeTabReadsTheLoggedChargesIntoTheScreen() {
-        activity.chargeHistoryReader = {
+        activity.history.chargeReader = {
             JSONArray().put(
                 JSONObject()
                     .put("startedAtMs", 1_000L)
@@ -156,7 +156,7 @@ class ComposeDashboardToolsTest {
                     .put("energyKwh", 8.4),
             )
         }
-        activity.loadChargeHistory()
+        activity.history.loadCharges()
         waitFor {
             activity
                 .uiState()
@@ -172,11 +172,11 @@ class ComposeDashboardToolsTest {
     @Test
     fun aFailedChargeReadLeavesTheListAloneAndCanBeRetried() {
         val reads = AtomicInteger()
-        activity.chargeHistoryReader = {
+        activity.history.chargeReader = {
             reads.incrementAndGet()
             throw IllegalStateException("database locked")
         }
-        activity.loadChargeHistory()
+        activity.history.loadCharges()
         waitFor { reads.get() == 1 }
         assertTrue(
             activity
@@ -186,7 +186,7 @@ class ComposeDashboardToolsTest {
         )
         // Once the failed read has finished, the next visit reads again.
         waitFor {
-            activity.loadChargeHistory()
+            activity.history.loadCharges()
             reads.get() >= 2
         }
         assertTrue(reads.get() >= 2)
@@ -195,19 +195,68 @@ class ComposeDashboardToolsTest {
     @Test
     fun theChargeReadWaitsOutABackupOrRestore() {
         val reads = AtomicInteger()
-        activity.chargeHistoryReader = {
+        activity.history.chargeReader = {
             reads.incrementAndGet()
             JSONArray()
         }
         val lease = DatabaseOperationLease.tryAcquire("test") ?: error("lease expected")
         try {
-            activity.loadChargeHistory()
+            activity.history.loadCharges()
             Thread.sleep(WAIT_MS / 50)
             assertEquals(0, reads.get())
         } finally {
             lease.close()
         }
     }
+
+    @Test
+    fun showingTheTripsTabReadsTheDrivesThenTheNewestRoute() {
+        val routesRead = mutableListOf<String>()
+        activity.history.tripsReader = {
+            JSONArray()
+                .put(tripRow("1:100:200", 100L))
+                .put(tripRow("1:300:400", 300L))
+        }
+        activity.history.routeReader = { key ->
+            synchronized(routesRead) { routesRead += key }
+            val points =
+                JSONArray()
+                    .put(JSONObject().put("lat", 0.0).put("lng", 0.0).put("atMs", 300L))
+                    .put(JSONObject().put("lat", 0.0).put("lng", 0.01).put("atMs", 400L))
+            JSONObject().put("points", points) to JSONArray().put(JSONObject().put("atMs", 350L).put("gas", true))
+        }
+        activity.history.loadTrips()
+        waitFor { activity.uiState().trips.selectedRoute != null }
+        val trips = activity.uiState().trips
+        assertEquals(listOf("1:300:400", "1:100:200"), trips.trips.map { it.routeKey })
+        assertEquals(listOf(true, true), trips.selectedRoute?.points?.map { it.gas })
+        assertEquals(listOf("1:300:400"), synchronized(routesRead) { routesRead.toList() })
+    }
+
+    @Test
+    fun aFailedRouteReadShowsTheDriveWithoutARoute() {
+        activity.history.tripsReader = { JSONArray().put(tripRow("1:100:200", 100L)) }
+        activity.history.routeReader = { throw IllegalStateException("database locked") }
+        activity.history.loadTrips()
+        waitFor { activity.uiState().trips.selectedRoute != null }
+        assertTrue(
+            activity
+                .uiState()
+                .trips.selectedRoute
+                ?.points
+                ?.isEmpty() == true,
+        )
+    }
+
+    private fun tripRow(
+        key: String,
+        startedAtMs: Long,
+    ) = JSONObject()
+        .put("id", key)
+        .put("startedAtMs", startedAtMs)
+        .put("endedAtMs", startedAtMs + 100L)
+        .put("distanceMeters", 5_000.0)
+        .put("evShare", 1.0)
 
     /** Polls [done] (running main-thread posts between tries) until it holds or [WAIT_MS] passes. */
     private fun waitFor(done: () -> Boolean) {

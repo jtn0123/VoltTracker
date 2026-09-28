@@ -4,6 +4,9 @@ import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.trips.TripPoint
+import com.volttracker.obdpoc.ui.trips.TripRoute
+import com.volttracker.obdpoc.ui.trips.TripSummary
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -282,7 +285,7 @@ class LiveUiStateStoreTest {
 
         assertTrue(s.drive.connected)
         assertTrue(s.charge.connected)
-        assertTrue(s.map.connected)
+        assertTrue(s.trips.connected)
         assertTrue(s.insights.connected)
         assertTrue(s.diag.connected)
         assertTrue(s.settings.connected)
@@ -428,5 +431,71 @@ class LiveUiStateStoreTest {
             store.state.value.charge.sessions
                 .isEmpty(),
         )
+    }
+
+    @Test
+    fun loggedDrivesShowWithTheSelectedRouteAndAskForTheNextOne() {
+        val store = LiveUiStateStore(nowMs = { 5_000_000_000L })
+        val older = TripSummary("1:10:20", 10L, 20L, 1_000.0)
+        val newer = TripSummary("1:30:40", 30L, 40L, 2_000.0)
+        store.onTripHistory(listOf(newer, older))
+        val trips = store.state.value.trips
+        assertEquals(listOf(newer, older), trips.trips)
+        assertEquals(5_000_000_000L, trips.nowMs)
+        assertTrue(trips.exportable)
+        // The newest drive shows first; its route is the one to read.
+        assertEquals("1:30:40", store.tripRouteToRead())
+
+        store.onTripRoute(TripRoute("1:30:40", listOf(TripPoint(0.0, 0.0, 30L))))
+        assertNull(store.tripRouteToRead())
+        assertEquals(
+            "1:30:40",
+            store.state.value.trips.selectedRoute
+                ?.routeKey,
+        )
+
+        store.selectTrip("1:10:20")
+        assertEquals(older, store.state.value.trips.selected)
+        assertNull("the other drive's route is never shown", store.state.value.trips.selectedRoute)
+        assertEquals("1:10:20", store.tripRouteToRead())
+
+        // A reread that no longer has the picked drive falls back to the newest.
+        store.onTripHistory(listOf(newer))
+        assertEquals(newer, store.state.value.trips.selected)
+    }
+
+    @Test
+    fun theDemoShowsSampleDrivesAndLeavesTheLoggedOnesAlone() {
+        val store = LiveUiStateStore(nowMs = { 5_000_000_000L })
+        val logged = TripSummary("1:10:20", 10L, 20L, 1_000.0)
+        store.onTripHistory(listOf(logged))
+
+        store.onTelemetry(sample { put("source", "demo") })
+        val demo = store.state.value.trips
+        assertTrue(demo.trips.none { it.routeKey == logged.routeKey })
+        assertFalse(demo.exportable)
+        assertTrue("the demo's selected drive has its route", (demo.selectedRoute?.points?.size ?: 0) > 1)
+        assertNull("demo routes are never read from disk", store.tripRouteToRead())
+        val other = demo.trips.first().routeKey
+        store.selectTrip(other)
+        assertEquals(
+            other,
+            store.state.value.trips.selectedRoute
+                ?.routeKey,
+        )
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertEquals(listOf(logged), store.state.value.trips.trips)
+        assertEquals("1:10:20", store.tripRouteToRead())
+    }
+
+    @Test
+    fun settingsCarryTheCostsToTheTripsTab() {
+        val store = LiveUiStateStore()
+        store.onSettings { it.copy(homeRate = 0.14, gasMpg = 38.0, gasPrice = 4.25) }
+        val trips = store.state.value.trips
+        assertEquals(0.14, trips.homeRate, 1e-9)
+        assertEquals(38.0, trips.gasMpg ?: 0.0, 1e-9)
+        assertEquals(4.25, trips.gasPrice, 1e-9)
     }
 }

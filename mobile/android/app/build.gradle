@@ -192,11 +192,6 @@ android {
             if (rootProject.hasProperty("roborazziRecord")) {
                 systemProperty "roborazzi.test.record", "true"
             }
-            // Map screenshot tests fetch real CARTO basemap tiles only when
-            // `-PvoltLiveTiles` is passed; CI stays deterministic/offline.
-            if (rootProject.hasProperty("voltLiveTiles")) {
-                systemProperty "volt.screenshot.liveTiles", "true"
-            }
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {
                 systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
             }

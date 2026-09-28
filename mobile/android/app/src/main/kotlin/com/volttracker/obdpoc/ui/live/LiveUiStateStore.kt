@@ -12,6 +12,8 @@ import com.volttracker.obdpoc.ui.drive.chargeEta
 import com.volttracker.obdpoc.ui.drive.chargeLevelLabel
 import com.volttracker.obdpoc.ui.drive.durationLabel
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
+import com.volttracker.obdpoc.ui.trips.TripRoute
+import com.volttracker.obdpoc.ui.trips.TripSummary
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
@@ -43,6 +45,7 @@ class LiveUiStateStore(
     private var socTraceLastSampleAt = 0L
     private var loggedCharges: List<ChargeSession> = emptyList()
     private var demoCharges: List<ChargeSession>? = null
+    private val tripHistory = TripHistoryHolder()
 
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
@@ -65,7 +68,7 @@ class LiveUiStateStore(
                                 adapterLabel = adapter,
                             ),
                         charge = s.charge.copy(connected = connected, statusLabel = label),
-                        map = s.map.copy(connected = connected, statusLabel = label),
+                        trips = s.trips.copy(connected = connected, statusLabel = label),
                         insights = s.insights.copy(connected = connected, statusLabel = label),
                         diag = s.diag.copy(connected = connected, statusLabel = label, adapterLabel = adapter),
                         settings =
@@ -76,7 +79,7 @@ class LiveUiStateStore(
                                 demoActive = demoAfterStatus(stateName, s.settings.demoActive),
                             ),
                     )
-                }.let(::withChargeHistory)
+                }.let(::withHistory)
     }
 
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
@@ -85,7 +88,7 @@ class LiveUiStateStore(
         val next = withSample(_state.value, payload)
         val demo = payload.optString("source", "") == DEMO_SOURCE
         _state.value =
-            withChargeHistory(
+            withHistory(
                 if (next.settings.demoActive ==
                     demo
                 ) {
@@ -101,6 +104,29 @@ class LiveUiStateStore(
         loggedCharges = sessions
         _state.value = withChargeHistory(_state.value)
     }
+
+    /** Logged drives read from the store (newest first), for the Trips tab. */
+    fun onTripHistory(trips: List<TripSummary>) {
+        tripHistory.onHistory(trips, nowMs())
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The selected drive's route, read from the store. */
+    fun onTripRoute(route: TripRoute) {
+        tripHistory.onRoute(route)
+        _state.value = withHistory(_state.value)
+    }
+
+    /** Shows [routeKey] on the Trips map; the host then reads [tripRouteToRead], if any. */
+    fun selectTrip(routeKey: String) {
+        tripHistory.select(routeKey, _state.value.settings.demoActive)
+        _state.value = withHistory(_state.value)
+    }
+
+    /** The logged drive whose route the host still has to read for the map, or null. */
+    fun tripRouteToRead(): String? = tripHistory.routeToRead(_state.value.settings.demoActive)
+
+    private fun withHistory(s: VoltAppUiState): VoltAppUiState = tripHistory.apply(withChargeHistory(s), nowMs())
 
     /**
      * The Charge tab lists the logged charges — or, while the demo runs, sample ones: demo data
@@ -460,6 +486,12 @@ class LiveUiStateStore(
                             homeRate = settings.homeRate,
                             publicRate = settings.publicRate,
                             targetSoc = settings.chargeTargetPct,
+                        ),
+                    trips =
+                        s.trips.copy(
+                            homeRate = settings.homeRate,
+                            gasMpg = settings.gasMpg,
+                            gasPrice = settings.gasPrice,
                         ),
                 )
             }

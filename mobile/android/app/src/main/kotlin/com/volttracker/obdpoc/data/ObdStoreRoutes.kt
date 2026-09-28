@@ -17,6 +17,34 @@ internal class ObdStoreRoutes(
 
     override fun getTripRouteJson(routeKey: String?): JSONObject = reports.tripRouteJson(routeKey)
 
+    override fun getTripDriveModesJson(routeKey: String?): JSONArray {
+        val parsed = DriveWindowDetector.parseRouteKey(routeKey) ?: return JSONArray()
+        val db = helper.readableDatabase
+        if (ObdTripExclusions.isHidden(db, routeKey)) return JSONArray()
+        val modes = JSONArray()
+        var lastGas: Boolean? = null
+        db
+            .rawQuery(
+                "SELECT captured_at_ms, vehicle_state FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                    "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                    "AND vehicle_state IN ('driving_ev', 'driving_gas') ORDER BY captured_at_ms",
+                arrayOf(
+                    parsed.sessionId.toString(),
+                    (parsed.startedAtMs ?: 0L).toString(),
+                    (parsed.endedAtMs ?: Long.MAX_VALUE).toString(),
+                ),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    val gas = cursor.getString(1) == "driving_gas"
+                    if (gas != lastGas) {
+                        modes.put(JSONObject().put("atMs", cursor.getLong(0)).put("gas", gas))
+                        lastGas = gas
+                    }
+                }
+            }
+        return modes
+    }
+
     override fun getCurrentSessionRouteJson(): JSONObject {
         // Direct lookup of the newest in-progress (STATUS_ACTIVE) session, independent of how many
         // newer started rows exist: a fixed-size recent scan could miss the live drive after a
