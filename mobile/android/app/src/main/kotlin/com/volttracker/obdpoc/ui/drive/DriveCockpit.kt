@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.CellHistogram
+import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.pillColor
@@ -469,33 +471,6 @@ private fun CellsCard(
     }
 }
 
-/** One bar per cell group, height = voltage relative to the pack's min…max; the weakest in warn. */
-@Composable
-private fun CellHistogram(
-    cells: List<Double?>,
-    weakest: Int?,
-    modifier: Modifier = Modifier,
-) {
-    val pal = LocalVoltPalette.current
-    Canvas(modifier.semantics { contentDescription = "Cell voltages" }) {
-        val known = cells.filterNotNull()
-        val lo = known.min()
-        val hi = known.max()
-        val span = (hi - lo).takeIf { it > 0 } ?: 1.0
-        val bw = size.width / cells.size
-        cells.forEachIndexed { i, v ->
-            if (v == null) return@forEachIndexed
-            val isWeak = weakest != null && i + 1 == weakest
-            val h = size.height * (HIST_FLOOR + (1 - HIST_FLOOR) * ((v - lo) / span)).toFloat()
-            drawRect(
-                color = if (isWeak) pal.warn else pal.ev.copy(alpha = 0.7f),
-                topLeft = Offset(i * bw, size.height - h),
-                size = Size(bw * HIST_BAR, h),
-            )
-        }
-    }
-}
-
 @Composable
 private fun EfficiencyCard(
     state: DriveUiState,
@@ -593,9 +568,6 @@ private fun TiresMini(
 }
 
 private const val CELL_GROUPS = 96
-private const val MIN_CELLS_FOR_HISTOGRAM = 8
-private const val HIST_FLOOR = 0.25
-private const val HIST_BAR = 0.62f
 private const val STRIP_ZERO = 0.62f
 private const val STRIP_DRIVE_KW = 60f
 private const val STRIP_REGEN_KW = 30f

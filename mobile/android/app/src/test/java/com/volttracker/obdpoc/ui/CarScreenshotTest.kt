@@ -59,7 +59,7 @@ class CarScreenshotTest(
                 drive = parked,
                 car = CarUiState.demo.copy(controls = ready),
                 charge = ChargeUiState(sohPct = 91.0),
-                diag = DiagUiState.demo.copy(codes = emptyList(), lastScanLabel = "scanned 2 h ago"),
+                diag = DiagUiState.demo.copy(codes = emptyList()),
                 settings = SettingsUiState.demo,
             )
 
@@ -69,7 +69,7 @@ class CarScreenshotTest(
                 "fault" to
                     base.copy(
                         drive = parked.copy(tires = TirePressures(38.0, 38.0, 37.0, 31.0)),
-                        diag = DiagUiState.demo.copy(lastScanLabel = "scanned 2 h ago"),
+                        diag = DiagUiState.demo,
                         car =
                             base.car.copy(
                                 controls = ready.copy(lastCommand = "lock", lastOutcome = "confirmed"),

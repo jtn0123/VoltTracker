@@ -19,7 +19,7 @@ class CarLogicTest {
     private val alert =
         DiagUiState.demo.copy(
             codes =
-                DiagUiState.demo.codes.mapIndexed { i, c ->
+                DiagUiState.demo.codes.orEmpty().mapIndexed { i, c ->
                     if (i ==
                         0
                     ) {
@@ -32,14 +32,16 @@ class CarLogicTest {
 
     @Test
     fun healthSummaryCountsCodesAndAppendsTheLastScan() {
-        assertEquals("2 trouble codes · Last scan 2h ago", healthSummary(warnings))
-        assertEquals("No trouble codes · Last scan 2h ago", healthSummary(clean))
-        assertEquals("1 trouble code", healthSummary(DiagUiState(codes = warnings.codes.take(1))))
-        assertEquals("No trouble codes", healthSummary(DiagUiState()))
+        assertEquals("2 trouble codes · scanned 2 h ago", healthSummary(warnings))
+        assertEquals("No trouble codes · scanned 2 h ago", healthSummary(clean))
+        assertEquals("1 trouble code", healthSummary(DiagUiState(codes = warnings.codes.orEmpty().take(1))))
+        assertEquals("No trouble codes", healthSummary(DiagUiState(codes = emptyList())))
+        assertEquals("Not scanned yet", healthSummary(DiagUiState()))
     }
 
     @Test
     fun healthToneEscalatesWithTheWorstCode() {
+        assertEquals(PillTone.NEUTRAL, healthTone(DiagUiState()))
         assertEquals(PillTone.EV, healthTone(clean))
         assertEquals(PillTone.WARN, healthTone(warnings))
         assertEquals(PillTone.BAD, healthTone(alert))
@@ -48,6 +50,7 @@ class CarLogicTest {
     @Test
     fun carBadgeShowsOnlyWhileCodesAreStored() {
         assertNull(carBadge(clean))
+        assertNull("not scanned is no alarm", carBadge(DiagUiState()))
         assertEquals(NavBadge.WARN, carBadge(warnings))
         assertEquals(NavBadge.BAD, carBadge(alert))
     }

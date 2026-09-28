@@ -37,6 +37,8 @@ data class ChargeUiState(
     /** The car's own EV range estimate in miles; null (caption hidden) until it reports. */
     val evRangeMiles: Double? = null,
     val sohPct: Double? = null,
+    /** The pack's measured capacity (Ah), read with [sohPct]; null until the car reports it. */
+    val capacityAh: Double? = null,
     val chargeKw: Double = 0.0,
     val acVolts: Double? = null,
     val acAmps: Double? = null,

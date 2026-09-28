@@ -1,4 +1,5 @@
 import com.volttracker.build.DashboardHtmlAssembler
+import com.volttracker.build.DtcTableExtractor
 
 plugins {
     // Kotlin is the language for Android production code. AGP 9.0+ has built-in Kotlin
@@ -363,12 +364,27 @@ tasks.register("generateDashboardHtml") {
     }
 }
 
+// The native Health screen's trouble-code names and severities, extracted from the classic
+// dashboard's DTC tables so both UIs grade a code the same way. The output is gitignored.
+tasks.register("generateDtcTable") {
+    description = "Extracts assets/dtc/dtc-table.tsv from the dashboard's DTC lookup and causes tables."
+    def lookupTs = file("src/main/dashboard-src/js/dtc-lookup.ts")
+    def causesTs = file("src/main/dashboard-src/js/dtc-causes.ts")
+    def outFile = file("src/main/assets/dtc/dtc-table.tsv")
+    inputs.files(lookupTs, causesTs)
+    outputs.file(outFile)
+    doLast {
+        outFile.parentFile.mkdirs()
+        outFile.setText(DtcTableExtractor.extract(lookupTs, causesTs), "UTF-8")
+    }
+}
+
 tasks.named("generateDashboardHtml") {
     mustRunAfter(rootProject.tasks.named("verifyGeneratedDashboardClean"))
 }
 
 tasks.named("preBuild") {
-    dependsOn("generateDashboardHtml")
+    dependsOn("generateDashboardHtml", "generateDtcTable")
     // The shipped dashboard JS assets (assets/dashboard/js) are gitignored, built from
     // dashboard-src/js TypeScript by esbuild — build them before the assets get packaged.
     dependsOn(rootProject.tasks.named("buildDashboardJs"))

@@ -27,6 +27,7 @@ import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.diag.DtcCatalog
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
@@ -36,6 +37,7 @@ import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
 import org.json.JSONObject
+import java.io.IOException
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
@@ -80,6 +82,12 @@ class ComposeDashboardActivity :
     private lateinit var backups: BackupController<ComposeDashboardActivity>
     private val tripExports by lazy { TripExportController(applicationContext, this) }
     private val carControls by lazy { ComposeCarControls(this, { prefs }, store, ::showMessage) }
+    private val dtc: ComposeDtcActions by lazy {
+        ComposeDtcActions(this, this, { prefs }, store, ::showMessage) { history.loadHealth() }
+    }
+
+    /** Health's trouble-code names and severities, read from the APK once, off the main thread. */
+    private val dtcCatalog: DtcCatalog by lazy { readDtcCatalog() }
 
     // Process-scoped: survives configuration recreation (see UpdateCoordinator).
     private lateinit var updates: UpdateCoordinator
@@ -92,6 +100,7 @@ class ComposeDashboardActivity :
             ) {
                 val json = intent.getStringExtra(ObdService.EXTRA_JSON)
                 ComposeDashboardSupport.routeServiceBroadcast(intent.action, json, store)
+                if (intent.action == ObdService.BROADCAST_TELEMETRY) dtc.onTelemetry(MainActivityUtils.parseJson(json))
                 if (intent.action == ObdService.BROADCAST_STATUS) {
                     // Keep-screen-awake only holds while a session is logging.
                     experience.onLoggingStateChanged()
@@ -187,6 +196,9 @@ class ComposeDashboardActivity :
                             onInsightsPeriod = ::selectInsightsPeriod,
                             onCarControl = { carControls.request(it) },
                             onCarControlsEnabled = { carControls.setEnabled(it) },
+                            onScanCodes = { dtc.scan() },
+                            onClearCodes = { dtc.clear() },
+                            onShareHealthReport = { dtc.share(it) },
                         ),
                 )
             }
@@ -514,6 +526,7 @@ class ComposeDashboardActivity :
             CHARGE_VIEW -> history.loadCharges()
             TRIPS_VIEW -> history.loadTrips()
             INSIGHTS_VIEW -> history.loadInsights()
+            HEALTH_VIEW -> history.loadHealth()
         }
     }
 
@@ -531,9 +544,24 @@ class ComposeDashboardActivity :
     internal fun uiState(): VoltAppUiState = store.state.value
 
     /** Reads the Charge, Trips and Insights tabs' history (tests swap its readers). */
-    internal val history by lazy {
-        ComposeHistoryLoader(backgroundExecutor, store, ::runOnUiThread) { ObdLocalStore(applicationContext) }
+    internal val history: ComposeHistoryLoader by lazy {
+        ComposeHistoryLoader(
+            backgroundExecutor,
+            store,
+            ::runOnUiThread,
+            openStore = { ObdLocalStore(applicationContext) },
+            dtcCatalog = { dtcCatalog },
+            dtcChecks = { dtc.lastScanAtMs() to dtc.lastClearAtMs() },
+        )
     }
+
+    private fun readDtcCatalog(): DtcCatalog =
+        try {
+            assets.open(DtcCatalog.ASSET_PATH).bufferedReader().use { DtcCatalog.parse(it.readText()) }
+        } catch (ex: IOException) {
+            Log.w(AppPrefs.LOG_TAG, "DTC table unavailable", ex)
+            DtcCatalog.EMPTY
+        }
 
     /** Opens the database for a data tool; false (with a message) when it can't be opened. */
     private fun ensureLocalStore(): Boolean {
@@ -621,6 +649,9 @@ class ComposeDashboardActivity :
         const val CHARGE_VIEW = "charge"
         const val TRIPS_VIEW = "map"
         const val INSIGHTS_VIEW = "insights"
+
+        /** The Car tab and Health both report "diagnostics"; both show the trouble codes. */
+        const val HEALTH_VIEW = "diagnostics"
         const val BACKUP_RECEIPT = "setBackupReceipt"
     }
 }
