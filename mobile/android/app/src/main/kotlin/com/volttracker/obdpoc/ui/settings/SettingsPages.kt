@@ -21,6 +21,7 @@ import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltSegmented
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.theme.DarkStyle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
 
@@ -172,12 +173,7 @@ internal fun AppearancePage(
     onChange: (SettingChange) -> Unit,
 ) {
     VoltPanel {
-        ChoiceRow(
-            label = "Theme",
-            subtitle = "System follows your phone's dark theme",
-            options = AppearanceMode.entries.map { it.label },
-            selectedIndex = state.appearance.ordinal,
-        ) { onChange(SettingChange.Appearance(AppearanceMode.entries[it])) }
+        ThemeRows(state, onChange)
         VoltListDivider()
         ChoiceRow(
             label = "Drive view",
@@ -212,6 +208,32 @@ internal fun AppearancePage(
             subtitle = "Calmer TalkBack announcements",
             on = state.quietLiveData,
         ) { onChange(SettingChange.QuietLiveData(it)) }
+    }
+}
+
+/** Mode (System / Dark / Light), the dark style, and — for OLED Black — its accent swatches. */
+@Composable
+private fun ThemeRows(
+    state: SettingsUiState,
+    onChange: (SettingChange) -> Unit,
+) {
+    ChoiceRow(
+        label = "Mode",
+        subtitle = "System follows your phone's dark theme",
+        options = AppearanceMode.entries.map { it.label },
+        selectedIndex = state.appearance.ordinal,
+    ) { onChange(SettingChange.Appearance(AppearanceMode.entries[it])) }
+    VoltListDivider()
+    ChoiceRow(
+        label = "Dark style",
+        subtitle = "Light mode uses Latte",
+        options = DarkStyle.entries.map { it.label },
+        selectedIndex = state.darkStyle.ordinal,
+    ) { onChange(SettingChange.DarkTheme(DarkStyle.entries[it])) }
+    if (state.darkStyle == DarkStyle.OLED) {
+        VoltListDivider()
+        SettingRow(label = "Accent", subtitle = state.accent.label) {}
+        AccentSwatches(selected = state.accent, onSelect = { onChange(SettingChange.Accent(it)) })
     }
 }
 

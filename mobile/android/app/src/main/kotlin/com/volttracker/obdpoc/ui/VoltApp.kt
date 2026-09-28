@@ -63,7 +63,11 @@ fun VoltApp(
     BackHandler(enabled = routes.isNotEmpty(), onBack = pop)
     val screen = screenViewName(tab, routes.lastOrNull())
     LaunchedEffect(screen) { actions.onScreenShown(screen) }
-    VoltTheme(appearance = state.settings.appearance) {
+    VoltTheme(
+        appearance = state.settings.appearance,
+        darkStyle = state.settings.darkStyle,
+        accent = state.settings.accent,
+    ) {
         ScaledText(state.settings.fontScale) {
             SystemBarsAppearance()
             // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the

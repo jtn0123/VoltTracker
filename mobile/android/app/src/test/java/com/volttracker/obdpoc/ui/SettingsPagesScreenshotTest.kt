@@ -12,7 +12,6 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.settings.SettingsPage
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
-import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import org.junit.Rule
@@ -23,7 +22,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Every Settings page in dark and light. `-ProborazziRecord` writes
+ * Every Settings page in OLED Black and Latte, plus Appearance in Saddle Leather and OLED Lime. `-ProborazziRecord` writes
  * build/outputs/roborazzi/settings-<page>-<theme>.png; every case also proves the page composes.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -31,7 +30,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(qualifiers = "w412dp-h915dp-420dpi")
 class SettingsPagesScreenshotTest(
     private val page: SettingsPage,
-    private val appearance: AppearanceMode,
+    private val theme: ThemeCase,
     private val editing: Boolean,
 ) {
     @get:Rule
@@ -41,14 +40,16 @@ class SettingsPagesScreenshotTest(
     fun capture() {
         compose.setContent {
             // Paint the app canvas behind the page, as VoltApp does.
-            VoltTheme(appearance = appearance) {
-                Box(Modifier.fillMaxSize().background(VoltColors.bg)) { SettingsScreen(SAMPLE, initialPage = page) }
+            VoltTheme(theme.appearance, theme.darkStyle, theme.accent) {
+                Box(Modifier.fillMaxSize().background(VoltColors.bg)) {
+                    SettingsScreen(theme.applyTo(SAMPLE), initialPage = page)
+                }
             }
         }
         // Costs with its number editor open under the home rate; Data with the backup passphrase step.
         if (editing) compose.onNodeWithText(EDIT_TARGETS.getValue(page)).performClick()
         val name = page.name.lowercase() + if (editing) "-editing" else ""
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/settings-$name-${appearance.key}.png")
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/settings-$name-${theme.key}.png")
     }
 
     companion object {
@@ -66,7 +67,9 @@ class SettingsPagesScreenshotTest(
         fun cases(): List<Array<Any>> =
             (SettingsPage.entries.map { it to false } + EDIT_TARGETS.keys.map { it to true })
                 .flatMap { (page, editing) ->
-                    listOf(AppearanceMode.DARK, AppearanceMode.LIGHT).map { arrayOf<Any>(page, it, editing) }
-                }
+                    listOf(ThemeCase.OLED, ThemeCase.LATTE).map { arrayOf<Any>(page, it, editing) }
+                } +
+                // Appearance in the other looks: Saddle hides the accent row; Lime shows the pick.
+                listOf(ThemeCase.SADDLE, ThemeCase.OLED_LIME).map { arrayOf<Any>(SettingsPage.APPEARANCE, it, false) }
     }
 }

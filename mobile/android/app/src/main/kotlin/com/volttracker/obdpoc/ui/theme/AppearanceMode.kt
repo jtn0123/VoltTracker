@@ -9,8 +9,8 @@ enum class AppearanceMode(
     val label: String,
 ) {
     SYSTEM("system", "System"),
-    LIGHT("light", "Light"),
     DARK("dark", "Dark"),
+    LIGHT("light", "Light"),
     ;
 
     companion object {

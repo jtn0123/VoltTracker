@@ -33,23 +33,22 @@ import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
 
-/** Card chrome (mockups `.card`): 20dp corners, hairline border, a soft shadow in light. */
+/** Card chrome (mockups `.card`): 20dp corners, hairline border, the theme's shadow (none in dark). */
 @Composable
 fun Modifier.voltCard(radius: Dp = 20.dp): Modifier {
     val shape = RoundedCornerShape(radius)
+    val tint = VoltColors.cardShadow
     val lifted =
-        if (VoltColors.isDark) {
+        if (VoltColors.isDark || tint.alpha == 0f) {
             this
         } else {
-            this.shadow(elevation = 6.dp, shape = shape, ambientColor = CARD_SHADOW, spotColor = CARD_SHADOW)
+            this.shadow(elevation = 6.dp, shape = shape, ambientColor = tint, spotColor = tint)
         }
     return lifted
         .clip(shape)
         .background(VoltColors.surface)
         .border(1.dp, VoltColors.hairline, shape)
 }
-
-private val CARD_SHADOW = Color(0x33102030)
 
 /** The one "card" container in the design language. */
 @Composable

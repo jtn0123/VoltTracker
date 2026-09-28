@@ -48,6 +48,8 @@ class ComposeSettingsStore(
             gasPrice = shared.gasPricePerGal(),
             chargeTargetPct = shared.chargeTargetSoc().roundToInt(),
             appearance = AppearancePrefs.read(prefs),
+            darkStyle = AppearancePrefs.readDarkStyle(prefs),
+            accent = AppearancePrefs.readAccent(prefs),
             keepScreenAwake = prefs.getBoolean(DashboardExperienceHostDelegate.PREF_KEEP_SCREEN_AWAKE, false),
             quietLiveData = shared.quietTelemetry(),
             fontScale = nearestTextSize(shared.fontScale()),
@@ -83,6 +85,8 @@ class ComposeSettingsStore(
             is SettingChange.TextSize -> shared.setFontScale(change.scale)
             is SettingChange.HighContrast -> shared.setHighContrast(change.on)
             is SettingChange.Appearance -> AppearancePrefs.write(prefs, change.mode)
+            is SettingChange.DarkTheme -> AppearancePrefs.writeDarkStyle(prefs, change.style)
+            is SettingChange.Accent -> AppearancePrefs.writeAccent(prefs, change.accent)
             is SettingChange.DriveDetailed -> AppearancePrefs.writeDriveDetailed(prefs, change.detailed)
             is SettingChange.DriveEnergyFlow -> AppearancePrefs.writeDriveEnergyFlow(prefs, change.show)
             else -> Unit

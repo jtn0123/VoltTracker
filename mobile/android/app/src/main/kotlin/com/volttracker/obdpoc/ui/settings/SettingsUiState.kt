@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc.ui.settings
 
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.theme.DarkStyle
+import com.volttracker.obdpoc.ui.theme.OledAccent
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -44,6 +46,10 @@ data class SettingsUiState(
     // Display
     // Appearance: follow the system theme, or pin light/dark.
     val appearance: AppearanceMode = AppearanceMode.SYSTEM,
+    /** The palette a dark [appearance] renders in. */
+    val darkStyle: DarkStyle = DarkStyle.OLED,
+    /** OLED Black's accent (ignored by Saddle Leather and the light theme). */
+    val accent: OledAccent = OledAccent.CYAN,
     val keepScreenAwake: Boolean = false,
     val quietLiveData: Boolean = true,
     /** Text size multiplier: 1, 1.25 or 1.5. */
