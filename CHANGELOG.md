@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.51.0 (2026-09-28)
+
+### ✳️ New
+
+- **car**: Redesign car tab with top-down tires, body state and car controls
+  ([#98](https://github.com/jtn0123/VoltTracker/pull/98),
+  [`bc89ce3`](https://github.com/jtn0123/VoltTracker/commit/bc89ce385e6b74f841968f27a181243fd86904ad))
+
+
 ## v0.50.0 (2026-09-28)
 
 ### ✳️ New
