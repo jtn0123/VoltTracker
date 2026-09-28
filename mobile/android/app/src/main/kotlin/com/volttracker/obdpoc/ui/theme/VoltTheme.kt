@@ -12,11 +12,12 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 
 /**
- * VoltTracker "Clean EV" palette — the approved redesign tokens (mockups `src/base.css`),
- * one instance per theme. Color carries meaning only:
- *  - [volt] (teal): interactive/brand — selection, primary actions, drive power.
+ * One VoltTracker theme's color tokens — the approved mockup token set (`src/themes*.css`; the
+ * instances live in VoltPalettes.kt). Color carries meaning only:
+ *  - [volt]: the accent — interactive/brand, selection, primary actions, drive power.
  *  - [ev] (green): electric energy — battery, charging, regen, healthy.
  *  - [gas] (amber): the gas engine is running.
  *  - [warn] / [bad]: warnings and faults.
@@ -50,12 +51,19 @@ data class VoltPalette(
     val mapLand: Color,
     val mapRoad: Color,
     val mapWater: Color,
-    /** Soft companions of [ev] kept for the existing chart/range call sites. */
-    val evBright: Color,
-    val evDim: Color,
-    /** Neutral chart series with no status meaning (terrain/elevation). */
-    val neutralSeries: Color,
+    /** Card shadow tint (`--shadow`); transparent on the dark themes, whose cards sit flat. */
+    val cardShadow: Color,
 ) {
+    /** Emphasized [ev] (chart highlights): lighter on dark, deeper on light. */
+    val evBright: Color =
+        lerp(ev, if (isDark) Color.White else Color.Black, if (isDark) EV_BRIGHT_DARK else EV_BRIGHT_LIGHT)
+
+    /** Receded [ev] (chart fills behind the line): toward the canvas. */
+    val evDim: Color = lerp(ev, if (isDark) Color.Black else Color.White, EV_DIM)
+
+    /** Neutral chart series with no status meaning (terrain/elevation). */
+    val neutralSeries: Color = if (isDark) lerp(muted, faint, NEUTRAL_MIX) else faint
+
     // Same names as [VoltColors], so drawing code can swap `VoltColors.x` for a captured `pal.x`.
     val surfaceElevated: Color get() = surface2
     val hairline: Color get() = line
@@ -72,74 +80,27 @@ data class VoltPalette(
     val alert: Color get() = bad
 
     companion object {
-        val Dark =
-            VoltPalette(
-                isDark = true,
-                bg = Color(0xFF0B0F14),
-                bgGlow = Color(0xFF0F151C),
-                surface = Color(0xFF141A21),
-                surface2 = Color(0xFF1B222B),
-                surface3 = Color(0xFF222A34),
-                line = Color.White.copy(alpha = 0.06f),
-                line2 = Color.White.copy(alpha = 0.11f),
-                track = Color.White.copy(alpha = 0.07f),
-                text = Color(0xFFE8EDF2),
-                muted = Color(0xFF9AA5B1),
-                faint = Color(0xFF6E7A87),
-                volt = Color(0xFF2BD4C4),
-                onVolt = Color(0xFF04201D),
-                ev = Color(0xFF5FD37A),
-                gas = Color(0xFFFF9F43),
-                warn = Color(0xFFF2C94C),
-                bad = Color(0xFFFF6B6B),
-                carBody = Color(0xFF1E262F),
-                carLine = Color.White.copy(alpha = 0.14f),
-                carGlass = Color(0xFF0F1419),
-                mapLand = Color(0xFF121820),
-                mapRoad = Color(0xFF1F2831),
-                mapWater = Color(0xFF0C1E26),
-                evBright = Color(0xFFA8EDB9),
-                evDim = Color(0xFF2E6B41),
-                neutralSeries = Color(0xFF8793A0),
-            )
+        /** OLED Black, Cyan accent — the default dark theme. */
+        val Oled: VoltPalette get() = OledCyanPalette
 
-        private val ink = Color(0xFF0C141C)
+        /** Saddle Leather — the alternative dark theme. */
+        val Saddle: VoltPalette get() = SaddlePalette
 
-        val Light =
-            VoltPalette(
-                isDark = false,
-                bg = Color(0xFFF6F8FA),
-                bgGlow = Color(0xFFFFFFFF),
-                surface = Color(0xFFFFFFFF),
-                surface2 = Color(0xFFEFF3F6),
-                surface3 = Color(0xFFE4E9EE),
-                line = ink.copy(alpha = 0.07f),
-                line2 = ink.copy(alpha = 0.12f),
-                track = ink.copy(alpha = 0.075f),
-                text = Color(0xFF0E151C),
-                muted = Color(0xFF56616D),
-                faint = Color(0xFF86909B),
-                volt = Color(0xFF0E9F91),
-                onVolt = Color(0xFFFFFFFF),
-                ev = Color(0xFF22A046),
-                gas = Color(0xFFE07A12),
-                warn = Color(0xFFB98A00),
-                bad = Color(0xFFD93F3F),
-                carBody = Color(0xFFE7ECF0),
-                carLine = ink.copy(alpha = 0.18f),
-                carGlass = Color(0xFFCBD4DC),
-                mapLand = Color(0xFFEDF1F4),
-                mapRoad = Color(0xFFFFFFFF),
-                mapWater = Color(0xFFD3E6EE),
-                evBright = Color(0xFF157A33),
-                evDim = Color(0xFF9FD6AE),
-                neutralSeries = Color(0xFF86909B),
-            )
+        /** Latte — the light theme. */
+        val Latte: VoltPalette get() = LattePalette
+
+        /** OLED Black in [accent]. */
+        fun oled(accent: OledAccent): VoltPalette = oledPalette(accent)
+
+        private const val EV_BRIGHT_DARK = 0.45f
+        private const val EV_BRIGHT_LIGHT = 0.3f
+        private const val EV_DIM = 0.5f
+        private const val NEUTRAL_MIX = 0.5f
     }
 }
 
 /** The palette in effect — supplied by [VoltTheme]; dark outside any theme. */
-val LocalVoltPalette = staticCompositionLocalOf { VoltPalette.Dark }
+val LocalVoltPalette = staticCompositionLocalOf { VoltPalette.Oled }
 
 /**
  * Theme-aware color tokens for call sites. Each reads the current [VoltPalette], so a screen
@@ -188,7 +149,7 @@ object VoltColors {
         @Composable @ReadOnlyComposable
         get() = p.faint
 
-    /** The one brand/interactive accent (Volt teal). */
+    /** The one brand/interactive accent (the theme's `--volt`). */
     val accent: Color
         @Composable @ReadOnlyComposable
         get() = p.volt
@@ -256,6 +217,11 @@ object VoltColors {
         @Composable @ReadOnlyComposable
         get() = p.mapWater
 
+    /** Card shadow tint; transparent in the dark themes (flat cards). */
+    val cardShadow: Color
+        @Composable @ReadOnlyComposable
+        get() = p.cardShadow
+
     private const val ACCENT_DIM_ALPHA = 0.35f
 }
 
@@ -267,8 +233,20 @@ fun AppearanceMode.resolvesDark(systemDark: Boolean): Boolean =
         AppearanceMode.LIGHT -> false
     }
 
-/** The palette for a light/dark decision. */
-fun voltPalette(dark: Boolean): VoltPalette = if (dark) VoltPalette.Dark else VoltPalette.Light
+/**
+ * The palette for a light/dark decision: Latte when light; when dark, the chosen [style] —
+ * OLED Black in [accent], or Saddle Leather (which has its own accent and ignores [accent]).
+ */
+fun voltPalette(
+    dark: Boolean,
+    style: DarkStyle = DarkStyle.OLED,
+    accent: OledAccent = OledAccent.CYAN,
+): VoltPalette =
+    when {
+        !dark -> VoltPalette.Latte
+        style == DarkStyle.SADDLE -> VoltPalette.Saddle
+        else -> VoltPalette.oled(accent)
+    }
 
 private fun materialScheme(p: VoltPalette): ColorScheme =
     if (p.isDark) {
@@ -303,14 +281,17 @@ private fun materialScheme(p: VoltPalette): ColorScheme =
 
 /**
  * VoltTracker's Compose theme. Follows the system dark/light setting unless the user picked a
- * fixed [appearance] (Settings → Appearance).
+ * fixed [appearance]; dark renders in [darkStyle] (and, for OLED Black, [accent]) — all three
+ * are Settings → Appearance choices.
  */
 @Composable
 fun VoltTheme(
     appearance: AppearanceMode = AppearanceMode.SYSTEM,
+    darkStyle: DarkStyle = DarkStyle.OLED,
+    accent: OledAccent = OledAccent.CYAN,
     content: @Composable () -> Unit,
 ) {
-    val palette = voltPalette(appearance.resolvesDark(isSystemInDarkTheme()))
+    val palette = voltPalette(appearance.resolvesDark(isSystemInDarkTheme()), darkStyle, accent)
     CompositionLocalProvider(LocalVoltPalette provides palette) {
         MaterialTheme(
             colorScheme = materialScheme(palette),

@@ -64,6 +64,8 @@ class PrefsKeyOwnershipTest {
                 CarControlSettings.KEY_PIN_HASH,
                 CarControlSettings.KEY_PIN_SALT,
                 com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_APPEARANCE,
+                com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_DARK_STYLE,
+                com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_ACCENT,
                 "raw_retention_days",
             ) + SharedDisplayPrefs.KEYS.map { SharedDisplayPrefs.PREFIX + it }
 

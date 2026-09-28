@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc.ui.settings
 
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.theme.DarkStyle
+import com.volttracker.obdpoc.ui.theme.OledAccent
 
 /**
  * One edit made on a Settings page. The screen emits these through a single callback; the host
@@ -72,6 +74,14 @@ sealed interface SettingChange {
     // Display
     data class Appearance(
         val mode: AppearanceMode,
+    ) : SettingChange
+
+    data class DarkTheme(
+        val style: DarkStyle,
+    ) : SettingChange
+
+    data class Accent(
+        val accent: OledAccent,
     ) : SettingChange
 
     data class KeepScreenAwake(

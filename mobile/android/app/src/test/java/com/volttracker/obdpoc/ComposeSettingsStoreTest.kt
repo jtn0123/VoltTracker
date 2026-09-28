@@ -6,6 +6,8 @@ import androidx.core.content.edit
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.theme.DarkStyle
+import com.volttracker.obdpoc.ui.theme.OledAccent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -80,6 +82,8 @@ class ComposeSettingsStoreTest {
         assertEquals("not set", state.gasMpgLabel)
         assertEquals(100, state.chargeTargetPct)
         assertEquals(AppearanceMode.SYSTEM, state.appearance)
+        assertEquals(DarkStyle.OLED, state.darkStyle)
+        assertEquals(OledAccent.CYAN, state.accent)
         assertFalse(state.keepScreenAwake)
         assertTrue(state.quietLiveData)
         assertEquals(1.0, state.fontScale, 0.0)
@@ -113,6 +117,8 @@ class ComposeSettingsStoreTest {
             SettingChange.GasMpg(32.5),
             SettingChange.ChargeTarget(80),
             SettingChange.Appearance(AppearanceMode.LIGHT),
+            SettingChange.DarkTheme(DarkStyle.SADDLE),
+            SettingChange.Accent(OledAccent.VIOLET),
             SettingChange.KeepScreenAwake(true),
             SettingChange.QuietLiveData(false),
             SettingChange.TextSize(1.25),
@@ -138,6 +144,8 @@ class ComposeSettingsStoreTest {
         assertEquals(32.5, s.gasMpg)
         assertEquals(80, s.chargeTargetPct)
         assertEquals(AppearanceMode.LIGHT, s.appearance)
+        assertEquals(DarkStyle.SADDLE, s.darkStyle)
+        assertEquals(OledAccent.VIOLET, s.accent)
         assertTrue(s.keepScreenAwake)
         assertFalse(s.quietLiveData)
         assertEquals(1.25, s.fontScale, 0.0)
