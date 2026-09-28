@@ -88,6 +88,23 @@ def repoVersionCode =
         Math.addExact(
                 Math.addExact(Math.multiplyExact(repoVersionNumbers[0], 1_000_000), repoVersionNumbers[1] * 1_000),
                 repoVersionNumbers[2])
+// Stadia Maps basemap key (map tiles for the WebView Map tab and the Compose Trips map).
+// Read from local.properties `STADIA_API_KEY=...` first, then the STADIA_API_KEY environment
+// variable (CI / release builds, sourced from the repo secret). Never commit a key: both sources
+// are outside git. Empty is a supported value — no key means no basemap tiles, never a fallback.
+def stadiaApiKey = {
+    def localProps = rootProject.file("local.properties")
+    def key = null
+    if (localProps.exists()) {
+        def props = new Properties()
+        localProps.withInputStream { props.load(it) }
+        key = props.getProperty("STADIA_API_KEY")?.trim()
+    }
+    if (!key) {
+        key = System.getenv("STADIA_API_KEY")?.trim()
+    }
+    return key ?: ""
+}()
 def benchmarkDebugTarget =
         (findProperty("voltTrackerBenchmarkDebug")?.toString()?.toBoolean() ?: false) ||
                 gradle.startParameter.taskNames.any {
@@ -107,6 +124,8 @@ android {
         versionCode = repoVersionCode
         versionName = "${repoVersionName}-${repoVersionSuffix}"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Escaped as a Java string literal; StadiaTiles is the only reader.
+        buildConfigField "String", "STADIA_API_KEY", "\"${stadiaApiKey.replace("\\", "\\\\").replace("\"", "\\\"")}\""
     }
 
     // Release signing activates only when mobile/android/keystore.properties exists

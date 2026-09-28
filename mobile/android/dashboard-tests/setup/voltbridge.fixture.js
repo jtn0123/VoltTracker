@@ -86,6 +86,8 @@ export function createVoltBridgeFixture(overrides = {}) {
     setTripSummaryNotify: voidStub,
     setActiveDashboardView: voidStub,
     getCarControlState: stub('{"available":true,"enabled":false,"unlocked":false,"unlockedRemainingMs":0,"pinLockedOut":false}'),
+    // No Stadia key by default: the map draws no tile layer (tests opt into a fake-key config).
+    getMapTileConfig: stub('{}'),
     setCarControlsEnabled: voidStub,
     requestCarControl: voidStub,
     lockCarControls: voidStub,
@@ -146,6 +148,7 @@ export const VOLT_BRIDGE_METHODS = Object.freeze([
   'setTripSummaryNotify',
   'setActiveDashboardView',
   'getCarControlState',
+  'getMapTileConfig',
   'setCarControlsEnabled',
   'requestCarControl',
   'lockCarControls',

@@ -253,6 +253,10 @@ jobs:
         # Signed mode builds both variants. Dev mode skips :app:assembleRelease:
         # without a signingConfig the release variant comes out unsigned, and
         # Android refuses to install unsigned APKs.
+        env:
+          # Stadia Maps basemap key -> BuildConfig.STADIA_API_KEY. An unset/empty secret is
+          # fine: the app builds and runs, the maps just draw no tiles.
+          STADIA_API_KEY: ${{ secrets.STADIA_API_KEY }}
         run: |
           chmod +x ./gradlew
           # The job checks out the tag after semantic-release creates it, so

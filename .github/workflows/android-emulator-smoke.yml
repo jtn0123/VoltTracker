@@ -40,6 +40,10 @@ jobs:
           java-version: '21'
       - name: Build debug APK
         working-directory: mobile/android
+        env:
+          # Stadia Maps basemap key -> BuildConfig.STADIA_API_KEY. An unset/empty secret is
+          # fine: the app builds and runs, the maps just draw no tiles.
+          STADIA_API_KEY: ${{ secrets.STADIA_API_KEY }}
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --configuration-cache :app:assembleDebug

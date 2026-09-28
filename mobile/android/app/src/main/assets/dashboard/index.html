@@ -8,8 +8,9 @@
     />
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
-  map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
-  unreachable (see map.js error handler). No remote scripts ever, and no
+  map tiles from Stadia Maps (tiles.stadiamaps.com; URL templates come from the
+  native StadiaTiles.kt, and a build without a key loads no tiles at all — there
+  is no fallback tile host). No remote scripts ever, and no
   'unsafe-inline' anywhere: style-src is 'self' because nothing sets inline
   styles CSP cares about — Leaflet positions tiles/markers via CSSOM
   (el.style.prop, which style-src does not restrict), our own code uses
@@ -18,7 +19,7 @@
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://tiles.stadiamaps.com; script-src 'self'; style-src 'self'; connect-src 'self' https://tiles.stadiamaps.com; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <!-- Display face (base.css @font-face). Preloaded so the first paint of the
@@ -1072,9 +1073,9 @@
     hidden
   >
     <span id="mapPrivacyNoticeCopy">
-      Map imagery loads from OpenStreetMap/CARTO servers. They receive the
-      approximate area you view (map-tile coordinates) &mdash; never your
-      routes, telemetry, or identity.
+      Map imagery loads from Stadia Maps servers. They receive the approximate
+      area you view (map-tile coordinates) &mdash; never your routes, telemetry,
+      or identity.
     </span>
     <button type="button" id="mapPrivacyGotItBtn" class="link-btn">
       Got it
@@ -3225,7 +3226,7 @@
   <!--
     Open-source licenses (C3). Everything third-party that ships INSIDE the
     app: the vendored Leaflet build (lib/leaflet), the remote basemap tile
-    data (OpenStreetMap via CARTO — ODbL attribution required), and the
+    data (OpenStreetMap via OpenMapTiles and Stadia Maps — ODbL attribution required), and the
     bundled Space Grotesk font (fonts/SpaceGroteskVar.woff2; its full OFL
     text ships beside it as fonts/OFL.txt). BSD/OFL require the copyright
     notice to travel with the distribution, so each entry expands to that
@@ -3263,12 +3264,12 @@
       <li>
         <details>
           <summary>
-            <strong>CARTO basemaps</strong>
-            <small>Tile service &middot; dark basemap style</small>
+            <strong>Stadia Maps basemaps</strong>
+            <small>Tile service &middot; Alidade Smooth styles</small>
           </summary>
           <p>
-            Map tiles &copy; CARTO (carto.com/attributions), rendered from
-            OpenStreetMap data.
+            Map tiles &copy; Stadia Maps (stadiamaps.com) &copy; OpenMapTiles
+            (openmaptiles.org), rendered from OpenStreetMap data.
           </p>
         </details>
       </li>
@@ -3295,9 +3296,9 @@
     disclosure lives on. Full detail: docs/privacy-data-handling.md.
   -->
   <p id="mapPrivacyFooter" class="status-copy app-version-footer">
-    Map imagery: OpenStreetMap/CARTO &mdash; their tile servers receive the
-    approximate map area viewed. Everything else stays on this device (see the
-    privacy notes in docs/privacy-data-handling.md).
+    Map imagery: Stadia Maps &mdash; their tile servers receive the approximate
+    map area viewed. Everything else stays on this device (see the privacy notes
+    in docs/privacy-data-handling.md).
   </p>
 
   <!--

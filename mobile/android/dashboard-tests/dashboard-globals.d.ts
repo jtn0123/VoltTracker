@@ -1126,6 +1126,8 @@ interface VoltRestoreProgress {
     setTripSummaryNotify(enabled: boolean): void;
     setActiveDashboardView(view: string): void;
     getCarControlState(): string;
+    /** Map-tab basemap tiles: JSON `{dark, light, attribution}` (Stadia URL templates), or `{}` with no key. */
+    getMapTileConfig(): string;
     setCarControlsEnabled(enabled: boolean): void;
     requestCarControl(command: string): void;
     lockCarControls(): void;

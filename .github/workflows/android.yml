@@ -192,6 +192,10 @@ jobs:
         # for the PRs where emulator-smoke is path-skipped, so the APK artifact still exists
         # without paying ~1.5-2 min for a second assembleDebug on this lane.
         if: github.event_name == 'pull_request' && needs.changes.outputs.emulator_smoke != 'true'
+        env:
+          # Stadia Maps basemap key -> BuildConfig.STADIA_API_KEY. An unset/empty secret is
+          # fine: the app builds and runs, the maps just draw no tiles.
+          STADIA_API_KEY: ${{ secrets.STADIA_API_KEY }}
         run: ./gradlew --no-daemon --configuration-cache :app:assembleDebug
       - name: Verify generated dashboard, bundle budget and coverage
         # One Gradle invocation instead of four: each separate call forked a single-use daemon

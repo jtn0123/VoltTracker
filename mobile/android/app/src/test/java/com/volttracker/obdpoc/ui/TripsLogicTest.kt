@@ -14,7 +14,7 @@ import com.volttracker.obdpoc.ui.trips.dayGroupLabel
 import com.volttracker.obdpoc.ui.trips.efficiencyText
 import com.volttracker.obdpoc.ui.trips.electricPct
 import com.volttracker.obdpoc.ui.trips.engineOn
-import com.volttracker.obdpoc.ui.trips.fitProjection
+import com.volttracker.obdpoc.ui.trips.fitViewport
 import com.volttracker.obdpoc.ui.trips.gasMiles
 import com.volttracker.obdpoc.ui.trips.groups
 import com.volttracker.obdpoc.ui.trips.miPerKwh
@@ -184,10 +184,11 @@ class TripsLogicTest {
     @Test
     fun theMapFitKeepsTheRoutesShape() {
         val points = listOf(TripPoint(0.0, 0.0, 0L), TripPoint(0.0, 0.02, 1L), TripPoint(0.01, 0.02, 2L))
-        val project = fitProjection(points, Size(400f, 300f), padSide = 20f, padTop = 20f, padBottom = 80f)
-        val a = project(points[0])
-        val b = project(points[1])
-        val c = project(points[2])
+        val viewport =
+            fitViewport(points, Size(400f, 300f), padSide = 20f, padTop = 20f, padBottom = 80f, tileSizePx = 256f)
+        val a = viewport.project(points[0])
+        val b = viewport.project(points[1])
+        val c = viewport.project(points[2])
         // Twice as wide as tall: the 360 px width binds, so the height is 180 px, centred in 200.
         assertEquals(360f, b.x - a.x, 0.5f)
         assertEquals(180f, a.y - c.y, 0.5f)

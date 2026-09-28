@@ -211,65 +211,43 @@ import { VD } from "./vd-registry";
     return point;
   }
 
-  function createRemoteTileLayer(map: LeafletMapInstance): LeafletLayer {
-    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd",
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap, &copy; CARTO"
-    });
-    // Track tile errors and swap to the plain OSM basemap if CARTO is unreachable (DNS block, CDN
-    // outage, regional restriction). Single tile misses are common on mobile networks, so only a
-    // run of failures should surface as a user-visible map problem.
+  type MapTileConfig = { dark?: unknown; light?: unknown; attribution?: unknown };
+
+  const LIGHT_SCHEME = "(prefers-color-scheme: light)";
+
+  // Basemap tiles come from native (StadiaTiles.kt, the one source of truth for both maps):
+  // Stadia Maps URL templates for the dark and light styles, or `{}` when the build has no
+  // key. No key means no tile layer at all: the plain map background plus the route, never a
+  // keyless fallback provider.
+  function mapTileSource(): { url: string; attribution: string } | null {
+    const cfg = VD.parsePayload<MapTileConfig>(VD.callBridge("getMapTileConfig"), {}) || {};
+    const light = typeof matchMedia === "function" && matchMedia(LIGHT_SCHEME).matches;
+    const url = light ? cfg.light : cfg.dark;
+    return typeof url === "string" && url.startsWith("https://tiles.stadiamaps.com/")
+      ? { url, attribution: String(cfg.attribution || "") }
+      : null;
+  }
+
+  function createRemoteTileLayer(): LeafletLayer | null {
+    const source = mapTileSource();
+    if (!source) return null;
+    const tiles = L.tileLayer(source.url, { maxZoom: 19, attribution: source.attribution });
+    // Single tile misses are common on mobile networks, so only a run of failures surfaces as a
+    // user-visible map problem; the route keeps drawing from local data either way.
     let tileErrorCount = 0;
-    let fallbackErrorCount = 0;
-    let fallbackActivated = false;
-    // In-flight requests on the removed primary layer can still settle after the
-    // fallback takes over; ignore them so they cannot clear or re-raise the banner.
     tiles.on("tileload", () => {
-      if (fallbackActivated) return;
       tileErrorCount = 0;
       setMapTileError(false);
     });
     tiles.on("tileerror", (event: LeafletTileErrorEvent) => {
-      if (fallbackActivated) return;
       tileErrorCount += 1;
-      const src = (event && event.tile && event.tile.src) || "unknown";
-      if (tileErrorCount <= 2) {
-        if (bridge && typeof bridge.logClientError === "function") {
-          bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
-        }
+      if (tileErrorCount <= 2 && bridge && typeof bridge.logClientError === "function") {
+        // Drop the query string: it carries the API key, and client errors reach shared logs.
+        const src = String((event && event.tile && event.tile.src) || "unknown").split("?")[0];
+        bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
       }
       if (tileErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
         setMapTileError(true, "Map tiles are not loading. Routes still work; retry when the network is back.");
-      }
-      if (tileErrorCount >= MAP_TILE_FALLBACK_THRESHOLD && !fallbackActivated) {
-        fallbackActivated = true;
-        try {
-          map.removeLayer(tiles);
-          const fallback = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap",
-            maxZoom: 19
-          });
-          fallback.on("tileload", () => {
-            fallbackErrorCount = 0;
-            setMapTileError(false);
-          });
-          fallback.on("tileerror", () => {
-            fallbackErrorCount += 1;
-            if (fallbackErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
-              setMapTileError(true, "Backup map tiles are also unavailable. Routes still work without basemap tiles.");
-            }
-          });
-          fallback.addTo(map);
-          remoteTileLayer = fallback;
-          if (bridge && typeof bridge.logClientError === "function") {
-            bridge.logClientError("map.fallback", "Switched to OSM basemap after tile errors");
-          }
-        } catch (err) {
-          if (bridge && typeof bridge.logClientError === "function") {
-            bridge.logClientError("map.fallback_failed", String(err));
-          }
-        }
       }
     });
     return tiles;
@@ -300,7 +278,7 @@ import { VD } from "./vd-registry";
 
   // ── Map-tile privacy disclosure (E1) ────────────────────────────────────
   // Basemap tile requests are the app's only routine network egress: they tell
-  // the OpenStreetMap/CARTO tile servers the approximate area being viewed
+  // the Stadia Maps tile servers the approximate area being viewed
   // (tile coordinates). Everything else — routes, OBD samples — stays local.
   // Disclose that honestly the first time the Map renders on this install; a
   // "Got it" tap persists the dismissal via prefs (vt.pref.* localStorage), so
@@ -332,7 +310,6 @@ import { VD } from "./vd-registry";
   });
 
   const MAP_TILE_WARNING_THRESHOLD = 3;
-  const MAP_TILE_FALLBACK_THRESHOLD = 6;
   // Cap on stop markers drawn (and counted in the badge) so a long stop-and-go
   // drive can't flood the map; keep the badge count and the drawn markers in sync.
   const MAX_DRAWN_STOPS = 20;
@@ -344,13 +321,13 @@ import { VD } from "./vd-registry";
     if (!map || typeof L === "undefined") return;
     VD.setState({ mapRemoteTilesEnabled: true });
     if (!remoteTileLayer) {
-      remoteTileLayer = createRemoteTileLayer(map);
-      remoteTileLayer.addTo(map);
+      remoteTileLayer = createRemoteTileLayer();
+      if (remoteTileLayer) remoteTileLayer.addTo(map);
     }
   }
 
-  // Creates the Leaflet map once. Remote basemap tiles are always on so route
-  // context stays consistent across Map and Trips.
+  // Creates the Leaflet map once. Remote basemap tiles are always on (when the
+  // build has a tile key) so route context stays consistent across Map and Trips.
   function ensureMap() {
     if (mapInstance) return mapInstance;
     if (typeof L === "undefined") return null;
@@ -358,7 +335,7 @@ import { VD } from "./vd-registry";
     if (!container) return null;
     const map: LeafletMapInstance = L.map(container, { zoomControl: false, attributionControl: true });
     map.setView([39.5, -98.35], 4);
-    // Keep the OSM/CARTO credit but drop Leaflet's default "Leaflet" prefix
+    // Keep the Stadia/OpenMapTiles/OSM credit but drop Leaflet's default "Leaflet" prefix
     // (with flag glyph) — the stock chrome rendered at body size over the
     // legend. The pill styling lives in screens-map.css.
     if (map.attributionControl && typeof map.attributionControl.setPrefix === "function") {
@@ -366,6 +343,8 @@ import { VD } from "./vd-registry";
     }
     mapInstance = map;
     syncRemoteTiles();
+    // Follow the system light/dark switch: rebuild the tile layer in the matching style.
+    if (typeof matchMedia === "function") matchMedia(LIGHT_SCHEME).addEventListener?.("change", retryMapTiles);
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(map);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
     map.on("click", (e: { latlng?: LeafletLatLng }) => {

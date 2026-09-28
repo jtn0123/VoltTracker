@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.volttracker.obdpoc.map.StadiaTiles
 
 /**
  * The [JavascriptInterface] surface the dashboard WebView calls into. The method count is
@@ -128,6 +129,10 @@ class VoltBridge(
     // the engine re-checks the opt-in, the one-shot confirmation and the parked gate before sending.
     @JavascriptInterface
     fun getCarControlState(): String = activity.carControls().getCarControlStateJson()
+
+    /** The Map tab's basemap tiles (see [StadiaTiles.webViewConfigJson]); `{}` when the build has no key. */
+    @JavascriptInterface
+    fun getMapTileConfig(): String = StadiaTiles.webViewConfigJson()
 
     @JavascriptInterface
     fun setCarControlsEnabled(enabled: Boolean) {

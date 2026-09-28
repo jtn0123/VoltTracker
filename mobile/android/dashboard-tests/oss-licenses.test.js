@@ -11,11 +11,15 @@ import { describe, expect, it } from 'vitest';
 // Space Grotesk's SIL OFL 1.1) must carry that notice text. The in-map ODbL
 // credit is separate and load-bearing: OpenStreetMap's license requires visible
 // attribution wherever the map data is shown, which is Leaflet's attribution
-// control on the Map tab.
+// control on the Map tab (its text comes from the native StadiaTiles.kt).
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const INDEX_HTML = resolve(HERE, '../app/src/main/assets/dashboard/index.html');
 const MAP_TS = resolve(HERE, '../app/src/main/dashboard-src/js/map.ts');
+const STADIA_TILES_KT = resolve(
+  HERE,
+  '../app/src/main/kotlin/com/volttracker/obdpoc/map/StadiaTiles.kt',
+);
 
 function licensesSection() {
   const dom = new JSDOM(readFileSync(INDEX_HTML, 'utf8'));
@@ -40,7 +44,8 @@ describe('Settings open-source licenses (C3)', () => {
     for (const name of [
       'Leaflet',
       'OpenStreetMap',
-      'CARTO',
+      'Stadia Maps',
+      'OpenMapTiles',
       'Space Grotesk',
     ]) {
       expect(text, `${name} must be credited`).toContain(name);
@@ -64,14 +69,12 @@ describe('Settings open-source licenses (C3)', () => {
 
   it('keeps the ODbL-critical in-map attribution on the tile layers', () => {
     const map = readFileSync(MAP_TS, 'utf8');
-    // Primary (CARTO) layer and the OSM fallback layer both credit OSM.
-    const attributions = [...map.matchAll(/attribution:\s*"([^"]+)"/g)].map(
-      (m) => m[1],
-    );
-    expect(attributions.length).toBeGreaterThanOrEqual(2);
-    for (const attribution of attributions) {
-      expect(attribution).toMatch(/OpenStreetMap/);
-    }
+    // The one tile layer takes its credit from the native tile config...
+    expect(map).toMatch(/attribution:\s*source\.attribution/);
+    // ...whose single source of truth credits Stadia, OpenMapTiles and OSM.
+    const kotlin = readFileSync(STADIA_TILES_KT, 'utf8');
+    const attribution = kotlin.match(/const val ATTRIBUTION = "([^"]+)"/)?.[1];
+    expect(attribution).toBe('© Stadia Maps © OpenMapTiles © OpenStreetMap');
     // The attribution control must stay enabled on the Leaflet map.
     expect(map).toMatch(/attributionControl:\s*true/);
   });

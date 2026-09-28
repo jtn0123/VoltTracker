@@ -81,10 +81,11 @@ requested by the device.
 
 ### Map Tiles
 
-The Map and Trips basemap is fetched at view time from the CARTO basemap CDN
-(`basemaps.cartocdn.com`), with `tile.openstreetmap.org` as an automatic
-fallback when CARTO is unreachable. Tile requests are the only routine network
-traffic the app generates.
+The Map and Trips basemap is fetched at view time from Stadia Maps
+(`tiles.stadiamaps.com`), using the build's `STADIA_API_KEY`. A build without a
+key fetches no tiles at all — routes draw on a plain background — and there is
+no fallback tile host. Tile requests are the only routine network traffic the
+app generates.
 
 **What leaves the device:** a tile request contains the tile's map
 coordinates (zoom level plus x/y tile indices) and standard HTTP metadata
@@ -109,16 +110,16 @@ next to the open-source licenses.
 Tiles are deliberately **not persistently cached** by the app. There is no
 offline tile store: caching tiles to disk would accumulate a
 location-revealing archive of everywhere the map has been viewed, and an
-unbounded one as zoom levels and areas pile up. Aside from the WebView's
-standard transient HTTP caching (app-private and removed with app data),
-viewed tile imagery is not written to device storage.
+unbounded one as zoom levels and areas pile up. The Compose Trips map keeps a
+small bounded in-memory tile cache (lost when the process ends); aside from
+that and the WebView's standard transient HTTP caching (app-private and
+removed with app data), viewed tile imagery is not written to device storage.
 
 Offline behavior: routes, OBD history, and GPS traces always render from local
 storage, with or without a basemap. When tiles repeatedly fail to load, the
-map shows a "Map tiles are not loading" banner with a retry control; after a
-sustained run of CARTO failures the map switches itself to the OSM fallback
-layer (see `dashboard-src/js/map.ts`). If the fallback also fails, the banner
-notes that routes still work without basemap tiles.
+map shows a "Map tiles are not loading" banner with a retry control (see
+`dashboard-src/js/map.ts`); routes keep drawing without basemap tiles. The
+Compose Trips map keeps its plain background for any tile that fails.
 
 ## Unusual Permissions
 

@@ -32,10 +32,13 @@ function sourceFor(name) {
 // The exact resource hosts the dashboard is allowed to reach. Keep in sync with the
 // CSP meta in dashboard-src/index.template.html. Adding a host here is a deliberate,
 // reviewable act — which is the whole point of this test.
-const ALLOWED_REMOTE_HOSTS = [
-  'https://*.basemaps.cartocdn.com',
-  'https://*.tile.openstreetmap.org',
-];
+const ALLOWED_REMOTE_HOSTS = ['https://tiles.stadiamaps.com'];
+// The tile URL templates themselves come from native (StadiaTiles.kt), so the
+// allowlist is cross-checked against that single source of truth below.
+const STADIA_TILES_KT = resolve(
+  HERE,
+  '../app/src/main/kotlin/com/volttracker/obdpoc/map/StadiaTiles.kt',
+);
 
 function readDashboard(file) {
   return readFileSync(resolve(DASHBOARD, file), 'utf8');
@@ -100,22 +103,19 @@ describe('dashboard content-security-policy', () => {
   });
 
   it('keeps every Leaflet tile URL within the CSP allowlist', () => {
-    // map.ts builds the basemap + OSM-fallback tile URLs. Those are the actual
-    // img/connect resources CSP governs; a host here that isn't in the allowlist
-    // would be silently blocked on-device (blank map).
-    const mapJs = readFileSync(sourceFor('map'), 'utf8');
-    const tileUrls = [...mapJs.matchAll(/https:\/\/\{s\}\.[a-z0-9.]+/g)].map((m) => m[0]);
-    expect(tileUrls.length).toBeGreaterThan(0);
+    // Tile URLs are built natively (StadiaTiles.kt) and handed to map.ts over the
+    // bridge; map.ts refuses any template outside the Stadia host. Both must name
+    // exactly the CSP host, or tiles would be silently blocked on-device (blank map).
+    const kotlin = readFileSync(STADIA_TILES_KT, 'utf8');
+    const host = kotlin.match(/const val HOST = "([^"]+)"/)?.[1];
+    expect(`https://${host}`).toBe(ALLOWED_REMOTE_HOSTS[0]);
+    expect(kotlin).toContain('"https://$HOST/tiles/');
 
-    const allowedSuffixes = ALLOWED_REMOTE_HOSTS.map((h) => h.replace('https://*.', ''));
-    for (const url of tileUrls) {
-      const host = url.replace('https://{s}.', '');
-      // Match on an exact host or a true domain-suffix boundary — `startsWith` would let
-      // `basemaps.cartocdn.com.evil.com` slip past and weaken this security regression test.
-      expect(
-        allowedSuffixes.some((suffix) => host === suffix || host.endsWith('.' + suffix)),
-        `${url} is not covered by the CSP allowlist`,
-      ).toBe(true);
+    const mapJs = readFileSync(sourceFor('map'), 'utf8');
+    const hosts = [...mapJs.matchAll(/https:\/\/([a-z0-9.{}-]+)/gi)].map((m) => m[1]);
+    expect(hosts.length).toBeGreaterThan(0);
+    for (const found of hosts) {
+      expect(`https://${found}`, `${found} is not the CSP tile host`).toBe(ALLOWED_REMOTE_HOSTS[0]);
     }
   });
 });

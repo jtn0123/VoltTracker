@@ -952,6 +952,19 @@ class VoltBridgeDispatchTest {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
     }
 
+    // ---- map tiles ---------------------------------------------------------------------------
+
+    @Test
+    fun mapTileConfigComesFromTheSingleTileSource() {
+        // The build's key (blank in tests unless configured) decides between "no tiles" and templates.
+        assertEquals(
+            com.volttracker.obdpoc.map.StadiaTiles
+                .webViewConfigJson(),
+            bridge.getMapTileConfig(),
+        )
+        if (BuildConfig.STADIA_API_KEY.isBlank()) assertEquals("{}", bridge.getMapTileConfig())
+    }
+
     // ---- car controls ----------------------------------------------------------------------
 
     @Test
