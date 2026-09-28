@@ -13,6 +13,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.location.LocationTracker
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
@@ -73,6 +74,7 @@ class ObdServiceIntegrationTest {
 
     @After
     fun tearDown() {
+        AppVisibility.resetForTest()
         for (receiver in receivers) {
             try {
                 RuntimeEnvironment.getApplication().unregisterReceiver(receiver)
@@ -361,31 +363,37 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
-    fun appVisibilityActionsStopIdleServiceButKeepActiveSessionSticky() {
-        val idleController = newController(null)
-        val idleService = idleController.create().get()
-
-        val idleBackground =
-            idleService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 1)
-
-        assertEquals(Service.START_NOT_STICKY, idleBackground)
-        assertFalse("background action records the app as backgrounded", idleService.appInForeground)
-        assertTrue("idle background action should stop the service", shadowOf(idleService).isStoppedBySelf)
-
-        val activeController =
+    fun appVisibilityReachesTheServiceInProcessWithoutAStartCommand() {
+        val controller =
             newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
-        val activeService = activeController.create().get()
-        activeController.startCommand(0, 1)
+        val service = controller.create().get()
+        controller.startCommand(0, 1)
+        assertTrue("a fresh service starts from the current (foreground) screen state", service.appInForeground)
 
-        val activeBackground =
-            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 2)
-        val activeForeground =
-            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_FOREGROUND, null, null, null), 0, 3)
+        // The activities call AppVisibility.report from onPause/onResume; no Intent is sent, so
+        // ActivityThread never runs QueuedWork.waitToFinish for it (the share-sheet ANR).
+        AppVisibility.report(false)
+        assertFalse("pause records the app as backgrounded", service.appInForeground)
+        AppVisibility.report(true)
+        assertTrue("resume records the app as foregrounded again", service.appInForeground)
+        assertFalse("visibility changes must not stop an active service", shadowOf(service).isStoppedBySelf)
+        assertNull(
+            "no start command is issued for visibility",
+            shadowOf(RuntimeEnvironment.getApplication()).nextStartedService,
+        )
+    }
 
-        assertEquals(Service.START_STICKY, activeBackground)
-        assertEquals(Service.START_STICKY, activeForeground)
-        assertTrue("foreground action records the app as foregrounded again", activeService.appInForeground)
-        assertFalse("active visibility changes must not stop the service", shadowOf(activeService).isStoppedBySelf)
+    @Test
+    fun serviceCreatedWhileBackgroundedStartsBackgroundedAndStopsListeningAfterDestroy() {
+        AppVisibility.report(false)
+        val controller = newController(null)
+        val service = controller.create().get()
+        assertFalse("a service created behind another app starts backgrounded", service.appInForeground)
+
+        controller.destroy()
+        controllers.remove(controller)
+        AppVisibility.report(true)
+        assertFalse("a destroyed service is no longer notified", service.appInForeground)
     }
 
     // ---- null / unrecognized start commands ------------------------------------------
