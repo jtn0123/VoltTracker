@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -16,6 +17,8 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
@@ -27,6 +30,7 @@ import com.volttracker.obdpoc.ui.diag.DiagScreen
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
 import com.volttracker.obdpoc.ui.map.MapScreen
+import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.theme.SystemBarsAppearance
@@ -57,36 +61,72 @@ fun VoltApp(
             )
         }
     BackHandler(enabled = routes.isNotEmpty(), onBack = pop)
+    val screen = screenViewName(tab, routes.lastOrNull())
+    LaunchedEffect(screen) { actions.onScreenShown(screen) }
     VoltTheme(appearance = state.settings.appearance) {
-        SystemBarsAppearance()
-        // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the
-        // content clear of them.
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .background(VoltColors.bg)
-                    .safeDrawingPadding(),
-        ) {
-            Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                CompositionLocalProvider(LocalVoltNav provides nav) {
-                    when (val route = routes.lastOrNull()) {
-                        null -> VoltTabContent(tab = tab, state = state, actions = actions)
-                        else -> VoltRouteContent(route = route, state = state, actions = actions, onBack = pop)
+        ScaledText(state.settings.fontScale) {
+            SystemBarsAppearance()
+            // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the
+            // content clear of them.
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(VoltColors.bg)
+                        .safeDrawingPadding(),
+            ) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+                    CompositionLocalProvider(LocalVoltNav provides nav) {
+                        when (val route = routes.lastOrNull()) {
+                            null -> VoltTabContent(tab = tab, state = state, actions = actions)
+                            else -> VoltRouteContent(route = route, state = state, actions = actions, onBack = pop)
+                        }
                     }
                 }
+                VoltNavBar(
+                    selected = tab,
+                    badges = listOfNotNull(carBadge(state.diag)?.let { VoltTab.CAR to it }).toMap(),
+                    onSelect = {
+                        tab = it
+                        routes = emptyList()
+                    },
+                )
             }
-            VoltNavBar(
-                selected = tab,
-                badges = listOfNotNull(carBadge(state.diag)?.let { VoltTab.CAR to it }).toMap(),
-                onSelect = {
-                    tab = it
-                    routes = emptyList()
-                },
-            )
         }
     }
 }
+
+/**
+ * Settings → Text size. Scales every sp on top of the phone's own font scale, like the classic
+ * dashboard's --font-scale token.
+ */
+@Composable
+private fun ScaledText(
+    scale: Double,
+    content: @Composable () -> Unit,
+) {
+    val density = LocalDensity.current
+    val scaled = remember(density, scale) { Density(density.density, density.fontScale * scale.toFloat()) }
+    CompositionLocalProvider(LocalDensity provides scaled, content = content)
+}
+
+/** The classic dashboard's name for what is on screen (its keep-screen-awake rule keys on it). */
+internal fun screenViewName(
+    tab: VoltTab,
+    route: VoltRoute?,
+): String =
+    when (route) {
+        VoltRoute.SETTINGS -> "settings"
+        VoltRoute.HEALTH -> "diagnostics"
+        null ->
+            when (tab) {
+                VoltTab.DRIVE -> "drive"
+                VoltTab.TRIPS -> "map"
+                VoltTab.CHARGE -> "charge"
+                VoltTab.INSIGHTS -> "insights"
+                VoltTab.CAR -> "diagnostics"
+            }
+    }
 
 @Composable
 private fun VoltTabContent(
@@ -101,7 +141,7 @@ private fun VoltTabContent(
                 onConnect = actions.onConnect,
                 onStartDemo = actions.onStartDemo,
                 showEnergyFlow = state.settings.driveEnergyFlow,
-                onSetDetailed = actions.onSetDriveDetailed,
+                onSetDetailed = { actions.onSettingChange(SettingChange.DriveDetailed(it)) },
             )
         VoltTab.TRIPS -> MapScreen(state.map)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
@@ -128,10 +168,9 @@ private fun VoltRouteContent(
                         onOpenClassicDashboard = actions.onOpenClassicDashboard,
                         onCheckForUpdate = actions.onCheckForUpdate,
                         onInstallUpdate = actions.onInstallUpdate,
-                        onSetAppearance = actions.onSetAppearance,
                         onStartDemo = actions.onStartDemo,
                         onStopDemo = actions.onStopDemo,
-                        onSetDriveEnergyFlow = actions.onSetDriveEnergyFlow,
+                        onChange = actions.onSettingChange,
                     ),
             )
     }

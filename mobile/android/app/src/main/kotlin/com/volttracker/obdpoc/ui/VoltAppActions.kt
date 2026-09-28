@@ -1,6 +1,6 @@
 package com.volttracker.obdpoc.ui
 
-import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.settings.SettingChange
 
 /** Everything the dashboard can ask its host to do. Defaults are no-ops (previews, tests). */
 data class VoltAppActions(
@@ -10,7 +10,11 @@ data class VoltAppActions(
     val onStopDemo: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
-    val onSetAppearance: (AppearanceMode) -> Unit = {},
-    val onSetDriveDetailed: (Boolean) -> Unit = {},
-    val onSetDriveEnergyFlow: (Boolean) -> Unit = {},
+    /** A stored setting changed (Settings pages, or Drive's Focus/Detailed toggle). */
+    val onSettingChange: (SettingChange) -> Unit = {},
+    /**
+     * The visible screen changed, as the classic dashboard's view name ("drive", "map", "charge",
+     * "insights", "diagnostics", "settings"), so the keep-screen-awake rule is shared.
+     */
+    val onScreenShown: (String) -> Unit = {},
 )

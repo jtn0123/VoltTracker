@@ -32,7 +32,6 @@ import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
-import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
@@ -58,10 +57,10 @@ class SettingsActions(
     val onOpenClassicDashboard: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
-    val onSetAppearance: (AppearanceMode) -> Unit = {},
     val onStartDemo: () -> Unit = {},
     val onStopDemo: () -> Unit = {},
-    val onSetDriveEnergyFlow: (Boolean) -> Unit = {},
+    /** Every stored-setting edit (toggles, pickers, number editors). */
+    val onChange: (SettingChange) -> Unit = {},
 )
 
 /**
@@ -88,11 +87,11 @@ fun SettingsScreen(
     ) {
         when (page) {
             SettingsPage.MAIN -> SettingsIndex(state, open)
-            SettingsPage.CONNECTION -> ConnectionPage(state)
-            SettingsPage.COSTS -> CostsPage(state)
-            SettingsPage.UNITS -> UnitsPage(state)
-            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onSetAppearance, actions.onSetDriveEnergyFlow)
-            SettingsPage.ALERTS -> AlertsPage(state)
+            SettingsPage.CONNECTION -> ConnectionPage(state, actions.onChange)
+            SettingsPage.COSTS -> CostsPage(state, actions.onChange)
+            SettingsPage.UNITS -> UnitsPage(state, actions.onChange)
+            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onChange)
+            SettingsPage.ALERTS -> AlertsPage(state, actions.onChange)
             SettingsPage.DATA -> DataPage(state)
             SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)
             SettingsPage.ADVANCED -> AdvancedPage(actions.onOpenClassicDashboard)

@@ -65,7 +65,7 @@ class PrefsKeyOwnershipTest {
                 CarControlSettings.KEY_PIN_SALT,
                 com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_APPEARANCE,
                 "raw_retention_days",
-            )
+            ) + SharedDisplayPrefs.KEYS.map { SharedDisplayPrefs.PREFIX + it }
 
         val allKeys = widgetKeys + notificationKeys + otherKeys
 

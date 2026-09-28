@@ -9,7 +9,7 @@ import com.volttracker.obdpoc.ui.drive.TirePressures
 import com.volttracker.obdpoc.ui.drive.chargeEta
 import com.volttracker.obdpoc.ui.drive.chargeLevelLabel
 import com.volttracker.obdpoc.ui.drive.durationLabel
-import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
@@ -382,22 +382,17 @@ class LiveUiStateStore {
             }
     }
 
-    /** Applies the Settings → Appearance choice (the theme follows it immediately). */
-    fun onAppearance(mode: AppearanceMode) {
-        _state.value =
-            _state.value.let { s -> s.copy(settings = s.settings.copy(appearance = mode)) }
-    }
-
-    /** Applies the persisted Drive view choices: Focus vs Detailed, and the energy-flow card. */
-    fun onDrivePrefs(
-        detailed: Boolean,
-        energyFlow: Boolean,
-    ) {
+    /**
+     * Applies stored settings (read from prefs at start, on resume, and after every edit). Drive
+     * picks up the choices it renders: Focus vs Detailed, and the rate its cost labels use.
+     */
+    fun onSettings(update: (SettingsUiState) -> SettingsUiState) {
         _state.value =
             _state.value.let { s ->
+                val settings = update(s.settings)
                 s.copy(
-                    drive = s.drive.copy(detailed = detailed),
-                    settings = s.settings.copy(driveEnergyFlow = energyFlow),
+                    settings = settings,
+                    drive = s.drive.copy(detailed = settings.driveDetailed, electricityRate = settings.homeRate),
                 )
             }
     }

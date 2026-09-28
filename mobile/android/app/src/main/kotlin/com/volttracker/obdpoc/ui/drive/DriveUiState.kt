@@ -104,6 +104,8 @@ data class DriveUiState(
     /** SOC when this charge began; null until a charge is seen starting. */
     val chargeFromSoc: Double? = null,
     val chargeAddedKwh: Double = 0.0,
+    /** Home electricity rate ($/kWh) from Settings → Costs; 0 = not set, so no cost is shown. */
+    val electricityRate: Double = 0.0,
     val chargeStartedAtMs: Long? = null,
     val chargeEta: ChargeEta? = null,
     /** Wall-clock time of the newest sample (ms) — anchors "Full by" and relative labels. */
@@ -199,6 +201,7 @@ data class DriveUiState(
         val demo =
             DriveUiState(
                 connected = true,
+                electricityRate = 0.12,
                 statusLabel = "Live · 1 Hz",
                 adapterLabel = "OBDLink MX+",
                 phase = DrivePhase.DRIVE,

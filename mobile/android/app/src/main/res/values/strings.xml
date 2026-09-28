@@ -76,6 +76,7 @@
     <!-- Event notifications (EventNotifier / EventNotificationDecider — M1) -->
     <string name="notification_events_channel_name">Volt Tracker alerts</string>
     <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, battery threshold, and overdue-maintenance alerts.</string>
+    <string name="compose_notifications_denied">Alerts are saved, but Android notifications are off for Volt Tracker. Turn them on in system settings to receive them.</string>
     <string name="notification_charge_complete_title">Charge complete</string>
     <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>
     <string name="notification_charge_complete_text_no_energy">Charging finished. Tap to view charge details.</string>

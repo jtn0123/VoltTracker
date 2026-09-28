@@ -136,8 +136,77 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       return;
     }
     rawSet(key, serialized);
+    if (isSharedKey(key)) pushShared(key, serialized);
     notify(key, value);
   }
+
+  // ----- shared display prefs (native source of truth) ------------------------
+  // These keys are shared with the native Compose dashboard. Native
+  // (SharedDisplayPrefs.kt) owns them: localStorage is only a boot-time cache.
+  // At load, native values overwrite the cache. A key native has never seen is
+  // migrated up from the cache, so an existing install keeps its rates and units.
+  // Every set() writes through, and returning to the foreground re-syncs,
+  // because the other UI may have changed a value while this page was hidden.
+  const SHARED_PREF_KEYS = [
+    "units",
+    "pricePerKwh",
+    "publicPricePerKwh",
+    "mpg",
+    "gasPricePerGal",
+    "chargeTargetSoc",
+    "fontScale",
+    "highContrast",
+    "quietTelemetry",
+  ] as const;
+
+  function isSharedKey(key: string): boolean {
+    return (SHARED_PREF_KEYS as readonly string[]).includes(key);
+  }
+
+  function pushShared(key: string, serialized: string): void {
+    try {
+      const bridge = window.VoltTrackerAndroid;
+      if (bridge && typeof bridge.setSharedPref === "function") bridge.setSharedPref(key, serialized);
+    } catch (_err) {
+      /* bridge absent in browser preview / older host — the local value still applies */
+    }
+  }
+
+  function nativeSharedSnapshot(): Record<string, unknown> | null {
+    try {
+      const bridge = window.VoltTrackerAndroid;
+      if (!bridge || typeof bridge.getSharedPrefs !== "function") return null;
+      const parsed: unknown = JSON.parse(bridge.getSharedPrefs());
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+    } catch (_err) {
+      return null;
+    }
+  }
+
+  // Pulls native values into the local cache and pushes up any key native lacks.
+  // Returns the keys whose local value changed.
+  function syncSharedPrefs(): string[] {
+    const snapshot = nativeSharedSnapshot();
+    if (!snapshot) return [];
+    const changed: string[] = [];
+    SHARED_PREF_KEYS.forEach((key) => {
+      const local = rawGet(key);
+      if (Object.prototype.hasOwnProperty.call(snapshot, key)) {
+        const serialized = JSON.stringify(snapshot[key]);
+        if (serialized !== local) {
+          rawSet(key, serialized);
+          changed.push(key);
+        }
+      } else if (local != null) {
+        pushShared(key, local);
+      }
+    });
+    return changed;
+  }
+
+  // Boot-time pull. It runs before any renderer reads a pref, so nothing needs
+  // to be notified.
+  syncSharedPrefs();
 
   // Subscribe to changes for one key, or "*" for all changes. Returns an
   // unsubscribe function.
@@ -208,6 +277,13 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     BACKUP_PREF_KEYS.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(values, key)) set(key, values[key]);
     });
+    applyAllPrefs();
+    return true;
+  }
+
+  // Re-applies every pref-driven surface after values changed underneath the UI
+  // (a backup restore, or a change made in the native dashboard).
+  function applyAllPrefs(): void {
     applyUnitsAttr();
     syncUnitButtons();
     applyAccessibilityAttrs();
@@ -215,7 +291,16 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     applyDriveTiles();
     renderTilesEditor();
     rerenderForUnits();
-    return true;
+  }
+
+  // Coming back from the native dashboard: adopt anything changed there while
+  // this page was hidden, fire the key subscribers (numeric inputs, charge
+  // target presets), then re-apply the pref-driven surfaces once.
+  function resyncSharedPrefs(): void {
+    const changed = syncSharedPrefs();
+    if (!changed.length) return;
+    changed.forEach((key) => notify(key, get<unknown>(key, null)));
+    applyAllPrefs();
   }
 
   export const prefs = { get, set, subscribe, exportForBackup, restoreFromBackup };
@@ -1020,6 +1105,16 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
   // Keeping those lifecycles separate prevents a late/missed ready event from
   // leaving visible preference controls inert.
   bindPreferencesClickHandler();
+
+  // At most once per document, like the click handler above.
+  (function bindSharedPrefsResync(): void {
+    const doc = document as Document & { __voltPrefsResyncBound?: boolean };
+    if (doc.__voltPrefsResyncBound) return;
+    doc.__voltPrefsResyncBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resyncSharedPrefs();
+    });
+  })();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootPrefsUi);

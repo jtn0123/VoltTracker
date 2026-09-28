@@ -518,7 +518,7 @@ private fun EfficiencyCard(
         )
         KvRow(
             state.tripKwh?.let { "${oneDecimal(it)} kWh" } ?: "-- kWh",
-            "max ${state.tripMaxMph}",
+            costLabel(state.tripKwh, state.electricityRate) ?: "max ${state.tripMaxMph}",
             "${state.ambientF}°F out",
             modifier = Modifier.padding(top = 0.dp),
         )

@@ -207,5 +207,11 @@ private const val L2_MIN_AC_V = 180.0
 /** Whole number with no grouping: "293". */
 fun wholeLabel(value: Double?): String = value?.roundToInt()?.toString() ?: "--"
 
+/** "$0.52": [kwh] at the home electricity rate; null when no rate is set (Settings → Costs). */
+fun costLabel(
+    kwh: Double?,
+    ratePerKwh: Double,
+): String? = if (kwh == null || ratePerKwh <= 0.0) null else String.format(Locale.US, "$%.2f", kwh * ratePerKwh)
+
 /** One decimal: "18.4". */
 fun oneDecimal(value: Double): String = String.format(Locale.US, "%.1f", value)

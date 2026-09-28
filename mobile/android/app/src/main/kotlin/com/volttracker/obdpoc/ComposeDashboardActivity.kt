@@ -24,8 +24,7 @@ import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
-import com.volttracker.obdpoc.ui.theme.AppearanceMode
-import com.volttracker.obdpoc.ui.theme.AppearancePrefs
+import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
 import org.json.JSONObject
@@ -45,6 +44,8 @@ class ComposeDashboardActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private lateinit var deviceCatalog: DeviceCatalog
     private lateinit var autoConnect: AutoConnectController
+    private lateinit var experience: DashboardExperienceHostDelegate
+    private lateinit var settings: ComposeSettingsStore
 
     // Process-scoped: survives configuration recreation (see UpdateCoordinator).
     private lateinit var updates: UpdateCoordinator
@@ -57,10 +58,17 @@ class ComposeDashboardActivity : ComponentActivity() {
             ) {
                 val json = intent.getStringExtra(ObdService.EXTRA_JSON)
                 ComposeDashboardSupport.routeServiceBroadcast(intent.action, json, store)
+                // Keep-screen-awake only holds while a session is logging.
+                if (intent.action == ObdService.BROADCAST_STATUS) experience.onLoggingStateChanged()
                 // The native screens only show a short status label, so a refused start (e.g. a
                 // missing Nearby devices permission) would otherwise vanish without a trace.
                 ComposeDashboardSupport.blockedStatusDetail(intent.action, json)?.let(::showMessage)
             }
+        }
+
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (!granted) showMessage(getString(R.string.compose_notifications_denied))
         }
 
     private val connectPermissionLauncher =
@@ -78,10 +86,33 @@ class ComposeDashboardActivity : ComponentActivity() {
         prefs = getSharedPreferences(AppPrefs.FILE, MODE_PRIVATE)
         deviceCatalog = DeviceCatalog(this, prefs)
         autoConnect = AutoConnectController(prefs, deviceCatalog)
+        experience =
+            DashboardExperienceHostDelegate(
+                activity = this,
+                prefs = { prefs },
+                loggingActive = ObdService::hasActiveSession,
+                publishAppState = ::refreshSettings,
+                hasNotificationPermission = ::hasNotificationPermission,
+                ensureNotificationPermission = ::requestNotificationPermission,
+            )
+        settings =
+            ComposeSettingsStore(
+                prefs = prefs,
+                autoConnect = autoConnect,
+                events =
+                    EventNotificationHostDelegate(
+                        prefs = { EventNotificationPrefs(prefs) },
+                        publishStatus = { _, detail, _ -> showMessage(detail) },
+                        publishAppState = ::refreshSettings,
+                        notReadyMessage = { getString(R.string.status_obd_start_blocked) },
+                        hasNotificationPermission = ::hasNotificationPermission,
+                        ensureNotificationPermission = ::requestNotificationPermission,
+                    ),
+                experience = experience,
+            )
         updates = UpdateCoordinator.shared(this)
         store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
-        store.onAppearance(AppearancePrefs.read(prefs))
-        store.onDrivePrefs(AppearancePrefs.readDriveDetailed(prefs), AppearancePrefs.readDriveEnergyFlow(prefs))
+        refreshSettings()
         // A recreated Activity starts with a fresh store; the coordinator's
         // retained result (an offered build, say) must not be forgotten.
         updates.lastResult?.let(::publishUpdateResult)
@@ -97,9 +128,8 @@ class ComposeDashboardActivity : ComponentActivity() {
                         onStopDemo = ::stopSession,
                         onCheckForUpdate = ::checkForUpdate,
                         onInstallUpdate = ::installUpdate,
-                        onSetAppearance = ::setAppearance,
-                        onSetDriveDetailed = ::setDriveDetailed,
-                        onSetDriveEnergyFlow = ::setDriveEnergyFlow,
+                        onSettingChange = ::changeSetting,
+                        onScreenShown = experience::setActiveDashboardView,
                     ),
             )
         }
@@ -117,6 +147,9 @@ class ComposeDashboardActivity : ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         replayServiceSnapshot()
+        // The classic dashboard may have changed a shared setting while this screen was away.
+        refreshSettings()
+        experience.onResume()
         signalAppForeground(true)
         maybeAutoConnect()
         // One silent update check per process start — the auto half of
@@ -131,6 +164,7 @@ class ComposeDashboardActivity : ComponentActivity() {
             // Not registered — nothing to do.
         }
         signalAppForeground(false)
+        experience.onPause()
         super.onPause()
     }
 
@@ -163,19 +197,24 @@ class ComposeDashboardActivity : ComponentActivity() {
         }
     }
 
-    private fun setAppearance(mode: AppearanceMode) {
-        AppearancePrefs.write(prefs, mode)
-        store.onAppearance(mode)
+    private fun changeSetting(change: SettingChange) {
+        settings.apply(change)
+        refreshSettings()
     }
 
-    private fun setDriveDetailed(detailed: Boolean) {
-        AppearancePrefs.writeDriveDetailed(prefs, detailed)
-        store.onDrivePrefs(detailed, AppearancePrefs.readDriveEnergyFlow(prefs))
+    private fun refreshSettings() {
+        store.onSettings(settings::read)
     }
 
-    private fun setDriveEnergyFlow(show: Boolean) {
-        AppearancePrefs.writeDriveEnergyFlow(prefs, show)
-        store.onDrivePrefs(AppearancePrefs.readDriveDetailed(prefs), show)
+    private fun hasNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+
+    private fun requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
     }
 
     private fun openClassicDashboard() {

@@ -1117,6 +1117,8 @@ interface VoltRestoreProgress {
     setLowSocNotify(enabled: boolean, thresholdPct: number): void;
     setHighPackTempNotify(enabled: boolean, thresholdC: number): void;
     setChargeTargetSoc(targetPct: number): void;
+    getSharedPrefs(): string;
+    setSharedPref(key: string, json: string): boolean;
     setAutoScanOnConnect(enabled: boolean): void;
     setMaintenanceDueNotify(enabled: boolean): void;
     getDashboardExperienceState(): string;

@@ -1,10 +1,16 @@
 package com.volttracker.obdpoc.ui.settings
 
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
+import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * Everything the Settings screen renders, as one immutable value.
  * Pure data — previewable and screenshot-testable with no service running.
+ *
+ * The persisted fields hold the real stored values. Their defaults are the ones the service and the
+ * classic dashboard use when nothing is stored (see [com.volttracker.obdpoc.ui.live.SettingsPrefsReader]).
+ * The labels are derived from those values, so the screen can never show a value that isn't stored.
  */
 data class SettingsUiState(
     val connected: Boolean = false,
@@ -13,33 +19,35 @@ data class SettingsUiState(
     val demoActive: Boolean = false,
     // Connection
     val adapterLabel: String = "--",
-    val autoConnect: Boolean = true,
+    val autoConnect: Boolean = false,
     val backgroundWaitLabel: String = "10 min",
     // Alerts
     val notifyChargingComplete: Boolean = true,
     val notifyNewCode: Boolean = true,
     val notifyBatteryLow: Boolean = false,
-    val batteryLowLabel: String = "below 20%",
+    val batteryLowPct: Int = 20,
     val notifyPackTempHigh: Boolean = false,
-    val packTempHighLabel: String = "above 45°C",
+    val packTempHighC: Int = 45,
     val notifyMaintenance: Boolean = false,
     val endOfDriveRecap: Boolean = false,
     val autoScanCodes: Boolean = false,
-    // Units & rates
-    val unitsLabel: String = "mi · °F",
-    val homeRateLabel: String = "not set",
-    val publicRateLabel: String = "not set",
-    val gasMpgLabel: String = "30 MPG",
-    val gasPriceLabel: String = "not set",
-    val chargeTargetLabel: String = "100%",
+    // Units & rates (0 / null = not set)
+    val metricUnits: Boolean = false,
+    val homeRate: Double = 0.0,
+    val publicRate: Double = 0.0,
+    val gasMpg: Double? = null,
+    val gasPrice: Double = 0.0,
+    val chargeTargetPct: Int = 100,
     // Display
     // Appearance: follow the system theme, or pin light/dark.
     val appearance: AppearanceMode = AppearanceMode.SYSTEM,
     val keepScreenAwake: Boolean = false,
     val quietLiveData: Boolean = true,
-    val textSizeLabel: String = "Default",
+    /** Text size multiplier: 1, 1.25 or 1.5. */
+    val fontScale: Double = 1.0,
     val highContrast: Boolean = false,
-    val driveTilesLabel: String = "Detailed",
+    /** Drive opens on Detailed (the Cockpit) instead of Focus. */
+    val driveDetailed: Boolean = false,
     /** Drive's Focus view shows the energy-flow card (opt-in). */
     val driveEnergyFlow: Boolean = false,
     // Data
@@ -64,13 +72,61 @@ data class SettingsUiState(
                 endOfDriveRecap,
             ).count { it }
 
+    val unitsLabel: String get() = if (metricUnits) "Metric" else "Imperial"
+
+    val homeRateLabel: String get() = rateLabel(homeRate, "kWh")
+
+    val publicRateLabel: String get() = if (publicRate > 0.0) rateLabel(publicRate, "kWh") else "same as home"
+
+    val gasPriceLabel: String get() = rateLabel(gasPrice, "gal")
+
+    val gasMpgLabel: String get() = gasMpg?.let { "${formatNumber(it)} MPG" } ?: NOT_SET
+
+    val chargeTargetLabel: String get() = "$chargeTargetPct%"
+
+    val batteryLowLabel: String get() = "below $batteryLowPct%"
+
+    val packTempHighLabel: String get() = "above ${temperatureLabel(packTempHighC)}"
+
+    val textSizeLabel: String get() = TEXT_SIZES.firstOrNull { it.first == fontScale }?.second ?: "Default"
+
+    /** A whole-degree Celsius threshold in the chosen units. */
+    fun temperatureLabel(celsius: Int): String =
+        if (metricUnits) "$celsius°C" else "${(celsius * F_PER_C + F_OFFSET).roundToInt()}°F"
+
     companion object {
+        const val NOT_SET = "not set"
+
+        // The choices the classic dashboard offers for these alerts (alerts.html).
+        val BATTERY_LOW_CHOICES = listOf(10, 15, 20, 30)
+        val PACK_TEMP_CHOICES = listOf(40, 45, 50, 55)
+        val CHARGE_TARGET_PRESETS = listOf(80, 90, 100)
+        val TEXT_SIZES = listOf(1.0 to "Default", 1.25 to "Large", 1.5 to "Largest")
+
+        private const val F_PER_C = 9.0 / 5.0
+        private const val F_OFFSET = 32.0
+
+        /** "$0.12 / kWh", or [NOT_SET] for 0. */
+        fun rateLabel(
+            value: Double,
+            unit: String,
+        ): String = if (value > 0.0) String.format(Locale.US, "$%.2f / %s", value, unit) else NOT_SET
+
+        /** Drops a trailing ".0" so 30.0 reads "30" and 32.5 reads "32.5". */
+        fun formatNumber(value: Double): String =
+            if (value == Math.floor(value)) value.toLong().toString() else value.toString()
+
         /** Sample state mirroring the demo scenario. */
         val demo =
             SettingsUiState(
                 connected = true,
                 statusLabel = "Live · 1 Hz",
                 adapterLabel = "OBDLink MX+",
+                autoConnect = true,
+                notifyBatteryLow = true,
+                homeRate = 0.12,
+                gasPrice = 4.29,
+                gasMpg = 30.0,
                 versionLabel = "Volt Tracker 0.33.0",
             )
     }

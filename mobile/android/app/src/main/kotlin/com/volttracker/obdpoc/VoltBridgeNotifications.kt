@@ -4,7 +4,7 @@ import android.webkit.JavascriptInterface
 
 open class VoltBridgeNotifications(
     private val activity: DashboardHost,
-) {
+) : VoltBridgeSharedPrefs(activity) {
     @JavascriptInterface
     fun getEventNotificationState(): String = activity.eventNotifications().getEventNotificationStateJson()
 

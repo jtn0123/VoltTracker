@@ -1,23 +1,18 @@
 package com.volttracker.obdpoc.ui.settings
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.VoltButton
@@ -29,78 +24,19 @@ import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
 
-// Detail pages behind the Settings index. Each is the former single-page group, moved intact.
+// Detail pages behind the Settings index. Every control reads the stored value from [SettingsUiState]
+// and reports edits as a [SettingChange]; the host persists them.
 
-/** One settings row: label (+ optional subtitle) with a trailing control. */
 @Composable
-private fun SettingRow(
-    label: String,
-    modifier: Modifier = Modifier,
-    subtitle: String? = null,
-    trailing: @Composable () -> Unit,
+internal fun ConnectionPage(
+    state: SettingsUiState,
+    onChange: (SettingChange) -> Unit,
 ) {
-    Row(
-        modifier =
-            modifier
-                .fillMaxWidth()
-                .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f).padding(end = 16.dp)) {
-            Text(text = label, style = VoltType.body, color = VoltColors.textPrimary)
-            if (subtitle != null) {
-                Spacer(Modifier.height(2.dp))
-                Text(text = subtitle, style = VoltType.caption, color = VoltColors.textTertiary)
-            }
-        }
-        trailing()
-    }
-}
-
-/** Compact on/off pill — reads as a switch without Material's large thumb. */
-@Composable
-private fun TogglePill(on: Boolean) {
-    Row(
-        modifier =
-            Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (on) VoltColors.accentDim else VoltColors.surfaceElevated)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Spacer(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (on) VoltColors.accent else VoltColors.textTertiary),
-        )
-        Text(
-            text = if (on) "On" else "Off",
-            style = VoltType.caption,
-            color = if (on) VoltColors.textPrimary else VoltColors.textSecondary,
-        )
-    }
-}
-
-@Composable
-private fun Value(value: String) {
-    Text(text = value, style = VoltType.body, color = VoltColors.textSecondary)
-}
-
-@Composable
-private fun Note(text: String) {
-    Text(text = text, style = VoltType.caption, color = VoltColors.textSecondary)
-}
-
-@Composable
-internal fun ConnectionPage(state: SettingsUiState) {
     VoltPanel {
         SettingRow(label = "Adapter", subtitle = "Bluetooth OBD-II") { Value(state.adapterLabel) }
         VoltListDivider()
-        SettingRow(label = "Auto-connect", subtitle = "When the last adapter is seen") {
-            TogglePill(state.autoConnect)
+        ToggleRow(label = "Auto-connect", subtitle = "When the last adapter is seen", on = state.autoConnect) {
+            onChange(SettingChange.AutoConnect(it))
         }
         VoltListDivider()
         SettingRow(label = "Wait for adapter", subtitle = "Keep checking in the background") {
@@ -114,95 +50,223 @@ internal fun ConnectionPage(state: SettingsUiState) {
     }
 }
 
-@Composable
-internal fun CostsPage(state: SettingsUiState) {
-    VoltPanel {
-        SettingRow(label = "Home electricity rate", subtitle = "Charging cost + gas savings") {
-            Value(state.homeRateLabel)
-        }
-        VoltListDivider()
-        SettingRow(label = "Public charging rate") { Value(state.publicRateLabel) }
-        VoltListDivider()
-        SettingRow(label = "Gas price") { Value(state.gasPriceLabel) }
-        VoltListDivider()
-        SettingRow(label = "Gas vehicle MPG", subtitle = "For savings estimates") { Value(state.gasMpgLabel) }
-        VoltListDivider()
-        SettingRow(label = "Charge target", subtitle = "Notify at this state of charge") {
-            Value(state.chargeTargetLabel)
-        }
-    }
+/** The number editors on the Costs page, keyed so the open one survives rotation. */
+private enum class CostField(
+    val field: NumberField,
+) {
+    HOME(NumberField("Home electricity rate", "$/kWh", 0.0, 2.0)),
+    PUBLIC(NumberField("Public charging rate", "$/kWh", 0.0, 2.0)),
+    GAS_PRICE(NumberField("Gas price", "$/gal", 0.0, 10.0)),
+    GAS_MPG(NumberField("Gas vehicle MPG", "MPG", 5.0, 150.0)),
+    CHARGE_TARGET(NumberField("Charge target", "%", 50.0, 100.0, clearable = false)),
 }
 
 @Composable
-internal fun UnitsPage(state: SettingsUiState) {
+internal fun CostsPage(
+    state: SettingsUiState,
+    onChange: (SettingChange) -> Unit,
+) {
+    var editing by rememberSaveable { mutableStateOf<CostField?>(null) }
+    val editor: @Composable (CostField) -> Unit = { field ->
+        if (editing == field) {
+            NumberEditor(field.field, costValue(state, field), onDismiss = { editing = null }) { value ->
+                onChange(costChange(field, value))
+                editing = null
+            }
+        }
+    }
     VoltPanel {
-        SettingRow(label = "Units", subtitle = "Distance and temperature") { Value(state.unitsLabel) }
+        ValueRow("Home electricity rate", state.homeRateLabel, subtitle = "Charging cost + gas savings") {
+            editing = CostField.HOME
+        }
+        editor(CostField.HOME)
+        VoltListDivider()
+        ValueRow("Public charging rate", state.publicRateLabel, subtitle = "DC fast / public sessions") {
+            editing = CostField.PUBLIC
+        }
+        editor(CostField.PUBLIC)
+        VoltListDivider()
+        ValueRow("Gas price", state.gasPriceLabel) { editing = CostField.GAS_PRICE }
+        editor(CostField.GAS_PRICE)
+        VoltListDivider()
+        ValueRow("Gas vehicle MPG", state.gasMpgLabel, subtitle = "For savings estimates") {
+            editing = CostField.GAS_MPG
+        }
+        editor(CostField.GAS_MPG)
+        VoltListDivider()
+        val presets = SettingsUiState.CHARGE_TARGET_PRESETS
+        val presetIndex = presets.indexOf(state.chargeTargetPct)
+        ChoiceRow(
+            label = "Charge target",
+            subtitle = "Notify at this charge · ${state.chargeTargetLabel}",
+            options = presets.map { "$it%" } + "Other",
+            selectedIndex = if (presetIndex >= 0) presetIndex else presets.size,
+        ) { index ->
+            if (index < presets.size) {
+                onChange(SettingChange.ChargeTarget(presets[index]))
+            } else {
+                editing = CostField.CHARGE_TARGET
+            }
+        }
+        editor(CostField.CHARGE_TARGET)
+    }
+}
+
+private fun costValue(
+    state: SettingsUiState,
+    field: CostField,
+): Double? =
+    when (field) {
+        CostField.HOME -> state.homeRate
+        CostField.PUBLIC -> state.publicRate
+        CostField.GAS_PRICE -> state.gasPrice
+        CostField.GAS_MPG -> state.gasMpg
+        CostField.CHARGE_TARGET -> state.chargeTargetPct.toDouble()
+    }?.takeIf { it > 0.0 }
+
+private fun costChange(
+    field: CostField,
+    value: Double?,
+): SettingChange =
+    when (field) {
+        CostField.HOME -> SettingChange.HomeRate(value ?: 0.0)
+        CostField.PUBLIC -> SettingChange.PublicRate(value ?: 0.0)
+        CostField.GAS_PRICE -> SettingChange.GasPrice(value ?: 0.0)
+        CostField.GAS_MPG -> SettingChange.GasMpg(value)
+        CostField.CHARGE_TARGET -> SettingChange.ChargeTarget(value?.toInt() ?: DEFAULT_CHARGE_TARGET)
+    }
+
+private const val DEFAULT_CHARGE_TARGET = 100
+
+@Composable
+internal fun UnitsPage(
+    state: SettingsUiState,
+    onChange: (SettingChange) -> Unit,
+) {
+    VoltPanel {
+        ChoiceRow(
+            label = "Units",
+            subtitle = if (state.metricUnits) "km · °C" else "mi · °F",
+            options = listOf("Imperial", "Metric"),
+            selectedIndex = if (state.metricUnits) 1 else 0,
+        ) { onChange(SettingChange.MetricUnits(it == 1)) }
     }
 }
 
 @Composable
 internal fun AppearancePage(
     state: SettingsUiState,
-    onSetAppearance: (AppearanceMode) -> Unit,
-    onSetDriveEnergyFlow: (Boolean) -> Unit,
+    onChange: (SettingChange) -> Unit,
 ) {
     VoltPanel {
-        SettingRow(label = "Theme", subtitle = "System follows your phone's dark theme") {}
-        VoltSegmented(
+        ChoiceRow(
+            label = "Theme",
+            subtitle = "System follows your phone's dark theme",
             options = AppearanceMode.entries.map { it.label },
             selectedIndex = state.appearance.ordinal,
-            onSelect = { onSetAppearance(AppearanceMode.entries[it]) },
-            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-        )
+        ) { onChange(SettingChange.Appearance(AppearanceMode.entries[it])) }
         VoltListDivider()
-        SettingRow(label = "Keep screen awake", subtitle = "While Drive or Trips is live") {
-            TogglePill(state.keepScreenAwake)
-        }
+        ChoiceRow(
+            label = "Drive view",
+            subtitle = "Focus is the ring; Detailed shows every gauge",
+            options = listOf("Focus", "Detailed"),
+            selectedIndex = if (state.driveDetailed) 1 else 0,
+        ) { onChange(SettingChange.DriveDetailed(it == 1)) }
         VoltListDivider()
-        SettingRow(label = "Quiet live data", subtitle = "Calmer TalkBack announcements") {
-            TogglePill(state.quietLiveData)
-        }
-        VoltListDivider()
-        SettingRow(label = "Text size") { Value(state.textSizeLabel) }
-        VoltListDivider()
-        SettingRow(label = "High contrast") { TogglePill(state.highContrast) }
-        VoltListDivider()
-        SettingRow(label = "Drive tiles", subtitle = "Choose the live signals") { Value(state.driveTilesLabel) }
-        VoltListDivider()
-        SettingRow(
+        ToggleRow(
             label = "Energy flow on Drive",
             subtitle = "Grid · battery · drive unit · engine",
-            modifier =
-                Modifier.toggleable(
-                    value = state.driveEnergyFlow,
-                    role = Role.Switch,
-                    onValueChange = onSetDriveEnergyFlow,
-                ),
-        ) { TogglePill(state.driveEnergyFlow) }
+            on = state.driveEnergyFlow,
+        ) { onChange(SettingChange.DriveEnergyFlow(it)) }
+        VoltListDivider()
+        ToggleRow(
+            label = "Keep screen awake",
+            subtitle = "While Drive or Trips is live",
+            on = state.keepScreenAwake,
+        ) { onChange(SettingChange.KeepScreenAwake(it)) }
+        VoltListDivider()
+        val sizes = SettingsUiState.TEXT_SIZES
+        ChoiceRow(
+            label = "Text size",
+            options = sizes.map { it.second },
+            selectedIndex = sizes.indexOfFirst { it.first == state.fontScale }.coerceAtLeast(0),
+        ) { onChange(SettingChange.TextSize(sizes[it].first)) }
+        VoltListDivider()
+        ToggleRow(label = "High contrast", on = state.highContrast) { onChange(SettingChange.HighContrast(it)) }
+        VoltListDivider()
+        ToggleRow(
+            label = "Quiet live data",
+            subtitle = "Calmer TalkBack announcements",
+            on = state.quietLiveData,
+        ) { onChange(SettingChange.QuietLiveData(it)) }
     }
 }
 
 @Composable
-internal fun AlertsPage(state: SettingsUiState) {
+internal fun AlertsPage(
+    state: SettingsUiState,
+    onChange: (SettingChange) -> Unit,
+) {
     VoltPanel {
-        SettingRow(label = "Charging complete") { TogglePill(state.notifyChargingComplete) }
-        VoltListDivider()
-        SettingRow(label = "New car code found") { TogglePill(state.notifyNewCode) }
-        VoltListDivider()
-        SettingRow(label = "Battery low", subtitle = state.batteryLowLabel) { TogglePill(state.notifyBatteryLow) }
-        VoltListDivider()
-        SettingRow(label = "Pack temperature high", subtitle = state.packTempHighLabel) {
-            TogglePill(state.notifyPackTempHigh)
+        ToggleRow(label = "Charging complete", on = state.notifyChargingComplete) {
+            onChange(SettingChange.NotifyChargeComplete(it))
         }
         VoltListDivider()
-        SettingRow(label = "Maintenance overdue") { TogglePill(state.notifyMaintenance) }
+        ToggleRow(label = "New car code found", on = state.notifyNewCode) { onChange(SettingChange.NotifyNewCode(it)) }
         VoltListDivider()
-        SettingRow(label = "End-of-drive recap") { TogglePill(state.endOfDriveRecap) }
-        VoltListDivider()
-        SettingRow(label = "Auto-scan for codes", subtitle = "One background scan per connect") {
-            TogglePill(state.autoScanCodes)
+        ToggleRow(label = "Battery low", subtitle = state.batteryLowLabel, on = state.notifyBatteryLow) {
+            onChange(SettingChange.NotifyBatteryLow(it, state.batteryLowPct))
         }
+        if (state.notifyBatteryLow) {
+            ThresholdChoice(
+                choices = SettingsUiState.BATTERY_LOW_CHOICES,
+                selected = state.batteryLowPct,
+                label = { "$it%" },
+            ) { onChange(SettingChange.NotifyBatteryLow(true, it)) }
+        }
+        VoltListDivider()
+        ToggleRow(label = "Pack temperature high", subtitle = state.packTempHighLabel, on = state.notifyPackTempHigh) {
+            onChange(SettingChange.NotifyPackTempHigh(it, state.packTempHighC))
+        }
+        if (state.notifyPackTempHigh) {
+            ThresholdChoice(
+                choices = SettingsUiState.PACK_TEMP_CHOICES,
+                selected = state.packTempHighC,
+                label = state::temperatureLabel,
+            ) { onChange(SettingChange.NotifyPackTempHigh(true, it)) }
+        }
+        VoltListDivider()
+        ToggleRow(label = "Maintenance overdue", on = state.notifyMaintenance) {
+            onChange(SettingChange.NotifyMaintenance(it))
+        }
+        VoltListDivider()
+        ToggleRow(
+            label = "End-of-drive recap",
+            on = state.endOfDriveRecap,
+        ) { onChange(SettingChange.EndOfDriveRecap(it)) }
+        VoltListDivider()
+        ToggleRow(
+            label = "Auto-scan for codes",
+            subtitle = "One background scan per connect",
+            on = state.autoScanCodes,
+        ) { onChange(SettingChange.AutoScanCodes(it)) }
     }
+}
+
+/** The threshold picker under an enabled alert. A stored custom value shows with no choice selected. */
+@Composable
+private fun ThresholdChoice(
+    choices: List<Int>,
+    selected: Int,
+    label: (Int) -> String,
+    onSelect: (Int) -> Unit,
+) {
+    VoltSegmented(
+        options = choices.map(label),
+        selectedIndex = choices.indexOf(selected),
+        onSelect = { onSelect(choices[it]) },
+        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+    )
 }
 
 @Composable
