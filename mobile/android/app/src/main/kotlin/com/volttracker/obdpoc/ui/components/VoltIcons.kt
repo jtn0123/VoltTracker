@@ -56,6 +56,22 @@ object VoltIcons {
     }
     val Doc by lazy { icon("M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z", "M14 3v6h6M8 13h8M8 17h5") }
     val Refresh by lazy { icon("M20 11a8 8 0 1 0-2.3 5.7", "M20 4v7h-7") }
+    val Lock by lazy { icon(rect(5f, 11f, 14f, 10f, 2.5f), "M8 11V8a4 4 0 0 1 8 0v3") }
+    val Plug by lazy { icon("M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4") }
+    val Battery by lazy { icon(rect(3f, 7f, 16f, 10f, 2.5f), "M22 11v2") }
+    val Motor by lazy {
+        icon(circle(12f, 12f, 8.5f), circle(12f, 12f, 2.2f), "M12 3.5v6.3M4.6 16.3l5.5-3.2M19.4 16.3l-5.5-3.2")
+    }
+
+    /** Four-tile grid: "switch to the Detailed (cockpit) view". */
+    val Grid by lazy {
+        icon(
+            rect(4f, 4f, 7f, 7f, 1.5f),
+            rect(13f, 4f, 7f, 7f, 1.5f),
+            rect(4f, 13f, 7f, 7f, 1.5f),
+            rect(13f, 13f, 7f, 7f, 1.5f),
+        )
+    }
 
     private const val VIEWPORT = 24f
     private const val STROKE = 1.8f

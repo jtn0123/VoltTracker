@@ -11,4 +11,6 @@ data class VoltAppActions(
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
     val onSetAppearance: (AppearanceMode) -> Unit = {},
+    val onSetDriveDetailed: (Boolean) -> Unit = {},
+    val onSetDriveEnergyFlow: (Boolean) -> Unit = {},
 )

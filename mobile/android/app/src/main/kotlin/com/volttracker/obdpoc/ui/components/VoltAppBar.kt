@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -61,6 +62,7 @@ fun VoltAppBar(
     dot: AppBarDot? = null,
     onBack: (() -> Unit)? = null,
     showGear: Boolean = true,
+    actions: @Composable RowScope.() -> Unit = {},
 ) {
     val nav = LocalVoltNav.current
     Row(
@@ -83,6 +85,7 @@ fun VoltAppBar(
                 }
             }
         }
+        actions()
         if (showGear) {
             IconCircleButton(VoltIcons.Settings, "Settings", nav.openSettings)
         }
@@ -143,6 +146,7 @@ fun VoltScreen(
     onBack: (() -> Unit)? = null,
     showGear: Boolean = true,
     contentPadding: Dp = SCREEN_MARGIN,
+    actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
@@ -158,6 +162,7 @@ fun VoltScreen(
             dot = dot,
             onBack = onBack,
             showGear = showGear,
+            actions = actions,
             modifier = Modifier.padding(horizontal = SCREEN_MARGIN),
         )
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding), content = content)

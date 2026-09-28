@@ -61,6 +61,7 @@ class SettingsActions(
     val onSetAppearance: (AppearanceMode) -> Unit = {},
     val onStartDemo: () -> Unit = {},
     val onStopDemo: () -> Unit = {},
+    val onSetDriveEnergyFlow: (Boolean) -> Unit = {},
 )
 
 /**
@@ -90,7 +91,7 @@ fun SettingsScreen(
             SettingsPage.CONNECTION -> ConnectionPage(state)
             SettingsPage.COSTS -> CostsPage(state)
             SettingsPage.UNITS -> UnitsPage(state)
-            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onSetAppearance)
+            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onSetAppearance, actions.onSetDriveEnergyFlow)
             SettingsPage.ALERTS -> AlertsPage(state)
             SettingsPage.DATA -> DataPage(state)
             SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)

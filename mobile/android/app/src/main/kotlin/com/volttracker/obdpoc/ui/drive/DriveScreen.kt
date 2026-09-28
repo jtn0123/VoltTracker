@@ -1,419 +1,230 @@
 package com.volttracker.obdpoc.ui.drive
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.volttracker.obdpoc.ui.components.BatteryBar
-import com.volttracker.obdpoc.ui.components.PowerBar
-import com.volttracker.obdpoc.ui.components.SignedBars
-import com.volttracker.obdpoc.ui.components.Sparkline
+import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.IconCircleButton
 import com.volttracker.obdpoc.ui.components.VoltButton
-import com.volttracker.obdpoc.ui.components.VoltLabel
-import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltScreen
-import com.volttracker.obdpoc.ui.components.VoltStat
-import com.volttracker.obdpoc.ui.components.VoltStatusPill
 import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
-import java.util.Locale
+import kotlinx.coroutines.delay
 
-/** The Drive tab: hero speed, power flow, battery, and the current trip. */
+/**
+ * The Drive tab. Focus (default) is Direction A: the Arc ring that morphs between the power
+ * gauge, the parked battery gauge and charge progress, with range, three tiles and the optional
+ * energy-flow card. Detailed is Direction C, the cockpit. An "Engine on" toast appears when the
+ * range extender starts.
+ */
 @Composable
 fun DriveScreen(
     state: DriveUiState,
     modifier: Modifier = Modifier,
     onConnect: () -> Unit = {},
     onStartDemo: () -> Unit = {},
+    showEnergyFlow: Boolean = true,
+    onSetDetailed: (Boolean) -> Unit = {},
+    initialToast: Boolean = false,
 ) {
-    var detailed by remember(state.detailed) { mutableStateOf(state.detailed) }
-    VoltScreen(
-        title = "Drive",
-        subtitle = state.statusLabel,
-        dot = connectionDot(state.connected),
-        modifier = modifier,
+    var detailed by rememberSaveable(state.detailed) { mutableStateOf(state.detailed) }
+    val toastVisible = engineToastVisible(state, initialToast)
+    val pal = LocalVoltPalette.current
+    val glow = ambientColor(pal, state)
+    Box(
+        modifier =
+            modifier
+                .fillMaxSize()
+                .drawBehind { drawAmbient(glow) },
     ) {
-        SpeedHero(state)
-        Spacer(Modifier.height(14.dp))
-        StatusChips(state)
-        // Hidden mid-handshake so a second tap can't start a replacement session.
-        if (!state.connected && !state.connecting) {
-            Spacer(Modifier.height(18.dp))
-            ConnectRow(onConnect = onConnect, onStartDemo = onStartDemo)
+        VoltScreen(
+            title = "Drive",
+            subtitle = driveSubtitle(state, detailed),
+            dot = connectionDot(state.connected),
+            actions = {
+                if (detailed && state.connected) OutsideTempChip(state.ambientF)
+                IconCircleButton(
+                    icon = if (detailed) VoltIcons.Drive else VoltIcons.Grid,
+                    contentDescription = if (detailed) "Focus view" else "Detailed view",
+                    onClick = {
+                        detailed = !detailed
+                        onSetDetailed(detailed)
+                    },
+                )
+            },
+        ) {
+            if (detailed) {
+                ConnectRowIfNeeded(state, onConnect, onStartDemo)
+                CockpitContent(state)
+            } else {
+                ArcGauge(state, Modifier.align(Alignment.CenterHorizontally))
+                ConnectRowIfNeeded(state, onConnect, onStartDemo)
+                RangeCard(state)
+                FocusTiles(state)
+                if (showEnergyFlow) EnergyFlowCard(state)
+            }
         }
-        Spacer(Modifier.height(16.dp))
-        DensityToggle(detailed = detailed, onChange = { detailed = it })
-        Spacer(Modifier.height(22.dp))
-        PowerSection(state)
-        if (detailed) {
-            Spacer(Modifier.height(14.dp))
-            ChartsRow(state)
+        AnimatedVisibility(
+            visible = toastVisible,
+            enter = fadeIn() + slideInVertically { -it / 4 },
+            exit = fadeOut() + slideOutVertically { -it / 4 },
+            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+        ) {
+            EngineOnToast(atReserve = state.atReserve)
         }
-        Spacer(Modifier.height(14.dp))
-        BatterySection(state)
-        if (detailed) {
-            Spacer(Modifier.height(14.dp))
-            MoreSignalsGrid(state)
-            Spacer(Modifier.height(14.dp))
-            VitalsRow(state)
-        }
-        Spacer(Modifier.height(14.dp))
-        TripStrip(state)
     }
 }
 
+/** True for [TOAST_MS] after the engine starts mid-drive (EV → gas); any other change hides it. */
 @Composable
-private fun SpeedHero(state: DriveUiState) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Text(
-            text = "${state.speedMph}",
-            style = VoltType.display,
-            color = VoltColors.textPrimary,
-        )
-        Text(
-            text = "MPH",
-            style = VoltType.heroUnit,
-            color = VoltColors.textTertiary,
-        )
-        Spacer(Modifier.height(18.dp))
-        Sparkline(
-            values = state.speedTrace,
-            lineColor = if (state.mode == DriveMode.GAS) VoltColors.gas else VoltColors.accent,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
+private fun engineToastVisible(
+    state: DriveUiState,
+    initial: Boolean,
+): Boolean {
+    var visible by remember { mutableStateOf(initial) }
+    var lastMode by remember { mutableStateOf(state.mode) }
+    LaunchedEffect(state.mode) {
+        val started = lastMode == DriveMode.EV && state.mode == DriveMode.GAS && state.phase == DrivePhase.DRIVE
+        lastMode = state.mode
+        if (started) {
+            visible = true
+            delay(TOAST_MS)
+            visible = false
+        } else if (!initial) {
+            visible = false
+        }
+    }
+    return visible
+}
+
+private const val TOAST_MS = 3_600L
+
+/**
+ * App-bar subtitle: the link and what the car is doing. The cockpit adds the live signal
+ * count; while not connected it is the connection status itself.
+ */
+fun driveSubtitle(
+    state: DriveUiState,
+    detailed: Boolean,
+): String {
+    if (!state.connected) return state.statusLabel
+    val signals = if (detailed && state.signalCount > 0) " · ${state.signalCount} signals" else ""
+    return when (state.phase) {
+        DrivePhase.DRIVE -> if (detailed) "Live · 1 Hz$signals" else "Live · ${state.adapterLabel}"
+        DrivePhase.CHARGING -> "Connected · charging$signals"
+        DrivePhase.PARKED -> "Connected · parked$signals"
+    }
+}
+
+/** The screen's top glow (mockups `ambient`): tinted by what the car is doing. */
+private fun ambientColor(
+    pal: VoltPalette,
+    state: DriveUiState,
+): Color {
+    val a = if (pal.isDark) AMBIENT_DARK else AMBIENT_LIGHT
+    return when {
+        !state.connected -> Color.Transparent
+        state.phase == DrivePhase.CHARGING -> pal.ev.copy(alpha = a)
+        state.phase == DrivePhase.PARKED -> pal.volt.copy(alpha = a * PARKED_AMBIENT)
+        else -> powerColor(pal, state.powerRole).copy(alpha = a)
+    }
+}
+
+/** CSS `radial-gradient(120% 55% at 50% -8%, glow, transparent 62%)`, drawn as a squashed circle. */
+private fun DrawScope.drawAmbient(glow: Color) {
+    if (glow.alpha == 0f) return
+    val rx = size.width * AMBIENT_RX
+    val ry = size.height * AMBIENT_RY
+    val center = Offset(size.width / 2, -size.height * AMBIENT_TOP)
+    scale(scaleX = 1f, scaleY = ry / rx, pivot = center) {
+        drawCircle(
+            brush = Brush.radialGradient(0f to glow, AMBIENT_STOP to Color.Transparent, center = center, radius = rx),
+            radius = rx,
+            center = center,
         )
     }
 }
 
-/** At-a-glance chips under the hero: propulsion mode, regen, range, GPS fix. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun StatusChips(state: DriveUiState) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        if (state.mode == DriveMode.GAS) {
-            VoltStatusPill(text = "Gas", dotColor = VoltColors.gas)
-        } else {
-            VoltStatusPill(text = "EV", dotColor = VoltColors.energy)
-        }
-        if (state.powerKw < -0.05) {
-            VoltStatusPill(text = "⚡ Regen", dotColor = VoltColors.regen)
-        }
-        state.evRangeMiles?.let {
-            VoltStatusPill(text = "${it.toInt()} mi range", dotColor = VoltColors.energyDim)
-        }
-        state.gpsAccuracyFt?.let {
-            VoltStatusPill(text = "±$it ft", dotColor = VoltColors.textTertiary)
-        }
-    }
-}
+private const val AMBIENT_DARK = 0.16f
+private const val AMBIENT_LIGHT = 0.10f
+private const val PARKED_AMBIENT = 0.45f
+private const val AMBIENT_RX = 1.2f
+private const val AMBIENT_RY = 0.55f
+private const val AMBIENT_TOP = 0.08f
+private const val AMBIENT_STOP = 0.62f
 
 /** Offered while no session is live: reconnect the last adapter, or preview with demo data. */
 @Composable
-private fun ConnectRow(
+private fun ConnectRowIfNeeded(
+    state: DriveUiState,
     onConnect: () -> Unit,
     onStartDemo: () -> Unit,
 ) {
+    // Hidden mid-handshake so a second tap can't start a replacement session.
+    if (state.connected || state.connecting) return
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
     ) {
         VoltButton(text = "Connect", accent = true, onClick = onConnect)
-        VoltButton(text = "▶ Demo", onClick = onStartDemo)
+        VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
     }
 }
 
-/** Two-segment density switch: Focus (essentials) vs Detailed (everything). */
+/** The cockpit's outside-temperature chip (mockups `.chip`). */
 @Composable
-private fun DensityToggle(
-    detailed: Boolean,
-    onChange: (Boolean) -> Unit,
-) {
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-        Row(
-            modifier =
-                Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(VoltColors.surface)
-                    .padding(3.dp)
-                    .selectableGroup(),
-        ) {
-            DensitySegment(text = "Focus", selected = !detailed) { onChange(false) }
-            DensitySegment(text = "Detailed", selected = detailed) { onChange(true) }
-        }
-    }
-}
-
-@Composable
-private fun DensitySegment(
-    text: String,
-    selected: Boolean,
-    onSelect: () -> Unit,
-) {
-    Text(
-        text = text,
-        style = VoltType.caption,
-        color = if (selected) VoltColors.textPrimary else VoltColors.textTertiary,
+private fun OutsideTempChip(ambientF: Int) {
+    Box(
         modifier =
             Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (selected) VoltColors.surfaceElevated else Color.Transparent)
-                .selectable(selected = selected, onClick = onSelect, role = Role.Tab)
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-    )
-}
-
-/** Label + accent color for the current power flow, derived together so they can't drift. */
-private data class PowerStatus(
-    val label: String,
-    val color: androidx.compose.ui.graphics.Color,
-)
-
-private fun powerStatus(
-    pal: VoltPalette,
-    state: DriveUiState,
-): PowerStatus =
-    when {
-        state.powerKw < -0.05 -> PowerStatus("Regen", pal.regen)
-        state.powerKw > 0.05 ->
-            PowerStatus(
-                if (state.mode == DriveMode.GAS) "Drive · Gas" else "Drive",
-                pal.drive,
-            )
-        else -> PowerStatus("Idle", pal.textTertiary)
-    }
-
-@Composable
-private fun PowerSection(state: DriveUiState) {
-    val status = powerStatus(LocalVoltPalette.current, state)
-    val kwText = String.format(Locale.US, "%.1f", kotlin.math.abs(state.powerKw))
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(text = kwText, style = VoltType.value, color = VoltColors.textPrimary)
-                Spacer(Modifier.height(0.dp))
-                Text(
-                    text = " kW",
-                    style = VoltType.caption,
-                    color = VoltColors.textSecondary,
-                )
-            }
-            VoltLabel(text = status.label, color = status.color)
-        }
-        Spacer(Modifier.height(14.dp))
-        PowerBar(
-            powerKw = state.powerKw,
-            maxDriveKw = state.maxDriveKw,
-            maxRegenKw = state.maxRegenKw,
+                .height(26.dp)
+                .background(VoltColors.surfaceElevated, RoundedCornerShape(13.dp))
+                .padding(horizontal = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "$ambientF°F",
+            style = VoltType.value.copy(fontSize = 13.sp),
+            color = VoltColors.textSecondary,
         )
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(text = "Regen", style = VoltType.caption, color = VoltColors.textTertiary)
-            Text(text = "Drive", style = VoltType.caption, color = VoltColors.textTertiary)
-        }
     }
 }
 
-/** Detailed-mode charts: signed pack power over the last minute + session SOC. */
-@Composable
-private fun ChartsRow(state: DriveUiState) {
-    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        VoltPanel(modifier = Modifier.weight(1f)) {
-            VoltLabel("Power · 60 s")
-            Spacer(Modifier.height(12.dp))
-            SignedBars(
-                values = state.powerTrace,
-                modifier = Modifier.height(64.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(text = "↓ regen", style = VoltType.caption, color = VoltColors.regen)
-                Text(text = "↑ drive", style = VoltType.caption, color = VoltColors.drive)
-            }
-        }
-        VoltPanel(modifier = Modifier.weight(1f)) {
-            VoltLabel("SOC · session")
-            Spacer(Modifier.height(12.dp))
-            Sparkline(
-                values = state.socTrace,
-                modifier = Modifier.height(64.dp),
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = socSessionLabel(state.socTrace),
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
-        }
-    }
-}
-
-private fun socSessionLabel(socTrace: List<Float>): String =
-    if (socTrace.size < 2) {
-        "--"
-    } else {
-        "${socTrace.first().toInt()}% → ${socTrace.last().toInt()}%"
-    }
-
-@Composable
-private fun BatterySection(state: DriveUiState) {
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            Row(verticalAlignment = Alignment.Bottom) {
-                Text(
-                    text = "${state.socPercent.toInt()}%",
-                    style = VoltType.value,
-                    color = VoltColors.textPrimary,
-                )
-                state.evRangeMiles?.let {
-                    Text(
-                        text = "  ·  ${it.toInt()} mi",
-                        style = VoltType.valueSmall,
-                        color = VoltColors.energy,
-                    )
-                }
-            }
-            VoltLabel("HV Battery")
-        }
-        Spacer(Modifier.height(14.dp))
-        BatteryBar(socFraction = (state.socPercent / 100.0).toFloat())
-        Spacer(Modifier.height(16.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            KeyValue("Voltage", String.format(Locale.US, "%.0f V", state.packVolts))
-            KeyValue("Current", String.format(Locale.US, "%.1f A", state.packAmps))
-            KeyValue("Power", String.format(Locale.US, "%.1f kW", state.powerKw))
-            KeyValue("Temp", "${state.packTempF}°F")
-        }
-    }
-}
-
-@Composable
-private fun KeyValue(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier,
-    valueColor: androidx.compose.ui.graphics.Color = VoltColors.textPrimary,
-) {
-    Column(modifier = modifier) {
-        VoltLabel(label)
-        Spacer(Modifier.height(5.dp))
-        Text(text = value, style = VoltType.valueSmall, color = valueColor)
-    }
-}
-
-/** Detailed-mode grid restoring the legacy "more signals" tiles. */
-@Composable
-private fun MoreSignalsGrid(state: DriveUiState) {
-    VoltPanel {
-        VoltLabel("More signals")
-        Spacer(Modifier.height(14.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            KeyValue("Motor A", String.format(Locale.US, "%.1f kW", state.motorAKw), modifier = Modifier.weight(1f))
-            KeyValue("Motor B", String.format(Locale.US, "%.1f kW", state.motorBKw), modifier = Modifier.weight(1f))
-            KeyValue("Trans", "${state.transTempF}°F", modifier = Modifier.weight(1f))
-            KeyValue("Torque", "${state.torqueNm} Nm", modifier = Modifier.weight(1f))
-        }
-        Spacer(Modifier.height(16.dp))
-        Row(modifier = Modifier.fillMaxWidth()) {
-            KeyValue("Ambient", "${state.ambientF}°F", modifier = Modifier.weight(1f))
-            KeyValue("Oil life", "${state.oilLifePct}%", modifier = Modifier.weight(1f))
-            KeyValue("Gear", state.gear, modifier = Modifier.weight(1f))
-            KeyValue("EV range", state.evRangeMiles?.let { "${it.toInt()} mi" } ?: "--", modifier = Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun VitalsRow(state: DriveUiState) {
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            KeyValue("Aux 12V", String.format(Locale.US, "%.1f V", state.auxVolts))
-            KeyValue("Coolant", "${state.coolantF}°F")
-            if (state.mode == DriveMode.GAS) {
-                KeyValue("RPM", "${state.rpm}")
-            } else {
-                KeyValue("GPS", state.gpsAccuracyFt?.let { "±$it ft" } ?: "--")
-            }
-        }
-    }
-}
-
-@Composable
-private fun TripStrip(state: DriveUiState) {
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            VoltStat(label = "This trip", value = String.format(Locale.US, "%.0f", state.tripMiles), unit = "mi")
-            VoltStat(label = "Time", value = state.tripDuration)
-            VoltStat(
-                label = "Efficiency",
-                value = state.tripMiPerKwh?.let { String.format(Locale.US, "%.1f", it) } ?: "--",
-                unit = "mi/kWh",
-                valueColor = VoltColors.energy,
-                alignEnd = true,
-            )
-        }
-    }
-}
-
-@Preview(widthDp = 412, heightDp = 1500)
+@Preview(widthDp = 412, heightDp = 1100)
 @Composable
 private fun DriveScreenPreview() {
     VoltTheme { DriveScreen(DriveUiState.demo) }
@@ -421,6 +232,6 @@ private fun DriveScreenPreview() {
 
 @Preview(widthDp = 412, heightDp = 1100)
 @Composable
-private fun DriveScreenFocusPreview() {
-    VoltTheme { DriveScreen(DriveUiState.demo.copy(detailed = false)) }
+private fun DriveScreenDetailedPreview() {
+    VoltTheme { DriveScreen(DriveUiState.demo.copy(detailed = true)) }
 }

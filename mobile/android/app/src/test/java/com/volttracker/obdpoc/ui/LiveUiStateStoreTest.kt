@@ -143,12 +143,14 @@ class LiveUiStateStoreTest {
     @Test
     fun tracesAccumulateAndStayBounded() {
         val store = LiveUiStateStore()
-        repeat(40) { i -> store.onTelemetry(sample(updatedAt = 1_000L + i)) }
+        repeat(70) { i -> store.onTelemetry(sample(updatedAt = 1_000L + i)) }
         val drive = store.state.value.drive
 
         assertEquals(30, drive.speedTrace.size)
-        assertEquals(30, drive.powerTrace.size)
-        // SOC is throttled to one sample per 30 s: 40 samples 1 ms apart → one point.
+        // The cockpit power strip spans the last minute at 1 Hz, with an engine flag per sample.
+        assertEquals(60, drive.powerTrace.size)
+        assertEquals(60, drive.gasTrace.size)
+        // SOC is throttled to one sample per 30 s: 70 samples 1 ms apart → one point.
         assertEquals(1, drive.socTrace.size)
     }
 

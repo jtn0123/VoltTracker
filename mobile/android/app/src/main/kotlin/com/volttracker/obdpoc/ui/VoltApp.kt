@@ -95,7 +95,14 @@ private fun VoltTabContent(
     actions: VoltAppActions,
 ) {
     when (tab) {
-        VoltTab.DRIVE -> DriveScreen(state.drive, onConnect = actions.onConnect, onStartDemo = actions.onStartDemo)
+        VoltTab.DRIVE ->
+            DriveScreen(
+                state.drive,
+                onConnect = actions.onConnect,
+                onStartDemo = actions.onStartDemo,
+                showEnergyFlow = state.settings.driveEnergyFlow,
+                onSetDetailed = actions.onSetDriveDetailed,
+            )
         VoltTab.TRIPS -> MapScreen(state.map)
         VoltTab.CHARGE -> ChargeScreen(state.charge)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights)
@@ -124,6 +131,7 @@ private fun VoltRouteContent(
                         onSetAppearance = actions.onSetAppearance,
                         onStartDemo = actions.onStartDemo,
                         onStopDemo = actions.onStopDemo,
+                        onSetDriveEnergyFlow = actions.onSetDriveEnergyFlow,
                     ),
             )
     }

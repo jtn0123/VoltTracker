@@ -81,6 +81,7 @@ class ComposeDashboardActivity : ComponentActivity() {
         updates = UpdateCoordinator.shared(this)
         store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
         store.onAppearance(AppearancePrefs.read(prefs))
+        store.onDrivePrefs(AppearancePrefs.readDriveDetailed(prefs), AppearancePrefs.readDriveEnergyFlow(prefs))
         // A recreated Activity starts with a fresh store; the coordinator's
         // retained result (an offered build, say) must not be forgotten.
         updates.lastResult?.let(::publishUpdateResult)
@@ -97,6 +98,8 @@ class ComposeDashboardActivity : ComponentActivity() {
                         onCheckForUpdate = ::checkForUpdate,
                         onInstallUpdate = ::installUpdate,
                         onSetAppearance = ::setAppearance,
+                        onSetDriveDetailed = ::setDriveDetailed,
+                        onSetDriveEnergyFlow = ::setDriveEnergyFlow,
                     ),
             )
         }
@@ -163,6 +166,16 @@ class ComposeDashboardActivity : ComponentActivity() {
     private fun setAppearance(mode: AppearanceMode) {
         AppearancePrefs.write(prefs, mode)
         store.onAppearance(mode)
+    }
+
+    private fun setDriveDetailed(detailed: Boolean) {
+        AppearancePrefs.writeDriveDetailed(prefs, detailed)
+        store.onDrivePrefs(detailed, AppearancePrefs.readDriveEnergyFlow(prefs))
+    }
+
+    private fun setDriveEnergyFlow(show: Boolean) {
+        AppearancePrefs.writeDriveEnergyFlow(prefs, show)
+        store.onDrivePrefs(AppearancePrefs.readDriveDetailed(prefs), show)
     }
 
     private fun openClassicDashboard() {

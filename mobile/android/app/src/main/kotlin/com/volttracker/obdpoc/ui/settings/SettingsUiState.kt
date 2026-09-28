@@ -40,6 +40,8 @@ data class SettingsUiState(
     val textSizeLabel: String = "Default",
     val highContrast: Boolean = false,
     val driveTilesLabel: String = "Detailed",
+    /** Drive's Focus view shows the energy-flow card (opt-in). */
+    val driveEnergyFlow: Boolean = false,
     // Data
     val lastBackupLabel: String = "No backup recorded on this phone yet",
     val versionLabel: String = "",
