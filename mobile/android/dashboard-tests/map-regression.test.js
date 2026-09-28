@@ -715,18 +715,23 @@ describe('map.ts — route selection regressions', () => {
       tileLayer: vi.fn(() => fakeLayer),
     };
     try {
-      await loadDashboard();
+      // A fake-key tile config (never fetched: Leaflet is faked here).
+      const dark = 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}@2x.png?api_key=test';
+      await loadDashboard({
+        bridge: createVoltBridgeFixture({ getMapTileConfig: () => JSON.stringify({ dark, light: dark }) }),
+      });
 
       const VD = window.VoltDashboard;
       await VD.ensureMapModule();
       const banner = document.getElementById('mapTileError');
 
       VD.ensureMap();
-      tileHandlers.tileerror({ tile: { src: 'https://a.basemaps.cartocdn.com/bad.png' } });
-      tileHandlers.tileerror({ tile: { src: 'https://b.basemaps.cartocdn.com/bad.png' } });
+      const tile = { src: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/1/0/0@2x.png?api_key=test' };
+      tileHandlers.tileerror({ tile });
+      tileHandlers.tileerror({ tile });
       expect(banner.hidden).toBe(true);
 
-      tileHandlers.tileerror({ tile: { src: 'https://c.basemaps.cartocdn.com/bad.png' } });
+      tileHandlers.tileerror({ tile });
       expect(banner.hidden).toBe(false);
 
       tileHandlers.tileload({});

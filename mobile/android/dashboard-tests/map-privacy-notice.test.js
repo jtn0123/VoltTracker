@@ -4,7 +4,7 @@ import { loadDashboard } from './setup/load-dashboard.js';
 
 // E1 map-tile privacy disclosure: the first time the Map renders on an
 // install, a dismissible notice states that basemap imagery is fetched from
-// OpenStreetMap/CARTO and that those servers see the approximate viewed area
+// Stadia Maps and that those servers see the approximate viewed area
 // (tile coordinates). "Got it" persists the dismissal through prefs
 // (vt.pref.mapTilePrivacyNoticeDismissed in localStorage) so the notice never
 // returns — including across a WebView teardown/reload.
@@ -46,7 +46,7 @@ describe('map.ts — map-tile privacy notice (E1)', () => {
 
     expect(notice.hidden).toBe(false);
     const copy = document.getElementById('mapPrivacyNoticeCopy').textContent;
-    expect(copy).toContain('OpenStreetMap/CARTO');
+    expect(copy).toContain('Stadia Maps');
     expect(copy).toContain('approximate area');
     expect(document.getElementById('mapPrivacyGotItBtn').textContent).toBe('Got it');
   });

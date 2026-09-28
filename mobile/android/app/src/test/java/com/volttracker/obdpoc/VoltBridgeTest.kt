@@ -368,6 +368,7 @@ class VoltBridgeTest {
                 "setActiveDashboardView",
                 // Experimental car controls (native PIN + confirmation).
                 "getCarControlState",
+                "getMapTileConfig",
                 "setCarControlsEnabled",
                 "requestCarControl",
                 "lockCarControls",

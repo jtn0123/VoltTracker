@@ -240,6 +240,19 @@ The debug APK will be at:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Map tiles
+
+Basemap tiles come from [Stadia Maps](https://stadiamaps.com) and need an API key. Add it to
+`local.properties` (gitignored) in this directory:
+
+```properties
+STADIA_API_KEY=your-stadia-key
+```
+
+CI and release builds read the `STADIA_API_KEY` environment variable instead, sourced from the
+repository secret of the same name. With no key the app still builds and runs; the maps just
+draw routes on a plain background with no tiles. Never commit a key.
+
 ### Pre-commit hooks (optional)
 
 Run Spotless locally before each commit so format failures surface before CI:
@@ -398,8 +411,9 @@ scrcpy
 - Bluetooth permissions are requested at runtime on Android 12+.
 - A foreground service keeps the OBD session alive while polling.
 - The WebView only loads local assets from `app/src/main/assets/dashboard`.
-- The Map and Trips route views use remote CARTO basemap tiles by default, with
-  OpenStreetMap fallback when CARTO is unavailable. Route, OBD, and GPS history
+- The Map and Trips route views use remote Stadia Maps basemap tiles when the build
+  has a `STADIA_API_KEY` (see "Map tiles" below); without a key they draw routes on a
+  plain background and fetch no tiles. Route, OBD, and GPS history
   still come from on-device storage, but tile providers can see requested tile
   coordinates.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.

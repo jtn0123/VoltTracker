@@ -3,8 +3,8 @@ package com.volttracker.obdpoc.ui.trips
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,6 +28,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextMeasurer
@@ -42,29 +44,29 @@ import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltType
-import kotlin.math.cos
-import kotlin.math.min
 
 /**
  * The selected drive on a map card (mockups `.map-card`): its GPS track colored electric green
  * where the car drove on battery and gas amber where the engine did, start and end dots, an
  * "Engine on · N mi" marker where the engine first started, and the drive's summary chip.
  *
- * [ground] is the layer under the route. It defaults to a plain themed ground with a faint dot
- * grid, never invented streets. A street-tile layer can be passed here later without touching
- * the route drawing, which is fitted to the track's bounds on its own.
+ * [ground] is the layer under the route, given the route's [MapViewport] (null while there is
+ * no track to fit). It defaults to [TripMapGround]: a plain themed ground with a faint dot grid,
+ * with Stadia street tiles over it when the app provides a [LocalMapTileLoader]. The route and
+ * the tiles share the viewport's Web-Mercator projection, so the track sits on its streets.
  */
 @Composable
 fun TripMapCard(
     state: TripsUiState,
     modifier: Modifier = Modifier,
-    ground: @Composable BoxScope.() -> Unit = { MapGround() },
+    ground: @Composable BoxScope.(MapViewport?) -> Unit = { TripMapGround(it) },
 ) {
     val trip = state.selected ?: return
     val route = state.selectedRoute
     val pal = LocalVoltPalette.current
     val shape = RoundedCornerShape(22.dp)
-    Box(
+    val density = LocalDensity.current
+    BoxWithConstraints(
         modifier =
             modifier
                 .fillMaxWidth()
@@ -73,11 +75,29 @@ fun TripMapCard(
                 .background(pal.mapLand)
                 .border(1.dp, pal.line, shape),
     ) {
-        ground()
         val points = route?.points.orEmpty()
-        if (points.size >= 2) {
+        val viewport =
+            remember(points, constraints, density) {
+                if (points.size < 2) {
+                    null
+                } else {
+                    with(density) {
+                        fitViewport(
+                            points,
+                            Size(constraints.maxWidth.toFloat(), constraints.maxHeight.toFloat()),
+                            padSide = 28.dp.toPx(),
+                            padTop = 24.dp.toPx(),
+                            padBottom = (CHIP_ROOM_DP + 8).dp.toPx(),
+                            tileSizePx = MapViewport.TILE_DP.dp.toPx(),
+                        )
+                    }
+                }
+            }
+        ground(viewport)
+        if (viewport != null) {
             RouteCanvas(
                 points = points,
+                viewport = viewport,
                 tripMiles = trip.miles,
                 modifier =
                     Modifier.fillMaxSize().semantics {
@@ -119,6 +139,7 @@ fun MapGround() {
 @Composable
 private fun RouteCanvas(
     points: List<TripPoint>,
+    viewport: MapViewport,
     tripMiles: Double,
     modifier: Modifier,
 ) {
@@ -132,7 +153,7 @@ private fun RouteCanvas(
         )
     val engineOn = TripRoute("", points).engineOn()
     Canvas(modifier) {
-        val project = fitProjection(points, size, 28.dp.toPx(), 24.dp.toPx(), (CHIP_ROOM_DP + 8).dp.toPx())
+        val project: (TripPoint) -> Offset = viewport::project
         val casing = Path()
         points.forEachIndexed { i, p ->
             val o = project(p)
@@ -237,35 +258,6 @@ private fun modeColor(
     gas: Boolean,
 ): Color = if (gas) pal.gas else pal.ev
 
-/**
- * Fits [points] into [size] with the given side / top / bottom padding, keeping the track's
- * shape (longitude scaled by cos latitude) and centring it in the space left.
- */
-internal fun fitProjection(
-    points: List<TripPoint>,
-    size: Size,
-    padSide: Float,
-    padTop: Float,
-    padBottom: Float,
-): (TripPoint) -> Offset {
-    val midLat = Math.toRadians((points.minOf { it.lat } + points.maxOf { it.lat }) / 2)
-    val xScale = cos(midLat)
-    val xs = points.map { it.lon * xScale }
-    val ys = points.map { -it.lat }
-    val minX = xs.min()
-    val minY = ys.min()
-    val spanX = (xs.max() - minX).coerceAtLeast(MIN_SPAN)
-    val spanY = (ys.max() - minY).coerceAtLeast(MIN_SPAN)
-    val width = (size.width - 2 * padSide).coerceAtLeast(1f)
-    val height = (size.height - padTop - padBottom).coerceAtLeast(1f)
-    val scale = min(width / spanX, height / spanY)
-    val left = padSide + (width - spanX * scale).toFloat() / 2
-    val top = padTop + (height - spanY * scale).toFloat() / 2
-    return { p ->
-        Offset(left + ((p.lon * xScale - minX) * scale).toFloat(), top + ((-p.lat - minY) * scale).toFloat())
-    }
-}
-
 @Composable
 private fun MapChip(
     trip: TripSummary,
@@ -312,4 +304,3 @@ private const val TAG_ALPHA = 0.9f
 private const val TAG_CLEAR_DP = 8
 private const val TRACK_SAMPLE_PX = 4f
 private const val DIAMOND_DEG = 45f
-private const val MIN_SPAN = 1e-6

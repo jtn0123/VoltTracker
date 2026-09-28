@@ -15,11 +15,13 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.map.StadiaTileLoader
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
@@ -29,6 +31,7 @@ import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
+import com.volttracker.obdpoc.ui.trips.LocalMapTileLoader
 import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
@@ -161,28 +164,32 @@ class ComposeDashboardActivity :
         // A recreated Activity starts with a fresh store; the coordinator's
         // retained result (an offered build, say) must not be forgotten.
         updates.lastResult?.let(::publishUpdateResult)
+        // Null without a Stadia key: the Trips map then draws its plain ground, no tiles.
+        val tileLoader = StadiaTileLoader.create()
         setContent {
             val state by store.state.collectAsState()
-            VoltApp(
-                state = state,
-                actions =
-                    VoltAppActions(
-                        onOpenClassicDashboard = ::openClassicDashboard,
-                        onConnect = ::connectLastAdapter,
-                        onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
-                        onStopDemo = ::stopObdService,
-                        onCheckForUpdate = ::checkForUpdate,
-                        onInstallUpdate = ::installUpdate,
-                        onSettingChange = ::changeSetting,
-                        onSettingsCommand = ::runCommand,
-                        onScreenShown = ::onScreenShown,
-                        onSelectTrip = ::selectTrip,
-                        onExportTrip = ::exportTrip,
-                        onInsightsPeriod = ::selectInsightsPeriod,
-                        onCarControl = { carControls.request(it) },
-                        onCarControlsEnabled = { carControls.setEnabled(it) },
-                    ),
-            )
+            CompositionLocalProvider(LocalMapTileLoader provides tileLoader) {
+                VoltApp(
+                    state = state,
+                    actions =
+                        VoltAppActions(
+                            onOpenClassicDashboard = ::openClassicDashboard,
+                            onConnect = ::connectLastAdapter,
+                            onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
+                            onStopDemo = ::stopObdService,
+                            onCheckForUpdate = ::checkForUpdate,
+                            onInstallUpdate = ::installUpdate,
+                            onSettingChange = ::changeSetting,
+                            onSettingsCommand = ::runCommand,
+                            onScreenShown = ::onScreenShown,
+                            onSelectTrip = ::selectTrip,
+                            onExportTrip = ::exportTrip,
+                            onInsightsPeriod = ::selectInsightsPeriod,
+                            onCarControl = { carControls.request(it) },
+                            onCarControlsEnabled = { carControls.setEnabled(it) },
+                        ),
+                )
+            }
         }
     }
 
