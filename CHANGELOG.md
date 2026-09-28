@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.47.0 (2026-09-28)
+
+### ✳️ New
+
+- **settings**: Shared native display prefs, live-wired compose settings
+  ([#91](https://github.com/jtn0123/VoltTracker/pull/91),
+  [`46ec1fe`](https://github.com/jtn0123/VoltTracker/commit/46ec1fec1224c048ee79fc2d3aeb2be0f54c97cb))
+
+
 ## v0.46.0 (2026-09-28)
 
 ### ✳️ New
