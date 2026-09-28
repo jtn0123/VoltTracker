@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.50.0 (2026-09-28)
+
+### ✳️ New
+
+- **insights**: Redesign insights tab with electric share, weekly bars and speed efficiency
+  ([#97](https://github.com/jtn0123/VoltTracker/pull/97),
+  [`c669fbe`](https://github.com/jtn0123/VoltTracker/commit/c669fbe4a30ff3ff836c80c8a5effda1178585c5))
+
+
 ## v0.49.0 (2026-09-28)
 
 ### ✳️ New
