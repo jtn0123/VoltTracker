@@ -6,12 +6,10 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.AppPrefs
@@ -623,8 +621,9 @@ open class ObdService :
         if (request.refreshCompetingApps) {
             refreshCompetingAppsAsync()
         }
-        if (!startForegroundSession(request.foregroundText)) {
-            broadcastStatus("blocked", getString(R.string.status_foreground_blocked), true)
+        val blockedDetail = startForegroundSession(request)
+        if (blockedDetail != null) {
+            broadcastStatus("blocked", blockedDetail, true)
             // The service was launched via startForegroundService but never reached the
             // foreground: without a session to own, it must stop itself or Android eventually
             // kills the process with a RemoteServiceException for the missing startForeground
@@ -901,26 +900,50 @@ open class ObdService :
         sendBroadcast(intent)
     }
 
-    private fun startForegroundSession(text: String): Boolean {
-        val notification = notifications.build(text)
+    /**
+     * Puts the service in the state [request]'s session needs (see [ForegroundServicePolicy]).
+     * Returns null on success, or the user-facing reason the session cannot start.
+     */
+    private fun startForegroundSession(request: SessionStartRequest): String? {
+        val plan =
+            ForegroundServicePolicy.plan(
+                request.mode,
+                Build.VERSION.SDK_INT,
+                hasBluetoothConnectPermission() || hasBluetoothScanPermission(),
+                hasLocationPermission(),
+            )
+        val serviceType =
+            when (plan) {
+                ForegroundPlan.Background -> {
+                    // The demo runs as a plain started service: drop any foreground state (and its
+                    // notification) a previous real session left behind.
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    foregroundServiceActive = false
+                    activeForegroundServiceType = 0
+                    return null
+                }
+                ForegroundPlan.MissingNearbyDevicesPermission -> {
+                    recorder.logEvent("foreground_skipped", "reason", "missing_nearby_devices_permission")
+                    return getString(R.string.status_foreground_needs_nearby_devices)
+                }
+                is ForegroundPlan.Foreground -> plan.serviceType
+            }
         return try {
-            val serviceType =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) currentForegroundServiceType() else null
-            enterForeground(notification, serviceType)
+            enterForeground(notifications.build(request.foregroundText), serviceType)
             if (serviceType != null) {
                 activeForegroundServiceType = serviceType
             }
             foregroundServiceActive = true
-            true
+            null
         } catch (ex: SecurityException) {
             onStartForegroundRefused("startForegroundSession", ex)
-            false
+            getString(R.string.status_foreground_blocked)
         } catch (ex: IllegalStateException) {
             // API 31+ throws ForegroundServiceStartNotAllowedException (an IllegalStateException
             // subclass) instead of SecurityException when background FGS starts are blocked;
             // route it to the same "blocked" fallback instead of crashing the process.
             onStartForegroundRefused("startForegroundSession", ex)
-            false
+            getString(R.string.status_foreground_blocked)
         }
     }
 
@@ -952,15 +975,6 @@ open class ObdService :
         activeForegroundServiceType = 0
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private fun currentForegroundServiceType(): Int {
-        var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        if (hasLocationPermission()) {
-            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-        }
-        return serviceType
-    }
-
     private fun reevaluateForegroundServiceType() {
         if (!running.get() || !foregroundServiceActive) {
             return
@@ -968,7 +982,7 @@ open class ObdService :
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return
         }
-        val desired = currentForegroundServiceType()
+        val desired = ForegroundServicePolicy.serviceType(hasLocationPermission())
         if (desired == activeForegroundServiceType) {
             return
         }
@@ -1041,7 +1055,8 @@ open class ObdService :
                 "sampleGapCount",
                 engine.sampleGapCount().toString(),
             )
-            if (running.get()) {
+            // A background (demo) session owns no notification, so there is nothing to refresh.
+            if (running.get() && foregroundServiceActive) {
                 updateNotification(foregroundNotificationText())
                 reevaluateForegroundServiceType()
             }

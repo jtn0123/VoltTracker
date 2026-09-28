@@ -203,4 +203,28 @@ class ComposeDashboardSupportTest {
         assertEquals(2, drive.speedTrace.size)
         assertEquals(39, drive.speedMph)
     }
+
+    // --- blockedStatusDetail -------------------------------------------------
+
+    @Test
+    fun blockedStatusSurfacesItsDetail() {
+        val json = JSONObject().put("state", "blocked").put("blocked", true).put("detail", " Allow Nearby devices ")
+
+        assertEquals(
+            "Allow Nearby devices",
+            ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, json.toString()),
+        )
+    }
+
+    @Test
+    fun unblockedBlankOrForeignBroadcastsSurfaceNothing() {
+        val ok = JSONObject().put("state", "demo").put("blocked", false).put("detail", "Demo running")
+        val blank = JSONObject().put("state", "blocked").put("blocked", true).put("detail", "  ")
+        val blocked = JSONObject().put("state", "blocked").put("blocked", true).put("detail", "x")
+
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, ok.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, blank.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_TELEMETRY, blocked.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, "not json"))
+    }
 }

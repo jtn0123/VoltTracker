@@ -78,6 +78,9 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
         </activity>
 
+        <!-- connectedDevice|location cover real adapter sessions only. The demo stream runs as a
+             plain started service (no startForeground), because on Android 14+ both types need
+             runtime permissions a fresh install lacks; see service/ForegroundServicePolicy.kt. -->
         <service
             android:name="com.volttracker.obdpoc.service.ObdService"
             android:exported="false"

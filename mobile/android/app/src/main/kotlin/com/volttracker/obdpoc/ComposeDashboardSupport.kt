@@ -55,6 +55,20 @@ internal object ComposeDashboardSupport {
         }
     }
 
+    /**
+     * The detail of a status broadcast that reports a refused start (`blocked: true`), or null for
+     * every other broadcast. Lets the host surface the reason instead of failing silently.
+     */
+    fun blockedStatusDetail(
+        action: String?,
+        json: String?,
+    ): String? {
+        if (action != ObdService.BROADCAST_STATUS) return null
+        val payload = MainActivityUtils.parseJson(json)
+        if (!payload.optBoolean("blocked", false)) return null
+        return payload.optString("detail", "").trim().ifEmpty { null }
+    }
+
     /** The Settings update section's rendering of one check outcome. */
     data class UpdateBanner(
         val statusLabel: String,
