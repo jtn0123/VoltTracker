@@ -1,5 +1,8 @@
 package com.volttracker.obdpoc.ui.charge
 
+import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.units.VoltUnits
+
 /**
  * One logged charge (the same observed + inferred rows the classic Charge card and the charge
  * CSV export read). Nullable fields are "not recorded": the row shows less, never a guess.
@@ -30,7 +33,7 @@ data class ChargeUiState(
     val connected: Boolean = false,
     val statusLabel: String = "No adapter",
     val charging: Boolean = false,
-    /** Raw pack SOC (%) — what time-to-full is computed from. */
+    /** Raw pack SOC (%) as the BECM reports it; the screen shows [shownSocPercent] everywhere. */
     val socPercent: Double = 0.0,
     /** The SOC the car's cluster shows (%), or null when the car hasn't reported it. */
     val displayedSocPercent: Double? = null,
@@ -61,7 +64,13 @@ data class ChargeUiState(
     val socPoints: List<SocPoint> = emptyList(),
     /** Logged charges, newest first. */
     val sessions: List<ChargeSession> = emptyList(),
+    /** Whether the logged charges have been read yet (demo and previews are always loaded). */
+    val history: HistoryLoad = HistoryLoad.LOADED,
+    /** Settings → Units: how distances, speeds and temperatures are shown. */
+    val metricUnits: Boolean = false,
 ) {
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     companion object {
         /** 9:42 PM on Apr 30 2026 (local) — the mockup's "tonight". */
         private const val DEMO_NOW_MS = 1_777_610_520_000L
@@ -76,7 +85,9 @@ data class ChargeUiState(
                     connected = true,
                     statusLabel = "Live · 1 Hz",
                     charging = true,
-                    socPercent = 71.0,
+                    // Raw ≠ displayed, as on a real Volt: every figure must use the displayed one.
+                    socPercent = 66.0,
+                    displayedSocPercent = 71.0,
                     evRangeMiles = 29.0,
                     sohPct = 91.0,
                     chargeKw = 3.6,

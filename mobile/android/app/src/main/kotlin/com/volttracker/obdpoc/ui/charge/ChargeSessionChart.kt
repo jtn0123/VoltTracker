@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
@@ -31,7 +32,9 @@ import kotlin.math.floor
 /**
  * The session's SOC curve (mockups `S.charge` chart): the measured line with a soft fill from the
  * charge's start to now, then a dashed projection to the charge limit at the estimated finish.
- * Grid lines every 25 %, the time axis labelled start / now / finish.
+ * Grid lines every 25 %, labelled in a right-hand gutter the curve never enters (so the
+ * projection's end at the limit can't run through the "100%" label); the time axis is labelled
+ * start / now / finish.
  */
 @Composable
 fun ChargeSessionChart(
@@ -48,6 +51,9 @@ fun ChargeSessionChart(
     val yMin = (floor((lowest - Y_PAD) / GRID_STEP) * GRID_STEP).coerceIn(0f, FULL - GRID_STEP)
     val yMax = FULL + Y_TOP_PAD
     val nowFrac = (span.nowMs - span.startMs).toFloat() / (span.endMs - span.startMs)
+    val density = LocalDensity.current
+    val gutterPx = measurer.measure("100%", axisStyle).size.width + with(density) { GUTTER_GAP.toPx() }
+    val gutter = with(density) { gutterPx.toDp() }
     Box(
         modifier =
             modifier
@@ -58,15 +64,20 @@ fun ChargeSessionChart(
                 },
     ) {
         Canvas(Modifier.fillMaxWidth().height(CHART_DP.dp)) {
-            fun x(atMs: Long): Float = size.width * (atMs - span.startMs) / (span.endMs - span.startMs)
+            val plotW = size.width - gutterPx
+
+            fun x(atMs: Long): Float = plotW * (atMs - span.startMs) / (span.endMs - span.startMs)
 
             fun y(soc: Float): Float = size.height - size.height * (soc - yMin) / (yMax - yMin)
             var grid = yMin + GRID_STEP
             while (grid <= FULL) {
                 val gy = y(grid)
-                drawLine(pal.line, Offset(0f, gy), Offset(size.width, gy), strokeWidth = 1.dp.toPx())
+                drawLine(pal.line, Offset(0f, gy), Offset(plotW, gy), strokeWidth = 1.dp.toPx())
                 val label = measurer.measure("${grid.toInt()}%", axisStyle)
-                drawText(label, topLeft = Offset(size.width - label.size.width, gy - label.size.height - 2.dp.toPx()))
+                drawText(
+                    label,
+                    topLeft = Offset(size.width - label.size.width, (gy - label.size.height / 2f).coerceAtLeast(0f)),
+                )
                 grid += GRID_STEP
             }
             val line = Path()
@@ -114,7 +125,7 @@ fun ChargeSessionChart(
             drawCircle(pal.surface, radius = 6.5.dp.toPx(), center = Offset(x(tip.atMs), y(tip.soc)))
             drawCircle(pal.ev, radius = 5.dp.toPx(), center = Offset(x(tip.atMs), y(tip.soc)))
         }
-        Axis(span, nowFrac, axisStyle)
+        Axis(span, nowFrac, axisStyle, Modifier.padding(end = gutter))
     }
 }
 
@@ -123,8 +134,9 @@ private fun Axis(
     span: ChargeChartSpan,
     nowFrac: Float,
     style: TextStyle,
+    modifier: Modifier = Modifier,
 ) {
-    Row(Modifier.fillMaxWidth().padding(top = (CHART_DP + 8).dp)) {
+    Row(modifier.fillMaxWidth().padding(top = (CHART_DP + 8).dp)) {
         // A charge that only just began has no room for a start label left of "now".
         if (nowFrac >= MIN_FRAC) {
             Text(
@@ -143,6 +155,7 @@ private fun Axis(
 }
 
 private const val CHART_DP = 112
+private val GUTTER_GAP = 6.dp
 private const val GRID_STEP = 25f
 private const val FULL = 100f
 private const val Y_PAD = 6f

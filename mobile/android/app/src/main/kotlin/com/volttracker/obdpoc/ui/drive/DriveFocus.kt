@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -39,6 +40,7 @@ import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
+import kotlin.math.roundToInt
 
 /** Number + small muted unit, the mockups' `<b>12.4</b><small> mi</small>` pairing. */
 @Composable
@@ -109,10 +111,9 @@ internal fun RangeCard(state: DriveUiState) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             VoltLabel("Range")
-            val total = state.totalRangeMiles
             NumberUnit(
-                value = total?.let { wholeLabel(it) } ?: "--",
-                unit = " mi total",
+                value = state.totalRangeWhole(state.units)?.toString() ?: "--",
+                unit = " ${state.units.distanceUnit} total",
                 size = 17f,
             )
         }
@@ -126,7 +127,8 @@ internal fun RangeCard(state: DriveUiState) {
             icon = VoltIcons.Bolt,
             tone = PillTone.EV,
             title = "Electric",
-            miles = state.evRangeMiles,
+            distance = state.evRangeMiles?.let(state.units::distanceWhole),
+            unit = state.units.distanceUnit,
             fraction = if (state.connected) (soc / 100).toFloat() else 0f,
             sub = evSub,
             dim = gasMode,
@@ -137,8 +139,10 @@ internal fun RangeCard(state: DriveUiState) {
             icon = VoltIcons.Fuel,
             tone = PillTone.GAS,
             title = "Gas",
-            miles = state.gasRangeMiles,
-            fraction = ((fuel ?: 0.0) / 100).toFloat(),
+            distance = state.gasRangeMiles?.let(state.units::distanceWhole),
+            unit = state.units.distanceUnit,
+            // No tank reading, no meter: an empty bar would claim an empty tank.
+            fraction = fuel?.let { (it / 100).toFloat() },
             sub =
                 listOfNotNull(
                     fuel?.let { "${it.toInt()}% tank" } ?: "Tank level not reported",
@@ -154,8 +158,9 @@ private fun RangeRow(
     icon: ImageVector,
     tone: PillTone,
     title: String,
-    miles: Double?,
-    fraction: Float,
+    distance: String?,
+    unit: String,
+    fraction: Float?,
     sub: String,
     dim: Boolean,
 ) {
@@ -171,9 +176,17 @@ private fun RangeRow(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(text = title, style = VoltType.bodyStrong.copy(fontSize = 14.sp), color = VoltColors.textPrimary)
-                NumberUnit(value = wholeLabel(miles), unit = " mi", size = 20f)
+                NumberUnit(value = distance ?: "--", unit = " $unit", size = 20f)
             }
-            Meter(fraction = fraction, color = pillColor(tone), modifier = Modifier.padding(top = 6.dp, bottom = 5.dp))
+            if (fraction != null) {
+                Meter(
+                    fraction = fraction,
+                    color = pillColor(tone),
+                    modifier = Modifier.padding(top = 6.dp, bottom = 5.dp),
+                )
+            } else {
+                Spacer(Modifier.height(4.dp))
+            }
             Text(text = sub, style = VoltType.caption.copy(fontSize = 12.sp), color = VoltColors.textSecondary)
         }
     }
@@ -208,6 +221,15 @@ internal fun StatTile(
     }
 }
 
+/** "368 V · 42 A" from whichever of the pack's volts and amps are known; "--" when neither is. */
+internal fun packElectrics(
+    volts: Double?,
+    amps: Double?,
+): String =
+    listOfNotNull(volts?.let { "${it.roundToInt()} V" }, amps?.let { "${it.roundToInt()} A" })
+        .joinToString(" · ")
+        .ifEmpty { "--" }
+
 /** The three state-dependent tiles under the range card (mockups `tilesA`). */
 @Composable
 internal fun FocusTiles(state: DriveUiState) {
@@ -216,20 +238,38 @@ internal fun FocusTiles(state: DriveUiState) {
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         val tile = Modifier.weight(1f)
+        val units = state.units
         when (state.phase) {
             DrivePhase.DRIVE -> {
-                StatTile("This drive", oneDecimal(state.tripMiles), " mi", state.tripDuration, tile)
+                StatTile(
+                    "This drive",
+                    units.distanceOneDecimal(state.tripMiles),
+                    " ${units.distanceUnit}",
+                    state.tripDuration,
+                    tile,
+                )
                 val mpg = state.cycleMpg
                 if (state.mode == DriveMode.GAS && mpg != null) {
-                    StatTile("Efficiency", oneDecimal(mpg), " mpg", "${state.cycleEvPercent ?: 0}% electric", tile)
+                    val sub = state.cycleEvPercent?.let { "$it% electric" } ?: "this cycle"
+                    // A third-width tile has no room for "L/100 km" beside the figure: it moves below.
+                    if (units.metric) {
+                        StatTile("Efficiency", units.economyValue(mpg) ?: "--", "", units.economyUnit, tile)
+                    } else {
+                        StatTile("Efficiency", units.economyValue(mpg) ?: "--", " ${units.economyUnit}", sub, tile)
+                    }
                 } else {
-                    StatTile("Efficiency", state.tripMiPerKwh?.let(::oneDecimal) ?: "--", " mi/kWh", "trip avg", tile)
+                    val value = units.efficiencyValue(state.shownTripMiPerKwh) ?: "--"
+                    if (units.metric) {
+                        StatTile("Efficiency", value, "", "${units.efficiencyUnit} avg", tile)
+                    } else {
+                        StatTile("Efficiency", value, " ${units.efficiencyUnit}", "trip avg", tile)
+                    }
                 }
                 StatTile(
                     "Battery",
-                    "${state.packTempF}",
-                    "°F",
-                    "${state.packVolts.toInt()} V · ${state.packAmps.toInt()} A",
+                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                    units.tempUnit,
+                    packElectrics(state.packVolts, state.packAmps),
                     tile,
                 )
             }
@@ -237,25 +277,25 @@ internal fun FocusTiles(state: DriveUiState) {
                 val last = state.lastDrive
                 StatTile(
                     "Last drive",
-                    last?.let { oneDecimal(it.miles) } ?: "--",
-                    " mi",
+                    last?.let { units.distanceOneDecimal(it.miles) } ?: "--",
+                    " ${units.distanceUnit}",
                     last?.let { d ->
                         listOfNotNull(
-                            d.miPerKwh?.let { "${oneDecimal(it)} mi/kWh" },
+                            d.miPerKwh?.takeIf { d.miles >= MIN_EFFICIENCY_MILES }?.let(units::efficiencyText),
                             clockLabel(d.endedAtMs, short = true),
                         ).joinToString(" · ")
                     } ?: "none this session",
                     tile,
                 )
-                val volts = state.aux12Volts ?: state.auxVolts.takeIf { state.connected && it > 0 }
+                val volts = state.aux12Volts ?: state.auxVolts?.takeIf { state.connected && it > 0 }
                 val aux = aux12Status(volts, state.phase)
                 StatTile("12V battery", volts?.let(::oneDecimal) ?: "--", " V", aux.text, tile, aux.tone)
                 val tires = state.tires
                 val status = tireStatus(tires, state.tirePlacardPsi)
                 StatTile(
                     "Tires",
-                    tires?.let { wholeLabel(it.all.average()) } ?: "--",
-                    " psi",
+                    tires?.let { units.pressure(it.all.average()).toString() } ?: "--",
+                    " ${units.pressureUnit}",
                     status.text,
                     tile,
                     status.tone.takeIf { tires != null },
@@ -274,8 +314,8 @@ internal fun FocusTiles(state: DriveUiState) {
                 )
                 StatTile(
                     "Battery",
-                    "${state.packTempF}",
-                    "°F",
+                    state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                    units.tempUnit,
                     state.cellSpreadMv?.let { "Cell Δ ${it.toInt()} mV" } ?: "--",
                     tile,
                 )

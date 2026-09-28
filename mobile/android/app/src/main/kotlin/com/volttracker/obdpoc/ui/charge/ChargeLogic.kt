@@ -17,7 +17,7 @@ val ChargeUiState.shownSocPercent: Double get() = displayedSocPercent ?: socPerc
 
 /** Time to the charge limit at the current charger power; null while not charging or already there. */
 val ChargeUiState.eta: ChargeEta?
-    get() = if (charging) chargeEta(socPercent, chargeKw, sohPct, targetSoc.toDouble()) else null
+    get() = if (charging) chargeEta(shownSocPercent, chargeKw, sohPct, targetSoc.toDouble()) else null
 
 /** "Plugged in · Level 2" while charging; otherwise the connection label. */
 val ChargeUiState.subtitle: String
@@ -126,7 +126,7 @@ fun costText(
     rate: Double,
 ): String? = if (kwh == null || rate <= 0.0) null else String.format(Locale.US, "$%.2f", kwh * rate)
 
-/** "L2 · 41 → 71%", leaving out whatever wasn't recorded. */
+/** "L2 · 41% → 71%", leaving out whatever wasn't recorded. */
 fun sessionDetail(
     level: String?,
     fromSoc: Int?,
@@ -134,7 +134,7 @@ fun sessionDetail(
 ): String {
     val span =
         when {
-            fromSoc != null && toSoc != null -> "$fromSoc → $toSoc%"
+            fromSoc != null && toSoc != null -> "$fromSoc% → $toSoc%"
             toSoc != null -> "to $toSoc%"
             else -> null
         }
@@ -183,7 +183,7 @@ fun ChargeUiState.measuredPoints(): List<SocPoint> {
     val span = chartSpan() ?: return emptyList()
     val head = listOfNotNull(fromSoc?.let { SocPoint(span.startMs, it.toFloat()) })
     val recorded = socPoints.filter { it.atMs in (span.startMs + 1) until span.nowMs }
-    return head + recorded + SocPoint(span.nowMs, socPercent.toFloat())
+    return head + recorded + SocPoint(span.nowMs, shownSocPercent.toFloat())
 }
 
 /**
@@ -193,7 +193,7 @@ fun ChargeUiState.measuredPoints(): List<SocPoint> {
 fun ChargeUiState.projectedPoints(steps: Int = PROJECTION_STEPS): List<SocPoint> {
     val span = chartSpan() ?: return emptyList()
     val finish = span.finishMs ?: return emptyList()
-    val from = socPercent
+    val from = shownSocPercent
     val to = targetSoc.toDouble()
     return (0..steps).map { i ->
         val u = i.toDouble() / steps

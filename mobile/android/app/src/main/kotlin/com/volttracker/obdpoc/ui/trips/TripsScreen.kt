@@ -42,6 +42,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.components.IconCircleButton
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -51,11 +52,11 @@ import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.unitStyle
-import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 
 /**
  * The Trips tab (mockups `S.trips`): this month's drives in the header, the selected drive on
@@ -85,13 +86,28 @@ fun TripsScreen(
         actions = { if (state.trips.isNotEmpty()) ExportMenu(state, onExport) },
     ) {
         if (state.trips.isEmpty()) {
-            EmptyTrips()
+            when (state.history) {
+                HistoryLoad.LOADING -> TripsNotice("Loading drives…", null)
+                HistoryLoad.FAILED ->
+                    TripsNotice(
+                        "Drives couldn't be read",
+                        "Your logged drives are safe. They'll load the next time you open Trips.",
+                    )
+                HistoryLoad.LOADED ->
+                    TripsNotice(
+                        "No drives logged yet",
+                        "Drives appear here after you drive with the adapter connected, " +
+                            "with the route when location is on.",
+                    )
+            }
         } else {
             TripMapCard(state)
             TripsFigures(state)
             state.groups().forEach { group ->
                 VoltGroupLabel(group.label, Modifier.padding(top = 2.dp))
-                group.trips.forEach { trip -> TripRow(trip, trip.routeKey == selectedKey) { onSelect(trip.routeKey) } }
+                group.trips.forEach { trip ->
+                    TripRow(trip, trip.routeKey == selectedKey, state.units) { onSelect(trip.routeKey) }
+                }
             }
         }
     }
@@ -162,7 +178,12 @@ private fun TripsFigures(state: TripsUiState) {
             Modifier.weight(1f),
             valueColor = VoltColors.energy,
         )
-        VoltFigure("Avg", state.avgMiPerKwh()?.let(::oneDecimal) ?: "--", "mi/kWh", Modifier.weight(1f))
+        VoltFigure(
+            "Avg",
+            state.units.efficiencyValue(state.avgMiPerKwh()) ?: "--",
+            state.units.efficiencyUnit,
+            Modifier.weight(1f),
+        )
         VoltFigure("Saved", state.savedVsGas()?.let(::wholeDollars) ?: "--", "vs gas", Modifier.weight(1f))
     }
 }
@@ -171,6 +192,7 @@ private fun TripsFigures(state: TripsUiState) {
 private fun TripRow(
     trip: TripSummary,
     selected: Boolean,
+    units: VoltUnits,
     onClick: () -> Unit,
 ) {
     val shape = VoltShapes.tile
@@ -220,13 +242,13 @@ private fun TripRow(
             Text(
                 text =
                     buildAnnotatedString {
-                        append(oneDecimal(trip.miles))
-                        withStyle(unitStyle(11)) { append(" mi") }
+                        append(units.distanceOneDecimal(trip.miles))
+                        withStyle(unitStyle(11)) { append(" ${units.distanceUnit}") }
                     },
                 style = VoltType.valueSmall,
                 color = VoltColors.textPrimary,
             )
-            trip.efficiencyText()?.let {
+            trip.efficiencyText(units)?.let {
                 Text(
                     text = it,
                     style = VoltType.caption.copy(fontWeight = FontWeight.SemiBold),
@@ -265,16 +287,22 @@ private fun RowScope.SplitPart(
     )
 }
 
+/** The card shown in place of the drive list: loading, a failed read, or none logged yet. */
 @Composable
-private fun EmptyTrips() {
+private fun TripsNotice(
+    title: String,
+    body: String?,
+) {
     VoltPanel(modifier = Modifier.padding(top = 8.dp)) {
-        Text("No drives logged yet", style = VoltType.bodyStrong, color = VoltColors.textPrimary)
-        Text(
-            text = "Drives appear here after you drive with the adapter connected, with the route when location is on.",
-            style = VoltType.body,
-            color = VoltColors.textSecondary,
-            modifier = Modifier.padding(top = 4.dp),
-        )
+        Text(title, style = VoltType.bodyStrong, color = VoltColors.textPrimary)
+        body?.let {
+            Text(
+                text = it,
+                style = VoltType.body,
+                color = VoltColors.textSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
     }
 }
 

@@ -20,10 +20,12 @@ import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltSegmented
+import com.volttracker.obdpoc.ui.drive.TIRE_LOW_MARGIN_PSI
 import com.volttracker.obdpoc.ui.theme.AppearanceMode
 import com.volttracker.obdpoc.ui.theme.DarkStyle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 
 // Detail pages behind the Settings index. Every control reads the stored value from [SettingsUiState]
 // and reports edits as a [SettingChange]; the host persists them.
@@ -64,16 +66,46 @@ internal fun ConnectionPage(
     }
 }
 
-/** The number editors on the Costs page, keyed so the open one survives rotation. */
-private enum class CostField(
-    val field: NumberField,
-) {
-    HOME(NumberField("Home electricity rate", "$/kWh", 0.0, 2.0)),
-    PUBLIC(NumberField("Public charging rate", "$/kWh", 0.0, 2.0)),
-    GAS_PRICE(NumberField("Gas price", "$/gal", 0.0, 10.0)),
-    GAS_MPG(NumberField("Gas vehicle MPG", "MPG", 5.0, 150.0)),
-    CHARGE_TARGET(NumberField("Charge target", "%", 50.0, 100.0, clearable = false)),
+/**
+ * The number editors on the Costs page, keyed so the open one survives rotation. Gas price and
+ * economy are edited in the chosen units (per litre and L/100 km in metric) over the same range
+ * the store accepts in $/gal and mpg.
+ */
+private enum class CostField {
+    HOME,
+    PUBLIC,
+    GAS_PRICE,
+    GAS_MPG,
+    CHARGE_TARGET,
+    ;
+
+    fun field(units: VoltUnits): NumberField =
+        when (this) {
+            HOME -> NumberField("Home electricity rate", "$/kWh", 0.0, MAX_RATE)
+            PUBLIC -> NumberField("Public charging rate", "$/kWh", 0.0, MAX_RATE)
+            GAS_PRICE ->
+                NumberField("Gas price", "$/${units.gasVolumeUnit}", 0.0, units.gasPrice(MAX_GAS_PRICE))
+            GAS_MPG ->
+                if (units.metric) {
+                    NumberField("Gas vehicle economy", units.economyUnit, economyMin(units), economyMax(units))
+                } else {
+                    NumberField("Gas vehicle MPG", "MPG", MIN_MPG, MAX_MPG)
+                }
+            CHARGE_TARGET -> NumberField("Charge target", "%", MIN_TARGET, FULL_TARGET, clearable = false)
+        }
 }
+
+// L/100 km runs the other way from mpg: the fewest litres is the most mpg.
+private fun economyMin(units: VoltUnits): Double = units.economy(MAX_MPG) ?: 0.0
+
+private fun economyMax(units: VoltUnits): Double = units.economy(MIN_MPG) ?: 0.0
+
+private const val MAX_RATE = 2.0
+private const val MAX_GAS_PRICE = 10.0
+private const val MIN_MPG = 5.0
+private const val MAX_MPG = 150.0
+private const val MIN_TARGET = 50.0
+private const val FULL_TARGET = 100.0
 
 @Composable
 internal fun CostsPage(
@@ -83,8 +115,8 @@ internal fun CostsPage(
     var editing by rememberSaveable { mutableStateOf<CostField?>(null) }
     val editor: @Composable (CostField) -> Unit = { field ->
         if (editing == field) {
-            NumberEditor(field.field, costValue(state, field), onDismiss = { editing = null }) { value ->
-                onChange(costChange(field, value))
+            NumberEditor(field.field(state.units), costValue(state, field), onDismiss = { editing = null }) { value ->
+                onChange(costChange(state.units, field, value))
                 editing = null
             }
         }
@@ -103,7 +135,11 @@ internal fun CostsPage(
         ValueRow("Gas price", state.gasPriceLabel) { editing = CostField.GAS_PRICE }
         editor(CostField.GAS_PRICE)
         VoltListDivider()
-        ValueRow("Gas vehicle MPG", state.gasMpgLabel, subtitle = "For savings estimates") {
+        ValueRow(
+            if (state.metricUnits) "Gas vehicle economy" else "Gas vehicle MPG",
+            state.gasMpgLabel,
+            subtitle = "For savings estimates",
+        ) {
             editing = CostField.GAS_MPG
         }
         editor(CostField.GAS_MPG)
@@ -133,20 +169,21 @@ private fun costValue(
     when (field) {
         CostField.HOME -> state.homeRate
         CostField.PUBLIC -> state.publicRate
-        CostField.GAS_PRICE -> state.gasPrice
-        CostField.GAS_MPG -> state.gasMpg
+        CostField.GAS_PRICE -> state.units.gasPrice(state.gasPrice)
+        CostField.GAS_MPG -> state.gasMpg?.let(state.units::economy)
         CostField.CHARGE_TARGET -> state.chargeTargetPct.toDouble()
     }?.takeIf { it > 0.0 }
 
 private fun costChange(
+    units: VoltUnits,
     field: CostField,
     value: Double?,
 ): SettingChange =
     when (field) {
         CostField.HOME -> SettingChange.HomeRate(value ?: 0.0)
         CostField.PUBLIC -> SettingChange.PublicRate(value ?: 0.0)
-        CostField.GAS_PRICE -> SettingChange.GasPrice(value ?: 0.0)
-        CostField.GAS_MPG -> SettingChange.GasMpg(value)
+        CostField.GAS_PRICE -> SettingChange.GasPrice(value?.let(units::gasPricePerGallon) ?: 0.0)
+        CostField.GAS_MPG -> SettingChange.GasMpg(value?.let(units::mpgFrom))
         CostField.CHARGE_TARGET -> SettingChange.ChargeTarget(value?.toInt() ?: DEFAULT_CHARGE_TARGET)
     }
 
@@ -160,7 +197,7 @@ internal fun UnitsPage(
     VoltPanel {
         ChoiceRow(
             label = "Units",
-            subtitle = if (state.metricUnits) "km · °C" else "mi · °F",
+            subtitle = if (state.metricUnits) "km · °C · kPa" else "mi · °F · psi",
             options = listOf("Imperial", "Metric"),
             selectedIndex = if (state.metricUnits) 1 else 0,
         ) { onChange(SettingChange.MetricUnits(it == 1)) }
@@ -169,13 +206,16 @@ internal fun UnitsPage(
         ValueRow(
             "Tire placard pressure",
             state.tirePlacardLabel,
-            subtitle = "Cold pressure on the driver's door jamb; tires read low 4 psi under it",
+            subtitle =
+                "Cold pressure on the driver's door jamb; tires read low " +
+                    "${state.units.pressureText(TIRE_LOW_MARGIN_PSI)} under it",
         ) { editing = true }
         if (editing) {
-            val field = placardField(state.metricUnits)
-            val shown = if (state.metricUnits) state.tirePlacardPsi / PSI_PER_KPA else state.tirePlacardPsi
-            NumberEditor(field, shown, onDismiss = { editing = false }) { value ->
-                value?.let { onChange(SettingChange.TirePlacard(if (state.metricUnits) it * PSI_PER_KPA else it)) }
+            val units = state.units
+            NumberEditor(placardField(units), units.pressureValue(state.tirePlacardPsi), onDismiss = {
+                editing = false
+            }) { value ->
+                value?.let { onChange(SettingChange.TirePlacard(units.psiFrom(it))) }
                 editing = false
             }
         }
@@ -183,20 +223,15 @@ internal fun UnitsPage(
 }
 
 /** The placard editor in the chosen units, over the same 20–60 psi the store accepts. */
-private fun placardField(metric: Boolean): NumberField =
-    if (metric) {
-        NumberField(
-            "Tire placard",
-            "kPa",
-            PLACARD_MIN_PSI / PSI_PER_KPA,
-            PLACARD_MAX_PSI / PSI_PER_KPA,
-            clearable = false,
-        )
-    } else {
-        NumberField("Tire placard", "psi", PLACARD_MIN_PSI, PLACARD_MAX_PSI, clearable = false)
-    }
+private fun placardField(units: VoltUnits): NumberField =
+    NumberField(
+        "Tire placard",
+        units.pressureUnit,
+        units.pressureValue(PLACARD_MIN_PSI),
+        units.pressureValue(PLACARD_MAX_PSI),
+        clearable = false,
+    )
 
-private const val PSI_PER_KPA = 0.145038
 private const val PLACARD_MIN_PSI = 20.0
 private const val PLACARD_MAX_PSI = 60.0
 

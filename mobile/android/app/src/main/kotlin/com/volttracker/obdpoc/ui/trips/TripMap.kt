@@ -44,6 +44,7 @@ import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 
 /**
  * The selected drive on a map card (mockups `.map-card`): its GPS track colored electric green
@@ -99,21 +100,27 @@ fun TripMapCard(
                 points = points,
                 viewport = viewport,
                 tripMiles = trip.miles,
+                units = state.units,
                 modifier =
                     Modifier.fillMaxSize().semantics {
-                        contentDescription = routeDescription(trip)
+                        contentDescription = routeDescription(trip, state.units)
                     },
             )
         } else {
             Text(
-                text = if (route == null) "Loading route…" else "No GPS route for this drive",
+                text =
+                    when {
+                        route == null -> "Loading route…"
+                        route.failed -> "This drive's route couldn't be read"
+                        else -> "No GPS route for this drive"
+                    },
                 style = VoltType.caption,
                 color = VoltColors.textSecondary,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(bottom = CHIP_ROOM_DP.dp / 2),
             )
         }
-        MapChip(trip, Modifier.align(Alignment.BottomCenter).padding(10.dp))
+        MapChip(trip, state.units, Modifier.align(Alignment.BottomCenter).padding(10.dp))
     }
 }
 
@@ -141,6 +148,7 @@ private fun RouteCanvas(
     points: List<TripPoint>,
     viewport: MapViewport,
     tripMiles: Double,
+    units: VoltUnits,
     modifier: Modifier,
 ) {
     val pal = LocalVoltPalette.current
@@ -183,7 +191,7 @@ private fun RouteCanvas(
             drawEngineOn(
                 project(points[it.index]),
                 densify(points.map(project)),
-                it.fraction * tripMiles,
+                units.distanceText(it.fraction * tripMiles),
                 pal,
                 measurer,
                 markStyle,
@@ -195,7 +203,7 @@ private fun RouteCanvas(
 private fun DrawScope.drawEngineOn(
     at: Offset,
     track: List<Offset>,
-    miles: Double,
+    distance: String,
     pal: VoltPalette,
     measurer: TextMeasurer,
     style: TextStyle,
@@ -209,7 +217,7 @@ private fun DrawScope.drawEngineOn(
             cornerRadius = CornerRadius(2.dp.toPx()),
         )
     }
-    val label = measurer.measure("Engine on · ${milesText(miles)}", style.copy(color = pal.gas))
+    val label = measurer.measure("Engine on · $distance", style.copy(color = pal.gas))
     // A small backed tag beside the marker, on whichever side covers the least of the track,
     // kept inside the card and clear of the chip.
     val padX = 6.dp.toPx()
@@ -261,6 +269,7 @@ private fun modeColor(
 @Composable
 private fun MapChip(
     trip: TripSummary,
+    units: VoltUnits,
     modifier: Modifier,
 ) {
     val shape = VoltShapes.tile
@@ -276,23 +285,31 @@ private fun MapChip(
     ) {
         Column(Modifier.weight(1f)) {
             Text(trip.title(), style = VoltType.bodyStrong, color = VoltColors.textPrimary, maxLines = 1)
-            Text(trip.chipDetail(), style = VoltType.caption, color = VoltColors.textSecondary, maxLines = 1)
+            Text(
+                trip.chipDetail(units = units),
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+                maxLines = 1,
+            )
         }
         Column(horizontalAlignment = Alignment.End) {
             val split = VoltType.caption.copy(fontWeight = FontWeight.SemiBold)
-            Text("${milesText(trip.evMiles)} EV", style = split, color = VoltColors.energy)
+            Text("${units.distanceText(trip.evMiles)} EV", style = split, color = VoltColors.energy)
             if (trip.mode != TripMode.EV) {
-                Text("${milesText(trip.gasMiles)} gas", style = split, color = VoltColors.gas)
+                Text("${units.distanceText(trip.gasMiles)} gas", style = split, color = VoltColors.gas)
             }
         }
     }
 }
 
-private fun routeDescription(trip: TripSummary): String =
+private fun routeDescription(
+    trip: TripSummary,
+    units: VoltUnits,
+): String =
     if (trip.mode == TripMode.EV) {
-        "Route map: ${milesText(trip.miles)}, all electric"
+        "Route map: ${units.distanceText(trip.miles)}, all electric"
     } else {
-        "Route map: ${milesText(trip.evMiles)} electric, ${milesText(trip.gasMiles)} on gas"
+        "Route map: ${units.distanceText(trip.evMiles)} electric, ${units.distanceText(trip.gasMiles)} on gas"
     }
 
 private const val MAP_DP = 250

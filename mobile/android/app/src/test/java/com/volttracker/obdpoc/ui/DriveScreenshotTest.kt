@@ -57,6 +57,7 @@ class DriveScreenshotTest(
                 "parked" to DriveUiState.demoParked,
                 "charging" to DriveUiState.demoCharging,
                 "offline" to DriveUiState(),
+                "metric" to DriveUiState.demo.copy(metricUnits = true),
             )
 
         @JvmStatic

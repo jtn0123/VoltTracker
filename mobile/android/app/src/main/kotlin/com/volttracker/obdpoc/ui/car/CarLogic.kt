@@ -7,6 +7,7 @@ import com.volttracker.obdpoc.ui.drive.ToneText
 import com.volttracker.obdpoc.ui.drive.aux12Status
 import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.drive.tireLow
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -26,9 +27,9 @@ data class CarTile(
 fun pressureValue(
     psi: Double,
     metric: Boolean,
-): String = (if (metric) psi / PSI_PER_KPA else psi).roundToInt().toString()
+): String = VoltUnits.of(metric).pressure(psi).toString()
 
-fun pressureUnit(metric: Boolean): String = if (metric) "kPa" else "psi"
+fun pressureUnit(metric: Boolean): String = VoltUnits.of(metric).pressureUnit
 
 /** "70°F" / "21°C" from Celsius. */
 fun tempText(
@@ -41,7 +42,7 @@ fun tempValue(
     metric: Boolean,
 ): String = (if (metric) celsius else celsius * F_PER_C + F_OFFSET).roundToInt().toString()
 
-fun tempUnit(metric: Boolean): String = if (metric) "°C" else "°F"
+fun tempUnit(metric: Boolean): String = VoltUnits.of(metric).tempUnit
 
 /** "Updated just now" / "Updated 4 min ago" / "Updated 2 h ago" from the newest body reading. */
 fun CarUiState.updatedLabel(): String? {
@@ -66,7 +67,14 @@ fun carHeadline(
     val open = car.openings?.open.orEmpty()
     val windowsOpen = car.windowsPct?.count { it > WINDOW_OPEN_PCT } ?: 0
     val lowTires = drive.tires?.all?.count { tireLow(it, car.placardPsi) } ?: 0
-    val closed = car.openings != null && open.isEmpty() && windowsOpen == 0
+    val doorsClosed = car.openings != null && open.isEmpty()
+    // "All closed" only when the windows reported too; doors alone say just that.
+    val closedText =
+        when {
+            !doorsClosed || windowsOpen > 0 -> null
+            car.windowsPct == null -> "Doors closed"
+            else -> "All closed"
+        }
     val lock =
         when (drive.locked) {
             true -> "Locked"
@@ -80,7 +88,7 @@ fun carHeadline(
         lock == null && car.openings == null -> ToneText("Lock and doors not reported", PillTone.NEUTRAL)
         else ->
             ToneText(
-                listOfNotNull(lock, if (closed) "All closed" else null).joinToString(" · "),
+                listOfNotNull(lock, closedText).joinToString(" · "),
                 if (drive.locked == true) PillTone.EV else PillTone.NEUTRAL,
             )
     }
@@ -89,7 +97,7 @@ fun carHeadline(
 /** The 12 V tile: the SW-CAN battery monitor, else the adapter's reading at the OBD port. */
 fun aux12Tile(drive: DriveUiState): CarTile {
     val monitored = drive.aux12Volts
-    val volts = monitored ?: drive.auxVolts.takeIf { drive.connected && it > 0 }
+    val volts = monitored ?: drive.auxVolts?.takeIf { drive.connected && it > 0 }
     val status = aux12Status(volts, drive.phase)
     if (volts == null) return CarTile("--", " V", listOf(NOT_REPORTED))
     val soc = drive.aux12SocPercent.takeIf { monitored != null }
@@ -301,7 +309,6 @@ private const val NOT_REPORTED = "Not reported"
 
 /** A window more than this far down reads as open (the broadcast rounds a closed window to 0–1). */
 private const val WINDOW_OPEN_PCT = 2
-private const val PSI_PER_KPA = 0.145038
 private const val F_PER_C = 9.0 / 5.0
 private const val F_OFFSET = 32.0
 private const val PERCENT = 100f

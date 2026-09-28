@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -48,6 +49,7 @@ import com.volttracker.obdpoc.ui.theme.VoltFonts
 import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltSpacing
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
 import kotlin.math.abs
 
@@ -74,16 +76,18 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
                 ).joinToString(" · ").ifEmpty { "Not reported" },
             )
         }
-        SmallCard("Tires psi", Modifier.weight(1f)) { TiresMini(state.tires, state.tirePlacardPsi) }
+        SmallCard("Tires ${state.units.pressureUnit}", Modifier.weight(1f)) {
+            TiresMini(state.tires, state.tirePlacardPsi, state.units)
+        }
         SmallCard("Motors", Modifier.weight(1f)) {
-            val a = if (state.phase == DrivePhase.DRIVE) state.motorAKw else 0.0
-            val b = if (state.phase == DrivePhase.DRIVE) state.motorBKw else 0.0
+            val a = motorLabel(state, state.motorAKw)
+            val b = motorLabel(state, state.motorBKw)
             Text(
                 text =
                     buildAnnotatedString {
-                        append(String.format(Locale.US, "%.0f", a))
+                        append(a)
                         withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" / ") }
-                        append(String.format(Locale.US, "%.0f", b))
+                        append(b)
                         withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" kW") }
                     },
                 style = VoltType.value.copy(fontSize = 20.sp),
@@ -94,6 +98,17 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
         }
     }
 }
+
+/** A motor's kW: "0" parked (it is idle, not unknown), "--" when stale or not connected. */
+private fun motorLabel(
+    state: DriveUiState,
+    kw: Double?,
+): String =
+    when {
+        !state.connected || kw == null -> "--"
+        state.phase != DrivePhase.DRIVE -> "0"
+        else -> String.format(Locale.US, "%.0f", kw)
+    }
 
 @Composable
 private fun CockpitRow(content: @Composable RowScope.() -> Unit) {
@@ -175,7 +190,7 @@ private fun MainCard(state: DriveUiState) {
                         if (!state.connected) {
                             "--"
                         } else if (driving) {
-                            "${state.speedMph}"
+                            "${state.units.speed(state.speedMph.toDouble())}"
                         } else {
                             "${state.shownSocPercent.toInt()}"
                         },
@@ -189,7 +204,7 @@ private fun MainCard(state: DriveUiState) {
                     color = VoltColors.textPrimary,
                 )
                 Text(
-                    text = if (driving) "mph" else "% SOC",
+                    text = if (driving) state.units.speedUnit else "% SOC",
                     style = VoltType.caption.copy(fontSize = 13.sp),
                     color = VoltColors.textSecondary,
                     modifier = Modifier.padding(bottom = 6.dp),
@@ -298,10 +313,14 @@ private fun BatteryCard(
                 buildAnnotatedString {
                     append(if (state.connected) "${soc.toInt()}" else "--")
                     withStyle(SpanStyle(fontSize = 13.sp, color = VoltColors.textSecondary)) { append("%") }
-                    withStyle(
-                        SpanStyle(fontSize = 11.sp, color = VoltColors.textTertiary, fontFamily = VoltFonts.hanken),
-                    ) {
-                        append("  raw ${oneDecimal(state.socPercent)}%")
+                    // The raw pack figure only adds anything when the cluster's differs from it.
+                    val cluster = state.displayedSocPercent
+                    if (state.connected && cluster != null && abs(cluster - state.socPercent) >= RAW_SHOWN_GAP) {
+                        withStyle(
+                            SpanStyle(fontSize = 11.sp, color = VoltColors.textTertiary, fontFamily = VoltFonts.hanken),
+                        ) {
+                            append("  raw ${oneDecimal(state.socPercent)}%")
+                        }
                     }
                 },
             style = VoltType.value.copy(fontSize = 30.sp),
@@ -310,9 +329,9 @@ private fun BatteryCard(
         )
         Meter((soc / 100).toFloat(), VoltColors.energy)
         KvRow(
-            "${oneDecimal(state.packVolts)} V",
-            "${state.packAmps.toInt()} A",
-            "${state.packTempF}°F",
+            state.packVolts?.let { "${oneDecimal(it)} V" } ?: "-- V",
+            state.packAmps?.let { "${it.toInt()} A" } ?: "-- A",
+            state.packTempF?.let { state.units.tempText(it.toDouble()) } ?: "--${state.units.tempUnit}",
         )
     }
 }
@@ -323,9 +342,20 @@ private fun RangeMiniCard(
     modifier: Modifier = Modifier,
 ) {
     CockpitCard(modifier) {
-        CapRow("Range", state.totalRangeMiles?.let { "${wholeLabel(it)} mi" } ?: "--")
-        RangeBar("EV", PillTone.EV, (state.shownSocPercent / 100).toFloat(), wholeLabel(state.evRangeMiles))
-        RangeBar("Gas", PillTone.GAS, ((state.fuelPercent ?: 0.0) / 100).toFloat(), wholeLabel(state.gasRangeMiles))
+        val units = state.units
+        CapRow("Range", state.totalRangeWhole(units)?.let { "$it ${units.distanceUnit}" } ?: "--")
+        RangeBar(
+            "EV",
+            PillTone.EV,
+            (state.shownSocPercent / 100).toFloat().takeIf { state.connected },
+            state.evRangeMiles?.let(units::distanceWhole) ?: "--",
+        )
+        RangeBar(
+            "Gas",
+            PillTone.GAS,
+            state.fuelPercent?.let { (it / 100).toFloat() },
+            state.gasRangeMiles?.let(units::distanceWhole) ?: "--",
+        )
         val engineOn = state.mode == DriveMode.GAS && state.rpm > 0
         KvRow(
             "Engine",
@@ -339,7 +369,7 @@ private fun RangeMiniCard(
 private fun RangeBar(
     label: String,
     tone: PillTone,
-    fraction: Float,
+    fraction: Float?,
     value: String,
 ) {
     Row(
@@ -353,7 +383,8 @@ private fun RangeBar(
             color = pillColor(tone),
             modifier = Modifier.width(28.dp),
         )
-        Meter(fraction, pillColor(tone), Modifier.weight(1f))
+        // No reading, no meter: an empty bar would claim an empty tank.
+        if (fraction != null) Meter(fraction, pillColor(tone), Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
         Text(
             text = value,
             style = VoltType.valueSmall.copy(fontSize = 15.sp),
@@ -364,7 +395,10 @@ private fun RangeBar(
     }
 }
 
-/** One cockpit thermometer: range and warn threshold follow the mockups' `therm` calls. */
+/**
+ * One cockpit thermometer: range and warn threshold follow the mockups' `therm` calls. The scale
+ * and threshold stay in °F (the store's scale); only the printed figure follows Settings → Units.
+ */
 private data class Therm(
     val label: String,
     val valueF: Int?,
@@ -377,17 +411,17 @@ private data class Therm(
 private fun TemperaturesCard(state: DriveUiState) {
     val therms =
         listOf(
-            Therm("Pack", state.packTempF.takeIf { state.connected }, 20, 120, 104),
+            Therm("Pack", state.packTempF?.takeIf { state.connected }, 20, 120, 104),
             Therm("Motor A", state.motorTempF, 40, 260, 230),
             Therm("Inverter", state.inverterTempF, 40, 220, 190),
-            Therm("Coolant", state.coolantF.takeIf { state.connected }, 40, 240, 225),
-            Therm("Trans", state.transTempF.takeIf { state.connected }, 40, 260, 240),
+            Therm("Coolant", state.coolantF?.takeIf { state.connected }, 40, 240, 225),
+            Therm("Trans", state.transTempF?.takeIf { state.connected }, 40, 260, 240),
             Therm("Cabin", state.cabinTempF, 20, 120, 110),
         )
     CockpitCard(Modifier.padding(top = 8.dp)) {
-        CapRow("Temperatures", "°F")
+        CapRow("Temperatures", state.units.tempUnit)
         Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            therms.forEach { Thermometer(it, Modifier.weight(1f)) }
+            therms.forEach { Thermometer(it, state.units, Modifier.weight(1f)) }
         }
     }
 }
@@ -395,6 +429,7 @@ private fun TemperaturesCard(state: DriveUiState) {
 @Composable
 private fun Thermometer(
     t: Therm,
+    units: VoltUnits,
     modifier: Modifier = Modifier,
 ) {
     val warn = t.valueF != null && t.valueF >= t.warnAt
@@ -420,7 +455,7 @@ private fun Thermometer(
             }
         }
         Text(
-            text = t.valueF?.let { "$it°" } ?: "--",
+            text = t.valueF?.let { "${units.temp(it.toDouble())}°" } ?: "--",
             style = VoltType.valueSmall.copy(fontSize = 16.sp),
             color = if (warn) VoltColors.warn else VoltColors.textPrimary,
             modifier = Modifier.padding(top = 6.dp),
@@ -479,24 +514,30 @@ private fun EfficiencyCard(
     modifier: Modifier = Modifier,
 ) {
     val mpg = state.cycleMpg.takeIf { state.mode == DriveMode.GAS }
+    val units = state.units
     CockpitCard(modifier) {
         CapRow("Efficiency", if (mpg != null) "cycle" else "trip")
         NumberUnit(
-            value = mpg?.let(::oneDecimal) ?: state.tripMiPerKwh?.let(::oneDecimal) ?: "--",
-            unit = if (mpg != null) " mpg" else " mi/kWh",
+            value =
+                if (mpg != null) {
+                    units.economyValue(mpg) ?: "--"
+                } else {
+                    units.efficiencyValue(state.shownTripMiPerKwh) ?: "--"
+                },
+            unit = if (mpg != null) " ${units.economyUnit}" else " ${units.efficiencyUnit}",
             size = 30f,
             unitSize = 13f,
             modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
         )
         KvRow(
-            "${oneDecimal(state.tripMiles)} mi",
+            "${units.distanceOneDecimal(state.tripMiles)} ${units.distanceUnit}",
             state.tripDuration,
             state.cycleEvPercent?.let { "$it% EV" } ?: "--",
         )
         KvRow(
             state.tripKwh?.let { "${oneDecimal(it)} kWh" } ?: "-- kWh",
-            costLabel(state.tripKwh, state.electricityRate) ?: "max ${state.tripMaxMph}",
-            "${state.ambientF}°F out",
+            costLabel(state.tripKwh, state.electricityRate) ?: "max ${units.speedText(state.tripMaxMph.toDouble())}",
+            state.ambientF?.takeIf { state.connected }?.let { "${units.tempText(it.toDouble())} out" } ?: "-- out",
             modifier = Modifier.padding(top = 0.dp),
         )
     }
@@ -521,6 +562,7 @@ private fun SmallCard(
 private fun TiresMini(
     tires: TirePressures?,
     placardPsi: Double,
+    units: VoltUnits,
 ) {
     val pal = LocalVoltPalette.current
     Row(
@@ -559,7 +601,7 @@ private fun TiresMini(
             Column {
                 listOf(tires.fl to tires.fr, tires.rl to tires.rr).forEach { (l, r) ->
                     Text(
-                        text = "${wholeLabel(l)}  ${wholeLabel(r)}",
+                        text = "${units.pressure(l)}  ${units.pressure(r)}",
                         style = VoltType.valueSmall.copy(fontSize = 14.sp, lineHeight = 19.sp),
                         color = VoltColors.textPrimary,
                     )
@@ -570,6 +612,9 @@ private fun TiresMini(
 }
 
 private const val CELL_GROUPS = 96
+
+/** The raw pack SOC is only worth a mention when it differs from the cluster's by half a point. */
+private const val RAW_SHOWN_GAP = 0.5
 private const val STRIP_ZERO = 0.62f
 private const val STRIP_DRIVE_KW = 60f
 private const val STRIP_REGEN_KW = 30f

@@ -35,6 +35,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltLabel
@@ -79,13 +80,13 @@ fun ChargeScreen(
             dot = connectionDot(state.connected),
         ) {
             ChargeHero(state)
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(10.dp))
             ChargeFigures(state)
             if (state.charging && state.chartSpan() != null) {
-                Spacer(Modifier.height(18.dp))
+                Spacer(Modifier.height(10.dp))
                 SessionCard(state)
             }
-            Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(10.dp))
             RecentSessions(state)
         }
     }
@@ -131,11 +132,11 @@ private fun ChargingSide(state: ChargeUiState) {
                 modifier = Modifier.padding(top = 2.dp),
             )
         }
-        ChargeEta.NearlyFull -> SideLine("Topping off — nearly full")
-        ChargeEta.Estimating -> SideLine("Estimating time to full…")
+        ChargeEta.NearlyFull -> SideLine("Topping off — nearly there")
+        ChargeEta.Estimating -> SideLine(estimatingText(state.targetSoc))
         null -> {
-            val atLimit = state.socPercent >= state.targetSoc
-            SideLine(if (atLimit) "At your ${state.targetSoc}% limit" else "Estimating time to full…")
+            val atLimit = state.shownSocPercent >= state.targetSoc
+            SideLine(if (atLimit) "At your ${state.targetSoc}% limit" else estimatingText(state.targetSoc))
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -177,10 +178,17 @@ private fun IdleSide(state: ChargeUiState) {
             color = VoltColors.textTertiary,
             modifier = Modifier.padding(top = 2.dp),
         )
+    } else if (state.connected) {
+        SideLine("Plug in the car to see time to full")
     } else {
-        SideLine("Plug in to see time to full")
+        // Not connected is about the OBD adapter, not the charger.
+        SideLine("Connect the adapter to follow a charge")
     }
 }
+
+/** "Estimating time to full…", or to the charge limit when one is set below 100 %. */
+private fun estimatingText(targetSoc: Int): String =
+    if (targetSoc >= FULL) "Estimating time to full…" else "Estimating time to $targetSoc%…"
 
 /** "L2 · 24 → 91% · 11.8 kWh" for the unplugged hero. */
 private fun lastChargeDetail(last: ChargeSession): String =
@@ -234,7 +242,7 @@ private fun MiniRing(state: ChargeUiState) {
                 color = VoltColors.textPrimary,
             )
             state.evRangeMiles?.let {
-                Text(text = "${it.roundToInt()} mi", style = VoltType.body, color = VoltColors.textSecondary)
+                Text(text = state.units.distanceText(it), style = VoltType.body, color = VoltColors.textSecondary)
             }
         }
     }
@@ -267,17 +275,27 @@ private fun DrawScope.polar(
     return Offset(center.x + r * cos(a).toFloat(), center.y + r * sin(a).toFloat())
 }
 
-/** Added / Cost / Pack (mockups `.kv3`); the last charge's figures while unplugged. */
+/**
+ * Added / Cost / Battery (mockups `.kv3`), on a card like every other group of figures; the
+ * last charge's figures while unplugged (the hero above already names it the last charge).
+ */
 @Composable
 private fun ChargeFigures(state: ChargeUiState) {
     val last = state.sessions.firstOrNull().takeIf { !state.charging }
     val kwh = if (state.charging) state.addedKwh else last?.energyKwh
     val rate = last?.let { state.rateFor(it) } ?: state.homeRate
-    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp)) {
-        val kwhLabel = if (state.charging) "Added" else "Last charge"
-        VoltFigure(kwhLabel, kwh?.let(::oneDecimal) ?: "--", "kWh", Modifier.weight(1f))
-        VoltFigure("Cost", costText(kwh, rate) ?: "--", null, Modifier.weight(1f))
-        VoltFigure("Pack", state.packTempF?.toString() ?: "--", "°F", Modifier.weight(1f))
+    val units = state.units
+    VoltPanel {
+        Row(modifier = Modifier.fillMaxWidth()) {
+            VoltFigure("Added", kwh?.let(::oneDecimal) ?: "--", "kWh", Modifier.weight(1f))
+            VoltFigure("Cost", costText(kwh, rate) ?: "--", null, Modifier.weight(1f))
+            VoltFigure(
+                "Battery",
+                state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: "--",
+                units.tempUnit,
+                Modifier.weight(1f),
+            )
+        }
     }
 }
 
@@ -327,7 +345,14 @@ private fun RecentSessions(state: ChargeUiState) {
         }
         if (rows.isEmpty()) {
             Text(
-                text = "No charges logged yet. Sessions appear here after you charge with the adapter connected.",
+                text =
+                    when (state.history) {
+                        HistoryLoad.LOADING -> "Loading charges…"
+                        HistoryLoad.FAILED ->
+                            "Charges couldn't be read. They'll load the next time you open Charge."
+                        HistoryLoad.LOADED ->
+                            "No charges logged yet. Sessions appear here after you charge with the adapter connected."
+                    },
                 style = VoltType.body,
                 color = VoltColors.textSecondary,
                 modifier = Modifier.padding(vertical = 12.dp),

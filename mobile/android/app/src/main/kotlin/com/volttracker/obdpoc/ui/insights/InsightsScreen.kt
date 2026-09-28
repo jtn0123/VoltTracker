@@ -33,6 +33,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltIcons
@@ -46,6 +47,7 @@ import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
 import kotlin.math.ceil
 
@@ -70,7 +72,7 @@ fun InsightsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
-        ElectricHero(summary)
+        ElectricHero(summary, state.units, state.history)
         Spacer(Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
@@ -80,7 +82,7 @@ fun InsightsScreen(
             EnergyTile(state, summary, Modifier.weight(1f).fillMaxHeight())
         }
         Spacer(Modifier.height(10.dp))
-        SpeedCard(state.speedEfficiency)
+        SpeedCard(state.speedEfficiency, state.units, loading = !state.speedsLoaded)
         state.cellDrift?.let {
             Spacer(Modifier.height(10.dp))
             CellNote(it)
@@ -89,7 +91,11 @@ fun InsightsScreen(
 }
 
 @Composable
-private fun ElectricHero(summary: PeriodSummary) {
+private fun ElectricHero(
+    summary: PeriodSummary,
+    units: VoltUnits,
+    history: HistoryLoad,
+) {
     VoltPanel(padding = PaddingValues(16.dp, 16.dp, 16.dp, 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -106,29 +112,38 @@ private fun ElectricHero(summary: PeriodSummary) {
                 )
                 summary.deltaText()?.let { DeltaLine(it, (summary.deltaPts ?: 0) >= 0) }
             }
-            if (summary.trips.isNotEmpty()) Legend(summary)
+            if (summary.trips.isNotEmpty()) Legend(summary, units)
         }
         Spacer(Modifier.height(14.dp))
         if (summary.trips.isEmpty()) {
             Text(
-                text = "No drives logged in this period yet.",
+                text =
+                    when (history) {
+                        HistoryLoad.LOADING -> "Loading drives…"
+                        HistoryLoad.FAILED -> "Drives couldn't be read. They'll load the next time you open Insights."
+                        HistoryLoad.LOADED -> "No drives logged in this period yet."
+                    },
                 style = VoltType.caption,
                 color = VoltColors.textSecondary,
                 modifier = Modifier.padding(vertical = 8.dp),
             )
         } else {
-            ModeBars(summary.buckets)
+            ModeBars(summary.buckets, units)
         }
     }
 }
 
 @Composable
-private fun Legend(summary: PeriodSummary) {
+private fun Legend(
+    summary: PeriodSummary,
+    units: VoltUnits,
+) {
+    val unit = units.distanceUnit
     Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-        LegendLine(VoltColors.energy, "${wholeMiles(summary.evMiles)} mi electric")
-        LegendLine(VoltColors.gas, "${wholeMiles(summary.gasMiles)} mi gas")
+        LegendLine(VoltColors.energy, "${wholeMiles(summary.evMiles, units)} $unit electric")
+        LegendLine(VoltColors.gas, "${wholeMiles(summary.gasMiles, units)} $unit gas")
         Text(
-            "${wholeMiles(summary.totalMiles)} mi total",
+            "${wholeMiles(summary.totalMiles, units)} $unit total",
             style = VoltType.caption.copy(fontWeight = FontWeight.Medium),
             color = VoltColors.textSecondary,
         )
@@ -168,12 +183,16 @@ private fun LegendLine(
 
 /** Electric over gas miles, one rounded column per bar with the gas at its foot. */
 @Composable
-private fun ModeBars(buckets: List<ModeBucket>) {
+private fun ModeBars(
+    buckets: List<ModeBucket>,
+    units: VoltUnits,
+) {
     val pal = LocalVoltPalette.current
     val max = buckets.maxOfOrNull { it.evMiles + it.gasMiles }?.takeIf { it > 0.0 } ?: 1.0
+    val unit = units.distanceUnit
     val described =
         buckets.joinToString("; ") {
-            "${it.label}: ${wholeMiles(it.evMiles)} mi electric, ${wholeMiles(it.gasMiles)} mi gas"
+            "${it.label}: ${wholeMiles(it.evMiles, units)} $unit electric, ${wholeMiles(it.gasMiles, units)} $unit gas"
         }
     Row(Modifier.fillMaxWidth().semantics { contentDescription = described }) {
         buckets.forEach { b ->
@@ -216,17 +235,22 @@ private fun SavedTile(
     modifier: Modifier,
 ) {
     val saved = summary.saved
-    val mpg = state.gasMpg
+    val units = state.units
     Tile("Saved vs gas", modifier) {
         if (saved == null) {
             TileValue("--", null)
-            TileNote("Set gas price and MPG in Settings")
+            TileNote(
+                if (units.metric) "Set gas price and fuel economy in Settings" else "Set gas price and MPG in Settings",
+            )
         } else {
             val (dollars, cents) = dollarsAndCents(saved)
             TileValue(dollars, cents, unitLeadingSpace = false)
-            TileNote(
-                "at ${dollarsAndCents(state.gasPrice).let { it.first + it.second }}/gal · ${mpg?.let(::wholeMpg)} mpg",
-            )
+            val price = dollarsAndCents(units.gasPrice(state.gasPrice)).let { it.first + it.second }
+            val economy =
+                state.gasMpg?.let { mpg ->
+                    if (units.metric) units.economyText(mpg) else "${wholeMpg(mpg)} mpg"
+                }
+            TileNote(listOfNotNull("at $price/${units.gasVolumeUnit}", economy).joinToString(" · "))
         }
     }
 }
@@ -247,7 +271,7 @@ private fun EnergyTile(
                 state.homeRate.takeIf { it > 0.0 }?.let { rate ->
                     dollarsAndCents(summary.kwh * rate).let { it.first + it.second }
                 }
-            TileNote(listOfNotNull(cost, summary.miPerKwh?.let { "${oneDecimal(it)} mi/kWh" }).joinToString(" · "))
+            TileNote(listOfNotNull(cost, summary.miPerKwh?.let(state.units::efficiencyText)).joinToString(" · "))
         }
     }
 }
@@ -293,16 +317,24 @@ private fun TileNote(text: String) {
 }
 
 @Composable
-private fun SpeedCard(bands: List<SpeedEfficiency>) {
+private fun SpeedCard(
+    bands: List<SpeedEfficiency>,
+    units: VoltUnits,
+    loading: Boolean,
+) {
     VoltPanel {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             VoltLabel("Efficiency by speed", Modifier.weight(1f))
-            Text("mi/kWh · mph", style = VoltType.caption, color = VoltColors.textSecondary)
+            Text(
+                "${units.efficiencyUnit} · ${units.speedUnit}",
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+            )
         }
         val best = bands.best()
         if (best == null) {
             Text(
-                text = "Not enough electric driving logged in this period yet.",
+                text = if (loading) "Loading…" else "Not enough electric driving logged in this period yet.",
                 style = VoltType.caption,
                 color = VoltColors.textSecondary,
                 modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
@@ -314,14 +346,14 @@ private fun SpeedCard(bands: List<SpeedEfficiency>) {
                 buildAnnotatedString {
                     append("Most efficient around ")
                     withStyle(SpanStyle(color = VoltColors.energy)) {
-                        append("${best.midMph} mph")
+                        append(units.speedText(best.midMph.toDouble()))
                     }
                 },
             style = VoltType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
             color = VoltColors.textPrimary,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
         )
-        SpeedBars(bands, best)
+        SpeedBars(bands, best, units)
     }
 }
 
@@ -329,46 +361,55 @@ private fun SpeedCard(bands: List<SpeedEfficiency>) {
 private fun SpeedBars(
     bands: List<SpeedEfficiency>,
     best: SpeedEfficiency,
+    units: VoltUnits,
 ) {
     val pal = LocalVoltPalette.current
     val measurer = rememberTextMeasurer()
     val axis = VoltType.label.copy(color = pal.faint, fontSize = 12.sp, letterSpacing = 0.04.sp)
     val bestStyle = axis.copy(color = pal.ev, fontWeight = FontWeight.SemiBold)
-    val top = maxOf(SPEED_MIN_TOP, ceil(bands.maxOf { it.miPerKwh } + VALUE_HEADROOM))
-    val described = bands.joinToString("; ") { "${it.midMph} mph: ${oneDecimal(it.miPerKwh)} mi/kWh" }
+    // Bars are drawn in the shown unit. In kWh/100 km lower is better, so the best band is the
+    // shortest bar there, still picked by mi/kWh and still the one highlighted.
+    val value = { band: SpeedEfficiency -> units.efficiency(band.miPerKwh) ?: 0.0 }
+    val scale = if (units.metric) METRIC_SCALE else 1.0
+    val top = maxOf(SPEED_MIN_TOP * scale, ceil(bands.maxOf(value) + VALUE_HEADROOM * scale))
+    val step = GRID_STEP * scale
+    val described =
+        bands.joinToString("; ") {
+            "${units.speedText(it.midMph.toDouble())}: ${oneDecimal(value(it))} ${units.efficiencyUnit}"
+        }
     Canvas(Modifier.fillMaxWidth().height(SPEED_DP.dp).semantics { contentDescription = described }) {
         val labelRoom = LABEL_ROOM_DP.dp.toPx()
         val chartH = size.height - labelRoom
         // Room above the tallest bar for the best band's value.
         val headroom = VALUE_ROOM_DP.dp.toPx()
         val y = { v: Double -> (chartH - v / top * (chartH - headroom)).toFloat() }
-        var line = GRID_STEP
+        var line = step
         while (line < top) {
             drawLine(pal.line, Offset(0f, y(line)), Offset(size.width, y(line)), 1.dp.toPx())
             drawAxisText(measurer.measure(oneDecimalOrWhole(line), axis), Offset(0f, y(line) - 18.dp.toPx()))
-            line += GRID_STEP
+            line += step
         }
         val slot = size.width / bands.size
         bands.forEachIndexed { i, band ->
             val isBest = band == best
             val barW = slot - 2 * BAR_INSET_DP.dp.toPx()
             val x = i * slot + BAR_INSET_DP.dp.toPx()
-            val h = chartH - y(band.miPerKwh)
+            val h = chartH - y(value(band))
             drawRoundRect(
                 if (isBest) pal.ev else pal.ev.copy(alpha = DIM_BAR_ALPHA),
                 Offset(x, chartH - h),
                 Size(barW, h),
                 CornerRadius(RADIUS_DP.dp.toPx()),
             )
-            val label = measurer.measure(band.midMph.toString(), axis)
+            val label = measurer.measure(units.speed(band.midMph.toDouble()).toString(), axis)
             drawAxisText(label, Offset(x + (barW - label.size.width) / 2, chartH + 8.dp.toPx()))
             if (isBest) {
-                val value = measurer.measure(oneDecimal(band.miPerKwh), bestStyle)
+                val figure = measurer.measure(oneDecimal(value(band)), bestStyle)
                 drawAxisText(
-                    value,
+                    figure,
                     Offset(
-                        x + (barW - value.size.width) / 2,
-                        chartH - h - value.size.height - 4.dp.toPx(),
+                        x + (barW - figure.size.width) / 2,
+                        chartH - h - figure.size.height - 4.dp.toPx(),
                     ),
                 )
             }
@@ -421,6 +462,9 @@ private const val DIM_BAR_ALPHA = 0.32f
 private const val SPEED_MIN_TOP = 5.0
 private const val GRID_STEP = 2.0
 private const val VALUE_HEADROOM = 0.3
+
+/** kWh/100 km figures run about 2.5× the mi/kWh ones: the grid and headroom scale with them. */
+private const val METRIC_SCALE = 2.5
 private const val VALUE_ROOM_DP = 18
 
 @Preview(widthDp = 412, heightDp = 1100)

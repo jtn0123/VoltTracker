@@ -73,7 +73,9 @@ internal class ComposeHistoryLoader(
     private val routeInFlight = AtomicBoolean(false)
 
     fun loadCharges() {
-        read(chargesInFlight, "charge history", chargeReader) { store.onChargeHistory(ChargeHistory.parse(it)) }
+        read(chargesInFlight, "charge history", chargeReader, store::onChargeHistoryFailed) {
+            store.onChargeHistory(ChargeHistory.parse(it))
+        }
     }
 
     /** Health's saved codes, named and graded, with when they were last read or cleared. */
@@ -89,7 +91,7 @@ internal class ComposeHistoryLoader(
 
     /** The drive list, then the selected drive's route. */
     fun loadTrips() {
-        read(tripsInFlight, "trip history", tripsReader) {
+        read(tripsInFlight, "trip history", tripsReader, store::onTripHistoryFailed) {
             store.onTripHistory(TripHistory.parse(it))
             loadRoute()
         }
@@ -97,8 +99,8 @@ internal class ComposeHistoryLoader(
 
     /**
      * The selected drive's route, EV / gas marked from its classified samples. A failed read
-     * leaves an empty route (the map says so) rather than retrying forever; a drive picked while
-     * this one was reading is read next.
+     * leaves a failed route (the map says so) that is read again on the next visit, not in a
+     * loop; a drive picked while this one was reading is read next.
      */
     fun loadRoute() {
         val key = store.tripRouteToRead() ?: return
@@ -111,8 +113,8 @@ internal class ComposeHistoryLoader(
             "trip route",
             { routeReader(key) },
             onFailure = {
-                store.onTripRoute(TripRoute(key, emptyList()))
-                loadRoute()
+                store.onTripRoute(TripRoute(key, emptyList(), failed = true))
+                if (store.tripRouteToRead() != key) loadRoute()
             },
         ) { (route, modes) ->
             store.onTripRoute(TripHistory.route(key, route, modes, fallbackGas))
@@ -125,7 +127,8 @@ internal class ComposeHistoryLoader(
         val period = store.insightsPeriod()
         val window = period.window(nowMs, firstTripMs = null)
         val (since, until) = if (period == InsightsPeriod.ALL) 0L to Long.MAX_VALUE else window.startMs to window.endMs
-        read(insightsInFlight, "insights", { insightsReader(since, until) }) { (trips, speeds, drift) ->
+        val reader = { insightsReader(since, until) }
+        read(insightsInFlight, "insights", reader, store::onInsightsHistoryFailed) { (trips, speeds, drift) ->
             store.onInsightsHistory(
                 TripHistory.parse(trips),
                 period,
@@ -144,7 +147,10 @@ internal class ComposeHistoryLoader(
         onFailure: () -> Unit = {},
         onRead: (T) -> Unit,
     ) {
-        if (DatabaseOperationLease.isHeld() || !inFlight.compareAndSet(false, true)) return
+        // A backup or restore holds the database: the read fails now (the tab says so, or keeps
+        // what it showed) and runs again on the next visit. One already running just finishes.
+        if (DatabaseOperationLease.isHeld()) return onFailure()
+        if (!inFlight.compareAndSet(false, true)) return
         try {
             executor.execute {
                 val result =
@@ -161,6 +167,7 @@ internal class ComposeHistoryLoader(
         } catch (ex: RejectedExecutionException) {
             Log.w(AppPrefs.LOG_TAG, "$what read not started", ex)
             inFlight.set(false)
+            onFailure()
         }
     }
 }

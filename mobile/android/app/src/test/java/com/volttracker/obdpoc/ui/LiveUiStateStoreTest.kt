@@ -61,15 +61,15 @@ class LiveUiStateStoreTest {
         assertEquals(39, drive.speedMph) // 64 kph ≈ 39.8 mph, truncated
         assertEquals(21.4, drive.powerKw, 1e-9)
         assertEquals(62.0, drive.socPercent, 1e-9)
-        assertEquals(364.0, drive.packVolts, 1e-9)
-        assertEquals(58.8, drive.packAmps, 1e-9)
+        assertEquals(364.0, drive.packVolts ?: -1.0, 1e-9)
+        assertEquals(58.8, drive.packAmps ?: -1.0, 1e-9)
         assertEquals(73, drive.packTempF) // 23 C
         assertEquals(174, drive.coolantF) // 79 C
         assertEquals(68, drive.ambientF) // 20 C
         assertEquals(141, drive.transTempF) // 61 C
         assertEquals("D", drive.gear)
-        assertEquals(14.2, drive.motorAKw, 1e-9)
-        assertEquals(3.1, drive.motorBKw, 1e-9)
+        assertEquals(14.2, drive.motorAKw ?: -1.0, 1e-9)
+        assertEquals(3.1, drive.motorBKw ?: -1.0, 1e-9)
         assertEquals(118, drive.torqueNm)
         assertEquals(87, drive.oilLifePct)
         assertEquals(13, drive.gpsAccuracyFt ?: -1) // 4 m ≈ 13.1 ft
@@ -120,7 +120,7 @@ class LiveUiStateStoreTest {
         val drive = store.state.value.drive
 
         assertEquals(19, drive.speedMph) // fresh
-        assertEquals(364.0, drive.packVolts, 1e-9) // retained
+        assertEquals(364.0, drive.packVolts ?: -1.0, 1e-9) // retained
         // The gear is the one tile that is never carried forward: no reading means no gear.
         assertEquals("--", drive.gear)
     }
@@ -344,8 +344,8 @@ class LiveUiStateStoreTest {
         val drive = store.state.value.drive
 
         assertEquals(62.0, drive.socPercent, 1e-9) // JSON null → retained
-        assertEquals(364.0, drive.packVolts, 1e-9) // NaN → retained
-        assertEquals(12.6, drive.auxVolts, 1e-9) // fallback key used
+        assertEquals(364.0, drive.packVolts ?: -1.0, 1e-9) // NaN → retained
+        assertEquals(12.6, drive.auxVolts ?: -1.0, 1e-9) // fallback key used
     }
 
     @Test

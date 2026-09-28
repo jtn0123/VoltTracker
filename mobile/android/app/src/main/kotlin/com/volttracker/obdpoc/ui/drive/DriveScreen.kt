@@ -73,7 +73,8 @@ fun DriveScreen(
             subtitle = driveSubtitle(state, detailed),
             dot = connectionDot(state.connected),
             actions = {
-                if (detailed && state.connected) OutsideTempChip(state.ambientF)
+                val outside = state.ambientF?.takeIf { state.connected }
+                if (detailed && outside != null) OutsideTempChip(state.units.tempText(outside.toDouble()))
                 IconCircleButton(
                     icon = if (detailed) VoltIcons.Drive else VoltIcons.Grid,
                     contentDescription = if (detailed) "Focus view" else "Detailed view",
@@ -183,7 +184,7 @@ private fun ConnectRowIfNeeded(
 
 /** The cockpit's outside-temperature chip (mockups `.chip`). */
 @Composable
-private fun OutsideTempChip(ambientF: Int) {
+private fun OutsideTempChip(text: String) {
     Box(
         modifier =
             Modifier
@@ -193,7 +194,7 @@ private fun OutsideTempChip(ambientF: Int) {
         contentAlignment = Alignment.Center,
     ) {
         Text(
-            text = "$ambientF°F",
+            text = text,
             style = VoltType.value.copy(fontSize = 13.sp),
             color = VoltColors.textSecondary,
         )

@@ -1,8 +1,10 @@
 package com.volttracker.obdpoc.ui.insights
 
+import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.trips.TripSummary
 import com.volttracker.obdpoc.ui.trips.TripsDemo
 import com.volttracker.obdpoc.ui.trips.TripsUiState
+import com.volttracker.obdpoc.ui.units.VoltUnits
 
 /** The span the Insights tab summarises. */
 enum class InsightsPeriod(
@@ -45,7 +47,15 @@ data class InsightsUiState(
     val homeRate: Double = 0.0,
     val gasMpg: Double? = null,
     val gasPrice: Double = 0.0,
+    /** Whether the logged drives have been read yet (demo and previews are always loaded). */
+    val history: HistoryLoad = HistoryLoad.LOADED,
+    /** Whether [speedEfficiency] has been read for [period]; false while that read is running. */
+    val speedsLoaded: Boolean = true,
+    /** Settings → Units: how distances, speeds and temperatures are shown. */
+    val metricUnits: Boolean = false,
 ) {
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     companion object {
         /** The demo's efficiency by speed (a Volt's usual curve, best around 45 mph). */
         val DEMO_SPEEDS =

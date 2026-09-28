@@ -67,8 +67,11 @@ class LiveCarStateTest {
         assertNull(car.openings)
         assertNull(car.windowsPct)
         assertNull(car.acOn)
+        assertEquals("absent staleness keeps the reading", 18.0, car.outsideTempC ?: 0.0, 0.0)
         // Heard, then stale: the last time it was fresh is kept for "No reading for N min".
         assertEquals(100_000L, car.seenAtMs[BodyGroup.DOORS])
+        store.onTelemetry(body(at = 401_000L) { put("outsideTempStaleMs", 150_000) })
+        assertNull("a stale outside temperature is not shown", car.outsideTempC)
     }
 
     @Test
