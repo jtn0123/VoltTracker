@@ -48,6 +48,12 @@ object VoltIcons {
     val Pulse by lazy { icon("M3 12h4l3-8 4 16 3-8h4") }
     val Cells by lazy { icon(rect(3f, 6f, 18f, 12f, 2f), "M7.5 6v12M12 6v12M16.5 6v12") }
     val Window by lazy { icon(rect(4f, 4f, 16f, 16f, 3f), "M4 12h16") }
+
+    /** A ruler: Settings → Units. */
+    val Ruler by lazy { icon(rect(3f, 8f, 18f, 8f, 1.5f), "M7 8v3M11 8v4M15 8v3") }
+
+    /** A half-shaded circle: Settings → Appearance. */
+    val Contrast by lazy { icon(circle(12f, 12f, 9f), "M12 3v18M12 7h4.5M12 11h5.5M12 15h5M12 19h2.5") }
     val Alert by lazy { icon("M12 3l10 18H2z", "M12 10v4M12 17.5h.01") }
     val Share by lazy { icon("M12 3v12M7 8l5-5 5 5M5 14v5a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-5") }
     val Play by lazy { icon("M7 4.5v15l12-7.5z") }

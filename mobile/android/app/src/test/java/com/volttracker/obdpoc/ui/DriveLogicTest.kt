@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.drive.ArcGeometry
 import com.volttracker.obdpoc.ui.drive.ChargeEta
@@ -21,7 +22,6 @@ import com.volttracker.obdpoc.ui.drive.gasDriving
 import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.drive.powerRole
 import com.volttracker.obdpoc.ui.drive.regenerating
-import com.volttracker.obdpoc.ui.drive.shortDurationLabel
 import com.volttracker.obdpoc.ui.drive.shownSocPercent
 import com.volttracker.obdpoc.ui.drive.shownTripMiPerKwh
 import com.volttracker.obdpoc.ui.drive.tireLow
@@ -153,15 +153,15 @@ class DriveLogicTest {
 
     @Test
     fun durationsAndClock() {
-        assertEquals("--", durationLabel(null))
-        assertEquals("--", durationLabel(0))
+        assertEquals(DASH, durationLabel(null))
+        assertEquals(DASH, durationLabel(0))
         assertEquals("22 min", durationLabel(22 * 60_000L))
-        assertEquals("1h 45m", durationLabel(105 * 60_000L))
-        assertEquals("99 min", durationLabel(99 * 60_000L))
-        assertEquals("2h 05m", durationLabel(125 * 60_000L))
-        assertEquals("48m", shortDurationLabel(48 * 60_000L))
-        assertEquals("1h 26m", shortDurationLabel(86 * 60_000L))
+        assertEquals("1 hr 45 min", durationLabel(105 * 60_000L))
+        assertEquals("1 hr 39 min", durationLabel(99 * 60_000L))
+        assertEquals("2 hr 5 min", durationLabel(125 * 60_000L))
+        assertEquals("2 hr", durationLabel(120 * 60_000L))
         assertEquals("11:08 PM", clockLabel(0L, (23 * 60 + 8) * 60_000L, TimeZone.getTimeZone("UTC")))
+        assertEquals("23:08", clockLabel(0L, (23 * 60 + 8) * 60_000L, TimeZone.getTimeZone("UTC"), h24 = true))
         assertEquals("9:12", clockLabel((21 * 60 + 12) * 60_000L, zone = TimeZone.getTimeZone("UTC"), short = true))
     }
 
@@ -213,12 +213,10 @@ class DriveLogicTest {
 
     @Test
     fun subtitleSaysWhatTheLinkAndCarAreDoing() {
-        assertEquals("No adapter", driveSubtitle(DriveUiState(), detailed = false))
-        assertEquals("Live · OBDLink MX+", driveSubtitle(DriveUiState.demo, detailed = false))
-        assertEquals("Live · 1 Hz · 42 signals", driveSubtitle(DriveUiState.demo, detailed = true))
-        assertEquals("Connected · parked", driveSubtitle(DriveUiState.demoParked, detailed = false))
-        assertEquals("Connected · charging · 38 signals", driveSubtitle(DriveUiState.demoCharging, detailed = true))
-        assertEquals("Live · 1 Hz", driveSubtitle(DriveUiState.demo.copy(signalCount = 0), detailed = true))
+        assertEquals("No adapter", driveSubtitle(DriveUiState()))
+        assertEquals("Live · OBDLink MX+", driveSubtitle(DriveUiState.demo))
+        assertEquals("Connected · parked", driveSubtitle(DriveUiState.demoParked))
+        assertEquals("Connected · charging", driveSubtitle(DriveUiState.demoCharging))
         assertEquals(DriveMode.GAS, DriveUiState.demoGas.mode)
     }
 }

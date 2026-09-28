@@ -59,6 +59,7 @@ data class SessionRow(
 fun ChargeUiState.sessionRows(
     limit: Int = RECENT_ROWS,
     zone: TimeZone = TimeZone.getDefault(),
+    h24: Boolean = false,
 ): List<SessionRow> {
     val live =
         if (charging) {
@@ -81,7 +82,7 @@ fun ChargeUiState.sessionRows(
             .filter { !charging || it.endedAtMs != null }
             .map { s ->
                 SessionRow(
-                    title = sessionWhen(s.startedAtMs, zone),
+                    title = sessionWhen(s.startedAtMs, zone, h24),
                     live = false,
                     detail = sessionDetail(s.level, s.fromSoc, s.toSoc),
                     fromSoc = s.fromSoc,
@@ -126,7 +127,7 @@ fun costText(
     rate: Double,
 ): String? = if (kwh == null || rate <= 0.0) null else String.format(Locale.US, "$%.2f", kwh * rate)
 
-/** "L2 · 41% → 71%", leaving out whatever wasn't recorded. */
+/** "Level 2 · 41% → 71%", leaving out whatever wasn't recorded. */
 fun sessionDetail(
     level: String?,
     fromSoc: Int?,
@@ -138,14 +139,18 @@ fun sessionDetail(
             toSoc != null -> "to $toSoc%"
             else -> null
         }
-    return listOfNotNull(level, span).joinToString(" · ").ifEmpty { "Charge" }
+    return listOfNotNull(levelName(level), span).joinToString(" · ").ifEmpty { "Charge" }
 }
 
-/** "Apr 30 · 9:18 PM". */
+/** "Apr 30 · 9:18 PM", or "Apr 30 · 21:18" on a 24-hour phone. */
 fun sessionWhen(
     atMs: Long,
     zone: TimeZone = TimeZone.getDefault(),
-): String = SimpleDateFormat("MMM d · h:mm a", Locale.US).apply { timeZone = zone }.format(Date(atMs))
+    h24: Boolean = false,
+): String =
+    SimpleDateFormat(if (h24) "MMM d · H:mm" else "MMM d · h:mm a", Locale.US)
+        .apply { timeZone = zone }
+        .format(Date(atMs))
 
 /** "This morning" / "This afternoon" / "Tonight" for the live row. */
 fun partOfDay(

@@ -23,6 +23,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.drive.clockLabel
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -136,18 +137,19 @@ private fun Axis(
     style: TextStyle,
     modifier: Modifier = Modifier,
 ) {
+    val h24 = LocalVoltPrefs.current.clock24h
     Row(modifier.fillMaxWidth().padding(top = (CHART_DP + 8).dp)) {
         // A charge that only just began has no room for a start label left of "now".
         if (nowFrac >= MIN_FRAC) {
             Text(
-                clockLabel(span.startMs),
+                clockLabel(span.startMs, h24 = h24),
                 style = style,
                 modifier = Modifier.weight(nowFrac.coerceAtMost(1f - MIN_FRAC)),
             )
         }
         Text("now", style = style)
         Text(
-            span.finishMs?.let { clockLabel(it) } ?: "",
+            span.finishMs?.let { clockLabel(it, h24 = h24) } ?: "",
             style = style.copy(textAlign = TextAlign.End),
             modifier = Modifier.weight((1f - nowFrac).coerceIn(MIN_FRAC, 1f)),
         )

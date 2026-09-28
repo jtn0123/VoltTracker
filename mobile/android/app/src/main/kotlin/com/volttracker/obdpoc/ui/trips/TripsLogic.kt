@@ -3,7 +3,9 @@ package com.volttracker.obdpoc.ui.trips
 import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.drive.clockLabel
 import com.volttracker.obdpoc.ui.drive.durationLabel
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import com.volttracker.obdpoc.ui.units.VoltUnits
+import com.volttracker.obdpoc.ui.units.haversineMeters
 import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
@@ -11,16 +13,10 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
-import kotlin.math.asin
-import kotlin.math.cos
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 /** How a drive was powered: all electric, part gas, or (almost) all gas. */
 enum class TripMode { EV, MIXED, GAS }
-
-const val METERS_PER_MILE = 1609.344
 
 val TripSummary.miles: Double get() = distanceMeters / METERS_PER_MILE
 
@@ -66,9 +62,11 @@ fun daypartTitle(
     return "$part drive"
 }
 
-/** "8:14 AM · 28 min". */
-fun TripSummary.whenLine(zone: TimeZone = TimeZone.getDefault()): String =
-    "${clockLabel(startedAtMs, zone = zone)} · ${durationLabel(endedAtMs - startedAtMs)}"
+/** "8:14 AM · 28 min" ("08:14" style on a 24-hour phone). */
+fun TripSummary.whenLine(
+    zone: TimeZone = TimeZone.getDefault(),
+    h24: Boolean = false,
+): String = "${clockLabel(startedAtMs, zone = zone, h24 = h24)} · ${durationLabel(endedAtMs - startedAtMs)}"
 
 /** "4.1 mi/kWh" for an electric drive, "64% electric" for a mixed one, "Gas" when the engine drove it all. */
 fun TripSummary.efficiencyText(units: VoltUnits = VoltUnits.Imperial): String? =
@@ -234,14 +232,7 @@ fun TripRoute.engineOn(): EngineOnMark? {
 fun distanceMiles(
     a: TripPoint,
     b: TripPoint,
-): Double {
-    val dLat = Math.toRadians(b.lat - a.lat)
-    val dLon = Math.toRadians(b.lon - a.lon)
-    val h =
-        sin(dLat / 2) * sin(dLat / 2) +
-            cos(Math.toRadians(a.lat)) * cos(Math.toRadians(b.lat)) * sin(dLon / 2) * sin(dLon / 2)
-    return 2 * EARTH_RADIUS_MILES * asin(sqrt(h.coerceIn(0.0, 1.0)))
-}
+): Double = haversineMeters(a.lat, a.lon, b.lat, b.lon) / METERS_PER_MILE
 
 /** Parses the store's trip rows and route payloads into the Trips tab's state. */
 object TripHistory {
@@ -333,4 +324,3 @@ private const val NOON = 12
 private const val EVENING = 17
 private const val NIGHT = 21
 private const val DAY_MS = 86_400_000L
-private const val EARTH_RADIUS_MILES = 3958.8

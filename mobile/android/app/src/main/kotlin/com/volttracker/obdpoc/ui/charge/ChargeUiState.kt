@@ -31,6 +31,8 @@ data class SocPoint(
  */
 data class ChargeUiState(
     val connected: Boolean = false,
+    /** A link is being set up: the Connect / Demo buttons stay hidden so a second tap can't race it. */
+    val connecting: Boolean = false,
     val statusLabel: String = "No adapter",
     val charging: Boolean = false,
     /** Raw pack SOC (%) as the BECM reports it; the screen shows [shownSocPercent] everywhere. */
@@ -83,7 +85,7 @@ data class ChargeUiState(
             get() =
                 ChargeUiState(
                     connected = true,
-                    statusLabel = "Live · 1 Hz",
+                    statusLabel = "Live",
                     charging = true,
                     // Raw ≠ displayed, as on a real Volt: every figure must use the displayed one.
                     socPercent = 66.0,

@@ -15,6 +15,7 @@ import com.volttracker.obdpoc.ui.charge.projectedPoints
 import com.volttracker.obdpoc.ui.charge.rateFor
 import com.volttracker.obdpoc.ui.charge.sessionDetail
 import com.volttracker.obdpoc.ui.charge.sessionRows
+import com.volttracker.obdpoc.ui.charge.sessionWhen
 import com.volttracker.obdpoc.ui.charge.subtitle
 import com.volttracker.obdpoc.ui.drive.ChargeEta
 import org.json.JSONArray
@@ -96,7 +97,8 @@ class ChargeLogicTest {
 
     @Test
     fun labelsLeaveOutWhatWasNotRecorded() {
-        assertEquals("L2 · 41% → 71%", sessionDetail("L2", 41, 71))
+        assertEquals("Level 2 · 41% → 71%", sessionDetail("L2", 41, 71))
+        assertEquals("Apr 30 · 21:42", sessionWhen(now, utc, h24 = true))
         assertEquals("to 71%", sessionDetail(null, null, 71))
         assertEquals("Charge", sessionDetail(null, null, null))
         assertEquals("Level 2", levelName("L2"))
@@ -143,7 +145,7 @@ class ChargeLogicTest {
         assertEquals(2, rows.size)
         assertTrue(rows[0].live)
         assertEquals("Tonight", rows[0].title)
-        assertEquals("L2 · 41% → 71%", rows[0].detail)
+        assertEquals("Level 2 · 41% → 71%", rows[0].detail)
         assertEquals("$0.52", rows[0].cost)
         assertEquals("Apr 29 · 9:42 PM", rows[1].title)
         assertFalse(rows[1].live)

@@ -170,7 +170,7 @@ class HealthLogicTest {
             demo.copy(codes = listOf(DtcCode("P0300", status = "freeze-frame"))).freezeFrameLine(),
         )
         assertEquals("Not connected", liveSignalsLine(DriveUiState()))
-        assertEquals("78 reporting · 1 Hz", liveSignalsLine(DriveUiState(connected = true, signalCount = 78)))
+        assertEquals("78 readings coming in", liveSignalsLine(DriveUiState(connected = true, signalCount = 78)))
         assertEquals("Waiting for data", liveSignalsLine(DriveUiState(connected = true)))
         assertEquals("OBDLink MX+ · connected", adapterLine("OBDLink MX+", true))
         assertEquals("OBDLink MX+ · not connected", adapterLine("OBDLink MX+", false))

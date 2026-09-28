@@ -62,7 +62,7 @@ data class DiagUiState(
         fun demoAt(nowMs: Long): DiagUiState =
             DiagUiState(
                 connected = true,
-                statusLabel = "Live · 1 Hz",
+                statusLabel = "Live",
                 adapterLabel = "OBDLink MX+",
                 codes =
                     listOf(

@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -26,23 +28,31 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.Hyphens
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.charge.costText
 import com.volttracker.obdpoc.ui.components.CellHistogram
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.pillColor
+import com.volttracker.obdpoc.ui.components.spoken
 import com.volttracker.obdpoc.ui.components.voltCard
+import com.volttracker.obdpoc.ui.components.withUnit
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
@@ -68,7 +78,7 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
     }
     CockpitRow {
         SmallCard("12V", Modifier.weight(1f)) {
-            NumberUnit(state.aux12Volts?.let(::oneDecimal) ?: "--", " V", 20f, Modifier.padding(top = 3.dp))
+            NumberUnit(state.aux12Volts?.let(::oneDecimal) ?: DASH, " V", 20f, Modifier.padding(top = 3.dp))
             Sub(
                 listOfNotNull(
                     state.aux12SocPercent?.let { "$it%" },
@@ -76,36 +86,50 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
                 ).joinToString(" · ").ifEmpty { "Not reported" },
             )
         }
-        SmallCard("Tires ${state.units.pressureUnit}", Modifier.weight(1f)) {
+        SmallCard("Tires", Modifier.weight(1f), unit = state.units.pressureUnit) {
             TiresMini(state.tires, state.tirePlacardPsi, state.units)
         }
         SmallCard("Motors", Modifier.weight(1f)) {
             val a = motorLabel(state, state.motorAKw)
             val b = motorLabel(state, state.motorBKw)
+            val known = a != DASH || b != DASH
             Text(
                 text =
                     buildAnnotatedString {
                         append(a)
-                        withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" / ") }
-                        append(b)
-                        withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" kW") }
+                        if (known) {
+                            withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" / ") }
+                            append(b)
+                            withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" kW") }
+                        }
                     },
                 style = VoltType.value.copy(fontSize = 20.sp),
                 color = VoltColors.textPrimary,
-                modifier = Modifier.padding(top = 3.dp),
+                modifier =
+                    Modifier.padding(top = 3.dp).semantics {
+                        contentDescription =
+                            if (known) {
+                                "Motor A ${spoken(
+                                    a,
+                                )} kilowatts, motor B ${spoken(b)} kilowatts"
+                            } else {
+                                NOT_REPORTED
+                            }
+                    },
             )
-            Sub("A / B")
+            // The Volt's two drive motors are named A and B (both in the one front drive unit).
+            Sub("Motor A / B")
         }
     }
 }
 
-/** A motor's kW: "0" parked (it is idle, not unknown), "--" when stale or not connected. */
+/** A motor's kW: "0" parked (it is idle, not unknown), a dash when stale or not connected. */
 private fun motorLabel(
     state: DriveUiState,
     kw: Double?,
 ): String =
     when {
-        !state.connected || kw == null -> "--"
+        !state.connected || kw == null -> DASH
         state.phase != DrivePhase.DRIVE -> "0"
         else -> String.format(Locale.US, "%.0f", kw)
     }
@@ -137,7 +161,7 @@ private fun CapRow(
 ) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         VoltLabel(left)
-        VoltLabel(right, color = rightColor)
+        VoltLabel(right, Modifier.padding(start = 6.dp).weight(1f, fill = false), color = rightColor, ellipsize = true)
     }
 }
 
@@ -160,6 +184,9 @@ private fun KvRow(
                     ),
                 color = colors.getOrNull(i) ?: VoltColors.textSecondary,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // Each item gets its share of the row, so a long first one can't squeeze the rest out.
+                modifier = Modifier.weight(1f, fill = false).padding(start = if (i == 0) 0.dp else 6.dp),
             )
         }
     }
@@ -172,7 +199,7 @@ private fun Sub(text: String) {
         style = VoltType.caption.copy(fontSize = 11.5.sp),
         color = VoltColors.textSecondary,
         maxLines = 1,
-        softWrap = false,
+        overflow = TextOverflow.Ellipsis,
         modifier = Modifier.padding(top = 1.dp),
     )
 }
@@ -188,7 +215,7 @@ private fun MainCard(state: DriveUiState) {
                 Text(
                     text =
                         if (!state.connected) {
-                            "--"
+                            DASH
                         } else if (driving) {
                             "${state.units.speed(state.speedMph.toDouble())}"
                         } else {
@@ -204,7 +231,12 @@ private fun MainCard(state: DriveUiState) {
                     color = VoltColors.textPrimary,
                 )
                 Text(
-                    text = if (driving) state.units.speedUnit else "% SOC",
+                    text =
+                        when {
+                            !state.connected -> ""
+                            driving -> state.units.speedUnit
+                            else -> "% battery"
+                        },
                     style = VoltType.caption.copy(fontSize = 13.sp),
                     color = VoltColors.textSecondary,
                     modifier = Modifier.padding(bottom = 6.dp),
@@ -232,7 +264,7 @@ private fun MainCard(state: DriveUiState) {
                         else -> "pack power"
                     }
                 Text(
-                    text = "$what · gear ${state.gear}",
+                    text = if (!state.gearKnown) what else "$what · gear ${state.gear}",
                     style = VoltType.caption.copy(fontSize = 11.5.sp),
                     color = VoltColors.textSecondary,
                     modifier = Modifier.padding(top = 3.dp),
@@ -266,7 +298,8 @@ private fun PowerStrip(
     val pal = LocalVoltPalette.current
     val values = state.powerTrace
     val gas = state.gasTrace
-    Canvas(modifier.semantics { contentDescription = "Pack power over the last minute" }) {
+    val described = powerTraceDescription(values)
+    Canvas(modifier.semantics { contentDescription = described }) {
         val zero = size.height * STRIP_ZERO
         drawLine(pal.line2, Offset(0f, zero), Offset(size.width, zero), strokeWidth = 1.dp.toPx())
         if (values.isEmpty()) return@Canvas
@@ -304,23 +337,20 @@ private fun BatteryCard(
     state: DriveUiState,
     modifier: Modifier = Modifier,
 ) {
-    val sustain = state.gasDriving
+    val holding = state.gasDriving
     val soc = state.shownSocPercent
     CockpitCard(modifier) {
-        CapRow("HV battery", if (sustain) "sustain" else "ok", pillColor(if (sustain) PillTone.GAS else PillTone.EV))
+        CapRow(
+            "HV battery",
+            if (holding) "Holding charge" else "OK",
+            pillColor(if (holding) PillTone.GAS else PillTone.EV),
+        )
         Text(
             text =
                 buildAnnotatedString {
-                    append(if (state.connected) "${soc.toInt()}" else "--")
-                    withStyle(SpanStyle(fontSize = 13.sp, color = VoltColors.textSecondary)) { append("%") }
-                    // The raw pack figure only adds anything when the cluster's differs from it.
-                    val cluster = state.displayedSocPercent
-                    if (state.connected && cluster != null && abs(cluster - state.socPercent) >= RAW_SHOWN_GAP) {
-                        withStyle(
-                            SpanStyle(fontSize = 11.sp, color = VoltColors.textTertiary, fontFamily = VoltFonts.hanken),
-                        ) {
-                            append("  raw ${oneDecimal(state.socPercent)}%")
-                        }
+                    append(if (state.connected) "${soc.toInt()}" else DASH)
+                    if (state.connected) {
+                        withStyle(SpanStyle(fontSize = 13.sp, color = VoltColors.textSecondary)) { append("%") }
                     }
                 },
             style = VoltType.value.copy(fontSize = 30.sp),
@@ -329,9 +359,9 @@ private fun BatteryCard(
         )
         Meter((soc / 100).toFloat(), VoltColors.energy)
         KvRow(
-            state.packVolts?.let { "${oneDecimal(it)} V" } ?: "-- V",
-            state.packAmps?.let { "${it.toInt()} A" } ?: "-- A",
-            state.packTempF?.let { state.units.tempText(it.toDouble()) } ?: "--${state.units.tempUnit}",
+            withUnit(state.packVolts?.let(::oneDecimal), "V"),
+            withUnit(state.packAmps?.let { "${it.toInt()}" }, "A"),
+            state.packTempF?.let { state.units.tempText(it.toDouble()) } ?: DASH,
         )
     }
 }
@@ -343,18 +373,18 @@ private fun RangeMiniCard(
 ) {
     CockpitCard(modifier) {
         val units = state.units
-        CapRow("Range", state.totalRangeWhole(units)?.let { "$it ${units.distanceUnit}" } ?: "--")
+        CapRow("Range", state.totalRangeWhole(units)?.let { "$it ${units.distanceUnit}" } ?: DASH)
         RangeBar(
             "EV",
             PillTone.EV,
             (state.shownSocPercent / 100).toFloat().takeIf { state.connected },
-            state.evRangeMiles?.let(units::distanceWhole) ?: "--",
+            state.evRangeMiles?.let(units::distanceWhole) ?: DASH,
         )
         RangeBar(
             "Gas",
             PillTone.GAS,
             state.fuelPercent?.let { (it / 100).toFloat() },
-            state.gasRangeMiles?.let(units::distanceWhole) ?: "--",
+            state.gasRangeMiles?.let(units::distanceWhole) ?: DASH,
         )
         val engineOn = state.mode == DriveMode.GAS && state.rpm > 0
         KvRow(
@@ -381,7 +411,9 @@ private fun RangeBar(
             text = label,
             style = VoltType.caption.copy(fontSize = 12.sp, fontWeight = FontWeight.SemiBold),
             color = pillColor(tone),
-            modifier = Modifier.width(28.dp),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 28.dp),
         )
         // No reading, no meter: an empty bar would claim an empty tank.
         if (fraction != null) Meter(fraction, pillColor(tone), Modifier.weight(1f)) else Spacer(Modifier.weight(1f))
@@ -389,11 +421,16 @@ private fun RangeBar(
             text = value,
             style = VoltType.valueSmall.copy(fontSize = 15.sp),
             color = VoltColors.textPrimary,
-            modifier = Modifier.width(34.dp),
+            maxLines = 1,
+            softWrap = false,
+            modifier = Modifier.widthIn(min = 34.dp),
             textAlign = TextAlign.End,
         )
     }
 }
+
+/** Above this text scale the six thermometers wrap onto two rows. */
+private const val WIDE_THERMS_MAX_SCALE = 1.15f
 
 /**
  * One cockpit thermometer: range and warn threshold follow the mockups' `therm` calls. The scale
@@ -415,13 +452,17 @@ private fun TemperaturesCard(state: DriveUiState) {
             Therm("Motor A", state.motorTempF, 40, 260, 230),
             Therm("Inverter", state.inverterTempF, 40, 220, 190),
             Therm("Coolant", state.coolantF?.takeIf { state.connected }, 40, 240, 225),
-            Therm("Trans", state.transTempF?.takeIf { state.connected }, 40, 260, 240),
+            Therm("Transmission", state.transTempF?.takeIf { state.connected }, 40, 260, 240),
             Therm("Cabin", state.cabinTempF, 20, 120, 110),
         )
     CockpitCard(Modifier.padding(top = 8.dp)) {
         CapRow("Temperatures", state.units.tempUnit)
-        Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-            therms.forEach { Thermometer(it, state.units, Modifier.weight(1f)) }
+        // Six across normally; at the larger text sizes two rows of three so the labels stay whole.
+        val perRow = if (LocalDensity.current.fontScale > WIDE_THERMS_MAX_SCALE) therms.size / 2 else therms.size
+        therms.chunked(perRow).forEach { row ->
+            Row(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                row.forEach { Thermometer(it, state.units, Modifier.weight(1f)) }
+            }
         }
     }
 }
@@ -435,7 +476,13 @@ private fun Thermometer(
     val warn = t.valueF != null && t.valueF >= t.warnAt
     val fraction = t.valueF?.let { ((it - t.lo).toFloat() / (t.hi - t.lo)).coerceIn(0f, 1f) } ?: 0f
     val fill = if (warn) VoltColors.warn else VoltColors.accent
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    val reading = t.valueF?.let { units.tempText(it.toDouble()) }
+    Column(
+        modifier.semantics(mergeDescendants = true) {
+            contentDescription = "${t.label} ${reading ?: NOT_REPORTED}${if (warn) ", high" else ""}"
+        },
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
         Box(
             modifier =
                 Modifier
@@ -455,22 +502,20 @@ private fun Thermometer(
             }
         }
         Text(
-            text = t.valueF?.let { "${units.temp(it.toDouble())}°" } ?: "--",
+            text = t.valueF?.let { "${units.temp(it.toDouble())}°" } ?: DASH,
             style = VoltType.valueSmall.copy(fontSize = 16.sp),
             color = if (warn) VoltColors.warn else VoltColors.textPrimary,
             modifier = Modifier.padding(top = 6.dp),
         )
+        // "Transmission" hyphenates onto a second line in a narrow column rather than clipping.
         Text(
             text = t.label,
-            style = VoltType.caption.copy(fontSize = 11.sp),
+            style = VoltType.caption.copy(fontSize = 11.sp, hyphens = Hyphens.Auto, textAlign = TextAlign.Center),
             color = VoltColors.textSecondary,
-            maxLines = 1,
+            maxLines = 2,
         )
     }
 }
-
-/** Cell spread at which the weakest group is called out (matches the Health "watch" band). */
-private const val CELL_WATCH_MV = 50.0
 
 @Composable
 private fun CellsCard(
@@ -487,23 +532,28 @@ private fun CellsCard(
             if (weak) VoltColors.warn else VoltColors.textTertiary,
         )
         if (state.cellVoltages.count { it != null } >= MIN_CELLS_FOR_HISTOGRAM) {
+            val described = cellsDescription(state)
             CellHistogram(
                 state.cellVoltages,
                 state.minCellNumber,
-                Modifier.padding(top = 6.dp).fillMaxWidth().height(40.dp),
+                Modifier
+                    .padding(top = 6.dp)
+                    .fillMaxWidth()
+                    .height(40.dp)
+                    .semantics { contentDescription = described },
             )
         } else {
             Text(
                 text = "Per-cell detail appears after a full cell read",
                 style = VoltType.caption.copy(fontSize = 11.5.sp),
                 color = VoltColors.textTertiary,
-                modifier = Modifier.padding(top = 6.dp).height(40.dp),
+                modifier = Modifier.padding(top = 6.dp).heightIn(min = 40.dp),
             )
         }
         KvRow(
-            spread?.let { "Δ ${it.toInt()} mV" } ?: "Δ --",
-            state.maxCellVolts?.let { String.format(Locale.US, "%.3f V", it) } ?: "--",
-            state.minCellVolts?.let { String.format(Locale.US, "%.3f V", it) } ?: "--",
+            spread?.let { "${it.toInt()} mV spread" } ?: DASH,
+            state.maxCellVolts?.let { String.format(Locale.US, "%.3f V", it) } ?: DASH,
+            state.minCellVolts?.let { String.format(Locale.US, "%.3f V", it) } ?: DASH,
         )
     }
 }
@@ -520,9 +570,9 @@ private fun EfficiencyCard(
         NumberUnit(
             value =
                 if (mpg != null) {
-                    units.economyValue(mpg) ?: "--"
+                    units.economyValue(mpg) ?: DASH
                 } else {
-                    units.efficiencyValue(state.shownTripMiPerKwh) ?: "--"
+                    units.efficiencyValue(state.shownTripMiPerKwh) ?: DASH
                 },
             unit = if (mpg != null) " ${units.economyUnit}" else " ${units.efficiencyUnit}",
             size = 30f,
@@ -532,12 +582,12 @@ private fun EfficiencyCard(
         KvRow(
             "${units.distanceOneDecimal(state.tripMiles)} ${units.distanceUnit}",
             state.tripDuration,
-            state.cycleEvPercent?.let { "$it% EV" } ?: "--",
+            state.cycleEvPercent?.let { "$it% EV" } ?: DASH,
         )
         KvRow(
-            state.tripKwh?.let { "${oneDecimal(it)} kWh" } ?: "-- kWh",
-            costLabel(state.tripKwh, state.electricityRate) ?: "max ${units.speedText(state.tripMaxMph.toDouble())}",
-            state.ambientF?.takeIf { state.connected }?.let { "${units.tempText(it.toDouble())} out" } ?: "-- out",
+            withUnit(state.tripKwh?.let(::oneDecimal), "kWh"),
+            costText(state.tripKwh, state.electricityRate) ?: "max ${units.speedText(state.tripMaxMph.toDouble())}",
+            state.ambientF?.takeIf { state.connected }?.let { "${units.tempText(it.toDouble())} out" } ?: DASH,
             modifier = Modifier.padding(top = 0.dp),
         )
     }
@@ -547,12 +597,13 @@ private fun EfficiencyCard(
 private fun SmallCard(
     label: String,
     modifier: Modifier = Modifier,
+    unit: String? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
         modifier = modifier.voltCard(radius = VoltShapes.TileRadius).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
-        VoltLabel(label)
+        VoltLabel(label, unit = unit)
         content()
     }
 }
@@ -596,7 +647,12 @@ private fun TiresMini(
             }
         }
         if (tires == null) {
-            Text("--", style = VoltType.valueSmall.copy(fontSize = 14.sp), color = VoltColors.textTertiary)
+            Text(
+                DASH,
+                style = VoltType.valueSmall.copy(fontSize = 14.sp),
+                color = VoltColors.textTertiary,
+                modifier = Modifier.semantics { contentDescription = NOT_REPORTED },
+            )
         } else {
             Column {
                 listOf(tires.fl to tires.fr, tires.rl to tires.rr).forEach { (l, r) ->
@@ -613,8 +669,6 @@ private fun TiresMini(
 
 private const val CELL_GROUPS = 96
 
-/** The raw pack SOC is only worth a mention when it differs from the cluster's by half a point. */
-private const val RAW_SHOWN_GAP = 0.5
 private const val STRIP_ZERO = 0.62f
 private const val STRIP_DRIVE_KW = 60f
 private const val STRIP_REGEN_KW = 30f

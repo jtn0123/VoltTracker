@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -22,12 +21,14 @@ import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,17 +72,24 @@ fun VoltPanel(
     )
 }
 
-/** Small upper-case section label, e.g. "HV BATTERY". */
+/**
+ * Small upper-case section label, e.g. "HV BATTERY". A [unit] follows in its own case ("TIRES psi",
+ * never "PSI"); [ellipsize] cuts a label that shares its row short instead of clipping it.
+ */
 @Composable
 fun VoltLabel(
     text: String,
     modifier: Modifier = Modifier,
     color: Color = VoltColors.textTertiary,
+    unit: String? = null,
+    ellipsize: Boolean = false,
 ) {
     Text(
-        text = text.uppercase(Locale.US),
+        text = text.uppercase(Locale.US) + unit?.let { " · $it" }.orEmpty(),
         style = VoltType.label,
         color = color,
+        maxLines = if (ellipsize) 1 else Int.MAX_VALUE,
+        overflow = if (ellipsize) TextOverflow.Ellipsis else TextOverflow.Clip,
         modifier = modifier,
     )
 }
@@ -131,7 +139,7 @@ fun VoltStatusPill(
 }
 
 /** Meaning of a [VoltPill]: its text color and tinted background. */
-enum class PillTone { EV, GAS, VOLT, NEUTRAL, WARN, BAD }
+enum class PillTone { EV, GAS, VOLT, NEUTRAL, WARN, BAD, DEMO }
 
 /**
  * Tinted status pill (mockups `.pill.ev/.gas/.volt/.warn/.bad/.neutral`): upper-case caps,
@@ -150,7 +158,7 @@ fun VoltPill(
     val background =
         when (tone) {
             PillTone.NEUTRAL -> VoltColors.surfaceElevated
-            PillTone.EV, PillTone.VOLT -> color.copy(alpha = 0.13f)
+            PillTone.EV, PillTone.VOLT, PillTone.DEMO -> color.copy(alpha = 0.13f)
             PillTone.GAS, PillTone.BAD -> color.copy(alpha = 0.14f)
             PillTone.WARN -> color.copy(alpha = 0.15f)
         }
@@ -173,6 +181,7 @@ fun pillColor(tone: PillTone): Color =
         PillTone.NEUTRAL -> VoltColors.textSecondary
         PillTone.WARN -> VoltColors.warn
         PillTone.BAD -> VoltColors.alert
+        PillTone.DEMO -> VoltColors.demo
     }
 
 @Composable
@@ -185,7 +194,7 @@ private fun PillShell(
     Row(
         modifier =
             modifier
-                .height(if (small) 22.dp else 28.dp)
+                .heightIn(min = if (small) 22.dp else 28.dp)
                 .clip(VoltShapes.chip)
                 .background(background)
                 .padding(start = if (small) 8.dp else 10.dp, end = if (small) 8.dp else 12.dp),
@@ -237,6 +246,7 @@ fun VoltButton(
     accent: Boolean = false,
     style: ButtonStyle = if (accent) ButtonStyle.PRIMARY else ButtonStyle.SECONDARY,
     icon: ImageVector? = null,
+    enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val shape = VoltShapes.control
@@ -245,6 +255,7 @@ fun VoltButton(
         modifier
             .minimumInteractiveComponentSize()
             .heightIn(min = BUTTON_HEIGHT)
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .clip(shape)
     val filled =
         when (style) {
@@ -254,7 +265,7 @@ fun VoltButton(
     Row(
         modifier =
             filled
-                .clickable(onClick = onClick, role = Role.Button)
+                .clickable(enabled = enabled, onClick = onClick, role = Role.Button)
                 .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
@@ -271,3 +282,6 @@ fun VoltButton(
 }
 
 private val BUTTON_HEIGHT = 44.dp
+
+/** How faded a control is while it can't be used. */
+internal const val DISABLED_ALPHA = 0.45f

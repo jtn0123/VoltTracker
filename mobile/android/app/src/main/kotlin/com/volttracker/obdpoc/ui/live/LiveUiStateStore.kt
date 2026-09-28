@@ -85,7 +85,7 @@ class LiveUiStateStore(
                                 statusLabel = label,
                                 adapterLabel = adapter,
                             ),
-                        charge = s.charge.copy(connected = connected, statusLabel = label),
+                        charge = s.charge.copy(connected = connected, connecting = transitioning, statusLabel = label),
                         trips = s.trips.copy(connected = connected, statusLabel = label),
                         insights = s.insights.copy(connected = connected, statusLabel = label),
                         diag =
@@ -686,7 +686,7 @@ class LiveUiStateStore(
         adapter: String,
     ): String =
         when (stateName) {
-            "connected" -> "Live · 1 Hz"
+            "connected" -> "Live"
             "demo" -> "Demo"
             "connecting", "initializing", "reconnecting" -> "Connecting…"
             "scanning", "scan-complete" -> "Scanning…"

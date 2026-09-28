@@ -1,7 +1,6 @@
 package com.volttracker.obdpoc.ui
 
 import androidx.compose.ui.geometry.Size
-import com.volttracker.obdpoc.ui.trips.METERS_PER_MILE
 import com.volttracker.obdpoc.ui.trips.TripHistory
 import com.volttracker.obdpoc.ui.trips.TripMode
 import com.volttracker.obdpoc.ui.trips.TripPoint
@@ -24,6 +23,7 @@ import com.volttracker.obdpoc.ui.trips.subtitle
 import com.volttracker.obdpoc.ui.trips.title
 import com.volttracker.obdpoc.ui.trips.whenLine
 import com.volttracker.obdpoc.ui.trips.wholeDollars
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.json.JSONArray
 import org.json.JSONObject
@@ -70,6 +70,7 @@ class TripsLogicTest {
         assertEquals("Afternoon drive", trip("a", now - 7 * hour).title(utc))
         assertEquals("Commute", trip("a", morning, label = "Commute").title(utc))
         assertEquals("8:42 AM · 28 min", trip("a", morning).whenLine(utc))
+        assertEquals("8:42 · 28 min", trip("a", morning).whenLine(utc, h24 = true))
     }
 
     @Test

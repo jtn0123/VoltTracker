@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.insights
 
 import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.trips.TripSummary
 import com.volttracker.obdpoc.ui.trips.TripsDemo
 import com.volttracker.obdpoc.ui.trips.TripsUiState
@@ -76,14 +77,14 @@ data class InsightsUiState(
             get() =
                 InsightsUiState(
                     connected = true,
-                    statusLabel = "Live · 1 Hz",
+                    statusLabel = "Live",
                     trips = TripsDemo.trips(TripsUiState.DEMO_NOW_MS),
                     speedEfficiency = DEMO_SPEEDS,
                     cellDrift = DEMO_CELL_DRIFT,
                     nowMs = TripsUiState.DEMO_NOW_MS,
-                    homeRate = 0.12,
-                    gasMpg = 38.0,
-                    gasPrice = 4.29,
+                    homeRate = SettingsUiState.DEMO_HOME_RATE,
+                    gasMpg = SettingsUiState.DEMO_GAS_MPG,
+                    gasPrice = SettingsUiState.DEMO_GAS_PRICE,
                 )
     }
 }

@@ -22,6 +22,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -31,8 +33,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.CellHistogram
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
+import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltIcons
@@ -42,6 +46,7 @@ import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -69,6 +74,7 @@ fun DiagScreen(
     VoltScreen(
         title = "Health",
         subtitle = "Car › Diagnostics",
+        dot = connectionDot(state.connected),
         onBack = onBack,
         modifier = modifier,
     ) {
@@ -337,7 +343,7 @@ private fun BatteryFigure(
     Column {
         Text(
             buildAnnotatedString {
-                append(value ?: "--")
+                append(value ?: DASH)
                 if (value != null) {
                     withStyle(
                         SpanStyle(fontSize = 14.sp, color = VoltColors.textSecondary, fontWeight = FontWeight.Normal),
@@ -355,6 +361,7 @@ private fun BatteryFigure(
             color = VoltColors.textPrimary,
             maxLines = 1,
             softWrap = false,
+            modifier = if (value == null) Modifier.semantics { contentDescription = NOT_REPORTED } else Modifier,
         )
         Text(caption, style = VoltType.caption, color = VoltColors.textSecondary)
     }

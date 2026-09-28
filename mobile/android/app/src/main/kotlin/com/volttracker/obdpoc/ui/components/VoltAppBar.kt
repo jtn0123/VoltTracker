@@ -30,6 +30,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -77,14 +78,34 @@ fun VoltAppBar(
             IconCircleButton(VoltIcons.ChevronLeft, "Back", onBack, tint = VoltColors.textPrimary, iconSize = 18.dp)
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = VoltType.screenTitle, color = VoltColors.textPrimary)
-            if (subtitle != null) {
+            Text(
+                text = title,
+                style = VoltType.screenTitle,
+                color = VoltColors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            val demo = LocalVoltPrefs.current.demo
+            if (subtitle != null || demo) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (dot != null) {
                         StatusDot(dot)
                         Spacer(Modifier.size(6.dp))
                     }
-                    Text(text = subtitle, style = VoltType.caption, color = VoltColors.textSecondary, maxLines = 1)
+                    // Demo data must never pass for the car's: every header flags it.
+                    if (demo) {
+                        VoltPill("Demo", PillTone.DEMO, dot = false, small = true)
+                        Spacer(Modifier.size(6.dp))
+                    }
+                    if (subtitle != null) {
+                        Text(
+                            text = subtitle,
+                            style = VoltType.caption,
+                            color = VoltColors.textSecondary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }

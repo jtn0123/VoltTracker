@@ -1,11 +1,5 @@
 package com.volttracker.obdpoc.ui.drive
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,9 +31,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
+import com.volttracker.obdpoc.ui.components.rememberLoopPhase
+import com.volttracker.obdpoc.ui.components.spoken
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
@@ -84,11 +81,16 @@ fun energyFlow(state: DriveUiState): EnergyFlow {
         engineActive = gasOn,
         regen = regen,
         gridValue = if (plugged) "${oneDecimal(state.chargeKw)} kW" else "Unplugged",
-        batteryValue = if (state.connected) "${state.shownSocPercent.toInt()}%" else "--",
+        batteryValue = if (state.connected) "${state.shownSocPercent.toInt()}%" else DASH,
         driveValue = if (driving) "${String.format(Locale.US, "%.0f", state.powerKw)} kW" else "Idle",
         engineValue = if (gasOn) "${String.format(Locale.US, "%,d", state.rpm)} rpm" else "Off",
     )
 }
+
+/** TalkBack's reading of the strip: the flow, then what each node reads. */
+fun EnergyFlow.description(): String =
+    "Energy flow: $caption. Grid ${spoken(gridValue)}, battery ${spoken(batteryValue)}, " +
+        "drive unit ${spoken(driveValue)}, engine ${spoken(engineValue)}"
 
 private const val STRIP_W = 380f
 private const val STRIP_H = 150f
@@ -112,17 +114,14 @@ fun EnergyFlowCard(
             rememberVectorPainter(VoltIcons.Motor),
             rememberVectorPainter(VoltIcons.Fuel),
         )
-    val t by rememberInfiniteTransition(label = "flow").animateFloat(
-        initialValue = 0f,
-        targetValue = DASH_PERIOD,
-        animationSpec = infiniteRepeatable(tween(FLOW_MS, easing = LinearEasing), RepeatMode.Restart),
-        label = "dash",
-    )
+    val anyFlow = flow.gridActive || flow.regen || flow.engineActive || flow.driveActive
+    // The dashes only march while energy is actually moving (and never with animations removed).
+    val t = rememberLoopPhase(active = anyFlow, period = DASH_PERIOD, durationMs = FLOW_MS, label = "flow") ?: 0f
+    val described = flow.description()
     VoltPanel(
         modifier =
             modifier.padding(top = 10.dp).semantics(mergeDescendants = true) {
-                contentDescription =
-                    "Energy flow: ${flow.caption}"
+                contentDescription = described
             },
         padding = PaddingValues(0.dp),
     ) {
@@ -138,8 +137,10 @@ fun EnergyFlowCard(
                 color = VoltColors.textSecondary,
             )
         }
-        Canvas(Modifier.fillMaxWidth().height(STRIP_H.dp).padding(top = 4.dp, bottom = 6.dp)) {
-            drawFlow(flow, pal, measurer, icons, t)
+        CappedTextScale {
+            Canvas(Modifier.fillMaxWidth().height(STRIP_H.dp).padding(top = 4.dp, bottom = 6.dp)) {
+                drawFlow(flow, pal, measurer, icons, t)
+            }
         }
     }
 }

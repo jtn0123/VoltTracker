@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -27,8 +28,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -159,9 +162,24 @@ internal data class NumberField(
             ?.takeIf { it.isFinite() }
             ?.coerceIn(min, max)
 
+    /** The allowed range in words: "From $0 to $2 per kWh", "From 50% to 100%", "From 5 to 150 mpg". */
     val rangeLabel: String
-        get() = "${SettingsUiState.formatNumber(min)}–${SettingsUiState.formatNumber(max)} $unit"
+        get() {
+            val low = SettingsUiState.formatNumber(min)
+            val high = SettingsUiState.formatNumber(max)
+            return when {
+                unit.startsWith("$/") -> "From $$low to $$high per ${unit.removePrefix("$/")}"
+                unit == "%" -> "From $low% to $high%"
+                else -> "From $low to $high $unit"
+            }
+        }
 }
+
+/** The inline error under a [NumberEditor] field: shown once something non-numeric is typed. */
+internal fun numberError(
+    text: String,
+    parsed: Double?,
+): String? = if (text.isNotBlank() && parsed == null) "Enter a number" else null
 
 /**
  * An inline number editor that opens under the row it edits. Out-of-range entries are clamped, and
@@ -178,6 +196,7 @@ internal fun NumberEditor(
     val parsed = field.parse(text)
     InlineEditor(
         caption = field.rangeLabel,
+        error = numberError(text, parsed),
         text = text,
         onTextChange = { text = it.take(MAX_CHARS) },
         fieldDescription = field.title,
@@ -189,7 +208,7 @@ internal fun NumberEditor(
             }
         },
         confirm = {
-            VoltButton(text = "Save", accent = parsed != null, onClick = { parsed?.let(onSave) })
+            VoltButton(text = "Save", accent = true, enabled = parsed != null, onClick = { parsed?.let(onSave) })
         },
     )
 }
@@ -235,6 +254,7 @@ private fun InlineEditor(
     onDismiss: () -> Unit,
     confirm: @Composable () -> Unit,
     visualTransformation: VisualTransformation = VisualTransformation.None,
+    error: String? = null,
     leading: @Composable () -> Unit = {},
 ) {
     Column(
@@ -264,10 +284,21 @@ private fun InlineEditor(
                     .semantics { contentDescription = fieldDescription }
                     .testTag("settings-number-input"),
         )
+        if (error != null) {
+            Text(
+                text = error,
+                style = VoltType.caption,
+                color = VoltColors.alert,
+                modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite },
+            )
+        }
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             leading()
-            Spacer(Modifier.weight(1f))
             VoltButton(text = "Cancel", onClick = onDismiss)
             confirm()
         }

@@ -5,15 +5,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -26,20 +20,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.ConnectRow
 import com.volttracker.obdpoc.ui.components.IconCircleButton
-import com.volttracker.obdpoc.ui.components.VoltButton
+import com.volttracker.obdpoc.ui.components.VoltChip
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.ambientAlpha
 import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
-import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltPalette
-import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
-import com.volttracker.obdpoc.ui.theme.VoltType
 import kotlinx.coroutines.delay
 
 /**
@@ -70,11 +61,11 @@ fun DriveScreen(
     ) {
         VoltScreen(
             title = "Drive",
-            subtitle = driveSubtitle(state, detailed),
+            subtitle = driveSubtitle(state),
             dot = connectionDot(state.connected),
             actions = {
                 val outside = state.ambientF?.takeIf { state.connected }
-                if (detailed && outside != null) OutsideTempChip(state.units.tempText(outside.toDouble()))
+                if (detailed && outside != null) VoltChip("${state.units.tempText(outside.toDouble())} outside")
                 IconCircleButton(
                     icon = if (detailed) VoltIcons.Drive else VoltIcons.Grid,
                     contentDescription = if (detailed) "Focus view" else "Detailed view",
@@ -86,11 +77,11 @@ fun DriveScreen(
             },
         ) {
             if (detailed) {
-                ConnectRowIfNeeded(state, onConnect, onStartDemo)
+                ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 CockpitContent(state)
             } else {
                 ArcGauge(state, Modifier.align(Alignment.CenterHorizontally))
-                ConnectRowIfNeeded(state, onConnect, onStartDemo)
+                ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 RangeCard(state)
                 FocusTiles(state)
                 if (showEnergyFlow) EnergyFlowCard(state)
@@ -100,7 +91,8 @@ fun DriveScreen(
             visible = toastVisible,
             enter = fadeIn() + slideInVertically { -it / 4 },
             exit = fadeOut() + slideOutVertically { -it / 4 },
-            modifier = Modifier.align(Alignment.BottomCenter).padding(12.dp),
+            // Over the ring (below the app bar), not the tiles the driver is reading.
+            modifier = Modifier.align(Alignment.TopCenter).padding(start = 12.dp, end = 12.dp, top = TOAST_TOP),
         ) {
             EngineOnToast(atReserve = state.atReserve)
         }
@@ -130,21 +122,15 @@ private fun engineToastVisible(
 }
 
 private const val TOAST_MS = 3_600L
+private val TOAST_TOP = 72.dp
 
-/**
- * App-bar subtitle: the link and what the car is doing. The cockpit adds the live signal
- * count; while not connected it is the connection status itself.
- */
-fun driveSubtitle(
-    state: DriveUiState,
-    detailed: Boolean,
-): String {
+/** App-bar subtitle: the link and what the car is doing; while not connected, the connection status. */
+fun driveSubtitle(state: DriveUiState): String {
     if (!state.connected) return state.statusLabel
-    val signals = if (detailed && state.signalCount > 0) " · ${state.signalCount} signals" else ""
     return when (state.phase) {
-        DrivePhase.DRIVE -> if (detailed) "Live · 1 Hz$signals" else "Live · ${state.adapterLabel}"
-        DrivePhase.CHARGING -> "Connected · charging$signals"
-        DrivePhase.PARKED -> "Connected · parked$signals"
+        DrivePhase.DRIVE -> "Live · ${state.adapterLabel}"
+        DrivePhase.CHARGING -> "Connected · charging"
+        DrivePhase.PARKED -> "Connected · parked"
     }
 }
 
@@ -163,43 +149,6 @@ private fun ambientColor(
 }
 
 private const val PARKED_AMBIENT = 0.45f
-
-/** Offered while no session is live: reconnect the last adapter, or preview with demo data. */
-@Composable
-private fun ConnectRowIfNeeded(
-    state: DriveUiState,
-    onConnect: () -> Unit,
-    onStartDemo: () -> Unit,
-) {
-    // Hidden mid-handshake so a second tap can't start a replacement session.
-    if (state.connected || state.connecting) return
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-    ) {
-        VoltButton(text = "Connect", accent = true, onClick = onConnect)
-        VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
-    }
-}
-
-/** The cockpit's outside-temperature chip (mockups `.chip`). */
-@Composable
-private fun OutsideTempChip(text: String) {
-    Box(
-        modifier =
-            Modifier
-                .height(26.dp)
-                .background(VoltColors.surfaceElevated, VoltShapes.chip)
-                .padding(horizontal = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = text,
-            style = VoltType.value.copy(fontSize = 13.sp),
-            color = VoltColors.textSecondary,
-        )
-    }
-}
 
 @Preview(widthDp = 412, heightDp = 1100)
 @Composable

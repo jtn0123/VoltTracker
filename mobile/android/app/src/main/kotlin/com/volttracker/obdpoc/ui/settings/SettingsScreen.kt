@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -119,9 +120,9 @@ private fun ColumnScope.SettingsIndex(
     }
     VoltGroupLabel("Preferences")
     VoltListCard {
-        VoltListRow(VoltIcons.Settings, "Units", value = state.unitsLabel, compact = true) { open(SettingsPage.UNITS) }
+        VoltListRow(VoltIcons.Ruler, "Units", value = state.unitsLabel, compact = true) { open(SettingsPage.UNITS) }
         VoltListDivider()
-        VoltListRow(VoltIcons.Window, "Appearance", value = state.appearance.label, compact = true) {
+        VoltListRow(VoltIcons.Contrast, "Appearance", value = state.appearance.label, compact = true) {
             open(SettingsPage.APPEARANCE)
         }
         VoltListDivider()
@@ -137,7 +138,7 @@ private fun ColumnScope.SettingsIndex(
             open(SettingsPage.DEMO)
         }
         VoltListDivider()
-        VoltListRow(VoltIcons.Wrench, "Advanced diagnostics", value = "Logs, raw PIDs", compact = true) {
+        VoltListRow(VoltIcons.Wrench, "Advanced diagnostics", value = "Logs & tools", compact = true) {
             open(SettingsPage.ADVANCED)
         }
     }
@@ -146,7 +147,9 @@ private fun ColumnScope.SettingsIndex(
         VoltListRow(
             VoltIcons.Refresh,
             "App updates",
-            value = state.updateAvailableTag?.let { "$it available" },
+            value =
+                state.updateAvailableTag?.let { "$it available" }
+                    ?: state.updateStatusLabel?.takeIf { it == SettingsUiState.UP_TO_DATE },
             tone = if (state.updateAvailableTag != null) PillTone.VOLT else PillTone.NEUTRAL,
             compact = true,
         ) { open(SettingsPage.UPDATES) }
@@ -160,6 +163,21 @@ private fun ColumnScope.SettingsIndex(
     )
 }
 
+/** The adapter card's title: the remembered adapter, or "No adapter" when none is. */
+internal fun adapterName(adapterLabel: String): String =
+    adapterLabel.takeUnless { it.isBlank() || it == "--" } ?: NO_ADAPTER
+
+/**
+ * The adapter card's link line while not connected. With no adapter the title already says
+ * "No adapter", so the line says "Not connected" instead of repeating it.
+ */
+internal fun adapterStatus(
+    adapterLabel: String,
+    statusLabel: String,
+): String = if (adapterName(adapterLabel) == NO_ADAPTER || statusLabel == NO_ADAPTER) "Not connected" else statusLabel
+
+private const val NO_ADAPTER = "No adapter"
+
 /** The paired adapter, its link state, and the way into connection settings. */
 @Composable
 private fun AdapterCard(
@@ -172,9 +190,11 @@ private fun AdapterCard(
             IconSquare(VoltIcons.Bluetooth, tone = if (state.connected) PillTone.EV else PillTone.NEUTRAL)
             Column(modifier = Modifier.weight(1f).padding(horizontal = 12.dp)) {
                 Text(
-                    text = state.adapterLabel.takeUnless { it == "--" } ?: "No adapter",
+                    text = adapterName(state.adapterLabel),
                     style = VoltType.bodyStrong,
                     color = VoltColors.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
                 Text(
                     text =
@@ -182,13 +202,15 @@ private fun AdapterCard(
                             if (state.connected) {
                                 withStyle(SpanStyle(color = energy)) { append("Connected") }
                             } else {
-                                append(state.statusLabel)
+                                append(adapterStatus(state.adapterLabel, state.statusLabel))
                             }
                             append(" · auto-connect ")
                             append(if (state.autoConnect) "on" else "off")
                         },
                     style = VoltType.caption,
                     color = VoltColors.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             VoltButton(text = "Manage", onClick = onManage)

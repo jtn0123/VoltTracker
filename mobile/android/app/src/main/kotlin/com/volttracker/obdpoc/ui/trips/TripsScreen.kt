@@ -39,18 +39,22 @@ import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconCircleButton
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltGroupLabel
 import com.volttracker.obdpoc.ui.components.VoltIcons
-import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
@@ -82,22 +86,27 @@ fun TripsScreen(
     VoltScreen(
         title = "Trips",
         subtitle = state.subtitle(),
+        dot = connectionDot(state.connected),
         scrollState = scroll,
         actions = { if (state.trips.isNotEmpty()) ExportMenu(state, onExport) },
     ) {
         if (state.trips.isEmpty()) {
+            val notice = Modifier.padding(top = 8.dp)
             when (state.history) {
-                HistoryLoad.LOADING -> TripsNotice("Loading drives…", null)
+                HistoryLoad.LOADING -> VoltEmptyState("Loading drives…", notice)
                 HistoryLoad.FAILED ->
-                    TripsNotice(
+                    VoltEmptyState(
                         "Drives couldn't be read",
-                        "Your logged drives are safe. They'll load the next time you open Trips.",
+                        notice,
+                        body = "Your logged drives are safe. They'll load the next time you open Trips.",
                     )
                 HistoryLoad.LOADED ->
-                    TripsNotice(
+                    VoltEmptyState(
                         "No drives logged yet",
-                        "Drives appear here after you drive with the adapter connected, " +
-                            "with the route when location is on.",
+                        notice,
+                        body =
+                            "Drives appear here after you drive with the adapter connected, " +
+                                "with the route when location is on.",
                     )
             }
         } else {
@@ -120,7 +129,7 @@ private fun ExportMenu(
 ) {
     var open by remember { mutableStateOf(false) }
     Box {
-        IconCircleButton(VoltIcons.Share, "Export trips", { open = true })
+        IconCircleButton(VoltIcons.Share, "Export drives", { open = true })
         DropdownMenu(
             expanded = open,
             onDismissRequest = { open = false },
@@ -173,18 +182,18 @@ private fun TripsFigures(state: TripsUiState) {
     Row(modifier = Modifier.fillMaxWidth().padding(start = 4.dp, end = 4.dp, top = 14.dp, bottom = 4.dp)) {
         VoltFigure(
             "Electric",
-            state.electricPct()?.toString() ?: "--",
+            state.electricPct()?.toString() ?: DASH,
             "%",
             Modifier.weight(1f),
             valueColor = VoltColors.energy,
         )
         VoltFigure(
             "Avg",
-            state.units.efficiencyValue(state.avgMiPerKwh()) ?: "--",
+            state.units.efficiencyValue(state.avgMiPerKwh()) ?: DASH,
             state.units.efficiencyUnit,
             Modifier.weight(1f),
         )
-        VoltFigure("Saved", state.savedVsGas()?.let(::wholeDollars) ?: "--", "vs gas", Modifier.weight(1f))
+        VoltFigure("Saved", state.savedVsGas()?.let(::wholeDollars) ?: DASH, "vs gas", Modifier.weight(1f))
     }
 }
 
@@ -234,8 +243,18 @@ private fun TripRow(
             size = 36.dp,
         )
         Column(Modifier.weight(1f)) {
-            Text(trip.title(), style = VoltType.bodyStrong, color = VoltColors.textPrimary, maxLines = 1)
-            Text(trip.whenLine(), style = VoltType.caption, color = VoltColors.textSecondary)
+            Text(
+                trip.title(),
+                style = VoltType.bodyStrong,
+                color = VoltColors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                trip.whenLine(h24 = LocalVoltPrefs.current.clock24h),
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+            )
             if (mode == TripMode.MIXED) SplitBar(trip.evShare ?: 0.0)
         }
         Column(horizontalAlignment = Alignment.End) {
@@ -285,25 +304,6 @@ private fun RowScope.SplitPart(
             .clip(RoundedCornerShape(2.dp))
             .background(color),
     )
-}
-
-/** The card shown in place of the drive list: loading, a failed read, or none logged yet. */
-@Composable
-private fun TripsNotice(
-    title: String,
-    body: String?,
-) {
-    VoltPanel(modifier = Modifier.padding(top = 8.dp)) {
-        Text(title, style = VoltType.bodyStrong, color = VoltColors.textPrimary)
-        body?.let {
-            Text(
-                text = it,
-                style = VoltType.body,
-                color = VoltColors.textSecondary,
-                modifier = Modifier.padding(top = 4.dp),
-            )
-        }
-    }
 }
 
 private const val SPLIT_MIN = 0.02f

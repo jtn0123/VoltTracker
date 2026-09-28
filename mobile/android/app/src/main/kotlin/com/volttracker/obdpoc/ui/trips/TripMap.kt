@@ -36,8 +36,10 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.CappedTextScale
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
@@ -120,7 +122,8 @@ fun TripMapCard(
                 modifier = Modifier.align(Alignment.Center).padding(bottom = CHIP_ROOM_DP.dp / 2),
             )
         }
-        MapChip(trip, state.units, Modifier.align(Alignment.BottomCenter).padding(10.dp))
+        // The chip lives in room reserved at the foot of the map: its text stops growing at 1.3×.
+        CappedTextScale { MapChip(trip, state.units, Modifier.align(Alignment.BottomCenter).padding(10.dp)) }
     }
 }
 
@@ -284,12 +287,19 @@ private fun MapChip(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(trip.title(), style = VoltType.bodyStrong, color = VoltColors.textPrimary, maxLines = 1)
+            Text(
+                trip.title(),
+                style = VoltType.bodyStrong,
+                color = VoltColors.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 trip.chipDetail(units = units),
                 style = VoltType.caption,
                 color = VoltColors.textSecondary,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
         Column(horizontalAlignment = Alignment.End) {

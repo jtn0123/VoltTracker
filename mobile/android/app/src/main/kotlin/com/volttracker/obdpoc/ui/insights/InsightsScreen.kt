@@ -34,13 +34,20 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.EmptyAction
+import com.volttracker.obdpoc.ui.components.EmptyLink
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.VoltSegmented
+import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
@@ -64,7 +71,12 @@ fun InsightsScreen(
     onPeriod: (InsightsPeriod) -> Unit = {},
 ) {
     val summary = state.summary()
-    VoltScreen(title = "Insights", subtitle = summary.window.title, modifier = modifier) {
+    VoltScreen(
+        title = "Insights",
+        subtitle = summary.window.title,
+        dot = connectionDot(state.connected),
+        modifier = modifier,
+    ) {
         VoltSegmented(
             options = InsightsPeriod.entries.map { it.label },
             selectedIndex = state.period.ordinal,
@@ -103,7 +115,7 @@ private fun ElectricHero(
                 Text(
                     text =
                         buildAnnotatedString {
-                            append(summary.electricPct?.toString() ?: "--")
+                            append(summary.electricPct?.toString() ?: DASH)
                             if (summary.electricPct != null) withStyle(unitStyle(HERO_UNIT_SP)) { append("%") }
                         },
                     style = VoltType.display.copy(fontSize = HERO_SP.sp, lineHeight = HERO_SP.sp),
@@ -116,17 +128,21 @@ private fun ElectricHero(
         }
         Spacer(Modifier.height(14.dp))
         if (summary.trips.isEmpty()) {
-            Text(
-                text =
-                    when (history) {
-                        HistoryLoad.LOADING -> "Loading drives…"
-                        HistoryLoad.FAILED -> "Drives couldn't be read. They'll load the next time you open Insights."
-                        HistoryLoad.LOADED -> "No drives logged in this period yet."
-                    },
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-                modifier = Modifier.padding(vertical = 8.dp),
-            )
+            when (history) {
+                HistoryLoad.LOADING -> VoltEmptyState("Loading drives…", inCard = false)
+                HistoryLoad.FAILED ->
+                    VoltEmptyState(
+                        "Drives couldn't be read",
+                        body = "They'll load the next time you open Insights.",
+                        inCard = false,
+                    )
+                HistoryLoad.LOADED ->
+                    VoltEmptyState(
+                        "No drives in this period yet",
+                        body = "Pick a longer period, or drive with the adapter connected.",
+                        inCard = false,
+                    )
+            }
         } else {
             ModeBars(summary.buckets, units)
         }
@@ -238,10 +254,9 @@ private fun SavedTile(
     val units = state.units
     Tile("Saved vs gas", modifier) {
         if (saved == null) {
-            TileValue("--", null)
-            TileNote(
-                if (units.metric) "Set gas price and fuel economy in Settings" else "Set gas price and MPG in Settings",
-            )
+            TileValue(DASH, null)
+            TileNote(if (units.metric) "Needs a gas price and fuel economy" else "Needs a gas price and mpg")
+            EmptyLink(EmptyAction("Open Settings", LocalVoltNav.current.openSettings))
         } else {
             val (dollars, cents) = dollarsAndCents(saved)
             TileValue(dollars, cents, unitLeadingSpace = false)
@@ -263,7 +278,7 @@ private fun EnergyTile(
 ) {
     Tile("Energy", modifier) {
         if (summary.kwh <= 0.0) {
-            TileValue("--", null)
+            TileValue(DASH, null)
             TileNote("No energy logged")
         } else {
             TileValue(String.format(Locale.US, "%,d", Math.round(summary.kwh)), "kWh")
@@ -333,12 +348,15 @@ private fun SpeedCard(
         }
         val best = bands.best()
         if (best == null) {
-            Text(
-                text = if (loading) "Loading…" else "Not enough electric driving logged in this period yet.",
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-                modifier = Modifier.padding(top = 10.dp, bottom = 4.dp),
-            )
+            if (loading) {
+                VoltEmptyState("Loading…", inCard = false)
+            } else {
+                VoltEmptyState(
+                    "Not enough electric driving yet",
+                    body = "Efficiency by speed appears once this period has a few electric drives.",
+                    inCard = false,
+                )
+            }
             return@VoltPanel
         }
         Text(
@@ -353,7 +371,7 @@ private fun SpeedCard(
             color = VoltColors.textPrimary,
             modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
         )
-        SpeedBars(bands, best, units)
+        CappedTextScale { SpeedBars(bands, best, units) }
     }
 }
 
@@ -383,17 +401,21 @@ private fun SpeedBars(
         // Room above the tallest bar for the best band's value.
         val headroom = VALUE_ROOM_DP.dp.toPx()
         val y = { v: Double -> (chartH - v / top * (chartH - headroom)).toFloat() }
-        var line = step
-        while (line < top) {
-            drawLine(pal.line, Offset(0f, y(line)), Offset(size.width, y(line)), 1.dp.toPx())
-            drawAxisText(measurer.measure(oneDecimalOrWhole(line), axis), Offset(0f, y(line) - 18.dp.toPx()))
-            line += step
+        // The grid figures sit in a gutter left of the bars, centred on their lines, so a tall bar
+        // never runs through its own scale.
+        val gridLabels = generateSequence(step) { it + step }.takeWhile { it < top }.toList()
+        val measured = gridLabels.map { measurer.measure(oneDecimalOrWhole(it), axis) }
+        val gutter = (measured.maxOfOrNull { it.size.width } ?: 0) + GUTTER_GAP_DP.dp.toPx()
+        gridLabels.forEachIndexed { i, line ->
+            drawLine(pal.line, Offset(gutter, y(line)), Offset(size.width, y(line)), 1.dp.toPx())
+            val label = measured[i]
+            drawAxisText(label, Offset(0f, (y(line) - label.size.height / 2f).coerceAtLeast(0f)))
         }
-        val slot = size.width / bands.size
+        val slot = (size.width - gutter) / bands.size
         bands.forEachIndexed { i, band ->
             val isBest = band == best
             val barW = slot - 2 * BAR_INSET_DP.dp.toPx()
-            val x = i * slot + BAR_INSET_DP.dp.toPx()
+            val x = gutter + i * slot + BAR_INSET_DP.dp.toPx()
             val h = chartH - y(value(band))
             drawRoundRect(
                 if (isBest) pal.ev else pal.ev.copy(alpha = DIM_BAR_ALPHA),
@@ -431,8 +453,8 @@ private fun CellNote(drift: CellDrift) {
                 Text("Cell ${drift.cell} trending low", style = VoltType.bodyStrong, color = VoltColors.textPrimary)
                 Text(
                     text =
-                        "${drift.belowMeanMv} mV below the pack mean, down ${drift.driftMv} mV over " +
-                            "${drift.days} days. Worth watching.",
+                        "It sits ${drift.belowMeanMv} mV lower than the average cell and has dropped " +
+                            "${drift.driftMv} mV over ${drift.days} days. Worth watching.",
                     style = VoltType.caption,
                     color = VoltColors.textSecondary,
                     modifier = Modifier.padding(top = 2.dp),
@@ -466,6 +488,7 @@ private const val VALUE_HEADROOM = 0.3
 /** kWh/100 km figures run about 2.5× the mi/kWh ones: the grid and headroom scale with them. */
 private const val METRIC_SCALE = 2.5
 private const val VALUE_ROOM_DP = 18
+private const val GUTTER_GAP_DP = 6
 
 @Preview(widthDp = 412, heightDp = 1100)
 @Composable

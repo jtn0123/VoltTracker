@@ -143,7 +143,7 @@ class ComposeDashboardSupportTest {
 
         val upToDate =
             ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.UpToDate)
-        assertEquals("Up to date", upToDate.statusLabel)
+        assertEquals("You're up to date", upToDate.statusLabel)
         assertNull(upToDate.availableTag)
         val noBuilds =
             ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.NoBuilds)

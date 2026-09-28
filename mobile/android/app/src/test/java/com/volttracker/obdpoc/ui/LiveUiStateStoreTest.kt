@@ -216,9 +216,11 @@ class LiveUiStateStoreTest {
         val store = LiveUiStateStore()
         store.onStatus(JSONObject().put("state", "connecting").put("adapter", "OBDLink MX+"))
         assertTrue(store.state.value.drive.connecting)
+        assertTrue(store.state.value.charge.connecting)
 
         store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))
         assertFalse(store.state.value.drive.connecting)
+        assertFalse(store.state.value.charge.connecting)
         assertTrue(store.state.value.drive.connected)
     }
 
@@ -294,7 +296,8 @@ class LiveUiStateStoreTest {
         assertTrue(s.diag.connected)
         assertTrue(s.settings.connected)
         assertEquals("OBDLink MX+", s.diag.adapterLabel)
-        assertEquals("Live · 1 Hz", s.drive.statusLabel)
+        assertEquals("Live", s.drive.statusLabel)
+        assertFalse(s.charge.connecting)
     }
 
     @Test
