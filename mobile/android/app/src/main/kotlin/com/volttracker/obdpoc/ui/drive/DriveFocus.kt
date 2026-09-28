@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -38,6 +37,7 @@ import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
 
 /** Number + small muted unit, the mockups' `<b>12.4</b><small> mi</small>` pairing. */
@@ -82,7 +82,7 @@ internal fun Meter(
             modifier
                 .fillMaxWidth()
                 .height(height.dp)
-                .clip(RoundedCornerShape(50))
+                .clip(VoltShapes.chip)
                 .background(VoltColors.track),
     ) {
         if (fraction > 0f) {
@@ -90,7 +90,7 @@ internal fun Meter(
                 Modifier
                     .fillMaxWidth(fraction.coerceIn(0f, 1f))
                     .height(height.dp)
-                    .clip(RoundedCornerShape(50))
+                    .clip(VoltShapes.chip)
                     .background(color),
             )
         }
@@ -192,7 +192,7 @@ internal fun StatTile(
     Column(
         modifier =
             modifier
-                .voltCard(radius = 16.dp)
+                .voltCard(radius = VoltShapes.TileRadius)
                 .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 11.dp),
     ) {
         VoltLabel(label)
@@ -301,13 +301,14 @@ internal fun EngineOnToast(
     atReserve: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = VoltShapes.tile
     val bg = if (VoltColors.isDark) VoltColors.surface3 else VoltColors.surface
+    val shadow = VoltColors.cardShadow
     Row(
         modifier =
             modifier
                 .fillMaxWidth()
-                .shadow(12.dp, shape, ambientColor = TOAST_SHADOW, spotColor = TOAST_SHADOW)
+                .shadow(12.dp, shape, ambientColor = shadow, spotColor = shadow)
                 .clip(shape)
                 .background(bg)
                 .border(1.dp, VoltColors.gas.copy(alpha = 0.35f), shape)
@@ -337,5 +338,4 @@ internal fun EngineOnToast(
     }
 }
 
-private val TOAST_SHADOW = Color(0x59000000)
 private const val DIM_ALPHA = 0.5f

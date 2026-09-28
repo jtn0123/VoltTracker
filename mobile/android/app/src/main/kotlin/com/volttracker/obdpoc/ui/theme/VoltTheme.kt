@@ -10,6 +10,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
@@ -64,6 +65,27 @@ data class VoltPalette(
     /** Neutral chart series with no status meaning (terrain/elevation). */
     val neutralSeries: Color = if (isDark) lerp(muted, faint, NEUTRAL_MIX) else faint
 
+    /**
+     * The accent is a neutral close to the body text (OLED Mono White), so accent-tinted selection
+     * reads as plain text: on-states are drawn filled in [volt] with [onVolt] content instead.
+     */
+    val monoAccent: Boolean =
+        maxOf(volt.red, volt.green, volt.blue) - minOf(volt.red, volt.green, volt.blue) < MONO_ACCENT_CHROMA &&
+            contrastRatio(volt, text) < MONO_ACCENT_CONTRAST
+
+    /**
+     * Settings → High contrast: faint text takes the muted tone, muted moves toward the body text,
+     * and hairlines / gauge tracks roughly double in strength. Status and accent colors stay put.
+     */
+    fun highContrast(): VoltPalette =
+        copy(
+            muted = lerp(muted, text, HC_MUTED_TO_TEXT),
+            faint = muted,
+            line = line.copy(alpha = (line.alpha * HC_LINE_GAIN).coerceAtMost(1f)),
+            line2 = line2.copy(alpha = (line2.alpha * HC_LINE_GAIN).coerceAtMost(1f)),
+            track = track.copy(alpha = (track.alpha * HC_LINE_GAIN).coerceAtMost(1f)),
+        )
+
     // Same names as [VoltColors], so drawing code can swap `VoltColors.x` for a captured `pal.x`.
     val surfaceElevated: Color get() = surface2
     val hairline: Color get() = line
@@ -96,6 +118,10 @@ data class VoltPalette(
         private const val EV_BRIGHT_LIGHT = 0.3f
         private const val EV_DIM = 0.5f
         private const val NEUTRAL_MIX = 0.5f
+        private const val MONO_ACCENT_CONTRAST = 1.5
+        private const val MONO_ACCENT_CHROMA = 0.1f
+        private const val HC_MUTED_TO_TEXT = 0.4f
+        private const val HC_LINE_GAIN = 2.2f
     }
 }
 
@@ -153,6 +179,11 @@ object VoltColors {
     val accent: Color
         @Composable @ReadOnlyComposable
         get() = p.volt
+
+    /** See [VoltPalette.monoAccent]: selection must be drawn filled, not accent-tinted. */
+    val monoAccent: Boolean
+        @Composable @ReadOnlyComposable
+        get() = p.monoAccent
 
     /** Filled-accent track (e.g. a switch that is on). */
     val accentDim: Color
@@ -241,12 +272,16 @@ fun voltPalette(
     dark: Boolean,
     style: DarkStyle = DarkStyle.OLED,
     accent: OledAccent = OledAccent.CYAN,
-): VoltPalette =
-    when {
-        !dark -> VoltPalette.Latte
-        style == DarkStyle.SADDLE -> VoltPalette.Saddle
-        else -> VoltPalette.oled(accent)
-    }
+    highContrast: Boolean = false,
+): VoltPalette {
+    val base =
+        when {
+            !dark -> VoltPalette.Latte
+            style == DarkStyle.SADDLE -> VoltPalette.Saddle
+            else -> VoltPalette.oled(accent)
+        }
+    return if (highContrast) base.highContrast() else base
+}
 
 private fun materialScheme(p: VoltPalette): ColorScheme =
     if (p.isDark) {
@@ -282,16 +317,18 @@ private fun materialScheme(p: VoltPalette): ColorScheme =
 /**
  * VoltTracker's Compose theme. Follows the system dark/light setting unless the user picked a
  * fixed [appearance]; dark renders in [darkStyle] (and, for OLED Black, [accent]) — all three
- * are Settings → Appearance choices.
+ * are Settings → Appearance choices, as is [highContrast] (see [VoltPalette.highContrast]).
  */
 @Composable
 fun VoltTheme(
     appearance: AppearanceMode = AppearanceMode.SYSTEM,
     darkStyle: DarkStyle = DarkStyle.OLED,
     accent: OledAccent = OledAccent.CYAN,
+    highContrast: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    val palette = voltPalette(appearance.resolvesDark(isSystemInDarkTheme()), darkStyle, accent)
+    val dark = appearance.resolvesDark(isSystemInDarkTheme())
+    val palette = remember(dark, darkStyle, accent, highContrast) { voltPalette(dark, darkStyle, accent, highContrast) }
     CompositionLocalProvider(LocalVoltPalette provides palette) {
         MaterialTheme(
             colorScheme = materialScheme(palette),

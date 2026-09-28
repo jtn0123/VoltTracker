@@ -235,15 +235,13 @@ private fun Buttons(
             text = scanLabel,
             accent = true,
             icon = VoltIcons.Scan,
-            height = 48.dp,
             modifier = scanModifier.weight(1f),
             onClick = scan,
         )
         if (hasCodes) {
             VoltButton(
                 text = "Share report",
-                style = ButtonStyle.GHOST,
-                height = 48.dp,
+                style = ButtonStyle.SECONDARY,
                 modifier = Modifier.weight(1f),
                 onClick = onShare,
             )

@@ -29,6 +29,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
@@ -49,6 +53,7 @@ import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 
@@ -168,8 +173,9 @@ private fun TripRow(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val shape = RoundedCornerShape(16.dp)
+    val shape = VoltShapes.tile
     val mode = trip.mode
+    val bar = VoltColors.accent
     Row(
         modifier =
             Modifier
@@ -177,7 +183,20 @@ private fun TripRow(
                 .clip(shape)
                 .then(
                     if (selected) {
-                        Modifier.background(VoltColors.surface).border(1.dp, VoltColors.hairline, shape)
+                        // Card fill, a visible outline and an accent bar: the plain card on the
+                        // OLED canvas alone was too subtle to mark the selected drive.
+                        Modifier
+                            .background(VoltColors.surface)
+                            .border(1.dp, VoltColors.line2, shape)
+                            .drawBehind {
+                                val w = SELECTED_BAR.toPx()
+                                drawRoundRect(
+                                    color = bar,
+                                    topLeft = Offset(0f, size.height * SELECTED_BAR_INSET),
+                                    size = Size(w, size.height * (1 - 2 * SELECTED_BAR_INSET)),
+                                    cornerRadius = CornerRadius(w / 2),
+                                )
+                            }
                     } else {
                         Modifier
                     },
@@ -266,3 +285,6 @@ private const val SPLIT_MIN = 0.02f
 private fun TripsScreenPreview() {
     VoltTheme { TripsScreen(TripsUiState.demo) }
 }
+
+private val SELECTED_BAR = 3.dp
+private const val SELECTED_BAR_INSET = 0.22f

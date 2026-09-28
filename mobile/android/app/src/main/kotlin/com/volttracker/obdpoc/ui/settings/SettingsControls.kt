@@ -12,8 +12,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
@@ -37,11 +35,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.BRIDGE_MAX_PASSPHRASE_LEN
-import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltSegmented
+import com.volttracker.obdpoc.ui.components.VoltSwitch
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltType
 
 // The building blocks the Settings detail pages are made of.
@@ -73,32 +72,6 @@ internal fun SettingRow(
     }
 }
 
-/** Compact on/off pill — reads as a switch without Material's large thumb. */
-@Composable
-internal fun TogglePill(on: Boolean) {
-    Row(
-        modifier =
-            Modifier
-                .clip(RoundedCornerShape(50))
-                .background(if (on) VoltColors.accentDim else VoltColors.surfaceElevated)
-                .padding(horizontal = 10.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Spacer(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (on) VoltColors.accent else VoltColors.textTertiary),
-        )
-        Text(
-            text = if (on) "On" else "Off",
-            style = VoltType.caption,
-            color = if (on) VoltColors.textPrimary else VoltColors.textSecondary,
-        )
-    }
-}
-
 /** A whole row that flips a switch: TalkBack reads it as one switch with its label. */
 @Composable
 internal fun ToggleRow(
@@ -111,7 +84,7 @@ internal fun ToggleRow(
         label = label,
         subtitle = subtitle,
         modifier = Modifier.toggleable(value = on, role = Role.Switch, onValueChange = onChange),
-    ) { TogglePill(on) }
+    ) { VoltSwitch(on) }
 }
 
 @Composable
@@ -162,8 +135,9 @@ internal fun ChoiceRow(
     VoltSegmented(
         options = options,
         selectedIndex = selectedIndex,
+        role = Role.RadioButton,
         onSelect = onSelect,
-        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
     )
 }
 
@@ -211,17 +185,11 @@ internal fun NumberEditor(
         onDismiss = onDismiss,
         leading = {
             if (field.clearable) {
-                VoltButton(text = "Clear", style = ButtonStyle.GHOST, height = 38.dp, onClick = { onSave(null) })
+                VoltButton(text = "Clear", onClick = { onSave(null) })
             }
         },
         confirm = {
-            VoltButton(text = "Save", accent = parsed != null, height = 38.dp, onClick = {
-                if (parsed !=
-                    null
-                ) {
-                    onSave(parsed)
-                }
-            })
+            VoltButton(text = "Save", accent = parsed != null, onClick = { parsed?.let(onSave) })
         },
     )
 }
@@ -250,7 +218,6 @@ internal fun PassphraseEditor(
             VoltButton(
                 text = confirmLabel,
                 accent = true,
-                height = 38.dp,
                 onClick = { onConfirm(text.ifBlank { null }) },
             )
         },
@@ -275,7 +242,7 @@ private fun InlineEditor(
             Modifier
                 .fillMaxWidth()
                 .padding(bottom = 12.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .clip(VoltShapes.control)
                 .background(VoltColors.surfaceElevated)
                 .padding(14.dp),
     ) {
@@ -292,7 +259,7 @@ private fun InlineEditor(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .border(1.dp, VoltColors.line2, RoundedCornerShape(12.dp))
+                    .border(1.dp, VoltColors.line2, VoltShapes.field)
                     .padding(horizontal = 14.dp, vertical = 10.dp)
                     .semantics { contentDescription = fieldDescription }
                     .testTag("settings-number-input"),
@@ -301,7 +268,7 @@ private fun InlineEditor(
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             leading()
             Spacer(Modifier.weight(1f))
-            VoltButton(text = "Cancel", style = ButtonStyle.GHOST, height = 38.dp, onClick = onDismiss)
+            VoltButton(text = "Cancel", onClick = onDismiss)
             confirm()
         }
     }

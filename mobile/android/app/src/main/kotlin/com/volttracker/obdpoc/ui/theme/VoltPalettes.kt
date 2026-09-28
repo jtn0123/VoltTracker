@@ -8,6 +8,10 @@ import androidx.compose.ui.graphics.isSpecified
  * each. Every CSS `--token` maps 1:1 onto the VoltPalette field of the same name; `rgba()`
  * hairlines keep their tint and alpha. `--shadow` is [VoltPalette.cardShadow]: none on the dark
  * themes, the warm two-layer card shadow on Latte.
+ *
+ * Legibility deviations from the CSS (WCAG AA, 4.5:1 for small text on the cards): OLED and Saddle
+ * `faint` are ~10% lighter, and Latte's `faint`, `ev`, `gas`, `warn` and `bad` are deepened.
+ * PaletteContrastTest pins every text/tone token against the surfaces it sits on.
  */
 
 /** OLED Black (`[data-theme^=oled]`) with the default Cyan accent. */
@@ -24,7 +28,7 @@ internal val OledCyanPalette =
         track = Color.White.copy(alpha = 0.08f),
         text = Color(0xFFF4F6F8),
         muted = Color(0xFF9A9FA6),
-        faint = Color(0xFF6A7078),
+        faint = Color(0xFF7E848C),
         volt = OledAccent.CYAN.volt,
         onVolt = OledAccent.CYAN.onVolt,
         ev = Color(0xFF3DF08A),
@@ -70,7 +74,7 @@ internal val SaddlePalette =
         track = leather.copy(alpha = 0.08f),
         text = Color(0xFFF2ECE3),
         muted = Color(0xFFAA9E8E),
-        faint = Color(0xFF7C715F),
+        faint = Color(0xFF8E826F),
         volt = Color(0xFFC8955A),
         onVolt = Color(0xFF1F1206),
         ev = Color(0xFF7ED492),
@@ -102,13 +106,13 @@ internal val LattePalette =
         track = coffee.copy(alpha = 0.09f),
         text = Color(0xFF2A1E14),
         muted = Color(0xFF6E5D4C),
-        faint = Color(0xFF9A8671),
+        faint = Color(0xFF776450),
         volt = Color(0xFF8A5A2B),
         onVolt = Color(0xFFFFFFFF),
-        ev = Color(0xFF2F8A4A),
-        gas = Color(0xFFD0561A),
-        warn = Color(0xFFA87B00),
-        bad = Color(0xFFC0392B),
+        ev = Color(0xFF237038),
+        gas = Color(0xFFA8420E),
+        warn = Color(0xFF7D5C00),
+        bad = Color(0xFFB0342A),
         carBody = Color(0xFFE6D9C7),
         carLine = coffee.copy(alpha = 0.22f),
         carGlass = Color(0xFFCDBBA3),

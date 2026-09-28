@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -32,6 +33,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltSpacing
 import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
@@ -67,7 +69,7 @@ fun VoltAppBar(
 ) {
     val nav = LocalVoltNav.current
     Row(
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 8.dp),
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -105,7 +107,7 @@ private fun StatusDot(dot: AppBarDot) {
     )
 }
 
-/** 40dp round icon button on a card-colored disc (mockups `.iconbtn`). */
+/** 40dp round icon button on a card-colored disc (mockups `.iconbtn`), in a 48dp touch target. */
 @Composable
 fun IconCircleButton(
     icon: ImageVector,
@@ -118,6 +120,7 @@ fun IconCircleButton(
     Box(
         modifier =
             modifier
+                .minimumInteractiveComponentSize()
                 .size(40.dp)
                 .clip(CircleShape)
                 .background(VoltColors.surface)
@@ -173,7 +176,7 @@ fun VoltScreen(
 }
 
 /** Page side margin (mockups `.content { padding: 0 16px }`). */
-val SCREEN_MARGIN = 16.dp
+val SCREEN_MARGIN = VoltSpacing.screen
 
 /** Status-dot convention for a connection label: live Volt-green when connected, faint otherwise. */
 @Composable

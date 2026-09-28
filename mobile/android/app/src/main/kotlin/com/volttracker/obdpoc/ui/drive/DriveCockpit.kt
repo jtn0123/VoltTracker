@@ -45,6 +45,8 @@ import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltFonts
+import com.volttracker.obdpoc.ui.theme.VoltShapes
+import com.volttracker.obdpoc.ui.theme.VoltSpacing
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
 import kotlin.math.abs
@@ -105,7 +107,7 @@ private fun CockpitRow(content: @Composable RowScope.() -> Unit) {
 @Composable
 private fun CockpitCard(
     modifier: Modifier = Modifier,
-    radius: Dp = 16.dp,
+    radius: Dp = VoltShapes.TileRadius,
     padding: Dp = 12.dp,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -165,7 +167,7 @@ private fun MainCard(state: DriveUiState) {
     val pal = LocalVoltPalette.current
     val driving = state.phase == DrivePhase.DRIVE
     val charging = state.phase == DrivePhase.CHARGING
-    CockpitCard(radius = 18.dp, padding = 14.dp) {
+    CockpitCard(radius = VoltShapes.CardRadius, padding = VoltSpacing.tile) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -507,7 +509,7 @@ private fun SmallCard(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Column(
-        modifier = modifier.voltCard(radius = 14.dp).padding(horizontal = 12.dp, vertical = 10.dp),
+        modifier = modifier.voltCard(radius = VoltShapes.TileRadius).padding(horizontal = 12.dp, vertical = 10.dp),
     ) {
         VoltLabel(label)
         content()
