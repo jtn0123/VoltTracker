@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
@@ -159,9 +160,11 @@ private fun CapRow(
     right: String,
     rightColor: Color = VoltColors.textTertiary,
 ) {
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        VoltLabel(left)
-        VoltLabel(right, Modifier.padding(start = 6.dp).weight(1f, fill = false), color = rightColor, ellipsize = true)
+    // The right label drops to its own line when both don't fit (large text in a half-width
+    // card) instead of being cut to "#4…" / "T…".
+    FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        VoltLabel(left, Modifier.padding(end = 6.dp))
+        if (right.isNotEmpty()) VoltLabel(right, color = rightColor)
     }
 }
 
@@ -172,7 +175,12 @@ private fun KvRow(
     modifier: Modifier = Modifier,
     colors: List<Color?> = emptyList(),
 ) {
-    Row(modifier = modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+    // Spread across the card, wrapping onto a second line at large text rather than cutting
+    // "356.4 V" to "356…".
+    FlowRow(
+        modifier = modifier.fillMaxWidth().padding(top = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
         items.forEachIndexed { i, text ->
             Text(
                 text = text,
@@ -184,9 +192,8 @@ private fun KvRow(
                     ),
                 color = colors.getOrNull(i) ?: VoltColors.textSecondary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                // Each item gets its share of the row, so a long first one can't squeeze the rest out.
-                modifier = Modifier.weight(1f, fill = false).padding(start = if (i == 0) 0.dp else 6.dp),
+                softWrap = false,
+                modifier = Modifier.padding(end = if (i == items.lastIndex) 0.dp else 6.dp),
             )
         }
     }

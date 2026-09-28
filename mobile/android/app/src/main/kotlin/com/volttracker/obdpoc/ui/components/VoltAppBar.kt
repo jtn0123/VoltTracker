@@ -66,6 +66,7 @@ fun VoltAppBar(
     dot: AppBarDot? = null,
     onBack: (() -> Unit)? = null,
     showGear: Boolean = true,
+    statusSubtitle: Boolean = false,
     actions: @Composable RowScope.() -> Unit = {},
 ) {
     val nav = LocalVoltNav.current
@@ -86,10 +87,13 @@ fun VoltAppBar(
                 overflow = TextOverflow.Ellipsis,
             )
             val demo = LocalVoltPrefs.current.demo
-            if (subtitle != null || demo) {
+            // Demo data must never pass for a live car: no live dot, and no adapter in the subtitle.
+            val shownDot = dot.takeUnless { demo }
+            val shownSubtitle = appBarSubtitle(subtitle, statusSubtitle, demo)
+            if (shownSubtitle != null || demo) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (dot != null) {
-                        StatusDot(dot)
+                    if (shownDot != null) {
+                        StatusDot(shownDot)
                         Spacer(Modifier.size(6.dp))
                     }
                     // Demo data must never pass for the car's: every header flags it.
@@ -97,9 +101,9 @@ fun VoltAppBar(
                         VoltPill("Demo", PillTone.DEMO, dot = false, small = true)
                         Spacer(Modifier.size(6.dp))
                     }
-                    if (subtitle != null) {
+                    if (shownSubtitle != null) {
                         Text(
-                            text = subtitle,
+                            text = shownSubtitle,
                             style = VoltType.caption,
                             color = VoltColors.textSecondary,
                             maxLines = 1,
@@ -171,6 +175,7 @@ fun VoltScreen(
     dot: AppBarDot? = null,
     onBack: (() -> Unit)? = null,
     showGear: Boolean = true,
+    statusSubtitle: Boolean = false,
     contentPadding: Dp = SCREEN_MARGIN,
     scrollState: ScrollState = rememberScrollState(),
     actions: @Composable RowScope.() -> Unit = {},
@@ -189,12 +194,32 @@ fun VoltScreen(
             dot = dot,
             onBack = onBack,
             showGear = showGear,
+            statusSubtitle = statusSubtitle,
             actions = actions,
             modifier = Modifier.padding(horizontal = SCREEN_MARGIN),
         )
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding), content = content)
     }
 }
+
+/**
+ * The app-bar subtitle as shown. During the demo a connection status ([statusSubtitle]: Drive,
+ * Charge) becomes "Sample data", and any other subtitle gets it as a prefix, so no header names an
+ * adapter or claims a live link while sample data is on screen.
+ */
+fun appBarSubtitle(
+    subtitle: String?,
+    statusSubtitle: Boolean,
+    demo: Boolean,
+): String? =
+    when {
+        !demo || subtitle == null -> subtitle
+        statusSubtitle -> DEMO_SUBTITLE
+        else -> "$DEMO_SUBTITLE · $subtitle"
+    }
+
+/** What every header says while the Demo / Testing stream is on screen. */
+const val DEMO_SUBTITLE = "Sample data"
 
 /** Page side margin (mockups `.content { padding: 0 16px }`). */
 val SCREEN_MARGIN = VoltSpacing.screen

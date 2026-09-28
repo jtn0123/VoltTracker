@@ -35,7 +35,7 @@ class PolishScreenshotTest(
     @Test
     fun capture() {
         val shot = CASES.getValue(case)
-        if (shot.narrow) RuntimeEnvironment.setQualifiers("w360dp-h800dp-420dpi")
+        if (shot.narrow) RuntimeEnvironment.setQualifiers("w360dp-h1200dp-420dpi")
         val state = shot.state.copy(settings = theme.applyTo(shot.state.settings))
         compose.setContent { VoltApp(state, initialTab = shot.tab) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/polish-$case-${theme.key}.png")
@@ -44,7 +44,7 @@ class PolishScreenshotTest(
     private class Shot(
         val tab: VoltTab,
         val state: VoltAppUiState,
-        /** A 360dp phone at Settings → Text size → Largest (1.5×). */
+        /** A 360dp phone at Settings → Text size → Largest (1.5×), tall enough to show the lower cards. */
         val narrow: Boolean = false,
     )
 
@@ -54,6 +54,12 @@ class PolishScreenshotTest(
         private val CASES =
             mapOf(
                 "drive-demo" to Shot(VoltTab.DRIVE, VoltAppUiState(drive = DriveUiState.demo, settings = DEMO)),
+                "cockpit-demo" to
+                    Shot(
+                        VoltTab.DRIVE,
+                        VoltAppUiState(drive = DriveUiState.demo.copy(detailed = true), settings = DEMO),
+                    ),
+                "charge-demo" to Shot(VoltTab.CHARGE, VoltAppUiState(charge = ChargeUiState.demo, settings = DEMO)),
                 "trips-demo" to Shot(VoltTab.TRIPS, VoltAppUiState(trips = TripsUiState.demo, settings = DEMO)),
                 "drive-large" to
                     Shot(VoltTab.DRIVE, VoltAppUiState(drive = DriveUiState.demo, settings = LARGE), narrow = true),
