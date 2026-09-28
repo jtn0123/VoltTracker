@@ -46,7 +46,18 @@ class ComposeSettingsStoreTest {
                         ensureNotificationPermission = { permissionRequests++ },
                     ),
                 experience = experience,
+                formatDateTime = { "at $it" },
             )
+    }
+
+    @Test
+    fun theLastBackupLineComesFromTheBackupReceipt() {
+        assertEquals(SettingsUiState.NO_BACKUP, store.read(SettingsUiState()).lastBackupLabel)
+        prefs.edit {
+            putLong(BackupController.PREF_LAST_BACKUP_AT_MS, 1_000L)
+            putInt(BackupController.PREF_LAST_BACKUP_TRIPS, 42)
+        }
+        assertEquals("Last backup at 1000 · 42 trips", store.read(SettingsUiState()).lastBackupLabel)
     }
 
     @Test

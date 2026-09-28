@@ -13,6 +13,7 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.drive.costLabel
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
+import com.volttracker.obdpoc.ui.settings.SettingsCommand
 import com.volttracker.obdpoc.ui.settings.SettingsPage
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
@@ -35,6 +36,7 @@ class SettingsScreenTest {
     val compose = createComposeRule()
 
     private val changes = mutableListOf<SettingChange>()
+    private val commands = mutableListOf<SettingsCommand>()
 
     private fun show(
         page: SettingsPage,
@@ -42,7 +44,15 @@ class SettingsScreenTest {
     ) {
         compose.setContent {
             VoltTheme {
-                SettingsScreen(state, initialPage = page, actions = SettingsActions(onChange = { changes += it }))
+                SettingsScreen(
+                    state,
+                    initialPage = page,
+                    actions =
+                        SettingsActions(onChange = { changes += it }, onCommand = {
+                            commands +=
+                                it
+                        }),
+                )
             }
         }
     }
@@ -68,6 +78,61 @@ class SettingsScreenTest {
         show(SettingsPage.CONNECTION, SettingsUiState.demo.copy(autoConnect = false))
         compose.onNodeWithText("Auto-connect").performClick()
         assertEquals(listOf<SettingChange>(SettingChange.AutoConnect(true)), changes)
+    }
+
+    @Test
+    fun connectionToolsRunTheirCommands() {
+        show(SettingsPage.CONNECTION)
+        compose.onNodeWithText("Test connection").performClick()
+        compose.onNodeWithText("Send diagnostics").performClick()
+        compose.onNodeWithText("Wait for adapter").performClick()
+        compose.onNodeWithText("30 min").performClick()
+        assertEquals(
+            listOf(
+                SettingsCommand.TestConnection,
+                SettingsCommand.SendDiagnostics,
+                SettingsCommand.WaitForAdapter(on = true, minutes = 10),
+                SettingsCommand.WaitForAdapter(on = false, minutes = 30),
+            ),
+            commands,
+        )
+    }
+
+    @Test
+    fun waitingForAdapterShowsItIsCheckingAndTurnsOff() {
+        show(SettingsPage.CONNECTION, SettingsUiState.demo.copy(waitingForAdapter = true, adapterWaitMins = 15))
+        compose.onNodeWithText("Checking every 30 s for 15 min · notifies when ready").assertIsDisplayed()
+        compose.onNodeWithText("Wait for adapter").performClick()
+        assertEquals(listOf<SettingsCommand>(SettingsCommand.WaitForAdapter(on = false, minutes = 15)), commands)
+    }
+
+    @Test
+    fun dataBacksUpWithAnOptionalPassphrase() {
+        show(
+            SettingsPage.DATA,
+            SettingsUiState.demo.copy(lastBackupLabel = "Last backup today", dataTaskLabel = "Preparing backup · 40%"),
+        )
+        compose.onNodeWithText("Last backup today").assertIsDisplayed()
+        compose.onNodeWithText("Preparing backup · 40%").assertIsDisplayed()
+        compose.onNodeWithText("Back up").performClick()
+        typeAndTap(null, "Back up now")
+        compose.onNodeWithText("Back up").performClick()
+        typeAndTap("correct horse", "Back up now")
+        assertEquals(
+            listOf(SettingsCommand.BackUp(null), SettingsCommand.BackUp("correct horse")),
+            commands,
+        )
+    }
+
+    @Test
+    fun dataRestoresAndExports() {
+        show(SettingsPage.DATA)
+        compose.onNodeWithText("Restore").performClick()
+        typeAndTap(null, "Choose file")
+        compose.onNodeWithText("Restore").performClick()
+        typeAndTap(null, "Cancel")
+        compose.onNodeWithText("Export").performClick()
+        assertEquals(listOf(SettingsCommand.Restore(null), SettingsCommand.ExportTrips), commands)
     }
 
     @Test

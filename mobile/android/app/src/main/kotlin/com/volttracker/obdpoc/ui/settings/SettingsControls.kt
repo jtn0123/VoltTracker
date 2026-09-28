@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -32,7 +33,10 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.BRIDGE_MAX_PASSPHRASE_LEN
 import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltIcons
@@ -198,6 +202,74 @@ internal fun NumberEditor(
 ) {
     var text by rememberSaveable(field.title) { mutableStateOf(initial?.let(SettingsUiState::formatNumber).orEmpty()) }
     val parsed = field.parse(text)
+    InlineEditor(
+        caption = field.rangeLabel,
+        text = text,
+        onTextChange = { text = it.take(MAX_CHARS) },
+        fieldDescription = field.title,
+        keyboardType = KeyboardType.Decimal,
+        onDismiss = onDismiss,
+        leading = {
+            if (field.clearable) {
+                VoltButton(text = "Clear", style = ButtonStyle.GHOST, height = 38.dp, onClick = { onSave(null) })
+            }
+        },
+        confirm = {
+            VoltButton(text = "Save", accent = parsed != null, height = 38.dp, onClick = {
+                if (parsed !=
+                    null
+                ) {
+                    onSave(parsed)
+                }
+            })
+        },
+    )
+}
+
+/**
+ * An inline, masked passphrase entry for backup and restore. [onConfirm] gets null when it was
+ * left blank. The passphrase lives only in this composable's state (never saved across process death).
+ */
+@Composable
+internal fun PassphraseEditor(
+    hint: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String?) -> Unit,
+) {
+    var text by remember { mutableStateOf("") }
+    InlineEditor(
+        caption = hint,
+        text = text,
+        onTextChange = { text = it.take(BRIDGE_MAX_PASSPHRASE_LEN) },
+        fieldDescription = "Passphrase",
+        keyboardType = KeyboardType.Password,
+        visualTransformation = PasswordVisualTransformation(),
+        onDismiss = onDismiss,
+        confirm = {
+            VoltButton(
+                text = confirmLabel,
+                accent = true,
+                height = 38.dp,
+                onClick = { onConfirm(text.ifBlank { null }) },
+            )
+        },
+    )
+}
+
+/** The shared chrome of the inline editors: caption, one text field, and a button row. */
+@Composable
+private fun InlineEditor(
+    caption: String,
+    text: String,
+    onTextChange: (String) -> Unit,
+    fieldDescription: String,
+    keyboardType: KeyboardType,
+    onDismiss: () -> Unit,
+    confirm: @Composable () -> Unit,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
+    leading: @Composable () -> Unit = {},
+) {
     Column(
         modifier =
             Modifier
@@ -207,36 +279,30 @@ internal fun NumberEditor(
                 .background(VoltColors.surfaceElevated)
                 .padding(14.dp),
     ) {
-        Text(text = field.rangeLabel, style = VoltType.caption, color = VoltColors.textTertiary)
+        Text(text = caption, style = VoltType.caption, color = VoltColors.textTertiary)
         Spacer(Modifier.height(8.dp))
         BasicTextField(
             value = text,
-            onValueChange = { text = it.take(MAX_CHARS) },
+            onValueChange = onTextChange,
             singleLine = true,
             textStyle = VoltType.value.copy(color = VoltColors.textPrimary),
             cursorBrush = SolidColor(VoltColors.accent),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+            visualTransformation = visualTransformation,
             modifier =
                 Modifier
                     .fillMaxWidth()
                     .border(1.dp, VoltColors.line2, RoundedCornerShape(12.dp))
                     .padding(horizontal = 14.dp, vertical = 10.dp)
-                    .semantics { contentDescription = field.title }
+                    .semantics { contentDescription = fieldDescription }
                     .testTag("settings-number-input"),
         )
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (field.clearable) {
-                VoltButton(text = "Clear", style = ButtonStyle.GHOST, height = 38.dp, onClick = { onSave(null) })
-            }
+            leading()
             Spacer(Modifier.weight(1f))
             VoltButton(text = "Cancel", style = ButtonStyle.GHOST, height = 38.dp, onClick = onDismiss)
-            VoltButton(
-                text = "Save",
-                accent = parsed != null,
-                height = 38.dp,
-                onClick = { if (parsed != null) onSave(parsed) },
-            )
+            confirm()
         }
     }
 }

@@ -133,7 +133,7 @@ interface EventNotificationCommands {
 interface BridgeStateProvider {
     fun requireDataBackup(): DataBackup
 
-    fun requireBackupController(): BackupController
+    fun requireBackupController(): BackupController<*>
 
     fun getAppStateJson(): String
 
@@ -268,9 +268,10 @@ interface DashboardHost :
     AutoConnectCommands,
     DashboardStatePublisher,
     SessionDataReader,
-    BridgeStateProvider {
+    BridgeStateProvider,
+    TripExportHost {
     /** Hands an [Intent] to the platform; used for the external DTC search. */
-    fun startActivity(intent: Intent?)
+    override fun startActivity(intent: Intent?)
 
     /**
      * Publish a transient action-confirmation status (trip favorite/label edits, maintenance

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.Manifest
+import android.app.Activity
 import android.app.ActivityManager
 import android.app.AlertDialog
 import android.app.NotificationManager
@@ -20,12 +21,13 @@ import org.json.JSONObject
 import java.util.Locale
 
 /**
- * Extracted from [MainActivity] so the Activity no longer owns the troubleshooter /
- * notify-when-ready bridge state directly.
+ * Test connection, notify-when-ready ("wait for adapter"), connection recovery and the diagnostics
+ * share. Either dashboard Activity can host it through [TroubleshooterHost]; the ready
+ * notification reopens the Activity that armed it.
  */
-class TroubleshooterBridge(
-    private val activity: MainActivity,
-) {
+class TroubleshooterBridge<A>(
+    private val activity: A,
+) where A : Activity, A : TroubleshooterHost {
     private var adapterReadyDeadlineMs = 0L
 
     @Volatile private var adapterReadyActive = false
@@ -61,7 +63,7 @@ class TroubleshooterBridge(
         }
 
     /**
-     * Drain both internal handlers. Called from [MainActivity.onDestroy].
+     * Drain both internal handlers. Called from the host Activity's onDestroy.
      */
     fun shutdown() {
         adapterReadyHandler?.removeCallbacksAndMessages(null)
@@ -69,7 +71,7 @@ class TroubleshooterBridge(
     }
 
     /**
-     * Called from [MainActivity.startObdService] so any pending test-connection auto-stop is
+     * Called when the host starts the service (e.g. [MainActivity.startObdService]) so any pending test-connection auto-stop is
      * dropped before a fresh connect kicks off.
      */
     fun clearPendingTestConnectionStop() {
@@ -310,6 +312,9 @@ class TroubleshooterBridge(
         adapterReadyHandler?.post(adapterReadyTick)
     }
 
+    /** Whether a notify-when-ready schedule is still probing (armed and not past its deadline). */
+    fun isAdapterReadyScheduled(): Boolean = adapterReadyActive && System.currentTimeMillis() < adapterReadyDeadlineMs
+
     /**
      * Cancel a running notify-when-ready schedule.
      */
@@ -363,7 +368,7 @@ class TroubleshooterBridge(
                 EventNotifier.ensureChannel(activity)
                 val open =
                     Intent()
-                        .setClass(activity, MainActivity::class.java)
+                        .setClass(activity, activity.javaClass)
                         .setPackage(activity.packageName)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                 val tap =

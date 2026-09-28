@@ -42,7 +42,7 @@ import java.lang.reflect.Modifier
 @Config(sdk = [34])
 class TroubleshooterBridgeTest {
     private var controller: ActivityController<HarnessActivity>? = null
-    private var bridge: TroubleshooterBridge? = null
+    private var bridge: TroubleshooterBridge<*>? = null
 
     @Before
     fun setUp() {

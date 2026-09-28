@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import android.content.Context
 import android.util.Log
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
@@ -17,10 +18,10 @@ import java.io.IOException
  * The cancellation gate is a lambda because the controller owns the disposed flag and the
  * pipeline must also observe the worker thread's interrupt state at call time.
  */
-class RestoreApplyPipeline(
-    private val activity: MainActivity,
+class RestoreApplyPipeline<A>(
+    private val activity: A,
     private val isCancelled: () -> Boolean,
-) {
+) where A : Context, A : BackupHost {
     enum class Result {
         OK,
         INVALID_FILE,

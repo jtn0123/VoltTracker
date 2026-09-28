@@ -10,7 +10,7 @@ package com.volttracker.obdpoc
  * so the delegate never caches a stale collaborator across a restore.
  */
 class DiagnosticsHostDelegate(
-    private val troubleshooter: () -> TroubleshooterBridge,
+    private val troubleshooter: () -> TroubleshooterBridge<*>,
     private val openSetupGuide: () -> Unit,
 ) : DiagnosticsCommands {
     override fun forceStopPackageFromBridge(packageName: String?): Boolean =

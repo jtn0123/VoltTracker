@@ -27,7 +27,7 @@ import java.io.File
 class RestoreApplyPipelineTest {
     private lateinit var controller: ActivityController<HarnessActivity>
     private lateinit var activity: HarnessActivity
-    private lateinit var pipeline: RestoreApplyPipeline
+    private lateinit var pipeline: RestoreApplyPipeline<HarnessActivity>
     private lateinit var presenter: BackupRestoreProgressPresenter
 
     @Before

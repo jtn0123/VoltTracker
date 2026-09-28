@@ -9,6 +9,7 @@ import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -39,7 +40,7 @@ import java.time.Duration
 class TroubleshooterBridgeConnectionTest {
     private var controller: ActivityController<HarnessActivity>? = null
     private lateinit var activity: HarnessActivity
-    private lateinit var bridge: TroubleshooterBridge
+    private lateinit var bridge: TroubleshooterBridge<HarnessActivity>
 
     @Before
     fun setUp() {
@@ -155,6 +156,29 @@ class TroubleshooterBridgeConnectionTest {
         assertEquals(NotificationManager.IMPORTANCE_DEFAULT, channel.importance)
         val posted = shadowOf(nm).allNotifications.firstOrNull { it.channelId == EventNotifier.CHANNEL_ID }
         assertNotNull("the adapter-ready alert must post on EventNotifier.CHANNEL_ID", posted)
+    }
+
+    @Test
+    fun adapterReadyScheduleReportsWhetherItIsStillChecking() {
+        shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
+        activity.requireDeviceCatalog().remember(REMEMBERED_ADDRESS, REMEMBERED_NAME)
+        assertFalse(bridge.isAdapterReadyScheduled())
+
+        bridge.scheduleAdapterReadyNotify(5)
+        assertTrue(bridge.isAdapterReadyScheduled())
+        bridge.cancelAdapterReadyNotify()
+        assertFalse("cancel stops it", bridge.isAdapterReadyScheduled())
+
+        bridge.scheduleAdapterReadyNotify(5)
+        shadowOf(Looper.getMainLooper()).idle()
+        bridge.onAdapterStatusForReadyNotify(connectedStatus(14.2))
+        assertFalse("a ready car ends the wait", bridge.isAdapterReadyScheduled())
+
+        // The alert reopens whichever dashboard armed the wait.
+        val nm = activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val posted = shadowOf(nm).allNotifications.first { it.channelId == EventNotifier.CHANNEL_ID }
+        val opens = shadowOf(posted.contentIntent).savedIntent
+        assertEquals(activity.javaClass.name, opens.component?.className)
     }
 
     @Test

@@ -20,11 +20,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * [BackupRestoreProgressPresenter]; applying a staged restore to the live database lives in
  * [RestoreApplyPipeline].
  */
-class BackupController(
-    private val activity: MainActivity,
+class BackupController<A>(
+    private val activity: A,
     private val dataBackup: DataBackup,
     private val executor: ExecutorService?,
-) {
+) where A : Activity, A : BackupHost {
     private var pendingRestorePassphrase: String? = null
     private var restorePickerInFlight = false
     private val backupShareInFlight = AtomicBoolean(false)
@@ -34,7 +34,7 @@ class BackupController(
     private val restoreApply = RestoreApplyPipeline(activity) { isCancelled() }
 
     /**
-     * Releases this controller's app-log file handle. Called from [MainActivity.onDestroy] so the
+     * Releases this controller's app-log file handle. Called from the host Activity's onDestroy so the
      * long-lived buffered writer (G1) backing [restoreLog] isn't leaked for the rest of the process
      * lifetime; a later backup/restore that logs again simply reopens it lazily.
      */

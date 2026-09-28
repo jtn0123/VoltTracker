@@ -61,6 +61,8 @@ class SettingsActions(
     val onStopDemo: () -> Unit = {},
     /** Every stored-setting edit (toggles, pickers, number editors). */
     val onChange: (SettingChange) -> Unit = {},
+    /** One-off tools: test connection, wait for adapter, diagnostics, backup / restore / export. */
+    val onCommand: (SettingsCommand) -> Unit = {},
 )
 
 /**
@@ -87,12 +89,12 @@ fun SettingsScreen(
     ) {
         when (page) {
             SettingsPage.MAIN -> SettingsIndex(state, open)
-            SettingsPage.CONNECTION -> ConnectionPage(state, actions.onChange)
+            SettingsPage.CONNECTION -> ConnectionPage(state, actions.onChange, actions.onCommand)
             SettingsPage.COSTS -> CostsPage(state, actions.onChange)
             SettingsPage.UNITS -> UnitsPage(state, actions.onChange)
             SettingsPage.APPEARANCE -> AppearancePage(state, actions.onChange)
             SettingsPage.ALERTS -> AlertsPage(state, actions.onChange)
-            SettingsPage.DATA -> DataPage(state)
+            SettingsPage.DATA -> DataPage(state, actions.onCommand)
             SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)
             SettingsPage.ADVANCED -> AdvancedPage(actions.onOpenClassicDashboard)
             SettingsPage.UPDATES -> UpdatesPage(state, actions.onCheckForUpdate, actions.onInstallUpdate)

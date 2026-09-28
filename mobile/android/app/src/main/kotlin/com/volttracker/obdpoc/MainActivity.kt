@@ -42,7 +42,9 @@ import java.util.concurrent.RejectedExecutionException
 
 open class MainActivity :
     ComponentActivity(),
-    DashboardHost {
+    DashboardHost,
+    TroubleshooterHost,
+    BackupHost {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
     private var dashboardRoot: FrameLayout? = null
@@ -202,7 +204,7 @@ open class MainActivity :
 
     @JvmField var dataBackup: DataBackup? = null
 
-    @JvmField var backupController: BackupController? = null
+    @JvmField var backupController: BackupController<*>? = null
 
     @JvmField var permissionGate: PermissionGate? = null
 
@@ -214,7 +216,7 @@ open class MainActivity :
     // existing null checks and RuntimeException handling around store reads.
     @Volatile override var localStore: ObdLocalStore? = null
 
-    @JvmField var troubleshooter: TroubleshooterBridge? = null
+    @JvmField var troubleshooter: TroubleshooterBridge<*>? = null
 
     // Per-trip GPX/CSV export orchestration (read route -> write cache file -> record export ->
     // share). Lazily built so it survives the test seam that skips super.onCreate(); holds the body
@@ -399,7 +401,7 @@ open class MainActivity :
 
     override fun requireDataBackup(): DataBackup = checkNotNull(dataBackup) { "DataBackup is not ready" }
 
-    override fun requireBackupController(): BackupController =
+    override fun requireBackupController(): BackupController<*> =
         checkNotNull(backupController) {
             "BackupController is not ready"
         }
@@ -407,7 +409,7 @@ open class MainActivity :
     override fun requirePermissionGate(): PermissionGate =
         checkNotNull(permissionGate) { "PermissionGate is not ready" }
 
-    fun requireTroubleshooter(): TroubleshooterBridge =
+    fun requireTroubleshooter(): TroubleshooterBridge<*> =
         checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
 
     private fun submitBackground(task: Runnable) {
@@ -482,6 +484,7 @@ open class MainActivity :
         installSplashScreen()
         StartupTrace.mark("activity_on_create_start")
         super.onCreate(savedInstanceState)
+        ClassicDashboardPresence.onCreated()
         dashboardTripDeepLink.capture(intent)
         restoreFilePicker =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult(), this::onRestoreFilePicked)
@@ -713,6 +716,7 @@ open class MainActivity :
     }
 
     override fun onDestroy() {
+        ClassicDashboardPresence.onDestroyed()
         backupController?.dispose()
         val storeToClose = localStore
         // Detach first so late bridge callbacks cannot acquire the handle while teardown drains the
@@ -1022,7 +1026,7 @@ open class MainActivity :
 
     override fun getInsightsJson(): String = storageReader.insightsJson()
 
-    open fun launchRestoreFilePicker(intent: Intent) {
+    override fun launchRestoreFilePicker(intent: Intent) {
         restoreFilePicker?.launch(intent)
     }
 
