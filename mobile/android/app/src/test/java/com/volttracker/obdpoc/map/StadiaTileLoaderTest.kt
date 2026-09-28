@@ -1,9 +1,9 @@
 package com.volttracker.obdpoc.map
 
 import android.graphics.Bitmap
-import android.graphics.Color
 import android.util.LruCache
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -13,17 +13,18 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** [StadiaTileLoader] over a fake connection: only a 200 image response that decodes becomes a tile. */
+/**
+ * [StadiaTileLoader] over a fake connection: only a 200 image response that decodes becomes a tile.
+ * Decoding is faked (a PNG-signature check) so this runs in the default graphics sandbox: a NATIVE
+ * graphics sandbox here would load Robolectric's native runtime ahead of the SQLite tests and break them.
+ */
 @RunWith(RobolectricTestRunner::class)
-@GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34])
 class StadiaTileLoaderTest {
     private val tile = TileId(StadiaTiles.STYLE_DARK, 3, 1, 2)
@@ -33,10 +34,23 @@ class StadiaTileLoaderTest {
     private fun loader(
         key: String = "test-key",
         respond: (URL) -> FakeConnection,
-    ) = StadiaTileLoader(key, LruCache<TileId, ImageBitmap>(8)) { url ->
-        requested += url.toString()
-        respond(url)
-    }
+    ) = StadiaTileLoader(
+        key,
+        LruCache<TileId, ImageBitmap>(8),
+        connect = { url ->
+            requested += url.toString()
+            respond(url)
+        },
+        decode = { bytes ->
+            if (bytes.take(PNG_MAGIC.size) ==
+                PNG_MAGIC
+            ) {
+                Bitmap.createBitmap(PNG_SIDE, PNG_SIDE, Bitmap.Config.ARGB_8888).asImageBitmap()
+            } else {
+                null
+            }
+        },
+    )
 
     @Test
     fun aValidImageBecomesATileAndIsCachedInMemory() {
@@ -102,11 +116,7 @@ class StadiaTileLoaderTest {
         assertNotNull(StadiaTileLoader.create("k"))
     }
 
-    private fun png(): ByteArray {
-        val bitmap = Bitmap.createBitmap(PNG_SIDE, PNG_SIDE, Bitmap.Config.ARGB_8888)
-        bitmap.eraseColor(Color.DKGRAY)
-        return ByteArrayOutputStream().also { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
-    }
+    private fun png(): ByteArray = (PNG_MAGIC + listOf<Byte>(0, 0, 0, 13)).toByteArray()
 
     inner class FakeConnection(
         url: URL,
@@ -140,5 +150,6 @@ class StadiaTileLoaderTest {
 
     private companion object {
         const val PNG_SIDE = 8
+        val PNG_MAGIC = listOf<Byte>(0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
     }
 }

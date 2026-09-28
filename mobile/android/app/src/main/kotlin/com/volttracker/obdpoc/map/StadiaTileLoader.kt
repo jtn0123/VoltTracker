@@ -30,12 +30,13 @@ class StadiaTileLoader(
     private val key: String,
     private val memory: LruCache<TileId, ImageBitmap> = sharedMemory,
     private val connect: (URL) -> HttpURLConnection = { it.openConnection() as HttpURLConnection },
+    private val decode: (ByteArray) -> ImageBitmap? = ::decodeImage,
 ) : MapTileLoader {
     override fun cached(tile: TileId): ImageBitmap? = memory.get(tile)
 
     override fun load(tile: TileId): ImageBitmap? {
         memory.get(tile)?.let { return it }
-        val bitmap = fetch(tile)?.let(::decode)
+        val bitmap = fetch(tile)?.let(decode)
         bitmap?.let { memory.put(tile, it) }
         return bitmap
     }
@@ -62,9 +63,6 @@ class StadiaTileLoader(
         }
     }
 
-    private fun decode(bytes: ByteArray): ImageBitmap? =
-        BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
-
     companion object {
         private const val TIMEOUT_MS = 5_000
         private const val USER_AGENT = "VoltTracker-Android"
@@ -72,6 +70,10 @@ class StadiaTileLoader(
 
         /** In-memory tiles shared by every loader, so reopening a trip redraws instantly. */
         val sharedMemory = LruCache<TileId, ImageBitmap>(MEMORY_TILES)
+
+        /** Decodes a PNG/JPEG body; null when it isn't an image Android can read. */
+        fun decodeImage(bytes: ByteArray): ImageBitmap? =
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
 
         /** The app's loader, or null when the build has no Stadia key — no tiles at all. */
         fun create(key: String = StadiaTiles.apiKey): StadiaTileLoader? =
