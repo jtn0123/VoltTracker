@@ -53,7 +53,68 @@ class DemoPollingLoop(
         private const val DEMO_DRIVE_GEAR_RAW = 3
         private const val DEMO_CLOSED = "closed"
 
+        // The drive phase is one short trip (mirrors actions-demo.ts's DEMO_*_AT_S):
+        // EV with regen dips until 36 s, the engine runs 36-48 s, regen braking to a
+        // stop 48-54 s, then parked in P until the charger is plugged in at 60 s.
+        const val GAS_START_SECONDS = 36.0
+        const val BRAKE_START_SECONDS = 48.0
+        const val PARK_START_SECONDS = 54.0
+        private const val BRAKE_SECONDS = PARK_START_SECONDS - BRAKE_START_SECONDS
+        private const val MPH_TO_KPH = 1.609
+
         fun isChargingPhase(t: Double): Boolean = t.mod(CYCLE_SECONDS) >= DRIVE_PHASE_SECONDS
+
+        /** Which leg of the demo cycle t falls in. */
+        fun legAt(t: Double): DemoLeg {
+            val phase = t.mod(CYCLE_SECONDS)
+            return when {
+                phase >= DRIVE_PHASE_SECONDS -> DemoLeg.CHARGING
+                phase >= PARK_START_SECONDS -> DemoLeg.PARKED
+                phase >= BRAKE_START_SECONDS -> DemoLeg.BRAKING
+                phase >= GAS_START_SECONDS -> DemoLeg.GAS
+                else -> DemoLeg.EV
+            }
+        }
+
+        /** The design prototype's gentle 25-47 mph urban speed band, in kph, on the drive clock. */
+        private fun cruiseKph(driveT: Double): Double =
+            (34 + 9 * Math.sin(driveT / 4.2) + 4 * Math.sin(driveT / 1.7)) * MPH_TO_KPH
+
+        /** Road speed at t: cruising, easing linearly to a stop while braking, 0 parked or charging. */
+        fun demoSpeedKph(t: Double): Long {
+            val driveT = driveSeconds(t)
+            val phase = t.mod(CYCLE_SECONDS)
+            return when (legAt(t)) {
+                DemoLeg.EV, DemoLeg.GAS -> Math.round(cruiseKph(driveT))
+                DemoLeg.BRAKING -> {
+                    val fromKph = cruiseKph(driveT - (phase - BRAKE_START_SECONDS))
+                    Math.round(fromKph * (PARK_START_SECONDS - phase) / BRAKE_SECONDS)
+                }
+                DemoLeg.PARKED, DemoLeg.CHARGING -> 0L
+            }
+        }
+
+        /** Signed pack power at t: + drive, - regen. The EV leg dips into regen; braking regenerates. */
+        fun demoPowerKw(t: Double): Double {
+            val driveT = driveSeconds(t)
+            val phase = t.mod(CYCLE_SECONDS)
+            return when (legAt(t)) {
+                DemoLeg.EV -> 6.0 + 14.0 * Math.sin(driveT / 3.1) + 5.0 * Math.sin(driveT / 1.3)
+                DemoLeg.GAS -> 30.0 + 9.0 * Math.sin(driveT / 3.0)
+                DemoLeg.BRAKING -> -(8.0 + 10.0 * (PARK_START_SECONDS - phase) / BRAKE_SECONDS)
+                DemoLeg.PARKED, DemoLeg.CHARGING -> 0.0
+            }
+        }
+
+        /** Engine speed: only the gas leg runs the engine. */
+        fun demoRpm(t: Double): Long =
+            if (legAt(t) == DemoLeg.GAS) Math.round(1260 + 420 * Math.sin(driveSeconds(t) / 2.1)) else 0L
+
+        /** Seconds spent moving in [0, t) — the map clock, frozen while parked and charging. */
+        fun routeSeconds(t: Double): Double {
+            val cycles = Math.floor(t / CYCLE_SECONDS)
+            return cycles * PARK_START_SECONDS + minOf(t.mod(CYCLE_SECONDS), PARK_START_SECONDS)
+        }
 
         /** Seconds spent driving in [0, t) — the route/sine clock, frozen while charging. */
         fun driveSeconds(t: Double): Double {
@@ -100,7 +161,10 @@ class DemoPollingLoop(
         while (service.isSessionRunnerActive()) {
             val t = (System.currentTimeMillis() - start) / 1000.0
             val charging = isChargingPhase(t)
+            val leg = legAt(t)
             val driveT = driveSeconds(t)
+            val routeT = routeSeconds(t)
+            val speedKph = demoSpeedKph(t)
             val sample = JSONObject()
             try {
                 val sampleNumber = engine.incrementSampleCount()
@@ -110,19 +174,22 @@ class DemoPollingLoop(
                 sample.put("sampleCount", sampleNumber)
                 sample.put("sessionMs", maxOf(0L, System.currentTimeMillis() - service.sessionStartedAtMs))
                 sample.put("supportedPids", engine.supportedPidsSummary())
-                sample.put("vehicleState", if (charging) "charging" else "demo-preview")
-                sample.put("speedKph", if (charging) 0L else maxOf(0L, Math.round(54 + 23 * Math.sin(driveT / 3.4))))
-                sample.put("rpm", if (charging) 0L else Math.round(1260 + 420 * Math.sin(driveT / 2.1)))
+                sample.put("vehicleState", leg.vehicleState)
+                sample.put("speedKph", speedKph)
+                sample.put("rpm", demoRpm(t))
                 sample.put("coolantC", Math.round(82 + 4 * Math.sin(t / 8.0)))
-                sample.put("loadPct", if (charging) 4L else Math.round(34 + 18 * Math.sin(driveT / 4.4)))
-                sample.put("throttlePct", if (charging) 0L else Math.round(18 + 14 * Math.sin(driveT / 2.7)))
+                sample.put("loadPct", if (leg.moving) Math.round(20 + 7 * Math.sin(driveT / 3.3)) else 4L)
+                sample.put(
+                    "throttlePct",
+                    if (leg == DemoLeg.EV || leg == DemoLeg.GAS) Math.round(14 + 9 * Math.sin(driveT / 2.2)) else 0L,
+                )
                 // Hoist the shared demo formulas once so the mirrored PIDs below
                 // (and the raw-vs-rounded pack voltage) stay in step with the JS
                 // runBrowserDemoStream mirror instead of drifting per call site.
                 val busV = ObdElmDecode.round1(if (charging) 14.2 else 13.8 + 0.2 * Math.sin(t / 5.0))
                 val soc = demoSoc(t)
                 val chargerKw = demoChargerPowerKw(t)
-                val drivePowerKw = if (charging) 0.0 else 16.0 + Math.sin(driveT / 2.2) * 12.0
+                val drivePowerKw = demoPowerKw(t)
                 val rawPackV = 353.0 + (soc - 50.0) * 0.2
                 val packWatts = (if (charging) -chargerKw else drivePowerKw) * 1000.0
                 sample.put("voltage", busV)
@@ -152,10 +219,10 @@ class DemoPollingLoop(
                 sample.put("minCellNumber", 47)
                 sample.put("maxCellNumber", 12)
                 sample.put("socVariationPct", 0.4)
-                sample.put("motorAPowerKw", if (charging) 0.0 else ObdElmDecode.round1(drivePowerKw * 0.6))
+                sample.put("motorAPowerKw", if (leg.moving) ObdElmDecode.round1(drivePowerKw * 0.6) else 0.0)
                 sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
-                sample.put("prndlState", if (charging) VoltGear.PARK else "D")
-                sample.put("prndlRaw", if (charging) VoltGear.PARK_RAW else DEMO_DRIVE_GEAR_RAW)
+                sample.put("prndlState", if (leg.moving) "D" else VoltGear.PARK)
+                sample.put("prndlRaw", if (leg.moving) DEMO_DRIVE_GEAR_RAW else VoltGear.PARK_RAW)
                 sample.put("gearConfidence", GearConfidence.CONFIRMED.wireName)
                 sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
                 sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
@@ -207,16 +274,13 @@ class DemoPollingLoop(
                     sample.put("chargerAcCurrentA", 14.0)
                     sample.put("chargerAcPowerKw", 3.4)
                 }
-                // The position clock is driveT, so the marker parks during the
-                // charge window instead of orbiting an unplugged charger.
-                sample.put("latitude", 34.0522 + 0.009 * Math.sin(driveT / 28.0))
-                sample.put("longitude", -118.2437 + 0.009 * Math.cos(driveT / 28.0))
+                // The position clock only runs while moving, so the marker stays put
+                // once the car parks instead of orbiting an unplugged charger.
+                sample.put("latitude", 34.0522 + 0.009 * Math.sin(routeT / 28.0))
+                sample.put("longitude", -118.2437 + 0.009 * Math.cos(routeT / 28.0))
                 sample.put("accuracyM", 6.0)
-                sample.put(
-                    "gpsSpeedMps",
-                    if (charging) 0.0 else ObdElmDecode.round1(kotlin.math.abs(15.0 + 9.0 * Math.cos(driveT / 28.0))),
-                )
-                sample.put("bearingDeg", ObdElmDecode.round1((Math.toDegrees(driveT / 28.0) % 360 + 360) % 360))
+                sample.put("gpsSpeedMps", ObdElmDecode.round1(speedKph / 3.6))
+                sample.put("bearingDeg", ObdElmDecode.round1((Math.toDegrees(routeT / 28.0) % 360 + 360) % 360))
                 sample.put("updatedAt", System.currentTimeMillis())
                 engine.appendSessionHealth(sample)
                 sample.put("raw", "demo")
@@ -236,4 +300,16 @@ class DemoPollingLoop(
             }
         }
     }
+}
+
+/** One leg of the demo cycle and the classifier state (VehicleState.asPayloadKey) it reports. */
+enum class DemoLeg(
+    val vehicleState: String,
+    val moving: Boolean,
+) {
+    EV("driving_ev", true),
+    GAS("driving_gas", true),
+    BRAKING("driving_ev", true),
+    PARKED("parked", false),
+    CHARGING("charging", false),
 }
