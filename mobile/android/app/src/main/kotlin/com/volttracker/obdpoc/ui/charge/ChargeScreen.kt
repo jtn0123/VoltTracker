@@ -89,6 +89,7 @@ fun ChargeScreen(
             title = "Charge",
             subtitle = state.subtitle,
             dot = connectionDot(state.connected),
+            statusSubtitle = true,
         ) {
             ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
             ChargeHero(state)

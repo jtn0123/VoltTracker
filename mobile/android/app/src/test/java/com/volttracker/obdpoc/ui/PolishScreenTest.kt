@@ -16,6 +16,8 @@ import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.drive.DriveScreen
+import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.settings.SettingsPage
 import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
@@ -120,5 +122,18 @@ class PolishScreenTest {
         assertEquals(1, compose.onAllNodes(hasText("No adapter", substring = true)).fetchSemanticsNodes().size)
         compose.onNodeWithText("Not connected", substring = true).assertIsDisplayed()
         compose.onNodeWithText("You're up to date").assertIsDisplayed()
+    }
+
+    @Test
+    fun demoDriveHeaderSaysSampleDataNotTheAdapter() {
+        compose.setContent {
+            VoltTheme {
+                CompositionLocalProvider(LocalVoltPrefs provides VoltPrefs(demo = true)) {
+                    DriveScreen(DriveUiState.demo)
+                }
+            }
+        }
+        compose.onNodeWithText("Sample data").assertIsDisplayed()
+        assertEquals(0, compose.onAllNodes(hasText("OBDLink", substring = true)).fetchSemanticsNodes().size)
     }
 }

@@ -8,7 +8,9 @@ import com.volttracker.obdpoc.ui.car.batterySummary
 import com.volttracker.obdpoc.ui.car.missingLine
 import com.volttracker.obdpoc.ui.car.tiresDescription
 import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.DEMO_SUBTITLE
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
+import com.volttracker.obdpoc.ui.components.appBarSubtitle
 import com.volttracker.obdpoc.ui.components.orDash
 import com.volttracker.obdpoc.ui.components.spoken
 import com.volttracker.obdpoc.ui.components.withUnit
@@ -22,6 +24,7 @@ import com.volttracker.obdpoc.ui.drive.estimatingText
 import com.volttracker.obdpoc.ui.drive.etaLead
 import com.volttracker.obdpoc.ui.drive.gaugeDescription
 import com.volttracker.obdpoc.ui.drive.gearKnown
+import com.volttracker.obdpoc.ui.drive.outsideTempLabel
 import com.volttracker.obdpoc.ui.drive.powerTraceDescription
 import com.volttracker.obdpoc.ui.settings.NumberField
 import com.volttracker.obdpoc.ui.settings.adapterName
@@ -164,5 +167,20 @@ class PolishLogicTest {
         assertEquals(111_195.0, haversineMeters(0.0, 0.0, 0.0, 1.0), 1.0)
         assertEquals(0.0, haversineMeters(42.0, -83.0, 42.0, -83.0), 1e-9)
         assertEquals(1609.344, METERS_PER_MILE, 0.0)
+    }
+
+    @Test
+    fun demoHeadersNeverClaimALiveAdapter() {
+        assertEquals("Live · OBDLink MX+", appBarSubtitle("Live · OBDLink MX+", statusSubtitle = true, demo = false))
+        assertEquals(DEMO_SUBTITLE, appBarSubtitle("Live · OBDLink MX+", statusSubtitle = true, demo = true))
+        assertEquals("Sample data · 48 drives", appBarSubtitle("48 drives", statusSubtitle = false, demo = true))
+        assertNull(appBarSubtitle(null, statusSubtitle = true, demo = true))
+    }
+
+    @Test
+    fun outsideChipNeedsALiveReading() {
+        assertEquals("64°F outside", outsideTempLabel(DriveUiState.demo))
+        assertNull(outsideTempLabel(DriveUiState.demo.copy(connected = false)))
+        assertNull(outsideTempLabel(DriveUiState.demo.copy(ambientF = null)))
     }
 }
