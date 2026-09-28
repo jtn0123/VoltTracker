@@ -156,12 +156,17 @@ open class ObdService :
         }
     }
 
-    // Flipped by APP_FOREGROUND/APP_BACKGROUND intents on the main thread and read on the poll/IO
-    // thread (background-sample accounting) — @Volatile for the cross-thread visibility edge. It
+    // Flipped by AppVisibility on the main thread and read on the poll/IO thread
+    // (background-sample accounting) — @Volatile for the cross-thread visibility edge. It
     // is deliberately NOT part of sessionOutcome: it is never read together with the outcome
     // fields, so folding it in would only add contention on the visibility flags.
     @Volatile
     override var appInForeground = true
+
+    // The activities report resume/pause through this in-process listener instead of a
+    // startService round trip: a start command makes ActivityThread wait for every pending
+    // SharedPreferences apply() on the main thread, which froze the app when a share sheet paused it.
+    private val appVisibilityListener = AppVisibility.Listener { recordAppVisibility(it) }
 
     // Written on the main thread (foreground start/stop) and read on the poll/IO thread;
     // @Volatile for the same independent-flag reasoning as appInForeground.
@@ -280,6 +285,11 @@ open class ObdService :
                 { store, sessionId -> tripSummaryNotifier?.notifyMaterializedTrip(store, sessionId) },
             )
         engine = createPollingEngine()
+        // Start from the current screen state (a session can start while the app is backgrounded),
+        // then follow every later resume/pause. Registered after the recorder exists because the
+        // listener hands visibility changes to it.
+        appInForeground = AppVisibility.isForeground
+        AppVisibility.addListener(appVisibilityListener)
         sdpProbe = SdpProbe(this)
         // The ACL hook keeps mid-drive recovery working while the Activity is gone (B3): when
         // the OS reports the active adapter's link is back, wake the engine's extended
@@ -346,18 +356,6 @@ open class ObdService :
                 foregroundServiceActive = false
                 stopSelf()
                 return START_NOT_STICKY
-            }
-            ACTION_APP_FOREGROUND -> {
-                recordAppVisibility(true)
-                val active = running.get()
-                if (!active) stopSelf(startId)
-                return if (active) START_STICKY else START_NOT_STICKY
-            }
-            ACTION_APP_BACKGROUND -> {
-                recordAppVisibility(false)
-                val active = running.get()
-                if (!active) stopSelf(startId)
-                return if (active) START_STICKY else START_NOT_STICKY
             }
             ACTION_CANCEL_RETRY -> {
                 requestCancelRetry()
@@ -430,6 +428,7 @@ open class ObdService :
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        AppVisibility.removeListener(appVisibilityListener)
         stopCurrentSession(getString(R.string.status_service_stopped))
         // Drop the foreground state right away: the persistence drain below runs off the main
         // thread, and the dying service must not keep its notification alive meanwhile (B4).
@@ -1108,8 +1107,6 @@ open class ObdService :
         const val ACTION_CLEAR_DTC = "com.volttracker.obdpoc.action.CLEAR_DTC"
         const val ACTION_DEMO = "com.volttracker.obdpoc.action.DEMO"
         const val ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT"
-        const val ACTION_APP_FOREGROUND = "com.volttracker.obdpoc.action.APP_FOREGROUND"
-        const val ACTION_APP_BACKGROUND = "com.volttracker.obdpoc.action.APP_BACKGROUND"
         const val ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY"
         const val ACTION_CAR_CONTROL = "com.volttracker.obdpoc.action.CAR_CONTROL"
         const val EXTRA_CAR_COMMAND = "car_command"

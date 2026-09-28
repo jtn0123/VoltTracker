@@ -122,14 +122,88 @@ class WidgetSnapshotStoreTest {
     }
 
     @Test
-    fun writeIfChangedWritesWhenSocChanges() {
+    fun socChangeIsHeldInMemoryAndPersistedOnTheNextThrottleWindow() {
         val first = WidgetSnapshot(50, charging = false, connected = true, vehicleState = "", updatedAtMs = 1_000L)
         assertTrue(store.writeIfChanged(first))
 
         val socChanged = WidgetSnapshot(49, charging = false, connected = true, vehicleState = "", updatedAtMs = 2_000L)
-        assertTrue(store.writeIfChanged(socChanged))
-        assertEquals(49, store.read().socPct)
-        assertEquals(2_000L, store.read().updatedAtMs)
+        assertFalse("an SOC tick inside the throttle window is not written", store.writeIfChanged(socChanged))
+        assertEquals("the in-memory snapshot has the new SOC", 49, store.read().socPct)
+        assertEquals("disk still holds the last persisted SOC", 50, store.readPersisted().socPct)
+
+        val nextWindow = socChanged.copy(updatedAtMs = 31_000L, lastSampleAtMs = 31_000L)
+        assertTrue(
+            "the held SOC change is persisted and redrawn once the window opens",
+            store.writeIfChanged(nextWindow),
+        )
+        val persisted = WidgetSnapshotStore(prefs).read()
+        assertEquals(49, persisted.socPct)
+        assertEquals("the change time is when the SOC changed", 2_000L, persisted.updatedAtMs)
+        assertEquals("the freshness clock carries the latest sample", 31_000L, persisted.lastSampleAtMs)
+    }
+
+    @Test
+    fun aOneHertzStreamWritesPrefsAtMostOncePerThrottleWindow() {
+        // The share-sheet ANR: every apply() rewrites volt_obd_prefs.xml and service starts / activity
+        // stops wait for it. A 10-minute 1 Hz stream (SOC drifting every sample) must not write per sample.
+        var writes = 0
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == "widget_snapshot_last_sample_at") writes++
+            }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        val samples = 600
+        for (i in 0 until samples) {
+            val at = 1_000L + i * 1_000L
+            store.writeIfChanged(
+                WidgetSnapshot(
+                    socPct = 80 - (i % 7),
+                    charging = false,
+                    connected = true,
+                    vehicleState = "driving_ev",
+                    updatedAtMs = at,
+                    lastSampleAtMs = at,
+                ),
+            )
+        }
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+
+        val window = WidgetSnapshotStore.MIN_PERSIST_INTERVAL_MS / 1_000L
+        assertTrue("expected about ${samples / window} writes, got $writes", writes <= samples / window + 1)
+        assertTrue("the stream must still reach disk periodically, got $writes", writes >= samples / window - 1)
+    }
+
+    @Test
+    fun connectionDropIsPersistedImmediatelyWithTheLatestHeldSoc() {
+        val first = WidgetSnapshot(50, charging = false, connected = true, vehicleState = "", updatedAtMs = 1_000L)
+        assertTrue(store.writeIfChanged(first))
+        assertFalse(store.writeIfChanged(first.copy(socPct = 47, updatedAtMs = 5_000L, lastSampleAtMs = 5_000L)))
+
+        // Session end: the disconnect status must flush the held SOC along with the connection flag.
+        assertTrue(store.writeIfChanged(store.read().copy(connected = false, updatedAtMs = 6_000L)))
+        val persisted = store.readPersisted()
+        assertFalse(persisted.connected)
+        assertEquals(47, persisted.socPct)
+        assertEquals("a status write never advances the sample clock", 5_000L, persisted.lastSampleAtMs)
+    }
+
+    @Test
+    fun aWallClockStepBackwardsDoesNotStallPersistence() {
+        val first = WidgetSnapshot(50, charging = false, connected = true, vehicleState = "", updatedAtMs = 100_000L)
+        assertTrue(store.writeIfChanged(first))
+
+        val afterClockReset = first.copy(socPct = 48, updatedAtMs = 5_000L, lastSampleAtMs = 5_000L)
+        assertTrue(store.writeIfChanged(afterClockReset))
+        assertEquals(48, store.readPersisted().socPct)
+    }
+
+    @Test
+    fun aZeroIntervalStorePersistsEveryDisplayChange() {
+        val unthrottled = WidgetSnapshotStore(prefs, minPersistIntervalMs = 0L)
+        val first = WidgetSnapshot(50, charging = false, connected = true, vehicleState = "", updatedAtMs = 1_000L)
+        assertTrue(unthrottled.writeIfChanged(first))
+        assertTrue(unthrottled.writeIfChanged(first.copy(socPct = 49, updatedAtMs = 2_000L)))
+        assertEquals(49, unthrottled.readPersisted().socPct)
     }
 
     @Test

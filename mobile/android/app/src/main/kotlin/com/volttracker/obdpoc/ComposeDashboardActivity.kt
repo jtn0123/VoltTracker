@@ -22,6 +22,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.map.StadiaTileLoader
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
@@ -413,17 +414,8 @@ class ComposeDashboardActivity :
         }
     }
 
-    private fun signalAppForeground(foreground: Boolean) {
-        val service = Intent(this, ObdService::class.java)
-        service.action =
-            if (foreground) ObdService.ACTION_APP_FOREGROUND else ObdService.ACTION_APP_BACKGROUND
-        try {
-            startService(service)
-        } catch (ex: RuntimeException) {
-            // Background start restrictions can reject this housekeeping signal; it is best-effort.
-            Log.w(AppPrefs.LOG_TAG, "foreground signal skipped", ex)
-        }
-    }
+    // In-process, not startService: a start command waits on pending prefs writes (ANR on pause).
+    private fun signalAppForeground(foreground: Boolean) = AppVisibility.report(foreground)
 
     // ===== Settings tools: the same helpers the classic dashboard drives =====================
 

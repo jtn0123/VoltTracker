@@ -28,6 +28,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdNotifications
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
@@ -973,15 +974,8 @@ open class MainActivity :
         requireTroubleshooter().onAdapterStatusForReadyNotify(status)
     }
 
-    private fun reportAppVisibility(foreground: Boolean) {
-        val service = Intent(this, ObdService::class.java)
-        service.action = if (foreground) ObdService.ACTION_APP_FOREGROUND else ObdService.ACTION_APP_BACKGROUND
-        try {
-            startService(service)
-        } catch (ignored: RuntimeException) {
-            // Visibility is diagnostic only.
-        }
-    }
+    // In-process, not startService: a start command waits on pending prefs writes (ANR on pause).
+    private fun reportAppVisibility(foreground: Boolean) = AppVisibility.report(foreground)
 
     private fun callDashboard(
         functionName: String,
