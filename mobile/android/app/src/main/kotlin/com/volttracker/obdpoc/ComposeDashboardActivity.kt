@@ -176,11 +176,24 @@ class ComposeDashboardActivity :
         updates.lastResult?.let(::publishUpdateResult)
         // Null without a Stadia key: the Trips map then draws its plain ground, no tiles.
         val tileLoader = StadiaTileLoader.create()
+        val launch =
+            if (BuildConfig.DEBUG) {
+                DebugLaunch.from(
+                    intent.getStringExtra(DebugLaunch.EXTRA_TAB),
+                    intent.getStringExtra(DebugLaunch.EXTRA_ROUTE),
+                    intent.getBooleanExtra(DebugLaunch.EXTRA_DEMO, false),
+                )
+            } else {
+                DebugLaunch()
+            }
+        if (launch.startDemo && savedInstanceState == null) startObdService(ObdService.ACTION_DEMO, null, null)
         setContent {
             val state by store.state.collectAsState()
             CompositionLocalProvider(LocalMapTileLoader provides tileLoader) {
                 VoltApp(
                     state = state,
+                    initialTab = launch.tab,
+                    initialRoutes = launch.routes,
                     actions =
                         VoltAppActions(
                             onOpenClassicDashboard = ::openClassicDashboard,
