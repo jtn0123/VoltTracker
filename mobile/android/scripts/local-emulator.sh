@@ -82,8 +82,8 @@ guest_idle_pct() {
 
 wait_settled() {
   adb wait-for-device
-  local i
-  for i in $(seq 1 120); do
+
+  for _ in $(seq 1 120); do
     [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] && break
     sleep 2
   done
