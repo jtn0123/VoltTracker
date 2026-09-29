@@ -99,8 +99,10 @@ class HealthActions(
     val onClear: () -> Unit = {},
     /** Share this plain-text report. */
     val onShare: (String) -> Unit = {},
-    /** Live signals, freeze frames and the troubleshooter live in the classic dashboard. */
+    /** Freeze-frame detail still lives in the classic dashboard. */
     val onOpenClassic: () -> Unit = {},
-    /** Settings → Adapter. */
+    /** Settings → Adapter (also the troubleshooter: test connection, send diagnostics). */
     val onOpenAdapter: () -> Unit = {},
+    /** Health › Live signals. */
+    val onOpenSignals: () -> Unit = {},
 )

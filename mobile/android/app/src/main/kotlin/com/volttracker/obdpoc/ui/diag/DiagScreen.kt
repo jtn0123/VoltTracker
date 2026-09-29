@@ -88,14 +88,15 @@ fun DiagScreen(
                 VoltIcons.Pulse,
                 "Live signals",
                 subtitle = liveSignalsLine(drive),
-                onClick = actions.onOpenClassic,
+                onClick = actions.onOpenSignals,
             )
             VoltListDivider()
             VoltListRow(
                 VoltIcons.Doc,
                 "Freeze frame",
                 subtitle = state.freezeFrameLine(),
-                onClick = actions.onOpenClassic,
+                // Nothing to open until the car has captured one.
+                onClick = actions.onOpenClassic.takeIf { state.hasFreezeFrame() },
             )
             VoltListDivider()
             VoltListRow(
@@ -109,7 +110,7 @@ fun DiagScreen(
                 VoltIcons.Wrench,
                 "Troubleshooter",
                 subtitle = "Connection & data checks",
-                onClick = actions.onOpenClassic,
+                onClick = actions.onOpenAdapter,
             )
         }
     }

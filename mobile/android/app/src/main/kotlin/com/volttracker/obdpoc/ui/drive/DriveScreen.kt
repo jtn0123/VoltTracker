@@ -1,13 +1,18 @@
 package com.volttracker.obdpoc.ui.drive
 
+import android.content.res.Configuration
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -18,8 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.components.ConnectRow
 import com.volttracker.obdpoc.ui.components.IconCircleButton
@@ -62,6 +69,7 @@ fun DriveScreen(
     ) {
         val outside = outsideTempLabel(state)
         val largeText = LocalDensity.current.fontScale > HEADER_CHIP_MAX_SCALE
+        val landscape = landscapeGaugeWidth(LocalConfiguration.current)
         VoltScreen(
             title = "Drive",
             subtitle = driveSubtitle(state),
@@ -84,6 +92,20 @@ fun DriveScreen(
                 if (largeText) outside?.let { VoltChip(it, Modifier.padding(bottom = 8.dp)) }
                 ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 CockpitContent(state)
+            } else if (landscape != null) {
+                // Sideways the ring alone overflowed the short window; it sits beside the cards,
+                // sized to the height that's left under the app bar.
+                Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Top) {
+                    Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                        ArcGauge(state, Modifier.widthIn(max = landscape))
+                    }
+                    Column(Modifier.weight(1f)) {
+                        ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
+                        RangeCard(state)
+                        FocusTiles(state)
+                        if (showEnergyFlow) EnergyFlowCard(state)
+                    }
+                }
             } else {
                 ArcGauge(state, Modifier.align(Alignment.CenterHorizontally))
                 ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
@@ -174,3 +196,24 @@ private fun DriveScreenPreview() {
 private fun DriveScreenDetailedPreview() {
     VoltTheme { DriveScreen(DriveUiState.demo.copy(detailed = true)) }
 }
+
+/**
+ * In a wide, short (landscape) window: how wide the Focus ring may be so it fits the height under
+ * the app bar. Null in portrait, where the ring keeps its full width above the cards.
+ */
+internal fun landscapeGaugeWidth(config: Configuration): Dp? {
+    val w = config.screenWidthDp
+    val h = config.screenHeightDp
+    if (w <= h || w < LANDSCAPE_MIN_WIDTH_DP) return null
+    val ringHeight = (h - LANDSCAPE_CHROME_DP).coerceAtLeast(LANDSCAPE_MIN_RING_DP)
+    return (ringHeight * GAUGE_ASPECT).dp
+}
+
+private const val LANDSCAPE_MIN_WIDTH_DP = 600
+
+/** Status bar, app bar, the ring's own padding and the gesture bar, in dp. */
+private const val LANDSCAPE_CHROME_DP = 150
+private const val LANDSCAPE_MIN_RING_DP = 200
+
+/** The ring's box is 380 × 350 (see ArcGauge). */
+private const val GAUGE_ASPECT = 380f / 350f

@@ -189,15 +189,16 @@ open class MainActivity :
         DashboardBackPressCallback(
             { webView },
             {
-                if (!moveTaskToBack(true)) finish()
+                if (!isTaskRoot || !moveTaskToBack(true)) finish()
             },
         )
 
     // Default Back when the dashboard has nothing to dismiss. evaluateJavascript is async so the
     // press is already consumed by the time we decide; onBackPressedDispatcher.onBackPressed()
-    // only re-runs registered callbacks (it does NOT perform the OS finish), so we background the
-    // app ourselves. moveTaskToBack keeps the live Activity/WebView and state alive (like Home);
-    // finish() is the fallback if this somehow isn't the task root.
+    // only re-runs registered callbacks (it does NOT perform the OS finish), so we leave ourselves.
+    // Opened from the Compose dashboard (the usual case now), finish() returns to it; backgrounding
+    // the task there sent the whole app Home. As the task root, moveTaskToBack keeps the live
+    // Activity/WebView and state alive (like Home).
 
     private var prefs: SharedPreferences? = null
 

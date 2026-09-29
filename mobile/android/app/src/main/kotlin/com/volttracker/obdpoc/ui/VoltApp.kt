@@ -36,6 +36,7 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.components.rememberSystemPrefs
 import com.volttracker.obdpoc.ui.diag.DiagScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
+import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
@@ -106,6 +107,7 @@ fun VoltApp(
                                     actions = actions,
                                     onBack = pop,
                                     openAdapter = { push(VoltRoute.ADAPTER) },
+                                    openSignals = { push(VoltRoute.SIGNALS) },
                                 )
                         }
                     }
@@ -157,7 +159,7 @@ internal fun screenViewName(
 ): String =
     when (route) {
         VoltRoute.SETTINGS, VoltRoute.ADAPTER -> "settings"
-        VoltRoute.HEALTH -> "diagnostics"
+        VoltRoute.HEALTH, VoltRoute.SIGNALS -> "diagnostics"
         null ->
             when (tab) {
                 VoltTab.DRIVE -> "drive"
@@ -211,6 +213,7 @@ private fun VoltRouteContent(
     actions: VoltAppActions,
     onBack: () -> Unit,
     openAdapter: () -> Unit,
+    openSignals: () -> Unit,
 ) {
     when (route) {
         VoltRoute.HEALTH ->
@@ -227,8 +230,11 @@ private fun VoltRouteContent(
                         onShare = actions.onShareHealthReport,
                         onOpenClassic = actions.onOpenClassicDashboard,
                         onOpenAdapter = openAdapter,
+                        onOpenSignals = openSignals,
                     ),
             )
+        VoltRoute.SIGNALS ->
+            LiveSignalsScreen(state.drive, onBack = onBack, onOpenClassic = actions.onOpenClassicDashboard)
         VoltRoute.SETTINGS -> Settings(state, actions, onBack, SettingsPage.MAIN)
         VoltRoute.ADAPTER -> Settings(state, actions, onBack, SettingsPage.CONNECTION)
     }
