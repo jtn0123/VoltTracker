@@ -131,7 +131,7 @@ internal fun RangeCard(state: DriveUiState) {
         }
         val evSub =
             when {
-                !state.connected -> DASH
+                !state.connected -> "Battery not reported"
                 gasMode && state.atReserve -> "Battery at reserve · holding ${state.socPercent.toInt()}%"
                 else -> "${soc.toInt()}% battery"
             }

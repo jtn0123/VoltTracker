@@ -29,6 +29,11 @@ data class SettingsUiState(
     val adapterList: AdapterListState = AdapterListState.READY,
     /** The remembered adapter's address ("" when none is chosen yet). */
     val selectedAdapterAddress: String = "",
+    /**
+     * No adapter has ever been chosen on this phone (the host checks after it reads the remembered
+     * one). False until then, so a returning driver never sees Drive's setup card flash by.
+     */
+    val setupNeeded: Boolean = false,
     val autoConnect: Boolean = false,
     /** A "wait for adapter" schedule is probing in the background. */
     val waitingForAdapter: Boolean = false,

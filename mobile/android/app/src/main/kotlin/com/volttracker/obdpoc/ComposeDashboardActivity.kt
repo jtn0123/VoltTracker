@@ -409,6 +409,7 @@ class ComposeDashboardActivity :
                 pairedAdapters = paired,
                 adapterList = listState,
                 selectedAdapterAddress = selected,
+                setupNeeded = selected.isEmpty(),
             )
         }
     }

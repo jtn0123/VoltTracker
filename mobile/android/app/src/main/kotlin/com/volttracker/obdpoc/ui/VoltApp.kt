@@ -39,6 +39,7 @@ import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.drive.DriveScreen
+import com.volttracker.obdpoc.ui.drive.isFirstRun
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsActions
@@ -185,6 +186,12 @@ private fun VoltTabContent(
                 onStartDemo = actions.onStartDemo,
                 showEnergyFlow = state.settings.driveEnergyFlow,
                 onSetDetailed = { actions.onSettingChange(SettingChange.DriveDetailed(it)) },
+                firstRun =
+                    isFirstRun(
+                        state.drive,
+                        setupNeeded = state.settings.setupNeeded,
+                        hasTrips = state.trips.trips.isNotEmpty(),
+                    ),
             )
         VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
         VoltTab.CHARGE -> ChargeScreen(state.charge, onConnect = onConnect, onStartDemo = actions.onStartDemo)
