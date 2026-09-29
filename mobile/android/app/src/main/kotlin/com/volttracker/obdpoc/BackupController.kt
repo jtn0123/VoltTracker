@@ -116,7 +116,7 @@ class BackupController<A>(
                 }.setOnCancelListener {
                     onFinishedWithoutConfirm.run()
                     activity.publishStatus("ready", activity.getString(R.string.status_backup_cancelled), false)
-                }.show()
+                }.showStyled()
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "share disclosure dialog failed to show", ex)
             onFinishedWithoutConfirm.run()
@@ -466,7 +466,7 @@ class BackupController<A>(
                 .setNegativeButton(R.string.dialog_restore_replace_all) { _, _ -> performReplace(staged) }
                 .setNeutralButton(R.string.dialog_cancel) { _, _ -> cancelStagedRestore(staged) }
                 .setOnCancelListener { cancelStagedRestore(staged) }
-                .show()
+                .showStyled()
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "restore-mode dialog failed to show", ex)
             cancelStagedRestore(staged)

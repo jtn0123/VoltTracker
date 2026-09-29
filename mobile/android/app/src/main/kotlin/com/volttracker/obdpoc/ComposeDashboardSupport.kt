@@ -7,8 +7,8 @@ import com.volttracker.obdpoc.update.UpdateManager
 
 /** What tapping Connect must do, given the remembered adapter and radio state. */
 internal enum class ConnectAction {
-    /** No adapter has ever been remembered — pairing lives in the classic dashboard. */
-    OPEN_CLASSIC,
+    /** No adapter has ever been remembered — open Settings → Adapter to pick one. */
+    CHOOSE_ADAPTER,
     REQUEST_PERMISSION,
     REQUEST_ENABLE_BLUETOOTH,
     CONNECT,
@@ -26,7 +26,7 @@ internal object ComposeDashboardSupport {
         bluetoothEnabled: Boolean,
     ): ConnectAction =
         when {
-            lastAddress.isNullOrBlank() -> ConnectAction.OPEN_CLASSIC
+            lastAddress.isNullOrBlank() -> ConnectAction.CHOOSE_ADAPTER
             !hasConnectPermission -> ConnectAction.REQUEST_PERMISSION
             !bluetoothEnabled -> ConnectAction.REQUEST_ENABLE_BLUETOOTH
             else -> ConnectAction.CONNECT

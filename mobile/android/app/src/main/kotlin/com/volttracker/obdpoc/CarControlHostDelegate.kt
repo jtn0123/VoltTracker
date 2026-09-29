@@ -190,7 +190,7 @@ class CarControlHostDelegate(
 
     private fun show(builder: AlertDialog.Builder) {
         try {
-            builder.show()
+            builder.showStyled()
         } catch (ex: RuntimeException) {
             // The activity can be finishing between the bridge call and the UI thread.
             Log.w(AppPrefs.LOG_TAG, "car-control dialog failed", ex)

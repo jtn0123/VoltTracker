@@ -113,7 +113,7 @@ class ComposeDtcActions(
                 .setMessage(message)
                 .setPositiveButton(CLEAR_LABEL) { _, _ -> onConfirmed() }
                 .setNegativeButton(R.string.dialog_cancel, null)
-                .show()
+                .showStyled()
         } catch (ex: RuntimeException) {
             // The activity can be finishing between the tap and the dialog.
             Log.w(AppPrefs.LOG_TAG, "clear-codes dialog failed", ex)

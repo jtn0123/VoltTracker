@@ -224,7 +224,7 @@ class TroubleshooterBridge<A>(
                     activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
                 }.setOnCancelListener {
                     activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_cancelled), false)
-                }.show()
+                }.showStyled()
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "showDiagnosticsDisclosure failed", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_disclosure_failed), true)

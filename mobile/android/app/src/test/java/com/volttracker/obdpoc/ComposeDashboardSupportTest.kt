@@ -27,11 +27,11 @@ class ComposeDashboardSupportTest {
     @Test
     fun noRememberedAdapterOpensClassicDashboard() {
         assertEquals(
-            ConnectAction.OPEN_CLASSIC,
+            ConnectAction.CHOOSE_ADAPTER,
             ComposeDashboardSupport.decideConnectAction("", hasConnectPermission = true, bluetoothEnabled = true),
         )
         assertEquals(
-            ConnectAction.OPEN_CLASSIC,
+            ConnectAction.CHOOSE_ADAPTER,
             ComposeDashboardSupport.decideConnectAction(null, hasConnectPermission = true, bluetoothEnabled = true),
         )
     }

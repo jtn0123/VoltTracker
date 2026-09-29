@@ -55,7 +55,7 @@ class ComposeCarControls(
                 .setMessage(DEMO_MESSAGE)
                 .setPositiveButton(label) { _, _ -> store.onDemoCarControl(command) }
                 .setNegativeButton(R.string.dialog_cancel, null)
-                .show()
+                .showStyled()
         } catch (ex: RuntimeException) {
             // The activity can be finishing between the tap and the dialog.
             Log.w(AppPrefs.LOG_TAG, "demo car-control dialog failed", ex)

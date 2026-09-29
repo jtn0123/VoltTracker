@@ -15,7 +15,9 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
@@ -31,8 +33,12 @@ import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.diag.DtcCatalog
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.settings.AdapterListState
 import com.volttracker.obdpoc.ui.settings.SettingChange
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
+import com.volttracker.obdpoc.ui.theme.VoltPalette
+import com.volttracker.obdpoc.ui.theme.resolvesDark
+import com.volttracker.obdpoc.ui.theme.voltPalette
 import com.volttracker.obdpoc.ui.trips.LocalMapTileLoader
 import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.update.UpdateCoordinator
@@ -58,7 +64,10 @@ class ComposeDashboardActivity :
     ComponentActivity(),
     TroubleshooterHost,
     BackupHost,
-    TripExportHost {
+    TripExportHost,
+    DialogPaletteHost {
+    override var dialogPalette: VoltPalette? = null
+        private set
     private val store = LiveUiStateStore()
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val exportInFlight = AtomicBoolean(false)
@@ -128,6 +137,7 @@ class ComposeDashboardActivity :
 
     private val connectPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            refreshAdapters()
             if (granted) {
                 connectLastAdapter()
             } else {
@@ -189,6 +199,13 @@ class ComposeDashboardActivity :
         if (launch.startDemo && savedInstanceState == null) startObdService(ObdService.ACTION_DEMO, null, null)
         setContent {
             val state by store.state.collectAsState()
+            val dark = state.settings.appearance.resolvesDark(isSystemInDarkTheme())
+            val palette =
+                voltPalette(dark, state.settings.darkStyle, state.settings.accent, state.settings.highContrast)
+            SideEffect {
+                dialogPalette = palette
+                theme.applyStyle(if (dark) R.style.VoltDialogs_Dark else R.style.VoltDialogs_Light, true)
+            }
             CompositionLocalProvider(LocalMapTileLoader provides tileLoader) {
                 VoltApp(
                     state = state,
@@ -221,6 +238,8 @@ class ComposeDashboardActivity :
 
     override fun onResume() {
         super.onResume()
+        // Back from Android's Bluetooth settings (or the permission prompt) with a new pairing.
+        refreshAdapters()
         ContextCompat.registerReceiver(
             this,
             serviceReceiver,
@@ -349,7 +368,8 @@ class ComposeDashboardActivity :
     // decideConnectAction gates the ACTION_REQUEST_ENABLE launch behind the permission
     // check; lint cannot see through it (same suppression MainActivity.startObdService uses).
     @android.annotation.SuppressLint("MissingPermission")
-    private fun connectLastAdapter() {
+    /** False when no adapter is chosen yet: the caller opens Settings → Adapter to pick one. */
+    private fun connectLastAdapter(): Boolean {
         val address = deviceCatalog.lastAddress().trim()
         val action =
             ComposeDashboardSupport.decideConnectAction(
@@ -358,21 +378,70 @@ class ComposeDashboardActivity :
                 bluetoothEnabled = BluetoothAdapters.get(this)?.isEnabled == true,
             )
         when (action) {
-            // Pairing/selection still lives in the classic dashboard.
-            ConnectAction.OPEN_CLASSIC -> openClassicDashboard()
-            ConnectAction.REQUEST_PERMISSION ->
-                // Only reachable on S+ (below S hasConnectPermission() is always true);
-                // the explicit check keeps lint's InlinedApi analysis satisfied.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    connectPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
-                }
-            ConnectAction.REQUEST_ENABLE_BLUETOOTH ->
+            ConnectAction.CHOOSE_ADAPTER -> {
+                refreshAdapters()
+                return false
+            }
+            ConnectAction.REQUEST_PERMISSION, ConnectAction.REQUEST_ENABLE_BLUETOOTH -> allowBluetooth()
+            ConnectAction.CONNECT -> startObdService(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
+        }
+        return true
+    }
+
+    /** Reloads the Settings → Adapter picker from Android's paired-device list. */
+    private fun refreshAdapters() {
+        val radio = BluetoothAdapters.get(this)
+        val listState =
+            PairedAdapterReader.listState(
+                hasBluetooth = radio != null,
+                hasPermission = hasConnectPermission(),
+                bluetoothEnabled = radio?.isEnabled == true,
+            )
+        val paired =
+            if (listState == AdapterListState.READY) {
+                PairedAdapterReader.parse(deviceCatalog.getBondedDevicesJson())
+            } else {
+                emptyList()
+            }
+        val selected = deviceCatalog.lastAddress().trim()
+        store.onSettings {
+            it.copy(
+                pairedAdapters = paired,
+                adapterList = listState,
+                selectedAdapterAddress = selected,
+            )
+        }
+    }
+
+    private fun pickAdapter(
+        address: String,
+        name: String,
+    ) {
+        if (deviceCatalog.remember(address, name).isBlank()) return
+        refreshAdapters()
+        connectLastAdapter()
+    }
+
+    /** The picker's "Allow" / "Turn on Bluetooth" button. */
+    private fun allowBluetooth() {
+        when {
+            !hasConnectPermission() -> connectPermissionLauncher.launch(Manifest.permission.BLUETOOTH_CONNECT)
+            BluetoothAdapters.get(this)?.isEnabled != true ->
                 try {
                     startActivity(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                } catch (ex: SecurityException) {
+                    Log.w(AppPrefs.LOG_TAG, "Bluetooth enable prompt refused", ex)
                 } catch (ex: RuntimeException) {
                     Log.w(AppPrefs.LOG_TAG, "Bluetooth enable prompt failed", ex)
                 }
-            ConnectAction.CONNECT -> startObdService(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
+        }
+    }
+
+    private fun openBluetoothSettings() {
+        try {
+            startActivity(Intent(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "Bluetooth settings unavailable", ex)
         }
     }
 
@@ -440,6 +509,9 @@ class ComposeDashboardActivity :
             is SettingsCommand.BackUp -> backUp(command.passphrase)
             is SettingsCommand.Restore -> restore(command.passphrase)
             SettingsCommand.ExportTrips -> exportTrips()
+            is SettingsCommand.PickAdapter -> pickAdapter(command.address, command.name)
+            SettingsCommand.OpenBluetoothSettings -> openBluetoothSettings()
+            SettingsCommand.AllowBluetooth -> allowBluetooth()
         }
     }
 

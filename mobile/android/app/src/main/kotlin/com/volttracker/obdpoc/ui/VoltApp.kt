@@ -92,7 +92,13 @@ fun VoltApp(
                 Box(modifier = modifier) {
                     CompositionLocalProvider(LocalVoltNav provides nav, LocalVoltPrefs provides prefs) {
                         when (val route = routes.lastOrNull()) {
-                            null -> VoltTabContent(tab = tab, state = state, actions = actions)
+                            null ->
+                                VoltTabContent(
+                                    tab = tab,
+                                    state = state,
+                                    actions = actions,
+                                    onConnect = { if (!actions.onConnect()) push(VoltRoute.ADAPTER) },
+                                )
                             else ->
                                 VoltRouteContent(
                                     route = route,
@@ -167,18 +173,19 @@ private fun VoltTabContent(
     tab: VoltTab,
     state: VoltAppUiState,
     actions: VoltAppActions,
+    onConnect: () -> Unit,
 ) {
     when (tab) {
         VoltTab.DRIVE ->
             DriveScreen(
                 state.drive,
-                onConnect = actions.onConnect,
+                onConnect = onConnect,
                 onStartDemo = actions.onStartDemo,
                 showEnergyFlow = state.settings.driveEnergyFlow,
                 onSetDetailed = { actions.onSettingChange(SettingChange.DriveDetailed(it)) },
             )
         VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
-        VoltTab.CHARGE -> ChargeScreen(state.charge, onConnect = actions.onConnect, onStartDemo = actions.onStartDemo)
+        VoltTab.CHARGE -> ChargeScreen(state.charge, onConnect = onConnect, onStartDemo = actions.onStartDemo)
         VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
         VoltTab.CAR ->
             CarScreen(

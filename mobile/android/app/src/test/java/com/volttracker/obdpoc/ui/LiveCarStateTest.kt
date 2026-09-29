@@ -124,6 +124,39 @@ class LiveCarStateTest {
     }
 
     @Test
+    fun aSimulatedUnlockHoldsAgainstTheDemoStreamUntilTheDemoEnds() {
+        store.onStatus(JSONObject().put("state", "demo").put("adapter", "Demo stream"))
+        store.onTelemetry(body { put("doorLockState", "locked") })
+        assertEquals(true, store.state.value.drive.locked)
+        store.onDemoCarControl("unlock")
+        assertEquals(false, store.state.value.drive.locked)
+        store.onTelemetry(body(at = 101_000L) { put("doorLockState", "locked") })
+        assertEquals(false, store.state.value.drive.locked)
+        store.onDemoCarControl("lock")
+        assertEquals(true, store.state.value.drive.locked)
+        store.onDemoCarControl("unlock")
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        store.onTelemetry(body(at = 102_000L) { put("doorLockState", "locked") })
+        assertEquals(true, store.state.value.drive.locked)
+    }
+
+    @Test
+    fun stoppingTheDemoForgetsItsMadeUpBodyButARealDisconnectKeepsTheLastKnown() {
+        store.onStatus(JSONObject().put("state", "demo").put("adapter", "Demo stream"))
+        store.onTelemetry(body { put("source", "demo") })
+        store.onDemoCarControl("flash")
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertNull(car.openings)
+        assertNull(car.outsideTempC)
+        assertNull(car.controls.lastCommand)
+
+        store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))
+        store.onTelemetry(body(at = 200_000L))
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertEquals(18.0, car.outsideTempC!!, 0.0)
+    }
+
+    @Test
     fun settingsCarryTheUnitsAndPlacardToCarAndDrive() {
         store.onSettings { it.copy(metricUnits = true, tirePlacardPsi = 41.0) }
         assertTrue(car.metricUnits)
