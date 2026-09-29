@@ -190,11 +190,13 @@ fun DiagUiState.summary(): String {
 }
 
 /** The Freeze frame row: which code the car captured one with. */
-fun DiagUiState.freezeFrameLine(): String =
-    codes
-        ?.firstOrNull { it.status.equals(DtcCode.STATUS_FREEZE_FRAME, ignoreCase = true) }
-        ?.let { "Captured with ${it.code}" }
-        ?: "None stored"
+fun DiagUiState.freezeFrameLine(): String = freezeFrameCode()?.let { "Captured with ${it.code}" } ?: "None stored"
+
+/** Whether the car has a freeze frame to show (the row is only tappable then). */
+fun DiagUiState.hasFreezeFrame(): Boolean = freezeFrameCode() != null
+
+private fun DiagUiState.freezeFrameCode(): DtcCode? =
+    codes?.firstOrNull { it.status.equals(DtcCode.STATUS_FREEZE_FRAME, ignoreCase = true) }
 
 /** The Live signals row: "78 readings coming in", or why there are none. */
 fun liveSignalsLine(drive: DriveUiState): String =

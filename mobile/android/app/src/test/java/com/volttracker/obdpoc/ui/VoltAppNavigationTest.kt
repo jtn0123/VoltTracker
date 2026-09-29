@@ -144,6 +144,23 @@ class VoltAppNavigationTest {
     }
 
     @Test
+    fun healthOpensNativeLiveSignals() {
+        compose.setContent { VoltApp(demoState, initialRoutes = listOf(VoltRoute.HEALTH)) }
+
+        compose.onNodeWithText("Live signals").performScrollTo().performClick()
+        compose.onNodeWithText("Pack voltage").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("All raw readings").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun healthTroubleshooterOpensTheAdapterPage() {
+        compose.setContent { VoltApp(demoState, initialRoutes = listOf(VoltRoute.HEALTH)) }
+
+        compose.onNodeWithText("Troubleshooter").performScrollTo().performClick()
+        compose.onNodeWithText("Test connection").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun demoPageStartsTheDemo() {
         var started = false
         compose.setContent {

@@ -292,6 +292,8 @@ class DemoPollingLoop(
                 sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))
                 sample.put("clusterEvRangeKm", ObdElmDecode.round1(soc / 100.0 * 66.0))
                 sample.put("fuelRangeKm", 471.0)
+                // ~7.3 of the Volt's 8.9 gal: the tank that 471 km of gas range implies at ~40 mpg.
+                sample.put("fuelLevelPct", 82.0)
                 if (charging) {
                     sample.put("chargeCurrentLimitA", 12.0)
                     sample.put("chargerAcVoltage", 240)

@@ -11,6 +11,7 @@ import com.volttracker.obdpoc.ui.diag.agoText
 import com.volttracker.obdpoc.ui.diag.detailLine
 import com.volttracker.obdpoc.ui.diag.earlierLine
 import com.volttracker.obdpoc.ui.diag.freezeFrameLine
+import com.volttracker.obdpoc.ui.diag.hasFreezeFrame
 import com.volttracker.obdpoc.ui.diag.healthReport
 import com.volttracker.obdpoc.ui.diag.hero
 import com.volttracker.obdpoc.ui.diag.hvBattery
@@ -169,6 +170,8 @@ class HealthLogicTest {
             "Captured with P0300",
             demo.copy(codes = listOf(DtcCode("P0300", status = "freeze-frame"))).freezeFrameLine(),
         )
+        assertFalse(demo.hasFreezeFrame())
+        assertTrue(demo.copy(codes = listOf(DtcCode("P0300", status = "freeze-frame"))).hasFreezeFrame())
         assertEquals("Not connected", liveSignalsLine(DriveUiState()))
         assertEquals("78 readings coming in", liveSignalsLine(DriveUiState(connected = true, signalCount = 78)))
         assertEquals("Waiting for data", liveSignalsLine(DriveUiState(connected = true)))
