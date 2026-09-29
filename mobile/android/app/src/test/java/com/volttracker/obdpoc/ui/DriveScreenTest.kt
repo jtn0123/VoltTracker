@@ -55,6 +55,25 @@ class DriveScreenTest {
     }
 
     @Test
+    fun efficiencySaysWhenItArrivesDuringTheFirstMile() {
+        var state by mutableStateOf(DriveUiState.demo.copy(tripMiles = 0.4, tripMiPerKwh = 5.0))
+        compose.setContent { VoltTheme { DriveScreen(state) } }
+        compose.onNodeWithText("after 1 mi").assertIsDisplayed()
+
+        state = state.copy(metricUnits = true)
+        compose.onNodeWithText("after 1.6 km").assertIsDisplayed()
+
+        state = state.copy(tripMiles = 2.0, metricUnits = false)
+        compose.onNodeWithText("trip avg").assertIsDisplayed()
+    }
+
+    @Test
+    fun chargingBatteryTileShowsAShortCellSpread() {
+        compose.setContent { VoltTheme { DriveScreen(DriveUiState.demoCharging.copy(cellSpreadMv = 14.2)) } }
+        compose.onNodeWithText("14 mV spread").performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
     fun energyFlowCardIsOptional() {
         var show by mutableStateOf(true)
         compose.setContent { VoltTheme { DriveScreen(DriveUiState.demo, showEnergyFlow = show) } }

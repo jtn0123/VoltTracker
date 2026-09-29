@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.charge.eta
 import com.volttracker.obdpoc.ui.drive.ChargeEta
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
@@ -179,6 +180,23 @@ class LiveDriveMappingTest {
         assertNull(d.chargeLevel)
         assertNull(d.chargeAcVolts)
         assertNull(d.chargeEta)
+    }
+
+    @Test
+    fun driveTimesTheChargeWithTheKnownPackHealthLikeTheChargeTab() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample(1_000L) { put("sohPct", 80.0) })
+        store.onTelemetry(
+            sample(2_000L) {
+                put("vehicleState", "charging")
+                put("chargerPowerKw", 3.5)
+                put("soc", 50)
+            },
+        )
+        // 14 kWh usable × 80% health × half the pack, at 3.5 kW: 96 min, not the 120 of a new pack.
+        val eta = store.drive().chargeEta as ChargeEta.Finish
+        assertEquals(5_760_000.0, eta.remainingMs.toDouble(), 1_000.0)
+        assertEquals(store.state.value.charge.eta, store.drive().chargeEta)
     }
 
     @Test

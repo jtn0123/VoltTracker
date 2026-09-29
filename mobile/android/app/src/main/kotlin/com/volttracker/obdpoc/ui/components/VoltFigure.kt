@@ -39,7 +39,7 @@ fun VoltFigure(
                     append(value)
                     if (unit != null && value != DASH) {
                         withStyle(unitStyle(FIGURE_UNIT_SP)) {
-                            append(" $unit")
+                            append(" ${unbreakableUnit(unit)}")
                         }
                     }
                 },
@@ -49,6 +49,12 @@ fun VoltFigure(
         )
     }
 }
+
+/**
+ * A unit that wraps as one piece: "kWh/100 km" split after the slash in a narrow column, leaving
+ * "km" alone on the next line. Non-breaking spaces, plus a word joiner after each slash.
+ */
+fun unbreakableUnit(unit: String): String = unit.replace(" ", "\u00A0").replace("/", "/\u2060")
 
 /** The small muted unit after a number ("kWh", "mi", "%"), in the label face. */
 @Composable
