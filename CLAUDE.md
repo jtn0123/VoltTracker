@@ -27,6 +27,14 @@ on that web stack unless explicitly asked.
   is held to the same `spotlessCheck` and coverage gates as Java — write tests for it.
   See `mobile/android/CONTRIBUTING.md` → "Android: Kotlin for new code".
 
+### Local emulator testing (no phone attached)
+
+Use `mobile/android/scripts/local-emulator.sh` — not an ad-hoc AVD. It boots the `vt_test` AVD
+(internal disk, host GPU, 4 GB, no Play Store), checks host memory first, AOT-compiles the app,
+opens screens by intent (`open trips`, `open car health --demo`, `tour --demo`) instead of
+uiautomator taps, and `check` labels each ANR as the app's or a system stall. Emulator ANRs while
+the Mac is swapping are not app bugs; run `check` before debugging.
+
 ## Dashboard (WebView UI)
 
 The dashboard `index.html` AND the shipped JS are generated — edit the sources, not the
