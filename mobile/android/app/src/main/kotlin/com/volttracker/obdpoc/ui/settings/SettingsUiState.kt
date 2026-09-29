@@ -24,6 +24,11 @@ data class SettingsUiState(
     val demoActive: Boolean = false,
     // Connection
     val adapterLabel: String = "--",
+    /** Devices paired in Android's Bluetooth settings, OBD-looking ones first. */
+    val pairedAdapters: List<PairedAdapter> = emptyList(),
+    val adapterList: AdapterListState = AdapterListState.READY,
+    /** The remembered adapter's address ("" when none is chosen yet). */
+    val selectedAdapterAddress: String = "",
     val autoConnect: Boolean = false,
     /** A "wait for adapter" schedule is probing in the background. */
     val waitingForAdapter: Boolean = false,

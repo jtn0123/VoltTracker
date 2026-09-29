@@ -3,6 +3,8 @@ package com.volttracker.obdpoc.ui.live
 import com.volttracker.obdpoc.VoltGear
 import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.car.CarControl
+import com.volttracker.obdpoc.ui.car.CarUiState
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
@@ -59,6 +61,9 @@ class LiveUiStateStore(
     private val socTrace = ArrayDeque<Float>()
     private var socTraceLastSampleAt = 0L
     private var loggedCharges: List<ChargeSession> = emptyList()
+
+    /** A simulated lock/unlock sticks for the rest of the demo; the demo stream would re-lock it each tick. */
+    private var demoLockOverride: Boolean? = null
     private var chargeLoad = HistoryLoad.LOADING
     private var demoCharges: List<ChargeSession>? = null
     private val tripHistory = TripHistoryHolder()
@@ -83,6 +88,7 @@ class LiveUiStateStore(
         // A fresh link starts a fresh session: the trip and charge figures restart with it.
         if (connected && !_state.value.drive.connected) session.reset()
         if (!connected) clearTraces()
+        if (stateName != "demo") demoLockOverride = null
         _state.value =
             _state.value
                 .let { s ->
@@ -100,6 +106,7 @@ class LiveUiStateStore(
                                 connecting = transitioning,
                                 statusLabel = label,
                             ),
+                        car = if (demoEnded) s.car.withoutDemoBody() else s.car,
                         trips = s.trips.copy(connected = connected, statusLabel = label),
                         insights = s.insights.copy(connected = connected, statusLabel = label),
                         diag =
@@ -152,6 +159,17 @@ class LiveUiStateStore(
             level = null,
             packTempF = null,
             socPoints = emptyList(),
+        )
+
+    /**
+     * A real car's doors, windows and cabin stay on screen as "last known" after a disconnect, but
+     * the demo's are made up: once it stops, the Car tab goes back to "not reported".
+     */
+    private fun CarUiState.withoutDemoBody(): CarUiState =
+        CarUiState(
+            metricUnits = metricUnits,
+            placardPsi = placardPsi,
+            controls = controls.copy(lastCommand = null, lastOutcome = null, lastDetail = null),
         )
 
     /** Forgets the chart history: the traces belong to the session that just ended. */
@@ -468,7 +486,7 @@ class LiveUiStateStore(
             torqueNm = optDouble(t, "engineTorqueNm")?.toInt() ?: current.torqueNm,
             oilLifePct = optDouble(t, "engineOilLifePct")?.toInt() ?: current.oilLifePct,
             tires = tires(t, current.tires),
-            locked = lockState(t, current.locked),
+            locked = demoLockOverride ?: lockState(t, current.locked),
             cellSpreadMv = optDouble(t, "cellBalanceMv") ?: current.cellSpreadMv,
             minCellVolts = optDouble(t, "minCellVoltage") ?: current.minCellVolts,
             maxCellVolts = optDouble(t, "maxCellVoltage") ?: current.maxCellVolts,
@@ -693,9 +711,14 @@ class LiveUiStateStore(
 
     /** A demo command, confirmed in the demo's own dialog: simulated, nothing is sent to a car. */
     fun onDemoCarControl(command: String) {
+        when (command) {
+            CarControl.LOCK.wireName -> demoLockOverride = true
+            CarControl.UNLOCK.wireName -> demoLockOverride = false
+        }
         _state.value =
             _state.value.let { s ->
                 s.copy(
+                    drive = s.drive.copy(locked = demoLockOverride ?: s.drive.locked),
                     car =
                         s.car.copy(
                             controls =

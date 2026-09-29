@@ -27,6 +27,18 @@ sealed interface SettingsCommand {
         val passphrase: String?,
     ) : SettingsCommand
 
+    /** Use this paired device as the adapter and connect to it. */
+    data class PickAdapter(
+        val address: String,
+        val name: String,
+    ) : SettingsCommand
+
+    /** Open Android's Bluetooth settings to pair a new adapter. */
+    data object OpenBluetoothSettings : SettingsCommand
+
+    /** Ask for the Nearby devices permission, or to turn Bluetooth on, so the paired list can load. */
+    data object AllowBluetooth : SettingsCommand
+
     /** Every logged trip as one CSV, via the share sheet. */
     data object ExportTrips : SettingsCommand
 }

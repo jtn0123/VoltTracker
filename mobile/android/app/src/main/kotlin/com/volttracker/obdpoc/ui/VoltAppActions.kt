@@ -8,7 +8,8 @@ import com.volttracker.obdpoc.ui.trips.TripExport
 /** Everything the dashboard can ask its host to do. Defaults are no-ops (previews, tests). */
 data class VoltAppActions(
     val onOpenClassicDashboard: () -> Unit = {},
-    val onConnect: () -> Unit = {},
+    /** Connect to the remembered adapter. False = none chosen yet, so the app opens the picker. */
+    val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},
     val onStopDemo: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},

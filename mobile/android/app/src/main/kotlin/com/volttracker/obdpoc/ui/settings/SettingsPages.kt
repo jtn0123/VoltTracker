@@ -37,7 +37,10 @@ internal fun ConnectionPage(
     onCommand: (SettingsCommand) -> Unit,
 ) {
     VoltPanel {
-        SettingRow(label = "Adapter", subtitle = "Bluetooth OBD-II") { Value(state.adapterLabel) }
+        PairedAdaptersSection(state, onCommand)
+        SettingRow(label = "Adapter", subtitle = "Bluetooth OBD-II") {
+            Value(state.adapterLabel.takeUnless { it == "--" } ?: "None chosen")
+        }
         VoltListDivider()
         ToggleRow(label = "Auto-connect", subtitle = "When the last adapter is seen", on = state.autoConnect) {
             onChange(SettingChange.AutoConnect(it))

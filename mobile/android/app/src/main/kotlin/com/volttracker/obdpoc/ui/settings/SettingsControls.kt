@@ -18,6 +18,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,7 +27,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -268,6 +272,14 @@ private fun InlineEditor(
     ) {
         Text(text = caption, style = VoltType.caption, color = VoltColors.textTertiary)
         Spacer(Modifier.height(8.dp))
+        // Opening an editor means "I want to type": focus the field and raise the keyboard, rather
+        // than making the driver tap the box a second time.
+        val focus = remember { FocusRequester() }
+        val keyboard = LocalSoftwareKeyboardController.current
+        LaunchedEffect(Unit) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
         BasicTextField(
             value = text,
             onValueChange = onTextChange,
@@ -282,6 +294,7 @@ private fun InlineEditor(
                     .border(1.dp, VoltColors.line2, VoltShapes.field)
                     .padding(horizontal = 14.dp, vertical = 10.dp)
                     .semantics { contentDescription = fieldDescription }
+                    .focusRequester(focus)
                     .testTag("settings-number-input"),
         )
         if (error != null) {

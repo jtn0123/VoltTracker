@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -345,10 +346,12 @@ private fun SessionCard(state: ChargeUiState) {
 private fun RecentSessions(state: ChargeUiState) {
     val rows = state.sessionRows(h24 = LocalVoltPrefs.current.clock24h)
     VoltPanel(padding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
-        Row(
+        // Flows so the month summary drops under the label at large text sizes instead of wrapping beside it.
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+            itemVerticalAlignment = Alignment.CenterVertically,
         ) {
             VoltLabel("Recent sessions")
             state.monthSummary(state.sampleAtMs.takeIf { it > 0 } ?: System.currentTimeMillis())?.let {

@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -181,12 +182,18 @@ private fun DtcRow(
                     .background(VoltColors.surfaceElevated)
                     .padding(horizontal = 8.dp, vertical = 5.dp),
         )
+        val pill = code.pill()
+        // At Large/Largest text the pill beside the title squeezed it to a word per line; stack it instead.
+        val stackPill = LocalDensity.current.fontScale > STACK_PILL_FONT_SCALE
         Column(Modifier.weight(1f)) {
             Text(code.title, style = VoltType.bodyStrong.copy(fontSize = 14.sp), color = VoltColors.textPrimary)
             Text(code.detailLine(nowMs), style = VoltType.caption, color = VoltColors.textSecondary)
+            if (stackPill) {
+                Spacer(Modifier.height(6.dp))
+                VoltPill(pill.text, pill.tone, dot = false, small = true)
+            }
         }
-        val pill = code.pill()
-        VoltPill(pill.text, pill.tone, dot = false, small = true)
+        if (!stackPill) VoltPill(pill.text, pill.tone, dot = false, small = true)
     }
 }
 
@@ -380,3 +387,5 @@ private fun DiagScreenPreview() {
         )
     }
 }
+
+private const val STACK_PILL_FONT_SCALE = 1.1f
