@@ -275,10 +275,14 @@
        it reads as a quiet reference, not a control. Still aria-hidden. */
     position: absolute;
     z-index: 1100;
-    bottom: 12px;
+    /* Sits above the attribution pill (bottom-right, ~28px with its margin) so a
+       wide legend never runs into it; wraps instead of overflowing a narrow frame. */
+    bottom: 36px;
     left: 12px;
+    max-width: calc(100% - 24px);
+    flex-wrap: wrap;
     display: none;
-    gap: 8px;
+    gap: 4px 8px;
     padding: 5px 9px;
     border: 1px solid var(--line);
     border-radius: 999px;

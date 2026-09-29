@@ -291,7 +291,7 @@ private fun ThemeRows(
 ) {
     ChoiceRow(
         label = "Mode",
-        subtitle = "System follows your phone's dark theme",
+        subtitle = state.appearance.hint,
         options = AppearanceMode.entries.map { it.label },
         selectedIndex = state.appearance.ordinal,
     ) { onChange(SettingChange.Appearance(AppearanceMode.entries[it])) }

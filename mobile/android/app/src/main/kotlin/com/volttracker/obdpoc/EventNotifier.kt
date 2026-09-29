@@ -64,7 +64,7 @@ open class EventNotifier(
     ): android.app.Notification {
         val open =
             Intent()
-                .setClass(context, MainActivity::class.java)
+                .setClass(context, ComposeDashboardActivity::class.java)
                 .setPackage(context.packageName)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val tap =

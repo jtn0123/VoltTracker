@@ -20,6 +20,9 @@ class VoltTrackerApp : Application() {
         if (BuildConfig.DEBUG) {
             installStrictMode()
         }
+        // Loads the prefs file and warms the data dir off the main thread, so the launcher
+        // activity's first-frame path never waits on the disk (see StartupWarmup).
+        StartupWarmup.start(this)
         StartupTrace.mark("app_on_create_complete")
     }
 

@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,12 +13,16 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +69,41 @@ fun VoltNavBar(
                 )
             }
         }
+    }
+}
+
+/**
+ * The same tabs as a left-hand rail, for landscape phones: a bottom bar there costs a sixth of an
+ * already short screen, while the rail spends width the cards don't need.
+ */
+@Composable
+fun VoltNavRail(
+    selected: VoltTab,
+    modifier: Modifier = Modifier,
+    badges: Map<VoltTab, NavBadge> = emptyMap(),
+    onSelect: (VoltTab) -> Unit = {},
+) {
+    Row(modifier = modifier.fillMaxHeight().background(VoltColors.bg)) {
+        Column(
+            modifier =
+                Modifier
+                    .width(RAIL_WIDTH)
+                    .fillMaxHeight()
+                    .verticalScroll(rememberScrollState())
+                    .selectableGroup(),
+            verticalArrangement = Arrangement.Center,
+        ) {
+            VoltTab.entries.forEach { tab ->
+                NavItem(
+                    tab = tab,
+                    active = tab == selected,
+                    badge = badges[tab],
+                    onClick = { onSelect(tab) },
+                    modifier = Modifier.fillMaxWidth().height(NAV_HEIGHT),
+                )
+            }
+        }
+        VerticalDivider(color = VoltColors.hairline, thickness = 1.dp)
     }
 }
 
@@ -143,4 +183,5 @@ private fun NavItem(
 }
 
 private val NAV_HEIGHT = 67.dp
+private val RAIL_WIDTH = 80.dp
 private const val INDICATOR_ALPHA = 0.14f

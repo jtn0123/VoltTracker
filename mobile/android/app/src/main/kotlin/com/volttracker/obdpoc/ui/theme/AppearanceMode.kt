@@ -7,10 +7,12 @@ package com.volttracker.obdpoc.ui.theme
 enum class AppearanceMode(
     val key: String,
     val label: String,
+    /** The Settings line under "Mode" while this choice is selected. */
+    val hint: String,
 ) {
-    SYSTEM("system", "System"),
-    DARK("dark", "Dark"),
-    LIGHT("light", "Light"),
+    SYSTEM("system", "System", "Follows your phone's dark theme"),
+    DARK("dark", "Dark", "Always dark, whatever your phone is set to"),
+    LIGHT("light", "Light", "Always light (Latte), whatever your phone is set to"),
     ;
 
     companion object {

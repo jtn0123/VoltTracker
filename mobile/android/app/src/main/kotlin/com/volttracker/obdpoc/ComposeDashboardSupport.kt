@@ -99,6 +99,7 @@ internal object ComposeDashboardSupport {
         val status = LiveDashboardSnapshot.latestStatus()
         if (status.length() > 0) store.onStatus(status)
         val history = LiveDashboardSnapshot.telemetryHistorySince(0L)
-        if (history.isNotEmpty()) store.onTelemetryBackfill(history)
+        // A finished session's tail must not repaint the charts under a "Not connected" status.
+        if (history.isNotEmpty() && store.state.value.drive.connected) store.onTelemetryBackfill(history)
     }
 }

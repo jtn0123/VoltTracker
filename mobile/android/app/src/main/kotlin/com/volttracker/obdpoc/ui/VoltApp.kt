@@ -3,7 +3,10 @@ package com.volttracker.obdpoc.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeDrawingPadding
@@ -19,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.car.CarActions
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
@@ -27,6 +31,7 @@ import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltNavActions
 import com.volttracker.obdpoc.ui.components.VoltNavBar
+import com.volttracker.obdpoc.ui.components.VoltNavRail
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.components.rememberSystemPrefs
 import com.volttracker.obdpoc.ui.diag.DiagScreen
@@ -78,16 +83,13 @@ fun VoltApp(
     ) {
         ScaledText(state.settings.fontScale) {
             SystemBarsAppearance()
-            // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the
-            // content clear of them.
-            Column(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(VoltColors.bg)
-                        .safeDrawingPadding(),
-            ) {
-                Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            val badges = listOfNotNull(carBadge(state.diag)?.let { VoltTab.CAR to it }).toMap()
+            val select: (VoltTab) -> Unit = {
+                tab = it
+                routes = emptyList()
+            }
+            val page: @Composable (Modifier) -> Unit = { modifier ->
+                Box(modifier = modifier) {
                     CompositionLocalProvider(LocalVoltNav provides nav, LocalVoltPrefs provides prefs) {
                         when (val route = routes.lastOrNull()) {
                             null -> VoltTabContent(tab = tab, state = state, actions = actions)
@@ -102,14 +104,27 @@ fun VoltApp(
                         }
                     }
                 }
-                VoltNavBar(
-                    selected = tab,
-                    badges = listOfNotNull(carBadge(state.diag)?.let { VoltTab.CAR to it }).toMap(),
-                    onSelect = {
-                        tab = it
-                        routes = emptyList()
-                    },
-                )
+            }
+            // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the
+            // content clear of them. A landscape phone gets a side rail instead of a bottom bar.
+            BoxWithConstraints(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .background(VoltColors.bg)
+                        .safeDrawingPadding(),
+            ) {
+                if (maxWidth > maxHeight && maxHeight < RAIL_MAX_HEIGHT) {
+                    Row(Modifier.fillMaxSize()) {
+                        VoltNavRail(selected = tab, badges = badges, onSelect = select)
+                        page(Modifier.weight(1f).fillMaxHeight())
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        page(Modifier.weight(1f).fillMaxWidth())
+                        VoltNavBar(selected = tab, badges = badges, onSelect = select)
+                    }
+                }
             }
         }
     }
@@ -235,6 +250,9 @@ private fun Settings(
             ),
     )
 }
+
+/** Below this height a landscape window trades the bottom bar for a side rail. */
+private val RAIL_MAX_HEIGHT = 480.dp
 
 /** Saves the route stack as enum names so it survives rotation and process death. */
 private val RouteStackSaver =

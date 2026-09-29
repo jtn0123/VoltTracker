@@ -140,4 +140,24 @@ class DemoPollingLoopTest {
         assertEquals(54.0, DemoPollingLoop.routeSeconds(89.0), 1e-9)
         assertEquals(64.0, DemoPollingLoop.routeSeconds(100.0), 1e-9)
     }
+
+    @Test
+    fun mapMarkerGroundSpeedMatchesTheSpeedometer() {
+        // The marker's own speed, sampled around the loop, must sit in the 25-47 mph band the
+        // speedometer shows (the old loop covered it at ~79 mph, so the map's average disagreed).
+        val metersPerDegree = 111_320.0
+        for (routeT in listOf(0.0, 20.0, 45.0, 90.0, 140.0)) {
+            val dLat = DemoPollingLoop.demoLatitude(routeT + 1) - DemoPollingLoop.demoLatitude(routeT)
+            val dLon =
+                (DemoPollingLoop.demoLongitude(routeT + 1) - DemoPollingLoop.demoLongitude(routeT)) *
+                    Math.cos(Math.toRadians(34.0522))
+            val mph = Math.hypot(dLat, dLon) * metersPerDegree * 2.23694
+            assertTrue("marker speed $mph mph at $routeT s", mph in 25.0..50.0)
+        }
+    }
+
+    @Test
+    fun demoCellSpreadIsSteadyAndSmall() {
+        assertEquals(14, DemoPollingLoop.DEMO_CELL_SPREAD_MV)
+    }
 }

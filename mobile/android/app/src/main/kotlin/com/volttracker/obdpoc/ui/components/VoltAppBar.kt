@@ -106,7 +106,9 @@ fun VoltAppBar(
                             text = shownSubtitle,
                             style = VoltType.caption,
                             color = VoltColors.textSecondary,
-                            maxLines = 1,
+                            // Wraps to a second line rather than cutting "Sample data · 45 drives ·
+                            // 1038 mi · September" mid-word beside the Demo pill.
+                            maxLines = SUBTITLE_MAX_LINES,
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
@@ -217,6 +219,8 @@ fun appBarSubtitle(
         statusSubtitle -> DEMO_SUBTITLE
         else -> "$DEMO_SUBTITLE · $subtitle"
     }
+
+private const val SUBTITLE_MAX_LINES = 2
 
 /** What every header says while the Demo / Testing stream is on screen. */
 const val DEMO_SUBTITLE = "Sample data"

@@ -16,7 +16,7 @@ import org.robolectric.annotation.Config
 
 /**
  * Pins the foreground-service notification built by [ObdNotifications]: its content tap must open
- * [MainActivity] via a PendingIntent, which launches from outside any activity task and therefore
+ * [ComposeDashboardActivity] via a PendingIntent, which launches from outside any activity task and therefore
  * requires [Intent.FLAG_ACTIVITY_NEW_TASK] (plus CLEAR_TOP to reuse a live dashboard, matching the
  * adapter-ready notification in [TroubleshooterBridge]).
  */
@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [34])
 class ObdNotificationsTest {
     @Test
-    fun contentIntentOpensMainActivityWithNewTaskAndClearTop() {
+    fun contentIntentOpensTheLauncherActivityWithNewTaskAndClearTop() {
         val context = RuntimeEnvironment.getApplication()
 
         val notification = ObdNotifications(context).build("Background logging active")
@@ -34,7 +34,7 @@ class ObdNotificationsTest {
         val open = shadowOf(contentIntent).savedIntent
         assertEquals(
             "the tap must open the dashboard activity",
-            ComponentName(context, MainActivity::class.java),
+            ComponentName(context, ComposeDashboardActivity::class.java),
             open.component,
         )
         assertTrue(

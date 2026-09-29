@@ -558,4 +558,125 @@ class LiveUiStateStoreTest {
         assertEquals(38.0, insights.gasMpg ?: 0.0, 1e-9)
         assertEquals(4.25, insights.gasPrice, 1e-9)
     }
+
+    @Test
+    fun stoppingASessionClearsEveryStaleDriveReading() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "demo"))
+        store.onTelemetry(
+            sample {
+                put("source", "demo")
+                put("evRangeKm", 40.0)
+                put("fuelLevelPct", 60.0)
+                put("fuelRangeKm", 400.0)
+                put("cabinTempEstC", 21.0)
+                put("tirePressureFlKpa", 260.0)
+                put("tirePressureFrKpa", 262.0)
+                put("tirePressureRlKpa", 258.0)
+                put("tirePressureRrKpa", 260.0)
+                put("cellBalanceMv", 14.0)
+                put("minCellVoltage", 3.89)
+                put("maxCellVoltage", 3.91)
+                put("aux12vVoltage", 14.1)
+                put("doorLockState", "locked")
+            },
+        )
+        store.onTelemetry(sample(updatedAt = 2_000L, speedKph = 40) { put("source", "demo") })
+        val live = store.state.value.drive
+        assertTrue(live.powerTrace.isNotEmpty())
+        assertTrue(live.evRangeMiles != null && live.tires != null && live.cabinTempF != null)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        val drive = store.state.value.drive
+
+        assertFalse(drive.connected)
+        assertNull(drive.evRangeMiles)
+        assertNull(drive.fuelPercent)
+        assertNull(drive.gasRangeMiles)
+        assertNull(drive.tires)
+        assertNull(drive.cabinTempF)
+        assertNull(drive.cellSpreadMv)
+        assertNull(drive.minCellVolts)
+        assertNull(drive.aux12Volts)
+        assertNull(drive.locked)
+        assertNull(drive.tripMiPerKwh)
+        assertNull(drive.transTempF)
+        assertEquals(0, drive.speedMph)
+        assertEquals(0.0, drive.powerKw, 0.0)
+        assertEquals("--", drive.gear)
+        assertTrue(drive.powerTrace.isEmpty())
+        assertTrue(drive.speedTrace.isEmpty())
+        assertTrue(drive.gasTrace.isEmpty())
+        assertTrue(drive.socTrace.isEmpty())
+    }
+
+    @Test
+    fun aNewSessionAfterAStopChartsFromScratch() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(sample())
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(sample(updatedAt = 9_000L))
+        assertEquals(1, store.state.value.drive.powerTrace.size)
+        assertEquals(1, store.state.value.drive.speedTrace.size)
+    }
+
+    @Test
+    fun stoppingASessionKeepsWhatTheDriverChose() {
+        val store = LiveUiStateStore()
+        store.onSettings { it.copy(metricUnits = true, homeRate = 0.2, driveDetailed = true, chargeTargetPct = 80) }
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(sample())
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        val drive = store.state.value.drive
+        assertTrue(drive.metricUnits)
+        assertTrue(drive.detailed)
+        assertEquals(0.2, drive.electricityRate, 0.0)
+        assertEquals(80, drive.chargeTargetPct)
+    }
+
+    @Test
+    fun stoppingWhileChargingLeavesNoChargerReadingOnTheChargeTab() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(sample { put("vehicleState", "charging").put("chargerPowerKw", 3.3).put("evRangeKm", 40.0) })
+        assertTrue(store.state.value.charge.charging)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        val charge = store.state.value.charge
+        assertFalse(charge.charging)
+        assertEquals(0.0, charge.chargeKw, 0.0)
+        assertNull(charge.evRangeMiles)
+    }
+
+    @Test
+    fun stoppingTheDemoForgetsItsAdapterNameAndBatteryLevel() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "demo"))
+        store.onStatus(JSONObject().put("state", "connected").put("adapter", "Demo stream"))
+        store.onTelemetry(sample { put("source", "demo") })
+        assertTrue(store.state.value.charge.socPercent > 0.0)
+
+        store.onStatus(JSONObject().put("state", "idle").put("adapter", "Demo stream"))
+        val s = store.state.value
+        assertEquals("No adapter", s.drive.statusLabel)
+        assertEquals("No adapter", s.charge.statusLabel)
+        assertEquals(0.0, s.charge.socPercent, 0.0)
+        assertNull(s.charge.displayedSocPercent)
+    }
+
+    @Test
+    fun aRealDisconnectKeepsTheLastBatteryLevelAndAdapterName() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))
+        store.onTelemetry(sample())
+        val soc = store.state.value.charge.socPercent
+        assertTrue(soc > 0.0)
+
+        store.onStatus(JSONObject().put("state", "idle").put("adapter", "OBDLink MX+"))
+        val s = store.state.value
+        assertEquals("Idle · OBDLink MX+", s.drive.statusLabel)
+        assertEquals(soc, s.charge.socPercent, 0.0)
+    }
 }
