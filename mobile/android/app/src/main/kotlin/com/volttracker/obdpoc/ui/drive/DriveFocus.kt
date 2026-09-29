@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -227,6 +228,7 @@ internal fun StatTile(
             color = subTone?.let { pillColor(it) } ?: VoltColors.textSecondary,
             maxLines = 1,
             softWrap = false,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.padding(top = 1.dp),
         )
     }
@@ -271,10 +273,19 @@ internal fun FocusTiles(state: DriveUiState) {
                     }
                 } else {
                     val value = units.efficiencyValue(state.shownTripMiPerKwh) ?: DASH
+                    // A bare dash for the first mile read as broken; say when the figure arrives.
+                    val waiting = value == DASH && state.tripMiles < MIN_EFFICIENCY_MILES
+                    val until = "after ${units.distanceText(MIN_EFFICIENCY_MILES).replace(".0 ", " ")}"
                     if (units.metric) {
-                        StatTile("Efficiency", value, "", "${units.efficiencyUnit} avg", tile)
+                        StatTile("Efficiency", value, "", if (waiting) until else "${units.efficiencyUnit} avg", tile)
                     } else {
-                        StatTile("Efficiency", value, " ${units.efficiencyUnit}", "trip avg", tile)
+                        StatTile(
+                            "Efficiency",
+                            value,
+                            " ${units.efficiencyUnit}",
+                            if (waiting) until else "trip avg",
+                            tile,
+                        )
                     }
                 }
                 StatTile(
@@ -329,8 +340,10 @@ internal fun FocusTiles(state: DriveUiState) {
                     "Battery",
                     state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: DASH,
                     units.tempUnit,
-                    state.cellSpreadMv?.let(::cellBalanceText) ?: DASH,
+                    // The full "Cells balanced (14 mV)" didn't fit a third-width tile.
+                    state.cellSpreadMv?.let { "${it.roundToInt()} mV spread" } ?: DASH,
                     tile,
+                    subTone = state.cellSpreadMv?.takeIf { it >= CELL_WATCH_MV }?.let { PillTone.WARN },
                 )
                 StatTile(
                     "Charger",

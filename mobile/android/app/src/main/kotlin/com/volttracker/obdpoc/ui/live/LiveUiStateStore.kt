@@ -353,7 +353,8 @@ class LiveUiStateStore(
         s: VoltAppUiState,
         t: JSONObject,
     ): VoltAppUiState {
-        val drive = mapDrive(s.drive, t)
+        // The pack health the Charge tab already knows, so both tabs time the charge alike.
+        val drive = mapDrive(s.drive, t, knownSohPct = s.charge.sohPct)
         val charging = drive.phase == DrivePhase.CHARGING
         return s.copy(
             car = CarBodyMapper.map(s.car, t),
@@ -428,6 +429,7 @@ class LiveUiStateStore(
     private fun mapDrive(
         current: DriveUiState,
         t: JSONObject,
+        knownSohPct: Double?,
     ): DriveUiState {
         val rpm = optDouble(t, "rpm")?.toInt() ?: current.rpm
         val mode = if (engineRunning(t, current.mode)) DriveMode.GAS else DriveMode.EV
@@ -509,7 +511,12 @@ class LiveUiStateStore(
             chargeStartedAtMs = session.chargeStartedAtMs,
             chargeEta =
                 if (charging) {
-                    chargeEta(shownSoc, chargerKw, optDouble(t, "sohPct"), current.chargeTargetPct.toDouble())
+                    chargeEta(
+                        shownSoc,
+                        chargerKw,
+                        optDouble(t, "sohPct") ?: knownSohPct,
+                        current.chargeTargetPct.toDouble(),
+                    )
                 } else {
                     null
                 },
