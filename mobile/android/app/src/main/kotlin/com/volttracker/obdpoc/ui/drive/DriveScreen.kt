@@ -56,6 +56,7 @@ fun DriveScreen(
     showEnergyFlow: Boolean = true,
     onSetDetailed: (Boolean) -> Unit = {},
     initialToast: Boolean = false,
+    firstRun: Boolean = false,
 ) {
     var detailed by rememberSaveable(state.detailed) { mutableStateOf(state.detailed) }
     val toastVisible = engineToastVisible(state, initialToast)
@@ -78,17 +79,20 @@ fun DriveScreen(
             actions = {
                 // At the larger text sizes the chip would crowd the status line; it moves below.
                 if (detailed && !largeText) outside?.let { VoltChip(it) }
-                IconCircleButton(
-                    icon = if (detailed) VoltIcons.Drive else VoltIcons.Grid,
-                    contentDescription = if (detailed) "Focus view" else "Detailed view",
-                    onClick = {
-                        detailed = !detailed
-                        onSetDetailed(detailed)
-                    },
-                )
+                // Nothing to switch between until there's data.
+                if (!firstRun) {
+                    IconCircleButton(
+                        icon = if (detailed) VoltIcons.Drive else VoltIcons.Grid,
+                        contentDescription = if (detailed) "Focus view" else "Detailed view",
+                        onClick = {
+                            detailed = !detailed
+                            onSetDetailed(detailed)
+                        },
+                    )
+                }
             },
         ) {
-            if (detailed) {
+            if (detailed && !firstRun) {
                 if (largeText) outside?.let { VoltChip(it, Modifier.padding(bottom = 8.dp)) }
                 ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 CockpitContent(state)
@@ -101,17 +105,13 @@ fun DriveScreen(
                     }
                     Column(Modifier.weight(1f)) {
                         ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
-                        RangeCard(state)
-                        FocusTiles(state)
-                        if (showEnergyFlow) EnergyFlowCard(state)
+                        FocusCards(state, showEnergyFlow, firstRun)
                     }
                 }
             } else {
                 ArcGauge(state, Modifier.align(Alignment.CenterHorizontally))
                 ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
-                RangeCard(state)
-                FocusTiles(state)
-                if (showEnergyFlow) EnergyFlowCard(state)
+                FocusCards(state, showEnergyFlow, firstRun)
             }
         }
         AnimatedVisibility(
@@ -195,6 +195,22 @@ private fun DriveScreenPreview() {
 @Composable
 private fun DriveScreenDetailedPreview() {
     VoltTheme { DriveScreen(DriveUiState.demo.copy(detailed = true)) }
+}
+
+/** Below the ring in Focus: the range card and tiles, or on first run how to get set up. */
+@Composable
+private fun FocusCards(
+    state: DriveUiState,
+    showEnergyFlow: Boolean,
+    firstRun: Boolean,
+) {
+    if (firstRun) {
+        GetStartedCard()
+        return
+    }
+    RangeCard(state)
+    FocusTiles(state)
+    if (showEnergyFlow) EnergyFlowCard(state)
 }
 
 /**
