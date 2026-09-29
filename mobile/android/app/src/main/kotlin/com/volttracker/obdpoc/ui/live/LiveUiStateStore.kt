@@ -70,10 +70,19 @@ class LiveUiStateStore(
         val stateName = payload.optString("state", "").lowercase(Locale.US)
         val connected = stateName == "connected" || stateName == "demo"
         val transitioning = stateName in TRANSITION_STATES
-        val adapter = payload.optString("adapter", "").ifBlank { "--" }
+        // Once the demo ends its "Demo stream" name is no adapter at all: the header must not
+        // keep saying "Idle · Demo stream" after Stop demo.
+        val adapter =
+            payload
+                .optString("adapter", "")
+                .takeUnless { it.isBlank() || (!connected && stateName != "demo" && it == DEMO_ADAPTER) }
+                ?: "--"
         val label = statusLabel(stateName, adapter)
+        // The last-known battery level survives a real disconnect, but not the demo's made-up one.
+        val demoEnded = !connected && stateName != "demo" && _state.value.settings.demoActive
         // A fresh link starts a fresh session: the trip and charge figures restart with it.
         if (connected && !_state.value.drive.connected) session.reset()
+        if (!connected) clearTraces()
         _state.value =
             _state.value
                 .let { s ->
@@ -85,7 +94,12 @@ class LiveUiStateStore(
                                 statusLabel = label,
                                 adapterLabel = adapter,
                             ),
-                        charge = s.charge.copy(connected = connected, connecting = transitioning, statusLabel = label),
+                        charge =
+                            (if (connected) s.charge else s.charge.withoutLiveCharge(demoEnded)).copy(
+                                connected = connected,
+                                connecting = transitioning,
+                                statusLabel = label,
+                            ),
                         trips = s.trips.copy(connected = connected, statusLabel = label),
                         insights = s.insights.copy(connected = connected, statusLabel = label),
                         diag =
@@ -107,27 +121,47 @@ class LiveUiStateStore(
     }
 
     /**
-     * Off the link, the last sample's instantaneous readings are no longer true: they read as
-     * not reported ("—") instead of a frozen figure until the next session reports them again.
+     * Off the link, nothing the last sample said is still true: range, tyres, cabin, cell spread,
+     * efficiency, the power chart and every other reading go back to "not reported" instead of
+     * frozen figures under a "Not connected" label. Only what the driver chose (units, rate,
+     * placard, view density) and the last finished drive survive; the next session repopulates
+     * the rest as its samples arrive.
      */
     private fun DriveUiState.withoutLiveReadings(): DriveUiState =
-        copy(
-            powerKw = 0.0,
-            packTempF = null,
-            packVolts = null,
-            packAmps = null,
-            auxVolts = null,
-            coolantF = null,
-            ambientF = null,
-            motorAKw = null,
-            motorBKw = null,
-            motorTempF = null,
-            inverterTempF = null,
-            transTempF = null,
-            torqueNm = null,
-            displayedSocPercent = null,
-            chargeEta = null,
+        DriveUiState(
+            maxDriveKw = maxDriveKw,
+            maxRegenKw = maxRegenKw,
+            tirePlacardPsi = tirePlacardPsi,
+            electricityRate = electricityRate,
+            detailed = detailed,
+            metricUnits = metricUnits,
+            chargeTargetPct = chargeTargetPct,
+            lastDrive = lastDrive,
         )
+
+    /** The same for the Charge tab: no charger, current or range survives the link. */
+    private fun ChargeUiState.withoutLiveCharge(demoEnded: Boolean): ChargeUiState =
+        copy(
+            socPercent = if (demoEnded) 0.0 else socPercent,
+            displayedSocPercent = if (demoEnded) null else displayedSocPercent,
+            charging = false,
+            evRangeMiles = null,
+            chargeKw = 0.0,
+            acVolts = null,
+            acAmps = null,
+            level = null,
+            packTempF = null,
+            socPoints = emptyList(),
+        )
+
+    /** Forgets the chart history: the traces belong to the session that just ended. */
+    private fun clearTraces() {
+        speedTrace.clear()
+        powerTrace.clear()
+        gasTrace.clear()
+        socTrace.clear()
+        socTraceLastSampleAt = 0L
+    }
 
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
     fun onTelemetry(payload: JSONObject) {
@@ -747,6 +781,9 @@ class LiveUiStateStore(
 
     private companion object {
         const val DEMO_SOURCE = "demo"
+
+        /** The adapter name ObdService reports for the demo stream. */
+        const val DEMO_ADAPTER = "Demo stream"
 
         /** A demo command's outcome (see [com.volttracker.obdpoc.ui.car.lastResultLine]). */
         const val DEMO_OUTCOME = "simulated"

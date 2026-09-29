@@ -51,6 +51,21 @@ class InsightsLogicTest {
     }
 
     @Test
+    fun theMonthChartStopsAtTheWeekThatHoldsToday() {
+        // Mon 2026-09-28: September's last week (29th) hasn't begun, so the chart ends at "22",
+        // the bar that holds today's drives, instead of ending on an empty future bar.
+        val sep28 = 1_790_570_520_000L
+        val w = InsightsPeriod.MONTH.window(sep28, firstTripMs = null, zone = utc)
+        assertEquals(listOf("Sep 1", "8", "15", "22"), w.bucketLabels)
+        val trips = listOf(TripSummary("today", sep28 - hour, sep28, 5.0 * METERS_PER_MILE, null, 1.0))
+        val s = InsightsUiState(trips = trips, nowMs = sep28).summary(utc)
+        assertEquals(listOf(0.0, 0.0, 0.0, 5.0), s.buckets.map { it.evMiles })
+        // The 29th itself is in: the day it starts the week is the current one.
+        val sep29 = sep28 + day
+        assertEquals(listOf("Sep 1", "8", "15", "22", "29"), InsightsPeriod.MONTH.window(sep29, null, utc).bucketLabels)
+    }
+
+    @Test
     fun aWeekRunsSundayToSaturdayByDay() {
         val w = InsightsPeriod.WEEK.window(now, firstTripMs = null, zone = utc)
         assertEquals(april1 + 25 * day, w.startMs)

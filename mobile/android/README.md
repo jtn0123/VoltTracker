@@ -57,7 +57,7 @@ Production source layout under `app/src/main/kotlin/com/volttracker/obdpoc/`:
 
 | Layer    | Files                                                                       | What it does                                                      | Entry point                |
 |----------|-----------------------------------------------------------------------------|-------------------------------------------------------------------|----------------------------|
-| UI       | `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*`                    | Hosts the WebView; bridges TypeScript calls back to the service   | `MainActivity.onCreate`    |
+| UI       | `ComposeDashboardActivity.kt`, `ui/*`; `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*` | Native Compose launcher; the classic WebView (advanced tools) is one tap away in Settings | `ComposeDashboardActivity.onCreate` |
 | Service  | `ObdService.kt`, `ObdNotifications.kt`, `PermissionGate.kt`                 | Foreground lifecycle, status broadcasts, runtime permissions       | `ObdService.onStartCommand`|
 | Engine   | `ObdPollingEngine.kt`, `SessionRecorder.kt`, `ObdProtocol.kt`, `ElmConnection.kt`, `ObdElmDecode.kt`, `ObdProbes.kt`, `location/*` | Bluetooth IO, ELM327 init, polling loop, parsing, GPS | `ObdPollingEngine.runBluetoothLoop` |
 | Data     | `data/*` (`ObdLocalStore`, `VoltTrackerDb`, `ObdStoreReports`, `ObdStoreTrips`, `ObdStoreSupport`, record DTOs) | SQLite schema, writes, queries, JSON projections for the dashboard | `ObdLocalStore`            |
@@ -79,7 +79,7 @@ branching off the polling engine):
 ```mermaid
 flowchart LR
     subgraph UI
-        MA["MainActivity<br/>(WebView dashboard)"]
+        MA["MainActivity<br/>(classic WebView, non-launcher)"]
         VB["VoltBridge<br/>(JS bridge)"]
     end
     subgraph Service

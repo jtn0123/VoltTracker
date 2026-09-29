@@ -258,12 +258,13 @@ private fun MainCard(state: DriveUiState) {
                         else -> powerColor(pal, state.powerRole)
                     }
                 val value =
-                    if (charging) {
-                        "+" + oneDecimal(state.chargeKw)
-                    } else {
-                        (if (state.regenerating) "−" else "") + oneDecimal(abs(state.powerKw))
+                    when {
+                        !state.connected -> DASH
+                        charging -> "+" + oneDecimal(state.chargeKw)
+                        else -> (if (state.regenerating) "−" else "") + oneDecimal(abs(state.powerKw))
                     }
-                NumberUnit(value, " kW", 26f, Modifier.padding(top = 8.dp), color = color, unitSize = 13f)
+                val unit = if (state.connected) " kW" else ""
+                NumberUnit(value, unit, 26f, Modifier.padding(top = 8.dp), color = color, unitSize = 13f)
                 val what =
                     when {
                         charging -> "charging"
@@ -349,7 +350,11 @@ private fun BatteryCard(
     CockpitCard(modifier) {
         CapRow(
             "HV battery",
-            if (holding) "Holding charge" else "OK",
+            when {
+                !state.connected -> ""
+                holding -> "Holding charge"
+                else -> "OK"
+            },
             pillColor(if (holding) PillTone.GAS else PillTone.EV),
         )
         Text(
@@ -396,7 +401,11 @@ private fun RangeMiniCard(
         val engineOn = state.mode == DriveMode.GAS && state.rpm > 0
         KvRow(
             "Engine",
-            if (engineOn) "${String.format(Locale.US, "%,d", state.rpm)} rpm" else "off",
+            when {
+                !state.connected -> DASH
+                engineOn -> "${String.format(Locale.US, "%,d", state.rpm)} rpm"
+                else -> "off"
+            },
             colors = listOf(null, if (engineOn) VoltColors.gas else null),
         )
     }
@@ -449,6 +458,8 @@ private data class Therm(
     val lo: Int,
     val hi: Int,
     val warnAt: Int,
+    /** What a screen reader says, when the printed [label] is abbreviated. */
+    val spokenLabel: String = label,
 )
 
 @Composable
@@ -459,7 +470,7 @@ private fun TemperaturesCard(state: DriveUiState) {
             Therm("Motor A", state.motorTempF, 40, 260, 230),
             Therm("Inverter", state.inverterTempF, 40, 220, 190),
             Therm("Coolant", state.coolantF?.takeIf { state.connected }, 40, 240, 225),
-            Therm("Transmission", state.transTempF?.takeIf { state.connected }, 40, 260, 240),
+            Therm("Trans.", state.transTempF?.takeIf { state.connected }, 40, 260, 240, "Transmission"),
             Therm("Cabin", state.cabinTempF, 20, 120, 110),
         )
     CockpitCard(Modifier.padding(top = 8.dp)) {
@@ -486,7 +497,7 @@ private fun Thermometer(
     val reading = t.valueF?.let { units.tempText(it.toDouble()) }
     Column(
         modifier.semantics(mergeDescendants = true) {
-            contentDescription = "${t.label} ${reading ?: NOT_REPORTED}${if (warn) ", high" else ""}"
+            contentDescription = "${t.spokenLabel} ${reading ?: NOT_REPORTED}${if (warn) ", high" else ""}"
         },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -514,7 +525,7 @@ private fun Thermometer(
             color = if (warn) VoltColors.warn else VoltColors.textPrimary,
             modifier = Modifier.padding(top = 6.dp),
         )
-        // "Transmission" hyphenates onto a second line in a narrow column rather than clipping.
+        // The labels are short ("Trans.") so they fit one line in a six-across column.
         Text(
             text = t.label,
             style = VoltType.caption.copy(fontSize = 11.sp, hyphens = Hyphens.Auto, textAlign = TextAlign.Center),
@@ -587,13 +598,14 @@ private fun EfficiencyCard(
             modifier = Modifier.padding(top = 4.dp, bottom = 6.dp),
         )
         KvRow(
-            "${units.distanceOneDecimal(state.tripMiles)} ${units.distanceUnit}",
-            state.tripDuration,
+            if (state.connected) "${units.distanceOneDecimal(state.tripMiles)} ${units.distanceUnit}" else DASH,
+            if (state.connected) state.tripDuration else DASH,
             state.cycleEvPercent?.let { "$it% EV" } ?: DASH,
         )
         KvRow(
             withUnit(state.tripKwh?.let(::oneDecimal), "kWh"),
-            costText(state.tripKwh, state.electricityRate) ?: "max ${units.speedText(state.tripMaxMph.toDouble())}",
+            costText(state.tripKwh, state.electricityRate)
+                ?: if (state.connected) "max ${units.speedText(state.tripMaxMph.toDouble())}" else DASH,
             state.ambientF?.takeIf { state.connected }?.let { "${units.tempText(it.toDouble())} out" } ?: DASH,
             modifier = Modifier.padding(top = 0.dp),
         )

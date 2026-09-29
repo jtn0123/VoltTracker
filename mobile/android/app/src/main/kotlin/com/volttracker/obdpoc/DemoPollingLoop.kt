@@ -63,6 +63,22 @@ class DemoPollingLoop(
         private const val BRAKE_SECONDS = PARK_START_SECONDS - BRAKE_START_SECONDS
         private const val MPH_TO_KPH = 1.609
 
+        /** Steady demo cell-group spread (mV), so every screen shows the same reading. */
+        const val DEMO_CELL_SPREAD_MV = 14
+
+        /**
+         * How fast the demo GPS marker circles its ~1 km loop. At 1/60 rad/s the ground speed is
+         * ~37 mph, in line with the 25-47 mph the speedometer reports; the old 1/28 covered the
+         * same loop at ~79 mph, so the map's average speed disagreed with the dashboard.
+         */
+        const val ROUTE_RAD_PER_SECOND = 1.0 / 60.0
+        private const val BEARING_TURN = 360
+
+        /** The demo marker's position after [routeT] seconds of moving: a ~1 km loop. */
+        fun demoLatitude(routeT: Double): Double = 34.0522 + 0.009 * Math.sin(routeT * ROUTE_RAD_PER_SECOND)
+
+        fun demoLongitude(routeT: Double): Double = -118.2437 + 0.009 * Math.cos(routeT * ROUTE_RAD_PER_SECOND)
+
         fun isChargingPhase(t: Double): Boolean = t.mod(CYCLE_SECONDS) >= DRIVE_PHASE_SECONDS
 
         /** Which leg of the demo cycle t falls in. */
@@ -210,11 +226,12 @@ class DemoPollingLoop(
                 sample.put("capacityAh", 47.3)
                 sample.put("packEnergyKwh", ObdElmDecode.round1(soc / 100.0 * 14.0))
                 sample.put("hvBatteryRawSoc", ObdElmDecode.round1(soc + 2.0))
-                // HV cell-group balance for the Battery-tab cell card (mirrors
-                // actions-demo.ts): a healthy pack wobbling ~10-20 mV around ~3.9 V,
-                // cell 47 on the low side to match the "Cell 47 trending low" insight.
+                // HV cell-group balance for the Battery-tab cell card: a healthy pack around
+                // ~3.9 V, cell 47 on the low side to match the "Cell 47 trending low" insight.
+                // The spread is steady, not wobbling, so Drive, Car and Health (each read at a
+                // different instant) all show the same figure.
                 val cellAvgV = 3.85 + (soc - 50.0) * 0.003
-                val cellSpreadMv = Math.round(14.0 + 6.0 * Math.sin(t / 9.0)).toInt()
+                val cellSpreadMv = DEMO_CELL_SPREAD_MV
                 sample.put("minCellVoltage", ObdElmDecode.round3(cellAvgV - cellSpreadMv / 2000.0))
                 sample.put("maxCellVoltage", ObdElmDecode.round3(cellAvgV + cellSpreadMv / 2000.0))
                 sample.put("cellBalanceMv", cellSpreadMv)
@@ -283,11 +300,16 @@ class DemoPollingLoop(
                 }
                 // The position clock only runs while moving, so the marker stays put
                 // once the car parks instead of orbiting an unplugged charger.
-                sample.put("latitude", 34.0522 + 0.009 * Math.sin(routeT / 28.0))
-                sample.put("longitude", -118.2437 + 0.009 * Math.cos(routeT / 28.0))
+                sample.put("latitude", demoLatitude(routeT))
+                sample.put("longitude", demoLongitude(routeT))
                 sample.put("accuracyM", 6.0)
                 sample.put("gpsSpeedMps", ObdElmDecode.round1(speedKph / 3.6))
-                sample.put("bearingDeg", ObdElmDecode.round1((Math.toDegrees(routeT / 28.0) % 360 + 360) % 360))
+                sample.put(
+                    "bearingDeg",
+                    ObdElmDecode.round1(
+                        (Math.toDegrees(routeT * ROUTE_RAD_PER_SECOND) % BEARING_TURN + BEARING_TURN) % BEARING_TURN,
+                    ),
+                )
                 sample.put("updatedAt", System.currentTimeMillis())
                 engine.appendSessionHealth(sample)
                 sample.put("raw", "demo")

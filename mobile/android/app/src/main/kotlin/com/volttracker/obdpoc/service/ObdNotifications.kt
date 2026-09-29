@@ -8,7 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import androidx.core.app.NotificationCompat
-import com.volttracker.obdpoc.MainActivity
+import com.volttracker.obdpoc.ComposeDashboardActivity
 import com.volttracker.obdpoc.R
 
 /**
@@ -24,7 +24,7 @@ class ObdNotifications(
     fun build(text: String): Notification {
         val open =
             Intent()
-                .setClass(context, MainActivity::class.java)
+                .setClass(context, ComposeDashboardActivity::class.java)
                 .setPackage(context.packageName)
                 // Activities launched from a notification PendingIntent start outside any
                 // activity task, so NEW_TASK is required; CLEAR_TOP matches the sibling

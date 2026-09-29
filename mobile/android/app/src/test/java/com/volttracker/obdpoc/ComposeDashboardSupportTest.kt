@@ -204,6 +204,25 @@ class ComposeDashboardSupportTest {
         assertEquals(39, drive.speedMph)
     }
 
+    @Test
+    fun aFinishedSessionsTailIsNotReplayedUnderANotConnectedStatus() {
+        LiveDashboardSnapshot.recordStatus(JSONObject().put("state", "disconnected"))
+        LiveDashboardSnapshot.recordTelemetry(JSONObject().put("updatedAt", 1_000L).put("speedKph", 32))
+
+        val store = LiveUiStateStore()
+        ComposeDashboardSupport.replayServiceSnapshot(store)
+
+        assertFalse(store.state.value.drive.connected)
+        assertTrue(
+            store.state.value.drive.speedTrace
+                .isEmpty(),
+        )
+        assertTrue(
+            store.state.value.drive.powerTrace
+                .isEmpty(),
+        )
+    }
+
     // --- blockedStatusDetail -------------------------------------------------
 
     @Test

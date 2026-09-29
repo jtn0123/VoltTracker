@@ -87,14 +87,17 @@ private fun monthWindow(
     cal: Calendar,
     zone: TimeZone,
 ): PeriodWindow {
+    val nowMs = cal.timeInMillis
     startOfDay(cal)
     cal.set(Calendar.DAY_OF_MONTH, 1)
     val start = cal.timeInMillis
     val daysInMonth = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
+    // Only the weeks that have begun: on the 28th of a 30-day month the "29" week hasn't started,
+    // so it would be an empty bar while today's drives sit in the "22" bar.
     val weeks =
-        (1..daysInMonth step DAYS_PER_WEEK).map { day ->
-            calendar(start, zone).apply { set(Calendar.DAY_OF_MONTH, day) }.timeInMillis
-        }
+        (1..daysInMonth step DAYS_PER_WEEK)
+            .map { day -> calendar(start, zone).apply { set(Calendar.DAY_OF_MONTH, day) }.timeInMillis }
+            .filter { it <= nowMs }
     cal.add(Calendar.MONTH, 1)
     val end = cal.timeInMillis
     cal.add(Calendar.MONTH, -2)
