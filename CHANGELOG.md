@@ -1,6 +1,82 @@
 # CHANGELOG
 
 
+## v0.53.0 (2026-09-30)
+
+### 🔺 Fix
+
+- Batch 2 on-car follow-ups — body test, parked listen, trips, labels
+  ([#113](https://github.com/jtn0123/VoltTracker/pull/113),
+  [`3cb3d23`](https://github.com/jtn0123/VoltTracker/commit/3cb3d23cf81689821cfccb313fe56f53665f733e))
+
+- **build**: Unblock releases — privacyScan skips the generated DTC table
+  ([#116](https://github.com/jtn0123/VoltTracker/pull/116),
+  [`93131e0`](https://github.com/jtn0123/VoltTracker/commit/93131e0fecdc79846a09d77c363ade58e63c0323))
+
+- **obd**: On-car fixes for dash soc, fuel, engine-on and adapter timing
+  ([#112](https://github.com/jtn0123/VoltTracker/pull/112),
+  [`770b058`](https://github.com/jtn0123/VoltTracker/commit/770b0586cd829f29cd8083b2fc2b314bf0a77343))
+
+- **service**: Stop the pause-time ANR behind prefs fsyncs
+  ([#103](https://github.com/jtn0123/VoltTracker/pull/103),
+  [`b3b150f`](https://github.com/jtn0123/VoltTracker/commit/b3b150fb34628ee844c1ae0be6b1c4a84ad00886))
+
+- **ui**: Consistent charge eta, readable tiles and units
+  ([#110](https://github.com/jtn0123/VoltTracker/pull/110),
+  [`f0b32d9`](https://github.com/jtn0123/VoltTracker/commit/f0b32d9676095909329dfa783946b8a15b5eb6f5))
+
+- **ui**: Demo headers say "Sample data"; cockpit holds up at large text
+  ([#105](https://github.com/jtn0123/VoltTracker/pull/105),
+  [`85c8770`](https://github.com/jtn0123/VoltTracker/commit/85c8770ef45150e474d8d9485ce00798f2563223))
+
+- **ui**: Dogfood pass on the compose dashboard with demo mode
+  ([#108](https://github.com/jtn0123/VoltTracker/pull/108),
+  [`b13f939`](https://github.com/jtn0123/VoltTracker/commit/b13f9399a3d22572be87e3c533dc262f2b5c34f1))
+
+- **ui**: Offline and large-text polish from the visual pass
+  ([#115](https://github.com/jtn0123/VoltTracker/pull/115),
+  [`296ad63`](https://github.com/jtn0123/VoltTracker/commit/296ad63ff4f4e70155d3e298f27f603bb2d45d06))
+
+- **ui**: Polish pass 3 — accessibility, motion, placeholders, large text, wording
+  ([#104](https://github.com/jtn0123/VoltTracker/pull/104),
+  [`fb7260e`](https://github.com/jtn0123/VoltTracker/commit/fb7260e2001a5e9ebb618ca32172ce6372db9c7b))
+
+### 🔷 Changed
+
+- **dev**: Reliable local emulator testing script
+  ([#107](https://github.com/jtn0123/VoltTracker/pull/107),
+  [`30954dc`](https://github.com/jtn0123/VoltTracker/commit/30954dcbb2e3f3bdc7458001cdcf3f1f00735452))
+
+### ✳️ New
+
+- Native freeze frame and all-readings screens, scan-complete label, body-test sim
+  ([#114](https://github.com/jtn0123/VoltTracker/pull/114),
+  [`87a7998`](https://github.com/jtn0123/VoltTracker/commit/87a7998cd26810ff6c0dee0a2f6fc8aace4d5a80))
+
+- **ui**: First-run setup card on drive ([#111](https://github.com/jtn0123/VoltTracker/pull/111),
+  [`e6e38df`](https://github.com/jtn0123/VoltTracker/commit/e6e38df98534e7cab09867f1c720c59c4295a19c))
+
+- **ui**: Make the new Compose dashboard the app launcher
+  ([#106](https://github.com/jtn0123/VoltTracker/pull/106),
+  [`697ea87`](https://github.com/jtn0123/VoltTracker/commit/697ea878cff5f44c5f38374191dfd7b1d9928a7a))
+
+- **ui**: Native live signals, landscape drive, classic back returns
+  ([#109](https://github.com/jtn0123/VoltTracker/pull/109),
+  [`5093038`](https://github.com/jtn0123/VoltTracker/commit/50930383bfa612f8a8df55ebf55190379f01d9df))
+
+- **ui**: Polish theme legibility, controls and touch targets
+  ([#101](https://github.com/jtn0123/VoltTracker/pull/101),
+  [`3bbb999`](https://github.com/jtn0123/VoltTracker/commit/3bbb9999aa198006e7d810907a690bdec76a9b4d))
+
+- **ui**: Units everywhere, loading states and stale-value fixes
+  ([#102](https://github.com/jtn0123/VoltTracker/pull/102),
+  [`add92b9`](https://github.com/jtn0123/VoltTracker/commit/add92b9c1b17267d94971eaec13ed24fcf8aaffb))
+
+- **ui**: Wire the Health screen to real trouble codes, scan and clear
+  ([#100](https://github.com/jtn0123/VoltTracker/pull/100),
+  [`e5fe481`](https://github.com/jtn0123/VoltTracker/commit/e5fe48164957005e5825c923aff7491748168612))
+
+
 ## v0.52.0 (2026-09-28)
 
 ### ✳️ New
