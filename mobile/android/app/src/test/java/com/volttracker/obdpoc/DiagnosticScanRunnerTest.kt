@@ -118,6 +118,56 @@ class DiagnosticScanRunnerTest {
         assertEquals(setOf("P0133"), codes)
     }
 
+    @Test
+    fun aQuickScanWithAStoredCodeReadsItsFreezeFrame() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+        engine.responses["03"] = "7E8 04 43 01 04 20\r>"
+        engine.responses[FreezeFrame.DTC_REQUEST] = "7E8 05 42 02 00 04 20\r>"
+        engine.responses["020D00"] = "7E8 04 42 0D 00 48\r>"
+        engine.responses["020C00"] = "7E8 05 42 0C 00 1A F8\r>"
+        engine.responses["020500"] = "NO DATA\r>"
+
+        DiagnosticScanRunner(service, engine).run(DiagnosticScanProfile.QUICK)
+
+        val frame = service.lastTelemetry()!!.getJSONObject("freezeFrame")
+        assertEquals("P0420", frame.getString("dtc"))
+        val readings = FreezeFrame.readingsFrom(frame)
+        assertEquals(
+            listOf(
+                FreezeFrame.Reading("vehicle speed", 72.0, "km/h"),
+                FreezeFrame.Reading("engine rpm", 1726.0, "rpm"),
+            ),
+            readings,
+        )
+        assertTrue(engine.commands.containsAll(FreezeFrame.PIDS.map(FreezeFrame::request)))
+    }
+
+    @Test
+    fun aQuickScanOfACleanCarSkipsTheFreezeFrame() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+        engine.responses["03"] = "7E8 02 43 00\r>"
+
+        DiagnosticScanRunner(service, engine).run(DiagnosticScanProfile.QUICK)
+
+        assertTrue(!engine.commands.contains(FreezeFrame.DTC_REQUEST))
+        assertTrue(!service.lastTelemetry()!!.has("freezeFrame"))
+    }
+
+    @Test
+    fun aFullScanWithNoFreezeFrameStopsAfterTheCodeRequest() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+        engine.responses[FreezeFrame.DTC_REQUEST] = "NO DATA\r>"
+
+        DiagnosticScanRunner(service, engine).run()
+
+        assertTrue(engine.commands.contains(FreezeFrame.DTC_REQUEST))
+        assertTrue("no snapshot PIDs without a code", !engine.commands.contains("020C00"))
+        assertTrue(!service.lastTelemetry()!!.has("freezeFrame"))
+    }
+
     private class FakeService : ObdService() {
         val statuses: MutableList<String?> = ArrayList()
         val statusDetails: MutableList<String?> = ArrayList()

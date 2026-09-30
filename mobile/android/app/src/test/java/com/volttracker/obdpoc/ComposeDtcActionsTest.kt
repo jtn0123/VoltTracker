@@ -152,6 +152,42 @@ class ComposeDtcActionsTest {
     }
 
     @Test
+    fun aScanSavesItsFreezeFrameAndAClearOrCleanScanDropsIt() {
+        val frame = FreezeFrame.toJson("P0420", listOf(FreezeFrame.Reading("vehicle speed", 72.0, "km/h")))
+        dtc.onTelemetry(
+            JSONObject()
+                .put(
+                    "source",
+                    "scan",
+                ).put("dtcScanValid", true)
+                .put("updatedAt", 5_000L)
+                .put("freezeFrame", frame),
+        )
+        val saved = dtc.freezeFrame()!!
+        assertEquals("P0420", saved.dtc)
+        assertEquals(5_000L, saved.capturedAtMs)
+        assertEquals(listOf(FreezeFrame.Reading("vehicle speed", 72.0, "km/h")), saved.readings)
+
+        dtc.onTelemetry(JSONObject().put("source", "clear-dtc").put("clearDtcOk", true).put("updatedAt", 9_000L))
+        assertNull("a clear erases the car's freeze frame", dtc.freezeFrame())
+
+        dtc.onTelemetry(
+            JSONObject()
+                .put(
+                    "source",
+                    "scan",
+                ).put("dtcScanValid", true)
+                .put("updatedAt", 10_000L)
+                .put("freezeFrame", frame),
+        )
+        dtc.onTelemetry(JSONObject().put("source", "scan").put("dtcScanValid", true).put("updatedAt", 11_000L))
+        assertNull("a scan that found none replaces it", dtc.freezeFrame())
+
+        prefs.edit { putString(ComposeDtcActions.PREF_FREEZE_FRAME, "{not json") }
+        assertNull(dtc.freezeFrame())
+    }
+
+    @Test
     fun theAutoScanCountsAsTheLastRead() {
         EventNotificationPrefs(prefs).setLastAutoScanAtMs(12_000L)
         assertEquals(12_000L, dtc.lastScanAtMs())

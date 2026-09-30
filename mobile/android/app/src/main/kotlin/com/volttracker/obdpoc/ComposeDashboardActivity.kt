@@ -641,6 +641,7 @@ class ComposeDashboardActivity :
             openStore = { ObdLocalStore(applicationContext) },
             dtcCatalog = { dtcCatalog },
             dtcChecks = { dtc.lastScanAtMs() to dtc.lastClearAtMs() },
+            freezeFrame = dtc::freezeFrame,
         )
     }
 

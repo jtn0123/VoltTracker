@@ -47,7 +47,7 @@ class DiagScreenshotTest(
             VoltAppUiState(
                 drive = drive,
                 charge = ChargeUiState(sohPct = 91.0, capacityAh = 47.3),
-                diag = DiagUiState.demo.copy(codes = emptyList()),
+                diag = DiagUiState.demo.copy(codes = emptyList(), freezeFrame = null),
                 settings = SettingsUiState.demo,
             )
 
@@ -89,6 +89,7 @@ class DiagScreenshotTest(
                         diag =
                             DiagUiState.demo.copy(
                                 codes = emptyList(),
+                                freezeFrame = null,
                                 busyLabel = "Reading stored diagnostic trouble codes...",
                             ),
                     ),

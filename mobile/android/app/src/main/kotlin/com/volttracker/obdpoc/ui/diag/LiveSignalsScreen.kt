@@ -28,14 +28,14 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
  * Health › Live signals: the key live readings, grouped, in the chosen units. Every raw sensor
- * (and the connection log) is still one tap away in the classic dashboard.
+ * is one tap away in All readings.
  */
 @Composable
 fun LiveSignalsScreen(
     drive: DriveUiState,
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
-    onOpenClassic: () -> Unit = {},
+    onOpenAllReadings: () -> Unit = {},
 ) {
     VoltScreen(
         title = "Live signals",
@@ -63,12 +63,12 @@ fun LiveSignalsScreen(
         }
         VoltButton(
             text = "All raw readings",
-            onClick = onOpenClassic,
+            onClick = onOpenAllReadings,
             style = ButtonStyle.SECONDARY,
             modifier = Modifier.fillMaxWidth(),
         )
         Text(
-            "Every sensor and the connection log, in the classic dashboard.",
+            "Every value the car sends, by name.",
             style = VoltType.caption,
             color = VoltColors.textSecondary,
             textAlign = TextAlign.Center,

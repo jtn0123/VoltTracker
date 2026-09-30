@@ -96,7 +96,7 @@ fun DiagScreen(
                 "Freeze frame",
                 subtitle = state.freezeFrameLine(),
                 // Nothing to open until the car has captured one.
-                onClick = actions.onOpenClassic.takeIf { state.hasFreezeFrame() },
+                onClick = actions.onOpenFreezeFrame.takeIf { state.hasFreezeFrame() },
             )
             VoltListDivider()
             VoltListRow(
