@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.car.CarUiState
@@ -108,7 +110,7 @@ class MotionReelTest {
         play("push", MID_MS)
         // Mid-slide: the Car tab is still underneath the Health screen sliding over it.
         compose.onNodeWithText("Vehicle health").assertExists()
-        compose.onNodeWithText("Car › Diagnostics").assertExists()
+        compose.onNodeWithText("Health").assertExists()
         play("push", SCREEN_MS)
         compose.onNodeWithText("Vehicle health").assertDoesNotExist()
 
@@ -118,12 +120,12 @@ class MotionReelTest {
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         play("push", MID_MS + SCREEN_MS)
-        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+        compose.onNodeWithText("Health").assertIsDisplayed()
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         play("push", MID_MS + SCREEN_MS)
         compose.onNodeWithText("Vehicle health").assertIsDisplayed()
-        compose.onNodeWithText("Car › Diagnostics").assertDoesNotExist()
+        compose.onNodeWithText("Health").assertDoesNotExist()
     }
 
     @Test
@@ -190,6 +192,25 @@ class MotionReelTest {
     }
 
     @Test
+    fun pullingDownRefreshesTrips() {
+        var refreshes = 0
+        start {
+            VoltApp(demoState, initialTab = VoltTab.TRIPS, actions = VoltAppActions(onRefresh = { refreshes++ }))
+        }
+        play("pull", HOLD_MS)
+        compose.onRoot().performTouchInput { down(Offset(width / 2f, height * PULL_FROM)) }
+        repeat(PULL_STEPS) {
+            compose.onRoot().performTouchInput { moveBy(Offset(0f, height * PULL_STEP)) }
+            play("pull", FRAME_MS.toInt())
+        }
+        compose.onRoot().performTouchInput { up() }
+        play("pull", PHASE_MS)
+        assertEquals(1, refreshes)
+        // The spinner has gone again and the drives are still there.
+        compose.onNodeWithText("ELECTRIC").assertIsDisplayed()
+    }
+
+    @Test
     fun removeAnimationsSkipsTheSlide() {
         val context = compose.activity
         Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
@@ -198,7 +219,7 @@ class MotionReelTest {
         compose.onNodeWithText("Vehicle health").performClick()
         play("still", MID_MS)
         // No slide to be part-way through: Health is simply there and the Car tab is gone.
-        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+        compose.onNodeWithText("Health").assertIsDisplayed()
         compose.onNodeWithText("Vehicle health").assertDoesNotExist()
     }
 
@@ -230,5 +251,10 @@ class MotionReelTest {
         const val POLL_MS = 1_000
         const val PHASE_MS = 1_600
         const val SCAN_MS = 1_800
+
+        /** A finger dragging down from a third of the way down the screen, past the refresh threshold. */
+        const val PULL_FROM = 0.3f
+        const val PULL_STEP = 0.03f
+        const val PULL_STEPS = 14
     }
 }

@@ -49,6 +49,7 @@ import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.CellHistogram
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -91,10 +92,12 @@ fun DiagScreen(
 ) {
     VoltScreen(
         title = "Health",
-        subtitle = "Car › Diagnostics",
-        dot = connectionDot(state.connected),
+        subtitle = state.statusLine(drive),
+        dot = connectionDot(state.connected, state.connecting),
         onBack = onBack,
         modifier = modifier,
+        statusSubtitle = true,
+        onRefresh = LocalVoltNav.current.refresh,
     ) {
         Hero(state, demo, actions) { actions.onShare(healthReport(state, battery, demo)) }
         Spacer(Modifier.height(12.dp))

@@ -108,11 +108,13 @@ class LiveUiStateStore(
                                 statusLabel = label,
                             ),
                         car = if (demoEnded) s.car.withoutDemoBody() else s.car,
-                        trips = s.trips.copy(connected = connected, statusLabel = label),
-                        insights = s.insights.copy(connected = connected, statusLabel = label),
+                        trips = s.trips.copy(connected = connected, connecting = transitioning, statusLabel = label),
+                        insights =
+                            s.insights.copy(connected = connected, connecting = transitioning, statusLabel = label),
                         diag =
                             s.diag.copy(
                                 connected = connected,
+                                connecting = transitioning,
                                 statusLabel = label,
                                 adapterLabel = adapter,
                                 busyLabel = busyLabel(stateName, payload.optString("detail", "")),
@@ -785,7 +787,8 @@ class LiveUiStateStore(
             "connecting", "initializing", "reconnecting" -> "Connecting…"
             "scanning" -> "Scanning…"
             "scan-complete" -> "Scan complete"
-            else -> if (adapter == "--") idleLabel(_state.value.settings) else "Idle · $adapter"
+            // One word for "no link" on every tab; which adapter it was is on Settings and Health.
+            else -> if (adapter == "--") idleLabel(_state.value.settings) else NOT_CONNECTED_LABEL
         }
 
     private fun push(

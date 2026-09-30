@@ -85,13 +85,13 @@ class VoltAppNavigationTest {
         compose.setContent { VoltApp(demoState, initialTab = VoltTab.CAR) }
 
         compose.onNodeWithText("Vehicle health").performClick()
-        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+        compose.onNodeWithText("Health").assertIsDisplayed()
 
         // Settings over Health, then two system backs: Settings → Health → Car.
         compose.onNodeWithContentDescription("Settings").performClick()
         compose.onNodeWithText("PREFERENCES").assertIsDisplayed()
         systemBack()
-        compose.onNodeWithText("Car › Diagnostics").assertIsDisplayed()
+        compose.onNodeWithText("Health").assertIsDisplayed()
         systemBack()
         compose.onNodeWithText("Vehicle health").assertIsDisplayed()
     }

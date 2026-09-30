@@ -307,13 +307,17 @@ class LiveUiStateStoreTest {
         store.onStatus(JSONObject().put("state", "scanning").put("adapter", "OBDLink MX+"))
         assertEquals("Scanning…", store.state.value.drive.statusLabel)
         assertTrue(store.state.value.drive.connecting)
+        // Every tab's header dot shows the link coming up, not just Drive's.
+        assertTrue(store.state.value.trips.connecting)
+        assertTrue(store.state.value.insights.connecting)
+        assertTrue(store.state.value.diag.connecting)
 
         store.onStatus(JSONObject().put("state", "demo"))
         assertEquals("Demo", store.state.value.drive.statusLabel)
         assertTrue(store.state.value.drive.connected)
 
         store.onStatus(JSONObject().put("state", "idle").put("adapter", "OBDLink MX+"))
-        assertEquals("Idle · OBDLink MX+", store.state.value.drive.statusLabel)
+        assertEquals("Not connected", store.state.value.drive.statusLabel)
 
         store.onStatus(JSONObject().put("state", "idle"))
         assertEquals("No adapter", store.state.value.drive.statusLabel)
@@ -685,7 +689,7 @@ class LiveUiStateStoreTest {
 
         store.onStatus(JSONObject().put("state", "idle").put("adapter", "OBDLink MX+"))
         val s = store.state.value
-        assertEquals("Idle · OBDLink MX+", s.drive.statusLabel)
+        assertEquals("Not connected", s.drive.statusLabel)
         assertEquals(soc, s.charge.socPercent, 0.0)
     }
 }

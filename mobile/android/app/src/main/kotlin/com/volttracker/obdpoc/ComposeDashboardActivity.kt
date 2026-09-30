@@ -222,6 +222,7 @@ class ComposeDashboardActivity :
                             onSettingChange = ::changeSetting,
                             onSettingsCommand = ::runCommand,
                             onScreenShown = ::onScreenShown,
+                            onRefresh = { loadHistoryFor(shownView) },
                             onSelectTrip = ::selectTrip,
                             onExportTrip = ::exportTrip,
                             onInsightsPeriod = ::selectInsightsPeriod,

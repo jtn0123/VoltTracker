@@ -30,31 +30,47 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltSpacing
 import com.volttracker.obdpoc.ui.theme.VoltType
+import kotlin.math.abs
 
 /**
- * App-level navigation the screens can trigger without knowing the shell: the gear opens
- * Settings, Car opens Health. Supplied by `VoltApp`; no-ops in isolated screen previews.
+ * App-level actions the screens can trigger without knowing the shell: the gear opens Settings,
+ * Car opens Health, an empty state offers Connect or the demo, a failed read offers a retry.
+ * Supplied by `VoltApp`; no-ops in isolated screen previews.
  */
 class VoltNavActions(
     val openSettings: () -> Unit = {},
     val openHealth: () -> Unit = {},
+    /** Connect to the remembered adapter, or open the adapter picker when none is. */
+    val connect: () -> Unit = {},
+    val startDemo: () -> Unit = {},
+    /** Re-read the saved history behind the screen that is showing. */
+    val refresh: () -> Unit = {},
 )
 
 val LocalVoltNav = staticCompositionLocalOf { VoltNavActions() }
 
-/** Subtitle status dot: [live] adds the soft halo the mockups use for a streaming link. */
+/**
+ * Subtitle status dot: [live] adds the soft halo the mockups use for a streaming link, [pulsing]
+ * breathes that halo while the link is still coming up. [spoken] is what TalkBack says for it on a
+ * screen whose subtitle isn't the connection status itself.
+ */
 class AppBarDot(
     val color: Color,
     val live: Boolean = false,
+    val pulsing: Boolean = false,
+    val spoken: String? = null,
 )
 
 /**
@@ -96,7 +112,8 @@ fun VoltAppBar(
             if (shownSubtitle != null || demo) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (shownDot != null) {
-                        StatusDot(shownDot)
+                        // Drive and Charge spell the status out beside the dot; elsewhere the dot speaks it.
+                        StatusDot(shownDot, spoken = shownDot.spoken.takeUnless { statusSubtitle })
                         Spacer(Modifier.size(6.dp))
                     }
                     // Demo data must never pass for the car's: every header flags it.
@@ -126,16 +143,25 @@ fun VoltAppBar(
 }
 
 @Composable
-private fun StatusDot(dot: AppBarDot) {
+private fun StatusDot(
+    dot: AppBarDot,
+    spoken: String?,
+) {
     // Connecting → live fades the dot and its halo in rather than flipping them.
     val color = glideColor(dot.color, "status-dot")
-    val halo = glideColor(if (dot.live) dot.color.copy(alpha = HALO_ALPHA) else Color.Transparent, "status-halo")
+    val ringed = dot.live || dot.pulsing
+    val halo = glideColor(if (ringed) dot.color.copy(alpha = HALO_ALPHA) else Color.Transparent, "status-halo")
+    // The halo breathes while the link comes up (steady under reduce-motion).
+    val phase = rememberLoopPhase(active = dot.pulsing, period = 2f, durationMs = PULSE_MS, label = "status-pulse")
     Box(
         modifier =
             Modifier
                 .size(13.dp)
-                .background(halo, CircleShape)
-                .padding(3.dp)
+                .then(if (spoken == null) Modifier else Modifier.semantics { contentDescription = spoken })
+                .drawBehind {
+                    val breath = phase?.let { PULSE_MIN + (1f - PULSE_MIN) * abs(1f - it) } ?: 1f
+                    drawCircle(halo, alpha = breath)
+                }.padding(3.dp)
                 .background(color, CircleShape),
     )
 }
@@ -179,8 +205,8 @@ fun IconCircleButton(
 
 /**
  * The standard scrolling page: [VoltAppBar] on top, then [content] with the mockups' 16dp side
- * margin. Pass `contentPadding = 0.dp` for full-bleed rows (the content then pads itself), and a
- * [scrollState] to move the page from outside.
+ * margin. Pass `contentPadding = 0.dp` for full-bleed rows (the content then pads itself), a
+ * [scrollState] to move the page from outside, and [onRefresh] to let a pull down re-read it.
  */
 @Composable
 fun VoltScreen(
@@ -193,28 +219,32 @@ fun VoltScreen(
     statusSubtitle: Boolean = false,
     contentPadding: Dp = SCREEN_MARGIN,
     scrollState: ScrollState = rememberScrollState(),
+    onRefresh: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState)
-                .padding(bottom = 20.dp),
-    ) {
-        VoltAppBar(
-            title = title,
-            subtitle = subtitle,
-            dot = dot,
-            onBack = onBack,
-            showGear = showGear,
-            statusSubtitle = statusSubtitle,
-            actions = actions,
-            modifier = Modifier.padding(horizontal = SCREEN_MARGIN),
-        )
-        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding), content = content)
+    val page: @Composable (Modifier) -> Unit = { pageModifier ->
+        Column(
+            modifier =
+                pageModifier
+                    .fillMaxSize()
+                    .verticalScroll(scrollState)
+                    .padding(bottom = 20.dp),
+        ) {
+            VoltAppBar(
+                title = title,
+                subtitle = subtitle,
+                dot = dot,
+                onBack = onBack,
+                showGear = showGear,
+                statusSubtitle = statusSubtitle,
+                actions = actions,
+                modifier = Modifier.padding(horizontal = SCREEN_MARGIN),
+            )
+            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding), content = content)
+        }
     }
+    if (onRefresh == null) page(modifier) else VoltRefreshBox(onRefresh, modifier) { page(Modifier) }
 }
 
 /**
@@ -241,12 +271,24 @@ const val DEMO_SUBTITLE = "Sample data"
 /** Page side margin (mockups `.content { padding: 0 16px }`). */
 val SCREEN_MARGIN = VoltSpacing.screen
 
-/** Status-dot convention for a connection label: live Volt-green when connected, faint otherwise. */
+/**
+ * The one status dot every header uses: green with a halo while live, amber and breathing while
+ * the link is coming up, faint while there is none.
+ */
 @Composable
-fun connectionDot(connected: Boolean): AppBarDot =
-    if (connected) AppBarDot(VoltColors.energy, live = true) else AppBarDot(VoltColors.textTertiary)
+fun connectionDot(
+    connected: Boolean,
+    connecting: Boolean = false,
+): AppBarDot =
+    when {
+        connected -> AppBarDot(VoltColors.energy, live = true, spoken = "Connected")
+        connecting -> AppBarDot(VoltColors.warn, pulsing = true, spoken = "Connecting")
+        else -> AppBarDot(VoltColors.textTertiary, spoken = "Not connected")
+    }
 
 private const val HALO_ALPHA = 0.18f
+private const val PULSE_MS = 1_600
+private const val PULSE_MIN = 0.25f
 
 /** A small round button shrinks a little more than a wide one, so the press still reads. */
 private const val ICON_PRESSED_SCALE = 0.9f

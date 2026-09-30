@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.components.ConnectRow
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.NavBadge
@@ -60,6 +61,7 @@ import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.Meter
 import com.volttracker.obdpoc.ui.drive.NumberUnit
 import com.volttracker.obdpoc.ui.drive.cellBalanceText
+import com.volttracker.obdpoc.ui.drive.driveSubtitle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
@@ -85,10 +87,13 @@ fun CarScreen(
     val nav = LocalVoltNav.current
     VoltScreen(
         title = "Car",
-        subtitle = "Chevrolet Volt",
-        dot = connectionDot(drive.connected),
+        subtitle = driveSubtitle(drive),
+        dot = connectionDot(drive.connected, drive.connecting),
         modifier = modifier,
+        statusSubtitle = true,
     ) {
+        // Everything on this tab is live: off the link it offers the same two ways in as Drive.
+        ConnectRow(drive.connected, drive.connecting, nav.connect, nav.startDemo)
         StatusRow(drive, car)
         CarTopView(
             tires = drive.tires,

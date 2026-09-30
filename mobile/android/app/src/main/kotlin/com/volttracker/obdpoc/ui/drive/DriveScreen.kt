@@ -74,7 +74,7 @@ fun DriveScreen(
         VoltScreen(
             title = "Drive",
             subtitle = driveSubtitle(state),
-            dot = connectionDot(state.connected),
+            dot = connectionDot(state.connected, state.connecting),
             statusSubtitle = true,
             actions = {
                 // At the larger text sizes the chip would crowd the status line; it moves below.

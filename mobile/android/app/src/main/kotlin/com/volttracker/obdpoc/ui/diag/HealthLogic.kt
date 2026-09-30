@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.ui.diag
 
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.driveSubtitle
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -200,6 +201,13 @@ fun DiagUiState.hasFreezeFrame(): Boolean = freezeFrameDtc() != null
 fun DiagUiState.freezeFrameDtc(): String? =
     freezeFrame?.dtc?.takeIf { it.isNotBlank() }
         ?: codes?.firstOrNull { it.status.equals(DtcCode.STATUS_FREEZE_FRAME, ignoreCase = true) }?.code
+
+/**
+ * Health's header: the same connection line as Drive ("Live · OBDLink MX+", "Connected · parked"),
+ * and "Scanning…" / "Not connected" off the link.
+ */
+fun DiagUiState.statusLine(drive: DriveUiState): String =
+    if (connected && drive.connected) driveSubtitle(drive) else statusLabel
 
 /** The Live signals row: "78 readings coming in", or why there are none. */
 fun liveSignalsLine(drive: DriveUiState): String =

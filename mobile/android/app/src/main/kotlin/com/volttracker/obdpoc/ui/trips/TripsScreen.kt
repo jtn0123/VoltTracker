@@ -47,6 +47,7 @@ import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconCircleButton
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
@@ -56,8 +57,11 @@ import com.volttracker.obdpoc.ui.components.VoltGroupLabel
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLoading
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectAction
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.demoAction
 import com.volttracker.obdpoc.ui.components.glideState
+import com.volttracker.obdpoc.ui.components.retryAction
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
@@ -86,11 +90,13 @@ fun TripsScreen(
             scroll.animateScrollTo(0)
         }
     }
+    val nav = LocalVoltNav.current
     VoltScreen(
         title = "Trips",
         subtitle = state.subtitle(),
-        dot = connectionDot(state.connected),
+        dot = connectionDot(state.connected, state.connecting),
         scrollState = scroll,
+        onRefresh = nav.refresh,
         actions = { if (state.trips.isNotEmpty()) ExportMenu(state, onExport) },
     ) {
         // Loading → drives (or → "none yet") cross-fades rather than popping a full page in.
@@ -103,7 +109,8 @@ fun TripsScreen(
                         VoltEmptyState(
                             "Drives couldn't be read",
                             notice,
-                            body = "Your logged drives are safe. They'll load the next time you open Trips.",
+                            body = "Your logged drives are safe.",
+                            action = nav.retryAction(),
                         )
                     HistoryLoad.LOADED ->
                         VoltEmptyState(
@@ -112,6 +119,9 @@ fun TripsScreen(
                             body =
                                 "Drives appear here after you drive with the adapter connected, " +
                                     "with the route when location is on.",
+                            // Already connected: this drive is the one being logged.
+                            action = nav.connectAction().takeUnless { state.connected || state.connecting },
+                            secondAction = nav.demoAction().takeUnless { state.connected || state.connecting },
                         )
                     // The drives themselves. (Skipped while fading out after the last one is removed.)
                     null ->

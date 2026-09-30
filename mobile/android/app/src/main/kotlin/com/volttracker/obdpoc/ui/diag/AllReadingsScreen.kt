@@ -23,11 +23,14 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltListCard
 import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectAction
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.demoAction
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
@@ -51,15 +54,22 @@ fun AllReadingsScreen(
     VoltScreen(
         title = "All readings",
         subtitle = if (drive.connected) "${all.size} readings in the latest sample" else "Not connected",
-        dot = connectionDot(drive.connected),
+        dot = connectionDot(drive.connected, drive.connecting),
         onBack = onBack,
         modifier = modifier,
     ) {
         if (!drive.connected || all.isEmpty()) {
-            VoltEmptyState(
-                if (drive.connected) "Waiting for readings" else "Not connected",
-                body = "Connect the adapter (or start the demo) to see every reading the car sends.",
-            )
+            val nav = LocalVoltNav.current
+            if (drive.connected) {
+                VoltEmptyState("Waiting for readings", body = "The first sample from the car lists them here.")
+            } else {
+                VoltEmptyState(
+                    "Not connected",
+                    body = "Connect the adapter to see every reading the car sends.",
+                    action = nav.connectAction(),
+                    secondAction = nav.demoAction(),
+                )
+            }
             return@VoltScreen
         }
         SearchField(query) { query = it }

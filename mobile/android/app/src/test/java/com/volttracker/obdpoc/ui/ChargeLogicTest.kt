@@ -117,7 +117,9 @@ class ChargeLogicTest {
     fun subtitleNamesTheChargerWhilePluggedIn() {
         assertEquals("Plugged in · Level 2", ChargeUiState(charging = true, level = "L2").subtitle)
         assertEquals("Plugged in", ChargeUiState(charging = true).subtitle)
-        assertEquals("Idle · OBDLink", ChargeUiState(statusLabel = "Idle · OBDLink").subtitle)
+        // Off the link it is the label every tab shares; on it, what the charger is doing.
+        assertEquals("Not connected", ChargeUiState(statusLabel = "Not connected").subtitle)
+        assertEquals("Connected · not charging", ChargeUiState(connected = true, statusLabel = "Live").subtitle)
     }
 
     @Test

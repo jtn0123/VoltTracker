@@ -2,7 +2,9 @@ package com.volttracker.obdpoc.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
@@ -20,8 +22,8 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 
 /**
  * The one empty / loading / failed state (in place of a list or chart): a short title, an
- * optional line saying what fills it, and an optional tappable way to fix it. [inCard] draws its
- * own card; pass false inside a card that already has one.
+ * optional line saying what fills it, and up to two tappable ways to fix it, so no empty screen is
+ * a dead end. [inCard] draws its own card; pass false inside a card that already has one.
  */
 @Composable
 fun VoltEmptyState(
@@ -30,6 +32,7 @@ fun VoltEmptyState(
     body: String? = null,
     action: EmptyAction? = null,
     inCard: Boolean = true,
+    secondAction: EmptyAction? = null,
 ) {
     val content: @Composable () -> Unit = {
         Text(title, style = VoltType.bodyStrong, color = VoltColors.textPrimary)
@@ -41,7 +44,11 @@ fun VoltEmptyState(
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
-        action?.let { EmptyLink(it) }
+        val links = listOfNotNull(action, secondAction)
+        if (links.isNotEmpty()) {
+            // Side by side, or one under the other when large text leaves no room for both.
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(20.dp)) { links.forEach { EmptyLink(it) } }
+        }
     }
     if (inCard) {
         VoltPanel(modifier = modifier) { content() }

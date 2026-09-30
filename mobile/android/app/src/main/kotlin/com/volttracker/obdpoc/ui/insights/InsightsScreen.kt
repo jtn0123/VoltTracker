@@ -49,6 +49,8 @@ import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.VoltSegmented
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.demoAction
+import com.volttracker.obdpoc.ui.components.retryAction
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.drive.oneDecimal
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
@@ -75,8 +77,9 @@ fun InsightsScreen(
     VoltScreen(
         title = "Insights",
         subtitle = summary.window.title,
-        dot = connectionDot(state.connected),
+        dot = connectionDot(state.connected, state.connecting),
         modifier = modifier,
+        onRefresh = LocalVoltNav.current.refresh,
     ) {
         VoltSegmented(
             options = InsightsPeriod.entries.map { it.label },
@@ -85,7 +88,9 @@ fun InsightsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
-        ElectricHero(summary, state.units, state.history)
+        // A period with nothing in it offers the way out: every drive there is.
+        val showAll = EmptyAction("Show all time") { onPeriod(InsightsPeriod.ALL) }
+        ElectricHero(summary, state.units, state.history, showAll.takeIf { state.period != InsightsPeriod.ALL })
         Spacer(Modifier.height(10.dp))
         Row(
             modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
@@ -108,7 +113,9 @@ private fun ElectricHero(
     summary: PeriodSummary,
     units: VoltUnits,
     history: HistoryLoad,
+    showAll: EmptyAction?,
 ) {
+    val nav = LocalVoltNav.current
     VoltPanel(padding = PaddingValues(16.dp, 16.dp, 16.dp, 12.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
             Column(Modifier.weight(1f)) {
@@ -134,13 +141,15 @@ private fun ElectricHero(
                 HistoryLoad.FAILED ->
                     VoltEmptyState(
                         "Drives couldn't be read",
-                        body = "They'll load the next time you open Insights.",
+                        body = "Your logged drives are safe.",
+                        action = nav.retryAction(),
                         inCard = false,
                     )
                 HistoryLoad.LOADED ->
                     VoltEmptyState(
                         "No drives in this period yet",
                         body = "Pick a longer period, or drive with the adapter connected.",
+                        action = showAll ?: nav.demoAction(),
                         inCard = false,
                     )
             }
