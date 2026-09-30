@@ -319,9 +319,13 @@ const val GATE_BUSY = "busy"
 
 private val TIRE_NAMES = listOf("front left", "front right", "rear left", "rear right")
 
-/** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */
+/** The Car tab's body-test row: what it does, or why it can't run yet. */
+fun bodyTestLine(canTest: Boolean): String =
+    if (canTest) "Listen 1 min while you open doors, lock and move windows" else "Connect to the car to run it"
+
 private const val NO_GEAR_TEXT = "--"
 
+/** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */
 const val NEEDS_OBDLINK = "Needs OBDLink adapter"
 const val TIRES_AFTER_DRIVE = "Shows after a short drive"
 const val NOT_SENT_YET = "Not sent by the car yet"

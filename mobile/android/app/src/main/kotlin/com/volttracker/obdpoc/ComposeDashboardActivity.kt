@@ -227,6 +227,7 @@ class ComposeDashboardActivity :
                             onInsightsPeriod = ::selectInsightsPeriod,
                             onCarControl = { carControls.request(it) },
                             onCarControlsEnabled = { carControls.setEnabled(it) },
+                            onBodyTest = ::startBodyTest,
                             onScanCodes = { dtc.scan() },
                             onClearCodes = { dtc.clear() },
                             onShareHealthReport = { dtc.share(it) },
@@ -386,6 +387,16 @@ class ComposeDashboardActivity :
             ConnectAction.CONNECT -> startObdService(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
         }
         return true
+    }
+
+    /** Asks the live session for a one-minute body-bus listen (see SwcanListenRunner). */
+    private fun startBodyTest() {
+        try {
+            startService(Intent(this, ObdService::class.java).setAction(ObdService.ACTION_BODY_TEST))
+            showMessage("Listening for 1 minute. Open and close doors, lock and unlock, move a window.")
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "body test dispatch failed", ex)
+        }
     }
 
     /** Reloads the Settings → Adapter picker from Android's paired-device list. */

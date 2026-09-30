@@ -127,15 +127,38 @@ fun TripsUiState.groups(zone: TimeZone = TimeZone.getDefault()): List<TripGroup>
     return groups
 }
 
-/** This month's drives (the header figures summarise them). */
-fun TripsUiState.monthTrips(zone: TimeZone = TimeZone.getDefault()): List<TripSummary> {
-    val now = Calendar.getInstance(zone).apply { timeInMillis = nowMs }
-    return trips.filter { t ->
-        Calendar.getInstance(zone).apply { timeInMillis = t.startedAtMs }.let {
-            it.get(Calendar.MONTH) == now.get(Calendar.MONTH) && it.get(Calendar.YEAR) == now.get(Calendar.YEAR)
-        }
+/** Under a tenth of a mile and a minute: a connect in the driveway, not a drive. */
+fun TripSummary.isGhost(): Boolean = miles < GHOST_MILES && endedAtMs - startedAtMs < GHOST_MS
+
+/**
+ * The month the header figures summarise: this one, or when it has no drives yet the latest
+ * month that does — a list of July drives under blank figures reads as broken.
+ */
+fun TripsUiState.summaryMonthMs(zone: TimeZone = TimeZone.getDefault()): Long =
+    if (trips.any { sameMonth(it.startedAtMs, nowMs, zone) }) {
+        nowMs
+    } else {
+        trips.maxOfOrNull { it.startedAtMs } ?: nowMs
     }
+
+/** The summary month's drives (the header figures summarise them). */
+fun TripsUiState.monthTrips(zone: TimeZone = TimeZone.getDefault()): List<TripSummary> {
+    val month = summaryMonthMs(zone)
+    return trips.filter { sameMonth(it.startedAtMs, month, zone) }
 }
+
+private fun sameMonth(
+    aMs: Long,
+    bMs: Long,
+    zone: TimeZone,
+): Boolean {
+    val a = Calendar.getInstance(zone).apply { timeInMillis = aMs }
+    val b = Calendar.getInstance(zone).apply { timeInMillis = bMs }
+    return a.get(Calendar.MONTH) == b.get(Calendar.MONTH) && a.get(Calendar.YEAR) == b.get(Calendar.YEAR)
+}
+
+private const val GHOST_MILES = 0.1
+private const val GHOST_MS = 60_000L
 
 /** "6 drives · 416 mi · April", or "No drives yet in April"; no month until the drives are read. */
 fun TripsUiState.subtitle(zone: TimeZone = TimeZone.getDefault()): String {
@@ -144,7 +167,7 @@ fun TripsUiState.subtitle(zone: TimeZone = TimeZone.getDefault()): String {
         HistoryLoad.FAILED -> return "Drives couldn't be read"
         HistoryLoad.LOADED -> Unit
     }
-    val month = SimpleDateFormat("MMMM", Locale.US).apply { timeZone = zone }.format(Date(nowMs))
+    val month = SimpleDateFormat("MMMM", Locale.US).apply { timeZone = zone }.format(Date(summaryMonthMs(zone)))
     val inMonth = monthTrips(zone)
     if (inMonth.isEmpty()) return "No drives yet in $month"
     val drives = if (inMonth.size == 1) "1 drive" else "${inMonth.size} drives"

@@ -63,6 +63,12 @@ class SwcanListenRunner(
         /** Runs [block] holding the adapter IO lock, so no other runner interleaves commands. */
         fun <T> exclusive(block: () -> T): T
 
+        /**
+         * True while the car is standing still. Parked, a longer and more frequent window costs
+         * nothing the driver sees and catches the event-only body frames (locks, doors, windows).
+         */
+        fun isStationary(): Boolean = false
+
         /** Session JSONL event, like every other engine event. */
         fun logEvent(
             event: String,
@@ -79,6 +85,12 @@ class SwcanListenRunner(
         /** Only listen while HS-CAN answered within this long — a sleeping car has no SW-CAN either. */
         val maxLiveDataAgeMs: Long = 5_000L,
         val maxConsecutiveEmpty: Int = 3,
+        /** Stationary cadence: on the car a 1.2 s window every 45 s heard ~3% of the time. */
+        val parkedIntervalMs: Long = 15_000L,
+        val parkedListenMs: Long = 3_000L,
+        /** A body test listens in chunks this long so no single monitor reply nears the 64 KB cap. */
+        val bodyTestChunkMs: Long = 5_000L,
+        val bodyTestMaxMs: Long = 90_000L,
     )
 
     private enum class Identity { UNKNOWN, STN, NOT_STN }
@@ -93,6 +105,9 @@ class SwcanListenRunner(
     private var healthCheckPending = false
     private var liveCyclesAtWindowEnd = 0L
 
+    /** A requested body-test length, set from the service thread and taken by the poll loop. */
+    @Volatile private var bodyTestRequestMs = 0L
+
     fun resetSession() {
         readings.clear()
         identity = Identity.UNKNOWN
@@ -102,6 +117,16 @@ class SwcanListenRunner(
         windowCount = 0
         okWindows = 0
         healthCheckPending = false
+        bodyTestRequestMs = 0L
+    }
+
+    /**
+     * Asks for one continuous listen of [durationMs] (capped at [Policy.bodyTestMaxMs]) at the next
+     * sample, logging every frame with its payload. Live HS data pauses meanwhile. It is how a
+     * decoder gets verified on the car: open a door, lock, move a window while it runs.
+     */
+    fun requestBodyTest(durationMs: Long) {
+        bodyTestRequestMs = durationMs.coerceIn(policy.bodyTestChunkMs, policy.bodyTestMaxMs)
     }
 
     fun isEnabled(): Boolean = identity == Identity.STN && disabledReason == null
@@ -164,6 +189,16 @@ class SwcanListenRunner(
                 return
             }
         }
+        val bodyTestMs = bodyTestRequestMs
+        if (bodyTestMs > 0L) {
+            bodyTestRequestMs = 0L
+            if (isEnabled()) {
+                runBodyTest(bodyTestMs)
+            } else {
+                io.logEvent("body_test_unavailable", "reason", disabledReason ?: identity.name.lowercase(Locale.US))
+            }
+            return
+        }
         if (!isEnabled() || clock() < nextWindowAtMs || io.msSinceLiveData() > policy.maxLiveDataAgeMs) return
         runWindow()
     }
@@ -182,7 +217,7 @@ class SwcanListenRunner(
             val failedSetup = SETUP_COMMANDS.firstOrNull { !sendOk(it) }
             val result =
                 if (failedSetup == null) {
-                    io.monitor(MONITOR_COMMAND, policy.listenMs, policy.stopTimeoutMs)
+                    io.monitor(MONITOR_COMMAND, listenMs(), policy.stopTimeoutMs)
                 } else {
                     null
                 }
@@ -211,8 +246,76 @@ class SwcanListenRunner(
         }
     }
 
+    private fun listenMs(): Long = if (io.isStationary()) policy.parkedListenMs else policy.listenMs
+
+    private fun intervalMs(): Long = if (io.isStationary()) policy.parkedIntervalMs else policy.intervalMs
+
+    @Throws(IOException::class)
+    private fun runBodyTest(durationMs: Long) {
+        io.exclusive {
+            val startedAt = clock()
+            io.logEvent("body_test_start", "durationMs", durationMs.toString())
+            val failedSetup = SETUP_COMMANDS.firstOrNull { !sendOk(it) }
+            var frameCount = 0
+            var decodedCount = 0
+            var chunk = 0
+            val ids = sortedSetOf<Int>()
+            // Bounded by chunk count too, so a clock that stalls can't hold the adapter forever.
+            val maxChunks = (durationMs / policy.bodyTestChunkMs).toInt() + 1
+            while (failedSetup == null && chunk < maxChunks && clock() - startedAt < durationMs) {
+                chunk += 1
+                val result = io.monitor(MONITOR_COMMAND, policy.bodyTestChunkMs, policy.stopTimeoutMs)
+                val frames = SwcanFrameDecoder.parseMonitorOutput(result.text)
+                val decoded = SwcanFrameDecoder.decodeAll(frames)
+                readings.record(decoded, clock())
+                frameCount += frames.size
+                decodedCount += decoded.size
+                frames.filter { it.extended }.mapTo(ids) { it.id }
+                io.logEvent(
+                    "swcan_raw",
+                    "mode",
+                    "body_test",
+                    "chunk",
+                    chunk.toString(),
+                    "text",
+                    result.text.take(MAX_RAW_CHARS),
+                )
+                if (!result.gotPrompt) break
+            }
+            val restored = restoreHs()
+            io.logEvent(
+                "body_test_done",
+                "outcome",
+                when {
+                    failedSetup != null -> "setup_failed"
+                    !restored -> "restore_failed"
+                    else -> "ok"
+                },
+                "durationMs",
+                (clock() - startedAt).toString(),
+                "frames",
+                frameCount.toString(),
+                "decoded",
+                decodedCount.toString(),
+                "distinctIds",
+                ids.size.toString(),
+                "failedCommand",
+                failedSetup ?: "",
+            )
+            nextWindowAtMs = clock() + intervalMs()
+            if (!restored) {
+                disable("restore_failed")
+                io.logEvent("swcan_hs_reinit", "reason", "restore_failed")
+                io.reinitialize()
+            } else {
+                healthCheckPending = true
+                liveCyclesAtWindowEnd = io.liveCycleCount()
+            }
+        }
+    }
+
     private fun scheduleAfter(outcome: String) {
-        nextWindowAtMs = clock() + policy.intervalMs
+        nextWindowAtMs = clock() + intervalMs()
         when (outcome) {
             "ok" -> {
                 consecutiveEmpty = 0
@@ -290,6 +393,9 @@ class SwcanListenRunner(
         private const val PROBE_TIMEOUT_MS = 1_200L
         private const val COMMAND_TIMEOUT_MS = 1_000L
         private const val MAX_LOGGED_IDS = 48
+
+        /** One body-test chunk's raw text in the session log (~5 s of frames is ~30 KB). */
+        private const val MAX_RAW_CHARS = 48_000
 
         /** ISO 15765-4 CAN, 11-bit, 500 kbit/s — the Volt's HS diagnostic bus. */
         private const val HS_PROTOCOL = "6"

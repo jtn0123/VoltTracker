@@ -125,6 +125,14 @@ fun CarScreen(
                 tone = PillTone.EV,
                 onClick = nav.openHealth,
             )
+            VoltListDivider()
+            val canTest = drive.connected && !demo
+            VoltListRow(
+                icon = VoltIcons.Scan,
+                title = "Body test",
+                subtitle = bodyTestLine(canTest),
+                onClick = actions.onBodyTest.takeIf { canTest },
+            )
         }
     }
 }

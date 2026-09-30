@@ -196,7 +196,8 @@ object PidSchedule {
             PidSpec("2241B6", Header.HV_PACK_7E4, 48, 38), // battery heater power
             PidSpec("22439E", Header.HV_PACK_7E4, 48, 38), // battery heater duty (OVMS)
             PidSpec("22801E", Header.HV_PACK_7E4, 120, 96), // outside temp raw
-            PidSpec("22801F", Header.HV_PACK_7E4, 120, 102), // outside temp filtered
+            // The Car tab's climate line: first read on 22434F's early 7E4 switch, not ~3 min in.
+            PidSpec("22801F", Header.HV_PACK_7E4, 24, 5), // outside temp filtered
             PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84, conditional = true), // charge count
             PidSpec("22437D", Header.HV_PACK_7E4, 120, 90, conditional = true), // last charge energy
             PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample

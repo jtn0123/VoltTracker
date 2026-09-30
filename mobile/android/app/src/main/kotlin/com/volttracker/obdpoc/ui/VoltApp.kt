@@ -208,6 +208,7 @@ private fun VoltTabContent(
                         onControl = actions.onCarControl,
                         onEnableControls = { actions.onCarControlsEnabled(true) },
                         onDisableControls = { actions.onCarControlsEnabled(false) },
+                        onBodyTest = actions.onBodyTest,
                     ),
             )
     }

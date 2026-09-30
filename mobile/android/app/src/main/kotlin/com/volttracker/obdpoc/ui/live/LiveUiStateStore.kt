@@ -671,6 +671,32 @@ class LiveUiStateStore(
      * picks up the choices it renders: Focus vs Detailed, and the rate its cost labels use.
      */
     fun onSettings(update: (SettingsUiState) -> SettingsUiState) {
+        applySettings(update)
+        _state.value = relabelIdle(_state.value)
+    }
+
+    /**
+     * The idle header says "Not connected" once an adapter is remembered, "No adapter" only
+     * before one is picked. The tabs start on "No adapter" before the service first reports.
+     */
+    private fun relabelIdle(s: VoltAppUiState): VoltAppUiState {
+        val idle = idleLabel(s.settings)
+
+        fun fix(label: String) = if (label == NO_ADAPTER_LABEL || label == NOT_CONNECTED_LABEL) idle else label
+        return s.copy(
+            drive = s.drive.copy(statusLabel = fix(s.drive.statusLabel)),
+            charge = s.charge.copy(statusLabel = fix(s.charge.statusLabel)),
+            trips = s.trips.copy(statusLabel = fix(s.trips.statusLabel)),
+            insights = s.insights.copy(statusLabel = fix(s.insights.statusLabel)),
+            diag = s.diag.copy(statusLabel = fix(s.diag.statusLabel)),
+            settings = s.settings.copy(statusLabel = fix(s.settings.statusLabel)),
+        )
+    }
+
+    private fun idleLabel(settings: SettingsUiState): String =
+        if (settings.selectedAdapterAddress.isNotBlank()) NOT_CONNECTED_LABEL else NO_ADAPTER_LABEL
+
+    private fun applySettings(update: (SettingsUiState) -> SettingsUiState) {
         _state.value =
             _state.value.let { s ->
                 val settings = update(s.settings)
@@ -756,7 +782,7 @@ class LiveUiStateStore(
             "demo" -> "Demo"
             "connecting", "initializing", "reconnecting" -> "Connecting…"
             "scanning", "scan-complete" -> "Scanning…"
-            else -> if (adapter == "--") "No adapter" else "Idle · $adapter"
+            else -> if (adapter == "--") idleLabel(_state.value.settings) else "Idle · $adapter"
         }
 
     private fun push(
@@ -867,6 +893,9 @@ class LiveUiStateStore(
                 "carControlLastDetail",
                 "carControlLastAtMs",
             )
+
+        const val NO_ADAPTER_LABEL = "No adapter"
+        const val NOT_CONNECTED_LABEL = "Not connected"
 
         /** Matches [DriveUiState.gear]'s empty default. */
         const val NO_GEAR = "--"

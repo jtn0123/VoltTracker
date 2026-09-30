@@ -81,4 +81,6 @@ data class CarActions(
     val onEnableControls: () -> Unit = {},
     /** Turn car controls off (the host erases the PIN). */
     val onDisableControls: () -> Unit = {},
+    /** Listen to the body bus for a minute while the driver opens, locks and moves things. */
+    val onBodyTest: () -> Unit = {},
 )

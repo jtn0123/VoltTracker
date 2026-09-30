@@ -307,7 +307,7 @@ internal fun FocusTiles(state: DriveUiState) {
                             d.miPerKwh?.takeIf { d.miles >= MIN_EFFICIENCY_MILES }?.let(units::efficiencyText),
                             clockLabel(d.endedAtMs, short = true, h24 = h24),
                         ).joinToString(" · ")
-                    } ?: "none this session",
+                    } ?: "none yet",
                     tile,
                 )
                 val volts = state.aux12Volts ?: state.auxVolts?.takeIf { state.connected && it > 0 }
