@@ -46,6 +46,7 @@ import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltListDivider
+import com.volttracker.obdpoc.ui.components.VoltLoading
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
@@ -360,7 +361,7 @@ private fun RecentSessions(state: ChargeUiState) {
         }
         if (rows.isEmpty()) {
             when (state.history) {
-                HistoryLoad.LOADING -> VoltEmptyState("Loading charges…", inCard = false)
+                HistoryLoad.LOADING -> VoltLoading("Loading charges…")
                 HistoryLoad.FAILED ->
                     VoltEmptyState(
                         "Charges couldn't be read",

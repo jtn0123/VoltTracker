@@ -1,8 +1,10 @@
 package com.volttracker.obdpoc.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -19,6 +21,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -250,11 +253,13 @@ fun VoltButton(
     onClick: () -> Unit,
 ) {
     val shape = VoltShapes.control
+    val interactions = remember { MutableInteractionSource() }
     val fg = if (style == ButtonStyle.PRIMARY) VoltColors.onAccent else VoltColors.textPrimary
     val base =
         modifier
             .minimumInteractiveComponentSize()
             .heightIn(min = BUTTON_HEIGHT)
+            .pressScale(interactions)
             .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .clip(shape)
     val filled =
@@ -265,8 +270,13 @@ fun VoltButton(
     Row(
         modifier =
             filled
-                .clickable(enabled = enabled, onClick = onClick, role = Role.Button)
-                .padding(horizontal = 16.dp),
+                .clickable(
+                    interactionSource = interactions,
+                    indication = LocalIndication.current,
+                    enabled = enabled,
+                    role = Role.Button,
+                    onClick = onClick,
+                ).padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {

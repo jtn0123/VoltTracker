@@ -1,9 +1,11 @@
 package com.volttracker.obdpoc.ui.components
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -124,13 +127,16 @@ fun VoltAppBar(
 
 @Composable
 private fun StatusDot(dot: AppBarDot) {
+    // Connecting → live fades the dot and its halo in rather than flipping them.
+    val color = glideColor(dot.color, "status-dot")
+    val halo = glideColor(if (dot.live) dot.color.copy(alpha = HALO_ALPHA) else Color.Transparent, "status-halo")
     Box(
         modifier =
             Modifier
                 .size(13.dp)
-                .background(if (dot.live) dot.color.copy(alpha = HALO_ALPHA) else Color.Transparent, CircleShape)
+                .background(halo, CircleShape)
                 .padding(3.dp)
-                .background(dot.color, CircleShape),
+                .background(color, CircleShape),
     )
 }
 
@@ -144,15 +150,22 @@ fun IconCircleButton(
     tint: Color = VoltColors.textSecondary,
     iconSize: Dp = 20.dp,
 ) {
+    val interactions = remember { MutableInteractionSource() }
     Box(
         modifier =
             modifier
                 .minimumInteractiveComponentSize()
                 .size(40.dp)
+                .pressScale(interactions, pressed = ICON_PRESSED_SCALE)
                 .clip(CircleShape)
                 .background(VoltColors.surface)
                 .border(1.dp, VoltColors.hairline, CircleShape)
-                .clickable(role = Role.Button, onClick = onClick),
+                .clickable(
+                    interactionSource = interactions,
+                    indication = LocalIndication.current,
+                    role = Role.Button,
+                    onClick = onClick,
+                ),
         contentAlignment = Alignment.Center,
     ) {
         Icon(
@@ -234,3 +247,6 @@ fun connectionDot(connected: Boolean): AppBarDot =
     if (connected) AppBarDot(VoltColors.energy, live = true) else AppBarDot(VoltColors.textTertiary)
 
 private const val HALO_ALPHA = 0.18f
+
+/** A small round button shrinks a little more than a wide one, so the press still reads. */
+private const val ICON_PRESSED_SCALE = 0.9f

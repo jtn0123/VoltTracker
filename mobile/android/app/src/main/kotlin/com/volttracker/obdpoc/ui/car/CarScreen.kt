@@ -1,8 +1,11 @@
 package com.volttracker.obdpoc.ui.car
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,10 +22,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -42,7 +49,9 @@ import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.glideColor
 import com.volttracker.obdpoc.ui.components.pillColor
+import com.volttracker.obdpoc.ui.components.pressScale
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcSeverity
@@ -238,19 +247,34 @@ private fun ControlButton(
             on -> VoltColors.accent.copy(alpha = ON_FILL_ALPHA)
             else -> VoltColors.surface
         }
+    val interactions = remember { MutableInteractionSource() }
+    val haptics = LocalHapticFeedback.current
     Column(
         modifier =
             Modifier
                 .alpha(if (enabled) 1f else DISABLED_ALPHA)
-                .clickable(enabled = enabled, role = Role.Button, onClickLabel = label, onClick = onClick),
+                .pressScale(interactions)
+                .clickable(
+                    interactionSource = interactions,
+                    indication = null,
+                    enabled = enabled,
+                    role = Role.Button,
+                    onClickLabel = label,
+                ) {
+                    // A command to the car is felt as well as seen.
+                    haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+                    onClick()
+                },
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         Box(
             Modifier
                 .size(58.dp)
-                .background(fill, CircleShape)
-                .border(1.dp, ring, CircleShape),
+                .clip(CircleShape)
+                .background(glideColor(fill, "control-fill"))
+                .border(1.dp, glideColor(ring, "control-ring"), CircleShape)
+                .indication(interactions, LocalIndication.current),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

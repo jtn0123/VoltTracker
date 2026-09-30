@@ -1,8 +1,6 @@
 package com.volttracker.obdpoc.ui
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -75,7 +73,6 @@ fun VoltApp(
                 openHealth = { push(VoltRoute.HEALTH) },
             )
         }
-    BackHandler(enabled = routes.isNotEmpty(), onBack = pop)
     val screen = screenViewName(tab, routes.lastOrNull())
     LaunchedEffect(screen) { actions.onScreenShown(screen) }
     val prefs = rememberSystemPrefs(quietLiveData = state.settings.quietLiveData, demo = state.settings.demoActive)
@@ -93,12 +90,17 @@ fun VoltApp(
                 routes = emptyList()
             }
             val page: @Composable (Modifier) -> Unit = { modifier ->
-                Box(modifier = modifier) {
-                    CompositionLocalProvider(LocalVoltNav provides nav, LocalVoltPrefs provides prefs) {
-                        when (val route = routes.lastOrNull()) {
+                VoltPages(
+                    target = VoltPage(tab, routes.lastOrNull(), routes.size),
+                    below = VoltPage(tab, routes.dropLast(1).lastOrNull(), routes.size - 1),
+                    onBack = pop,
+                    modifier = modifier,
+                ) { shown ->
+                    CompositionLocalProvider(LocalVoltNav provides nav) {
+                        when (val route = shown.route) {
                             null ->
                                 VoltTabContent(
-                                    tab = tab,
+                                    tab = shown.tab,
                                     state = state,
                                     actions = actions,
                                     onConnect = { if (!actions.onConnect()) push(VoltRoute.ADAPTER) },
@@ -117,22 +119,24 @@ fun VoltApp(
             }
             // Edge-to-edge (targetSdk 35+): paint the canvas under the system bars and keep the
             // content clear of them. A landscape phone gets a side rail instead of a bottom bar.
-            BoxWithConstraints(
-                modifier =
-                    Modifier
-                        .fillMaxSize()
-                        .background(VoltColors.bg)
-                        .safeDrawingPadding(),
-            ) {
-                if (maxWidth > maxHeight && maxHeight < RAIL_MAX_HEIGHT) {
-                    Row(Modifier.fillMaxSize()) {
-                        VoltNavRail(selected = tab, badges = badges, onSelect = select)
-                        page(Modifier.weight(1f).fillMaxHeight())
-                    }
-                } else {
-                    Column(Modifier.fillMaxSize()) {
-                        page(Modifier.weight(1f).fillMaxWidth())
-                        VoltNavBar(selected = tab, badges = badges, onSelect = select)
+            CompositionLocalProvider(LocalVoltPrefs provides prefs) {
+                BoxWithConstraints(
+                    modifier =
+                        Modifier
+                            .fillMaxSize()
+                            .background(VoltColors.bg)
+                            .safeDrawingPadding(),
+                ) {
+                    if (maxWidth > maxHeight && maxHeight < RAIL_MAX_HEIGHT) {
+                        Row(Modifier.fillMaxSize()) {
+                            VoltNavRail(selected = tab, badges = badges, onSelect = select)
+                            page(Modifier.weight(1f).fillMaxHeight())
+                        }
+                    } else {
+                        Column(Modifier.fillMaxSize()) {
+                            page(Modifier.weight(1f).fillMaxWidth())
+                            VoltNavBar(selected = tab, badges = badges, onSelect = select)
+                        }
                     }
                 }
             }

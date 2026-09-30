@@ -1,5 +1,10 @@
 package com.volttracker.obdpoc.ui.components
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -22,13 +27,25 @@ fun ConnectRow(
     onStartDemo: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    if (connected || connecting) return
-    FlowRow(
-        modifier = modifier.fillMaxWidth().padding(bottom = 14.dp),
-        horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+    val reduceMotion = LocalVoltPrefs.current.reduceMotion
+    // Folds away once a session starts, so the cards below slide up instead of jumping.
+    AnimatedVisibility(
+        visible = !connected && !connecting,
+        enter =
+            expandVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
+                fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)),
+        exit =
+            shrinkVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
+                fadeOut(VoltMotion.spec(VoltMotion.FAST_MS, reduceMotion)),
+        modifier = modifier,
     ) {
-        VoltButton(text = "Connect", accent = true, onClick = onConnect)
-        VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            VoltButton(text = "Connect", accent = true, onClick = onConnect)
+            VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
+        }
     }
 }

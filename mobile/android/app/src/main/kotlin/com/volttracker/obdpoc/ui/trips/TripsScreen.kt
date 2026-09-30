@@ -1,7 +1,6 @@
 package com.volttracker.obdpoc.ui.trips
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -34,6 +33,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -50,11 +50,14 @@ import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
+import com.volttracker.obdpoc.ui.components.VoltFade
 import com.volttracker.obdpoc.ui.components.VoltFigure
 import com.volttracker.obdpoc.ui.components.VoltGroupLabel
 import com.volttracker.obdpoc.ui.components.VoltIcons
+import com.volttracker.obdpoc.ui.components.VoltLoading
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.glideState
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltShapes
@@ -90,32 +93,40 @@ fun TripsScreen(
         scrollState = scroll,
         actions = { if (state.trips.isNotEmpty()) ExportMenu(state, onExport) },
     ) {
-        if (state.trips.isEmpty()) {
-            val notice = Modifier.padding(top = 8.dp)
-            when (state.history) {
-                HistoryLoad.LOADING -> VoltEmptyState("Loading drives…", notice)
-                HistoryLoad.FAILED ->
-                    VoltEmptyState(
-                        "Drives couldn't be read",
-                        notice,
-                        body = "Your logged drives are safe. They'll load the next time you open Trips.",
-                    )
-                HistoryLoad.LOADED ->
-                    VoltEmptyState(
-                        "No drives logged yet",
-                        notice,
-                        body =
-                            "Drives appear here after you drive with the adapter connected, " +
-                                "with the route when location is on.",
-                    )
-            }
-        } else {
-            TripMapCard(state)
-            TripsFigures(state)
-            state.groups().forEach { group ->
-                VoltGroupLabel(group.label, Modifier.padding(top = 2.dp))
-                group.trips.forEach { trip ->
-                    TripRow(trip, trip.routeKey == selectedKey, state.units) { onSelect(trip.routeKey) }
+        // Loading → drives (or → "none yet") cross-fades rather than popping a full page in.
+        VoltFade(if (state.trips.isEmpty()) state.history else null, label = "trips") { empty ->
+            Column {
+                val notice = Modifier.padding(top = 8.dp)
+                when (empty) {
+                    HistoryLoad.LOADING -> VoltLoading("Loading drives…", notice, rows = LOADING_ROWS)
+                    HistoryLoad.FAILED ->
+                        VoltEmptyState(
+                            "Drives couldn't be read",
+                            notice,
+                            body = "Your logged drives are safe. They'll load the next time you open Trips.",
+                        )
+                    HistoryLoad.LOADED ->
+                        VoltEmptyState(
+                            "No drives logged yet",
+                            notice,
+                            body =
+                                "Drives appear here after you drive with the adapter connected, " +
+                                    "with the route when location is on.",
+                        )
+                    // The drives themselves. (Skipped while fading out after the last one is removed.)
+                    null ->
+                        if (state.trips.isNotEmpty()) {
+                            TripMapCard(state)
+                            TripsFigures(state)
+                            state.groups().forEach { group ->
+                                VoltGroupLabel(group.label, Modifier.padding(top = 2.dp))
+                                group.trips.forEach { trip ->
+                                    TripRow(trip, trip.routeKey == selectedKey, state.units) {
+                                        onSelect(trip.routeKey)
+                                    }
+                                }
+                            }
+                        }
                 }
             }
         }
@@ -207,31 +218,39 @@ private fun TripRow(
     val shape = VoltShapes.tile
     val mode = trip.mode
     val bar = VoltColors.accent
+    // Card fill, a visible outline and an accent bar mark the selected drive (the plain card on
+    // the OLED canvas alone was too subtle); picking another drive fades the marking across.
+    val marked = glideState(if (selected) 1f else 0f, "trip-selected")
+    val fill = VoltColors.surface
+    val outline = VoltColors.line2
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clip(shape)
-                .then(
-                    if (selected) {
-                        // Card fill, a visible outline and an accent bar: the plain card on the
-                        // OLED canvas alone was too subtle to mark the selected drive.
-                        Modifier
-                            .background(VoltColors.surface)
-                            .border(1.dp, VoltColors.line2, shape)
-                            .drawBehind {
-                                val w = SELECTED_BAR.toPx()
-                                drawRoundRect(
-                                    color = bar,
-                                    topLeft = Offset(0f, size.height * SELECTED_BAR_INSET),
-                                    size = Size(w, size.height * (1 - 2 * SELECTED_BAR_INSET)),
-                                    cornerRadius = CornerRadius(w / 2),
-                                )
-                            }
-                    } else {
-                        Modifier
-                    },
-                ).clickable(role = Role.Button, onClick = onClick)
+                .drawBehind {
+                    val shown = marked.value
+                    if (shown <= 0f) return@drawBehind
+                    val radius = CornerRadius(VoltShapes.TileRadius.toPx())
+                    drawRoundRect(fill, cornerRadius = radius, alpha = shown)
+                    val stroke = 1.dp.toPx()
+                    drawRoundRect(
+                        color = outline,
+                        topLeft = Offset(stroke / 2, stroke / 2),
+                        size = Size(size.width - stroke, size.height - stroke),
+                        cornerRadius = radius,
+                        style = Stroke(stroke),
+                        alpha = shown,
+                    )
+                    val w = SELECTED_BAR.toPx()
+                    drawRoundRect(
+                        color = bar,
+                        topLeft = Offset(0f, size.height * SELECTED_BAR_INSET),
+                        size = Size(w, size.height * (1 - 2 * SELECTED_BAR_INSET)),
+                        cornerRadius = CornerRadius(w / 2),
+                        alpha = shown,
+                    )
+                }.clickable(role = Role.Button, onClick = onClick)
                 .semantics { this.selected = selected }
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -316,3 +335,6 @@ private fun TripsScreenPreview() {
 
 private val SELECTED_BAR = 3.dp
 private const val SELECTED_BAR_INSET = 0.22f
+
+/** Placeholder rows while the drives are read: enough to fill the page like the list will. */
+private const val LOADING_ROWS = 5

@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,9 +25,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -116,40 +118,53 @@ private fun NavItem(
     modifier: Modifier = Modifier,
 ) {
     val badgeText = badge?.let { if (it == NavBadge.BAD) ", has faults" else ", has warnings" }.orEmpty()
+    val interactions = remember { MutableInteractionSource() }
     Box(
         modifier =
             modifier
                 .fillMaxHeight()
-                .selectable(selected = active, onClick = onClick, role = Role.Tab)
-                .semantics { contentDescription = tab.label + badgeText },
+                .selectable(
+                    selected = active,
+                    interactionSource = interactions,
+                    // The pill is the feedback; a ripple across the whole cell would fight it.
+                    indication = null,
+                    role = Role.Tab,
+                    onClick = onClick,
+                ).semantics { contentDescription = tab.label + badgeText },
         contentAlignment = Alignment.TopCenter,
     ) {
         // Mono White: a white tint behind a white icon barely reads, so the pill is filled instead.
         val mono = VoltColors.monoAccent
+        val pill = if (mono) VoltColors.accent else VoltColors.accent.copy(alpha = INDICATOR_ALPHA)
+        // The pill grows out from the icon and fades in as its tab is chosen.
+        val shown = glideState(if (active) 1f else 0f, "nav-pill")
         Box(
             modifier =
                 Modifier
                     .padding(top = 9.dp)
                     .size(width = 56.dp, height = 30.dp)
-                    .background(
-                        when {
-                            !active -> Color.Transparent
-                            mono -> VoltColors.accent
-                            else -> VoltColors.accent.copy(alpha = INDICATOR_ALPHA)
-                        },
-                        VoltShapes.chip,
-                    ),
+                    .pressScale(interactions)
+                    .graphicsLayer {
+                        alpha = shown.value
+                        scaleX = PILL_MIN_SCALE + (1f - PILL_MIN_SCALE) * shown.value
+                    }.background(pill, VoltShapes.chip),
         )
-        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(top = 12.5.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 12.5.dp).pressScale(interactions),
+        ) {
             Icon(
                 imageVector = tab.icon(),
                 contentDescription = null,
                 tint =
-                    when {
-                        !active -> VoltColors.textTertiary
-                        mono -> VoltColors.onAccent
-                        else -> VoltColors.accent
-                    },
+                    glideColor(
+                        when {
+                            !active -> VoltColors.textTertiary
+                            mono -> VoltColors.onAccent
+                            else -> VoltColors.accent
+                        },
+                        "nav-icon",
+                    ),
                 modifier = Modifier.size(23.dp),
             )
             Spacer(Modifier.height(4.dp))
@@ -162,7 +177,7 @@ private fun NavItem(
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 11.5.sp,
                     lineHeight = 14.sp,
-                    color = if (active) VoltColors.textPrimary else VoltColors.textTertiary,
+                    color = glideColor(if (active) VoltColors.textPrimary else VoltColors.textTertiary, "nav-label"),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -185,3 +200,6 @@ private fun NavItem(
 private val NAV_HEIGHT = 67.dp
 private val RAIL_WIDTH = 80.dp
 private const val INDICATOR_ALPHA = 0.14f
+
+/** How narrow the pill starts before it grows to full width. */
+private const val PILL_MIN_SCALE = 0.55f

@@ -29,15 +29,23 @@ fun VoltSwitch(
     on: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val thumbOffset by animateDpAsState(if (on) THUMB_TRAVEL else 0.dp, label = "switchThumb")
+    val reduceMotion = LocalVoltPrefs.current.reduceMotion
+    val thumbOffset by animateDpAsState(
+        if (on) THUMB_TRAVEL else 0.dp,
+        VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion),
+        label = "switchThumb",
+    )
     Box(
         modifier =
             modifier
                 .size(width = 44.dp, height = 26.dp)
                 .clip(VoltShapes.chip)
-                .background(if (on) VoltColors.accent else VoltColors.surface3)
-                .border(1.dp, if (on) VoltColors.accent else VoltColors.line2, VoltShapes.chip)
-                .padding(3.dp),
+                .background(glideColor(if (on) VoltColors.accent else VoltColors.surface3, "switch-track"))
+                .border(
+                    1.dp,
+                    glideColor(if (on) VoltColors.accent else VoltColors.line2, "switch-border"),
+                    VoltShapes.chip,
+                ).padding(3.dp),
         contentAlignment = Alignment.CenterStart,
     ) {
         Box(
@@ -45,7 +53,7 @@ fun VoltSwitch(
                 .offset { IntOffset(thumbOffset.roundToPx(), 0) }
                 .size(20.dp)
                 .clip(CircleShape)
-                .background(if (on) VoltColors.onAccent else VoltColors.textSecondary),
+                .background(glideColor(if (on) VoltColors.onAccent else VoltColors.textSecondary, "switch-thumb")),
         )
     }
 }
