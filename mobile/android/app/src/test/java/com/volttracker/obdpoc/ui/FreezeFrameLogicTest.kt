@@ -56,7 +56,7 @@ class FreezeFrameLogicTest {
     fun theCodeComesFromTheSnapshotElseTheSavedRow() {
         assertNull(DiagUiState().freezeFrameDtc())
         assertFalse(DiagUiState().hasFreezeFrame())
-        assertEquals("None stored", DiagUiState().freezeFrameLine())
+        assertEquals("Not scanned yet", DiagUiState().freezeFrameLine())
 
         val row = DiagUiState(codes = listOf(DtcCode("P0171", status = DtcCode.STATUS_FREEZE_FRAME)))
         assertEquals("P0171", row.freezeFrameDtc())

@@ -166,7 +166,8 @@ class HealthLogicTest {
     fun listRows() {
         assertEquals("Captured with P0420", demo.freezeFrameLine())
         assertEquals("None stored", demo.copy(freezeFrame = null).freezeFrameLine())
-        assertEquals("None stored", DiagUiState().freezeFrameLine())
+        assertEquals("Not scanned yet", DiagUiState().freezeFrameLine())
+        assertEquals("None stored", DiagUiState(codes = emptyList()).freezeFrameLine())
         assertEquals(
             "Captured with P0300",
             demo.copy(freezeFrame = null, codes = listOf(DtcCode("P0300", status = "freeze-frame"))).freezeFrameLine(),

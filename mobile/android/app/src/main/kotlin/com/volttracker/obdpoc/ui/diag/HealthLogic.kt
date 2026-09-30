@@ -190,7 +190,8 @@ fun DiagUiState.summary(): String {
 }
 
 /** The Freeze frame row: which code the car captured one with. */
-fun DiagUiState.freezeFrameLine(): String = freezeFrameDtc()?.let { "Captured with $it" } ?: "None stored"
+fun DiagUiState.freezeFrameLine(): String =
+    freezeFrameDtc()?.let { "Captured with $it" } ?: if (codes == null) "Not scanned yet" else "None stored"
 
 /** Whether the car has a freeze frame to show (the row is only tappable then). */
 fun DiagUiState.hasFreezeFrame(): Boolean = freezeFrameDtc() != null

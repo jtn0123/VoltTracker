@@ -585,12 +585,16 @@ private fun ChargeCenter(
         color = VoltColors.energy,
         maxLines = 1,
         autoSize = TextAutoSize.StepBased(minFontSize = LINE_MIN_SP.sp, maxFontSize = VoltType.value.fontSize),
-        modifier = Modifier.padding(top = 12.dp).widthIn(max = (INNER_LINE_W * k).dp),
+        // The bottom line sits between the E and F marks, so it gets less room than the ETA line.
+        modifier = Modifier.padding(top = 12.dp).widthIn(max = (BOTTOM_LINE_W * k).dp),
     )
 }
 
 /** How wide a line under the ring's big figure may run (mockup units) before it meets the arc. */
 private const val INNER_LINE_W = 240f
+
+/** How wide the charge-rate line may run: it sits lower, between the E and F marks. */
+private const val BOTTOM_LINE_W = 200f
 
 /** The smallest a ring line shrinks to. */
 private const val LINE_MIN_SP = 10
