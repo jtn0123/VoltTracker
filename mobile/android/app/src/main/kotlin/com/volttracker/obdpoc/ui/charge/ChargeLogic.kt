@@ -53,6 +53,8 @@ data class SessionRow(
     val toSoc: Int?,
     val energyKwh: Double?,
     val cost: String?,
+    /** The logged charge's start, which opens its receipt; null for the live charge. */
+    val startedAtMs: Long? = null,
 )
 
 /**
@@ -92,6 +94,7 @@ fun ChargeUiState.sessionRows(
                     toSoc = s.toSoc,
                     energyKwh = s.energyKwh,
                     cost = costText(s.energyKwh, rateFor(s)),
+                    startedAtMs = s.startedAtMs,
                 )
             }
     return (live + logged).take(limit)

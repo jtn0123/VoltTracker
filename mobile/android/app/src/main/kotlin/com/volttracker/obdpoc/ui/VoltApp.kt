@@ -25,7 +25,9 @@ import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.car.CarActions
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
+import com.volttracker.obdpoc.ui.charge.ChargeReceiptScreen
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
+import com.volttracker.obdpoc.ui.charge.ChargeWorth
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltNavActions
@@ -49,7 +51,9 @@ import com.volttracker.obdpoc.ui.settings.SettingsScreen
 import com.volttracker.obdpoc.ui.theme.SystemBarsAppearance
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
+import com.volttracker.obdpoc.ui.trips.TripReceiptScreen
 import com.volttracker.obdpoc.ui.trips.TripsScreen
+import com.volttracker.obdpoc.ui.trips.avgMiPerKwh
 
 /**
  * The whole Compose dashboard: five tabs under a full-width nav bar, with Settings and Health
@@ -62,9 +66,13 @@ fun VoltApp(
     initialTab: VoltTab = VoltTab.DRIVE,
     initialRoutes: List<VoltRoute> = emptyList(),
     actions: VoltAppActions = VoltAppActions(),
+    /** The logged charge an initial [VoltRoute.CHARGE] shows, by start time. */
+    initialCharge: Long? = null,
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var routes by rememberSaveable(stateSaver = RouteStackSaver) { mutableStateOf(initialRoutes) }
+    // The charge Charge → Recent sessions opened (drives open through the Trips selection).
+    var chargeAt by rememberSaveable { mutableStateOf(initialCharge) }
     val push: (VoltRoute) -> Unit = { route -> routes = routes.filterNot { it == route } + route }
     val pop: () -> Unit = { routes = routes.dropLast(1) }
     val latest by rememberUpdatedState(actions)
@@ -110,6 +118,11 @@ fun VoltApp(
                                     state = state,
                                     actions = actions,
                                     onConnect = connect,
+                                    onOpenTrip = { push(VoltRoute.TRIP) },
+                                    onOpenCharge = {
+                                        chargeAt = it
+                                        push(VoltRoute.CHARGE)
+                                    },
                                 )
                             else ->
                                 VoltRouteContent(
@@ -118,6 +131,7 @@ fun VoltApp(
                                     actions = actions,
                                     onBack = pop,
                                     open = push,
+                                    chargeAt = chargeAt,
                                 )
                         }
                     }
@@ -172,6 +186,8 @@ internal fun screenViewName(
     when (route) {
         VoltRoute.SETTINGS, VoltRoute.ADAPTER -> "settings"
         VoltRoute.HEALTH, VoltRoute.SIGNALS, VoltRoute.FREEZE_FRAME, VoltRoute.ALL_READINGS -> "diagnostics"
+        VoltRoute.TRIP -> "map"
+        VoltRoute.CHARGE -> "charge"
         null ->
             when (tab) {
                 VoltTab.DRIVE -> "drive"
@@ -188,6 +204,8 @@ private fun VoltTabContent(
     state: VoltAppUiState,
     actions: VoltAppActions,
     onConnect: () -> Unit,
+    onOpenTrip: () -> Unit,
+    onOpenCharge: (Long) -> Unit,
 ) {
     when (tab) {
         VoltTab.DRIVE ->
@@ -204,8 +222,20 @@ private fun VoltTabContent(
                         hasTrips = state.trips.trips.isNotEmpty(),
                     ),
             )
-        VoltTab.TRIPS -> TripsScreen(state.trips, onSelect = actions.onSelectTrip, onExport = actions.onExportTrip)
-        VoltTab.CHARGE -> ChargeScreen(state.charge, onConnect = onConnect, onStartDemo = actions.onStartDemo)
+        VoltTab.TRIPS ->
+            TripsScreen(
+                state.trips,
+                onSelect = actions.onSelectTrip,
+                onExport = actions.onExportTrip,
+                onOpen = { onOpenTrip() },
+            )
+        VoltTab.CHARGE ->
+            ChargeScreen(
+                state.charge,
+                onConnect = onConnect,
+                onStartDemo = actions.onStartDemo,
+                onOpenSession = onOpenCharge,
+            )
         VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
         VoltTab.CAR ->
             CarScreen(
@@ -232,6 +262,7 @@ private fun VoltRouteContent(
     actions: VoltAppActions,
     onBack: () -> Unit,
     open: (VoltRoute) -> Unit,
+    chargeAt: Long?,
 ) {
     when (route) {
         VoltRoute.HEALTH ->
@@ -255,6 +286,21 @@ private fun VoltRouteContent(
             LiveSignalsScreen(state.drive, onBack = onBack, onOpenAllReadings = { open(VoltRoute.ALL_READINGS) })
         VoltRoute.FREEZE_FRAME -> FreezeFrameScreen(state.diag, state.drive.units, onBack = onBack)
         VoltRoute.ALL_READINGS -> AllReadingsScreen(state.drive, onBack = onBack)
+        VoltRoute.TRIP ->
+            TripReceiptScreen(
+                state.trips,
+                onBack = onBack,
+                onShare = actions.onShareText,
+                onExport = actions.onExportTrip,
+            )
+        VoltRoute.CHARGE ->
+            ChargeReceiptScreen(
+                state.charge,
+                startedAtMs = chargeAt,
+                worth = ChargeWorth(state.trips.trips.avgMiPerKwh(), state.trips.gasMpg, state.trips.gasPrice),
+                onBack = onBack,
+                onShare = actions.onShareText,
+            )
         VoltRoute.SETTINGS -> Settings(state, actions, onBack, SettingsPage.MAIN)
         VoltRoute.ADAPTER -> Settings(state, actions, onBack, SettingsPage.CONNECTION)
     }

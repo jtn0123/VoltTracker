@@ -17,6 +17,11 @@ data class TripSummary(
     val energyKwh: Double? = null,
     val evShare: Double? = null,
     val label: String = "",
+    /** Top and average moving speed, km/h, when the drive logged speed. */
+    val maxSpeedKph: Double? = null,
+    val avgSpeedKph: Double? = null,
+    /** Average outside air temperature over the drive, °C. */
+    val outsideTempC: Double? = null,
 )
 
 /** A route point; [gas] is true where the engine was driving the car. */

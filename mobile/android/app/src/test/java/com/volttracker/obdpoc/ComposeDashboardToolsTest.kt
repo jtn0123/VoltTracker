@@ -280,6 +280,75 @@ class ComposeDashboardToolsTest {
         assertEquals(0L to Long.MAX_VALUE, synchronized(windows) { windows[1] })
     }
 
+    @Test
+    fun healthReadsTheBatteryHealthHistoryWithTheCodes() {
+        val codes =
+            JSONObject().put(
+                "latestDiagnosticCodes",
+                JSONArray().put(JSONObject().put("dtc", "P0420").put("lastSeenMs", 5_000L)),
+            )
+        activity.history.healthReader = { codes }
+        activity.history.sohReader = {
+            JSONArray()
+                .put(JSONObject().put("capturedAtMs", 1_000L).put("sohPct", 95.0))
+                .put(JSONObject().put("capturedAtMs", 2_000L).put("capacityAh", 47.0))
+        }
+        activity.history.loadHealth()
+        waitFor {
+            activity
+                .uiState()
+                .diag.sohHistory
+                .isNotEmpty()
+        }
+        val diag = activity.uiState().diag
+        assertEquals(listOf(95.0, 47.0 / 52.0 * 100.0), diag.sohHistory.map { it.pct })
+        assertEquals(listOf("P0420"), diag.codes.orEmpty().map { it.code })
+    }
+
+    @Test
+    fun aFailedBatteryHistoryReadStillShowsTheCodes() {
+        val codes =
+            JSONObject().put(
+                "latestDiagnosticCodes",
+                JSONArray().put(JSONObject().put("dtc", "P0011").put("lastSeenMs", 5_000L)),
+            )
+        activity.history.healthReader = { codes }
+        activity.history.sohReader = { throw IllegalStateException("no battery table") }
+        activity.history.loadHealth()
+        waitFor {
+            activity
+                .uiState()
+                .diag.codes
+                ?.isNotEmpty() == true
+        }
+        assertEquals(
+            listOf("P0011"),
+            activity
+                .uiState()
+                .diag.codes
+                .orEmpty()
+                .map { it.code },
+        )
+        assertTrue(
+            activity
+                .uiState()
+                .diag.sohHistory
+                .isEmpty(),
+        )
+    }
+
+    @Test
+    fun aReceiptIsSharedAsPlainTextThroughTheShareSheet() {
+        activity.shareText("Evening drive", "Distance: 12.0 mi")
+        val chooser = shadowOf(activity).nextStartedActivity
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        @Suppress("DEPRECATION")
+        val send = chooser.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        assertEquals("text/plain", send?.type)
+        assertEquals("Evening drive", send?.getStringExtra(Intent.EXTRA_SUBJECT))
+        assertEquals("Distance: 12.0 mi", send?.getStringExtra(Intent.EXTRA_TEXT))
+    }
+
     private fun tripRow(
         key: String,
         startedAtMs: Long,

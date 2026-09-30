@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import com.volttracker.obdpoc.ui.diag.DtcCatalog
 import com.volttracker.obdpoc.ui.diag.FreezeFrameSnapshot
+import com.volttracker.obdpoc.ui.diag.SohHistory
 import com.volttracker.obdpoc.ui.diag.savedCodes
 import com.volttracker.obdpoc.ui.insights.INSIGHTS_TRIP_LIMIT
 import com.volttracker.obdpoc.ui.insights.InsightsHistory
@@ -67,6 +68,9 @@ internal class ComposeHistoryLoader(
     /** The saved trouble codes, newest first, as the store's diagnostics summary. */
     var healthReader: () -> JSONObject = { openStore().use { it.projections().diagnosticsSummary(HEALTH_CODE_LIMIT) } }
 
+    /** Every logged battery-health read, oldest first, for Health's trend. */
+    var sohReader: () -> JSONArray = { openStore().use { it.routes.getBatterySohHistoryJson() } }
+
     private val chargesInFlight = AtomicBoolean(false)
     private val healthInFlight = AtomicBoolean(false)
     private val healthAgain = AtomicBoolean(false)
@@ -84,9 +88,19 @@ internal class ComposeHistoryLoader(
     fun loadHealth() {
         // A scan landing while the last read runs must not be lost: read again once it finishes.
         if (healthInFlight.get()) healthAgain.set(true)
-        val reader = { Triple(savedCodes(healthReader(), dtcCatalog()), dtcChecks(), freezeFrame()) }
-        read(healthInFlight, "trouble codes", reader) { (codes, checks, frame) ->
-            store.onHealthHistory(HealthHistoryHolder.Logged(codes, checks.first, checks.second, frame))
+        val reader = {
+            val checks = dtcChecks()
+            HealthHistoryHolder.Logged(
+                codes = savedCodes(healthReader(), dtcCatalog()),
+                scannedAtMs = checks.first,
+                clearedAtMs = checks.second,
+                freezeFrame = freezeFrame(),
+                // The battery trend is extra: a failed read leaves it empty rather than losing the codes.
+                soh = runCatching { SohHistory.parse(sohReader()) }.getOrDefault(emptyList()),
+            )
+        }
+        read(healthInFlight, "trouble codes", reader) { logged ->
+            store.onHealthHistory(logged)
             if (healthAgain.getAndSet(false)) loadHealth()
         }
     }

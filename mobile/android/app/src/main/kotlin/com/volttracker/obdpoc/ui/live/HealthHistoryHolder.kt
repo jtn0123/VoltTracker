@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcCode
 import com.volttracker.obdpoc.ui.diag.FreezeFrameSnapshot
 import com.volttracker.obdpoc.ui.diag.SCAN_WINDOW_MS
+import com.volttracker.obdpoc.ui.diag.SohPoint
 
 /**
  * The trouble codes Health and the Car tab show: the codes saved on the phone, split into the ones
@@ -18,6 +19,8 @@ internal class HealthHistoryHolder {
         val scannedAtMs: Long?,
         val clearedAtMs: Long?,
         val freezeFrame: FreezeFrameSnapshot? = null,
+        /** Logged battery-health reads, oldest first. */
+        val soh: List<SohPoint> = emptyList(),
     )
 
     private var logged: Logged? = null
@@ -80,6 +83,7 @@ internal class HealthHistoryHolder {
             scannedAtMs = scanned ?: sample.scannedAtMs,
             clearedAtMs = demoClearedAtMs,
             freezeFrame = if (demoClearedAtMs != null) null else sample.freezeFrame,
+            sohHistory = sample.sohHistory,
             nowMs = maxOf(nowMs, at),
         )
     }
@@ -89,7 +93,13 @@ internal class HealthHistoryHolder {
         nowMs: Long,
     ): DiagUiState {
         val history =
-            logged ?: return current.copy(codes = null, earlierCodes = emptyList(), freezeFrame = null, nowMs = nowMs)
+            logged ?: return current.copy(
+                codes = null,
+                earlierCodes = emptyList(),
+                freezeFrame = null,
+                sohHistory = emptyList(),
+                nowMs = nowMs,
+            )
         val newest = history.codes.maxOfOrNull { it.lastSeenMs }
         // A scan from the classic dashboard isn't timed here, but the codes it saved carry its time.
         val scanned = listOfNotNull(history.scannedAtMs, newest).maxOrNull()
@@ -104,6 +114,7 @@ internal class HealthHistoryHolder {
             scannedAtMs = scanned,
             clearedAtMs = cleared,
             freezeFrame = history.freezeFrame,
+            sohHistory = history.soh,
             nowMs = maxOf(nowMs, loggedAtMs),
         )
     }

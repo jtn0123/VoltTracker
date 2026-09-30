@@ -292,5 +292,6 @@ fun healthReport(
                 battery.weakestLabel()?.let { "weakest cell $it" },
             ).joinToString(", ")
     }
+    if (diag.sohHistory.isNotEmpty()) lines += "Battery health trend: ${sohTrend(diag.sohHistory).sentence}"
     return lines.joinToString("\n")
 }

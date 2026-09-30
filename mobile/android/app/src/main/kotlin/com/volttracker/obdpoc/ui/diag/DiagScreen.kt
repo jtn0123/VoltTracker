@@ -101,7 +101,7 @@ fun DiagScreen(
     ) {
         Hero(state, demo, actions) { actions.onShare(healthReport(state, battery, demo)) }
         Spacer(Modifier.height(12.dp))
-        BatteryCard(battery)
+        BatteryCard(battery, state.sohHistory.takeIf { it.isNotEmpty() }?.let { sohTrend(it) })
         Spacer(Modifier.height(12.dp))
         VoltListCard {
             VoltListRow(
@@ -375,7 +375,10 @@ private fun ColumnScope.HeroFootnote(
 }
 
 @Composable
-private fun BatteryCard(battery: HvBattery) {
+private fun BatteryCard(
+    battery: HvBattery,
+    trend: SohTrend?,
+) {
     Column(Modifier.fillMaxWidth().voltCard().padding(horizontal = 16.dp, vertical = 14.dp)) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -418,6 +421,7 @@ private fun BatteryCard(battery: HvBattery) {
                 }
             Text(note, style = VoltType.caption, color = VoltColors.textTertiary)
         }
+        trend?.let { SohTrendView(it, Modifier.padding(top = 14.dp)) }
     }
 }
 

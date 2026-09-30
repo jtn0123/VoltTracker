@@ -277,6 +277,9 @@ object TripHistory {
             energyKwh = finiteOrNull(row, "energyKwh"),
             evShare = finiteOrNull(row, "evShare")?.coerceIn(0.0, 1.0),
             label = row.optString("label", "").trim(),
+            maxSpeedKph = finiteOrNull(row, "maxSpeedKph")?.takeIf { it > 0.0 },
+            avgSpeedKph = finiteOrNull(row, "avgMovingSpeedKph")?.takeIf { it > 0.0 },
+            outsideTempC = finiteOrNull(row, "avgOutsideTempC"),
         )
     }
 
@@ -340,7 +343,7 @@ private const val ALL_EV = 0.98
 private const val ALL_GAS = 0.02
 private const val MIN_KWH = 0.05
 private const val MAX_MI_PER_KWH = 10.0
-private const val ASSUMED_MI_PER_KWH = 3.5
+internal const val ASSUMED_MI_PER_KWH = 3.5
 private const val PERCENT = 100
 private const val DAWN = 5
 private const val NOON = 12

@@ -2,7 +2,7 @@ package com.volttracker.obdpoc.ui
 
 /**
  * Pages pushed over the tabs: Settings (the gear, from anywhere), Car › Health, Health › Live
- * signals, Health › Freeze frame, Live signals › All readings, and Settings' Adapter page opened
- * straight from Health.
+ * signals, Health › Freeze frame, Live signals › All readings, Settings' Adapter page opened
+ * straight from Health, and the receipts for one drive (Trips) or one charge (Charge).
  */
-enum class VoltRoute { SETTINGS, HEALTH, ADAPTER, SIGNALS, FREEZE_FRAME, ALL_READINGS }
+enum class VoltRoute { SETTINGS, HEALTH, ADAPTER, SIGNALS, FREEZE_FRAME, ALL_READINGS, TRIP, CHARGE }

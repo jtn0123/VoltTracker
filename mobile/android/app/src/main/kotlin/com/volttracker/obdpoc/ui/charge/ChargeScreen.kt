@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.charge
 
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -25,6 +27,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.SpanStyle
@@ -45,6 +48,7 @@ import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltChip
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltFigure
+import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltLoading
@@ -85,6 +89,7 @@ fun ChargeScreen(
     modifier: Modifier = Modifier,
     onConnect: () -> Unit = {},
     onStartDemo: () -> Unit = {},
+    onOpenSession: (Long) -> Unit = {},
 ) {
     val pal = LocalVoltPalette.current
     val glow = if (state.charging) pal.ev.copy(alpha = ambientAlpha(pal)) else Color.Transparent
@@ -105,7 +110,7 @@ fun ChargeScreen(
                 SessionCard(state)
             }
             Spacer(Modifier.height(10.dp))
-            RecentSessions(state)
+            RecentSessions(state, onOpenSession)
         }
     }
 }
@@ -347,7 +352,10 @@ private fun SessionCard(state: ChargeUiState) {
 }
 
 @Composable
-private fun RecentSessions(state: ChargeUiState) {
+private fun RecentSessions(
+    state: ChargeUiState,
+    onOpen: (Long) -> Unit,
+) {
     val rows = state.sessionRows(h24 = LocalVoltPrefs.current.clock24h)
     VoltPanel(padding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
         // Flows so the month summary drops under the label at large text sizes instead of wrapping beside it.
@@ -380,15 +388,19 @@ private fun RecentSessions(state: ChargeUiState) {
                     )
             }
         }
-        rows.forEach { row -> SessionRowView(row) }
+        rows.forEach { row -> SessionRowView(row, row.startedAtMs?.let { at -> { onOpen(at) } }) }
     }
 }
 
 @Composable
-private fun SessionRowView(row: SessionRow) {
+private fun SessionRowView(
+    row: SessionRow,
+    onClick: (() -> Unit)?,
+) {
     VoltListDivider()
+    val clickable = if (onClick != null) Modifier.clickable(role = Role.Button, onClick = onClick) else Modifier
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().then(clickable).padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(modifier = Modifier.weight(1f)) {
@@ -425,6 +437,14 @@ private fun SessionRowView(row: SessionRow) {
                     modifier = Modifier.padding(top = 2.dp),
                 )
             }
+        }
+        if (onClick != null) {
+            Icon(
+                imageVector = VoltIcons.ChevronRight,
+                contentDescription = null,
+                tint = VoltColors.textTertiary,
+                modifier = Modifier.padding(start = 8.dp).size(16.dp),
+            )
         }
     }
 }

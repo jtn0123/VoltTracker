@@ -19,11 +19,9 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -72,24 +70,18 @@ import com.volttracker.obdpoc.ui.units.VoltUnits
 /**
  * The Trips tab (mockups `S.trips`): this month's drives in the header, the selected drive on
  * the map card, electric share / efficiency / savings, and the drives grouped by day. Tapping a
- * drive shows it on the map; the share button exports it.
+ * drive opens its receipt (and shows it on the map behind); the share button exports it.
  */
 @Composable
 fun TripsScreen(
     state: TripsUiState,
     onSelect: (String) -> Unit = {},
     onExport: (TripExport) -> Unit = {},
+    onOpen: (String) -> Unit = {},
 ) {
+    // Tapping a drive opens its receipt over this page, so the list keeps its place underneath.
     val scroll = rememberScrollState()
     val selectedKey = state.selected?.routeKey
-    var shownKey by rememberSaveable { mutableStateOf(selectedKey) }
-    // A newly picked drive shows on the map at the top of the page.
-    LaunchedEffect(selectedKey) {
-        if (selectedKey != shownKey) {
-            shownKey = selectedKey
-            scroll.animateScrollTo(0)
-        }
-    }
     val nav = LocalVoltNav.current
     VoltScreen(
         title = "Trips",
@@ -133,6 +125,7 @@ fun TripsScreen(
                                 group.trips.forEach { trip ->
                                     TripRow(trip, trip.routeKey == selectedKey, state.units) {
                                         onSelect(trip.routeKey)
+                                        onOpen(trip.routeKey)
                                     }
                                 }
                             }
