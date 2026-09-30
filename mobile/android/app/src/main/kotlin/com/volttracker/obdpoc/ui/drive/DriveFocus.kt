@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -243,12 +245,18 @@ internal fun packElectrics(
         .joinToString(" · ")
         .ifEmpty { DASH }
 
-/** The three state-dependent tiles under the range card (mockups `tilesA`). */
+/**
+ * The three state-dependent tiles under the range card (mockups `tilesA`). At large text sizes a
+ * third of the width cut their labels to "THIS D…", so they stack one per row instead.
+ */
 @Composable
 internal fun FocusTiles(state: DriveUiState) {
-    Row(
+    val stacked = LocalDensity.current.fontScale > STACK_TILES_FONT_SCALE
+    FlowRow(
         modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+        maxItemsInEachRow = if (stacked) 1 else TILES_PER_ROW,
     ) {
         val tile = Modifier.weight(1f)
         val units = state.units
@@ -408,3 +416,7 @@ private const val DIM_ALPHA = 0.5f
 
 /** The smallest a [NumberUnit] figure shrinks to fit, as a share of its size. */
 private const val MIN_FIT = 0.7f
+
+/** Above this text scale the Drive tiles stack one per row (Settings → Text size "Large" is 1.25×). */
+private const val STACK_TILES_FONT_SCALE = 1.2f
+private const val TILES_PER_ROW = 3

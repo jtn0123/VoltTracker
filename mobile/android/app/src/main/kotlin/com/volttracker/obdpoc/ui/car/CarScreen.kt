@@ -107,7 +107,7 @@ fun CarScreen(
                     }
                 Tile("Tires", icon, tires, it, iconTone = tires.tone)
             },
-            { Tile("Windows", VoltIcons.Window, windowsTile(car), it) },
+            { Tile("Windows", VoltIcons.Window, windowsTile(car, drive.connected), it) },
         )
         VoltListCard(Modifier.padding(top = 10.dp)) {
             VoltListRow(

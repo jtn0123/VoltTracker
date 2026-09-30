@@ -57,11 +57,16 @@ fun CarUiState.updatedLabel(): String? {
  * body frame at all has been: "Needs OBDLink adapter", since the SW-CAN body bus needs one. Never
  * heard while other body frames were: the bus works and the car just hasn't sent this one. Tyre
  * sensors only transmit once the wheels roll; doors, locks and windows only when they change.
+ * Never heard while the car isn't [connected]: nothing is wrong yet, it just isn't linked.
  */
-fun CarUiState.missingLine(group: BodyGroup): String {
+fun CarUiState.missingLine(
+    group: BodyGroup,
+    connected: Boolean = true,
+): String {
     val at = seenAtMs[group]
     return when {
         at != null -> "No reading for ${ago(nowMs - at).removeSuffix(" ago")}"
+        !connected -> SHOWS_WHEN_CONNECTED
         group == BodyGroup.AUX12 -> NOT_REPORTED
         seenAtMs.isEmpty() -> NEEDS_OBDLINK
         group == BodyGroup.TIRES -> TIRES_AFTER_DRIVE
@@ -110,7 +115,7 @@ fun aux12Tile(drive: DriveUiState): CarTile {
     val monitored = drive.aux12Volts
     val volts = monitored ?: drive.auxVolts?.takeIf { drive.connected && it > 0 }
     val status = aux12Status(volts, drive.phase)
-    if (volts == null) return CarTile(DASH, " V", listOf(NOT_REPORTED))
+    if (volts == null) return CarTile(DASH, " V", listOf(if (drive.connected) NOT_REPORTED else SHOWS_WHEN_CONNECTED))
     val soc = drive.aux12SocPercent.takeIf { monitored != null }
     val phase =
         when (drive.phase) {
@@ -149,7 +154,7 @@ fun climateTile(
         listOfNotNull(
             outside,
             if (car.remoteStartOn == true) "Remote start running" else null,
-            if (cabin == null) car.missingLine(BodyGroup.CLIMATE) else null,
+            if (cabin == null) car.missingLine(BodyGroup.CLIMATE, drive.connected) else null,
         )
     return CarTile(
         value = cabin?.let { tempValue(it, metric) } ?: DASH,
@@ -167,7 +172,7 @@ fun tiresTile(
     val metric = car.metricUnits
     val unit = pressureUnit(metric)
     val placard = "${pressureValue(car.placardPsi, metric)} $unit"
-    val tires = drive.tires ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES)))
+    val tires = drive.tires ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES, drive.connected)))
     val low = tires.all.indices.filter { tireLow(tires.all[it], car.placardPsi) }
     if (low.isEmpty()) {
         return CarTile(
@@ -190,7 +195,10 @@ fun tiresTile(
 }
 
 /** The windows tile, with the doors, hood and hatch under it. */
-fun windowsTile(car: CarUiState): CarTile {
+fun windowsTile(
+    car: CarUiState,
+    connected: Boolean = true,
+): CarTile {
     val windows = car.windowsPct
     val openCount = windows?.count { it > WINDOW_OPEN_PCT }
     val value =
@@ -209,9 +217,9 @@ fun windowsTile(car: CarUiState): CarTile {
         }
     val lines =
         listOfNotNull(
-            if (openCount == null) car.missingLine(BodyGroup.WINDOWS) else null,
+            if (openCount == null) car.missingLine(BodyGroup.WINDOWS, connected) else null,
             doors,
-        ).ifEmpty { listOf(car.missingLine(BodyGroup.DOORS)) }
+        ).ifEmpty { listOf(car.missingLine(BodyGroup.DOORS, connected)) }
     val warn = (openCount ?: 0) > 0 || openings?.open.orEmpty().isNotEmpty()
     return CarTile(value = value, lines = lines.distinct(), tone = if (warn) PillTone.WARN else PillTone.NEUTRAL)
 }
@@ -328,6 +336,7 @@ private const val NO_GEAR_TEXT = "--"
 /** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */
 const val NEEDS_OBDLINK = "Needs OBDLink adapter"
 const val TIRES_AFTER_DRIVE = "Shows after a short drive"
+const val SHOWS_WHEN_CONNECTED = "Shows when connected"
 const val NOT_SENT_YET = "Not sent by the car yet"
 const val SENT_ON_CHANGE = "Updates when one opens or locks"
 

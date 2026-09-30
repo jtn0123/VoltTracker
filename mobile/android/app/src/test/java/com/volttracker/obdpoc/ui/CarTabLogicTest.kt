@@ -104,6 +104,8 @@ class CarTabLogicTest {
         assertNull(port.meter)
         assertEquals(PillTone.WARN, port.tone)
         assertEquals(DASH, aux12Tile(DriveUiState()).value)
+        assertEquals(listOf("Shows when connected"), aux12Tile(DriveUiState()).lines)
+        assertEquals(listOf("Not reported"), aux12Tile(DriveUiState(connected = true)).lines)
         assertEquals("86% · plugged in · charging", aux12Tile(parked.copy(phase = DrivePhase.CHARGING)).lines.first())
         // On-car: in Park with the car on, GM's regulated voltage sits at 12.7 V. A fresh gear
         // reading says the car is on, so the tile must not call it "resting".
@@ -134,7 +136,8 @@ class CarTabLogicTest {
         assertEquals(listOf("Outside 18°C · A/C on", "Remote start running"), metric.lines)
         val none = climateTile(DriveUiState(), CarUiState())
         assertEquals(DASH, none.value)
-        assertEquals(listOf("Needs OBDLink adapter"), none.lines)
+        assertEquals(listOf("Shows when connected"), none.lines)
+        assertEquals(listOf("Needs OBDLink adapter"), climateTile(DriveUiState(connected = true), CarUiState()).lines)
     }
 
     @Test
@@ -154,7 +157,8 @@ class CarTabLogicTest {
         val metric = tiresTile(parked, car.copy(metricUnits = true))
         assertEquals(" kPa avg", metric.unit)
         assertEquals(listOf("Placard 262 kPa · all normal"), metric.lines)
-        assertEquals(listOf("Needs OBDLink adapter"), tiresTile(DriveUiState(), CarUiState()).lines)
+        assertEquals(listOf("Shows when connected"), tiresTile(DriveUiState(), CarUiState()).lines)
+        assertEquals(listOf("Needs OBDLink adapter"), tiresTile(DriveUiState(connected = true), CarUiState()).lines)
     }
 
     @Test
@@ -167,6 +171,15 @@ class CarTabLogicTest {
         assertEquals(listOf("Hatch open"), hatch.lines)
         assertEquals(PillTone.WARN, hatch.tone)
         assertEquals(listOf("Needs OBDLink adapter"), windowsTile(CarUiState()).lines)
+        assertEquals(listOf("Shows when connected"), windowsTile(CarUiState(), connected = false).lines)
+        assertEquals(
+            "a reading heard before the link dropped still says how old it is",
+            listOf("No reading for 2 min"),
+            windowsTile(
+                CarUiState(seenAtMs = mapOf(BodyGroup.WINDOWS to 0L), nowMs = 120_000L),
+                connected = false,
+            ).lines,
+        )
     }
 
     @Test
