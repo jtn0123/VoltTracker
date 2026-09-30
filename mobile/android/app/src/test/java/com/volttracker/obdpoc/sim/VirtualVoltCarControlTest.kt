@@ -226,7 +226,14 @@ class VirtualVoltCarControlTest {
         val adapter = VirtualVolt(mode, stn = stn)
         VirtualVoltService.nextConnection = adapter
         VirtualVoltService.nextSwcanPolicy =
-            SwcanListenRunner.Policy(firstWindowDelayMs = 0L, intervalMs = 0L, listenMs = 0L, stopTimeoutMs = 0L)
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 0L,
+                intervalMs = 0L,
+                listenMs = 0L,
+                stopTimeoutMs = 0L,
+                parkedIntervalMs = 0L,
+                parkedListenMs = 0L,
+            )
         val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
         controllers.add(controller)
         val service = controller.get()

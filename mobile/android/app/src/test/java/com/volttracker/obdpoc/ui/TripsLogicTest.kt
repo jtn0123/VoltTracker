@@ -16,6 +16,7 @@ import com.volttracker.obdpoc.ui.trips.engineOn
 import com.volttracker.obdpoc.ui.trips.fitViewport
 import com.volttracker.obdpoc.ui.trips.gasMiles
 import com.volttracker.obdpoc.ui.trips.groups
+import com.volttracker.obdpoc.ui.trips.isGhost
 import com.volttracker.obdpoc.ui.trips.miPerKwh
 import com.volttracker.obdpoc.ui.trips.mode
 import com.volttracker.obdpoc.ui.trips.savedVsGas
@@ -140,6 +141,29 @@ class TripsLogicTest {
         assertEquals("No drives yet in April", TripsUiState(nowMs = now).subtitle(utc))
         assertNull(TripsUiState(nowMs = now).electricPct(utc))
         assertEquals("1 drive · 20 mi · April", state.copy(trips = state.trips.take(1)).subtitle(utc))
+    }
+
+    @Test
+    fun aQuietMonthSummarisesTheLatestMonthWithDrives() {
+        // On the phone: September with only July drives read "No drives yet" over blank figures.
+        val state =
+            TripsUiState(
+                trips =
+                    listOf(
+                        trip("jul-b", now - 40 * day, miles = 22.0),
+                        trip("jul-a", now - 45 * day, miles = 70.0),
+                    ),
+                nowMs = now,
+            )
+        assertEquals("2 drives · 92 mi · March", state.subtitle(utc))
+        assertEquals(100, state.electricPct(utc))
+    }
+
+    @Test
+    fun aDrivewayConnectIsNotADrive() {
+        assertTrue(TripSummary("g", now, now + 20_000L, 0.0).isGhost())
+        assertTrue(!TripSummary("short", now, now + 5 * minute, 0.0).isGhost())
+        assertTrue(!trip("real", now).isGhost())
     }
 
     @Test

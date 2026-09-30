@@ -372,6 +372,13 @@ open class ObdService :
                 if (!active) stopSelf(startId)
                 return if (active) START_STICKY else START_NOT_STICKY
             }
+            ACTION_BODY_TEST -> {
+                // Like a car command, only meaningful on a live session; never starts one.
+                if (running.get()) engine.requestBodyTest(BODY_TEST_MS)
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
+            }
             ACTION_DEMO -> {
                 activeName = "Demo stream"
                 startDemoSession()
@@ -1109,6 +1116,10 @@ open class ObdService :
         const val ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT"
         const val ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY"
         const val ACTION_CAR_CONTROL = "com.volttracker.obdpoc.action.CAR_CONTROL"
+        const val ACTION_BODY_TEST = "com.volttracker.obdpoc.action.BODY_TEST"
+
+        /** How long a body test listens: long enough to walk round the car opening things. */
+        const val BODY_TEST_MS = 60_000L
         const val EXTRA_CAR_COMMAND = "car_command"
         const val BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY"
         const val BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS"

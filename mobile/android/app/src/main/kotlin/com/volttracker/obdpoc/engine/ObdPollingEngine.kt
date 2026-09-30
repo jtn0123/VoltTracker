@@ -119,6 +119,12 @@ open class ObdPollingEngine(
     /** Queues a user-confirmed car command for the live poll loop; safe from any thread. */
     fun requestCarControl(command: CarCommand) = carControl.request(command)
 
+    /** See [SwcanListenRunner.requestBodyTest]; ignored (and logged) off an OBDLink. */
+    fun requestBodyTest(durationMs: Long) = swcanListener.requestBodyTest(durationMs)
+
+    /** The last sample's road speed, read by the SW-CAN runner on the same poll thread. */
+    private var lastSpeedKph = Double.NaN
+
     /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
     private inner class SwcanIo : SwcanListenRunner.Io {
         override fun send(
@@ -145,6 +151,8 @@ open class ObdPollingEngine(
 
         override fun <T> exclusive(block: () -> T): T = synchronized(service.ioLock) { block() }
 
+        override fun isStationary(): Boolean = lastSpeedKph.let { !it.isNaN() && it <= MOVING_SPEED_KPH }
+
         override fun logEvent(
             event: String,
             vararg pairs: String,
@@ -160,6 +168,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
+        lastSpeedKph = Double.NaN
         lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
@@ -773,6 +782,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
+            lastSpeedKph = sample.optDouble("speedKph", Double.NaN)
             appendSwcanReadings(sample)
             carControl.appendTo(sample)
             service.broadcastTelemetry(sample)

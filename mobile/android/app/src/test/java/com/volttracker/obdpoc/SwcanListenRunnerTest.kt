@@ -33,6 +33,11 @@ class SwcanListenRunnerTest {
         var reinitCount = 0
         var exclusiveDepth = 0
         var commandsOutsideLock = 0
+        var stationary = false
+        val listenMs = mutableListOf<Long>()
+        var onMonitor: (Long) -> Unit = {}
+
+        override fun isStationary(): Boolean = stationary
 
         override fun send(
             command: String,
@@ -51,6 +56,8 @@ class SwcanListenRunnerTest {
             stopTimeoutMs: Long,
         ): ElmConnection.MonitorResult {
             commands.add(command)
+            this.listenMs.add(listenMs)
+            onMonitor(listenMs)
             return ElmConnection.MonitorResult(monitorText, monitorPrompt, false, false)
         }
 
@@ -310,5 +317,66 @@ class SwcanListenRunnerTest {
         cycle()
         assertEquals("no_stop_prompt", runner.disabledReason())
         assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+    }
+
+    @Test
+    fun aStationaryCarGetsLongerMoreFrequentWindows() {
+        readyStn()
+        io.stationary = true
+        cycle()
+        assertEquals(listOf(policy.parkedListenMs), io.listenMs)
+        now += policy.parkedIntervalMs
+        cycle()
+        cycle()
+        assertEquals("parked windows come every parkedIntervalMs", 2, io.count("STM"))
+        io.stationary = false
+        now += policy.parkedIntervalMs
+        cycle()
+        cycle()
+        assertEquals("a moving car keeps the short listen", policy.listenMs, io.listenMs.last())
+    }
+
+    @Test
+    fun aBodyTestListensInChunksLogsEveryFrameAndRestores() {
+        readyStn()
+        io.onMonitor = { now += it }
+        runner.requestBodyTest(12_000L)
+        cycle()
+        assertEquals("12 s in 5 s chunks", 3, io.count("STM"))
+        assertEquals(0, io.commandsOutsideLock)
+        assertEquals(
+            SwcanListenRunner.RESTORE_COMMANDS,
+            io.commands
+                .takeLast(
+                    SwcanListenRunner.RESTORE_COMMANDS.size + 1,
+                ).dropLast(1),
+        )
+        val raw = io.events.filter { it.first == "swcan_raw" }
+        assertEquals(3, raw.size)
+        assertTrue(raw.all { it.second["mode"] == "body_test" && it.second["text"]!!.contains("0C 41 40 40") })
+        val done = io.event("body_test_done")!!
+        assertEquals("ok", done["outcome"])
+        assertEquals("6", done["frames"])
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals("locked", sample.getString("doorLockState"))
+    }
+
+    @Test
+    fun aBodyTestOffAnObdLinkIsLoggedNotRun() {
+        io.replies["STI"] = "?\r\r>"
+        runner.probeAdapter()
+        runner.requestBodyTest(60_000L)
+        cycle()
+        assertEquals(0, io.count("STM"))
+        assertEquals("not_stn", io.event("body_test_unavailable")!!["reason"])
+    }
+
+    @Test
+    fun aBodyTestWithAStalledClockStillEnds() {
+        readyStn()
+        runner.requestBodyTest(10_000L)
+        cycle()
+        assertEquals(3, io.count("STM"))
     }
 }

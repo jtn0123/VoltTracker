@@ -317,6 +317,15 @@ class LiveUiStateStoreTest {
 
         store.onStatus(JSONObject().put("state", "idle"))
         assertEquals("No adapter", store.state.value.drive.statusLabel)
+
+        // A remembered adapter: idle reads "Not connected", on every tab, whichever arrives first.
+        store.onSettings { it.copy(selectedAdapterAddress = "00:04:3E:00:00:01") }
+        assertEquals("Not connected", store.state.value.drive.statusLabel)
+        assertEquals("Not connected", store.state.value.trips.statusLabel)
+        store.onStatus(JSONObject().put("state", "idle"))
+        assertEquals("Not connected", store.state.value.charge.statusLabel)
+        store.onSettings { it.copy(selectedAdapterAddress = "") }
+        assertEquals("No adapter", store.state.value.drive.statusLabel)
     }
 
     @Test

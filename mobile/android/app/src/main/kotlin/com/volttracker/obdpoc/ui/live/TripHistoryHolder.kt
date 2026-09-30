@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.trips.TripRoute
 import com.volttracker.obdpoc.ui.trips.TripSummary
 import com.volttracker.obdpoc.ui.trips.TripsDemo
+import com.volttracker.obdpoc.ui.trips.isGhost
 
 /**
  * What the Trips tab shows: the logged drives and the selected one's route, or — while the demo
@@ -20,7 +21,8 @@ internal class TripHistoryHolder {
     private var demoKey: String = TripsDemo.MIXED_KEY
 
     fun onHistory(trips: List<TripSummary>) {
-        logged = trips
+        // A connect-and-disconnect in the driveway logs a 0.0 mi, 0 min "drive"; it isn't one.
+        logged = trips.filterNot { it.isGhost() }
         load = HistoryLoad.LOADED
         if (trips.none { it.routeKey == loggedKey }) loggedKey = null
     }
