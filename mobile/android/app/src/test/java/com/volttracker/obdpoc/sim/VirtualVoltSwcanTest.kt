@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc.sim
 
+import android.content.Intent
 import com.volttracker.obdpoc.engine.SwcanListenRunner
+import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
 import com.volttracker.obdpoc.sim.VirtualVoltScorecardTest.VirtualVoltService
 import org.junit.After
@@ -52,6 +54,52 @@ class VirtualVoltSwcanTest {
             assertEquals(12.6, latest.getDouble("aux12vVoltage"), 1e-9)
             assertTrue(latest.has("aux12vStaleMs"))
         }
+    }
+
+    @Test
+    fun aBodyTestHearsAnEventFrameTheShortWindowsMissAndPollingResumes() {
+        val adapter = VirtualVolt(Mode.DRIVING, stn = true)
+        adapter.body.doorFlOpen = true
+        VirtualVoltService.nextConnection = adapter
+        VirtualVoltService.nextSwcanPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 0L,
+                intervalMs = 0L,
+                listenMs = 0L,
+                stopTimeoutMs = 0L,
+                parkedIntervalMs = 0L,
+                parkedListenMs = 0L,
+            )
+        val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
+        controllers.add(controller)
+        val service = controller.get()
+        service.localStore!!.clearAllData()
+        service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
+        waitFor("first samples") { service.engineSamples.size >= 5 }
+        // The ordinary 0 ms windows never hear the door.
+        assertTrue(synchronized(service.wirePayloads) { service.wirePayloads.none { it.has("doorFlState") } })
+
+        service.onStartCommand(
+            Intent(service, VirtualVoltService::class.java).setAction(ObdService.ACTION_BODY_TEST),
+            0,
+            2,
+        )
+        waitFor("the body test to hear the door") {
+            synchronized(service.wirePayloads) { service.wirePayloads.any { it.optString("doorFlState") == "open" } }
+        }
+        val heardAt = service.engineSamples.size
+        waitFor("polling to resume after the body test") { service.engineSamples.size >= heardAt + 5 }
+        service.running.set(false)
+        waitFor("adapter to close") { adapter.closeCalls.get() > 0 }
+
+        val commands = adapter.commands()
+        val doorHeard =
+            synchronized(adapter.exchanges) {
+                adapter.exchanges.count { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
+            }
+        assertTrue("the 60 s body test listened in 5 s chunks, not one window ($doorHeard)", doorHeard >= 12)
+        val lastStm = commands.lastIndexOf("STM")
+        assertTrue("HS-CAN restored after the listen", commands.drop(lastStm).contains("ATSP6"))
     }
 
     @Test
@@ -130,5 +178,6 @@ class VirtualVoltSwcanTest {
     private companion object {
         const val SAMPLES = 40
         const val WAIT_TIMEOUT_MS = 60_000L
+        const val DOOR_FL_FRAME = "0C 63 00 40"
     }
 }

@@ -77,6 +77,12 @@ class VirtualVolt(
 
         @Volatile var windowsOpen: Boolean? = null
 
+        /**
+         * The driver's door, sent only when it changes: like the real car's door frames, a short
+         * listen window misses it and only a long one ([EVENT_LISTEN_MS]+, i.e. a body test) hears it.
+         */
+        @Volatile var doorFlOpen: Boolean? = null
+
         /** Set by the SW-CAN wake frame (sent under High Voltage Wakeup); body commands need it. */
         @Volatile var awake = false
     }
@@ -129,7 +135,7 @@ class VirtualVolt(
         }
         val frames =
             if (protocol == SWCAN_PROTOCOL || protocol == SWCAN_29BIT_PROTOCOL) {
-                swcanLines().joinToString("\r") + "\r"
+                swcanLines(listenMs).joinToString("\r") + "\r"
             } else {
                 ""
             }
@@ -194,7 +200,7 @@ class VirtualVolt(
         }
 
     /** The catalog's broadcasts with the body's current state swapped in (bus order: state last). */
-    private fun swcanLines(): List<String> {
+    private fun swcanLines(listenMs: Long): List<String> {
         val lines =
             VirtualVoltCatalog.SWCAN_FRAMES
                 .getValue(mode)
@@ -204,6 +210,11 @@ class VirtualVolt(
         body.locked?.let { lines.add(LOCK_FRAME_PREFIX + if (it) " 00 01 00 07" else " 00 00 00 07") }
         body.remoteStart?.let { lines.add(REMOTE_START_FRAME_PREFIX + if (it) " 02" else " 00") }
         body.windowsOpen?.let { lines.add(WINDOWS_FRAME_PREFIX + if (it) " 36 36" else " 00 00") }
+        if (listenMs >=
+            EVENT_LISTEN_MS
+        ) {
+            body.doorFlOpen?.let { lines.add(DOOR_FL_FRAME_PREFIX + if (it) " 01" else " 00") }
+        }
         return lines
     }
 
@@ -274,6 +285,12 @@ class VirtualVolt(
 
         // GMLAN PID 0x325 (window positions) from the BCM: FL|RL<<3, FR|RR<<3; 6 = fully open.
         const val WINDOWS_FRAME_PREFIX = "10 64 A0 CB"
+
+        /** 0x0C630040: the driver's door (open = data bit 0). */
+        const val DOOR_FL_FRAME_PREFIX = "0C 63 00 40"
+
+        /** Shortest listen that catches an event-only frame (a body test chunk is 5 s). */
+        const val EVENT_LISTEN_MS = 3_000L
         val STPX = Regex("STPXH:([0-9A-F]+),D:([0-9A-F]*),R:\\d+")
 
         // 17 characters like a real VIN, but obviously synthetic (VINs never contain I, O or Q).

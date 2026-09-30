@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui.diag
 
+import com.volttracker.obdpoc.FreezeFrame
+
 /**
  * How serious a trouble code is, as the classic dashboard grades it: the DTC table's severity when
  * it lists the code, else by family (chassis codes ALERT, the rest WARNING).
@@ -51,6 +53,8 @@ data class DiagUiState(
     val nowMs: Long = 0L,
     /** A scan or clear is running; the detail says which stage. */
     val busyLabel: String? = null,
+    /** The readings the car saved with its last freeze frame, when a scan read them. */
+    val freezeFrame: FreezeFrameSnapshot? = null,
 ) {
     companion object {
         /** The demo's check: taken two hours before [DEMO_NOW_MS]. */
@@ -85,6 +89,21 @@ data class DiagUiState(
                     ),
                 scannedAtMs = nowMs - 2 * HOUR_MS,
                 nowMs = nowMs,
+                freezeFrame =
+                    FreezeFrameSnapshot(
+                        dtc = "P0420",
+                        capturedAtMs = nowMs - 2 * HOUR_MS,
+                        readings =
+                            listOf(
+                                FreezeFrame.Reading("vehicle speed", 72.0, "km/h"),
+                                FreezeFrame.Reading("engine rpm", 1726.0, "rpm"),
+                                FreezeFrame.Reading("engine load", 38.0, "%"),
+                                FreezeFrame.Reading("coolant temperature", 88.0, "deg C"),
+                                FreezeFrame.Reading("intake air temperature", 21.0, "deg C"),
+                                FreezeFrame.Reading("fuel level", 64.0, "%"),
+                                FreezeFrame.Reading("control module voltage", 14.2, "V"),
+                            ),
+                    ),
             )
 
         val demo: DiagUiState = demoAt(DEMO_NOW_MS)
@@ -99,8 +118,8 @@ class HealthActions(
     val onClear: () -> Unit = {},
     /** Share this plain-text report. */
     val onShare: (String) -> Unit = {},
-    /** Freeze-frame detail still lives in the classic dashboard. */
-    val onOpenClassic: () -> Unit = {},
+    /** Health › Freeze frame. */
+    val onOpenFreezeFrame: () -> Unit = {},
     /** Settings → Adapter (also the troubleshooter: test connection, send diagnostics). */
     val onOpenAdapter: () -> Unit = {},
     /** Health › Live signals. */

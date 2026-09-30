@@ -782,7 +782,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
-            lastSpeedKph = sample.optDouble("speedKph", Double.NaN)
+            lastSpeedKph = freshSpeedKph(sample)
             appendSwcanReadings(sample)
             carControl.appendTo(sample)
             service.broadcastTelemetry(sample)
@@ -1249,3 +1249,19 @@ open class ObdPollingEngine(
         }
     }
 }
+
+/**
+ * The sample's speed, or NaN when the car stopped refreshing it (it's off, or asleep): a stale
+ * speed doesn't mean "parked with the car on", so only a fresh one earns the longer parked
+ * SW-CAN windows.
+ */
+private fun freshSpeedKph(sample: JSONObject): Double =
+    if (sample.optLong("speedKphStaleMs", 0L) <=
+        FRESH_SPEED_MS
+    ) {
+        sample.optDouble("speedKph", Double.NaN)
+    } else {
+        Double.NaN
+    }
+
+private const val FRESH_SPEED_MS = 10_000L

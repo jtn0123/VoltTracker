@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.ui.charge.CHARGE_HISTORY_LIMIT
 import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import com.volttracker.obdpoc.ui.diag.DtcCatalog
+import com.volttracker.obdpoc.ui.diag.FreezeFrameSnapshot
 import com.volttracker.obdpoc.ui.diag.savedCodes
 import com.volttracker.obdpoc.ui.insights.INSIGHTS_TRIP_LIMIT
 import com.volttracker.obdpoc.ui.insights.InsightsHistory
@@ -41,6 +42,7 @@ internal class ComposeHistoryLoader(
     private val dtcCatalog: () -> DtcCatalog = { DtcCatalog.EMPTY },
     /** When the car's codes were last read and last cleared, if ever. */
     private val dtcChecks: () -> Pair<Long?, Long?> = { null to null },
+    private val freezeFrame: () -> FreezeFrameSnapshot? = { null },
 ) {
     /** Seams so tests can serve canned rows without a database. */
     var chargeReader: () -> JSONArray = {
@@ -82,9 +84,9 @@ internal class ComposeHistoryLoader(
     fun loadHealth() {
         // A scan landing while the last read runs must not be lost: read again once it finishes.
         if (healthInFlight.get()) healthAgain.set(true)
-        val reader = { savedCodes(healthReader(), dtcCatalog()) to dtcChecks() }
-        read(healthInFlight, "trouble codes", reader) { (codes, checks) ->
-            store.onHealthHistory(HealthHistoryHolder.Logged(codes, checks.first, checks.second))
+        val reader = { Triple(savedCodes(healthReader(), dtcCatalog()), dtcChecks(), freezeFrame()) }
+        read(healthInFlight, "trouble codes", reader) { (codes, checks, frame) ->
+            store.onHealthHistory(HealthHistoryHolder.Logged(codes, checks.first, checks.second, frame))
             if (healthAgain.getAndSet(false)) loadHealth()
         }
     }

@@ -7,7 +7,9 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.core.content.edit
 import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.ui.diag.FreezeFrameSnapshot
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import org.json.JSONException
 import org.json.JSONObject
 
 /**
@@ -77,8 +79,32 @@ class ComposeDtcActions(
                     PREF_LAST_CLEAR_MS
                 else -> return
             }
-        prefs()?.edit { putLong(key, at) }
+        prefs()?.edit {
+            putLong(key, at)
+            // A scan replaces the saved freeze frame (a clean car has none); a clear erases it.
+            val frame = payload.optJSONObject("freezeFrame")?.takeIf { key == PREF_LAST_SCAN_MS }
+            if (frame ==
+                null
+            ) {
+                remove(PREF_FREEZE_FRAME)
+            } else {
+                putString(PREF_FREEZE_FRAME, frame.put("capturedAtMs", at).toString())
+            }
+        }
         reload()
+    }
+
+    /** The freeze frame the last scan read, or null if it found none (or none was ever read). */
+    fun freezeFrame(): FreezeFrameSnapshot? {
+        val json =
+            try {
+                JSONObject(prefs()?.getString(PREF_FREEZE_FRAME, null) ?: return null)
+            } catch (ex: JSONException) {
+                Log.w(AppPrefs.LOG_TAG, "saved freeze frame unreadable", ex)
+                return null
+            }
+        val dtc = json.optString("dtc", "").trim().ifEmpty { return null }
+        return FreezeFrameSnapshot(dtc, json.optLong("capturedAtMs", 0L), FreezeFrame.readingsFrom(json))
     }
 
     /** When the car's codes were last read — here or by the on-connect auto-scan — or null if never. */
@@ -124,6 +150,7 @@ class ComposeDtcActions(
         /** Compose-only bookkeeping: when this screen last saw the car's codes read or cleared. */
         const val PREF_LAST_SCAN_MS = "compose_dtc_last_scan_ms"
         const val PREF_LAST_CLEAR_MS = "compose_dtc_last_clear_ms"
+        const val PREF_FREEZE_FRAME = "compose_dtc_freeze_frame"
 
         private const val SOURCE_SCAN = "scan"
         private const val SOURCE_CLEAR = "clear-dtc"

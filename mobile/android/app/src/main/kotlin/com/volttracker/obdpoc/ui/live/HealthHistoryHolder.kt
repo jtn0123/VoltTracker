@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.ui.live
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcCode
+import com.volttracker.obdpoc.ui.diag.FreezeFrameSnapshot
 import com.volttracker.obdpoc.ui.diag.SCAN_WINDOW_MS
 
 /**
@@ -16,6 +17,7 @@ internal class HealthHistoryHolder {
         val codes: List<DtcCode>,
         val scannedAtMs: Long?,
         val clearedAtMs: Long?,
+        val freezeFrame: FreezeFrameSnapshot? = null,
     )
 
     private var logged: Logged? = null
@@ -77,6 +79,7 @@ internal class HealthHistoryHolder {
             earlierCodes = if (demoClearedAtMs != null) sample.codes.orEmpty().map { it.code } else emptyList(),
             scannedAtMs = scanned ?: sample.scannedAtMs,
             clearedAtMs = demoClearedAtMs,
+            freezeFrame = if (demoClearedAtMs != null) null else sample.freezeFrame,
             nowMs = maxOf(nowMs, at),
         )
     }
@@ -85,7 +88,8 @@ internal class HealthHistoryHolder {
         current: DiagUiState,
         nowMs: Long,
     ): DiagUiState {
-        val history = logged ?: return current.copy(codes = null, earlierCodes = emptyList(), nowMs = nowMs)
+        val history =
+            logged ?: return current.copy(codes = null, earlierCodes = emptyList(), freezeFrame = null, nowMs = nowMs)
         val newest = history.codes.maxOfOrNull { it.lastSeenMs }
         // A scan from the classic dashboard isn't timed here, but the codes it saved carry its time.
         val scanned = listOfNotNull(history.scannedAtMs, newest).maxOrNull()
@@ -99,6 +103,7 @@ internal class HealthHistoryHolder {
             earlierCodes = earlier.map { it.code }.distinct(),
             scannedAtMs = scanned,
             clearedAtMs = cleared,
+            freezeFrame = history.freezeFrame,
             nowMs = maxOf(nowMs, loggedAtMs),
         )
     }

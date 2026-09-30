@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.drive
 
+import com.volttracker.obdpoc.ui.diag.RawReading
 import com.volttracker.obdpoc.ui.units.VoltUnits
 
 /** Propulsion source for the moment: EV (battery) or extended-range (gas). */
@@ -118,6 +119,8 @@ data class DriveUiState(
     val sampleAtMs: Long = 0L,
     /** Live readings present in the newest sample (cockpit subtitle). */
     val signalCount: Int = 0,
+    /** Every reading in the newest sample, for Live signals › All readings. */
+    val rawReadings: List<RawReading> = emptyList(),
     /** Density: false = Focus (the Arc ring), true = Detailed (the cockpit). */
     val detailed: Boolean = false,
     /** Settings → Units: show km, km/h, °C, kPa and kWh/100 km instead of the imperial units. */

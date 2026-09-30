@@ -164,14 +164,17 @@ class HealthLogicTest {
 
     @Test
     fun listRows() {
-        assertEquals("None stored", demo.freezeFrameLine())
+        assertEquals("Captured with P0420", demo.freezeFrameLine())
+        assertEquals("None stored", demo.copy(freezeFrame = null).freezeFrameLine())
         assertEquals("None stored", DiagUiState().freezeFrameLine())
         assertEquals(
             "Captured with P0300",
-            demo.copy(codes = listOf(DtcCode("P0300", status = "freeze-frame"))).freezeFrameLine(),
+            demo.copy(freezeFrame = null, codes = listOf(DtcCode("P0300", status = "freeze-frame"))).freezeFrameLine(),
         )
-        assertFalse(demo.hasFreezeFrame())
-        assertTrue(demo.copy(codes = listOf(DtcCode("P0300", status = "freeze-frame"))).hasFreezeFrame())
+        assertFalse(demo.copy(freezeFrame = null).hasFreezeFrame())
+        assertTrue(
+            demo.copy(freezeFrame = null, codes = listOf(DtcCode("P0300", status = "freeze-frame"))).hasFreezeFrame(),
+        )
         assertEquals("Not connected", liveSignalsLine(DriveUiState()))
         assertEquals("78 readings coming in", liveSignalsLine(DriveUiState(connected = true, signalCount = 78)))
         assertEquals("Waiting for data", liveSignalsLine(DriveUiState(connected = true)))

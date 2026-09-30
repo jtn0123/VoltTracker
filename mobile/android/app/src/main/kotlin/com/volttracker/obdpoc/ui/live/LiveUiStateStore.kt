@@ -7,6 +7,7 @@ import com.volttracker.obdpoc.ui.car.CarControl
 import com.volttracker.obdpoc.ui.car.CarUiState
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
+import com.volttracker.obdpoc.ui.diag.rawReadings
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -522,6 +523,7 @@ class LiveUiStateStore(
                 },
             sampleAtMs = if (at > 0) at else current.sampleAtMs,
             signalCount = signalCount(t),
+            rawReadings = rawReadings(t, META_KEYS),
             tripMiles = session.driveMiles,
             tripDuration = durationLabel(session.durationMs(at)),
             tripMaxMph = kmToMi(session.maxKph).toInt(),
@@ -781,7 +783,8 @@ class LiveUiStateStore(
             "connected" -> "Live"
             "demo" -> "Demo"
             "connecting", "initializing", "reconnecting" -> "Connecting…"
-            "scanning", "scan-complete" -> "Scanning…"
+            "scanning" -> "Scanning…"
+            "scan-complete" -> "Scan complete"
             else -> if (adapter == "--") idleLabel(_state.value.settings) else "Idle · $adapter"
         }
 
@@ -845,7 +848,7 @@ class LiveUiStateStore(
 
         /** A demo command's outcome (see [com.volttracker.obdpoc.ui.car.lastResultLine]). */
         const val DEMO_OUTCOME = "simulated"
-        val TRANSITION_STATES = setOf("connecting", "initializing", "reconnecting", "scanning", "scan-complete")
+        val TRANSITION_STATES = setOf("connecting", "initializing", "reconnecting", "scanning")
         const val TRACE_CAP = 30
 
         /** The cockpit power strip spans the last minute at 1 Hz. */

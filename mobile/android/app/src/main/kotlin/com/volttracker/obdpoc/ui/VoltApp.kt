@@ -34,7 +34,9 @@ import com.volttracker.obdpoc.ui.components.VoltNavBar
 import com.volttracker.obdpoc.ui.components.VoltNavRail
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.components.rememberSystemPrefs
+import com.volttracker.obdpoc.ui.diag.AllReadingsScreen
 import com.volttracker.obdpoc.ui.diag.DiagScreen
+import com.volttracker.obdpoc.ui.diag.FreezeFrameScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
@@ -107,8 +109,7 @@ fun VoltApp(
                                     state = state,
                                     actions = actions,
                                     onBack = pop,
-                                    openAdapter = { push(VoltRoute.ADAPTER) },
-                                    openSignals = { push(VoltRoute.SIGNALS) },
+                                    open = push,
                                 )
                         }
                     }
@@ -160,7 +161,7 @@ internal fun screenViewName(
 ): String =
     when (route) {
         VoltRoute.SETTINGS, VoltRoute.ADAPTER -> "settings"
-        VoltRoute.HEALTH, VoltRoute.SIGNALS -> "diagnostics"
+        VoltRoute.HEALTH, VoltRoute.SIGNALS, VoltRoute.FREEZE_FRAME, VoltRoute.ALL_READINGS -> "diagnostics"
         null ->
             when (tab) {
                 VoltTab.DRIVE -> "drive"
@@ -220,8 +221,7 @@ private fun VoltRouteContent(
     state: VoltAppUiState,
     actions: VoltAppActions,
     onBack: () -> Unit,
-    openAdapter: () -> Unit,
-    openSignals: () -> Unit,
+    open: (VoltRoute) -> Unit,
 ) {
     when (route) {
         VoltRoute.HEALTH ->
@@ -236,13 +236,15 @@ private fun VoltRouteContent(
                         onScan = actions.onScanCodes,
                         onClear = actions.onClearCodes,
                         onShare = actions.onShareHealthReport,
-                        onOpenClassic = actions.onOpenClassicDashboard,
-                        onOpenAdapter = openAdapter,
-                        onOpenSignals = openSignals,
+                        onOpenFreezeFrame = { open(VoltRoute.FREEZE_FRAME) },
+                        onOpenAdapter = { open(VoltRoute.ADAPTER) },
+                        onOpenSignals = { open(VoltRoute.SIGNALS) },
                     ),
             )
         VoltRoute.SIGNALS ->
-            LiveSignalsScreen(state.drive, onBack = onBack, onOpenClassic = actions.onOpenClassicDashboard)
+            LiveSignalsScreen(state.drive, onBack = onBack, onOpenAllReadings = { open(VoltRoute.ALL_READINGS) })
+        VoltRoute.FREEZE_FRAME -> FreezeFrameScreen(state.diag, state.drive.units, onBack = onBack)
+        VoltRoute.ALL_READINGS -> AllReadingsScreen(state.drive, onBack = onBack)
         VoltRoute.SETTINGS -> Settings(state, actions, onBack, SettingsPage.MAIN)
         VoltRoute.ADAPTER -> Settings(state, actions, onBack, SettingsPage.CONNECTION)
     }

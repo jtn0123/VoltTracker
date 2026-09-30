@@ -522,7 +522,7 @@ object ObdProtocol {
             "03" -> "43"
             "07" -> "47"
             "0A" -> "4A"
-            "0202" -> "4202"
+            "0202", FreezeFrame.DTC_REQUEST -> "4202"
             else -> null
         }
 
@@ -544,7 +544,7 @@ object ObdProtocol {
         when (command?.trim()?.uppercase(Locale.US) ?: "") {
             "07" -> "pending"
             "0A" -> "permanent"
-            "0202" -> "freeze-frame"
+            "0202", FreezeFrame.DTC_REQUEST -> "freeze-frame"
             else -> "stored"
         }
 
