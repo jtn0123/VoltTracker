@@ -38,6 +38,7 @@ import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.components.CappedTextScale
 import com.volttracker.obdpoc.ui.components.ConnectRow
 import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -53,6 +54,7 @@ import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.ambientAlpha
 import com.volttracker.obdpoc.ui.components.announceChanges
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.retryAction
 import com.volttracker.obdpoc.ui.components.unitStyle
 import com.volttracker.obdpoc.ui.components.voltAmbient
 import com.volttracker.obdpoc.ui.drive.ArcGeometry
@@ -90,8 +92,9 @@ fun ChargeScreen(
         VoltScreen(
             title = "Charge",
             subtitle = state.subtitle,
-            dot = connectionDot(state.connected),
+            dot = connectionDot(state.connected, state.connecting),
             statusSubtitle = true,
+            onRefresh = LocalVoltNav.current.refresh,
         ) {
             ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
             ChargeHero(state)
@@ -365,7 +368,8 @@ private fun RecentSessions(state: ChargeUiState) {
                 HistoryLoad.FAILED ->
                     VoltEmptyState(
                         "Charges couldn't be read",
-                        body = "Your logged charges are safe. They'll load the next time you open Charge.",
+                        body = "Your logged charges are safe.",
+                        action = LocalVoltNav.current.retryAction(),
                         inCard = false,
                     )
                 HistoryLoad.LOADED ->

@@ -19,9 +19,11 @@ import com.volttracker.obdpoc.ui.diag.liveSignalsLine
 import com.volttracker.obdpoc.ui.diag.pill
 import com.volttracker.obdpoc.ui.diag.safeToDrive
 import com.volttracker.obdpoc.ui.diag.statusCounts
+import com.volttracker.obdpoc.ui.diag.statusLine
 import com.volttracker.obdpoc.ui.diag.summary
 import com.volttracker.obdpoc.ui.diag.title
 import com.volttracker.obdpoc.ui.diag.weakestLabel
+import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -176,6 +178,11 @@ class HealthLogicTest {
         assertTrue(
             demo.copy(freezeFrame = null, codes = listOf(DtcCode("P0300", status = "freeze-frame"))).hasFreezeFrame(),
         )
+        // Health's header speaks Drive's connection line on the link, and the shared label off it.
+        val live = DriveUiState(connected = true, adapterLabel = "OBDLink MX+", phase = DrivePhase.DRIVE)
+        assertEquals("Live · OBDLink MX+", DiagUiState(connected = true, statusLabel = "Live").statusLine(live))
+        assertEquals("Scanning…", DiagUiState(statusLabel = "Scanning…").statusLine(DriveUiState()))
+        assertEquals("Not connected", DiagUiState(statusLabel = "Not connected").statusLine(live))
         assertEquals("Not connected", liveSignalsLine(DriveUiState()))
         assertEquals("78 readings coming in", liveSignalsLine(DriveUiState(connected = true, signalCount = 78)))
         assertEquals("Waiting for data", liveSignalsLine(DriveUiState(connected = true)))

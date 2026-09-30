@@ -19,13 +19,16 @@ val ChargeUiState.shownSocPercent: Double get() = displayedSocPercent ?: socPerc
 val ChargeUiState.eta: ChargeEta?
     get() = if (charging) chargeEta(shownSocPercent, chargeKw, sohPct, targetSoc.toDouble()) else null
 
-/** "Plugged in · Level 2" while charging; otherwise the connection label. */
+/**
+ * "Plugged in · Level 2" while charging, "Connected · not charging" on a live link that isn't;
+ * otherwise the connection label every tab shares.
+ */
 val ChargeUiState.subtitle: String
     get() =
-        if (charging) {
-            listOfNotNull("Plugged in", levelName(level)).joinToString(" · ")
-        } else {
-            statusLabel
+        when {
+            charging -> listOfNotNull("Plugged in", levelName(level)).joinToString(" · ")
+            connected -> "Connected · not charging"
+            else -> statusLabel
         }
 
 /** "Level 2" for "L2"; other levels read as reported. */

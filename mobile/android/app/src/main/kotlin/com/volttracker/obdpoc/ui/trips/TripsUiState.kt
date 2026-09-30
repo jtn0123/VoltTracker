@@ -41,6 +41,8 @@ data class TripRoute(
  */
 data class TripsUiState(
     val connected: Boolean = false,
+    /** The link is coming up (or a scan is running): the header dot shows it. */
+    val connecting: Boolean = false,
     val statusLabel: String = "No adapter",
     val trips: List<TripSummary> = emptyList(),
     val selectedKey: String? = null,

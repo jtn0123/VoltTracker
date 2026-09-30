@@ -14,13 +14,16 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.components.ButtonStyle
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltListCard
 import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.connectAction
 import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.demoAction
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
@@ -40,14 +43,17 @@ fun LiveSignalsScreen(
     VoltScreen(
         title = "Live signals",
         subtitle = liveSignalsLine(drive),
-        dot = connectionDot(drive.connected),
+        dot = connectionDot(drive.connected, drive.connecting),
         onBack = onBack,
         modifier = modifier,
     ) {
         if (!drive.connected) {
+            val nav = LocalVoltNav.current
             VoltEmptyState(
                 "Not connected",
-                body = "Connect the adapter (or start the demo) to watch the car's readings live.",
+                body = "Connect the adapter to watch the car's readings live.",
+                action = nav.connectAction(),
+                secondAction = nav.demoAction(),
             )
         } else {
             liveSignalGroups(drive).forEach { group ->

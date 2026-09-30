@@ -23,6 +23,8 @@ data class VoltAppActions(
      * "insights", "diagnostics", "settings"), so the keep-screen-awake rule is shared.
      */
     val onScreenShown: (String) -> Unit = {},
+    /** Pull to refresh, or "Try again": re-read the saved history behind the screen that is showing. */
+    val onRefresh: () -> Unit = {},
     /** Trips: show this drive (by route key) on the map. */
     val onSelectTrip: (String) -> Unit = {},
     /** Trips: export one drive (GPX / CSV) or all of them. */

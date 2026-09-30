@@ -14,6 +14,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -66,11 +67,16 @@ fun VoltApp(
     var routes by rememberSaveable(stateSaver = RouteStackSaver) { mutableStateOf(initialRoutes) }
     val push: (VoltRoute) -> Unit = { route -> routes = routes.filterNot { it == route } + route }
     val pop: () -> Unit = { routes = routes.dropLast(1) }
+    val latest by rememberUpdatedState(actions)
+    val connect: () -> Unit = { if (!latest.onConnect()) push(VoltRoute.ADAPTER) }
     val nav =
         remember {
             VoltNavActions(
                 openSettings = { push(VoltRoute.SETTINGS) },
                 openHealth = { push(VoltRoute.HEALTH) },
+                connect = connect,
+                startDemo = { latest.onStartDemo() },
+                refresh = { latest.onRefresh() },
             )
         }
     val screen = screenViewName(tab, routes.lastOrNull())
@@ -103,7 +109,7 @@ fun VoltApp(
                                     tab = shown.tab,
                                     state = state,
                                     actions = actions,
-                                    onConnect = { if (!actions.onConnect()) push(VoltRoute.ADAPTER) },
+                                    onConnect = connect,
                                 )
                             else ->
                                 VoltRouteContent(

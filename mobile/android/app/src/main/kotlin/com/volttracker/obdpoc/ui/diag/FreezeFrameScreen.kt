@@ -39,7 +39,7 @@ fun FreezeFrameScreen(
     VoltScreen(
         title = "Freeze frame",
         subtitle = dtc?.let { "Captured with $it" } ?: "Health › Freeze frame",
-        dot = connectionDot(state.connected),
+        dot = connectionDot(state.connected, state.connecting),
         onBack = onBack,
         modifier = modifier,
     ) {

@@ -79,50 +79,78 @@ internal fun ColumnScope.CockpitContent(state: DriveUiState) {
         CellsCard(state, Modifier.weight(1f))
         EfficiencyCard(state, Modifier.weight(1f))
     }
-    CockpitRow {
-        SmallCard("12V", Modifier.weight(1f)) {
-            NumberUnit(state.aux12Volts?.let(::oneDecimal) ?: DASH, " V", 20f, Modifier.padding(top = 3.dp))
-            Sub(
-                listOfNotNull(
-                    state.aux12SocPercent?.let { "$it%" },
-                    state.aux12Amps?.let { (if (it >= 0) "+" else "−") + "${abs(it).toInt()} A" },
-                ).joinToString(" · ").ifEmpty { "Not reported" },
-            )
+    // Three across normally. At the larger text sizes a third of the width cut "86% · +6 A" short
+    // and stacked the four tyres one per line, so the tyres take a full-width row of their own.
+    if (LocalDensity.current.fontScale > WIDE_THERMS_MAX_SCALE) {
+        CockpitRow {
+            Aux12Card(state, Modifier.weight(1f))
+            MotorsCard(state, Modifier.weight(1f))
         }
-        SmallCard("Tires", Modifier.weight(1f), unit = state.units.pressureUnit) {
-            TiresMini(state.tires, state.tirePlacardPsi, state.units)
+        CockpitRow { TiresCard(state, Modifier.weight(1f)) }
+    } else {
+        CockpitRow {
+            Aux12Card(state, Modifier.weight(1f))
+            TiresCard(state, Modifier.weight(1f))
+            MotorsCard(state, Modifier.weight(1f))
         }
-        SmallCard("Motors", Modifier.weight(1f)) {
-            val a = motorLabel(state, state.motorAKw)
-            val b = motorLabel(state, state.motorBKw)
-            val known = a != DASH || b != DASH
-            Text(
-                text =
-                    buildAnnotatedString {
-                        append(a)
-                        if (known) {
-                            withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" / ") }
-                            append(b)
-                            withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" kW") }
-                        }
-                    },
-                style = VoltType.value.copy(fontSize = 20.sp),
-                color = VoltColors.textPrimary,
-                modifier =
-                    Modifier.padding(top = 3.dp).semantics {
-                        contentDescription =
-                            if (known) {
-                                "Motor A ${spoken(
-                                    a,
-                                )} kilowatts, motor B ${spoken(b)} kilowatts"
-                            } else {
-                                NOT_REPORTED
-                            }
-                    },
-            )
-            // The Volt's two drive motors are named A and B (both in the one front drive unit).
-            Sub("Motor A / B")
-        }
+    }
+}
+
+@Composable
+private fun Aux12Card(
+    state: DriveUiState,
+    modifier: Modifier,
+) {
+    SmallCard("12V", modifier) {
+        NumberUnit(state.aux12Volts?.let(::oneDecimal) ?: DASH, " V", 20f, Modifier.padding(top = 3.dp))
+        Sub(
+            listOfNotNull(
+                state.aux12SocPercent?.let { "$it%" },
+                state.aux12Amps?.let { (if (it >= 0) "+" else "−") + "${abs(it).toInt()} A" },
+            ).joinToString(" · ").ifEmpty { "Not reported" },
+        )
+    }
+}
+
+@Composable
+private fun TiresCard(
+    state: DriveUiState,
+    modifier: Modifier,
+) {
+    SmallCard("Tires", modifier, unit = state.units.pressureUnit) {
+        TiresMini(state.tires, state.tirePlacardPsi, state.units)
+    }
+}
+
+@Composable
+private fun MotorsCard(
+    state: DriveUiState,
+    modifier: Modifier,
+) {
+    SmallCard("Motors", modifier) {
+        val a = motorLabel(state, state.motorAKw)
+        val b = motorLabel(state, state.motorBKw)
+        val known = a != DASH || b != DASH
+        Text(
+            text =
+                buildAnnotatedString {
+                    append(a)
+                    if (known) {
+                        withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" / ") }
+                        append(b)
+                        withStyle(SpanStyle(fontSize = 12.sp, color = VoltColors.textSecondary)) { append(" kW") }
+                    }
+                },
+            style = VoltType.value.copy(fontSize = 20.sp),
+            color = VoltColors.textPrimary,
+            modifier =
+                Modifier.padding(top = 3.dp).semantics {
+                    contentDescription =
+                        if (known) "Motor A ${spoken(a)} kilowatts, motor B ${spoken(b)} kilowatts" else NOT_REPORTED
+                },
+        )
+        // The Volt's two drive motors are named A and B (both in the one front drive unit).
+        Sub("Motor A / B")
     }
 }
 
@@ -449,7 +477,7 @@ private fun RangeBar(
     }
 }
 
-/** Above this text scale the six thermometers wrap onto two rows. */
+/** Above this text scale the six thermometers wrap onto two rows and the tyres get a row of their own. */
 private const val WIDE_THERMS_MAX_SCALE = 1.15f
 
 /**
