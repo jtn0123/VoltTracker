@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.54.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Motion pass — screen transitions, gliding gauge, press and haptic feedback, loading
+  skeletons ([#117](https://github.com/jtn0123/VoltTracker/pull/117),
+  [`4d7fa21`](https://github.com/jtn0123/VoltTracker/commit/4d7fa211f425c6d303d2b412837b9cba77e37198))
+
+
 ## v0.53.0 (2026-09-30)
 
 ### 🔺 Fix
