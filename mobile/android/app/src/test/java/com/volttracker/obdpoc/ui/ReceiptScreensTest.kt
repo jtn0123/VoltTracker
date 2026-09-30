@@ -17,6 +17,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagUiState
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
 import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.ui.trips.TripsDemo
@@ -131,7 +132,8 @@ class ReceiptScreensTest {
 
     @Test
     fun insightsOpenWithThePeriodInPlainWords() {
-        show(VoltAppUiState(insights = InsightsUiState.demo), VoltTab.INSIGHTS)
+        // The year, not the month: in UTC the demo's "now" is already May 1, a month with no drives yet.
+        show(VoltAppUiState(insights = InsightsUiState.demo.copy(period = InsightsPeriod.YEAR)), VoltTab.INSIGHTS)
         compose.onNodeWithText("In short", ignoreCase = true).assertIsDisplayed()
         assertTrue(compose.onAllNodes(hasText("You drove", substring = true)).fetchSemanticsNodes().isNotEmpty())
     }
