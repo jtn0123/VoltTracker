@@ -578,6 +578,8 @@ tasks.register("privacyScan", Exec) {
         // undeclared producer/consumer link that Gradle 9.6+ fails the build over.
         exclude "mobile/android/app/src/main/assets/dashboard/js/**"
         exclude "mobile/android/app/src/main/assets/dashboard/lib/leaflet/**"
+        // Same for the gitignored DTC table :app:generateDtcTable writes.
+        exclude "mobile/android/app/src/main/assets/dtc/**"
     })
     inputs.file(file("tools/privacy-scan.py"))
     inputs.file(file("tools/privacy-scan-allowlist.txt"))
