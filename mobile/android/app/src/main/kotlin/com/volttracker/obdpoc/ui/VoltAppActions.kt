@@ -43,4 +43,6 @@ data class VoltAppActions(
     val onClearCodes: () -> Unit = {},
     /** Health: share this plain-text report. */
     val onShareHealthReport: (String) -> Unit = {},
+    /** A trip or charge receipt: share this text (subject, body) through the share sheet. */
+    val onShareText: (String, String) -> Unit = { _, _ -> },
 )

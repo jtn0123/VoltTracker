@@ -88,6 +88,10 @@ fun InsightsScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(12.dp))
+        summary.story(state.units)?.let {
+            StoryCard(it)
+            Spacer(Modifier.height(10.dp))
+        }
         // A period with nothing in it offers the way out: every drive there is.
         val showAll = EmptyAction("Show all time") { onPeriod(InsightsPeriod.ALL) }
         ElectricHero(summary, state.units, state.history, showAll.takeIf { state.period != InsightsPeriod.ALL })
@@ -105,6 +109,20 @@ fun InsightsScreen(
             Spacer(Modifier.height(10.dp))
             CellNote(it)
         }
+    }
+}
+
+/** The period in plain sentences, above the charts. */
+@Composable
+private fun StoryCard(sentences: List<String>) {
+    VoltPanel {
+        VoltLabel("In short")
+        Text(
+            text = sentences.joinToString(" "),
+            style = VoltType.body,
+            color = VoltColors.textPrimary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
     }
 }
 

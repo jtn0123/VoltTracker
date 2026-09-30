@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.trips
 
 import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import kotlin.math.cos
 import kotlin.math.sin
 
@@ -32,6 +33,9 @@ internal object TripsDemo {
     private const val ERRAND_STEPS = 4
     private const val LAST_MONTH_GAS_EVERY = 4
     private const val LAST_MONTH_COMMUTE_SHARE = 0.6
+    private const val TOP_OVER_AVG = 1.25
+    private const val DEMO_TEMP_C = 14.0
+    private const val TEMP_SPREAD = 7.0
 
     /** Days ago → (miles, EV share) of the longer drives that ran the engine. */
     private val LONG_DRIVES =
@@ -125,8 +129,14 @@ internal object TripsDemo {
                 energyKwh = d.kwh,
                 evShare = d.evShare,
                 label = d.label,
+                avgSpeedKph = avgKph(d),
+                maxSpeedKph = avgKph(d) * TOP_OVER_AVG,
+                outsideTempC = DEMO_TEMP_C + (d.miles % TEMP_SPREAD),
             )
         }
+
+    /** A drive's average moving speed: its distance over its time, in km/h. */
+    private fun avgKph(d: Drive): Double = d.miles * VoltUnits.KM_PER_MI / (d.durationMs.toDouble() / HOUR)
 
     /** The loop, timed across the drive; the mixed drive switches to gas after its EV share. */
     fun route(

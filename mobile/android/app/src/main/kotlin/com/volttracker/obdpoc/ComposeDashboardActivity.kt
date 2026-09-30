@@ -232,6 +232,7 @@ class ComposeDashboardActivity :
                             onScanCodes = { dtc.scan() },
                             onClearCodes = { dtc.clear() },
                             onShareHealthReport = { dtc.share(it) },
+                            onShareText = ::shareText,
                         ),
                 )
             }
@@ -623,6 +624,24 @@ class ComposeDashboardActivity :
     internal fun selectInsightsPeriod(period: InsightsPeriod) {
         store.selectInsightsPeriod(period)
         history.loadInsights()
+    }
+
+    /** A trip or charge receipt, handed to the system share sheet as plain text. */
+    internal fun shareText(
+        subject: String,
+        text: String,
+    ) {
+        val send =
+            Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_SUBJECT, subject)
+                .putExtra(Intent.EXTRA_TEXT, text)
+        try {
+            startActivity(Intent.createChooser(send, subject))
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "receipt share failed", ex)
+            showMessage("Couldn't open sharing")
+        }
     }
 
     private fun selectTrip(routeKey: String) {

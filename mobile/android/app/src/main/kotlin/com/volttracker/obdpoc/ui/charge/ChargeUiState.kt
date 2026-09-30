@@ -119,3 +119,13 @@ data class ChargeUiState(
             )
     }
 }
+
+/**
+ * What the car's recent driving says a charge is worth: its electric [miPerKwh], and the MPG
+ * and gas price the same miles would have cost on gas (null / 0 when not set).
+ */
+data class ChargeWorth(
+    val miPerKwh: Double?,
+    val gasMpg: Double?,
+    val gasPrice: Double,
+)

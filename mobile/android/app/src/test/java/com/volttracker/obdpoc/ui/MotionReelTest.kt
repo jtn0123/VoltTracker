@@ -5,8 +5,10 @@ import androidx.activity.ComponentActivity
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
@@ -15,7 +17,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeUp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.car.CarUiState
@@ -114,7 +118,8 @@ class MotionReelTest {
         play("push", SCREEN_MS)
         compose.onNodeWithText("Vehicle health").assertDoesNotExist()
 
-        compose.onNodeWithText("Freeze frame").performClick()
+        // Below the fold now (the battery trend sits above it): tap it without scrolling the paused clock.
+        compose.onNodeWithText("Freeze frame").performSemanticsAction(SemanticsActions.OnClick)
         play("push", MID_MS + SCREEN_MS)
         compose.onNodeWithText("When it was set", ignoreCase = true).assertIsDisplayed()
 
@@ -208,6 +213,34 @@ class MotionReelTest {
         assertEquals(1, refreshes)
         // The spinner has gone again and the drives are still there.
         compose.onNodeWithText("ELECTRIC").assertIsDisplayed()
+    }
+
+    @Test
+    fun aDriveOpensItsReceiptAndGoesBack() {
+        start {
+            var state by remember {
+                mutableStateOf(
+                    demoState.copy(trips = demoState.trips.copy(selectedKey = "demo:1")),
+                )
+            }
+            VoltApp(
+                state,
+                initialTab = VoltTab.TRIPS,
+                actions =
+                    VoltAppActions(
+                        onSelectTrip = { key -> state = state.copy(trips = state.trips.copy(selectedKey = key)) },
+                    ),
+            )
+        }
+        play("receipt", HOLD_MS)
+        compose.onAllNodesWithText("Tahoe weekend").onFirst().performClick()
+        play("receipt", MID_MS + SCREEN_MS)
+        compose.onNodeWithText("DETAILS").assertIsDisplayed()
+        compose.onRoot().performTouchInput { swipeUp(startY = height * 0.8f, endY = height * 0.3f) }
+        play("receipt", HOLD_MS)
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
+        play("receipt", MID_MS + SCREEN_MS)
+        compose.onNodeWithText("DETAILS").assertDoesNotExist()
     }
 
     @Test

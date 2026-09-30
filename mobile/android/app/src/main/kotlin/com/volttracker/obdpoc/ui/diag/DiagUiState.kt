@@ -57,6 +57,8 @@ data class DiagUiState(
     val busyLabel: String? = null,
     /** The readings the car saved with its last freeze frame, when a scan read them. */
     val freezeFrame: FreezeFrameSnapshot? = null,
+    /** Logged battery-health reads, oldest first (Health's trend line). */
+    val sohHistory: List<SohPoint> = emptyList(),
 ) {
     companion object {
         /** The demo's check: taken two hours before [DEMO_NOW_MS]. */
@@ -91,6 +93,7 @@ data class DiagUiState(
                     ),
                 scannedAtMs = nowMs - 2 * HOUR_MS,
                 nowMs = nowMs,
+                sohHistory = SohHistory.demo(nowMs),
                 freezeFrame =
                     FreezeFrameSnapshot(
                         dtc = "P0420",
