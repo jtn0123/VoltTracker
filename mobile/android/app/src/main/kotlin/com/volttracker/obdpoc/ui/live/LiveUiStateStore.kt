@@ -545,9 +545,11 @@ class LiveUiStateStore(
         val rpm = optDouble(t, "rpm")
         return when {
             vehicleState == "driving_gas" -> true
+            // The classifier calls a parked car with the engine charging the pack "ready", so the
+            // fresh rpm decides before its verdict does.
+            rpm != null && rpm > GAS_RPM_FLOOR -> true
             vehicleState.isNotBlank() -> false
             // Low or missing rpm with no classifier verdict keeps the prior mode rather than guessing.
-            rpm != null && rpm > GAS_RPM_FLOOR -> true
             else -> currentMode == DriveMode.GAS
         }
     }

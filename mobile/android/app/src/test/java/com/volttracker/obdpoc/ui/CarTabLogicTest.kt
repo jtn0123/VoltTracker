@@ -105,6 +105,21 @@ class CarTabLogicTest {
         assertEquals(PillTone.WARN, port.tone)
         assertEquals(DASH, aux12Tile(DriveUiState()).value)
         assertEquals("86% · plugged in · charging", aux12Tile(parked.copy(phase = DrivePhase.CHARGING)).lines.first())
+        // On-car: in Park with the car on, GM's regulated voltage sits at 12.7 V. A fresh gear
+        // reading says the car is on, so the tile must not call it "resting".
+        assertEquals(
+            "100% · car on · healthy",
+            aux12Tile(parked.copy(gear = "P", aux12Volts = 12.7, aux12SocPercent = 100)).lines.first(),
+        )
+    }
+
+    @Test
+    fun aMissingBodyReadingSaysWhyOnceTheBusIsHeard() {
+        val heard = CarUiState(nowMs = now, seenAtMs = mapOf(BodyGroup.AUX12 to now - 5_000L))
+        assertEquals("Shows after a short drive", heard.missingLine(BodyGroup.TIRES))
+        assertEquals("Not sent by the car yet", heard.missingLine(BodyGroup.CLIMATE))
+        assertEquals("Updates when one opens or locks", heard.missingLine(BodyGroup.DOORS))
+        assertEquals("Updates when one opens or locks", heard.missingLine(BodyGroup.WINDOWS))
     }
 
     @Test

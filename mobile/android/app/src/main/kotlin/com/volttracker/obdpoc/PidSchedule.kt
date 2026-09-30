@@ -141,7 +141,8 @@ object PidSchedule {
             PidSpec("0142", Header.BROADCAST, 24, 6), // control module voltage
             PidSpec("011F", Header.BROADCAST, 24, 12), // engine run time
             PidSpec("015C", Header.BROADCAST, 48, 36), // engine oil temp
-            PidSpec("012F", Header.BROADCAST, 48, 30), // fuel level
+            // Fuel level heads the Drive range card: read it on the second cycle, then every ~20 s.
+            PidSpec("012F", Header.BROADCAST, 12, 1), // fuel level
             // GM odometer (4 bytes, km * 64): the command the open-source Voltage app reads on
             // the Volt. 01A6 stays as the fallback; whichever the car refuses gets retired.
             PidSpec("2234B2", Header.BROADCAST, 240, 150), // odometer, GM
@@ -175,8 +176,11 @@ object PidSchedule {
             PidSpec("224368", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC voltage
             PidSpec("224369", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC current
             PidSpec("2243AF", Header.HV_PACK_7E4, 24, 22), // raw precise SOC
-            PidSpec("228334", Header.HV_PACK_7E4, 24, 22), // dash-displayed SOC (read by Voltage)
-            PidSpec("2241A6", Header.HV_PACK_7E4, 24, 22), // car's own EV range estimate (OVMS)
+            // The dash SOC and EV range are the Drive screen's headline. On the 24-cycle lane the
+            // first read landed ~100 s into a session, so the ring showed the raw pack % (14) and
+            // then jumped to the dash's (0). Every 6 cycles, sharing 22434F's 7E4 phase: ~10 s.
+            PidSpec("228334", Header.HV_PACK_7E4, 6, 5), // dash-displayed SOC (read by Voltage)
+            PidSpec("2241A6", Header.HV_PACK_7E4, 6, 5), // car's own EV range estimate (OVMS)
             // Cell-balance trio shares phase 22 with 2243AF so they batch on the same 7E4 header
             // switch; balance changes slowly, so every 24 cycles is plenty.
             PidSpec("224329", Header.HV_PACK_7E4, 24, 22), // minimum cell voltage
