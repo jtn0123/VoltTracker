@@ -158,7 +158,7 @@ internal fun RangeCard(state: DriveUiState) {
             sub =
                 listOfNotNull(
                     fuel?.let { "${it.toInt()}% tank" } ?: "Tank level not reported",
-                    "engine running".takeIf { gasMode },
+                    "engine running".takeIf { state.connected && state.mode == DriveMode.GAS },
                 ).joinToString(" · "),
             dim = false,
         )

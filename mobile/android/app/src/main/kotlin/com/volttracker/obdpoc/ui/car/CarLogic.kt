@@ -53,12 +53,21 @@ fun CarUiState.updatedLabel(): String? {
 }
 
 /**
- * Why a body reading is missing: never heard this session ("Needs OBDLink adapter", since the
- * SW-CAN body bus needs one), or heard and since gone stale.
+ * Why a body reading is missing. Heard and since gone stale: how long ago. Never heard, while no
+ * body frame at all has been: "Needs OBDLink adapter", since the SW-CAN body bus needs one. Never
+ * heard while other body frames were: the bus works and the car just hasn't sent this one. Tyre
+ * sensors only transmit once the wheels roll; doors, locks and windows only when they change.
  */
 fun CarUiState.missingLine(group: BodyGroup): String {
-    val at = seenAtMs[group] ?: return if (group == BodyGroup.AUX12) NOT_REPORTED else NEEDS_OBDLINK
-    return "No reading for ${ago(nowMs - at).removeSuffix(" ago")}"
+    val at = seenAtMs[group]
+    return when {
+        at != null -> "No reading for ${ago(nowMs - at).removeSuffix(" ago")}"
+        group == BodyGroup.AUX12 -> NOT_REPORTED
+        seenAtMs.isEmpty() -> NEEDS_OBDLINK
+        group == BodyGroup.TIRES -> TIRES_AFTER_DRIVE
+        group == BodyGroup.CLIMATE -> NOT_SENT_YET
+        else -> SENT_ON_CHANGE
+    }
 }
 
 /** The status pill over the car: anything open or low first, else the lock and closures. */
@@ -105,7 +114,9 @@ fun aux12Tile(drive: DriveUiState): CarTile {
     val soc = drive.aux12SocPercent.takeIf { monitored != null }
     val phase =
         when (drive.phase) {
-            DrivePhase.PARKED -> "resting"
+            // A fresh gear reading means the car answered: it is on, just in Park, and 12.7 V is
+            // GM's regulated-voltage mode with a full battery, not the car at rest.
+            DrivePhase.PARKED -> if (drive.connected && drive.gear != NO_GEAR_TEXT) "car on" else "resting"
             DrivePhase.DRIVE -> "car on"
             DrivePhase.CHARGING -> "plugged in"
         }
@@ -309,7 +320,12 @@ const val GATE_BUSY = "busy"
 private val TIRE_NAMES = listOf("front left", "front right", "rear left", "rear right")
 
 /** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */
+private const val NO_GEAR_TEXT = "--"
+
 const val NEEDS_OBDLINK = "Needs OBDLink adapter"
+const val TIRES_AFTER_DRIVE = "Shows after a short drive"
+const val NOT_SENT_YET = "Not sent by the car yet"
+const val SENT_ON_CHANGE = "Updates when one opens or locks"
 
 /** A window more than this far down reads as open (the broadcast rounds a closed window to 0–1). */
 private const val WINDOW_OPEN_PCT = 2

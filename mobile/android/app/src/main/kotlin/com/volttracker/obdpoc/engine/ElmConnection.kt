@@ -414,7 +414,10 @@ open class ElmConnection
             // the ELM327 v1.4b dropped the prompt (a known quirk). It is far longer than a normal
             // inter-frame gap (<100 ms), so a legitimate slow multi-frame reply is not truncated; it
             // just lets prompt-recovery start ~1 s+ sooner than waiting out the full command timeout.
-            private const val NO_PROMPT_QUIET_PERIOD_MS = 250L
+            // It must also outlast ATST64 (400 ms): right after an ATSP the adaptive timer restarts
+            // at that ceiling, so an OBDLink holds its prompt up to 400 ms after the last frame.
+            // Cutting at 250 ms turned every post-SW-CAN restore into 2-4 ~1 s recoveries on the car.
+            private const val NO_PROMPT_QUIET_PERIOD_MS = 500L
 
             // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
             // Keep a single command response bounded so it cannot exhaust the app process heap.

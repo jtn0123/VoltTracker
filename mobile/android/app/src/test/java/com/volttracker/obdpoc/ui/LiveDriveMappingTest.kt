@@ -211,6 +211,16 @@ class LiveDriveMappingTest {
     }
 
     @Test
+    fun aParkedCarChargingOffTheEngineReadsAsEngineOn() {
+        // On-car: at 13% the engine ran at 1370 rpm in Park and the classifier said "ready".
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample(1_000L) { put("vehicleState", "ready").put("rpm", 1370).put("speedKph", 0) })
+        assertEquals(DriveMode.GAS, store.drive().mode)
+        store.onTelemetry(sample(2_000L) { put("vehicleState", "ready").put("rpm", 0).put("speedKph", 0) })
+        assertEquals(DriveMode.EV, store.drive().mode)
+    }
+
+    @Test
     fun signalCountSkipsBookkeepingStalenessAndNulls() {
         val store = LiveUiStateStore()
         store.onTelemetry(

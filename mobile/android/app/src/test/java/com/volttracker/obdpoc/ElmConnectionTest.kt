@@ -75,7 +75,7 @@ class ElmConnectionTest {
         val input = ReplyStream("41 0C 1880\r")
         val out = TriggerOutputStream(input)
         // Monotonic clock: every read advances 50 ms, so the loop always terminates (at the 5000 ms
-        // deadline if nothing else) — but the 250 ms quiet-period exit should fire long before that.
+        // deadline if nothing else) — but the 500 ms quiet-period exit should fire long before that.
         val now = AtomicLong(0L)
         val clock = ElmConnection.Clock { now.getAndAdd(50L) }
         val connection = ElmConnection(input, out, clock)
@@ -105,6 +105,20 @@ class ElmConnectionTest {
         val response = connection.transact("010D", 1500L) { true }
 
         assertEquals("010D\r41 0D 28\r\r>", response)
+        assertFalse(connection.lastTransactTruncated)
+    }
+
+    @Test
+    fun promptHeldForTheAdaptiveTimeoutIsStillRead() {
+        // On-car capture: after the SW-CAN restore's ATSP6 the OBDLink sends the reply at once but
+        // holds the '>' ~400 ms (ATST64) while adaptive timing relearns. That is not a dropped prompt.
+        val now = AtomicLong(0L)
+        val input = StagedStream(now, listOf(0L to "4104B4\r", 400L to "\r>"))
+        val connection = ElmConnection(input, TriggerOutputStream(input.trigger), { now.getAndAdd(25L) })
+
+        val response = connection.transact("0104", 1500L) { true }
+
+        assertEquals("4104B4\r\r>", response)
         assertFalse(connection.lastTransactTruncated)
     }
 
