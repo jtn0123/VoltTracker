@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.56.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Usefulness pass — trip and charge receipts, insights in plain words, battery health trend
+  ([#119](https://github.com/jtn0123/VoltTracker/pull/119),
+  [`adf7971`](https://github.com/jtn0123/VoltTracker/commit/adf7971b0f7aec11e0170ab2bbce0ab5e5f553a0))
+
+
 ## v0.55.0 (2026-09-30)
 
 ### ✳️ New
