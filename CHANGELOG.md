@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.55.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Ux pass — one connection status everywhere, a way out of every empty screen, pull to
+  refresh ([#118](https://github.com/jtn0123/VoltTracker/pull/118),
+  [`c9b3b1e`](https://github.com/jtn0123/VoltTracker/commit/c9b3b1ec09a40ee0bdf5067a09afafdc79034306))
+
+
 ## v0.54.0 (2026-09-30)
 
 ### ✳️ New
