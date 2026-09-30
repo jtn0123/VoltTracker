@@ -30,6 +30,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -87,10 +89,15 @@ internal fun ToggleRow(
     subtitle: String? = null,
     onChange: (Boolean) -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
     SettingRow(
         label = label,
         subtitle = subtitle,
-        modifier = Modifier.toggleable(value = on, role = Role.Switch, onValueChange = onChange),
+        modifier =
+            Modifier.toggleable(value = on, role = Role.Switch) {
+                haptics.performHapticFeedback(if (it) HapticFeedbackType.ToggleOn else HapticFeedbackType.ToggleOff)
+                onChange(it)
+            },
     ) { VoltSwitch(on) }
 }
 

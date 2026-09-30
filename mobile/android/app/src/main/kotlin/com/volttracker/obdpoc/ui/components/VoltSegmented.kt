@@ -20,7 +20,6 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -105,15 +104,16 @@ private fun Segment(
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 30.dp)
-                    .then(
-                        if (selected) {
-                            Modifier
-                                .clip(shape)
-                                .background(fill)
-                                .border(1.dp, VoltColors.line2, shape)
-                        } else {
-                            Modifier.background(Color.Transparent)
-                        },
+                    .clip(shape)
+                    // The raised segment fades from the old choice to the new one.
+                    .background(glideColor(if (selected) fill else fill.copy(alpha = 0f), "segment-fill"))
+                    .border(
+                        1.dp,
+                        glideColor(
+                            if (selected) VoltColors.line2 else VoltColors.line2.copy(alpha = 0f),
+                            "segment-line",
+                        ),
+                        shape,
                     ).padding(horizontal = 10.dp),
             contentAlignment = Alignment.Center,
         ) {
@@ -124,7 +124,7 @@ private fun Segment(
                         fontSize = 12.5.sp,
                         fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
                     ),
-                color = if (selected) VoltColors.textPrimary else VoltColors.textSecondary,
+                color = glideColor(if (selected) VoltColors.textPrimary else VoltColors.textSecondary, "segment-text"),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

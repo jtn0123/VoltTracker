@@ -1,12 +1,15 @@
 package com.volttracker.obdpoc.ui.settings
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -23,6 +26,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
+import com.volttracker.obdpoc.ui.components.PageMotion
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltGroupLabel
@@ -32,6 +37,7 @@ import com.volttracker.obdpoc.ui.components.VoltListDivider
 import com.volttracker.obdpoc.ui.components.VoltListRow
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.pageTransition
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
@@ -81,23 +87,37 @@ fun SettingsScreen(
     var page by rememberSaveable { mutableStateOf(initialPage) }
     BackHandler(enabled = page != SettingsPage.MAIN) { page = SettingsPage.MAIN }
     val open: (SettingsPage) -> Unit = { page = it }
-    VoltScreen(
-        title = page.title,
+    val reduceMotion = LocalVoltPrefs.current.reduceMotion
+    // The index keeps its place while a detail page is open; each detail page starts at its top.
+    val indexScroll = rememberScrollState()
+    AnimatedContent(
+        targetState = page,
         modifier = modifier,
-        onBack = if (page == SettingsPage.MAIN) onBack else ({ page = SettingsPage.MAIN }),
-        showGear = false,
-    ) {
-        when (page) {
-            SettingsPage.MAIN -> SettingsIndex(state, open)
-            SettingsPage.CONNECTION -> ConnectionPage(state, actions.onChange, actions.onCommand)
-            SettingsPage.COSTS -> CostsPage(state, actions.onChange)
-            SettingsPage.UNITS -> UnitsPage(state, actions.onChange)
-            SettingsPage.APPEARANCE -> AppearancePage(state, actions.onChange)
-            SettingsPage.ALERTS -> AlertsPage(state, actions.onChange)
-            SettingsPage.DATA -> DataPage(state, actions.onCommand)
-            SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)
-            SettingsPage.ADVANCED -> AdvancedPage(actions.onOpenClassicDashboard)
-            SettingsPage.UPDATES -> UpdatesPage(state, actions.onCheckForUpdate, actions.onInstallUpdate)
+        transitionSpec = {
+            val deeper = targetState != SettingsPage.MAIN
+            pageTransition(if (deeper) PageMotion.PUSH else PageMotion.POP, if (deeper) 1 else 0, reduceMotion)
+        },
+        label = "settings-page",
+    ) { shown ->
+        VoltScreen(
+            title = shown.title,
+            modifier = Modifier.background(VoltColors.bg),
+            onBack = if (shown == SettingsPage.MAIN) onBack else ({ page = SettingsPage.MAIN }),
+            showGear = false,
+            scrollState = if (shown == SettingsPage.MAIN) indexScroll else rememberScrollState(),
+        ) {
+            when (shown) {
+                SettingsPage.MAIN -> SettingsIndex(state, open)
+                SettingsPage.CONNECTION -> ConnectionPage(state, actions.onChange, actions.onCommand)
+                SettingsPage.COSTS -> CostsPage(state, actions.onChange)
+                SettingsPage.UNITS -> UnitsPage(state, actions.onChange)
+                SettingsPage.APPEARANCE -> AppearancePage(state, actions.onChange)
+                SettingsPage.ALERTS -> AlertsPage(state, actions.onChange)
+                SettingsPage.DATA -> DataPage(state, actions.onCommand)
+                SettingsPage.DEMO -> DemoPage(state, actions.onStartDemo, actions.onStopDemo)
+                SettingsPage.ADVANCED -> AdvancedPage(actions.onOpenClassicDashboard)
+                SettingsPage.UPDATES -> UpdatesPage(state, actions.onCheckForUpdate, actions.onInstallUpdate)
+            }
         }
     }
 }

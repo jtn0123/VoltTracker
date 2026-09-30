@@ -44,6 +44,7 @@ import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
+import com.volttracker.obdpoc.ui.components.VoltLoading
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.VoltSegmented
@@ -129,7 +130,7 @@ private fun ElectricHero(
         Spacer(Modifier.height(14.dp))
         if (summary.trips.isEmpty()) {
             when (history) {
-                HistoryLoad.LOADING -> VoltEmptyState("Loading drives…", inCard = false)
+                HistoryLoad.LOADING -> VoltLoading("Loading drives…")
                 HistoryLoad.FAILED ->
                     VoltEmptyState(
                         "Drives couldn't be read",
@@ -349,7 +350,7 @@ private fun SpeedCard(
         val best = bands.best()
         if (best == null) {
             if (loading) {
-                VoltEmptyState("Loading…", inCard = false)
+                VoltLoading("Loading…", rows = 2)
             } else {
                 VoltEmptyState(
                     "Not enough electric driving yet",

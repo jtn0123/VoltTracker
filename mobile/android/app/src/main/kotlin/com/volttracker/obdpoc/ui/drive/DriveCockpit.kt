@@ -50,6 +50,8 @@ import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltLabel
+import com.volttracker.obdpoc.ui.components.glideTenths
+import com.volttracker.obdpoc.ui.components.glideWhole
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.spoken
 import com.volttracker.obdpoc.ui.components.voltCard
@@ -224,9 +226,9 @@ private fun MainCard(state: DriveUiState) {
                         if (!state.connected) {
                             DASH
                         } else if (driving) {
-                            "${state.units.speed(state.speedMph.toDouble())}"
+                            "${glideWhole(state.units.speed(state.speedMph.toDouble()), "cockpit-speed")}"
                         } else {
-                            "${state.shownSocPercent.toInt()}"
+                            "${glideWhole(state.shownSocPercent.toInt(), "cockpit-soc")}"
                         },
                     style =
                         VoltType.value.copy(
@@ -257,11 +259,12 @@ private fun MainCard(state: DriveUiState) {
                         !driving -> pal.muted
                         else -> powerColor(pal, state.powerRole)
                     }
+                val shownKw = glideTenths(if (charging) state.chargeKw else state.powerKw, "cockpit-power")
                 val value =
                     when {
                         !state.connected -> DASH
-                        charging -> "+" + oneDecimal(state.chargeKw)
-                        else -> (if (state.regenerating) "−" else "") + oneDecimal(abs(state.powerKw))
+                        charging -> "+" + oneDecimal(shownKw)
+                        else -> (if (state.regenerating && shownKw < 0) "−" else "") + oneDecimal(abs(shownKw))
                     }
                 val unit = if (state.connected) " kW" else ""
                 NumberUnit(value, unit, 26f, Modifier.padding(top = 8.dp), color = color, unitSize = 13f)
@@ -347,6 +350,7 @@ private fun BatteryCard(
 ) {
     val holding = state.gasDriving
     val soc = state.shownSocPercent
+    val shownSoc = glideWhole(soc.toInt(), "cockpit-battery-soc")
     CockpitCard(modifier) {
         CapRow(
             "HV battery",
@@ -360,7 +364,7 @@ private fun BatteryCard(
         Text(
             text =
                 buildAnnotatedString {
-                    append(if (state.connected) "${soc.toInt()}" else DASH)
+                    append(if (state.connected) "$shownSoc" else DASH)
                     if (state.connected) {
                         withStyle(SpanStyle(fontSize = 13.sp, color = VoltColors.textSecondary)) { append("%") }
                     }

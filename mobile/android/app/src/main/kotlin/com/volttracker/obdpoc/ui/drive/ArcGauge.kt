@@ -1,5 +1,11 @@
 package com.volttracker.obdpoc.ui.drive
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -30,6 +36,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -53,8 +60,12 @@ import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltIcons
+import com.volttracker.obdpoc.ui.components.VoltMotion
 import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.announceChanges
+import com.volttracker.obdpoc.ui.components.glideState
+import com.volttracker.obdpoc.ui.components.glideTenths
+import com.volttracker.obdpoc.ui.components.glideWhole
 import com.volttracker.obdpoc.ui.components.rememberLoopPhase
 import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -65,6 +76,7 @@ import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 // Mockup geometry (drive.js arcGauge), in dp: a 380 × 350 box, ring centre (190, 188), r 152.
@@ -110,6 +122,11 @@ fun ArcGauge(
             durationMs = SHIMMER_MS,
             label = "charge-shimmer",
         )
+    // The ring eases to each new reading instead of jumping a poll at a time. Read while drawing,
+    // so a glide repaints the canvas without recomposing the screen.
+    val power = glideState(state.powerKw.toFloat(), "gauge-power")
+    val soc = glideState(state.shownSocPercent.toFloat(), "gauge-soc")
+    val rpm = glideState(state.rpm.toFloat(), "gauge-rpm")
     // The mockups' 380 × 350 box, scaled down to fit a narrower phone: every offset below follows
     // the ring, so the centre text and the gear row stay where they belong on a 360dp screen.
     BoxWithConstraints(
@@ -130,9 +147,10 @@ fun ArcGauge(
             val g = Geo(size.width / BOX_W)
             drawTrack(g, pal)
             if (state.phase == DrivePhase.DRIVE) {
-                drawPowerRing(g, pal, state, measurer)
+                drawPowerRing(g, pal, state, measurer, power.value.toDouble(), rpm.value.roundToInt())
             } else {
-                drawSocRing(g, pal, state, measurer, if (state.phase == DrivePhase.CHARGING) shimmer ?: 0f else null)
+                val shimmerPhase = if (state.phase == DrivePhase.CHARGING) shimmer ?: 0f else null
+                drawSocRing(g, pal, state, measurer, soc.value.toDouble(), shimmerPhase)
             }
         }
         CappedTextScale {
@@ -254,6 +272,8 @@ private fun DrawScope.drawPowerRing(
     pal: VoltPalette,
     state: DriveUiState,
     measurer: TextMeasurer,
+    powerKw: Double,
+    rpm: Int,
 ) {
     // Regen zone tint.
     arc(g, R, ArcGeometry.START_DEG, ArcGeometry.ZERO_DEG, pal.ev.copy(alpha = REGEN_TINT), RING)
@@ -276,9 +296,9 @@ private fun DrawScope.drawPowerRing(
     val regenAt = g.polar(R - 42f, ArcGeometry.kwToDeg(-36.0))
     label(measurer, "REGEN", Offset(regenAt.x + g.px(4f), regenAt.y), tickStyle(pal.ev.copy(alpha = 0.8f), 10f))
 
-    val a = ArcGeometry.kwToDeg(state.powerKw)
+    val a = ArcGeometry.kwToDeg(powerKw)
     val color = powerColor(pal, state.powerRole)
-    if (state.powerKw >= 0) {
+    if (powerKw >= 0) {
         glowArc(g, ArcGeometry.ZERO_DEG, a, color, GLOW_DRIVE)
     } else {
         glowArc(g, a, ArcGeometry.ZERO_DEG, color, GLOW_DRIVE)
@@ -306,8 +326,8 @@ private fun DrawScope.drawPowerRing(
         ),
         ENGINE_RING,
     )
-    if (gas && state.rpm > 0) {
-        arc(g, rr, ArcGeometry.START_DEG, ArcGeometry.START_DEG + ArcGeometry.rpmSweep(state.rpm), pal.gas, ENGINE_RING)
+    if (gas && rpm > 0) {
+        arc(g, rr, ArcGeometry.START_DEG, ArcGeometry.START_DEG + ArcGeometry.rpmSweep(rpm), pal.gas, ENGINE_RING)
     }
 }
 
@@ -316,6 +336,7 @@ private fun DrawScope.drawSocRing(
     pal: VoltPalette,
     state: DriveUiState,
     measurer: TextMeasurer,
+    soc: Double,
     shimmerPhase: Float?,
 ) {
     for (p in 0..100 step 25) {
@@ -326,7 +347,6 @@ private fun DrawScope.drawSocRing(
         label(measurer, "F", g.polar(R + 2f, ArcGeometry.END_DEG + 9f), tickStyle(pal.faint))
         return
     }
-    val soc = state.shownSocPercent
     val a = ArcGeometry.socToDeg(soc)
     val from = state.chargeFromSoc
     if (state.phase == DrivePhase.CHARGING) {
@@ -360,23 +380,61 @@ private fun DrawScope.drawSocRing(
     label(measurer, "F", g.polar(R + 2f, ArcGeometry.END_DEG + 9f), tickStyle(pal.faint))
 }
 
-/** The mode pill for the moment (mockups `modePill`). */
-@Composable
-fun ModePill(state: DriveUiState) {
+/** What the mode pill says for the moment. */
+internal data class ModePillSpec(
+    val text: String,
+    val tone: PillTone,
+    val dot: Boolean = true,
+    val icon: ImageVector? = null,
+)
+
+internal fun modePill(state: DriveUiState): ModePillSpec =
     when {
-        !state.connected -> VoltPill("Not connected", PillTone.NEUTRAL)
+        !state.connected -> ModePillSpec("Not connected", PillTone.NEUTRAL)
         state.phase == DrivePhase.CHARGING ->
-            VoltPill(listOfNotNull("Charging", levelName(state.chargeLevel)).joinToString(" · "), PillTone.EV)
+            ModePillSpec(listOfNotNull("Charging", levelName(state.chargeLevel)).joinToString(" · "), PillTone.EV)
         state.phase == DrivePhase.PARKED ->
             when (state.locked) {
-                true -> VoltPill("Parked · Locked", PillTone.NEUTRAL, icon = VoltIcons.Lock)
-                false -> VoltPill("Parked · Unlocked", PillTone.NEUTRAL, dot = false)
-                null -> VoltPill("Parked", PillTone.NEUTRAL, dot = false)
+                true -> ModePillSpec("Parked · Locked", PillTone.NEUTRAL, icon = VoltIcons.Lock)
+                false -> ModePillSpec("Parked · Unlocked", PillTone.NEUTRAL, dot = false)
+                null -> ModePillSpec("Parked", PillTone.NEUTRAL, dot = false)
             }
-        state.mode == DriveMode.GAS -> VoltPill("Gas · Range extender", PillTone.GAS)
-        else -> VoltPill("Electric", PillTone.EV)
+        state.mode == DriveMode.GAS -> ModePillSpec("Gas · Range extender", PillTone.GAS)
+        else -> ModePillSpec("Electric", PillTone.EV)
+    }
+
+/** The mode pill for the moment (mockups `modePill`); a change of mode fades the new pill in. */
+@Composable
+fun ModePill(state: DriveUiState) {
+    val reduceMotion = LocalVoltPrefs.current.reduceMotion
+    AnimatedContent(
+        targetState = modePill(state),
+        transitionSpec = {
+            fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
+                scaleIn(
+                    VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion),
+                    initialScale = PILL_IN_SCALE,
+                ) togetherWith
+                fadeOut(VoltMotion.spec(VoltMotion.FAST_MS, reduceMotion))
+        },
+        contentAlignment = Alignment.Center,
+        label = "mode-pill",
+    ) { pill ->
+        VoltPill(pill.text, pill.tone, dot = pill.dot, icon = pill.icon)
     }
 }
+
+private const val PILL_IN_SCALE = 0.92f
+
+/** Which set of figures sits inside the ring. */
+private enum class CenterKind { DRIVE, CHARGE, PARKED }
+
+private fun centerKind(state: DriveUiState): CenterKind =
+    when {
+        state.phase == DrivePhase.DRIVE && state.connected -> CenterKind.DRIVE
+        state.phase == DrivePhase.CHARGING && state.connected -> CenterKind.CHARGE
+        else -> CenterKind.PARKED
+    }
 
 /** The hero figures are sized to the ring in dp, not sp: the ring doesn't grow with the text size. */
 @Composable
@@ -423,14 +481,26 @@ private fun GaugeCenter(
         // The mode is announced on its own when it changes; the figures below read as one line.
         Box(Modifier.heightIn(min = 30.dp).announceChanges(prefs)) { ModePill(state) }
         val described = gaugeDescription(state, prefs.clock24h)
-        Column(
+        // Pulling away, parking or plugging in cross-fades the figures instead of swapping them.
+        AnimatedContent(
+            targetState = centerKind(state),
+            transitionSpec = {
+                // Unclipped: the figures are laid out to overflow their line boxes, and a height
+                // change mid-fade must not slice the line underneath.
+                fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, prefs.reduceMotion)) togetherWith
+                    fadeOut(VoltMotion.spec(VoltMotion.FAST_MS, prefs.reduceMotion)) using
+                    SizeTransform(clip = false)
+            },
+            contentAlignment = Alignment.TopCenter,
             modifier = Modifier.clearAndSetSemantics { contentDescription = described },
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            when {
-                state.phase == DrivePhase.DRIVE && state.connected -> DriveCenter(state, pal, k)
-                state.phase == DrivePhase.CHARGING && state.connected -> ChargeCenter(state, k, prefs.clock24h)
-                else -> ParkedCenter(state, k)
+            label = "gauge-center",
+        ) { kind ->
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                when (kind) {
+                    CenterKind.DRIVE -> DriveCenter(state, pal, k)
+                    CenterKind.CHARGE -> ChargeCenter(state, k, prefs.clock24h)
+                    CenterKind.PARKED -> ParkedCenter(state, k)
+                }
             }
         }
     }
@@ -444,7 +514,9 @@ private fun DriveCenter(
 ) {
     val color = powerColor(pal, state.powerRole)
     val units = state.units
-    val speed = units.speed(state.speedMph.toDouble())
+    val speed = glideWhole(units.speed(state.speedMph.toDouble()), "gauge-speed")
+    val shownKw = glideTenths(state.powerKw, "gauge-power-text")
+    val regen = state.regenerating && shownKw < 0
     Spacer(Modifier.height(10.dp))
     HeroNumber(
         text = AnnotatedString("$speed"),
@@ -461,9 +533,9 @@ private fun DriveCenter(
     Text(
         text =
             buildAnnotatedString {
-                append((if (state.regenerating) "−" else "") + oneDecimal(abs(state.powerKw)))
+                append((if (regen) "−" else "") + oneDecimal(abs(shownKw)))
                 withStyle(SpanStyle(fontFamily = VoltFonts.hanken, fontSize = 13.sp, color = pal.muted)) {
-                    append(if (state.regenerating) " kW regen" else " kW power")
+                    append(if (regen) " kW regen" else " kW power")
                 }
             },
         style = VoltType.value,
@@ -471,7 +543,7 @@ private fun DriveCenter(
     )
     if (state.mode == DriveMode.GAS && state.rpm > 0) {
         Text(
-            text = "Engine ${String.format(Locale.US, "%,d", state.rpm)} rpm",
+            text = "Engine ${String.format(Locale.US, "%,d", glideWhole(state.rpm, "gauge-rpm-text"))} rpm",
             style =
                 VoltType.body.copy(
                     fontFamily = VoltFonts.barlow,
@@ -525,7 +597,7 @@ private fun ParkedCenter(
         )
         return
     }
-    SocNumber("${state.shownSocPercent.toInt()}", k)
+    SocNumber("${glideWhole(state.shownSocPercent.toInt(), "gauge-soc-text")}", k)
     Text(
         text =
             state.evRangeMiles?.let { "${state.units.distanceWhole(it)} ${state.units.distanceUnit} electric range" }
@@ -542,7 +614,7 @@ private fun ChargeCenter(
     k: Float,
     h24: Boolean,
 ) {
-    SocNumber("${state.shownSocPercent.toInt()}", k)
+    SocNumber("${glideWhole(state.shownSocPercent.toInt(), "gauge-soc-text")}", k)
     val text = VoltColors.textPrimary
     Text(
         text =
@@ -571,10 +643,11 @@ private fun ChargeCenter(
             state.chargeAcVolts?.let { "${it.toInt()} V" },
             state.chargeAcAmps?.let { "${it.toInt()} A" },
         )
+    val chargeKw = glideTenths(state.chargeKw, "gauge-charge-kw")
     Text(
         text =
             buildAnnotatedString {
-                append("+" + oneDecimal(state.chargeKw))
+                append("+" + oneDecimal(chargeKw))
                 withStyle(
                     SpanStyle(fontFamily = VoltFonts.hanken, fontSize = 13.sp, color = VoltColors.textSecondary),
                 ) {

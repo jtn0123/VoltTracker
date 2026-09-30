@@ -20,7 +20,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
@@ -44,6 +47,7 @@ import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltPanel
 import com.volttracker.obdpoc.ui.components.announceChanges
+import com.volttracker.obdpoc.ui.components.glideState
 import com.volttracker.obdpoc.ui.components.pillColor
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.theme.VoltColors
@@ -85,7 +89,7 @@ internal fun NumberUnit(
     )
 }
 
-/** A 6dp rounded meter (mockups `.meter`). */
+/** A 6dp rounded meter (mockups `.meter`); the fill eases to each new reading. */
 @Composable
 internal fun Meter(
     fraction: Float,
@@ -93,24 +97,25 @@ internal fun Meter(
     modifier: Modifier = Modifier,
     height: Float = 6f,
 ) {
+    val shown = glideState(fraction.coerceIn(0f, 1f), "meter")
     Box(
         modifier =
             modifier
                 .fillMaxWidth()
                 .height(height.dp)
                 .clip(VoltShapes.chip)
-                .background(VoltColors.track),
-    ) {
-        if (fraction > 0f) {
-            Box(
-                Modifier
-                    .fillMaxWidth(fraction.coerceIn(0f, 1f))
-                    .height(height.dp)
-                    .clip(VoltShapes.chip)
-                    .background(color),
-            )
-        }
-    }
+                .background(VoltColors.track)
+                .drawBehind {
+                    val filled = size.width * shown.value
+                    if (filled > 0f) {
+                        drawRoundRect(
+                            color = color,
+                            size = Size(filled, size.height),
+                            cornerRadius = CornerRadius(size.height / 2f),
+                        )
+                    }
+                },
+    )
 }
 
 /** EV and gas range with their battery/tank meters (mockups `rangeRows`). */

@@ -1,8 +1,10 @@
 package com.volttracker.obdpoc.ui.diag
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -16,12 +18,23 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -40,6 +53,7 @@ import com.volttracker.obdpoc.ui.components.MIN_CELLS_FOR_HISTOGRAM
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.components.VoltButton
+import com.volttracker.obdpoc.ui.components.VoltFade
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
 import com.volttracker.obdpoc.ui.components.VoltListCard
@@ -49,9 +63,12 @@ import com.volttracker.obdpoc.ui.components.VoltPill
 import com.volttracker.obdpoc.ui.components.VoltScreen
 import com.volttracker.obdpoc.ui.components.connectionDot
 import com.volttracker.obdpoc.ui.components.pillColor
+import com.volttracker.obdpoc.ui.components.rememberLoopPhase
+import com.volttracker.obdpoc.ui.components.voltAnimateSize
 import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.theme.VoltColors
+import com.volttracker.obdpoc.ui.theme.VoltShapes
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
 import java.util.Locale
@@ -126,18 +143,33 @@ private fun Hero(
     val hero = state.hero()
     val codes = state.codes.orEmpty()
     val busy = state.busyLabel != null
-    Column(Modifier.fillMaxWidth().voltCard().padding(16.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-            IconSquare(heroIcon(hero.tone), tone = hero.tone, size = 48.dp, iconSize = 24.dp)
-            Column(Modifier.weight(1f)) {
-                Text(
-                    hero.title,
-                    style = VoltType.bodyStrong.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
-                    color = VoltColors.textPrimary,
-                )
-                Text(hero.subtitle, style = VoltType.caption, color = VoltColors.textSecondary)
+    ScanDoneHaptic(busy)
+    // The card eases taller when a scan finds codes, and its verdict cross-fades to the new one.
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .voltCard()
+            .voltAnimateSize()
+            .padding(16.dp),
+    ) {
+        VoltFade(hero, label = "health-hero") { shown ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                IconSquare(heroIcon(shown.tone), tone = shown.tone, size = 48.dp, iconSize = 24.dp)
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        shown.title,
+                        style = VoltType.bodyStrong.copy(fontSize = 20.sp, fontWeight = FontWeight.SemiBold),
+                        color = VoltColors.textPrimary,
+                    )
+                    Text(shown.subtitle, style = VoltType.caption, color = VoltColors.textSecondary)
+                }
             }
         }
+        ScanSweep(busy)
         codes.forEach { code ->
             HorizontalDivider(color = VoltColors.hairline, thickness = 1.dp, modifier = Modifier.padding(top = 12.dp))
             DtcRow(code, state.nowMs)
@@ -155,6 +187,51 @@ private fun Hero(
         HeroFootnote(state, demo, codes.isNotEmpty() && !busy, actions.onClear)
     }
 }
+
+/** A tick when a scan finishes, so the result is felt without watching the screen. */
+@Composable
+private fun ScanDoneHaptic(busy: Boolean) {
+    val haptics = LocalHapticFeedback.current
+    var wasBusy by remember { mutableStateOf(busy) }
+    LaunchedEffect(busy) {
+        if (wasBusy && !busy) haptics.performHapticFeedback(HapticFeedbackType.Confirm)
+        wasBusy = busy
+    }
+}
+
+/** While a scan runs: a thin line with a highlight sweeping across it, under the verdict. */
+@Composable
+private fun ScanSweep(busy: Boolean) {
+    val accent = VoltColors.accent
+    val track = VoltColors.track
+    val phase = rememberLoopPhase(active = busy, period = 1f, durationMs = SWEEP_MS, label = "scan-sweep")
+    AnimatedVisibility(visible = busy) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp)
+                .height(3.dp)
+                .clip(VoltShapes.chip)
+                .background(track)
+                .drawBehind {
+                    // Steady and full under reduce-motion: busy, but nothing moving.
+                    val p = phase ?: return@drawBehind drawRect(accent.copy(alpha = SWEEP_STILL_ALPHA))
+                    val w = size.width * SWEEP_WIDTH
+                    val x = (size.width + w) * p - w
+                    drawRoundRect(
+                        color = accent,
+                        topLeft = Offset(x, 0f),
+                        size = Size(w, size.height),
+                        cornerRadius = CornerRadius(size.height / 2f),
+                    )
+                },
+        )
+    }
+}
+
+private const val SWEEP_MS = 1_100
+private const val SWEEP_WIDTH = 0.35f
+private const val SWEEP_STILL_ALPHA = 0.5f
 
 private fun heroIcon(tone: PillTone): ImageVector =
     when (tone) {
