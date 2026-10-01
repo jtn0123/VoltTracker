@@ -19,6 +19,8 @@ import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
+import com.volttracker.obdpoc.ui.insights.MAINTENANCE_OPEN
+import com.volttracker.obdpoc.ui.trips.EDIT_IN_CLASSIC
 import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.ui.trips.TripsDemo
 import com.volttracker.obdpoc.ui.trips.TripsUiState
@@ -40,6 +42,8 @@ class ReceiptScreensTest {
 
     private val shared = mutableListOf<Pair<String, String>>()
     private val exports = mutableListOf<TripExport>()
+    private val classicTrips = mutableListOf<String>()
+    private val classicViews = mutableListOf<String>()
 
     private fun show(
         start: VoltAppUiState,
@@ -58,9 +62,37 @@ class ReceiptScreensTest {
                         onSelectTrip = { key -> state = state.copy(trips = state.trips.copy(selectedKey = key)) },
                         onShareText = { subject, text -> shared += subject to text },
                         onExportTrip = { exports += it },
+                        onOpenClassicTrip = { classicTrips += it },
+                        onOpenClassicView = { classicViews += it },
                     ),
             )
         }
+    }
+
+    @Test
+    fun aRealDriveCanBeRenamedOnTheClassicReceipt() {
+        val trips = TripsUiState.demo.copy(exportable = true, selectedKey = "demo:1")
+        show(VoltAppUiState(trips = trips), VoltTab.TRIPS, listOf(VoltRoute.TRIP))
+        compose.onNodeWithText(EDIT_IN_CLASSIC).performScrollTo().performClick()
+        assertEquals(listOf("demo:1"), classicTrips)
+    }
+
+    @Test
+    fun demoDrivesDoNotOfferTheClassicEditLink() {
+        show(
+            VoltAppUiState(trips = TripsUiState.demo.copy(selectedKey = "demo:1")),
+            VoltTab.TRIPS,
+            listOf(VoltRoute.TRIP),
+        )
+        compose.onNodeWithText("Demo drives can't be exported").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(EDIT_IN_CLASSIC).assertDoesNotExist()
+    }
+
+    @Test
+    fun insightsLinksToTheClassicMaintenanceLog() {
+        show(VoltAppUiState(), VoltTab.INSIGHTS)
+        compose.onNodeWithText(MAINTENANCE_OPEN).performScrollTo().performClick()
+        assertEquals(listOf("insights"), classicViews)
     }
 
     @Test

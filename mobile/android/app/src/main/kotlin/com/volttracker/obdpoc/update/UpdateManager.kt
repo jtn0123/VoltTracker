@@ -22,9 +22,11 @@ import java.util.concurrent.atomic.AtomicBoolean
  * Two things this deliberately does NOT do:
  * 1. It does not install anything — Android does. The system shows its own
  *    confirmation sheet; there is no silent path for a sideloaded app.
- * 2. It does not verify the download itself — Android refuses an APK signed
- *    with a different key than the installed app, which is the real check
- *    (and why the release workflow never rotates the signing key).
+ * 2. It does not trust the download blindly — [ApkSignerCheck] confirms the
+ *    APK is this app signed with this key before the install sheet opens.
+ *    Android repeats that check itself (and is why the release workflow never
+ *    rotates the signing key); checking first turns a wrong asset into a plain
+ *    failed download instead of a confusing installer error.
  */
 class UpdateManager(
     private val context: Context,
@@ -34,6 +36,8 @@ class UpdateManager(
     private val fetcher: (String) -> String = ::defaultFetch,
     private val runningVersionCode: Int = BuildConfig.VERSION_CODE,
     private val wantDebugVariant: Boolean = BuildConfig.DEBUG,
+    /** Injectable for tests; the default compares package name and signing key. */
+    private val verifyApk: (File) -> Boolean = { apk -> ApkSignerCheck.verify(context, apk) },
 ) {
     sealed interface CheckResult {
         /** A newer build is published and downloadable. */
@@ -185,6 +189,10 @@ class UpdateManager(
             // a truncated APK must fail here, not as an installer parse error.
             if (total > 0 && destination.length() != total) {
                 throw IOException("download truncated at ${destination.length()} of $total bytes")
+            }
+            if (!verifyApk(destination)) {
+                destination.delete()
+                throw IOException("downloaded APK is not this app or not signed with its key")
             }
             return destination
         } finally {

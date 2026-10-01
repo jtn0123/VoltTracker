@@ -48,6 +48,23 @@ class ComposeDashboardToolsTest {
     }
 
     @Test
+    fun editingADriveOpensItsClassicReceipt() {
+        activity.openClassicTrip("route-42")
+        val started = shadowOf(activity).nextStartedActivity
+        assertEquals(MainActivity::class.java.name, started.component?.className)
+        assertEquals("route-42", started.getStringExtra(MainActivity.EXTRA_OPEN_TRIP))
+        assertEquals(true, started.getBooleanExtra(MainActivity.EXTRA_OPEN_TRIP_RECEIPT, false))
+    }
+
+    @Test
+    fun theMaintenanceLinkOpensTheClassicInsightsTab() {
+        activity.openClassicView("insights")
+        val started = shadowOf(activity).nextStartedActivity
+        assertEquals(MainActivity::class.java.name, started.component?.className)
+        assertEquals("insights", started.getStringExtra(MainActivity.EXTRA_OPEN_VIEW))
+    }
+
+    @Test
     fun restoreIsRefusedWhileASessionIsLogging() {
         activity.loggingProbe = { true }
         activity.runCommand(SettingsCommand.Restore(null))

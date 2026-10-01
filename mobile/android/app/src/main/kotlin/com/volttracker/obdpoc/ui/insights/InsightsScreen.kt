@@ -41,6 +41,7 @@ import com.volttracker.obdpoc.ui.components.EmptyLink
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
@@ -72,6 +73,7 @@ fun InsightsScreen(
     state: InsightsUiState,
     modifier: Modifier = Modifier,
     onPeriod: (InsightsPeriod) -> Unit = {},
+    onOpenMaintenance: () -> Unit = {},
 ) {
     val summary = state.summary()
     VoltScreen(
@@ -109,6 +111,23 @@ fun InsightsScreen(
             Spacer(Modifier.height(10.dp))
             CellNote(it)
         }
+        Spacer(Modifier.height(10.dp))
+        MaintenanceCard(onOpenMaintenance)
+    }
+}
+
+/** The maintenance log hasn't moved to these screens yet; this is the way to it. */
+@Composable
+private fun MaintenanceCard(onOpen: () -> Unit) {
+    VoltPanel {
+        VoltLabel("Maintenance")
+        Text(
+            text = MAINTENANCE_BODY,
+            style = VoltType.body,
+            color = VoltColors.textSecondary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        VoltButton(MAINTENANCE_OPEN, Modifier.fillMaxWidth().padding(top = 10.dp), onClick = onOpen)
     }
 }
 
@@ -497,6 +516,10 @@ private fun wholeMpg(mpg: Double): String = if (mpg % 1.0 == 0.0) mpg.toInt().to
 private fun oneDecimalOrWhole(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else oneDecimal(v)
 
 private const val HERO_SP = 64
+internal const val MAINTENANCE_OPEN = "Open maintenance log"
+private const val MAINTENANCE_BODY =
+    "Log oil changes, tire rotations and other service, with reminders when it's due. " +
+        "It opens in the classic dashboard, under Vehicle."
 private const val HERO_UNIT_SP = 26
 private const val TILE_SP = 28
 private const val TILE_UNIT_SP = 14

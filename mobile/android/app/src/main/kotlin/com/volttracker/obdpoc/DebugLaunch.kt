@@ -8,7 +8,7 @@ import java.util.Locale
  * Where a debug launch opens, from `am start` extras, so emulator screenshots don't have to find
  * and tap on-screen elements (uiautomator stalls while the demo animates):
  *
- * `adb shell am start --activity-clear-top -n com.volttracker.obdpoc/.ComposeDashboardActivity
+ * `adb shell am start --activity-clear-top -n com.volttracker.obdpoc.debug/com.volttracker.obdpoc.ComposeDashboardActivity
  *   --es vt.tab trips --es vt.route settings --ez vt.demo true`
  *
  * Only debug builds read the extras (see ComposeDashboardActivity); scripts/local-emulator.sh

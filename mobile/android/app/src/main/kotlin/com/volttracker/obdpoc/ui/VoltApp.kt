@@ -236,7 +236,12 @@ private fun VoltTabContent(
                 onStartDemo = actions.onStartDemo,
                 onOpenSession = onOpenCharge,
             )
-        VoltTab.INSIGHTS -> InsightsScreen(state.insights, onPeriod = actions.onInsightsPeriod)
+        VoltTab.INSIGHTS ->
+            InsightsScreen(
+                state.insights,
+                onPeriod = actions.onInsightsPeriod,
+                onOpenMaintenance = { actions.onOpenClassicView(CLASSIC_MAINTENANCE_VIEW) },
+            )
         VoltTab.CAR ->
             CarScreen(
                 drive = state.drive,
@@ -292,6 +297,7 @@ private fun VoltRouteContent(
                 onBack = onBack,
                 onShare = actions.onShareText,
                 onExport = actions.onExportTrip,
+                onEditInClassic = actions.onOpenClassicTrip,
             )
         VoltRoute.CHARGE ->
             ChargeReceiptScreen(
@@ -339,3 +345,6 @@ private val RouteStackSaver =
         save = { stack -> stack.map { it.name } },
         restore = { names -> names.map { VoltRoute.valueOf(it) } },
     )
+
+/** The classic dashboard tab that hosts the maintenance log (inside its Vehicle card). */
+private const val CLASSIC_MAINTENANCE_VIEW = "insights"

@@ -157,10 +157,14 @@ android {
 
     buildTypes {
         debug {
-            // Release-produced debug APKs should be debuggable *and* signed by the
-            // stable app key when CI has signing secrets. Otherwise every tagged
-            // debug APK gets Android's throwaway runner debug key and cannot update
-            // the previous debug/release install.
+            // Debug builds are debuggable, so they install as their own app
+            // ("Volt Tracker Debug", src/debug/res) beside the release app. A
+            // debuggable build signed with the real key under the release app ID
+            // could replace a release install and expose its data to `adb run-as`.
+            applicationIdSuffix = ".debug"
+            // Still signed by the stable key when CI has signing secrets, so each
+            // tagged debug APK updates the previous debug install instead of getting
+            // Android's throwaway runner debug key.
             if (rootProject.file("keystore.properties").exists()) {
                 signingConfig = signingConfigs.release
             }

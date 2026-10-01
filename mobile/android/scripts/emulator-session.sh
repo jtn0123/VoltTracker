@@ -59,12 +59,12 @@ bash "$android_dir/scripts/emulator-smoke.sh" || exit $?
 # debuggable debug APK the shell smoke above just exercised (and that ships as latest-debug).
 test_apk="$android_dir/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
 instrumentation_log="$build_dir/emulator-instrumentation.txt"
-runner="com.volttracker.obdpoc.test/androidx.test.runner.AndroidJUnitRunner"
+runner="com.volttracker.obdpoc.debug.test/androidx.test.runner.AndroidJUnitRunner"
 
 adb install -r -t "$test_apk" || exit $?
 # Match Gradle's fresh start: instrumentation restarts the target process anyway, but stop the
 # demo telemetry the shell smoke left running so the tests begin from a quiet app.
-adb shell am force-stop com.volttracker.obdpoc || true
+adb shell am force-stop com.volttracker.obdpoc.debug || true
 # `am instrument` exits 0 even when tests fail or the process crashes, so its exit status is not
 # the verdict — check-instrumentation-output.sh parses the transcript instead.
 adb shell am instrument -w "$runner" 2>&1 | tee "$instrumentation_log"

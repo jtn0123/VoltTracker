@@ -67,6 +67,14 @@ class UsefulnessScreenshotTest(
         private val STATES: Map<String, Case> =
             mapOf(
                 "trip-mixed" to Case(VoltTab.TRIPS, listOf(VoltRoute.TRIP), tall = true),
+                // A real (exportable) drive: export buttons plus the classic rename/star link.
+                "trip-real" to
+                    Case(
+                        VoltTab.TRIPS,
+                        listOf(VoltRoute.TRIP),
+                        base.copy(trips = TripsUiState.demo.copy(exportable = true)),
+                        tall = true,
+                    ),
                 "trip-ev" to
                     Case(
                         VoltTab.TRIPS,
@@ -86,7 +94,7 @@ class UsefulnessScreenshotTest(
                         charge = charge.sessions.first().startedAtMs,
                     ),
                 "charge-list" to Case(VoltTab.CHARGE),
-                "insights" to Case(VoltTab.INSIGHTS),
+                "insights" to Case(VoltTab.INSIGHTS, tall = true),
                 "health" to Case(VoltTab.CAR, listOf(VoltRoute.HEALTH)),
             )
 

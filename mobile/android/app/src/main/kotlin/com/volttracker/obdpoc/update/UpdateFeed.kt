@@ -63,10 +63,12 @@ object UpdateFeed {
     /**
      * The newest published release that has an APK for this build variant
      * (debug installs update from the debug asset, release from release —
-     * both share the signing key, but like-for-like keeps `adb run-as`
-     * working on field builds). Falls back to any `.apk` on that release so
-     * a hand-uploaded asset still counts. Drafts are invisible to the phone
-     * and skipped; pre-releases are not, matching how ad-hoc builds publish.
+     * debug builds are a separate app ID, so the other variant could never
+     * install over this one). Only the exact `-release.apk` / `-debug.apk`
+     * asset counts — a stray or hand-uploaded APK is never offered; a release
+     * without this variant is skipped for an older one that has it. Drafts are
+     * invisible to the phone and skipped; pre-releases are not, matching how
+     * ad-hoc builds publish.
      */
     fun pickBuild(
         releases: JSONArray,
@@ -77,18 +79,15 @@ object UpdateFeed {
             val release = releases.optJSONObject(i) ?: continue
             if (release.optBoolean("draft", false)) continue
             val assets = release.optJSONArray("assets") ?: continue
-            var fallback: Triple<String, String, Long>? = null
             var match: Triple<String, String, Long>? = null
             for (j in 0 until assets.length()) {
                 val asset = assets.optJSONObject(j) ?: continue
                 val name = asset.optString("name", "")
                 val url = asset.optString("browser_download_url", "")
-                if (url.isBlank() || !name.lowercase(Locale.US).endsWith(".apk")) continue
-                val entry = Triple(name, url, asset.optLong("size", 0L))
-                if (name.lowercase(Locale.US).endsWith(wantSuffix)) match = match ?: entry
-                fallback = fallback ?: entry
+                if (url.isBlank() || !name.lowercase(Locale.US).endsWith(wantSuffix)) continue
+                match = match ?: Triple(name, url, asset.optLong("size", 0L))
             }
-            val chosen = match ?: fallback ?: continue
+            val chosen = match ?: continue
             val tag = release.optString("tag_name", "")
             return AvailableBuild(
                 tag = tag,

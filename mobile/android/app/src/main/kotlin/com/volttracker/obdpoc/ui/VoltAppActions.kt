@@ -8,6 +8,10 @@ import com.volttracker.obdpoc.ui.trips.TripExport
 /** Everything the dashboard can ask its host to do. Defaults are no-ops (previews, tests). */
 data class VoltAppActions(
     val onOpenClassicDashboard: () -> Unit = {},
+    /** Open one drive (by route key) on the classic dashboard's receipt, where it can be renamed or starred. */
+    val onOpenClassicTrip: (String) -> Unit = {},
+    /** Open the classic dashboard on one of its tabs ("insights" hosts the maintenance log). */
+    val onOpenClassicView: (String) -> Unit = {},
     /** Connect to the remembered adapter. False = none chosen yet, so the app opens the picker. */
     val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},

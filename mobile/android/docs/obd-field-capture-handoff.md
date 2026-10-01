@@ -22,7 +22,7 @@ The app build is debuggable, so no root is needed.
    ```
 3. Pull the logs (private app storage, via run-as). zsh: use an array, not a bare for-var.
    ```
-   P=com.volttracker.obdpoc; D=/tmp/volt-logs; mkdir -p $D
+   P=com.volttracker.obdpoc.debug; D=/tmp/volt-logs; mkdir -p $D
    adb exec-out run-as $P sh -c 'cd files/obd-logs && tar c .' | tar x -C $D
    adb exec-out run-as $P cat files/app-log/app.log > $D/app.log
    ```

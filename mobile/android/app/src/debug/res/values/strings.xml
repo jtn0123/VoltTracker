@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Debug builds install beside the release app (applicationIdSuffix ".debug"); a distinct
+         name keeps the two launcher icons apart. -->
+    <string name="app_name">Volt Tracker Debug</string>
+</resources>
