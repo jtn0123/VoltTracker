@@ -128,6 +128,8 @@ object VirtualVoltCatalog {
             // --- Mode 22 on the drive-unit motor-generator nodes (replies on 0x657 / 0x658) ------
             entry("257", "2228CB", Evidence.GUESS, split("6228CB5A", null)), // 50 C; asleep off-drive
             entry("258", "22368F", Evidence.GUESS, split("62368F58", null)), // 48 C
+            // Body module tires, FL RL FR RR at 4 kPa/count (240-252 kPa); unconfirmed on the car.
+            entry("241", "22C901", Evidence.GUESS, both("62C9013C3D3E3F")),
         )
 
     /**
@@ -275,6 +277,7 @@ object VirtualVoltCatalog {
         2243A5 hvBatteryChargeCount
         22437D lastChargeEnergyWh
         2241A3 capacityAh sohPct packEnergyKwh
+        22C901 tirePressureFlKpa tirePressureFrKpa tirePressureRlKpa tirePressureRrKpa
         """.trimIndent()
             .lines()
             .filter(String::isNotBlank)

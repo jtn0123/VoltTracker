@@ -27,6 +27,7 @@ class LiveSampleReader(
      * (one session) so a persistently malformed PID does not spam the log every poll cycle.
      */
     private val parseFailureReported = HashSet<String>()
+    private var bcmTiresLogged = false
 
     /**
      * Consecutive speed-poll cycles on which PID 010D returned the 0xFF sentinel. The Volt reports
@@ -44,6 +45,7 @@ class LiveSampleReader(
      */
     fun reset() {
         parseFailureReported.clear()
+        bcmTiresLogged = false
         consecutiveSpeedSentinels = 0
     }
 
@@ -136,6 +138,7 @@ class LiveSampleReader(
             appendOvmsFields(sample)
 
             val now = System.currentTimeMillis()
+            appendBcmTires(sample, now)
             pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now)
             pidPolling.putStaleMsIfTracked(sample, "speedKphStaleMs", "010D", now)
             pidPolling.putStaleMsIfTracked(sample, "rpmStaleMs", "010C", now)
@@ -220,7 +223,7 @@ class LiveSampleReader(
             if (!EnhancedPidProfiles.isPositiveResponse(command, raw)) {
                 continue
             }
-            if (ObdProtocol.parseKnownValue(command, raw) != null) {
+            if (ObdProtocol.parseKnownValue(command, raw) != null || BcmTirePressure.parse(raw) != null) {
                 continue
             }
             // A recognized no-reading sentinel (all-zero Mode 22 payload, or the 0xFF speed sentinel)
@@ -566,6 +569,36 @@ class LiveSampleReader(
         putStaleMsForPresentValue(sample, "packResistanceMohm", "packResistanceStaleMs", "2240E9", now)
         putStaleMsForPresentValue(sample, "hvIsolationKohm", "hvIsolationStaleMs", "2243A6", now)
         putStaleMsForPresentValue(sample, "chargerAcVoltage", "chargerAcStaleMs", "224368", now)
+    }
+
+    /**
+     * Tire pressures read from the body control module ([BcmTirePressure]), under the same keys the
+     * SW-CAN tire frame fills. A fresher SW-CAN value, when one is heard, replaces these later in
+     * the sample (see SwcanReadings.appendTo).
+     */
+    @Throws(JSONException::class)
+    private fun appendBcmTires(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        val raw = pidPolling.lastRaw(BcmTirePressure.COMMAND)
+        val tires = BcmTirePressure.parse(raw) ?: return
+        if (!bcmTiresLogged) {
+            // Once per session: the raw reply and the chosen scale, so a drive log confirms both.
+            bcmTiresLogged = true
+            service.recorder.logEvent(
+                "bcm_tires_first_read",
+                "response",
+                ObdProtocol.summarize(raw),
+                "kpaPerCount",
+                tires.kpaPerCount.toString(),
+            )
+        }
+        tires.flKpa?.let { putRoundedNumeric(sample, "tirePressureFlKpa", it, 0) }
+        tires.frKpa?.let { putRoundedNumeric(sample, "tirePressureFrKpa", it, 0) }
+        tires.rlKpa?.let { putRoundedNumeric(sample, "tirePressureRlKpa", it, 0) }
+        tires.rrKpa?.let { putRoundedNumeric(sample, "tirePressureRrKpa", it, 0) }
+        pidPolling.putStaleMsIfTracked(sample, "tirePressureStaleMs", BcmTirePressure.COMMAND, now)
     }
 
     @Throws(JSONException::class)

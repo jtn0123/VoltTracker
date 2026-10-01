@@ -83,4 +83,6 @@ data class CarActions(
     val onDisableControls: () -> Unit = {},
     /** Listen to the body bus for a minute while the driver opens, locks and moves things. */
     val onBodyTest: () -> Unit = {},
+    /** Ask the car's body computer for tire pressures (a short read-only probe session). */
+    val onTireTest: () -> Unit = {},
 )

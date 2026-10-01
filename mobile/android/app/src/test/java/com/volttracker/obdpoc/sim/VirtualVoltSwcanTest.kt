@@ -69,6 +69,7 @@ class VirtualVoltSwcanTest {
                 stopTimeoutMs = 0L,
                 parkedIntervalMs = 0L,
                 parkedListenMs = 0L,
+                tireHuntMaxWindows = 0,
             )
         val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
         controllers.add(controller)
@@ -158,6 +159,7 @@ class VirtualVoltSwcanTest {
                 stopTimeoutMs = 0L,
                 parkedIntervalMs = 0L,
                 parkedListenMs = 0L,
+                tireHuntMaxWindows = 0,
             )
         val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
         controllers.add(controller)

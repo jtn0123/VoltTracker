@@ -1,6 +1,9 @@
 package com.volttracker.obdpoc.ui
 
 import androidx.activity.ComponentActivity
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -141,6 +144,26 @@ class VoltAppNavigationTest {
         compose.onNodeWithText("Advanced diagnostics").performScrollTo().performClick()
         compose.onNodeWithText("Open classic dashboard").performClick()
         assertTrue(opened)
+    }
+
+    @Test
+    fun carTireTestRunsOnlyWhileConnected() {
+        var runs = 0
+        var connected by mutableStateOf(true)
+        compose.setContent {
+            VoltApp(
+                demoState.copy(drive = DriveUiState.demo.copy(connected = connected)),
+                actions = VoltAppActions(onTireTest = { runs += 1 }),
+            )
+        }
+
+        tab("Car").performClick()
+        compose.onNodeWithText("Tire test").performScrollTo().performClick()
+        assertEquals(1, runs)
+
+        connected = false
+        compose.onNodeWithText("Tire test").performScrollTo().performClick()
+        assertEquals("no run while disconnected", 1, runs)
     }
 
     @Test

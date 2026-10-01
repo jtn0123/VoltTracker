@@ -333,7 +333,62 @@ class SwcanListenRunnerTest {
         now += policy.parkedIntervalMs
         cycle()
         cycle()
-        assertEquals("a moving car keeps the short listen", policy.listenMs, io.listenMs.last())
+        assertEquals("a moving car with no tires yet hunts for them", policy.tireHuntListenMs, io.listenMs.last())
+    }
+
+    @Test
+    fun aMovingCarHuntsForTiresUntilItHearsThem() {
+        readyStn()
+        cycle()
+        assertEquals(listOf(policy.tireHuntListenMs), io.listenMs)
+        assertEquals("true", io.event("swcan_window")!!["tireHunt"])
+        assertNull(io.event("swcan_tires_heard"))
+
+        io.monitorText = "10 3D 40 40 00 00 3C 3D 3E 3F 00 00\rSTOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertEquals("2", io.event("swcan_tires_heard")!!["huntWindows"])
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals(240.0, sample.getDouble("tirePressureFlKpa"), 0.0)
+
+        now += policy.intervalMs
+        cycle()
+        cycle()
+        assertEquals("tires heard: back to the short listen", policy.listenMs, io.listenMs.last())
+        assertEquals("false", io.event("swcan_window")!!["tireHunt"])
+    }
+
+    @Test
+    fun theTireHuntStopsAfterItsWindowCap() {
+        val capped =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 10_000L,
+                intervalMs = 45_000L,
+                tireHuntMaxWindows = 2,
+            )
+        val runner = SwcanListenRunner(io, capped) { now }
+        runner.probeAdapter()
+        now += capped.firstWindowDelayMs
+        repeat(3) {
+            io.liveCycles += 1
+            runner.afterSample()
+            io.liveCycles += 1
+            runner.afterSample()
+            now += capped.tireHuntIntervalMs
+        }
+        assertEquals("the third window waits for the normal interval", 2, io.count("STM"))
+        now += capped.intervalMs - capped.tireHuntIntervalMs
+        io.liveCycles += 1
+        runner.afterSample()
+        io.liveCycles += 1
+        runner.afterSample()
+        assertEquals(3, io.count("STM"))
+        assertEquals(
+            listOf(capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
+            io.listenMs,
+        )
     }
 
     @Test

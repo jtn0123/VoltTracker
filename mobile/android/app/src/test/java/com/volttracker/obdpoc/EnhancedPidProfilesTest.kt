@@ -60,9 +60,18 @@ class EnhancedPidProfilesTest {
         for (profile in EnhancedPidProfiles.forCategory("tpms")) {
             assertEquals("tpms", profile.category)
             assertEquals(EnhancedPidProfiles.STAGE_TIRES, profile.scanStage)
-            assertEquals(EnhancedPidProfiles.STATUS_REJECTED, profile.validationStatus)
+            // The engine-computer and receiver guesses were refused on the car; the body-computer
+            // reads (headers 241/751) are still untried candidates.
+            val expected =
+                if (profile.header in BODY_TPMS_HEADERS) {
+                    EnhancedPidProfiles.STATUS_CANDIDATE
+                } else {
+                    EnhancedPidProfiles.STATUS_REJECTED
+                }
+            assertEquals(profile.key, expected, profile.validationStatus)
         }
         assertTrue(EnhancedPidProfiles.forCategory("tpms").size >= 8)
+        assertEquals(4, EnhancedPidProfiles.forCategory("tpms").count { it.header in BODY_TPMS_HEADERS })
     }
 
     @Test
@@ -121,5 +130,9 @@ class EnhancedPidProfilesTest {
             "low",
             EnhancedPidProfiles.catalogJson().getJSONObject(4).optString("risk"),
         )
+    }
+
+    private companion object {
+        val BODY_TPMS_HEADERS = setOf("ATSH241", "ATSH751")
     }
 }

@@ -46,6 +46,9 @@ object PidSchedule {
         // Keep these last: the engine restores the automatic receive filter once they are done.
         MOTOR_GEN_A_257("ATSH257", "ATCRA657"),
         MOTOR_GEN_B_258("ATSH258", "ATCRA658"),
+
+        // Body control module (GM physical 0x241, replies on 0x641): where GM keeps tire pressures.
+        BODY_241("ATSH241", "ATCRA641"),
     }
 
     /** Restore the broadcast header after a non-broadcast block of reads. */
@@ -217,6 +220,9 @@ object PidSchedule {
             // Every ~10 s like OVMS; both share one phase so the filter restore happens once.
             PidSpec("2228CB", Header.MOTOR_GEN_A_257, 48, 44), // motor-generator A temperature
             PidSpec("22368F", Header.MOTOR_GEN_B_258, 48, 44), // motor-generator B temperature
+            // Tire pressures from the body control module (BcmTirePressure). Unconfirmed on the car:
+            // the negative-PID cache retires it if the BCM refuses. Early first read, then ~40 s.
+            PidSpec(BcmTirePressure.COMMAND, Header.BODY_241, 48, 3), // tire pressures, all four
         )
 
     private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }

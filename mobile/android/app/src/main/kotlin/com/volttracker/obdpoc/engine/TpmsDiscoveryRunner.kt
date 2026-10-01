@@ -97,6 +97,11 @@ class TpmsDiscoveryRunner(
             if (header.isNotEmpty()) {
                 probeCommand(header, 1800, raw)
             }
+            // Nodes outside 7E0-7E7 reply outside the adapter's automatic 7E8-7EF filter.
+            val receiveFilter = RECEIVE_FILTERS[header]
+            if (receiveFilter != null) {
+                probeCommand(receiveFilter, 1800, raw)
+            }
             for (profile in profiles) {
                 if (header != profile.header || isPassive(profile)) {
                     continue
@@ -110,6 +115,9 @@ class TpmsDiscoveryRunner(
                     continue
                 }
                 probeCommand(profile.command, 4200, raw)
+            }
+            if (receiveFilter != null) {
+                probeCommand(RESTORE_AUTO_RECEIVE, 1800, raw)
             }
         }
     }
@@ -164,6 +172,13 @@ class TpmsDiscoveryRunner(
     }
 
     companion object {
+        /**
+         * Reply filters for headers outside 7E0-7E7: the BCM answers 0x241 on 0x641 (GM's +0x400,
+         * like the 0x257 motor node); 0x751's reply ID is unknown, so accept any 7xx reply.
+         */
+        private val RECEIVE_FILTERS = mapOf("ATSH241" to "ATCRA641", "ATSH751" to "ATCRA7XX")
+        private const val RESTORE_AUTO_RECEIVE = "ATAR"
+
         private fun isPassive(profile: EnhancedPidProfile): Boolean = profile.pollLane == "passive"
 
         private fun stageLabel(stage: String): String =

@@ -3,6 +3,8 @@ package com.volttracker.obdpoc.engine
 import com.volttracker.obdpoc.CarControlGate
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.SwcanFrameDecoder
+import com.volttracker.obdpoc.SwcanGroup
+import com.volttracker.obdpoc.SwcanReading
 import com.volttracker.obdpoc.SwcanReadings
 import org.json.JSONException
 import org.json.JSONObject
@@ -91,6 +93,14 @@ class SwcanListenRunner(
         /** A body test listens in chunks this long so no single monitor reply nears the 64 KB cap. */
         val bodyTestChunkMs: Long = 5_000L,
         val bodyTestMaxMs: Long = 90_000L,
+        /**
+         * Tire hunt: the tire frame was never heard parked (sensors stay quiet until the wheels
+         * roll), and a 1.2 s window every 45 s rarely lands on it. While moving with no tire value
+         * yet this session, listen longer and more often, for a bounded number of windows.
+         */
+        val tireHuntListenMs: Long = 4_000L,
+        val tireHuntIntervalMs: Long = 30_000L,
+        val tireHuntMaxWindows: Int = 20,
     )
 
     private enum class Identity { UNKNOWN, STN, NOT_STN }
@@ -104,6 +114,8 @@ class SwcanListenRunner(
     private var okWindows = 0
     private var healthCheckPending = false
     private var liveCyclesAtWindowEnd = 0L
+    private var tiresHeard = false
+    private var tireHuntWindows = 0
 
     /** A requested body-test length, set from the service thread and taken by the poll loop. */
     @Volatile private var bodyTestRequestMs = 0L
@@ -118,6 +130,8 @@ class SwcanListenRunner(
         okWindows = 0
         healthCheckPending = false
         bodyTestRequestMs = 0L
+        tiresHeard = false
+        tireHuntWindows = 0
     }
 
     /**
@@ -208,6 +222,8 @@ class SwcanListenRunner(
         io.exclusive {
             val startedAt = clock()
             windowCount += 1
+            val hunting = isTireHunting()
+            if (hunting) tireHuntWindows += 1
             val protocol = currentProtocol()
             if (protocol.removePrefix("A") != HS_PROTOCOL) {
                 disable("hs_protocol_$protocol")
@@ -217,7 +233,7 @@ class SwcanListenRunner(
             val failedSetup = SETUP_COMMANDS.firstOrNull { !sendOk(it) }
             val result =
                 if (failedSetup == null) {
-                    io.monitor(MONITOR_COMMAND, listenMs(), policy.stopTimeoutMs)
+                    io.monitor(MONITOR_COMMAND, listenMs(hunting), policy.stopTimeoutMs)
                 } else {
                     null
                 }
@@ -225,6 +241,7 @@ class SwcanListenRunner(
             val frames = SwcanFrameDecoder.parseMonitorOutput(result?.text)
             val decoded = SwcanFrameDecoder.decodeAll(frames)
             readings.record(decoded, clock())
+            noteTires(decoded)
             val ids = frames.filter { it.extended }.map { it.id }.toSortedSet()
             val outcome =
                 when {
@@ -234,7 +251,7 @@ class SwcanListenRunner(
                     frames.isEmpty() -> "empty"
                     else -> "ok"
                 }
-            logWindow(outcome, startedAt, frames.size, decoded.size, ids, failedSetup)
+            logWindow(outcome, startedAt, frames.size, decoded.size, ids, failedSetup, hunting)
             scheduleAfter(outcome)
             if (!restored) {
                 io.logEvent("swcan_hs_reinit", "reason", "restore_failed")
@@ -246,9 +263,29 @@ class SwcanListenRunner(
         }
     }
 
-    private fun listenMs(): Long = if (io.isStationary()) policy.parkedListenMs else policy.listenMs
+    private fun listenMs(hunting: Boolean): Long =
+        when {
+            io.isStationary() -> policy.parkedListenMs
+            hunting -> policy.tireHuntListenMs
+            else -> policy.listenMs
+        }
 
-    private fun intervalMs(): Long = if (io.isStationary()) policy.parkedIntervalMs else policy.intervalMs
+    private fun intervalMs(): Long =
+        when {
+            io.isStationary() -> policy.parkedIntervalMs
+            isTireHunting() -> policy.tireHuntIntervalMs
+            else -> policy.intervalMs
+        }
+
+    /** Moving, no tire value heard yet this session, and hunt windows left. */
+    private fun isTireHunting(): Boolean =
+        !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
+
+    private fun noteTires(decoded: List<SwcanReading>) {
+        if (tiresHeard || decoded.none { it.field.group == SwcanGroup.TIRES }) return
+        tiresHeard = true
+        io.logEvent("swcan_tires_heard", "huntWindows", tireHuntWindows.toString())
+    }
 
     @Throws(IOException::class)
     private fun runBodyTest(durationMs: Long) {
@@ -268,6 +305,7 @@ class SwcanListenRunner(
                 val frames = SwcanFrameDecoder.parseMonitorOutput(result.text)
                 val decoded = SwcanFrameDecoder.decodeAll(frames)
                 readings.record(decoded, clock())
+                noteTires(decoded)
                 frameCount += frames.size
                 decodedCount += decoded.size
                 frames.filter { it.extended }.mapTo(ids) { it.id }
@@ -366,6 +404,7 @@ class SwcanListenRunner(
         decodedCount: Int,
         ids: Set<Int>,
         failedCommand: String? = null,
+        tireHunt: Boolean = false,
     ) {
         io.logEvent(
             "swcan_window",
@@ -386,6 +425,8 @@ class SwcanListenRunner(
             failedCommand ?: "",
             "window",
             windowCount.toString(),
+            "tireHunt",
+            tireHunt.toString(),
         )
     }
 

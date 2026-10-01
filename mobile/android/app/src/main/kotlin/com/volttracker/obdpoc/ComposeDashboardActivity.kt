@@ -231,6 +231,7 @@ class ComposeDashboardActivity :
                             onCarControl = { carControls.request(it) },
                             onCarControlsEnabled = { carControls.setEnabled(it) },
                             onBodyTest = ::startBodyTest,
+                            onTireTest = ::startTireTest,
                             onScanCodes = { dtc.scan() },
                             onClearCodes = { dtc.clear() },
                             onShareHealthReport = { dtc.share(it) },
@@ -413,6 +414,20 @@ class ComposeDashboardActivity :
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "body test dispatch failed", ex)
         }
+    }
+
+    /**
+     * Runs the tire Detail Probe (read-only body-module and TPMS reads) on the remembered adapter.
+     * It is its own short session, so live data stops until the driver taps Connect again.
+     */
+    internal fun startTireTest() {
+        val address = deviceCatalog.lastAddress().trim()
+        if (address.isEmpty()) {
+            showMessage("Pick your adapter in Settings first.")
+            return
+        }
+        startObdService(ObdService.ACTION_TPMS_SCAN, address, deviceCatalog.lastName(), EnhancedPidProfiles.STAGE_TIRES)
+        showMessage("Checking tire pressure. It takes about 30 seconds; tap Connect when it's done.")
     }
 
     /** Reloads the Settings → Adapter picker from Android's paired-device list. */

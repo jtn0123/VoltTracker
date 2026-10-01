@@ -41,6 +41,8 @@ data class VoltAppActions(
     val onCarControlsEnabled: (Boolean) -> Unit = {},
     /** Car: one minute of continuous body-bus listening, frames logged for decoder checks. */
     val onBodyTest: () -> Unit = {},
+    /** Car: a short read-only probe asking the body computer for tire pressures. */
+    val onTireTest: () -> Unit = {},
     /** Health: read the car's trouble codes (the demo only simulates it). */
     val onScanCodes: () -> Unit = {},
     /** Health: clear the car's trouble codes, after the host's confirmation. */
