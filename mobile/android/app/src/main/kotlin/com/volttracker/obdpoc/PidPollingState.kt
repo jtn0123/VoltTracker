@@ -206,37 +206,7 @@ class PidPollingState(
                 receiveFilterSet = selectHeader(header, headerCommand, receiveFilterSet)
                 switched = true
             }
-            val extraBatch =
-                if (mode01BatchSupported) {
-                    batchableMode01(headerSpecs, batchedTier1, header)
-                } else {
-                    emptyList()
-                }
-            val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
-            if (batchedExtra) {
-                extraBatch.forEach { outcomes.add(it.command to PollOutcome.LIVE) }
-            }
-            for (spec in headerSpecs) {
-                if (
-                    batchedTier1 &&
-                    header == Header.BROADCAST &&
-                    PidSchedule.isMode01BatchCommand(spec.command)
-                ) {
-                    continue
-                }
-                if (batchedExtra && extraBatch.contains(spec)) {
-                    continue
-                }
-                val response = engine.sendRecoverableCommand(spec.command, 1500)
-                appendRawTo(rawThisCycle, spec.command, response)
-                val now = clock.nowMs()
-                lastPolledAtMsByCommand[spec.command] = now
-                val outcome = classifyOutcome(response)
-                if (outcome == PollOutcome.LIVE) {
-                    putLastRaw(spec.command, response, now)
-                }
-                outcomes.add(spec.command to outcome)
-            }
+            pollHeaderGroup(header, headerSpecs, batchedTier1, rawThisCycle, outcomes)
         }
         if (receiveFilterSet) {
             engine.sendCommand(PidSchedule.RESTORE_AUTO_RECEIVE_COMMAND, 1500)
@@ -245,6 +215,56 @@ class PidPollingState(
             engine.sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500)
         }
         applyNoDataCache(outcomes)
+    }
+
+    /**
+     * Polls one header's due PIDs (the header is already selected): any extra Mode 01 PIDs are
+     * batched into one request when the adapter supports it, and PIDs a batch already answered
+     * this cycle are not asked again.
+     */
+    @Throws(IOException::class)
+    private fun pollHeaderGroup(
+        header: Header,
+        headerSpecs: List<PidSpec>,
+        batchedTier1: Boolean,
+        rawThisCycle: StringBuilder,
+        outcomes: MutableList<Pair<String, PollOutcome>>,
+    ) {
+        val extraBatch =
+            if (mode01BatchSupported) {
+                batchableMode01(headerSpecs, batchedTier1, header)
+            } else {
+                emptyList()
+            }
+        val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
+        if (batchedExtra) {
+            extraBatch.forEach { outcomes.add(it.command to PollOutcome.LIVE) }
+        }
+        for (spec in headerSpecs) {
+            val inTier1Batch =
+                batchedTier1 && header == Header.BROADCAST && PidSchedule.isMode01BatchCommand(spec.command)
+            if (inTier1Batch || (batchedExtra && extraBatch.contains(spec))) {
+                continue
+            }
+            outcomes.add(spec.command to pollOne(spec.command, rawThisCycle))
+        }
+    }
+
+    /** One PID read: records the raw reply, the poll time and (when live) the last good reply. */
+    @Throws(IOException::class)
+    private fun pollOne(
+        command: String,
+        rawThisCycle: StringBuilder,
+    ): PollOutcome {
+        val response = engine.sendRecoverableCommand(command, 1500)
+        appendRawTo(rawThisCycle, command, response)
+        val now = clock.nowMs()
+        lastPolledAtMsByCommand[command] = now
+        val outcome = classifyOutcome(response)
+        if (outcome == PollOutcome.LIVE) {
+            putLastRaw(command, response, now)
+        }
+        return outcome
     }
 
     /**
