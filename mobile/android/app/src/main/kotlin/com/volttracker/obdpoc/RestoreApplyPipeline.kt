@@ -86,14 +86,8 @@ class RestoreApplyPipeline<A>(
                 return Result.LOGGING_ACTIVE
             }
             ensureActive()
-            val activeStore = activity.localStore
-            if (activeStore != null) {
-                if (!activeStore.checkpoint()) {
-                    Log.w(AppPrefs.LOG_TAG, "replace restore aborted: live WAL checkpoint stayed incomplete")
-                    return Result.OTHER
-                }
-                activeStore.close()
-                activity.localStore = null
+            if (!closeLiveStoreForReplace()) {
+                return Result.OTHER
             }
             restoreTemp = File(dbFile.path + ".restore-new")
             restoreBackup = File(dbFile.path + ".restore-backup")
@@ -132,25 +126,50 @@ class RestoreApplyPipeline<A>(
             return Result.OK
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) {
-                if (activity.localStore == null && !isCancelled() && !preserveRestoreBackup) {
-                    try {
-                        activity.localStore = ObdLocalStore(activity)
-                    } catch (ignored: RuntimeException) {
-                        // Nothing more we can do; the next launch will recreate it.
-                    }
-                }
+                reopenStoreAfterFailedReplace(preserveRestoreBackup)
                 return Result.OTHER
             }
             throw ex
         } finally {
             databaseLease.close()
             DataBackup.deleteIfExists(restoreTemp)
-            if (shouldDeleteRestoreSafetyCopy(preserveRestoreBackup)) {
-                DataBackup.deleteIfExists(restoreBackup)
-            } else {
-                Log.e(AppPrefs.LOG_TAG, "preserving restore safety copy after rollback failure: $restoreBackup")
-            }
+            cleanUpRestoreSafetyCopy(restoreBackup, preserveRestoreBackup)
             DataBackup.deleteIfExists(staged)
+        }
+    }
+
+    /** Checkpoints and closes the live store so its file can be swapped; false aborts the replace. */
+    private fun closeLiveStoreForReplace(): Boolean {
+        val activeStore = activity.localStore ?: return true
+        if (!activeStore.checkpoint()) {
+            Log.w(AppPrefs.LOG_TAG, "replace restore aborted: live WAL checkpoint stayed incomplete")
+            return false
+        }
+        activeStore.close()
+        activity.localStore = null
+        return true
+    }
+
+    /** After a failed replace, reopen whatever database is in place unless a safety copy must stay. */
+    private fun reopenStoreAfterFailedReplace(preserveRestoreBackup: Boolean) {
+        if (activity.localStore != null || isCancelled() || preserveRestoreBackup) {
+            return
+        }
+        try {
+            activity.localStore = ObdLocalStore(activity)
+        } catch (ignored: RuntimeException) {
+            // Nothing more we can do; the next launch will recreate it.
+        }
+    }
+
+    private fun cleanUpRestoreSafetyCopy(
+        restoreBackup: File?,
+        preserveRestoreBackup: Boolean,
+    ) {
+        if (shouldDeleteRestoreSafetyCopy(preserveRestoreBackup)) {
+            DataBackup.deleteIfExists(restoreBackup)
+        } else {
+            Log.e(AppPrefs.LOG_TAG, "preserving restore safety copy after rollback failure: $restoreBackup")
         }
     }
 

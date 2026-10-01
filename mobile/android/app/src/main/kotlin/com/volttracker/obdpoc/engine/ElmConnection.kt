@@ -234,42 +234,21 @@ open class ElmConnection
             var responseCapped = false
             while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
                 val available = inputStream.available()
-                if (available > 0) {
-                    val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
-                    if (read > 0) {
-                        lastByteAtMs = clock.nowMs()
-                        val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
-                        val remaining = MAX_RESPONSE_CHARS - response.length
-                        if (remaining <= 0) {
-                            responseCapped = true
-                            break
-                        }
-                        response.append(chunk, 0, minOf(chunk.length, remaining))
-                        if (chunk.length > remaining || response.length >= MAX_RESPONSE_CHARS) {
-                            responseCapped = true
-                            break
-                        }
-                        if (chunk.indexOf('>') >= 0) {
-                            break
-                        }
-                    }
-                } else {
-                    // The '>' prompt hasn't arrived. If a response already came in and the adapter has
-                    // since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
-                    // almost certainly dropped the prompt — stop here instead of burning the rest of
-                    // the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
-                    // Only real reply text starts the quiet clock: with echo on (e.g. ATE0 not yet
-                    // applied) the echoed command, or a "SEARCHING..." status, arrives at once while a
-                    // busy ECU can take 300 ms+ to answer. Cutting there loses the value and lets the
-                    // late reply bleed into the next command.
-                    if (hasReplyBeyondEcho(response, command) &&
-                        clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS
-                    ) {
+                if (available <= 0) {
+                    if (promptLikelyDropped(response, command, lastByteAtMs) || !sleep(25)) {
                         break
                     }
-                    if (!sleep(25)) {
-                        break
-                    }
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read <= 0) {
+                    continue
+                }
+                lastByteAtMs = clock.nowMs()
+                val step = appendTransactChunk(response, String(buffer, 0, read, StandardCharsets.US_ASCII))
+                responseCapped = step == TransactStep.CAPPED
+                if (step != TransactStep.MORE) {
+                    break
                 }
             }
             val text = response.toString()
@@ -282,6 +261,43 @@ open class ElmConnection
                 )
             return text
         }
+
+        private enum class TransactStep { MORE, PROMPT, CAPPED }
+
+        /** Appends [chunk] up to the response cap and says whether [transact] should keep reading. */
+        private fun appendTransactChunk(
+            response: StringBuilder,
+            chunk: String,
+        ): TransactStep {
+            val remaining = MAX_RESPONSE_CHARS - response.length
+            if (remaining <= 0) {
+                return TransactStep.CAPPED
+            }
+            response.append(chunk, 0, minOf(chunk.length, remaining))
+            return when {
+                chunk.length > remaining || response.length >= MAX_RESPONSE_CHARS -> TransactStep.CAPPED
+                chunk.indexOf('>') >= 0 -> TransactStep.PROMPT
+                else -> TransactStep.MORE
+            }
+        }
+
+        /**
+         * The '>' prompt hasn't arrived. If a response already came in and the adapter has
+         * since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
+         * almost certainly dropped the prompt — stop here instead of burning the rest of
+         * the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
+         * Only real reply text starts the quiet clock: with echo on (e.g. ATE0 not yet
+         * applied) the echoed command, or a "SEARCHING..." status, arrives at once while a
+         * busy ECU can take 300 ms+ to answer. Cutting there loses the value and lets the
+         * late reply bleed into the next command.
+         */
+        private fun promptLikelyDropped(
+            response: CharSequence,
+            command: String,
+            lastByteAtMs: Long,
+        ): Boolean =
+            hasReplyBeyondEcho(response, command) &&
+                clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS
 
         /** Result of a [monitor] call. */
         class MonitorResult(
