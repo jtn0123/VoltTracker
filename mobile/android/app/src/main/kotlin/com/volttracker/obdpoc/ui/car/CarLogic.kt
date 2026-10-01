@@ -331,6 +331,12 @@ private val TIRE_NAMES = listOf("front left", "front right", "rear left", "rear 
 fun bodyTestLine(canTest: Boolean): String =
     if (canTest) "Listen 1 min while you open doors, lock and move windows" else "Connect to the car to run it"
 
+/** The Car tab's tire-test row: what it does, or why it can't run yet. */
+fun tireTestLine(canTest: Boolean): String =
+    if (canTest) "Ask the car for tire pressures (about 30 s)" else "Connect to the car to run it"
+
+const val TIRE_TEST_TITLE = "Tire test"
+
 private const val NO_GEAR_TEXT = "--"
 
 /** A body reading never heard this session: the SW-CAN body bus needs an OBDLink adapter. */

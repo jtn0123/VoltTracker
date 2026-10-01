@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Looper
 import androidx.core.content.edit
+import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.SpeedEfficiency
 import com.volttracker.obdpoc.ui.settings.SettingsCommand
@@ -62,6 +63,26 @@ class ComposeDashboardToolsTest {
         val started = shadowOf(activity).nextStartedActivity
         assertEquals(MainActivity::class.java.name, started.component?.className)
         assertEquals("insights", started.getStringExtra(MainActivity.EXTRA_OPEN_VIEW))
+    }
+
+    @Test
+    fun theTireTestNeedsARememberedAdapter() {
+        activity.startTireTest()
+        assertEquals("Pick your adapter in Settings first.", ShadowToast.getTextOfLatestToast())
+        assertNull(shadowOf(activity).nextStartedService)
+    }
+
+    @Test
+    fun theTireTestRunsTheTireProbeOnTheRememberedAdapter() {
+        activity.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE).edit {
+            putString(DeviceCatalog.PREF_LAST_ADDRESS, "AA:BB:CC:DD:EE:FF")
+            putString(DeviceCatalog.PREF_LAST_NAME, "OBDLink MX+")
+        }
+        activity.startTireTest()
+        val started = shadowOf(activity).nextStartedService
+        assertEquals(ObdService.ACTION_TPMS_SCAN, started.action)
+        assertEquals("AA:BB:CC:DD:EE:FF", started.getStringExtra(ObdService.EXTRA_ADDRESS))
+        assertEquals(EnhancedPidProfiles.STAGE_TIRES, started.getStringExtra(ObdService.EXTRA_DETAIL_STAGE))
     }
 
     @Test

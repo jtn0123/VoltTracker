@@ -261,6 +261,22 @@ class LiveSampleReaderParseFailureTest {
         assertEquals("unknown", sample.optString("gearConfidence"))
     }
 
+    @Test
+    fun bodyComputerTiresFillTheTireKeysAndLogTheFirstRead() {
+        // 4 kPa per count, FL, RL, FR, RR; the RR sensor reports "no reading".
+        engine.responses[BcmTirePressure.COMMAND] = "62 C9 01 3C 3D 3E FE\r>"
+        val sample = readUntil("tirePressureFlKpa")
+        assertEquals(240, sample.getInt("tirePressureFlKpa"))
+        assertEquals(244, sample.getInt("tirePressureRlKpa"))
+        assertEquals(248, sample.getInt("tirePressureFrKpa"))
+        assertFalse(sample.has("tirePressureRrKpa"))
+        assertTrue(sample.has("tirePressureStaleMs"))
+        reader.read(context)
+        assertEquals(1, countAllEvents("bcm_tires_first_read"))
+        assertEquals("4.0", eventPayloads("bcm_tires_first_read").single().optString("kpaPerCount"))
+        assertEquals(0, countEvents("pid_parse_failed", BcmTirePressure.COMMAND))
+    }
+
     /** Reads until the slow-cadence PID feeding [key] has been polled (bounded). */
     private fun readUntil(key: String): JSONObject {
         repeat(400) {

@@ -147,6 +147,13 @@ fun CarScreen(
                 subtitle = bodyTestLine(canTest),
                 onClick = actions.onBodyTest.takeIf { canTest },
             )
+            VoltListDivider()
+            VoltListRow(
+                icon = VoltIcons.Scan,
+                title = TIRE_TEST_TITLE,
+                subtitle = tireTestLine(canTest),
+                onClick = actions.onTireTest.takeIf { canTest },
+            )
         }
     }
 }
