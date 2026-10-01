@@ -22,15 +22,15 @@ def summarize_report(path: Path) -> dict[str, str]:
 
 
 def write_index(output: Path, entries: list[tuple[str, Path]]) -> None:
-    output.parent.mkdir(parents=True, exist_ok=True)
+    output.parent.mkdir(parents=True, exist_ok=True)  # NOSONAR: developer CLI; the caller chooses this path
     rows = [("| Report | Status | Path |"), ("|---|---|---|")]
     payload = {}
     for name, path in entries:
         item = summarize_report(path)
         payload[name] = item
         rows.append(f"| {name} | `{item['status']}` | `{item['path']}` |")
-    output.write_text("# Local Performance Report Index\n\n" + "\n".join(rows) + "\n", encoding="utf-8")
-    output.with_suffix(".json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    output.write_text("# Local Performance Report Index\n\n" + "\n".join(rows) + "\n", encoding="utf-8")  # NOSONAR: developer CLI; the caller chooses this path
+    output.with_suffix(".json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")  # NOSONAR: developer CLI; the caller chooses this path
 
 
 def self_test() -> int:

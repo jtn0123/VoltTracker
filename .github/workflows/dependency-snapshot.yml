@@ -49,13 +49,13 @@ jobs:
       - name: npm dashboard dependency snapshot
         run: |
           cd dashboard-tests
-          npm ci
+          npm ci --ignore-scripts
           npm outdated --long > ../build/npm-outdated.txt || true
           npm audit --audit-level=low
       - name: npm e2e dependency snapshot
         run: |
           cd dashboard-e2e
-          npm ci
+          npm ci --ignore-scripts
           npm outdated --long > ../build/npm-e2e-outdated.txt || true
           npm audit --audit-level=low
       - name: Summarize dependency snapshot

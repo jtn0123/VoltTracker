@@ -9,6 +9,7 @@ import com.volttracker.obdpoc.data.ObdDbMaintenanceStore
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import com.volttracker.obdpoc.data.VoltTrackerDb
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -62,7 +63,7 @@ class DataBackupTest {
             writer.write("this is plain text, not a database")
         }
         assertFalse(DataBackup.isVoltTrackerBackup(file))
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -72,7 +73,7 @@ class DataBackupTest {
         db.execSQL("CREATE TABLE unrelated (id INTEGER)")
         db.close()
         assertFalse(DataBackup.isVoltTrackerBackup(file))
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -83,7 +84,7 @@ class DataBackupTest {
         db.execSQL("CREATE TABLE telemetry_samples (_id INTEGER PRIMARY KEY)")
         db.close()
         assertFalse(DataBackup.isVoltTrackerBackup(file))
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -93,7 +94,7 @@ class DataBackupTest {
         createMinimalVoltSchema(db, false, false)
         db.close()
         assertFalse(DataBackup.isVoltTrackerBackup(file))
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -107,7 +108,7 @@ class DataBackupTest {
         )
         db.close()
         assertFalse(DataBackup.isVoltTrackerBackup(file))
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -185,7 +186,7 @@ class DataBackupTest {
                 "warning detail should carry the first quick_check problem, got: ${warning.detail}",
                 warning.detail!!.contains(FAKE_INTEGRITY_PROBLEM),
             )
-            backup!!.delete()
+            backup!!.deleteOrLog()
         } finally {
             store.close()
         }
@@ -205,7 +206,7 @@ class DataBackupTest {
                 "a warning-flagged progress snapshot should reach the listener",
                 snapshots.any { it.warning },
             )
-            backup!!.delete()
+            backup!!.deleteOrLog()
         } finally {
             store.close()
         }
@@ -224,7 +225,7 @@ class DataBackupTest {
                 "no progress snapshot should be warning-flagged for a healthy database",
                 snapshots.none { it.warning },
             )
-            backup!!.delete()
+            backup!!.deleteOrLog()
         } finally {
             store.close()
         }
@@ -308,7 +309,7 @@ class DataBackupTest {
         assertFalse(plaintext.exists())
         assertFalse(encrypted.exists())
         assertTrue(unrelated.exists())
-        unrelated.delete()
+        unrelated.deleteOrLog()
     }
 
     @Test
@@ -325,7 +326,7 @@ class DataBackupTest {
 
         assertFalse(staleExport.exists())
         assertTrue(unrelated.exists())
-        unrelated.delete()
+        unrelated.deleteOrLog()
     }
 
     @Test
@@ -340,7 +341,7 @@ class DataBackupTest {
         DataBackup(context).sweepTransientCacheFiles()
 
         assertTrue("recent share target should not be deleted", recent.exists())
-        recent.delete()
+        recent.deleteOrLog()
     }
 
     @Test
@@ -358,8 +359,8 @@ class DataBackupTest {
             assertTrue(first!!.exists())
             assertTrue(second!!.exists())
             assertTrue("backup filenames should be unique", first.name != second.name)
-            first.delete()
-            second.delete()
+            first.deleteOrLog()
+            second.deleteOrLog()
         } finally {
             store.close()
         }
@@ -445,9 +446,9 @@ class DataBackupTest {
         val appLog = diagnostics.getJSONArray("appLog").getJSONObject(0)
         assertEquals("app.log", appLog.optString("name"))
         assertTrue(appLog.optString("text").contains("command trace mirrored"))
-        file.delete()
-        sessionLog.delete()
-        appLogFile.delete()
+        file.deleteOrLog()
+        sessionLog.deleteOrLog()
+        appLogFile.deleteOrLog()
     }
 
     @Test
@@ -488,8 +489,8 @@ class DataBackupTest {
             text.startsWith("kept-line"),
         )
         assertFalse("tail text should not contain a replacement character", text.contains("\uFFFD"))
-        file.delete()
-        sessionLog.delete()
+        file.deleteOrLog()
+        sessionLog.deleteOrLog()
     }
 
     @Test
@@ -532,8 +533,8 @@ class DataBackupTest {
         )
         assertFalse(text.contains("00:11:22:33:44:55"))
         assertFalse(text.contains("1G1RD6E45CU" + "112233"))
-        file.delete()
-        sessionLog.delete()
+        file.deleteOrLog()
+        sessionLog.deleteOrLog()
     }
 
     @Test
@@ -624,8 +625,8 @@ class DataBackupTest {
             assertEquals(1, rowCount(verify, "obd_sessions"))
         } finally {
             verify.close()
-            staged.delete()
-            backupFile.delete()
+            staged.deleteOrLog()
+            backupFile.deleteOrLog()
         }
     }
 
@@ -642,14 +643,14 @@ class DataBackupTest {
         assertEquals(DataBackup.RestoreStageStatus.NOT_A_BACKUP, outcome.status)
         assertFalse(outcome.encrypted)
         assertEquals(file.length(), outcome.bytesRead)
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
     fun stageRestoreFileWithStatusRejectsNewerSchemaBackup() {
         val context = RuntimeEnvironment.getApplication()
         val file = File(context.cacheDir, "too-new-restore.db")
-        file.delete()
+        file.deleteOrLog()
         val db = SQLiteDatabase.openOrCreateDatabase(file.path, null)
         try {
             db.execSQL("CREATE TABLE obd_sessions (_id INTEGER PRIMARY KEY)")
@@ -665,7 +666,7 @@ class DataBackupTest {
         assertEquals(DataBackup.RestoreStageStatus.TOO_NEW, outcome.status)
         assertFalse(outcome.encrypted)
         assertEquals(file.length(), outcome.bytesRead)
-        file.delete()
+        file.deleteOrLog()
     }
 
     @Test
@@ -703,10 +704,10 @@ class DataBackupTest {
                     it.bytesDone == encrypted.length()
             },
         )
-        restored.file!!.delete()
-        restoredWithProgress.file!!.delete()
-        encrypted.delete()
-        source.delete()
+        restored.file!!.deleteOrLog()
+        restoredWithProgress.file!!.deleteOrLog()
+        encrypted.deleteOrLog()
+        source.deleteOrLog()
     }
 
     @Test
@@ -728,8 +729,8 @@ class DataBackupTest {
         assertTrue(outcome.encrypted)
         assertEquals(encrypted.length(), outcome.bytesRead)
         assertTrue(snapshots.any { it.phase == "Decrypting backup" && it.bytesDone == 0L })
-        encrypted.delete()
-        source.delete()
+        encrypted.deleteOrLog()
+        source.deleteOrLog()
     }
 
     @Test
@@ -752,8 +753,8 @@ class DataBackupTest {
         assertEquals(0L, snapshots.first().bytesDone)
         assertEquals(source.length(), snapshots.last().bytesDone)
         assertTrue(snapshots.all { it.phase == "Copying test" })
-        source.delete()
-        dest.delete()
+        source.deleteOrLog()
+        dest.deleteOrLog()
     }
 
     @Test
@@ -783,8 +784,8 @@ class DataBackupTest {
             assertTrue("interrupted copy must stop before the complete source", dest.length() < source.length())
         } finally {
             Thread.interrupted()
-            source.delete()
-            dest.delete()
+            source.deleteOrLog()
+            dest.deleteOrLog()
         }
     }
 
@@ -802,7 +803,7 @@ class DataBackupTest {
         } finally {
             missing.close()
             unreadable.close()
-            unreadable.fakeDatabaseFile.delete()
+            unreadable.fakeDatabaseFile.deleteOrLog()
         }
     }
 
@@ -812,14 +813,14 @@ class DataBackupTest {
         val source = File(context.cacheDir, "rename-source-ok.db")
         val dest = File(context.cacheDir, "rename-dest-ok.db")
         writeFile(source, "backup")
-        dest.delete()
+        dest.deleteOrLog()
 
         DataBackup.renameFile(source, dest)
 
         assertFalse(source.exists())
         assertTrue(dest.exists())
         assertEquals("backup", dest.readText())
-        dest.delete()
+        dest.deleteOrLog()
     }
 
     @Test
@@ -838,7 +839,7 @@ class DataBackupTest {
 
         assertTrue(source.exists())
         assertFalse(dest.exists())
-        source.delete()
+        source.deleteOrLog()
     }
 
     @Test
@@ -880,7 +881,7 @@ class DataBackupTest {
         val existing = File(context.cacheDir, "delete-existing.tmp")
         val missing = File(context.cacheDir, "delete-missing.tmp")
         writeFile(existing, "delete me")
-        missing.delete()
+        missing.deleteOrLog()
 
         assertFalse(DataBackup.isEncryptedBackup(null))
         assertFalse(DataBackup.isVoltTrackerBackup(null))

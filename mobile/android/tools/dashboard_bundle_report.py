@@ -137,7 +137,7 @@ def check_coverage(gradle: str) -> None:
 
 
 def measure(root: Path, gradle_path: Path) -> dict:
-    gradle = gradle_path.read_text(encoding="utf-8")
+    gradle = gradle_path.read_text(encoding="utf-8")  # NOSONAR: developer CLI; the caller chooses this path
     check_coverage(gradle)
     budgets = {key: read_budget(gradle, name) for key, name in BUDGETS.items()}
     groups = {key: read_file_group(gradle, name) for key, name in FILE_GROUPS.items()}
@@ -266,7 +266,7 @@ def cmd_report(m: dict) -> int:
 
 
 def cmd_snapshot(m: dict, out_dir: Path) -> int:
-    out_dir.mkdir(parents=True, exist_ok=True)
+    out_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR: developer CLI; the caller chooses this path
     payload = {
         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT", ""),

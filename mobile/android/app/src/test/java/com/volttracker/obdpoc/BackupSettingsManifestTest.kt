@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import com.volttracker.obdpoc.data.VinKeyHasher
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -42,7 +43,7 @@ class BackupSettingsManifestTest {
     @After
     fun tearDown() {
         VinKeyHasher.replaceSecretsForTest(context, originalIdentitySecrets)
-        databaseFile.delete()
+        databaseFile.deleteOrLog()
     }
 
     @Test

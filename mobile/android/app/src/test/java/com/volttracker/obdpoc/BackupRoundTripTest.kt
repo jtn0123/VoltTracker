@@ -7,6 +7,7 @@ import android.net.Uri
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.VoltTrackerDb
 import com.volttracker.obdpoc.data.VoltTrackerSchema
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -178,7 +179,7 @@ class BackupRoundTripTest {
 
         // -- swap into the live DB path, reopen --
         swapStagedFileIntoLiveDb(staged!!)
-        staged.delete()
+        staged.deleteOrLog()
 
         // -- verify every seeded row survived --
         val session = store!!.getSession(sessionId)
@@ -246,7 +247,7 @@ class BackupRoundTripTest {
         val staged = dataBackup.stageRestoreFile(uri)
         assertNotNull(staged)
         swapStagedFileIntoLiveDb(staged!!)
-        staged.delete()
+        staged.deleteOrLog()
 
         // -- post-restore state: only the source session is present; the throwaway row is gone --
         val restoredSource = store!!.getSession(sourceSessionId)
@@ -301,7 +302,7 @@ class BackupRoundTripTest {
         val verified = snapshots.last { it.phase == "Backup verified" }
         assertEquals(outcome.bytesRead, verified.bytesDone)
         assertEquals(outcome.bytesRead, verified.bytesTotal)
-        outcome.file?.delete()
+        outcome.file?.deleteOrLog()
     }
 
     @Test
@@ -338,7 +339,7 @@ class BackupRoundTripTest {
         assertTrue(DataBackup.isVoltTrackerBackup(staged))
 
         swapStagedFileIntoLiveDb(staged!!)
-        staged.delete()
+        staged.deleteOrLog()
         assertNotNull(store!!.getSession(sessionId))
         assertEquals(
             1L,
@@ -377,15 +378,15 @@ class BackupRoundTripTest {
             "the encrypted container is the only transport for the identity secrets",
             encryptedManifest!!.getJSONObject("native").getJSONArray("vehicleIdentityKeys").length() > 0,
         )
-        decrypted.delete()
-        encrypted.delete()
+        decrypted.deleteOrLog()
+        encrypted.deleteOrLog()
 
         // The plaintext backup without the keys still stages and restores.
         val staged = dataBackup.stageRestoreFile(registerAsSafUri(plain!!), null)
         assertNotNull("a keyless plaintext backup must still stage", staged)
         swapStagedFileIntoLiveDb(staged!!)
-        staged.delete()
-        plain.delete()
+        staged.deleteOrLog()
+        plain.deleteOrLog()
         assertNotNull("restored session must be readable", store!!.getSession(sessionId))
     }
 
@@ -463,8 +464,8 @@ class BackupRoundTripTest {
         assertNotNull(staged)
 
         swapStagedFileIntoLiveDb(staged!!)
-        staged.delete()
-        encrypted.delete()
+        staged.deleteOrLog()
+        encrypted.deleteOrLog()
 
         val reader = DashboardStorageReader { store }
         val summary = JSONObject(reader.storageSummaryJson())
@@ -532,8 +533,8 @@ class BackupRoundTripTest {
         val staged = dataBackup.stageRestoreFile(uri, shortPassphrase)
         assertNotNull("restore must accept the short passphrase the backup was created with", staged)
         assertTrue(DataBackup.isVoltTrackerBackup(staged))
-        staged!!.delete()
-        legacyEncrypted.delete()
+        staged!!.deleteOrLog()
+        legacyEncrypted.deleteOrLog()
     }
 
     /**
@@ -558,8 +559,8 @@ class BackupRoundTripTest {
         val staged = dataBackup.stageRestoreFile(uri, " trim me please ")
         assertNotNull("the trimmed-key fallback must unlock a pre-fix backup", staged)
         assertTrue(DataBackup.isVoltTrackerBackup(staged))
-        staged!!.delete()
-        legacyEncrypted.delete()
+        staged!!.deleteOrLog()
+        legacyEncrypted.deleteOrLog()
     }
 
     @Test
@@ -575,8 +576,8 @@ class BackupRoundTripTest {
 
         val staged = outcome.file!!
         swapStagedFileIntoLiveDb(staged)
-        staged.delete()
-        legacy.delete()
+        staged.deleteOrLog()
+        legacy.deleteOrLog()
 
         val restored = store!!.getSession(1L)
         assertNotNull("legacy v7 session should survive restore", restored)
@@ -655,7 +656,7 @@ class BackupRoundTripTest {
         assertNull("stageRestoreFile must reject a foreign-schema SQLite file", staged)
         assertFalse(File(context.cacheDir, "restore-tmp.db").exists())
 
-        foreign.delete()
+        foreign.deleteOrLog()
     }
 
     /**

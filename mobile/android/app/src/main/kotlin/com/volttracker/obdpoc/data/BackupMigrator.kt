@@ -130,7 +130,7 @@ object BackupMigrator {
                 file.isFile && file.name.startsWith(MIGRATION_DB_PREFIX)
             } ?: return
         for (file in stale) {
-            file.delete()
+            file.deleteOrLog()
         }
     }
 
@@ -174,9 +174,6 @@ object BackupMigrator {
     }
 
     private fun deleteDbFamily(file: File) {
-        file.delete()
-        File(file.path + "-wal").delete()
-        File(file.path + "-shm").delete()
-        File(file.path + "-journal").delete()
+        listOf("", "-wal", "-shm", "-journal").forEach { File(file.path + it).deleteOrLog() }
     }
 }

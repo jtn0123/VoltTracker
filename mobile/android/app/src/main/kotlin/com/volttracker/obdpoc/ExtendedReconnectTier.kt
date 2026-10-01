@@ -65,7 +65,8 @@ class ExtendedReconnectTier(
      */
     fun awaitNextAttempt(): Boolean =
         try {
-            wakeUps.tryAcquire(intervalMs, TimeUnit.MILLISECONDS)
+            // Timed out or woken early: either way the next attempt is due, so the result is unused.
+            wakeUps.tryAcquire(intervalMs, TimeUnit.MILLISECONDS) // NOSONAR kotlin:S899
             attemptCount += 1
             true
         } catch (_: InterruptedException) {

@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.BuildConfig
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import java.io.File
 import java.io.IOException
@@ -191,7 +192,7 @@ class UpdateManager(
                 throw IOException("download truncated at ${destination.length()} of $total bytes")
             }
             if (!verifyApk(destination)) {
-                destination.delete()
+                destination.deleteOrLog()
                 throw IOException("downloaded APK is not this app or not signed with its key")
             }
             return destination

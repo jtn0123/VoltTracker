@@ -38,12 +38,14 @@ concurrency:
 
 permissions:
   contents: read
-  # Needed by dorny/paths-filter to inspect pull-request file changes.
-  pull-requests: read
 
 jobs:
   changes:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Needed by dorny/paths-filter to inspect pull-request file changes.
+      pull-requests: read
     outputs:
       android: ${{ steps.filter.outputs.android }}
       emulator_smoke: ${{ steps.filter.outputs.emulator_smoke }}
@@ -335,7 +337,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - name: Install dashboard build deps
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Build dashboard bundle
         run: npm run build
       - name: Upload dashboard bundle
@@ -375,7 +377,7 @@ jobs:
           name: dashboard-bundle
           path: mobile/android/app/src/main/assets/dashboard
       - name: Install dashboard test deps
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Verify package-lock.json is in sync
         # npm ci rewrites the lockfile when package.json was edited without
         # relocking (e.g. a hand-bumped version range). A dirty lockfile here
@@ -494,7 +496,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Verify package-lock.json is in sync
         # Mirrors the dashboard-tests lockfile-sync gate: catches a package.json
         # edited without relocking before it drifts past CI.
@@ -520,12 +522,12 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - name: Install Playwright Chromium + OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Install Playwright OS deps (browser cache hit)
         # The browser binaries came from the cache, but apt-level dependencies are
         # not cached, so they still need installing on every runner.
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: ./node_modules/.bin/playwright install-deps chromium
       - name: Download prebuilt dashboard bundle
         # Playwright serves the real index.html, which loads js/app.js — the bundle
         # built once in the build-dashboard job (no second npm ci + esbuild here).
@@ -550,7 +552,7 @@ jobs:
         # mismatch fails THERE, not here. An intentional UI change must refresh the
         # committed *-linux.png baselines (download the dashboard-visual-snapshots
         # artifact and commit it), or the dashboard-visual gate stays red.
-        run: npx playwright test --project=chromium
+        run: ./node_modules/.bin/playwright test --project=chromium
       - name: Report retried Playwright tests
         if: always()
         # Flake escalation policy: retries stay at 1 (playwright.config.js) so a
@@ -664,7 +666,7 @@ jobs:
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-e2e/package-lock.json
       - name: Install e2e deps
-        run: npm ci
+        run: npm ci --ignore-scripts
       - name: Resolve pinned Playwright version
         # Cache key input: the browser build is fixed by the @playwright/test pin in
         # package-lock.json, so the cache rolls over exactly when the pin changes.
@@ -680,12 +682,12 @@ jobs:
           key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
       - name: Install Playwright Chromium + OS deps
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
       - name: Install Playwright OS deps (browser cache hit)
         # The browser binaries came from the cache, but apt-level dependencies are
         # not cached, so they still need installing on every runner.
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
+        run: ./node_modules/.bin/playwright install-deps chromium
       - name: Download prebuilt dashboard bundle
         # Playwright serves the real index.html, which loads js/app.js — the bundle
         # built once in the build-dashboard job (no second npm ci + esbuild here).
@@ -694,7 +696,7 @@ jobs:
           name: dashboard-bundle
           path: mobile/android/app/src/main/assets/dashboard
       - name: Run visual screenshot tests
-        run: npx playwright test --project=visual
+        run: ./node_modules/.bin/playwright test --project=visual
       - name: Upload visual baselines + diffs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

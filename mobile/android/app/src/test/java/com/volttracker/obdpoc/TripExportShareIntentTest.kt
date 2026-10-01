@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Bitmap
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -310,7 +311,7 @@ class TripExportShareIntentTest {
             if (dir.isDirectory) {
                 dir.listFiles()?.forEach { wipe(it) }
             }
-            dir.delete()
+            dir.deleteOrLog()
         }
     }
 }

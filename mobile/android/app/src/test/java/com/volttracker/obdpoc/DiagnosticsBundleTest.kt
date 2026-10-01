@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -262,7 +263,7 @@ class DiagnosticsBundleTest {
             if (file.isDirectory) {
                 file.listFiles()?.forEach { deleteRec(it) }
             }
-            file.delete()
+            file.deleteOrLog()
         }
     }
 }

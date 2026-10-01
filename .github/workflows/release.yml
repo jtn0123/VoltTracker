@@ -18,12 +18,15 @@ on:
     branches: [main]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: ubuntu-latest
     if: github.repository == 'jtn0123/VoltTracker'
+    permissions:
+      # Pushes the version commit and tag.
+      contents: write
     outputs:
       released: ${{ steps.resolve_tag.outputs.released }}
       tag: ${{ steps.resolve_tag.outputs.tag }}
@@ -73,14 +76,14 @@ jobs:
 
       - name: Install release dashboard e2e deps
         working-directory: mobile/android/dashboard-e2e
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Install release Playwright Chromium + OS deps
         # release-preflight.sh runs verifyActiveApp, which includes the
         # Playwright dashboard e2e checks. The normal Android CI installs the
         # browser binary first; the release lane needs the same runtime setup.
         working-directory: mobile/android/dashboard-e2e
-        run: npx playwright install --with-deps chromium
+        run: ./node_modules/.bin/playwright install --with-deps chromium
 
       - name: Release preflight
         env:
@@ -88,7 +91,7 @@ jobs:
         run: ./scripts/release-preflight.sh
 
       - name: Install python-semantic-release
-        run: pip install python-semantic-release==9.21.1
+        run: pip install --only-binary :all: python-semantic-release==9.21.1
 
       - name: Semantic Release — version & publish
         env:

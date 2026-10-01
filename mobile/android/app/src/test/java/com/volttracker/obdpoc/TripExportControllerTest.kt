@@ -5,6 +5,7 @@ import android.content.Intent
 import com.volttracker.obdpoc.data.ObdExportLogStore
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdRouteQueryStore
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -644,7 +645,7 @@ class TripExportControllerTest {
         private fun wipe(dir: File) {
             if (dir.isDirectory) {
                 dir.listFiles()?.forEach { it.delete() }
-                dir.delete()
+                dir.deleteOrLog()
             }
         }
     }

@@ -47,7 +47,8 @@ object TripTrackFormatter {
         builder
             .append("<gpx version=\"1.1\" creator=\"")
             .append(escapeXml(GPX_CREATOR))
-            .append("\" xmlns=\"http://www.topografix.com/GPX/1/1\" ")
+            // GPX namespace URIs are fixed identifiers, never fetched; they must stay http://.
+            .append("\" xmlns=\"http://www.topografix.com/GPX/1/1\" ") // NOSONAR kotlin:S5332
             .append("xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" ")
             .append(
                 "xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 " +
