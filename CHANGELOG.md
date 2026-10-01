@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.56.1 (2026-10-01)
+
+### 🔺 Fix
+
+- Harden the app before phone install ([#120](https://github.com/jtn0123/VoltTracker/pull/120),
+  [`5409026`](https://github.com/jtn0123/VoltTracker/commit/54090262125ad6ee68c69834007d02f204a52d4c))
+
+
 ## v0.56.0 (2026-09-30)
 
 ### ✳️ New
