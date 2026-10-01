@@ -8,6 +8,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.database.sqlite.SQLiteDatabaseCorruptException
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.engine.EngineHost
@@ -628,6 +629,23 @@ class ObdServiceIntegrationTest {
     // ---- B6: foreground refusal must not leave an orphaned started service ----------
 
     @Test
+    fun aFailingSessionRecoveryDoesNotCrashServiceStartup() {
+        // B1: a locked/damaged database or full disk used to throw out of onCreate, killing the
+        // service on every start. Recovery is now best-effort and a demo still runs afterwards.
+        val controller =
+            newController(
+                RecoveryFailsObdService::class.java,
+                intentFor(ObdService.ACTION_DEMO, null, null, null),
+            )
+        val service = controller.create().get()
+
+        controller.startCommand(0, 1)
+
+        assertTrue("recovery was attempted", (service as RecoveryFailsObdService).attempted)
+        assertTrue("the service still starts a session after recovery fails", service.running.get())
+    }
+
+    @Test
     fun foregroundRefusalStopsTheOrphanedServiceWithoutAWakeLock() {
         val controller =
             newController(
@@ -845,6 +863,16 @@ class ObdServiceIntegrationTest {
      */
     open class TestObdService : ObdService() {
         override fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(NeutralizedHost(this))
+    }
+
+    /** [TestObdService] whose startup session recovery hits a broken database (B1). */
+    class RecoveryFailsObdService : TestObdService() {
+        var attempted = false
+
+        override fun recoverInterruptedSessions(): Int {
+            attempted = true
+            throw SQLiteDatabaseCorruptException("simulated corrupt database")
+        }
     }
 
     /**

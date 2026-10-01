@@ -214,6 +214,8 @@ class ComposeDashboardActivity :
                     actions =
                         VoltAppActions(
                             onOpenClassicDashboard = ::openClassicDashboard,
+                            onOpenClassicTrip = ::openClassicTrip,
+                            onOpenClassicView = ::openClassicView,
                             onConnect = ::connectLastAdapter,
                             onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
                             onStopDemo = ::stopObdService,
@@ -348,6 +350,18 @@ class ComposeDashboardActivity :
 
     private fun openClassicDashboard() {
         startActivity(Intent(this, MainActivity::class.java))
+    }
+
+    internal fun openClassicTrip(routeKey: String) {
+        startActivity(
+            Intent(this, MainActivity::class.java)
+                .putExtra(MainActivity.EXTRA_OPEN_TRIP, routeKey)
+                .putExtra(MainActivity.EXTRA_OPEN_TRIP_RECEIPT, true),
+        )
+    }
+
+    internal fun openClassicView(view: String) {
+        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_VIEW, view))
     }
 
     private fun maybeAutoConnect() {

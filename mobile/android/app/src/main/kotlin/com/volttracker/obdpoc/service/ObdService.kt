@@ -259,10 +259,8 @@ open class ObdService :
         // a previous stopped instance before this one starts publishing authoritative values.
         LiveDashboardSnapshot.reset()
         val openedStore = ObdLocalStore(this)
-        val recoveredSessions = ObdSessionRecovery.recover(this)
-        if (recoveredSessions > 0) {
-            Log.w(AppPrefs.LOG_TAG, "recovered $recoveredSessions sessions interrupted by process death")
-        }
+        // Before any new session can open, so recovery can never mark the new one interrupted.
+        ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
         localStore = openedStore
         locationTracker = LocationManagerTracker(this)
         notifications = ObdNotifications(this)
@@ -309,6 +307,9 @@ open class ObdService :
         }
         refreshCompetingAppsAsync()
     }
+
+    /** Seam for [ObdSessionRecovery.recoverSafely]; `open` so a test can simulate a failing database. */
+    open fun recoverInterruptedSessions(): Int = ObdSessionRecovery.recover(this)
 
     /**
      * Factory for the polling engine, created once in [onCreate]. Behavior-identical to the inline

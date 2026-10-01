@@ -35,6 +35,50 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun downgradeFromANewerBuild_keepsDataInsteadOfCrashing() {
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_downgrade.db"
+        context.deleteDatabase(name)
+
+        // 1. Current schema with one session, then stamp it as if a newer build wrote it.
+        newHelper = VoltTrackerDb(context, name)
+        newHelper!!.writableDatabase.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS} (started_at_ms, created_at_ms, status, mode) VALUES (1, 1, 'completed', 'obd')",
+        )
+        newHelper!!.writableDatabase.version = VoltTrackerDb.DATABASE_VERSION + 3
+        newHelper!!.close()
+
+        // 2. Reopen with this (older) build: the default onDowngrade would throw here.
+        newHelper = VoltTrackerDb(context, name)
+        val db = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, db.version)
+        db.rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("the downgrade must keep existing sessions", 1, cursor.getInt(0))
+        }
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
+    fun recentMigrationSteps_rerunCleanlyOnACurrentSchema() {
+        // After a downgrade the newer build re-runs its steps above the recorded version on a
+        // schema that already has them, so every recent step must be re-runnable.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_rerun.db"
+        context.deleteDatabase(name)
+        val helper = VoltTrackerDb(context, name)
+        newHelper = helper
+        val db = helper.writableDatabase
+        helper.onUpgrade(db, RERUNNABLE_FROM_VERSION, VoltTrackerDb.DATABASE_VERSION)
+        assertTrue(readColumnNames(db, VoltTrackerDb.TABLE_TELEMETRY).contains("prndl_raw"))
+        helper.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun freshInstall_createsPruneIndexes() {
         val context = RuntimeEnvironment.getApplication()
         // Use a distinct DB name so this test doesn't trample others. Robolectric reuses the app
@@ -1027,6 +1071,9 @@ class VoltTrackerDbMigrationTest {
 
     companion object {
         private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 17
+
+        // Steps above this version are guarded (IF NOT EXISTS / column checks) and so re-runnable.
+        private const val RERUNNABLE_FROM_VERSION = 8
 
         private val V7_INDEXES =
             arrayOf(

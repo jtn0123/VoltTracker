@@ -196,6 +196,22 @@ class VoltTrackerDb : SQLiteOpenHelper {
     }
 
     /**
+     * An older build opened a database written by a newer one (sideloading a previous APK). The
+     * default throws, which crash-loops the app until its data is cleared. Every migration only
+     * adds tables, indexes and nullable/defaulted columns, so this build can keep using the newer
+     * file as-is: keep the data and let the helper record [newVersion]. When the newer build is
+     * installed again it re-runs its steps above [newVersion], which is why every step must stay
+     * re-runnable (IF NOT EXISTS / [addColumnIfMissing]).
+     */
+    override fun onDowngrade(
+        db: SQLiteDatabase,
+        oldVersion: Int,
+        newVersion: Int,
+    ) {
+        Log.w("VoltTrackerDb", "database downgraded from v$oldVersion to v$newVersion; keeping data")
+    }
+
+    /**
      * v17 (gear-aware trip splitting, see TripSplitRules): the PRNDL code and door-open flag per
      * telemetry row, plus the rules version a session was recorded under. Existing sessions get
      * version 0 (legacy) and existing rows NULL gear/door — deliberately NOT backfilled from the

@@ -433,7 +433,7 @@ files/obd-logs/latest.txt
 After reconnecting the phone with USB debugging (bash):
 
 ```sh
-pkg="com.volttracker.obdpoc"
+pkg="com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 out="./field-test-latest.jsonl"
 latest=$(adb shell run-as "$pkg" cat files/obd-logs/latest.txt | tr -d '\r')
 adb exec-out run-as "$pkg" cat "files/obd-logs/$latest" > "$out"
@@ -442,7 +442,7 @@ adb exec-out run-as "$pkg" cat "files/obd-logs/$latest" > "$out"
 Or with PowerShell:
 
 ```powershell
-$pkg = "com.volttracker.obdpoc"
+$pkg = "com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 $out = ".\field-test-latest.jsonl"
 $latest = adb shell run-as $pkg cat files/obd-logs/latest.txt
 adb exec-out run-as $pkg cat "files/obd-logs/$latest" > $out
@@ -453,7 +453,7 @@ Those logs include status transitions, connection failures, every ELM327 command
 The SQLite database can also be pulled after a test (bash):
 
 ```sh
-pkg="com.volttracker.obdpoc"
+pkg="com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 out="./field-test-db.db"
 adb exec-out run-as "$pkg" cat databases/volttracker_obd_poc.db > "$out"
 ```
@@ -461,7 +461,7 @@ adb exec-out run-as "$pkg" cat databases/volttracker_obd_poc.db > "$out"
 Or with PowerShell:
 
 ```powershell
-$pkg = "com.volttracker.obdpoc"
+$pkg = "com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 $out = ".\field-test-db.db"
 adb exec-out run-as $pkg cat databases/volttracker_obd_poc.db > $out
 ```

@@ -86,13 +86,17 @@ class UpdateFeedTest {
     }
 
     @Test
-    fun missingVariantFallsBackToAnyApk() {
-        val releases = JSONArray().put(release("v0.35.0", false, "volttracker-hand-upload.apk"))
-        val build = UpdateFeed.pickBuild(releases, wantDebugVariant = true)!!
+    fun strayOrWrongVariantApksAreNeverOffered() {
+        // E2: a hand-uploaded or wrong-variant APK must not be offered; the walk skips to the
+        // newest older release that carries this variant's exact asset.
+        val releases =
+            JSONArray()
+                .put(release("v0.36.0", false, "volttracker-hand-upload.apk", "volttracker-v0.36.0-debug.apk"))
+                .put(release("v0.35.0", false, "volttracker-v0.35.0-release.apk"))
 
-        assertEquals("volttracker-hand-upload.apk", build.assetName)
-        // The tag still parses even when the asset name doesn't.
-        assertEquals(35_000, build.versionCode)
+        val build = UpdateFeed.pickBuild(releases, wantDebugVariant = false)!!
+        assertEquals("volttracker-v0.35.0-release.apk", build.assetName)
+        assertNull(UpdateFeed.pickBuild(JSONArray().put(release("v0.36.0", false, "x.apk")), wantDebugVariant = true))
     }
 
     @Test

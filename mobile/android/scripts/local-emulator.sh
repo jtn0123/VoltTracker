@@ -20,8 +20,9 @@ set -uo pipefail
 
 AVD="${VT_AVD:-vt_test}"
 IMAGE="system-images;android-36;google_apis;arm64-v8a"
-PKG="com.volttracker.obdpoc"
-ACTIVITY="$PKG/.ComposeDashboardActivity"
+# Debug builds install as their own app ID (applicationIdSuffix ".debug").
+PKG="com.volttracker.obdpoc.debug"
+ACTIVITY="$PKG/com.volttracker.obdpoc.ComposeDashboardActivity"
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 android_dir="$(cd "$here/.." && pwd)"

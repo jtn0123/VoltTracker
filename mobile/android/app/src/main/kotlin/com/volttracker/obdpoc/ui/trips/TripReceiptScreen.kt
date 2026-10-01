@@ -33,6 +33,7 @@ fun TripReceiptScreen(
     onBack: () -> Unit,
     onShare: (subject: String, text: String) -> Unit = { _, _ -> },
     onExport: (TripExport) -> Unit = {},
+    onEditInClassic: (routeKey: String) -> Unit = {},
 ) {
     val trip = state.selected
     val receipt = trip?.let { state.receipt(it, h24 = LocalVoltPrefs.current.clock24h) }
@@ -83,6 +84,16 @@ fun TripReceiptScreen(
                         onExport(TripExport.One(trip.routeKey, TripExport.CSV))
                     }
                 }
+                // Naming and starring a drive still live on the classic dashboard's receipt.
+                VoltButton(EDIT_IN_CLASSIC, Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    onEditInClassic(trip.routeKey)
+                }
+                Text(
+                    text = EDIT_IN_CLASSIC_HINT,
+                    style = VoltType.caption,
+                    color = VoltColors.textTertiary,
+                    modifier = Modifier.padding(top = 6.dp, start = 4.dp),
+                )
             } else {
                 Text(
                     text = "Demo drives can't be exported",
@@ -96,6 +107,8 @@ fun TripReceiptScreen(
 }
 
 private const val PERCENT = 100
+internal const val EDIT_IN_CLASSIC = "Rename or star this drive"
+private const val EDIT_IN_CLASSIC_HINT = "Opens this drive in the classic dashboard."
 private const val NO_RATES =
     "Set your electricity rate, gas price and MPG in Settings → Costs & rates to see what this drive cost."
 
