@@ -257,41 +257,50 @@ object DatabaseMerger {
                 progress.step("Merging ${tableLabel(table)}")
                 val cv = readRow(c)
                 val oldId = cv.getAsLong("_id")
-                if (cv.containsKey("session_id")) {
-                    val donorSession = cv.getAsLong("session_id")
-                    if (donorSession != null && !sessionMap.containsKey(donorSession)) {
-                        continue
-                    }
-                }
+                if (belongsToSkippedSession(cv, sessionMap)) continue
                 cv.remove("_id")
-                remap(cv, "session_id", sessionMap)
-                if (table == VoltTrackerDb.TABLE_EVENTS) {
-                    // B2: trip-edit events embed the route key (with the donor's session id) in
-                    // detail/payload; rewrite it so post-merge route-key lookups still resolve.
-                    TripEditRemapper.remapEvent(cv, sessionMap)
-                }
-                if (vehicleMap != null) {
-                    remap(cv, "vehicle_id", vehicleMap)
-                }
-                if (telemetryMap != null) {
-                    remap(cv, "start_sample_id", telemetryMap)
-                    remap(cv, "end_sample_id", telemetryMap)
-                }
+                remapChildRow(cv, table, sessionMap, vehicleMap, telemetryMap)
                 val existingId = matchingExistingRowId(target, table, cv)
-                if (existingId != null) {
-                    if (outIdMap != null && oldId != null) {
-                        outIdMap[oldId] = existingId
-                    }
-                    continue
-                }
-                val newId = target.insertOrThrow(table, null, cv)
+                val newId = existingId ?: target.insertOrThrow(table, null, cv)
                 if (outIdMap != null && oldId != null) {
                     outIdMap[oldId] = newId
                 }
-                inserted++
+                if (existingId == null) inserted++
             }
         }
         return inserted
+    }
+
+    /** A child row whose donor session was not merged (e.g. skipped as a duplicate) is dropped. */
+    private fun belongsToSkippedSession(
+        cv: ContentValues,
+        sessionMap: Map<Long, Long>,
+    ): Boolean {
+        val donorSession = cv.getAsLong("session_id") ?: return false
+        return !sessionMap.containsKey(donorSession)
+    }
+
+    /** Rewrites a donor child row's foreign keys to the merged ids. */
+    private fun remapChildRow(
+        cv: ContentValues,
+        table: String,
+        sessionMap: Map<Long, Long>,
+        vehicleMap: Map<Long, Long>?,
+        telemetryMap: Map<Long, Long>?,
+    ) {
+        remap(cv, "session_id", sessionMap)
+        if (table == VoltTrackerDb.TABLE_EVENTS) {
+            // B2: trip-edit events embed the route key (with the donor's session id) in
+            // detail/payload; rewrite it so post-merge route-key lookups still resolve.
+            TripEditRemapper.remapEvent(cv, sessionMap)
+        }
+        if (vehicleMap != null) {
+            remap(cv, "vehicle_id", vehicleMap)
+        }
+        if (telemetryMap != null) {
+            remap(cv, "start_sample_id", telemetryMap)
+            remap(cv, "end_sample_id", telemetryMap)
+        }
     }
 
     private fun copyCellSnapshots(

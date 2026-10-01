@@ -35,6 +35,22 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun migrationStepsCoverEveryVersionOnceInOrder() {
+        assertEquals(
+            (2..VoltTrackerDb.DATABASE_VERSION).toList(),
+            VoltTrackerMigrations.STEPS.map { it.version },
+        )
+        assertEquals(
+            "every step has a distinct log label",
+            VoltTrackerMigrations.STEPS.size,
+            VoltTrackerMigrations.STEPS
+                .map { it.label }
+                .toSet()
+                .size,
+        )
+    }
+
+    @Test
     fun downgradeFromANewerBuild_keepsDataInsteadOfCrashing() {
         val context = RuntimeEnvironment.getApplication()
         val name = "volttracker_migration_downgrade.db"

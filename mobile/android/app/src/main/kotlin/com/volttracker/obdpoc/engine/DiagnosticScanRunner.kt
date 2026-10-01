@@ -60,18 +60,7 @@ class DiagnosticScanRunner(
         StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:adapter_identity")
 
         publishProgress("Checking standard OBD protocols, capability pages, and VIN...")
-        var vinResponse: String? = null
-        for (protocol in ObdProbes.PROTOCOL_PROBES) {
-            probeCommand(protocol, 1800, raw)
-            for (capability in ObdProbes.CAPABILITY_PROBES) {
-                probeCommand(capability, if (capability == "0100") 9000 else 3500, raw)
-            }
-            val thisVin = probeCommand("0902", 6000, raw)
-            if (vinResponse == null && ObdProtocol.parseVin(thisVin) != null) {
-                vinResponse = thisVin
-            }
-            probeCommand("03", 3500, raw)
-        }
+        val vinResponse = probeProtocolsForVin(raw)
 
         StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:protocol_vin")
 
@@ -117,18 +106,60 @@ class DiagnosticScanRunner(
         }
         probeCommand("ATSH7DF", 1800, raw)
 
-        if (vinResponse != null) {
-            val vin = ObdProtocol.parseVin(vinResponse)
-            val store = service.localStore
-            if (vin != null && store != null) {
-                try {
-                    store.upsertVehicleFromVin(vin)
-                } catch (ex: RuntimeException) {
-                    service.recorder?.logError("vin_persist_failed", ex)
-                }
-            }
-        }
+        persistVin(vinResponse)
+        service.broadcastTelemetry(scanSample(profile, raw, dtcScanValid, freezeFrame))
+        StartupTrace.mark("${StartupTrace.OBD_SCAN_COMPLETE}:${profile.wireName}")
+        service.broadcastStatus(
+            "scan-complete",
+            if (full) {
+                "Diagnostic scan complete. You can disconnect and bring the phone back for the log."
+            } else {
+                "Quick scan complete. Run a full scan for battery, module, and TPMS detail."
+            },
+            false,
+        )
+        service.updateNotification("Scan complete for ${service.activeName}")
+    }
 
+    /**
+     * Sweeps every standard protocol with its capability pages, VIN and stored-code reads. Returns
+     * the first VIN reply that parses, or null when no protocol produced one.
+     */
+    @Throws(IOException::class)
+    private fun probeProtocolsForVin(raw: StringBuilder): String? {
+        var vinResponse: String? = null
+        for (protocol in ObdProbes.PROTOCOL_PROBES) {
+            probeCommand(protocol, 1800, raw)
+            for (capability in ObdProbes.CAPABILITY_PROBES) {
+                probeCommand(capability, if (capability == "0100") 9000 else 3500, raw)
+            }
+            val thisVin = probeCommand("0902", 6000, raw)
+            if (vinResponse == null && ObdProtocol.parseVin(thisVin) != null) {
+                vinResponse = thisVin
+            }
+            probeCommand("03", 3500, raw)
+        }
+        return vinResponse
+    }
+
+    /** Records the car the VIN identifies; a store failure is logged, never fatal to the scan. */
+    private fun persistVin(vinResponse: String?) {
+        val vin = ObdProtocol.parseVin(vinResponse ?: return) ?: return
+        val store = service.localStore ?: return
+        try {
+            store.upsertVehicleFromVin(vin)
+        } catch (ex: RuntimeException) {
+            service.recorder?.logError("vin_persist_failed", ex)
+        }
+    }
+
+    /** The scan's telemetry payload: codes, freeze frame, profile and the raw probe tail. */
+    private fun scanSample(
+        profile: DiagnosticScanProfile,
+        raw: StringBuilder,
+        dtcScanValid: Boolean,
+        freezeFrame: JSONObject?,
+    ): JSONObject {
         val sample = JSONObject()
         try {
             sample.put("source", "scan")
@@ -144,18 +175,7 @@ class DiagnosticScanRunner(
         } catch (_: JSONException) {
             // Local values are safe.
         }
-        service.broadcastTelemetry(sample)
-        StartupTrace.mark("${StartupTrace.OBD_SCAN_COMPLETE}:${profile.wireName}")
-        service.broadcastStatus(
-            "scan-complete",
-            if (full) {
-                "Diagnostic scan complete. You can disconnect and bring the phone back for the log."
-            } else {
-                "Quick scan complete. Run a full scan for battery, module, and TPMS detail."
-            },
-            false,
-        )
-        service.updateNotification("Scan complete for ${service.activeName}")
+        return sample
     }
 
     /**
