@@ -412,7 +412,7 @@ import { VD } from "./vd-registry";
   function chargeNum(value: unknown) {
     // Native sends JSON null for missing fields; coerce those to NaN so a real
     // 0 reading and "no data" don't both render as "0".
-    return value == null || value === "" ? NaN : Number(value);
+    return value == null || value === "" ? Number.NaN : Number(value);
   }
 
   function chargerLabel(type: unknown) {
@@ -452,7 +452,7 @@ import { VD } from "./vd-registry";
     const endSoc = chargeNum(session.endSoc);
     const power = chargeNum(session.powerKw);
     const endedAtMs = chargeNum(session.endedAtMs);
-    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
+    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : Number.NaN;
     const parts: string[] = [];
     if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%`);
     if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
@@ -470,7 +470,7 @@ import { VD } from "./vd-registry";
     small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
     center.append(strong, small);
     const right = document.createElement("b");
-    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
+    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : Number.NaN;
     if (Number.isFinite(energy) && energy > 0) {
       right.textContent = `${energy.toFixed(1)} kWh`;
     } else if (Number.isFinite(socGain) && socGain > 0) {
@@ -488,7 +488,7 @@ import { VD } from "./vd-registry";
       const n = Number(v);
       if (Number.isFinite(n)) return n;
     }
-    return NaN;
+    return Number.NaN;
   }
 
   // HV-pack detail. The battery snapshot already rides in the storage payload —
@@ -544,5 +544,3 @@ import { VD } from "./vd-registry";
   // an already-open Charge/Insights tab hydrates the moment the chunk arrives.
   if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
 })();
-
-export {};

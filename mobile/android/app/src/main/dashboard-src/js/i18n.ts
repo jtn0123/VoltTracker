@@ -115,7 +115,7 @@ export function resolveDeviceLocale(): string {
   try {
     const nav = typeof navigator !== "undefined" ? navigator : null;
     return setLocale(nav ? nav.language : null);
-  } catch (_err) {
+  } catch {
     // `navigator` access can throw in exotic embeddings; default to English.
     return activeBase;
   }

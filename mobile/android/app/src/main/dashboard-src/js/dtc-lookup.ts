@@ -3761,7 +3761,7 @@ import { VD } from "./vd-registry";
     const empty = { code: "", description: null, known: false, category: null, causes: null, severity: null };
     if (!key) return empty;
     const desc = VOLT_DTC[key];
-    const causesData = (VD.DTC_CAUSES && VD.DTC_CAUSES[key]) || null;
+    const causesData = (VD.DTC_CAUSES?.[key]) || null;
     const causes = causesData ? causesData.causes : null;
     const severity = causesData ? causesData.severity : null;
     const categoryTag = causesData ? causesData.category : null;
@@ -3818,5 +3818,3 @@ import { VD } from "./vd-registry";
     },
   ];
 })();
-
-export {};

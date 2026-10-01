@@ -98,7 +98,7 @@ export function renderMapSessionListInto(
     const filter = formatters.filter;
     const p = document.createElement("p");
     p.className = "status-copy";
-    const noQuery = !String((filter && filter.query) || "").trim();
+    const noQuery = !String((filter?.query) || "").trim();
     p.textContent = filter && filter.favoritesOnly && noQuery
       ? "No favorite drives yet. Tap a drive's star to add it here."
       : filter && filter.longOnly && noQuery
@@ -181,7 +181,7 @@ export function sessionForRoute(route: MapRoute): MapRouteSession {
   // VoltRoute.session is the open `{ id?; [k]: unknown }` payload; narrow it to
   // the named fields the map UI reads. Field reads stay defensively coerced at
   // each use, so the narrowing is presentational only.
-  return (route && route.session ? route.session : {}) as MapRouteSession;
+  return (route?.session ? route.session : {}) as MapRouteSession;
 }
 
 export function routeIsLive(route: MapRoute) {
@@ -214,7 +214,7 @@ function buildMapSessionEntry(
 
 // The user's trip label, defensively coerced (the native session field is open/untyped).
 function labelOf(session: MapRouteSession): string {
-  const label = session && session.label;
+  const label = session?.label;
   return typeof label === "string" ? label.trim() : "";
 }
 

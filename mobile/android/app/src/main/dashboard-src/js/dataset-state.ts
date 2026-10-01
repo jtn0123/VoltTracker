@@ -95,7 +95,7 @@ function warnUnexpected(attr: string, value: string, known: readonly string[]): 
     if (typeof console !== "undefined" && console && console.warn) {
       console.warn(`dataset-state: unexpected ${attr} value "${value}"`);
     }
-  } catch (_err) {
+  } catch {
     /* console is best-effort on legacy WebViews */
   }
 }

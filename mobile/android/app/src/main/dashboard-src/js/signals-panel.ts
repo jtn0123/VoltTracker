@@ -373,5 +373,3 @@ import { VD } from "./vd-registry";
     });
   })();
 })();
-
-export {};

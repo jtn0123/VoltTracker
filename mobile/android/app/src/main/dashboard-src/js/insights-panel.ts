@@ -105,7 +105,7 @@ import { VD } from "./vd-registry";
         allTripsLoading = false;
         allTripsLoaded = true;
       }
-    } catch (_err) {
+    } catch {
       allTripsLoading = false;
       VD.reportNativeReadError(
         { ok: false, error: "trips_page_read_failed", message: "Could not load older drives." },
@@ -142,7 +142,7 @@ import { VD } from "./vd-registry";
         tripsRead.complete();
         VD.setState({ tripsLoaded: true });
       }
-    } catch (_err) {
+    } catch {
       handleTripsBridgeFailure();
     }
   }
@@ -209,7 +209,7 @@ import { VD } from "./vd-registry";
         renderInsightStats();
         renderInsightScatter();
       }
-    } catch (_err) {
+    } catch {
       handleInsightsBridgeFailure();
     }
   }
@@ -227,7 +227,7 @@ import { VD } from "./vd-registry";
     // Lifetime "% of driving on electric" (speed-weighted over classified EV vs
     // gas samples). Null until the classifier has seen real driving, so keep
     // the placeholder rather than a misleading 0%.
-    const evPct = insights.electricDrivingPct == null ? NaN : Number(insights.electricDrivingPct);
+    const evPct = insights.electricDrivingPct == null ? Number.NaN : Number(insights.electricDrivingPct);
     VD.setText("insightElectricPct", Number.isFinite(evPct) ? `${Math.round(evPct)}%` : "--");
     renderSavingsVsGas();
     renderDriveTrend();
@@ -254,8 +254,8 @@ import { VD } from "./vd-registry";
     const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
     const pts: Array<{ tempC: number; rangeMi: number }> = [];
     for (const trip of trips) {
-      const tempC = trip.avgOutsideTempC == null ? NaN : Number(trip.avgOutsideTempC);
-      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const tempC = trip.avgOutsideTempC == null ? Number.NaN : Number(trip.avgOutsideTempC);
+      const energy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       const meters = Number(trip.distanceMeters);
       if (!Number.isFinite(tempC) || !Number.isFinite(energy) || energy <= 0 || !(meters > 0)) continue;
       const miPerKwh = meters / 1609.344 / energy;
@@ -451,7 +451,7 @@ import { VD } from "./vd-registry";
       const day = days[idx]!;
       day.miles += meters / 1609.344;
       day.trips += 1;
-      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const energy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       if (Number.isFinite(energy) && energy > 0) {
         // Pair distance with energy: only miles from energy-logged trips may feed
         // the mi/kWh denominator. Adding every trip's miles (day.miles) but only
@@ -570,7 +570,7 @@ import { VD } from "./vd-registry";
         byKey.set(key, { label, ms: firstMs, meters });
       }
       totalMeters += meters;
-      const tripEnergy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const tripEnergy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       if (Number.isFinite(tripEnergy) && tripEnergy > 0) {
         energyKwh += tripEnergy;
         energyMeters += meters;
@@ -588,7 +588,7 @@ import { VD } from "./vd-registry";
     VD.setText("driveTrendLatest", distText(latest.meters));
     VD.setText("driveTrendAvg", distText(totalMeters / buckets.length));
     const miles = energyMeters / 1609.344;
-    const miPerKwh = energyKwh > 0 && miles > 0 ? miles / energyKwh : NaN;
+    const miPerKwh = energyKwh > 0 && miles > 0 ? miles / energyKwh : Number.NaN;
     VD.setText("driveTrendEff", Number.isFinite(miPerKwh) ? units.efficiencyText(miPerKwh) : "--");
     // Estimated electric cost per displayed-distance unit: real integrated kWh
     // billed at the home rate. Approximate (public charging is billed at the
@@ -812,10 +812,10 @@ import { VD } from "./vd-registry";
     // distinct from drive efficiency.
     const whmiInst = pts.map((p, i) => {
       const mph = mphArr[i] ?? 0;
-      if (mph <= 4) return NaN;
+      if (mph <= 4) return Number.NaN;
       const kW = powerAt(Number(p.atMs));
-      if (!Number.isFinite(kW)) return NaN;
-      if (kW <= 0) return NaN;
+      if (!Number.isFinite(kW)) return Number.NaN;
+      if (kW <= 0) return Number.NaN;
       return (kW * 1000) / mph;
     });
     for (let i = 0; i < pts.length; i += 1) {
@@ -1140,7 +1140,7 @@ import { VD } from "./vd-registry";
     // City/Highway averages per drive rather than per correlated sample.
     routes.forEach((route, routeIdx) => {
       enrichRouteEff(route);
-      const pts = (route && route.points) || [];
+      const pts = (route?.points) || [];
       for (let i = 0; i < pts.length; i += 1) {
         const point = pts[i]!;
         // enrichRouteEff sets eff = null for all-regen/idle windows (no positive
@@ -1540,5 +1540,3 @@ import { VD } from "./vd-registry";
     });
   })();
 })();
-
-export {};

@@ -34,7 +34,7 @@ function safeCall(method: keyof VoltBridge, ...args: unknown[]): unknown {
     // Spread-applying a union of method signatures isn't expressible without a
     // cast; the typeof-function guard above is the real runtime safety check.
     return (fn as (...a: unknown[]) => unknown)(...args);
-  } catch (ignored) {
+  } catch {
     // Bridge calls are fire-and-forget; failures surface via the status
     // pipeline rather than throwing into the dashboard.
     return undefined;
@@ -46,7 +46,7 @@ function parseBridgeJson(value: unknown): Record<string, unknown> {
   try {
     const parsed = JSON.parse(value);
     return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (ignored) {
+  } catch {
     return {};
   }
 }
@@ -214,7 +214,7 @@ function bindNotifyWhenReady(opts?: AddEventListenerOptions) {
     }
   }
   function scheduleNotify() {
-    const minutes = Math.max(1, Math.min(30, parseInt(minsInput.value, 10) || 10));
+    const minutes = Math.max(1, Math.min(30, Number.parseInt(minsInput.value, 10) || 10));
     // Reflect the clamped value back into the input so the UI never advertises a duration
     // (e.g., 999) that the bridge silently shrank to 30.
     minsInput.value = String(minutes);
@@ -430,5 +430,3 @@ function bindConnectionTools() {
 
 bindConnectionTools();
 VD.bindConnectionTools = bindConnectionTools;
-
-export {};
