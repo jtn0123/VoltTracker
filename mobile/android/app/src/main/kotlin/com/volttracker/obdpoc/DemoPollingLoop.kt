@@ -200,118 +200,9 @@ class DemoPollingLoop(
                     "throttlePct",
                     if (leg == DemoLeg.EV || leg == DemoLeg.GAS) Math.round(14 + 9 * Math.sin(driveT / 2.2)) else 0L,
                 )
-                // Hoist the shared demo formulas once so the mirrored PIDs below
-                // (and the raw-vs-rounded pack voltage) stay in step with the JS
-                // runBrowserDemoStream mirror instead of drifting per call site.
-                val busV = ObdElmDecode.round1(if (charging) 14.2 else 13.8 + 0.2 * Math.sin(t / 5.0))
-                val soc = demoSoc(t)
-                val chargerKw = demoChargerPowerKw(t)
-                val drivePowerKw = demoPowerKw(t)
-                val rawPackV = 353.0 + (soc - 50.0) * 0.2
-                val packWatts = (if (charging) -chargerKw else drivePowerKw) * 1000.0
-                sample.put("voltage", busV)
-                sample.put("soc", ObdElmDecode.round1(soc))
-                sample.put("batteryTemp", ObdElmDecode.round1(24.0 + Math.sin(t / 8.0)))
-                sample.put("powerKw", ObdElmDecode.round1(drivePowerKw))
-                sample.put("chargerPowerKw", chargerKw)
-                // Extra PIDs a real Volt answers, so the Live-signals console shows a
-                // populated "reporting" list in demo (mirrors runBrowserDemoStream).
-                sample.put("packVoltage", ObdElmDecode.round1(rawPackV))
-                sample.put("packCurrentA", ObdElmDecode.round1(packWatts / rawPackV))
-                sample.put("controlModuleVoltage", busV)
-                sample.put("odometerKm", 77593.0)
-                sample.put("intakeAirTempC", ObdElmDecode.round1(22.0 + 3.0 * Math.sin(t / 11.0)))
-                sample.put("outsideTempC", ObdElmDecode.round1(18.0 + 2.0 * Math.sin(t / 13.0)))
-                sample.put("sohPct", 91.0)
-                sample.put("capacityAh", 47.3)
-                sample.put("packEnergyKwh", ObdElmDecode.round1(soc / 100.0 * 14.0))
-                sample.put("hvBatteryRawSoc", ObdElmDecode.round1(soc + 2.0))
-                // HV cell-group balance for the Battery-tab cell card: a healthy pack around
-                // ~3.9 V, cell 47 on the low side to match the "Cell 47 trending low" insight.
-                // The spread is steady, not wobbling, so Drive, Car and Health (each read at a
-                // different instant) all show the same figure.
-                val cellAvgV = 3.85 + (soc - 50.0) * 0.003
-                val cellSpreadMv = DEMO_CELL_SPREAD_MV
-                sample.put("minCellVoltage", ObdElmDecode.round3(cellAvgV - cellSpreadMv / 2000.0))
-                sample.put("maxCellVoltage", ObdElmDecode.round3(cellAvgV + cellSpreadMv / 2000.0))
-                sample.put("cellBalanceMv", cellSpreadMv)
-                sample.put("minCellNumber", 47)
-                sample.put("maxCellNumber", 12)
-                sample.put("socVariationPct", 0.4)
-                sample.put("motorAPowerKw", if (leg.moving) ObdElmDecode.round1(drivePowerKw * 0.6) else 0.0)
-                sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
-                sample.put("prndlState", if (leg.moving) "D" else VoltGear.PARK)
-                sample.put("prndlRaw", if (leg.moving) DEMO_DRIVE_GEAR_RAW else VoltGear.PARK_RAW)
-                sample.put("gearConfidence", GearConfidence.CONFIRMED.wireName)
-                sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
-                sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
-                // The cluster's SOC reads a few points above the raw pack SOC on a real Volt; keeping
-                // them apart in the demo shows any screen that mixes the two scales.
-                sample.put(
-                    "displayedSocPct",
-                    ObdElmDecode.round1((soc + DEMO_DISPLAYED_SOC_OFFSET).coerceAtMost(100.0)),
-                )
-                sample.put("packResistanceMohm", 148.5)
-                sample.put("hvIsolationKohm", 2000)
-                sample.put("motorBTempC", ObdElmDecode.round1(48.0 + 4.0 * Math.sin(t / 10.0)))
-                // Same SOC-proportional ~66 km full-charge range as actions-demo.ts, so both demo
-                // streams show "≈ 26 mi EV range" and agree with the cluster range below.
-                sample.put("evRangeKm", Math.round(soc / 100.0 * 66.0))
-                sample.put("batteryHeaterPct", 0)
-                sample.put("pemCoolantTempC", ObdElmDecode.round1(38.0 + 2.0 * Math.sin(t / 11.0)))
-                sample.put("lifetimeChargeEnergyKwh", 2198.1)
-                for (section in 1..6) {
-                    sample.put("packSection${section}TempC", 22 + section % 3)
-                }
-                // SW-CAN (GMLAN) broadcasts the listen window hears on an OBDLink (mirrors
-                // actions-demo.ts; SwcanReadings).
-                sample.put("aux12vVoltage", if (charging) 13.9 else 14.1)
-                sample.put("aux12vSocPct", 86.0)
-                sample.put("aux12vCurrentA", if (charging) 3.5 else 6.0)
-                sample.put("tirePressureFlKpa", 260.0)
-                sample.put("tirePressureFrKpa", 264.0)
-                sample.put("tirePressureRlKpa", 256.0)
-                sample.put("tirePressureRrKpa", 260.0)
-                sample.put("doorLockState", if (charging) "unlocked" else "locked")
-                sample.put("doorLockSource", "fob")
-                sample.put("doorFlState", DEMO_CLOSED)
-                sample.put("doorFrState", DEMO_CLOSED)
-                sample.put("doorRlState", DEMO_CLOSED)
-                sample.put("doorRrState", DEMO_CLOSED)
-                sample.put("hoodState", DEMO_CLOSED)
-                sample.put("trunkState", DEMO_CLOSED)
-                sample.put("alarmState", "disarmed")
-                sample.put("windowFlPct", 0)
-                sample.put("windowFrPct", 0)
-                sample.put("windowRlPct", 0)
-                sample.put("windowRrPct", 0)
-                sample.put("blowerPct", 35.0)
-                sample.put("remoteStartState", "off")
-                sample.put("cabinTempEstC", ObdElmDecode.round1(21.0 + Math.sin(t / 15.0)))
-                sample.put("acState", "on")
-                sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))
-                sample.put("clusterEvRangeKm", ObdElmDecode.round1(soc / 100.0 * 66.0))
-                sample.put("fuelRangeKm", 471.0)
-                // ~7.3 of the Volt's 8.9 gal: the tank that 471 km of gas range implies at ~40 mpg.
-                sample.put("fuelLevelPct", 82.0)
-                if (charging) {
-                    sample.put("chargeCurrentLimitA", 12.0)
-                    sample.put("chargerAcVoltage", 240)
-                    sample.put("chargerAcCurrentA", 14.0)
-                    sample.put("chargerAcPowerKw", 3.4)
-                }
-                // The position clock only runs while moving, so the marker stays put
-                // once the car parks instead of orbiting an unplugged charger.
-                sample.put("latitude", demoLatitude(routeT))
-                sample.put("longitude", demoLongitude(routeT))
-                sample.put("accuracyM", 6.0)
-                sample.put("gpsSpeedMps", ObdElmDecode.round1(speedKph / 3.6))
-                sample.put(
-                    "bearingDeg",
-                    ObdElmDecode.round1(
-                        (Math.toDegrees(routeT * ROUTE_RAD_PER_SECOND) % BEARING_TURN + BEARING_TURN) % BEARING_TURN,
-                    ),
-                )
+                putPowertrainSignals(sample, t, leg, charging)
+                putBodySignals(sample, t, charging)
+                putDemoPosition(sample, routeT, speedKph)
                 sample.put("updatedAt", System.currentTimeMillis())
                 engine.appendSessionHealth(sample)
                 sample.put("raw", "demo")
@@ -330,6 +221,141 @@ class DemoPollingLoop(
                 return
             }
         }
+    }
+
+    private fun putPowertrainSignals(
+        sample: JSONObject,
+        t: Double,
+        leg: DemoLeg,
+        charging: Boolean,
+    ) {
+        // Hoist the shared demo formulas once so the mirrored PIDs below
+        // (and the raw-vs-rounded pack voltage) stay in step with the JS
+        // runBrowserDemoStream mirror instead of drifting per call site.
+        val busV = ObdElmDecode.round1(if (charging) 14.2 else 13.8 + 0.2 * Math.sin(t / 5.0))
+        val soc = demoSoc(t)
+        val chargerKw = demoChargerPowerKw(t)
+        val drivePowerKw = demoPowerKw(t)
+        val rawPackV = 353.0 + (soc - 50.0) * 0.2
+        val packWatts = (if (charging) -chargerKw else drivePowerKw) * 1000.0
+        sample.put("voltage", busV)
+        sample.put("soc", ObdElmDecode.round1(soc))
+        sample.put("batteryTemp", ObdElmDecode.round1(24.0 + Math.sin(t / 8.0)))
+        sample.put("powerKw", ObdElmDecode.round1(drivePowerKw))
+        sample.put("chargerPowerKw", chargerKw)
+        // Extra PIDs a real Volt answers, so the Live-signals console shows a
+        // populated "reporting" list in demo (mirrors runBrowserDemoStream).
+        sample.put("packVoltage", ObdElmDecode.round1(rawPackV))
+        sample.put("packCurrentA", ObdElmDecode.round1(packWatts / rawPackV))
+        sample.put("controlModuleVoltage", busV)
+        sample.put("odometerKm", 77593.0)
+        sample.put("intakeAirTempC", ObdElmDecode.round1(22.0 + 3.0 * Math.sin(t / 11.0)))
+        sample.put("outsideTempC", ObdElmDecode.round1(18.0 + 2.0 * Math.sin(t / 13.0)))
+        sample.put("sohPct", 91.0)
+        sample.put("capacityAh", 47.3)
+        sample.put("packEnergyKwh", ObdElmDecode.round1(soc / 100.0 * 14.0))
+        sample.put("hvBatteryRawSoc", ObdElmDecode.round1(soc + 2.0))
+        // HV cell-group balance for the Battery-tab cell card: a healthy pack around
+        // ~3.9 V, cell 47 on the low side to match the "Cell 47 trending low" insight.
+        // The spread is steady, not wobbling, so Drive, Car and Health (each read at a
+        // different instant) all show the same figure.
+        val cellAvgV = 3.85 + (soc - 50.0) * 0.003
+        val cellSpreadMv = DEMO_CELL_SPREAD_MV
+        sample.put("minCellVoltage", ObdElmDecode.round3(cellAvgV - cellSpreadMv / 2000.0))
+        sample.put("maxCellVoltage", ObdElmDecode.round3(cellAvgV + cellSpreadMv / 2000.0))
+        sample.put("cellBalanceMv", cellSpreadMv)
+        sample.put("minCellNumber", 47)
+        sample.put("maxCellNumber", 12)
+        sample.put("socVariationPct", 0.4)
+        sample.put("motorAPowerKw", if (leg.moving) ObdElmDecode.round1(drivePowerKw * 0.6) else 0.0)
+        sample.put("transmissionTempC", ObdElmDecode.round1(68.0 + 3.0 * Math.sin(t / 7.0)))
+        sample.put("prndlState", if (leg.moving) "D" else VoltGear.PARK)
+        sample.put("prndlRaw", if (leg.moving) DEMO_DRIVE_GEAR_RAW else VoltGear.PARK_RAW)
+        sample.put("gearConfidence", GearConfidence.CONFIRMED.wireName)
+        sample.put("motorTempC", ObdElmDecode.round1(55.0 + 5.0 * Math.sin(t / 9.0)))
+        sample.put("inverterTempC", ObdElmDecode.round1(42.0 + 3.0 * Math.sin(t / 8.0)))
+        // The cluster's SOC reads a few points above the raw pack SOC on a real Volt; keeping
+        // them apart in the demo shows any screen that mixes the two scales.
+        sample.put(
+            "displayedSocPct",
+            ObdElmDecode.round1((soc + DEMO_DISPLAYED_SOC_OFFSET).coerceAtMost(100.0)),
+        )
+        sample.put("packResistanceMohm", 148.5)
+        sample.put("hvIsolationKohm", 2000)
+        sample.put("motorBTempC", ObdElmDecode.round1(48.0 + 4.0 * Math.sin(t / 10.0)))
+        // Same SOC-proportional ~66 km full-charge range as actions-demo.ts, so both demo
+        // streams show "≈ 26 mi EV range" and agree with the cluster range below.
+        sample.put("evRangeKm", Math.round(soc / 100.0 * 66.0))
+        sample.put("batteryHeaterPct", 0)
+        sample.put("pemCoolantTempC", ObdElmDecode.round1(38.0 + 2.0 * Math.sin(t / 11.0)))
+        sample.put("lifetimeChargeEnergyKwh", 2198.1)
+        for (section in 1..6) {
+            sample.put("packSection${section}TempC", 22 + section % 3)
+        }
+    }
+
+    /** SW-CAN body/comfort broadcasts plus the charge-port readings while plugged in. */
+    private fun putBodySignals(
+        sample: JSONObject,
+        t: Double,
+        charging: Boolean,
+    ) {
+        // SW-CAN (GMLAN) broadcasts the listen window hears on an OBDLink (mirrors
+        // actions-demo.ts; SwcanReadings).
+        sample.put("aux12vVoltage", if (charging) 13.9 else 14.1)
+        sample.put("aux12vSocPct", 86.0)
+        sample.put("aux12vCurrentA", if (charging) 3.5 else 6.0)
+        sample.put("tirePressureFlKpa", 260.0)
+        sample.put("tirePressureFrKpa", 264.0)
+        sample.put("tirePressureRlKpa", 256.0)
+        sample.put("tirePressureRrKpa", 260.0)
+        sample.put("doorLockState", if (charging) "unlocked" else "locked")
+        sample.put("doorLockSource", "fob")
+        sample.put("doorFlState", DEMO_CLOSED)
+        sample.put("doorFrState", DEMO_CLOSED)
+        sample.put("doorRlState", DEMO_CLOSED)
+        sample.put("doorRrState", DEMO_CLOSED)
+        sample.put("hoodState", DEMO_CLOSED)
+        sample.put("trunkState", DEMO_CLOSED)
+        sample.put("alarmState", "disarmed")
+        sample.put("windowFlPct", 0)
+        sample.put("windowFrPct", 0)
+        sample.put("windowRlPct", 0)
+        sample.put("windowRrPct", 0)
+        sample.put("blowerPct", 35.0)
+        sample.put("remoteStartState", "off")
+        sample.put("cabinTempEstC", ObdElmDecode.round1(21.0 + Math.sin(t / 15.0)))
+        sample.put("acState", "on")
+        sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))
+        sample.put("clusterEvRangeKm", ObdElmDecode.round1(demoSoc(t) / 100.0 * 66.0))
+        sample.put("fuelRangeKm", 471.0)
+        // ~7.3 of the Volt's 8.9 gal: the tank that 471 km of gas range implies at ~40 mpg.
+        sample.put("fuelLevelPct", 82.0)
+        if (charging) {
+            sample.put("chargeCurrentLimitA", 12.0)
+            sample.put("chargerAcVoltage", 240)
+            sample.put("chargerAcCurrentA", 14.0)
+            sample.put("chargerAcPowerKw", 3.4)
+        }
+    }
+
+    private fun putDemoPosition(
+        sample: JSONObject,
+        routeT: Double,
+        speedKph: Long,
+    ) {
+        // The position clock only runs while moving, so the marker stays put
+        // once the car parks instead of orbiting an unplugged charger.
+        sample.put("latitude", demoLatitude(routeT))
+        sample.put("longitude", demoLongitude(routeT))
+        sample.put("accuracyM", 6.0)
+        sample.put("gpsSpeedMps", ObdElmDecode.round1(speedKph / 3.6))
+        sample.put(
+            "bearingDeg",
+            ObdElmDecode.round1(
+                (Math.toDegrees(routeT * ROUTE_RAD_PER_SECOND) % BEARING_TURN + BEARING_TURN) % BEARING_TURN,
+            ),
+        )
     }
 }
 

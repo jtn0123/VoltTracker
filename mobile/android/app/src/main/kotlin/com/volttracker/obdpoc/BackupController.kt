@@ -133,25 +133,7 @@ class BackupController<A>(
         passphrase: String?,
         dashboardPreferencesJson: String?,
     ) {
-        if (activity.isLoggingActive()) {
-            activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
-            backupShareInFlight.set(false)
-            return
-        }
-        val databaseLease = DatabaseOperationLease.tryAcquire(OPERATION_BACKUP)
-        if (databaseLease == null) {
-            activity.publishStatus("blocked", activity.getString(R.string.status_database_operation_running), true)
-            backupShareInFlight.set(false)
-            return
-        }
-        // Close the check/acquire race: a session that started just before the lease won must finish
-        // being observed here; starts after acquisition are rejected by Activity + Service.
-        if (activity.isLoggingActive()) {
-            databaseLease.close()
-            activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
-            backupShareInFlight.set(false)
-            return
-        }
+        val databaseLease = acquireBackupLease() ?: return
         activity.publishStatus(
             "ready",
             activity.getString(
@@ -209,115 +191,150 @@ class BackupController<A>(
                     } finally {
                         databaseLease.close()
                     }
-                activity.runOnUiThread {
-                    if (disposed.get()) {
-                        DataBackup.deleteIfExists(backup)
-                        backupShareInFlight.set(false)
-                        return@runOnUiThread
-                    }
-                    if (backup == null) {
-                        // DataBackup logs the throwing phase internally; tie that to this UI failure.
-                        Log.e(
-                            AppPrefs.LOG_TAG,
-                            "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
-                        )
-                        progressPresenter.show(
-                            activity.getString(R.string.progress_backup_failed_title),
-                            activity.getString(R.string.status_backup_create_failed),
-                            busy = false,
-                            tone = "blocked",
-                            operation = OPERATION_BACKUP,
-                        )
-                        activity.publishStatus(
-                            "blocked",
-                            activity.getString(R.string.status_backup_create_failed),
-                            true,
-                        )
-                        backupShareInFlight.set(false)
-                        return@runOnUiThread
-                    }
-                    val warningSuffix =
-                        if (integrityWarning) {
-                            " " + activity.getString(R.string.status_backup_integrity_warning)
-                        } else {
-                            ""
-                        }
-                    try {
-                        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", backup)
-                        val share = Intent(Intent.ACTION_SEND)
-                        share.type = "application/octet-stream"
-                        share.putExtra(Intent.EXTRA_STREAM, uri)
-                        share.putExtra(Intent.EXTRA_SUBJECT, backup.name)
-                        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        activity.startActivity(
-                            Intent.createChooser(share, activity.getString(R.string.chooser_backup)),
-                        )
-                        val completedAtMs = System.currentTimeMillis()
-                        val tripCount =
-                            try {
-                                JSONObject(activity.getStorageSummaryJson()).optInt("tripSegmentCount", 0)
-                            } catch (_: RuntimeException) {
-                                0
-                            }
-                        activity.getSharedPreferences(AppPrefs.FILE, Activity.MODE_PRIVATE).edit {
-                            putLong(PREF_LAST_BACKUP_AT_MS, completedAtMs)
-                            putInt(PREF_LAST_BACKUP_TRIPS, tripCount)
-                        }
-                        activity.publishDashboardPayload(
-                            "setBackupReceipt",
-                            JSONObject()
-                                .put("lastBackupAtMs", completedAtMs)
-                                .put("lastBackupTrips", tripCount)
-                                .toString(),
-                        )
-                        progressPresenter.show(
-                            activity.getString(R.string.progress_backup_ready_title),
-                            activity.getString(
-                                if (encrypted) {
-                                    R.string.progress_encrypted_backup_ready_detail
-                                } else {
-                                    R.string.progress_backup_ready_detail
-                                },
-                            ) + warningSuffix,
-                            busy = false,
-                            tone = "ok",
-                            phase = activity.getString(R.string.progress_phase_ready_to_share),
-                            percent = 100,
-                            operation = OPERATION_BACKUP,
-                        )
-                        activity.publishStatus(
-                            "ready",
-                            activity.getString(
-                                if (encrypted) R.string.status_encrypted_backup_ready else R.string.status_backup_ready,
-                            ) + warningSuffix,
-                            false,
-                        )
-                        backupShareInFlight.set(false)
-                    } catch (ex: RuntimeException) {
-                        Log.e(AppPrefs.LOG_TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
-                        progressPresenter.show(
-                            activity.getString(R.string.progress_backup_failed_title),
-                            activity.getString(R.string.status_share_sheet_failed),
-                            busy = false,
-                            tone = "blocked",
-                            operation = OPERATION_BACKUP,
-                        )
-                        activity.publishStatus("blocked", activity.getString(R.string.status_share_sheet_failed), true)
-                        backupShareInFlight.set(false)
-                    }
-                }
+                activity.runOnUiThread { onBackupBuilt(backup, encrypted, integrityWarning) }
             }
         if (!started) {
             databaseLease.close()
-            progressPresenter.show(
-                activity.getString(R.string.progress_backup_failed_title),
-                activity.getString(R.string.status_backup_worker_failed),
-                busy = false,
-                tone = "blocked",
-                operation = OPERATION_BACKUP,
-            )
+            showBackupFailed(activity.getString(R.string.status_backup_worker_failed))
             backupShareInFlight.set(false)
         }
+    }
+
+    /**
+     * Takes the database lease for a backup, or publishes why it can't and clears the in-flight
+     * flag. Logging is checked again after acquisition to close the check/acquire race: a session
+     * that started just before the lease won must finish being observed here; starts after
+     * acquisition are rejected by Activity + Service.
+     */
+    private fun acquireBackupLease(): DatabaseOperationLease.Token? {
+        if (activity.isLoggingActive()) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
+            backupShareInFlight.set(false)
+            return null
+        }
+        val databaseLease = DatabaseOperationLease.tryAcquire(OPERATION_BACKUP)
+        if (databaseLease == null) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_database_operation_running), true)
+            backupShareInFlight.set(false)
+            return null
+        }
+        if (activity.isLoggingActive()) {
+            databaseLease.close()
+            activity.publishStatus("blocked", activity.getString(R.string.status_stop_logging_before_backup), true)
+            backupShareInFlight.set(false)
+            return null
+        }
+        return databaseLease
+    }
+
+    /** UI-thread completion of a backup build: share it, or report why it failed. */
+    private fun onBackupBuilt(
+        backup: File?,
+        encrypted: Boolean,
+        integrityWarning: Boolean,
+    ) {
+        if (disposed.get()) {
+            DataBackup.deleteIfExists(backup)
+            backupShareInFlight.set(false)
+            return
+        }
+        if (backup == null) {
+            // DataBackup logs the throwing phase internally; tie that to this UI failure.
+            Log.e(
+                AppPrefs.LOG_TAG,
+                "backup build failed (encrypted=$encrypted, integrityWarning=$integrityWarning)",
+            )
+            showBackupFailed(activity.getString(R.string.status_backup_create_failed))
+            activity.publishStatus(
+                "blocked",
+                activity.getString(R.string.status_backup_create_failed),
+                true,
+            )
+            backupShareInFlight.set(false)
+            return
+        }
+        val warningSuffix =
+            if (integrityWarning) {
+                " " + activity.getString(R.string.status_backup_integrity_warning)
+            } else {
+                ""
+            }
+        try {
+            shareBackup(backup)
+            recordBackupReceipt()
+            progressPresenter.show(
+                activity.getString(R.string.progress_backup_ready_title),
+                activity.getString(
+                    if (encrypted) {
+                        R.string.progress_encrypted_backup_ready_detail
+                    } else {
+                        R.string.progress_backup_ready_detail
+                    },
+                ) + warningSuffix,
+                busy = false,
+                tone = "ok",
+                phase = activity.getString(R.string.progress_phase_ready_to_share),
+                percent = 100,
+                operation = OPERATION_BACKUP,
+            )
+            activity.publishStatus(
+                "ready",
+                activity.getString(
+                    if (encrypted) R.string.status_encrypted_backup_ready else R.string.status_backup_ready,
+                ) + warningSuffix,
+                false,
+            )
+            backupShareInFlight.set(false)
+        } catch (ex: RuntimeException) {
+            Log.e(AppPrefs.LOG_TAG, "backup share sheet failed (encrypted=$encrypted)", ex)
+            showBackupFailed(activity.getString(R.string.status_share_sheet_failed))
+            activity.publishStatus("blocked", activity.getString(R.string.status_share_sheet_failed), true)
+            backupShareInFlight.set(false)
+        }
+    }
+
+    private fun shareBackup(backup: File) {
+        val uri = FileProvider.getUriForFile(activity, activity.packageName + ".fileprovider", backup)
+        val share = Intent(Intent.ACTION_SEND)
+        share.type = "application/octet-stream"
+        share.putExtra(Intent.EXTRA_STREAM, uri)
+        share.putExtra(Intent.EXTRA_SUBJECT, backup.name)
+        share.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        activity.startActivity(
+            Intent.createChooser(share, activity.getString(R.string.chooser_backup)),
+        )
+    }
+
+    /** Persists and publishes the "last backup" receipt shown on the dashboard. */
+    private fun recordBackupReceipt() {
+        val completedAtMs = System.currentTimeMillis()
+        val tripCount =
+            try {
+                JSONObject(activity.getStorageSummaryJson()).optInt("tripSegmentCount", 0)
+            } catch (_: RuntimeException) {
+                0
+            }
+        activity.getSharedPreferences(AppPrefs.FILE, Activity.MODE_PRIVATE).edit {
+            putLong(PREF_LAST_BACKUP_AT_MS, completedAtMs)
+            putInt(PREF_LAST_BACKUP_TRIPS, tripCount)
+        }
+        activity.publishDashboardPayload(
+            "setBackupReceipt",
+            JSONObject()
+                .put("lastBackupAtMs", completedAtMs)
+                .put("lastBackupTrips", tripCount)
+                .toString(),
+        )
+    }
+
+    private fun showBackupFailed(detail: String) {
+        progressPresenter.show(
+            activity.getString(R.string.progress_backup_failed_title),
+            detail,
+            busy = false,
+            tone = "blocked",
+            operation = OPERATION_BACKUP,
+        )
     }
 
     fun onRestorePickerResult(

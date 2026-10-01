@@ -377,126 +377,18 @@ class DataBackup(
         if (uri == null) {
             return RestoreStageOutcome(null, RestoreStageStatus.NO_FILE)
         }
-        val temp = File(context.cacheDir, "restore-${UUID.randomUUID()}.backup")
-        var total = 0L
         val expectedBytes = contentLength(context, uri)
-        try {
-            progress?.onProgress(
-                ProgressSnapshot(
-                    "Reading backup",
-                    "Copying the selected file into Volt Tracker.",
-                    bytesDone = 0L,
-                    bytesTotal = expectedBytes,
-                ),
-            )
-            context.contentResolver.openInputStream(uri).use { input ->
-                FileOutputStream(temp).use { out ->
-                    if (input == null) {
-                        temp.deleteOrLog()
-                        return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED)
-                    }
-                    val buffer = ByteArray(IO_BUFFER_BYTES)
-                    while (true) {
-                        val read = input.read(buffer)
-                        if (read <= 0) {
-                            break
-                        }
-                        total += read.toLong()
-                        if (total > MAX_RESTORE_BYTES) {
-                            temp.deleteOrLog()
-                            progress?.onProgress(
-                                ProgressSnapshot(
-                                    "Reading backup",
-                                    "The selected file is larger than Volt Tracker can import on this phone.",
-                                    bytesDone = total,
-                                    bytesTotal = expectedBytes,
-                                ),
-                            )
-                            return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE, bytesRead = total)
-                        }
-                        out.write(buffer, 0, read)
-                        progress?.onProgress(
-                            ProgressSnapshot(
-                                "Reading backup",
-                                "Copying the selected file into Volt Tracker.",
-                                bytesDone = total,
-                                bytesTotal = expectedBytes,
-                            ),
-                        )
-                    }
-                }
+        val copied = copyRestoreSource(uri, expectedBytes, progress)
+        val temp = copied.file ?: return copied
+        val total = copied.bytesRead
+        val encrypted = isEncryptedBackup(temp)
+        val candidate =
+            if (encrypted) {
+                val decrypted = decryptStagedBackup(temp, passphrase, total, progress)
+                decrypted.file ?: return decrypted
+            } else {
+                temp
             }
-        } catch (ex: Exception) {
-            if (ex is IOException || ex is RuntimeException) {
-                temp.deleteOrLog()
-                return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED, bytesRead = total)
-            }
-            throw ex
-        }
-
-        var candidate = temp
-        var encrypted = false
-        if (isEncryptedBackup(temp)) {
-            encrypted = true
-            // Any non-empty passphrase may unlock a restore; MIN_PASSPHRASE_LENGTH only gates
-            // creating new backups, and older backups can carry shorter passphrases.
-            if (passphrase.isNullOrBlank()) {
-                temp.deleteOrLog()
-                return RestoreStageOutcome(
-                    null,
-                    RestoreStageStatus.MISSING_PASSPHRASE,
-                    encrypted = true,
-                    bytesRead = total,
-                )
-            }
-            candidate = File(context.cacheDir, "restore-${UUID.randomUUID()}.db")
-            try {
-                progress?.onProgress(
-                    ProgressSnapshot(
-                        "Decrypting backup",
-                        "Unlocking the encrypted backup with your passphrase.",
-                        bytesDone = 0L,
-                        bytesTotal = temp.length(),
-                    ),
-                )
-                val passphraseForm =
-                    BackupCrypto.decryptFileWithTrimFallback(
-                        temp,
-                        candidate,
-                        requireNotNull(passphrase),
-                        MAX_RESTORE_BYTES,
-                    )
-                // Log WHICH form unlocked the backup (never the passphrase itself). The trimmed
-                // fallback firing means this is a pre-trim-fix backup keyed on the trimmed
-                // passphrase — worth a warning so field logs explain "works here, fails there".
-                if (passphraseForm == BackupCrypto.PassphraseForm.LEGACY_TRIMMED) {
-                    Log.w(TAG, "Encrypted restore unlocked with the legacy TRIMMED passphrase form")
-                } else {
-                    Log.i(TAG, "Encrypted restore unlocked with the passphrase exactly as typed")
-                }
-                progress?.onProgress(
-                    ProgressSnapshot(
-                        "Decrypting backup",
-                        "Encrypted backup unlocked.",
-                        bytesDone = temp.length(),
-                        bytesTotal = temp.length(),
-                    ),
-                )
-            } catch (ex: Exception) {
-                if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
-                    temp.deleteOrLog()
-                    candidate.deleteOrLog()
-                    return RestoreStageOutcome(
-                        null,
-                        RestoreStageStatus.DECRYPT_FAILED,
-                        encrypted = true,
-                        bytesRead = total,
-                    )
-                }
-                throw ex
-            }
-            temp.deleteOrLog()
-        }
 
         progress?.onProgress(
             ProgressSnapshot(
@@ -505,38 +397,12 @@ class DataBackup(
             ),
         )
         val migration = BackupMigrator.migrateToCurrentVersion(context, candidate)
-        when (migration) {
-            BackupMigrator.Result.TOO_NEW -> {
-                candidate.deleteOrLog()
-                return RestoreStageOutcome(null, RestoreStageStatus.TOO_NEW, encrypted = encrypted, bytesRead = total)
-            }
-            BackupMigrator.Result.NOT_A_BACKUP -> {
-                candidate.deleteOrLog()
-                return RestoreStageOutcome(
-                    null,
-                    RestoreStageStatus.NOT_A_BACKUP,
-                    encrypted = encrypted,
-                    bytesRead = total,
-                )
-            }
-            BackupMigrator.Result.FAILED -> {
-                candidate.deleteOrLog()
-                return RestoreStageOutcome(
-                    null,
-                    RestoreStageStatus.MIGRATION_FAILED,
-                    encrypted = encrypted,
-                    bytesRead = total,
-                )
-            }
-            BackupMigrator.Result.ALREADY_CURRENT,
-            BackupMigrator.Result.MIGRATED,
-            -> {
-                // Continue validation below.
-            }
-        }
-        if (!isVoltTrackerBackup(candidate)) {
+        val rejection =
+            migrationRejection(migration)
+                ?: if (isVoltTrackerBackup(candidate)) null else RestoreStageStatus.NOT_A_BACKUP
+        if (rejection != null) {
             candidate.deleteOrLog()
-            return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
+            return RestoreStageOutcome(null, rejection, encrypted = encrypted, bytesRead = total)
         }
         progress?.onProgress(
             ProgressSnapshot(
@@ -562,8 +428,156 @@ class DataBackup(
         )
     }
 
+    /** Copies the picked document into cache; on success the outcome carries the staged file. */
+    private fun copyRestoreSource(
+        uri: Uri,
+        expectedBytes: Long,
+        progress: ProgressListener?,
+    ): RestoreStageOutcome {
+        val temp = File(context.cacheDir, "restore-${UUID.randomUUID()}.backup")
+        val copy = CappedRestoreCopy(expectedBytes, progress)
+        try {
+            progress?.onProgress(copy.snapshot(COPYING_DETAIL))
+            val withinLimit =
+                context.contentResolver.openInputStream(uri).use { input ->
+                    if (input == null) {
+                        temp.deleteOrLog()
+                        return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED)
+                    }
+                    FileOutputStream(temp).use { out -> copy.copy(input, out) }
+                }
+            if (!withinLimit) {
+                temp.deleteOrLog()
+                progress?.onProgress(
+                    copy.snapshot("The selected file is larger than Volt Tracker can import on this phone."),
+                )
+                return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE, bytesRead = copy.total)
+            }
+        } catch (ex: Exception) {
+            if (ex is IOException || ex is RuntimeException) {
+                temp.deleteOrLog()
+                return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED, bytesRead = copy.total)
+            }
+            throw ex
+        }
+        return RestoreStageOutcome(temp, RestoreStageStatus.OK, bytesRead = copy.total)
+    }
+
+    /**
+     * Decrypts a staged encrypted backup into a fresh cache file. The encrypted temp file is always
+     * removed; on success the outcome carries the decrypted database.
+     */
+    private fun decryptStagedBackup(
+        temp: File,
+        passphrase: String?,
+        total: Long,
+        progress: ProgressListener?,
+    ): RestoreStageOutcome {
+        // Any non-empty passphrase may unlock a restore; MIN_PASSPHRASE_LENGTH only gates
+        // creating new backups, and older backups can carry shorter passphrases.
+        if (passphrase.isNullOrBlank()) {
+            temp.deleteOrLog()
+            return RestoreStageOutcome(
+                null,
+                RestoreStageStatus.MISSING_PASSPHRASE,
+                encrypted = true,
+                bytesRead = total,
+            )
+        }
+        val candidate = File(context.cacheDir, "restore-${UUID.randomUUID()}.db")
+        try {
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Decrypting backup",
+                    "Unlocking the encrypted backup with your passphrase.",
+                    bytesDone = 0L,
+                    bytesTotal = temp.length(),
+                ),
+            )
+            val passphraseForm =
+                BackupCrypto.decryptFileWithTrimFallback(
+                    temp,
+                    candidate,
+                    passphrase,
+                    MAX_RESTORE_BYTES,
+                )
+            // Log WHICH form unlocked the backup (never the passphrase itself). The trimmed
+            // fallback firing means this is a pre-trim-fix backup keyed on the trimmed
+            // passphrase — worth a warning so field logs explain "works here, fails there".
+            if (passphraseForm == BackupCrypto.PassphraseForm.LEGACY_TRIMMED) {
+                Log.w(TAG, "Encrypted restore unlocked with the legacy TRIMMED passphrase form")
+            } else {
+                Log.i(TAG, "Encrypted restore unlocked with the passphrase exactly as typed")
+            }
+            progress?.onProgress(
+                ProgressSnapshot(
+                    "Decrypting backup",
+                    "Encrypted backup unlocked.",
+                    bytesDone = temp.length(),
+                    bytesTotal = temp.length(),
+                ),
+            )
+        } catch (ex: Exception) {
+            if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
+                temp.deleteOrLog()
+                candidate.deleteOrLog()
+                return RestoreStageOutcome(
+                    null,
+                    RestoreStageStatus.DECRYPT_FAILED,
+                    encrypted = true,
+                    bytesRead = total,
+                )
+            }
+            throw ex
+        }
+        temp.deleteOrLog()
+        return RestoreStageOutcome(candidate, RestoreStageStatus.OK, encrypted = true, bytesRead = total)
+    }
+
+    private fun migrationRejection(migration: BackupMigrator.Result): RestoreStageStatus? =
+        when (migration) {
+            BackupMigrator.Result.TOO_NEW -> RestoreStageStatus.TOO_NEW
+            BackupMigrator.Result.NOT_A_BACKUP -> RestoreStageStatus.NOT_A_BACKUP
+            BackupMigrator.Result.FAILED -> RestoreStageStatus.MIGRATION_FAILED
+            BackupMigrator.Result.ALREADY_CURRENT,
+            BackupMigrator.Result.MIGRATED,
+            -> null
+        }
+
+    /** Stream copy capped at [MAX_RESTORE_BYTES]; [total] stays accurate even if a read throws. */
+    private class CappedRestoreCopy(
+        private val expectedBytes: Long,
+        private val progress: ProgressListener?,
+    ) {
+        var total = 0L
+            private set
+
+        fun snapshot(detail: String) =
+            ProgressSnapshot("Reading backup", detail, bytesDone = total, bytesTotal = expectedBytes)
+
+        /** Returns false (without writing the overflowing chunk) once the source passes the cap. */
+        fun copy(
+            input: InputStream,
+            out: OutputStream,
+        ): Boolean {
+            val buffer = ByteArray(IO_BUFFER_BYTES)
+            var read = input.read(buffer)
+            while (read > 0) {
+                total += read.toLong()
+                if (total > MAX_RESTORE_BYTES) {
+                    return false
+                }
+                out.write(buffer, 0, read)
+                progress?.onProgress(snapshot(COPYING_DETAIL))
+                read = input.read(buffer)
+            }
+            return true
+        }
+    }
+
     companion object {
         private const val TAG = "DataBackup"
+        private const val COPYING_DETAIL = "Copying the selected file into Volt Tracker."
 
         // Restore is staged to a temp file and opened as a SQLite DB (BackupMigrator) — it is
         // disk-bound, not loaded into memory — so this ceiling only guards against a runaway file

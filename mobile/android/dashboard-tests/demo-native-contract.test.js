@@ -204,7 +204,7 @@ describe('demo ↔ native shape contract', () => {
   });
 
   // The two demo telemetry emitters — browser (actions-demo.ts runBrowserDemoStream)
-  // and native (DemoPollingLoop.kt run()) — are documented mirrors. The Battery-tab
+  // and native (DemoPollingLoop.kt run() + its put* helpers) — are documented mirrors. The Battery-tab
   // cell card needs six cell-balance fields; both streams must emit them, or the
   // card is blank on whichever demo dropped them (native was missing all six).
   it('both demo streams emit the Battery-tab cell-balance fields (mirror parity)', () => {
@@ -214,7 +214,12 @@ describe('demo ↔ native shape contract', () => {
     ];
 
     const loopSource = readNativeSource('DemoPollingLoop.kt');
-    const nativeKeys = putKeys(methodBody(loopSource, ['fun run()']));
+    // run() delegates groups of fields to put* helpers; the stream is their union.
+    const nativeKeys = putKeys(
+      ['fun run()', 'fun putPowertrainSignals(', 'fun putBodySignals(', 'fun putDemoPosition(']
+        .map((signature) => methodBody(loopSource, signature))
+        .join('\n'),
+    );
     const nativeMissing = CELL_FIELDS.filter((k) => !nativeKeys.has(k));
     expect(nativeMissing, 'DemoPollingLoop.kt dropped cell-balance fields the browser demo emits').toEqual([]);
 

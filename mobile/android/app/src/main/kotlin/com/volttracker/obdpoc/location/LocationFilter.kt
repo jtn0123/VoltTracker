@@ -67,33 +67,45 @@ class LocationFilter(
         if (accuracyM > 0f && accuracyM > maxAccuracyM) {
             return reject(Decision.REJECT_ACCURACY)
         }
-        if (fixTimeMs > 0L) {
-            // A provider timestamp from the future poisons the next dt calculation; an older fix
-            // arriving after an accepted one makes dt <= 0 and used to bypass the jump gate.
-            if (fixTimeMs > nowMs || nowMs - fixTimeMs > staleFixMs.coerceAtLeast(0L)) {
-                return reject(Decision.REJECT_STALE)
-            }
-            if (hasLast && fixTimeMs <= lastFixMs) {
-                return reject(Decision.REJECT_STALE)
-            }
+        if (isStaleFix(fixTimeMs, nowMs)) {
+            return reject(Decision.REJECT_STALE)
         }
         val network = isNetworkProvider(provider)
         if (network && lastGpsAcceptMs > 0L && nowMs - lastGpsAcceptMs <= networkSuppressMs) {
             return reject(Decision.REJECT_PROVIDER)
         }
         val resync = rejectStreak >= maxConsecutiveRejects
-        if (hasLast && !resync) {
-            val effectiveFix = if (fixTimeMs > 0L) fixTimeMs else nowMs
-            val dtSeconds = (effectiveFix - lastFixMs) / 1000.0
-            if (dtSeconds > 0) {
-                val mps = haversineMeters(lastLat, lastLng, lat, lng) / dtSeconds
-                if (mps > maxImpliedSpeedMps) {
-                    return reject(Decision.REJECT_JUMP)
-                }
-            }
+        if (hasLast && !resync && impliesJump(lat, lng, if (fixTimeMs > 0L) fixTimeMs else nowMs)) {
+            return reject(Decision.REJECT_JUMP)
         }
         accept(lat, lng, if (fixTimeMs > 0L) fixTimeMs else nowMs, network, nowMs)
         return Decision.ACCEPT
+    }
+
+    /**
+     * A provider timestamp from the future poisons the next dt calculation; an older fix arriving
+     * after an accepted one makes dt <= 0 and used to bypass the jump gate. Untimed fixes pass.
+     */
+    private fun isStaleFix(
+        fixTimeMs: Long,
+        nowMs: Long,
+    ): Boolean {
+        if (fixTimeMs <= 0L) {
+            return false
+        }
+        return fixTimeMs > nowMs ||
+            nowMs - fixTimeMs > staleFixMs.coerceAtLeast(0L) ||
+            (hasLast && fixTimeMs <= lastFixMs)
+    }
+
+    /** True when reaching ([lat], [lng]) from the last accepted fix needs an impossible speed. */
+    private fun impliesJump(
+        lat: Double,
+        lng: Double,
+        effectiveFixMs: Long,
+    ): Boolean {
+        val dtSeconds = (effectiveFixMs - lastFixMs) / 1000.0
+        return dtSeconds > 0 && haversineMeters(lastLat, lastLng, lat, lng) / dtSeconds > maxImpliedSpeedMps
     }
 
     private fun accept(

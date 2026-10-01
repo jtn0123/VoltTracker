@@ -59,6 +59,24 @@ const LEG_EV = 0;
 const LEG_GAS = 1;
 const LEG_BRAKING = 2;
 
+// Which leg of the cycle this second falls in (DemoPollingLoop.legAt).
+function demoLegAt(phase: number, charging: boolean): number {
+  if (charging) return 4;
+  if (phase >= DEMO_PARK_AT_S) return 3; // parked
+  if (phase >= DEMO_BRAKE_AT_S) return LEG_BRAKING;
+  if (phase >= DEMO_GAS_AT_S) return LEG_GAS;
+  return LEG_EV;
+}
+
+// EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
+// mostly drive with regen dips, peaking ~25 kW. Braking regenerates hard.
+function demoPowerKw(leg: number, driveT: number, phase: number): number {
+  if (leg === LEG_EV) return 6 + 14 * Math.sin(driveT / 3.1) + 5 * Math.sin(driveT / 1.3);
+  if (leg === LEG_GAS) return 30 + Math.sin(driveT / 3) * 9;
+  if (leg === LEG_BRAKING) return -(8 + (10 * (DEMO_PARK_AT_S - phase)) / DEMO_BRAKE_S);
+  return 0;
+}
+
 // Speed follows the v2 design prototype's demo series (34 + 9sin + 4sin mph,
 // converted to kph) — a gentle 25–47 mph urban band.
 function demoCruiseKph(driveT: number): number {
@@ -97,9 +115,7 @@ export function runBrowserDemoStream(
     t += 1;
     const phase = t % DEMO_CYCLE_S;
     const charging = phase >= DEMO_DRIVE_PHASE_S;
-    // Which leg of the cycle this second falls in (DemoPollingLoop.legAt).
-    const leg = charging ? 4 : phase >= DEMO_PARK_AT_S ? 3
-      : phase >= DEMO_BRAKE_AT_S ? LEG_BRAKING : phase >= DEMO_GAS_AT_S ? LEG_GAS : LEG_EV;
+    const leg = demoLegAt(phase, charging);
     const moving = leg <= LEG_BRAKING;
     // The sine clock runs for the whole trip; the route clock only while moving,
     // so the map marker stays put once the car parks.
@@ -107,12 +123,7 @@ export function runBrowserDemoStream(
     if (moving) routeT += 1;
     const gas = leg === LEG_GAS;
     VD.setState({ mode: gas ? "gas" : "ev" });
-    // EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
-    // mostly drive with regen dips, peaking ~25 kW. Braking regenerates hard.
-    const powerKw = leg === LEG_EV ? 6 + 14 * Math.sin(driveT / 3.1) + 5 * Math.sin(driveT / 1.3)
-      : gas ? 30 + Math.sin(driveT / 3) * 9
-      : leg === LEG_BRAKING ? -(8 + (10 * (DEMO_PARK_AT_S - phase)) / DEMO_BRAKE_S)
-      : 0;
+    const powerKw = demoPowerKw(leg, driveT, phase);
     // 0 while driving (not omitted: samples merge into state.telemetry, so a
     // stale charger reading from the last charge window would otherwise pin
     // the live charge card open forever).
