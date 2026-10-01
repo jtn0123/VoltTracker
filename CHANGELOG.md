@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.57.0 (2026-10-01)
+
+### ✳️ New
+
+- Read tire pressure from the body computer
+  ([#121](https://github.com/jtn0123/VoltTracker/pull/121),
+  [`43ac431`](https://github.com/jtn0123/VoltTracker/commit/43ac431e441c58953dfe2ce4c98c1519bb4ca047))
+
+
 ## v0.56.1 (2026-10-01)
 
 ### 🔺 Fix
