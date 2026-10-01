@@ -15,7 +15,7 @@ mkdir -p "$ANDROID_SDK_ROOT/cmdline-tools"
 
 if [ ! -x "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
   tmp_zip="$(mktemp --suffix=.zip)"
-  curl -fsSL -o "$tmp_zip" \
+  curl -fsSL --proto "=https" --tlsv1.2 -o "$tmp_zip" \
     "https://dl.google.com/android/repository/commandlinetools-linux-${CMDLINE_TOOLS_VERSION}_latest.zip"
   rm -rf "$ANDROID_SDK_ROOT/cmdline-tools/latest"
   unzip -q "$tmp_zip" -d "$ANDROID_SDK_ROOT/cmdline-tools"

@@ -2,7 +2,8 @@
 // the built-in demo mode running, for the Compose-rewrite before/after review loop.
 // Run with SHOT_DIR=/path/to/output npx playwright test before-screens.spec.js
 // (optionally PW_EXECUTABLE_PATH=/path/to/chromium to reuse a preinstalled browser).
-const { test } = require('@playwright/test');
+const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
 const { openDashboard, loadDemoScenario, setView } = require('./harness');
 
 if (process.env.PW_EXECUTABLE_PATH) {
@@ -34,4 +35,5 @@ test('capture before screenshots of all views', async ({ page }) => {
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `${OUT}/before-${view}.png`, fullPage: true });
   }
+  expect(fs.existsSync(`${OUT}/before-drive.png`)).toBe(true);
 });

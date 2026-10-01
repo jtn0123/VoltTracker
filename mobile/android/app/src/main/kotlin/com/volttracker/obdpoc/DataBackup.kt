@@ -5,6 +5,7 @@ import android.net.Uri
 import android.util.Log
 import com.volttracker.obdpoc.data.BackupMigrator
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
@@ -391,7 +392,7 @@ class DataBackup(
             context.contentResolver.openInputStream(uri).use { input ->
                 FileOutputStream(temp).use { out ->
                     if (input == null) {
-                        temp.delete()
+                        temp.deleteOrLog()
                         return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED)
                     }
                     val buffer = ByteArray(IO_BUFFER_BYTES)
@@ -402,7 +403,7 @@ class DataBackup(
                         }
                         total += read.toLong()
                         if (total > MAX_RESTORE_BYTES) {
-                            temp.delete()
+                            temp.deleteOrLog()
                             progress?.onProgress(
                                 ProgressSnapshot(
                                     "Reading backup",
@@ -427,7 +428,7 @@ class DataBackup(
             }
         } catch (ex: Exception) {
             if (ex is IOException || ex is RuntimeException) {
-                temp.delete()
+                temp.deleteOrLog()
                 return RestoreStageOutcome(null, RestoreStageStatus.OPEN_FAILED, bytesRead = total)
             }
             throw ex
@@ -440,7 +441,7 @@ class DataBackup(
             // Any non-empty passphrase may unlock a restore; MIN_PASSPHRASE_LENGTH only gates
             // creating new backups, and older backups can carry shorter passphrases.
             if (passphrase.isNullOrBlank()) {
-                temp.delete()
+                temp.deleteOrLog()
                 return RestoreStageOutcome(
                     null,
                     RestoreStageStatus.MISSING_PASSPHRASE,
@@ -483,8 +484,8 @@ class DataBackup(
                 )
             } catch (ex: Exception) {
                 if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
-                    temp.delete()
-                    candidate.delete()
+                    temp.deleteOrLog()
+                    candidate.deleteOrLog()
                     return RestoreStageOutcome(
                         null,
                         RestoreStageStatus.DECRYPT_FAILED,
@@ -494,7 +495,7 @@ class DataBackup(
                 }
                 throw ex
             }
-            temp.delete()
+            temp.deleteOrLog()
         }
 
         progress?.onProgress(
@@ -506,11 +507,11 @@ class DataBackup(
         val migration = BackupMigrator.migrateToCurrentVersion(context, candidate)
         when (migration) {
             BackupMigrator.Result.TOO_NEW -> {
-                candidate.delete()
+                candidate.deleteOrLog()
                 return RestoreStageOutcome(null, RestoreStageStatus.TOO_NEW, encrypted = encrypted, bytesRead = total)
             }
             BackupMigrator.Result.NOT_A_BACKUP -> {
-                candidate.delete()
+                candidate.deleteOrLog()
                 return RestoreStageOutcome(
                     null,
                     RestoreStageStatus.NOT_A_BACKUP,
@@ -519,7 +520,7 @@ class DataBackup(
                 )
             }
             BackupMigrator.Result.FAILED -> {
-                candidate.delete()
+                candidate.deleteOrLog()
                 return RestoreStageOutcome(
                     null,
                     RestoreStageStatus.MIGRATION_FAILED,
@@ -534,7 +535,7 @@ class DataBackup(
             }
         }
         if (!isVoltTrackerBackup(candidate)) {
-            candidate.delete()
+            candidate.deleteOrLog()
             return RestoreStageOutcome(null, RestoreStageStatus.NOT_A_BACKUP, encrypted = encrypted, bytesRead = total)
         }
         progress?.onProgress(
@@ -638,7 +639,7 @@ class DataBackup(
                     (name.endsWith(".db") || name.endsWith(".vtdb")) &&
                     file.lastModified() < cutoff
                 ) {
-                    file.delete()
+                    file.deleteOrLog()
                 }
             }
         }
@@ -648,7 +649,7 @@ class DataBackup(
             for (file in existing) {
                 val name = file.name
                 if (name.startsWith("restore-") && (name.endsWith(".backup") || name.endsWith(".db"))) {
-                    file.delete()
+                    file.deleteOrLog()
                 }
             }
         }
@@ -658,7 +659,7 @@ class DataBackup(
             for (file in existing) {
                 val name = file.name
                 if (name.startsWith("volttracker-debug-summary-") && name.endsWith(".json")) {
-                    file.delete()
+                    file.deleteOrLog()
                 }
             }
         }
@@ -787,7 +788,7 @@ class DataBackup(
         @JvmStatic
         fun deleteIfExists(file: File?) {
             if (file != null && file.exists()) {
-                file.delete()
+                file.deleteOrLog()
             }
         }
     }

@@ -195,7 +195,7 @@ def run_check(text: str, ceilings: dict, require: list[str], output_dir: Path | 
     summary = render_summary(spans_list, violations, missing_required)
     print(summary)
     if output_dir is not None:
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)  # NOSONAR: developer CLI; the caller chooses this path
         (output_dir / "summary.md").write_text(summary, encoding="utf-8")
         payload = {"sessions": spans_list, "violations": violations, "missingRequired": missing_required}
         (output_dir / "result.json").write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
@@ -271,7 +271,7 @@ def main() -> int:
         return self_test()
     if not args.logcat:
         raise SystemExit("--logcat is required (use - for stdin)")
-    text = sys.stdin.read() if args.logcat == "-" else Path(args.logcat).read_text(encoding="utf-8", errors="replace")
+    text = sys.stdin.read() if args.logcat == "-" else Path(args.logcat).read_text(encoding="utf-8", errors="replace")  # NOSONAR: developer CLI; the caller chooses this path
     ceilings = {key: getattr(args, key) for key in DEFAULT_CEILINGS}
     return run_check(text, ceilings, args.require, Path(args.output_dir))
 

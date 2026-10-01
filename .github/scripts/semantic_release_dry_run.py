@@ -153,7 +153,7 @@ def main() -> int:
     output = "\n".join(lines) + "\n"
     print(output)
     if args.summary_file:
-        with open(args.summary_file, "a", encoding="utf-8") as handle:
+        with open(args.summary_file, "a", encoding="utf-8") as handle:  # NOSONAR: developer CLI; the caller chooses this path
             handle.write(output)
     return 0
 

@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.VoltTrackerDb
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.After
@@ -219,7 +220,7 @@ class TripExportTest {
         private fun wipe(dir: File) {
             if (dir.isDirectory) {
                 dir.listFiles()?.forEach { it.delete() }
-                dir.delete()
+                dir.deleteOrLog()
             }
         }
     }
