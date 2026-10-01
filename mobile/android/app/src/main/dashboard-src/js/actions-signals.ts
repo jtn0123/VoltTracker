@@ -53,7 +53,7 @@ function downloadTextFile(text: string, filename: string) {
     document.body.append(link);
     link.click();
     return true;
-  } catch (_err) {
+  } catch {
     return false;
   } finally {
     link?.remove();

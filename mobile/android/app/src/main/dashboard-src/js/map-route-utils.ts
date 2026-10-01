@@ -53,7 +53,7 @@ export function liveSampleTimeMs(sample: VoltTelemetry) {
 // fire as intended. Use this instead of bare Number() on any field that can be
 // null/absent.
 export function numOrNaN(value: unknown): number {
-  return value == null || value === "" ? NaN : Number(value);
+  return value == null || value === "" ? Number.NaN : Number(value);
 }
 
 export function mapEffColor(eff: unknown) {

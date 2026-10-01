@@ -38,7 +38,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       console.warn(
         "prefs: localStorage is unavailable; preferences will not persist across app restarts this session."
       );
-    } catch (_err) {
+    } catch {
       /* console is best-effort on legacy WebViews */
     }
     try {
@@ -58,7 +58,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
           if (toast.textContent === notice) toast.hidden = true;
         }, 6000);
       }, 0);
-    } catch (_err) {
+    } catch {
       /* notice is best-effort; prefs still work in-memory */
     }
   }
@@ -66,7 +66,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
   function store(): Storage | null {
     try {
       if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
-    } catch (_err) {
+    } catch {
       // Some WebView configurations throw on localStorage access (e.g. storage
       // disabled). Fall back to in-memory so callers still get their defaults.
     }
@@ -81,7 +81,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     if (s) {
       try {
         return s.getItem(PREFIX + key);
-      } catch (_err) {
+      } catch {
         noteStorageFallback();
         /* fall through to memory */
       }
@@ -95,7 +95,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       try {
         s.setItem(PREFIX + key, serialized);
         return;
-      } catch (_err) {
+      } catch {
         noteStorageFallback();
         /* fall through to memory */
       }
@@ -109,7 +109,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       list.slice().forEach((cb) => {
         try {
           cb(value);
-        } catch (_err) {
+        } catch {
           /* a bad subscriber must not break the others */
         }
       });
@@ -123,7 +123,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     if (raw == null) return fallback;
     try {
       return JSON.parse(raw) as T;
-    } catch (_err) {
+    } catch {
       return fallback;
     }
   }
@@ -132,7 +132,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     let serialized: string;
     try {
       serialized = JSON.stringify(value);
-    } catch (_err) {
+    } catch {
       return;
     }
     rawSet(key, serialized);
@@ -167,7 +167,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     try {
       const bridge = window.VoltTrackerAndroid;
       if (bridge && typeof bridge.setSharedPref === "function") bridge.setSharedPref(key, serialized);
-    } catch (_err) {
+    } catch {
       /* bridge absent in browser preview / older host — the local value still applies */
     }
   }
@@ -178,7 +178,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       if (!bridge || typeof bridge.getSharedPrefs !== "function") return null;
       const parsed: unknown = JSON.parse(bridge.getSharedPrefs());
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
-    } catch (_err) {
+    } catch {
       return null;
     }
   }
@@ -211,7 +211,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
   // Subscribe to changes for one key, or "*" for all changes. Returns an
   // unsubscribe function.
   function subscribe(key: string, callback: (value: unknown) => void): () => void {
-    const list = keyListeners[key] || (keyListeners[key] = []);
+    const list = (keyListeners[key] ||= []);
     list.push(callback);
     return () => {
       const current = keyListeners[key];
@@ -253,7 +253,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       if (raw == null) return;
       try {
         preferences[key] = JSON.parse(raw);
-      } catch (_err) {
+      } catch {
         /* a corrupt preference is omitted instead of poisoning the backup */
       }
     });
@@ -265,7 +265,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     if (typeof parsed === "string") {
       try {
         parsed = JSON.parse(parsed);
-      } catch (_err) {
+      } catch {
         return false;
       }
     }
@@ -397,7 +397,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
   function applyUnitsAttr(): void {
     try {
       if (document.body) document.body.dataset.units = unitSystem();
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
   }
@@ -465,7 +465,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       try {
         if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
         if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
-      } catch (_err) {
+      } catch {
         /* the next telemetry/storage render will fill the newly visible tools */
       }
     }
@@ -492,7 +492,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       document.querySelectorAll<HTMLElement>("[data-live-telemetry]").forEach((node) => {
         node.setAttribute("aria-live", quietTelemetry() ? "off" : "polite");
       });
-    } catch (_err) {
+    } catch {
       /* no-op: a missing documentElement (non-DOM host) leaves defaults intact */
     }
   }
@@ -750,7 +750,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     const safe = (fn: unknown) => {
       try {
         if (typeof fn === "function") (fn as () => void)();
-      } catch (_err) {
+      } catch {
         /* a single renderer failing must not block the others */
       }
     };
@@ -765,7 +765,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     try {
       const view = VD.state && VD.state.view;
       if (view && typeof VD.setView === "function") VD.setView(view);
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
     window.scrollTo({ top: scrollY, behavior: "auto" });
@@ -795,12 +795,12 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       if (bridge && typeof bridge.setChargeTargetSoc === "function") {
         bridge.setChargeTargetSoc(clamped);
       }
-    } catch (_err) {
+    } catch {
       /* bridge absent in browser preview / older host — pref still drives the ETA */
     }
     try {
       if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
     syncChargeTargetPresets();
@@ -896,7 +896,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       // making those values impossible to type. Persisting (set) and the bridge
       // push (onCommit) also wait for the field to settle (commitEdit) so
       // intermediate keystrokes never stick.
-      const parsed = parseFloat(input.value);
+      const parsed = Number.parseFloat(input.value);
       if (Number.isFinite(parsed) && parsed > max) {
         input.value = String(max);
         showClampHint();
@@ -907,7 +907,7 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
     // push it across the bridge. Only the settled value is stored/pushed, so
     // typing "120" no longer commits "12" then "120" mid-entry.
     const commitEdit = () => {
-      const parsed = parseFloat(input.value);
+      const parsed = Number.parseFloat(input.value);
       const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
       const reflect = Number.isFinite(parsed)
         ? clamped !== parsed
@@ -918,10 +918,10 @@ import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types"
       if (Number.isFinite(parsed) && clamped !== parsed) showClampHint();
       else clearHint();
       set(prefKey, clamped);
-      if (options && options.onCommit) {
+      if (options?.onCommit) {
         try {
           options.onCommit(clamped);
-        } catch (_err) {
+        } catch {
           /* a bridge hiccup must not break the input */
         }
       }

@@ -253,5 +253,3 @@ import { VD } from "./vd-registry";
     startDtcScanProgress
   });
 })();
-
-export {};

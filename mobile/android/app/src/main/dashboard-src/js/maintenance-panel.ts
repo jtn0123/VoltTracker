@@ -221,7 +221,7 @@ import { miles, milesToKm } from "./unit-types";
     let parsed: VoltMaintenanceEntry[] | VoltNativeError;
     try {
       parsed = VD.parsePayload<VoltMaintenanceEntry[] | VoltNativeError>(bridge.getMaintenanceLog(), []);
-    } catch (_err) {
+    } catch {
       VD.setState({ maintenanceLog: [] });
       renderMaintenanceList();
       VD.reportNativeReadError(
@@ -376,7 +376,7 @@ import { miles, milesToKm } from "./unit-types";
         try {
           const message = err instanceof Error && err.message ? err.message : String(err || "");
           bridge.logClientError("maintenance_add_failed", message ? `${detail} ${message}` : detail);
-        } catch (_ignored) {}
+        } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       }
       return;
     }
@@ -413,5 +413,3 @@ import { miles, milesToKm } from "./unit-types";
   // signature memo makes this a no-op when loadMaintenanceLog just rendered.
   renderMaintenanceList();
 })();
-
-export {};

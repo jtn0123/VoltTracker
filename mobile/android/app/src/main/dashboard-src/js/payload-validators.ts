@@ -138,7 +138,7 @@ function warnPayloadIssueOnce(key: string, message: string) {
     if (typeof console !== "undefined" && console && console.warn) {
       console.warn(message);
     }
-  } catch (ignored) {}
+  } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
   // Also land in the rolling app log via the native bridge (token-bucketed on the
   // Kotlin side), so field reports carry shape drift without an adb session.
   try {
@@ -146,7 +146,7 @@ function warnPayloadIssueOnce(key: string, message: string) {
     if (bridge && typeof bridge.logClientError === "function") {
       bridge.logClientError("payload.shape", message);
     }
-  } catch (ignored) {}
+  } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
 }
 
 function matchesExpectedType(value: unknown, expected: string) {
@@ -198,7 +198,7 @@ function validatePayload(kind: string, payload: unknown) {
         );
       }
     });
-  } catch (ignored) {
+  } catch {
     // Warn-only by contract: validation must never break a render pass.
   }
 }

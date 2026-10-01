@@ -142,7 +142,7 @@ import { VD } from "./vd-registry";
   // Number(null) is 0 (finite!), which would silently coerce missing samples
   // into real readings. Treat null/undefined as NaN BEFORE coercion so a
   // null-eff regen segment stays "missing" instead of becoming 0.0.
-  const scrubNum = (v: unknown) => (v == null ? NaN : Number(v));
+  const scrubNum = (v: unknown) => (v == null ? Number.NaN : Number(v));
 
   function scrubberAttachMap(map: ScrubMapHandle) {
     scrubMap = map;
@@ -181,11 +181,11 @@ import { VD } from "./vd-registry";
         c += 1;
       }
     }
-    return c ? s / c : NaN;
+    return c ? s / c : Number.NaN;
   }
 
   function buildScrubData(route: ScrubRoute): ScrubPoint[] {
-    const pts = ((route && route.points) || []).filter(isValidScrubPoint) as ScrubRoutePoint[];
+    const pts = ((route?.points) || []).filter(isValidScrubPoint) as ScrubRoutePoint[];
     const n = pts.length;
     if (n < 2) return [];
     const d = pts.map((p) => ({
@@ -214,7 +214,7 @@ import { VD } from "./vd-registry";
         haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
     }
     const lastPoint = d[n - 1];
-    const total = (lastPoint && lastPoint.distM) || 1;
+    const total = (lastPoint?.distM) || 1;
 
     // speed — prefer the GPS-reported value, derive from geometry if missing
     const rawMph = pts.map((p, i) => {
@@ -296,8 +296,8 @@ import { VD } from "./vd-registry";
 
   function isValidScrubPoint(point: unknown): point is ScrubRoutePoint {
     const candidate = point as ScrubRoutePoint | null;
-    const lat = Number(candidate && candidate.lat);
-    const lng = Number(candidate && candidate.lng);
+    const lat = Number(candidate?.lat);
+    const lng = Number(candidate?.lng);
     // Reject exact (0,0) "null island" GPS sentinel — see isValidRoutePoint in map-route-utils.
     if (lat === 0 && lng === 0) return false;
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
@@ -506,7 +506,7 @@ import { VD } from "./vd-registry";
   }
 
   function scrubChip(k: string, v: string | number, opts: ScrubChipOptions = {}) {
-    opts = opts || {};
+    opts ||= {};
     const chip = document.createElement("div");
     if (opts.dim) chip.className = "scrub-dim";
     const label = document.createElement("span");
@@ -595,7 +595,7 @@ import { VD } from "./vd-registry";
 
   function renderScrubCharts() {
     const chart = el("scrubChart");
-    if (!chart || !chart.clientWidth) return;
+    if (!chart?.clientWidth) return;
     syncScrubPalette();
     paintScrub(chart, drawScrubCombo(chart.clientWidth));
     const stack = el("scrubStack");
@@ -835,14 +835,12 @@ import { VD } from "./vd-registry";
     );
 
     if (scrubMap) {
-      if (!scrubTrail) {
-        scrubTrail = L.polyline([], {
-          color: "#e8f7ff",
-          weight: 2.5,
-          opacity: 0.95,
-          interactive: false
-        }) as ScrubTrailHandle;
-      }
+      scrubTrail ||= L.polyline([], {
+        color: "#e8f7ff",
+        weight: 2.5,
+        opacity: 0.95,
+        interactive: false
+      }) as ScrubTrailHandle;
       scrubTrail.addTo(scrubMap);
       if (!scrubMarker) {
         const firstPoint = scrubData[0];
@@ -957,7 +955,7 @@ import { VD } from "./vd-registry";
       // Readout cells glow while playing so the live numbers read as active.
       el("scrubReadout")?.classList.add("is-playing");
       const lastPoint = scrubData[scrubData.length - 1];
-      const totalMi = (lastPoint && lastPoint.distMi) || 22;
+      const totalMi = (lastPoint?.distMi) || 22;
       // ~1 second per mile, with a sane 8-22s floor/ceiling so very short or
       // very long drives still play in a watchable window.
       const dur = Math.min(22000, Math.max(8000, totalMi * 1000));
@@ -1031,5 +1029,3 @@ import { VD } from "./vd-registry";
     scrubberAttachMap,
     scrubAtLatLng
   });
-
-export {};

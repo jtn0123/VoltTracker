@@ -103,19 +103,19 @@ type SignalActions = {
       try {
         reportClientError("bridge.call_failed", message);
         reported = true;
-      } catch (_ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
     }
     if (!reported && bridge && typeof bridge.logClientError === "function") {
       try {
         bridge.logClientError("bridge.call_failed", message);
-      } catch (_ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
     }
     if (statusDetail) VD.setStatus({ state: "blocked", detail: statusDetail });
   }
 
   function bridgeFunction(method: string): ((...args: unknown[]) => unknown) | null {
     const target = bridge as unknown as Record<string, unknown> | null;
-    const fn = target && target[method];
+    const fn = target?.[method];
     return typeof fn === "function" ? fn.bind(bridge) as (...args: unknown[]) => unknown : null;
   }
 
@@ -232,60 +232,54 @@ type SignalActions = {
 
   function ensureStorageActions(): Promise<StorageActions> {
     if (storageActions) return Promise.resolve(storageActions);
-    if (!storageActionsPromise) {
-      storageActionsPromise = loadActionScript(
-        "js/actions-storage.js",
-        "actions-storage",
-        () => {
-          const factory = actionModulesRegistry().createStorageActions;
-          if (typeof factory !== "function") return null;
-          storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
-          return storageActions;
-        }
-      ).catch((err) => {
-        storageActionsPromise = null;
-        throw err;
-      });
-    }
+    storageActionsPromise ||= loadActionScript(
+      "js/actions-storage.js",
+      "actions-storage",
+      () => {
+        const factory = actionModulesRegistry().createStorageActions;
+        if (typeof factory !== "function") return null;
+        storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
+        return storageActions;
+      }
+    ).catch((err) => {
+      storageActionsPromise = null;
+      throw err;
+    });
     return storageActionsPromise;
   }
 
   function ensureSignalActions(): Promise<SignalActions> {
     if (signalActions) return Promise.resolve(signalActions);
-    if (!signalActionsPromise) {
-      signalActionsPromise = loadActionScript(
-        "js/actions-signals.js",
-        "actions-signals",
-        () => {
-          const factory = actionModulesRegistry().createSignalActions;
-          if (typeof factory !== "function") return null;
-          signalActions = factory({ VD, bridge }) as SignalActions;
-          return signalActions;
-        }
-      ).catch((err) => {
-        signalActionsPromise = null;
-        throw err;
-      });
-    }
+    signalActionsPromise ||= loadActionScript(
+      "js/actions-signals.js",
+      "actions-signals",
+      () => {
+        const factory = actionModulesRegistry().createSignalActions;
+        if (typeof factory !== "function") return null;
+        signalActions = factory({ VD, bridge }) as SignalActions;
+        return signalActions;
+      }
+    ).catch((err) => {
+      signalActionsPromise = null;
+      throw err;
+    });
     return signalActionsPromise;
   }
 
   function ensureBrowserDemoStream(): Promise<(dashboard: VoltDashboard, dashboardState: DashboardState) => void> {
     const loaded = actionModulesRegistry().runBrowserDemoStream;
     if (typeof loaded === "function") return Promise.resolve(loaded);
-    if (!demoActionsPromise) {
-      demoActionsPromise = loadActionScript(
-        "js/actions-demo.js",
-        "actions-demo",
-        () => {
-          const run = actionModulesRegistry().runBrowserDemoStream;
-          return typeof run === "function" ? run : null;
-        }
-      ).catch((err) => {
-        demoActionsPromise = null;
-        throw err;
-      });
-    }
+    demoActionsPromise ||= loadActionScript(
+      "js/actions-demo.js",
+      "actions-demo",
+      () => {
+        const run = actionModulesRegistry().runBrowserDemoStream;
+        return typeof run === "function" ? run : null;
+      }
+    ).catch((err) => {
+      demoActionsPromise = null;
+      throw err;
+    });
     return demoActionsPromise;
   }
 
@@ -399,7 +393,7 @@ type SignalActions = {
   // out WHY no adapter is selectable and either fix it (fire the Android
   // permission prompt) or tell the user the exact next step.
   function explainMissingAdapter(scan: boolean, allowPermissionResume: boolean) {
-    const permissions = (state.appState && state.appState.permissions) || {};
+    const permissions = (state.appState?.permissions) || {};
     if (bridge && permissions.bluetoothPermission === false && typeof bridge.requestPermissions === "function") {
       if (allowPermissionResume) pendingPermissionConnect = { scan, requestedAtMs: Date.now() };
       if (!callBridgeAction("requestPermissions", [], "Could not request Bluetooth permissions.")) {
@@ -596,7 +590,7 @@ type SignalActions = {
   }
 
   function smartConnect(button?: BusyButton | null) {
-    const permissions = (state.appState && state.appState.permissions) || {};
+    const permissions = (state.appState?.permissions) || {};
     if (bridge && permissions.bluetoothPermission === false) {
       explainMissingAdapter(false, true);
       return;
@@ -816,7 +810,7 @@ type SignalActions = {
 
   function confirmClearDtc(button?: BusyButton | null) {
     const ack = el("dtcClearAckBox") as HTMLInputElement | null;
-    if (!ack || !ack.checked) {
+    if (!ack?.checked) {
       VD.setStatus({ state: "blocked", detail: "Tick the acknowledgement first." });
       return;
     }
@@ -852,13 +846,11 @@ type SignalActions = {
     // Snapshot the real DTC cache once so Clear can put it back — Preview must not
     // destroy real cached codes on a real device. Skip re-snapshotting while a
     // preview is already active, or it would capture the sample data instead.
-    if (!dtcPreviewSnapshot) {
-      dtcPreviewSnapshot = {
-        latestDiagnosticCodes: storage.latestDiagnosticCodes,
-        diagnosticCodeCount: storage.diagnosticCodeCount,
-        diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
-      };
-    }
+    dtcPreviewSnapshot ||= {
+      latestDiagnosticCodes: storage.latestDiagnosticCodes,
+      diagnosticCodeCount: storage.diagnosticCodeCount,
+      diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
+    };
     // Replace the storage bag rather than mutating the aliased one: an alias write would
     // slip past the setState() seam even though `state` itself is readonly (Readonly<> is
     // shallow). Whole-object replacement is already how storage-status.ts and map.ts
@@ -1425,7 +1417,7 @@ type SignalActions = {
   function currentDemoScenario() {
     const picker = el("demoScenarioPicker");
     const active = picker && picker.querySelector<HTMLElement>("[data-scenario].is-active");
-    return String(state.demoScenario || (active && active.dataset.scenario) || "typical");
+    return String(state.demoScenario || (active?.dataset.scenario) || "typical");
   }
 
   function refreshNativeDataAfterDemo() {
@@ -2042,5 +2034,3 @@ type SignalActions = {
   };
   schedulePostStartupIdle(loadDeferredPanels);
   setTimeout(() => scrollAppToTop(), 200);
-
-export {};

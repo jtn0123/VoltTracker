@@ -199,7 +199,7 @@ import { VD } from "./vd-registry";
         // already a one-liner into adb logcat.
         bridge.logClientError("troubleshooter.open", String(reason));
       }
-    } catch (ignored) {}
+    } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
   }
 
   function close() {
@@ -367,7 +367,7 @@ import { VD } from "./vd-registry";
       if (bridge && typeof bridge.forceStopPackage === "function") {
         try {
           bridge.forceStopPackage(pkg);
-        } catch (ignored) {
+        } catch {
           // Match the eslint pattern for intentionally-unused catch bindings; we revert the
           // button so the user can retry rather than silently leaving "Sent" stuck.
           button.disabled = false;
@@ -446,7 +446,7 @@ import { VD } from "./vd-registry";
           const parsed = JSON.parse(raw || "[]");
           recent = Array.isArray(parsed) ? parsed : [];
         }
-      } catch (ignored) {
+      } catch {
         recent = [];
       }
     }
@@ -458,7 +458,7 @@ import { VD } from "./vd-registry";
     const failedSessionOutcomes = ["failed", "aborted"];
     const allFailed = recent
       .slice(0, 3)
-      .every((s) => failedSessionOutcomes.includes(String((s && s.outcome) || "").toLowerCase()));
+      .every((s) => failedSessionOutcomes.includes(String((s?.outcome) || "").toLowerCase()));
     if (!allFailed) {
       renderForRetry();
       return;
@@ -491,9 +491,9 @@ import { VD } from "./vd-registry";
     const cancelNode = el("errorBannerCancelRetry");
     const helpNode = el("errorBannerHelp");
     if (!titleNode) return;
-    const stateName = String((status && status.state) || "").toLowerCase();
-    const detail = String((status && status.detail) || "").toLowerCase();
-    const failureClass = String((status && status.failureClass) || "").toUpperCase();
+    const stateName = String((status?.state) || "").toLowerCase();
+    const detail = String((status?.detail) || "").toLowerCase();
+    const failureClass = String((status?.failureClass) || "").toUpperCase();
     const bannerNode = el("errorBanner");
     const bannerVisible = Boolean(bannerNode && !bannerNode.hidden);
     // A dismissed / never-shown banner starts a clean slate; a real recovery
@@ -511,7 +511,7 @@ import { VD } from "./vd-registry";
     const isFailure =
       stateName === "failed" ||
       stateName === "blocked" ||
-      Boolean(status && status.blocked);
+      Boolean(status?.blocked);
     const isRetrying = stateName === "connecting" && detail.indexOf("retry") !== -1;
 
     const copy = FAILURE_CLASS_COPY[failureClass];
@@ -673,7 +673,7 @@ import { VD } from "./vd-registry";
         try {
           const parsed = VD.parsePayload<VoltStatus>(payload, {});
           noteStatus(parsed);
-        } catch (ignored) {
+        } catch {
           // Observer must never break the underlying setStatus call.
         }
         return result;
@@ -698,7 +698,7 @@ import { VD } from "./vd-registry";
         try {
           const parsed = VD.parsePayload(payload, {});
           noteTelemetry(parsed);
-        } catch (ignored) {}
+        } catch { /* Observer only: a payload it can't read must not break the real handler. */ }
         return result;
       };
     if (typeof VD.updateTelemetry === "function") {
@@ -737,5 +737,3 @@ import { VD } from "./vd-registry";
     STALE_FIELDS,
     STALE_THRESHOLD_MS
   };
-
-export {};

@@ -266,5 +266,3 @@ import { VD } from "./vd-registry";
   // First paint through the pass (the renderer is new, so its signature forces a run).
   VD.requestRender();
 })();
-
-export {};

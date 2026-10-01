@@ -116,7 +116,7 @@ function tripRow(base: DemoTripRow | null, route: MapRoute, bounds: TripSplitSpa
 }
 
 function energyOf(trip: DemoTripRow | null): number | null {
-  const value = trip ? Number(trip.energyKwh) : NaN;
+  const value = trip ? Number(trip.energyKwh) : Number.NaN;
   return Number.isFinite(value) ? value : null;
 }
 
