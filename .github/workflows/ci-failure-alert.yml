@@ -1,0 +1,61 @@
+name: CI failure alert
+
+# Scheduled lanes and main-branch pipelines fail without anything showing up on a PR:
+# release.yml stopped parsing after #122 and cut no release for days, and the weekly
+# emulator smoke was red every Monday from 2026-08-10. This keeps one open issue
+# (label `ci-failure`) per failing watched workflow on main, comments on repeat failures,
+# and closes it when that workflow next passes. Logic: .github/scripts/ci_failure_alert.sh.
+#
+# Limit: workflow_run matches by workflow `name:`, and a workflow file that no longer
+# parses runs under its path instead of its name, so it never fires this. The
+# workflow-lint job in android.yml catches that class on the PR instead.
+
+on:
+  workflow_run:
+    workflows:
+      - Android unit tests
+      - Android emulator smoke
+      - Attach tagged Android APKs
+      - CodeQL
+      - Dependency snapshot
+      - Privacy scan
+      - Release
+      - Secret Scan
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  # One updater per watched workflow so two quick failures don't open twin issues.
+  group: ci-failure-alert-${{ github.event.workflow_run.name }}
+  cancel-in-progress: false
+
+jobs:
+  alert:
+    # cancelled runs were superseded by a newer run of the same ref; skipped/neutral
+    # runs say nothing about health.
+    if: >-
+      github.repository == 'jtn0123/VoltTracker'
+      && contains(fromJSON('["success", "failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          WORKFLOW: ${{ github.event.workflow_run.name }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          EVENT: ${{ github.event.workflow_run.event }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: bash .github/scripts/ci_failure_alert.sh

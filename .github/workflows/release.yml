@@ -91,7 +91,7 @@ jobs:
         run: ./scripts/release-preflight.sh
 
       - name: Install python-semantic-release
-        run: pip install --only-binary :all: python-semantic-release==9.21.1
+        run: pip install --only-binary ":all:" python-semantic-release==9.21.1
 
       - name: Semantic Release — version & publish
         env:
