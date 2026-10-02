@@ -18,6 +18,13 @@ updates:
     directory: "/mobile/android/dashboard-tests"
     schedule:
       interval: "weekly"
+    # @vitest/coverage-istanbul pins vitest exactly, so either bump alone
+    # fails `npm ci` (#125/#126, landed together as #130).
+    groups:
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
     # The @typescript/native alias supplies TS 7 for type-checking. Keep TS 6
     # under its normal name for typescript-eslint's compiler API dependency.
     ignore:
