@@ -1,0 +1,66 @@
+package com.volttracker.obdpoc.ui.theme
+
+import android.content.SharedPreferences
+import androidx.core.content.edit
+
+/**
+ * Persists the Compose display choices in the shared app prefs file (`ui_` namespace): the
+ * Settings → Appearance theme (mode, dark style, OLED accent), the Drive view (Focus / Detailed)
+ * and the energy-flow card. Missing keys read as the defaults — System / OLED Black / Cyan — so
+ * installs from before the dark-style and accent choices land on OLED Cyan (dark) and Latte (light).
+ */
+object AppearancePrefs {
+    const val PREFIX = "ui_"
+    const val KEY_APPEARANCE = "${PREFIX}appearance"
+    const val KEY_DARK_STYLE = "${PREFIX}dark_style"
+    const val KEY_ACCENT = "${PREFIX}accent"
+    const val KEY_DRIVE_DETAILED = "${PREFIX}drive_detailed"
+    const val KEY_DRIVE_ENERGY_FLOW = "${PREFIX}drive_energy_flow"
+
+    fun read(prefs: SharedPreferences): AppearanceMode = AppearanceMode.fromKey(prefs.getString(KEY_APPEARANCE, null))
+
+    fun write(
+        prefs: SharedPreferences,
+        mode: AppearanceMode,
+    ) {
+        prefs.edit { putString(KEY_APPEARANCE, mode.key) }
+    }
+
+    fun readDarkStyle(prefs: SharedPreferences): DarkStyle = DarkStyle.fromKey(prefs.getString(KEY_DARK_STYLE, null))
+
+    fun writeDarkStyle(
+        prefs: SharedPreferences,
+        style: DarkStyle,
+    ) {
+        prefs.edit { putString(KEY_DARK_STYLE, style.key) }
+    }
+
+    fun readAccent(prefs: SharedPreferences): OledAccent = OledAccent.fromKey(prefs.getString(KEY_ACCENT, null))
+
+    fun writeAccent(
+        prefs: SharedPreferences,
+        accent: OledAccent,
+    ) {
+        prefs.edit { putString(KEY_ACCENT, accent.key) }
+    }
+
+    /** Drive opens on Focus (the Arc ring) unless the user switched to Detailed. */
+    fun readDriveDetailed(prefs: SharedPreferences): Boolean = prefs.getBoolean(KEY_DRIVE_DETAILED, false)
+
+    fun writeDriveDetailed(
+        prefs: SharedPreferences,
+        detailed: Boolean,
+    ) {
+        prefs.edit { putBoolean(KEY_DRIVE_DETAILED, detailed) }
+    }
+
+    /** The optional energy-flow card on Drive's Focus view; off (Direction A as drawn) until turned on. */
+    fun readDriveEnergyFlow(prefs: SharedPreferences): Boolean = prefs.getBoolean(KEY_DRIVE_ENERGY_FLOW, false)
+
+    fun writeDriveEnergyFlow(
+        prefs: SharedPreferences,
+        show: Boolean,
+    ) {
+        prefs.edit { putBoolean(KEY_DRIVE_ENERGY_FLOW, show) }
+    }
+}

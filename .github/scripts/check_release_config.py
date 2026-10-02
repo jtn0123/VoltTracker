@@ -82,7 +82,7 @@ def validate_release_workflow(workflow_text: str) -> None:
         "python .github/scripts/check_release_config.py",
         "Install release dashboard e2e deps",
         "Install release Playwright Chromium + OS deps",
-        "npx playwright install --with-deps chromium",
+        "./node_modules/.bin/playwright install --with-deps chromium",
         "semantic-release version",
         "semantic-release publish",
         "Warn loudly if no release was cut",

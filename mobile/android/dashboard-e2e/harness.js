@@ -10,8 +10,11 @@
 // Runs in the browser context. Keep it self-contained (no closures over Node values): an all-stub
 // VoltTrackerAndroid so the dashboard boots in "connected app" mode without a device. Tests
 // override state directly after load, so these only need to be present + return well-formed JSON.
-function installMockBridge() {
+// `opts.mapTileConfig` (see FAKE_MAP_TILE_CONFIG) is what getMapTileConfig answers; by default it
+// is `{}` — the no-key build, which draws no basemap tile layer at all.
+function installMockBridge(opts) {
   const json = (value) => () => value;
+  const tileConfig = opts && opts.mapTileConfig ? JSON.stringify(opts.mapTileConfig) : '{}';
   const noop = () => undefined;
   window.VoltTrackerAndroid = {
     listDevices: json('[]'),
@@ -23,6 +26,7 @@ function installMockBridge() {
     getInsights: json('{}'),
     getTripRoute: json('{}'),
     getRecentSessions: json('[]'),
+    getMapTileConfig: json(tileConfig),
     forceStopPackage: () => false,
     dashboardReady: noop,
     requestPermissions: noop,
@@ -93,7 +97,10 @@ async function waitForInitialDeferredWork(page) {
 /**
  * Loads the dashboard and waits until window.VoltDashboard is wired up.
  * @param {import('@playwright/test').Page} page
- * @param {{ fixedTime?: string | number | Date, withBridge?: boolean }} [opts] when fixedTime is set, Date.now()/new
+ * @param {{ fixedTime?: string | number | Date, withBridge?: boolean, mapTileConfig?: object }} [opts]
+ *   mapTileConfig: the bridge's getMapTileConfig answer (e.g. FAKE_MAP_TILE_CONFIG); omitted = no key,
+ *   no tile layer. With one set, every tiles.stadiamaps.com request is aborted unless the test
+ *   routes it itself. When fixedTime is set, Date.now()/new
  *   Date() return that instant for the whole page — required for visual snapshots so relative
  *   timestamps ("2 days ago") don't drift the baseline. Must be set before the page renders.
  */
@@ -104,7 +111,12 @@ async function openDashboard(page, opts = {}) {
     await page.clock.setFixedTime(new Date(opts.fixedTime));
   }
   if (opts.withBridge !== false) {
-    await page.addInitScript(installMockBridge);
+    if (opts.mapTileConfig) {
+      // Fake-key tile configs must never reach Stadia: abort every tile request at the context
+      // level. A test's own page.route() for the same URLs takes precedence over this guard.
+      await page.context().route('https://tiles.stadiamaps.com/**', (route) => route.abort());
+    }
+    await page.addInitScript(installMockBridge, { mapTileConfig: opts.mapTileConfig || null });
   }
   await page.goto('/index.html');
   try {
@@ -166,4 +178,12 @@ async function setView(page, view) {
   }, view);
 }
 
-module.exports = { ensureMapModule, loadDemoScenario, openDashboard, setView };
+// A tile config as a keyed build would answer it, with a fake key. Only ever use it with the
+// requests intercepted (openDashboard does that) — never let it reach the real tile server.
+const FAKE_MAP_TILE_CONFIG = {
+  dark: 'https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}@2x.png?api_key=e2e-fake-key',
+  light: 'https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}@2x.png?api_key=e2e-fake-key',
+  attribution: '© Stadia Maps © OpenMapTiles © OpenStreetMap',
+};
+
+module.exports = { FAKE_MAP_TILE_CONFIG, ensureMapModule, loadDemoScenario, openDashboard, setView };

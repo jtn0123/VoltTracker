@@ -2,12 +2,13 @@ package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.update.UpdateManager
 
 /** What tapping Connect must do, given the remembered adapter and radio state. */
 internal enum class ConnectAction {
-    /** No adapter has ever been remembered — pairing lives in the classic dashboard. */
-    OPEN_CLASSIC,
+    /** No adapter has ever been remembered — open Settings → Adapter to pick one. */
+    CHOOSE_ADAPTER,
     REQUEST_PERMISSION,
     REQUEST_ENABLE_BLUETOOTH,
     CONNECT,
@@ -25,7 +26,7 @@ internal object ComposeDashboardSupport {
         bluetoothEnabled: Boolean,
     ): ConnectAction =
         when {
-            lastAddress.isNullOrBlank() -> ConnectAction.OPEN_CLASSIC
+            lastAddress.isNullOrBlank() -> ConnectAction.CHOOSE_ADAPTER
             !hasConnectPermission -> ConnectAction.REQUEST_PERMISSION
             !bluetoothEnabled -> ConnectAction.REQUEST_ENABLE_BLUETOOTH
             else -> ConnectAction.CONNECT
@@ -55,6 +56,20 @@ internal object ComposeDashboardSupport {
         }
     }
 
+    /**
+     * The detail of a status broadcast that reports a refused start (`blocked: true`), or null for
+     * every other broadcast. Lets the host surface the reason instead of failing silently.
+     */
+    fun blockedStatusDetail(
+        action: String?,
+        json: String?,
+    ): String? {
+        if (action != ObdService.BROADCAST_STATUS) return null
+        val payload = MainActivityUtils.parseJson(json)
+        if (!payload.optBoolean("blocked", false)) return null
+        return payload.optString("detail", "").trim().ifEmpty { null }
+    }
+
     /** The Settings update section's rendering of one check outcome. */
     data class UpdateBanner(
         val statusLabel: String,
@@ -67,7 +82,7 @@ internal object ComposeDashboardSupport {
         when (result) {
             is UpdateManager.CheckResult.UpdateAvailable ->
                 UpdateBanner("${result.build.tag} is available", result.build.tag)
-            UpdateManager.CheckResult.UpToDate -> UpdateBanner("Up to date", null)
+            UpdateManager.CheckResult.UpToDate -> UpdateBanner(SettingsUiState.UP_TO_DATE, null)
             UpdateManager.CheckResult.NoBuilds -> UpdateBanner("No published builds yet", null)
             is UpdateManager.CheckResult.Unknown ->
                 UpdateBanner("Newest is ${result.build.tag} — can't compare to this build", null)
@@ -84,6 +99,7 @@ internal object ComposeDashboardSupport {
         val status = LiveDashboardSnapshot.latestStatus()
         if (status.length() > 0) store.onStatus(status)
         val history = LiveDashboardSnapshot.telemetryHistorySince(0L)
-        if (history.isNotEmpty()) store.onTelemetryBackfill(history)
+        // A finished session's tail must not repaint the charts under a "Not connected" status.
+        if (history.isNotEmpty() && store.state.value.drive.connected) store.onTelemetryBackfill(history)
     }
 }

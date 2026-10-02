@@ -228,6 +228,64 @@ class LiveSampleReaderParseFailureTest {
         assertTrue("sample should carry the current-cycle raw transcript", sample.has("raw"))
     }
 
+    @Test
+    fun gmOdometerIsPreferredOverTheStandardPid() {
+        scriptRichResponses()
+        // 0x003C4B00 / 64 = 61,740 km; 01A6 (123,456.7 km) is only the fallback.
+        engine.responses["2234B2"] = "62 34 B2 00 3C 4B 00\r>"
+
+        var sample = JSONObject()
+        repeat(241) {
+            sample = reader.read(context)
+        }
+
+        assertEquals(61740.0, sample.optDouble("odometerKm"), 0.01)
+        assertEquals(38363.4, sample.optDouble("odometerMiles"), 0.1)
+    }
+
+    @Test
+    fun prndlCodeIsDecodedToAGearLetterAndTheRawCodeIsKept() {
+        engine.responses["222889"] = "62 28 89 08\r>"
+        val park = readUntil("prndlRaw")
+        assertEquals("P", park.optString("prndlState"))
+        assertEquals(8, park.optInt("prndlRaw"))
+        assertEquals("confirmed", park.optString("gearConfidence"))
+    }
+
+    @Test
+    fun anUnseenPrndlCodeShowsAsUnknownNotAGuess() {
+        engine.responses["222889"] = "62 28 89 0D\r>"
+        val sample = readUntil("prndlRaw")
+        assertEquals("?", sample.optString("prndlState"))
+        assertEquals(13, sample.optInt("prndlRaw"))
+        assertEquals("unknown", sample.optString("gearConfidence"))
+    }
+
+    @Test
+    fun bodyComputerTiresFillTheTireKeysAndLogTheFirstRead() {
+        // 4 kPa per count, FL, RL, FR, RR; the RR sensor reports "no reading".
+        engine.responses[BcmTirePressure.COMMAND] = "62 C9 01 3C 3D 3E FE\r>"
+        val sample = readUntil("tirePressureFlKpa")
+        assertEquals(240, sample.getInt("tirePressureFlKpa"))
+        assertEquals(244, sample.getInt("tirePressureRlKpa"))
+        assertEquals(248, sample.getInt("tirePressureFrKpa"))
+        assertFalse(sample.has("tirePressureRrKpa"))
+        assertTrue(sample.has("tirePressureStaleMs"))
+        reader.read(context)
+        assertEquals(1, countAllEvents("bcm_tires_first_read"))
+        assertEquals("4.0", eventPayloads("bcm_tires_first_read").single().optString("kpaPerCount"))
+        assertEquals(0, countEvents("pid_parse_failed", BcmTirePressure.COMMAND))
+    }
+
+    /** Reads until the slow-cadence PID feeding [key] has been polled (bounded). */
+    private fun readUntil(key: String): JSONObject {
+        repeat(400) {
+            val sample = reader.read(context)
+            if (sample.has(key)) return sample
+        }
+        throw AssertionError("$key never appeared")
+    }
+
     /** Counts `pid_parse_failed` event lines whose `command` payload matches [command]. */
     private fun countEvents(
         event: String,

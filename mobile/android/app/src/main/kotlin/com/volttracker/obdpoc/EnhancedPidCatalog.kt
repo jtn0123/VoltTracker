@@ -274,7 +274,7 @@ internal object EnhancedPidCatalog {
         addTpmsReceiver(profiles, "224052", "slot 2")
         addTpmsReceiver(profiles, "224053", "slot 3")
         addTpmsReceiver(profiles, "224054", "slot 4")
-        return Collections.unmodifiableList(profiles)
+        return Collections.unmodifiableList(profiles + BcmTirePressure.catalogProfiles())
     }
 
     private fun addSensorExpansionProfiles(profiles: MutableList<EnhancedPidProfile>) {

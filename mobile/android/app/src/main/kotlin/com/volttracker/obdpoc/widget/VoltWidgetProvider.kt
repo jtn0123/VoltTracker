@@ -7,7 +7,7 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
-import com.volttracker.obdpoc.MainActivity
+import com.volttracker.obdpoc.ComposeDashboardActivity
 import com.volttracker.obdpoc.R
 
 /**
@@ -118,7 +118,7 @@ class VoltWidgetProvider : AppWidgetProvider() {
         private fun openAppIntent(context: Context): PendingIntent {
             val open =
                 Intent()
-                    .setClass(context, MainActivity::class.java)
+                    .setClass(context, ComposeDashboardActivity::class.java)
                     .setPackage(context.packageName)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             return PendingIntent.getActivity(

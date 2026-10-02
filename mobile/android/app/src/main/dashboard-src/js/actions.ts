@@ -17,6 +17,7 @@ import {
   bridge,
   clearDemoTelemetry,
   el,
+  ensureCarControlsModule,
   ensureChargeHistoryModule,
   ensureDemoData,
   ensureDtcData,
@@ -102,19 +103,19 @@ type SignalActions = {
       try {
         reportClientError("bridge.call_failed", message);
         reported = true;
-      } catch (_ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
     }
     if (!reported && bridge && typeof bridge.logClientError === "function") {
       try {
         bridge.logClientError("bridge.call_failed", message);
-      } catch (_ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
     }
     if (statusDetail) VD.setStatus({ state: "blocked", detail: statusDetail });
   }
 
   function bridgeFunction(method: string): ((...args: unknown[]) => unknown) | null {
     const target = bridge as unknown as Record<string, unknown> | null;
-    const fn = target && target[method];
+    const fn = target?.[method];
     return typeof fn === "function" ? fn.bind(bridge) as (...args: unknown[]) => unknown : null;
   }
 
@@ -231,60 +232,54 @@ type SignalActions = {
 
   function ensureStorageActions(): Promise<StorageActions> {
     if (storageActions) return Promise.resolve(storageActions);
-    if (!storageActionsPromise) {
-      storageActionsPromise = loadActionScript(
-        "js/actions-storage.js",
-        "actions-storage",
-        () => {
-          const factory = actionModulesRegistry().createStorageActions;
-          if (typeof factory !== "function") return null;
-          storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
-          return storageActions;
-        }
-      ).catch((err) => {
-        storageActionsPromise = null;
-        throw err;
-      });
-    }
+    storageActionsPromise ||= loadActionScript(
+      "js/actions-storage.js",
+      "actions-storage",
+      () => {
+        const factory = actionModulesRegistry().createStorageActions;
+        if (typeof factory !== "function") return null;
+        storageActions = factory({ VD, bridge, withBusy }) as StorageActions;
+        return storageActions;
+      }
+    ).catch((err) => {
+      storageActionsPromise = null;
+      throw err;
+    });
     return storageActionsPromise;
   }
 
   function ensureSignalActions(): Promise<SignalActions> {
     if (signalActions) return Promise.resolve(signalActions);
-    if (!signalActionsPromise) {
-      signalActionsPromise = loadActionScript(
-        "js/actions-signals.js",
-        "actions-signals",
-        () => {
-          const factory = actionModulesRegistry().createSignalActions;
-          if (typeof factory !== "function") return null;
-          signalActions = factory({ VD, bridge }) as SignalActions;
-          return signalActions;
-        }
-      ).catch((err) => {
-        signalActionsPromise = null;
-        throw err;
-      });
-    }
+    signalActionsPromise ||= loadActionScript(
+      "js/actions-signals.js",
+      "actions-signals",
+      () => {
+        const factory = actionModulesRegistry().createSignalActions;
+        if (typeof factory !== "function") return null;
+        signalActions = factory({ VD, bridge }) as SignalActions;
+        return signalActions;
+      }
+    ).catch((err) => {
+      signalActionsPromise = null;
+      throw err;
+    });
     return signalActionsPromise;
   }
 
   function ensureBrowserDemoStream(): Promise<(dashboard: VoltDashboard, dashboardState: DashboardState) => void> {
     const loaded = actionModulesRegistry().runBrowserDemoStream;
     if (typeof loaded === "function") return Promise.resolve(loaded);
-    if (!demoActionsPromise) {
-      demoActionsPromise = loadActionScript(
-        "js/actions-demo.js",
-        "actions-demo",
-        () => {
-          const run = actionModulesRegistry().runBrowserDemoStream;
-          return typeof run === "function" ? run : null;
-        }
-      ).catch((err) => {
-        demoActionsPromise = null;
-        throw err;
-      });
-    }
+    demoActionsPromise ||= loadActionScript(
+      "js/actions-demo.js",
+      "actions-demo",
+      () => {
+        const run = actionModulesRegistry().runBrowserDemoStream;
+        return typeof run === "function" ? run : null;
+      }
+    ).catch((err) => {
+      demoActionsPromise = null;
+      throw err;
+    });
     return demoActionsPromise;
   }
 
@@ -398,7 +393,7 @@ type SignalActions = {
   // out WHY no adapter is selectable and either fix it (fire the Android
   // permission prompt) or tell the user the exact next step.
   function explainMissingAdapter(scan: boolean, allowPermissionResume: boolean) {
-    const permissions = (state.appState && state.appState.permissions) || {};
+    const permissions = (state.appState?.permissions) || {};
     if (bridge && permissions.bluetoothPermission === false && typeof bridge.requestPermissions === "function") {
       if (allowPermissionResume) pendingPermissionConnect = { scan, requestedAtMs: Date.now() };
       if (!callBridgeAction("requestPermissions", [], "Could not request Bluetooth permissions.")) {
@@ -595,7 +590,7 @@ type SignalActions = {
   }
 
   function smartConnect(button?: BusyButton | null) {
-    const permissions = (state.appState && state.appState.permissions) || {};
+    const permissions = (state.appState?.permissions) || {};
     if (bridge && permissions.bluetoothPermission === false) {
       explainMissingAdapter(false, true);
       return;
@@ -815,7 +810,7 @@ type SignalActions = {
 
   function confirmClearDtc(button?: BusyButton | null) {
     const ack = el("dtcClearAckBox") as HTMLInputElement | null;
-    if (!ack || !ack.checked) {
+    if (!ack?.checked) {
       VD.setStatus({ state: "blocked", detail: "Tick the acknowledgement first." });
       return;
     }
@@ -851,13 +846,11 @@ type SignalActions = {
     // Snapshot the real DTC cache once so Clear can put it back — Preview must not
     // destroy real cached codes on a real device. Skip re-snapshotting while a
     // preview is already active, or it would capture the sample data instead.
-    if (!dtcPreviewSnapshot) {
-      dtcPreviewSnapshot = {
-        latestDiagnosticCodes: storage.latestDiagnosticCodes,
-        diagnosticCodeCount: storage.diagnosticCodeCount,
-        diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
-      };
-    }
+    dtcPreviewSnapshot ||= {
+      latestDiagnosticCodes: storage.latestDiagnosticCodes,
+      diagnosticCodeCount: storage.diagnosticCodeCount,
+      diagnosticCodeStatusCounts: storage.diagnosticCodeStatusCounts,
+    };
     // Replace the storage bag rather than mutating the aliased one: an alias write would
     // slip past the setState() seam even though `state` itself is readonly (Readonly<> is
     // shallow). Whole-object replacement is already how storage-status.ts and map.ts
@@ -1357,7 +1350,9 @@ type SignalActions = {
   // with #topDemoInfo's aria-label in topbar.html).
   const DEMO_RUNNING_DETAIL = "Demo / Testing is running.";
 
-  function startDemo() {
+  // `scenario` (the Demo / Testing picker) seeds that scenario; otherwise the current one.
+  // `onStarted` runs once the demo is active and its stream has been asked to start.
+  function startDemo(scenario?: string, onStarted?: () => void) {
     ensureDemoData((error) => {
       if (error) {
         VD.setStatus({ state: "blocked", detail: "Demo data could not be loaded." });
@@ -1387,16 +1382,17 @@ type SignalActions = {
         } else {
           void runBrowserDemo();
         }
+        if (onStarted) onStarted();
       };
-      const scenario = currentDemoScenario();
+      const seed = scenario || currentDemoScenario();
       if (typeof VD.loadDemoScenario === "function") {
-        VD.loadDemoScenario(scenario);
+        VD.loadDemoScenario(seed);
         activateAndStart();
         return;
       }
       void ensureMapModule()
         .then(() => {
-          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(seed);
           else if (typeof VD.loadSampleData === "function") VD.loadSampleData();
           activateAndStart();
         })
@@ -1411,10 +1407,17 @@ type SignalActions = {
     });
   }
 
+  // A real (non-demo) OBD session is connected or on its way up.
+  function realSessionLive() {
+    if (state.demoActive) return false;
+    const status = String((state.status || {}).state || "").toLowerCase();
+    return ["connected", "connecting", "initializing", "reconnecting"].includes(status);
+  }
+
   function currentDemoScenario() {
     const picker = el("demoScenarioPicker");
     const active = picker && picker.querySelector<HTMLElement>("[data-scenario].is-active");
-    return String(state.demoScenario || (active && active.dataset.scenario) || "typical");
+    return String(state.demoScenario || (active?.dataset.scenario) || "typical");
   }
 
   function refreshNativeDataAfterDemo() {
@@ -1576,21 +1579,10 @@ type SignalActions = {
     document.querySelectorAll("[data-scenario]").forEach((node) => {
       const button = node as HTMLElement;
       button.addEventListener("click", () => {
-        const scenario = button.dataset.scenario;
-        // Tapping a scenario is an explicit preview action; keep demo isolation
-        // active so native storage/app-state pushes cannot overwrite the sample.
-        // Flip demoActive on ONLY AFTER loadDemoScenario has captured the preview
-        // snapshot (captureDemoPreview populates demoPreviewStorage). Doing it
-        // before the async map-module load resolved left a window where
-        // demoActive was true but demoPreviewStorage was still null, so the demo
-        // isolation guard (state.demoActive && state.demoPreviewStorage) let a
-        // native setStorage push write real data over the demo view.
-        const activateDemo = () => {
-          setDemoActive(true, DEMO_RUNNING_DETAIL);
-        };
+        const scenario = button.dataset.scenario || "typical";
         // Only mark the tapped scenario button selected once the demo has actually
-        // activated — otherwise a rejected ensureMapModule() (swallowed below) would
-        // leave the picker showing a scenario as active that never loaded.
+        // activated — otherwise a failed module load would leave the picker showing
+        // a scenario as active that never loaded.
         const markScenarioActive = () => {
           const picker = el("demoScenarioPicker");
           if (picker) {
@@ -1600,21 +1592,32 @@ type SignalActions = {
             });
           }
         };
-        if (typeof VD.loadDemoScenario === "function") {
-          VD.loadDemoScenario(scenario);
-          activateDemo();
-          markScenarioActive();
-        } else {
-          void ensureMapModule()
-            .then(() => {
-              if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
-              activateDemo();
-              markScenarioActive();
-            })
-            .catch(() => {
-              VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
-            });
+        // Picking a scenario (re)starts the demo stream with it, exactly like
+        // Start: without a stream Drive sat on "demo · waiting" until Stop → Start.
+        // A real car session is never torn down by a scenario tap, though — then
+        // the scenario only previews its stored data, as before.
+        if (!realSessionLive()) {
+          startDemo(scenario, markScenarioActive);
+          return;
         }
+        // Preview only. Flip demoActive on ONLY AFTER loadDemoScenario has captured
+        // the preview snapshot (captureDemoPreview populates demoPreviewStorage), so
+        // the demo isolation guard (state.demoActive && state.demoPreviewStorage)
+        // never lets a native setStorage push write real data over the demo view.
+        const preview = () => {
+          if (typeof VD.loadDemoScenario === "function") VD.loadDemoScenario(scenario);
+          setDemoActive(true, DEMO_RUNNING_DETAIL);
+          markScenarioActive();
+        };
+        if (typeof VD.loadDemoScenario === "function") {
+          preview();
+          return;
+        }
+        void ensureMapModule()
+          .then(preview)
+          .catch(() => {
+            VD.setStatus({ state: "blocked", detail: "Could not load the demo scenario." });
+          });
       }, opts);
     });
     document.querySelectorAll("[data-map-layer]").forEach((node) => {
@@ -1913,6 +1916,19 @@ type SignalActions = {
     backfillTelemetry: VD.backfillTelemetry,
     showToast: (message: unknown) => showToast(message),
     showTripUndo,
+    // "Split trip here" / merge-back answer: trip keys changed, so re-read the
+    // trip + insight rollups; the lazy map chunk (when loaded) drops its route
+    // cache and moves the open trip sheet.
+    tripSplitChanged: (payload: unknown) => {
+      setState({ tripsLoaded: false, insightsLoaded: false });
+      void ensureInsightsModule()
+        .then(() => {
+          if (typeof VD.loadTrips === "function") VD.loadTrips(true);
+          if (typeof VD.loadInsights === "function") VD.loadInsights(true);
+        })
+        .catch(() => {});
+      if (typeof VD.onTripSplitChanged === "function") VD.onTripSplitChanged(payload);
+    },
     setBackupReceipt: (payload: unknown) => VD.setBackupReceipt?.(payload),
     applyRestoredPreferences: (payload: unknown) => {
       if (prefs.restoreFromBackup(payload)) showToast("Backup settings restored");
@@ -2013,9 +2029,8 @@ type SignalActions = {
     startupMark("actions_secondary_render_start");
     flushRender();
     if (typeof VD.renderMapIfLoaded === "function") renderMapIfLoaded();
+    void ensureCarControlsModule().catch(() => {});
     startupMark("actions_secondary_render_end");
   };
   schedulePostStartupIdle(loadDeferredPanels);
   setTimeout(() => scrollAppToTop(), 200);
-
-export {};

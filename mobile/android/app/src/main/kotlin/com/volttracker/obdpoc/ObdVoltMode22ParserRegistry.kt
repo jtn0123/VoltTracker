@@ -53,7 +53,11 @@ internal object ObdVoltMode22ParserRegistry {
         return null
     }
 
-    /** Word PID: `(A*256+B) / divisor`, optionally two's-complement, bounded when [range] set. */
+    /**
+     * Word PID: `(A*256+B) / divisor`, optionally two's-complement, bounded when [range] set.
+     * When [notAvailableWord] is set, that raw word is the ECU's "not available" sentinel and
+     * decodes to no value instead of a real-looking number.
+     */
     private fun wordPid(
         name: String,
         unit: String,
@@ -61,12 +65,20 @@ internal object ObdVoltMode22ParserRegistry {
         divisor: Double,
         signed: Boolean,
         range: Range? = null,
+        notAvailableWord: Int? = null,
     ): Mode22Parser =
         Mode22Parser { command, response ->
             voltWordValue(response, command, divisor, signed)
+                ?.takeUnless { isNotAvailableWord(response, command, notAvailableWord) }
                 ?.let { if (range == null) it else bounded(it, range) }
                 ?.let { value(name, it, unit, decimals) }
         }
+
+    private fun isNotAvailableWord(
+        response: String?,
+        command: String,
+        sentinel: Int?,
+    ): Boolean = sentinel != null && mode22Word(response, command, false) == sentinel
 
     /** Word PID with a linear transform: `(A*256+B) * scale + offset`. */
     private fun wordLinearPid(
@@ -115,6 +127,7 @@ internal object ObdVoltMode22ParserRegistry {
     private val CAPACITY_AH_RANGE = Range(10.0, 60.0)
     private val CELL_NUMBER_RANGE = Range(1.0, 96.0)
     private val PERCENT_RANGE = Range(0.0, 100.0)
+    private const val WORD_NOT_AVAILABLE = 0xFFFF
     private val PACK_RESISTANCE_RANGE = Range(0.0, 10_000.0)
     private val ISOLATION_KOHM_RANGE = Range(0.0, 25_000.0)
     private val ISOLATION_OHM_RANGE = Range(0.0, 5_000_000.0)
@@ -123,6 +136,11 @@ internal object ObdVoltMode22ParserRegistry {
     private val PUMP_RPM_RANGE = Range(0.0, 10_000.0)
     private val HEATER_POWER_RANGE = Range(-100.0, 10_000.0)
     private val EV_DISTANCE_KM_RANGE = Range(0.0, 655.35)
+    private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
+    private val EV_RANGE_KM_RANGE = Range(0.0, 300.0)
+
+    // 1,000 MWh is far beyond any pack's lifetime throughput; it only rejects decode garbage.
+    private val LIFETIME_CHARGE_KWH_RANGE = Range(0.0, 1_000_000.0)
 
     private val mode22Parsers: Map<String, Mode22Parser> =
         buildMap {
@@ -150,7 +168,9 @@ internal object ObdVoltMode22ParserRegistry {
             put("22436B", wordPid("charger hv voltage", "V", 1, 2.0, true, HV_VOLTAGE_RANGE))
             put("22436C", wordPid("charger hv current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             put("224373", Mode22Parser { command, response -> chargeModeValue(response, command) })
-            put("22437D", wordPid("last charge energy", "Wh", 0, 0.1, false))
+            // OVMS treats 0xFFFF as "not available" (no charge recorded yet) — without the
+            // sentinel it decoded as a bogus 655,350 Wh.
+            put("22437D", wordPid("last charge energy", "Wh", 0, 0.1, false, notAvailableWord = WORD_NOT_AVAILABLE))
             put("2243A5", wordPid("hv battery charge count", "count", 0, 1.0, false))
             put(
                 "2243AF",
@@ -174,8 +194,11 @@ internal object ObdVoltMode22ParserRegistry {
             )
             put("22432A", bytePid("minimum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("22432C", bytePid("maximum cell number", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
-            put("22435F", bytePid("SOC variation", "%", 1, 1.0 / 2.55, 0.0, PERCENT_RANGE))
-            put("2240E9", wordPid("pack resistance", "ohm", 1, 2.0, false, PACK_RESISTANCE_RANGE))
+            // OVMS writes A / 2.55, which floats to 100.00000000000001 at 0xFF and fails the 0–100 %
+            // range check; 100 / 255 is the same scale but lands exactly on 100 % (as 22439E does).
+            put("22435F", bytePid("SOC variation", "%", 1, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            // Voltage app: (A*256+B)/2 shown as milliohms.
+            put("2240E9", wordPid("pack resistance", "mOhm", 1, 2.0, false, PACK_RESISTANCE_RANGE))
             put("22433B", wordLinearPid("minimum pack voltage", "V", 1, 0.52, 0.0, false, HV_VOLTAGE_RANGE))
             put("22433C", wordLinearPid("maximum pack voltage", "V", 1, 0.52, 0.0, false, HV_VOLTAGE_RANGE))
             put("224349", bytePid("HV battery max temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
@@ -184,7 +207,7 @@ internal object ObdVoltMode22ParserRegistry {
             put("22434C", bytePid("HV battery min-temp module", "", 0, 1.0, 0.0, CELL_NUMBER_RANGE))
             put("221C43", bytePid("power electronics coolant loop temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("2241A4", bytePid("battery coolant temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
-            put("22433F", bytePid("minimum SOC limit", "%", 1, 1.0 / 2.55, 0.0, PERCENT_RANGE))
+            put("22433F", bytePid("minimum SOC limit", "%", 1, 100.0 / 255.0, 0.0, PERCENT_RANGE))
             put("2241B0", wordPid("APM output power", "W", 1, 16.0, false, HEATER_POWER_RANGE))
             put("22437E", wordPid("APM output current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             // 2243A6 and 2241EC are distinct PIDs in different units/magnitudes (~1000x apart); keep
@@ -201,7 +224,19 @@ internal object ObdVoltMode22ParserRegistry {
             put("221C26", bytePid("inverter temperature 1", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("221C28", bytePid("inverter temperature 2", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("221C2A", bytePid("inverter temperature 3", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
+            // Motor-generator A (node 0x257) and B (node 0x258): A - 40, per the OVMS Volt module.
             put("2228CB", bytePid("motor temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
+            put("22368F", bytePid("motor B temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
+            // The car's own EV range estimate (the figure behind the cluster), (A*256+B)/64 km.
+            put("2241A6", wordPid("ev range estimate", "km", 0, 64.0, false, EV_RANGE_KM_RANGE))
+            // OVMS writes A / 2.55; 100 / 255 is the same scale but lands exactly on 100 % at 0xFF.
+            put("22439E", bytePid("battery heater duty", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put(
+                "224389",
+                Mode22Parser { command, response ->
+                    lifetimeChargeKwhValue(response, command)?.let { value("lifetime charge energy", it, "kWh", 1) }
+                },
+            )
             put("22242C", wordPid("brake torque demand", "Nm", 1, 4.0, true, BRAKE_TORQUE_RANGE))
             put("2224B0", Mode22Parser { command, response -> regenActiveValue(response, command) })
             put("224501", wordPid("brake pedal position 1", "mm", 2, 100.0, true, BRAKE_PEDAL_MM_RANGE))
@@ -220,6 +255,12 @@ internal object ObdVoltMode22ParserRegistry {
             )
             put("2240D4", wordPid("HD pack current", "A", 2, 20.0, true, CURRENT_A_RANGE))
             put("224531", Mode22Parser { command, response -> chargeLevelValue(response, command) })
+            put(
+                "2234B2",
+                Mode22Parser { command, response ->
+                    odometerKmValue(response, command)?.let { value("odometer", it, "km", 1) }
+                },
+            )
             put("228334", bytePid("hv battery displayed soc", "%", 2, 100.0 / 255.0, 0.0))
             put("2241B2", wordPid("battery coolant pump rpm", "rpm", 0, 1.0, true, PUMP_RPM_RANGE))
             put(
@@ -279,6 +320,32 @@ internal object ObdVoltMode22ParserRegistry {
             word -= 0x10000
         }
         return word
+    }
+
+    /** GM odometer DID 34B2: 4-byte big-endian count of 1/64 km. */
+    private fun odometerKmValue(
+        response: String?,
+        command: String?,
+    ): Double? = mode22Long(response, command)?.let { bounded(it / 64.0, ODOMETER_KM_RANGE) }
+
+    /**
+     * Lifetime charge energy DID 4389: 4-byte big-endian Wh on 2011-2018 cars (the OVMS module
+     * reads a MY2019 as kWh; that model year is not handled here).
+     */
+    private fun lifetimeChargeKwhValue(
+        response: String?,
+        command: String?,
+    ): Double? = mode22Long(response, command)?.let { bounded(it / 1000.0, LIFETIME_CHARGE_KWH_RANGE) }
+
+    private fun mode22Long(
+        response: String?,
+        command: String?,
+    ): Long? {
+        val payload = mode22Payload(response, command)
+        if (payload == null || payload.size < 4) {
+            return null
+        }
+        return payload.take(4).fold(0L) { acc, byte -> acc * 256 + byte }
     }
 
     private fun voltWordPercentValue(

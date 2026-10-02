@@ -21,4 +21,14 @@
         <item name="android:statusBarColor">@color/volt_dark</item>
         <item name="android:navigationBarColor">@color/volt_dark</item>
     </style>
+
+    <!-- ComposeDashboardActivity overlays one of these onto its theme at runtime (Theme.applyStyle)
+         so platform AlertDialogs get a light or dark base matching the chosen appearance; see
+         DialogPaletteHost.kt for the palette recolour on top. -->
+    <style name="VoltDialogs.Light" parent="">
+        <item name="android:alertDialogTheme">@android:style/Theme.Material.Light.Dialog.Alert</item>
+    </style>
+    <style name="VoltDialogs.Dark" parent="">
+        <item name="android:alertDialogTheme">@android:style/Theme.Material.Dialog.Alert</item>
+    </style>
 </resources>

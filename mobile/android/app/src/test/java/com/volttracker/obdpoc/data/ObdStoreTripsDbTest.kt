@@ -154,6 +154,26 @@ class ObdStoreTripsDbTest {
     }
 
     @Test
+    fun driveModesListWhereTheTripSwitchedBetweenElectricAndGas() {
+        val id = store.startSession("obd", "00:11", "Adapter")
+        store.recordTelemetry(id, poweredSample(40, 34.0500, -118.2500, 1000L, 20.0, "driving_ev"))
+        store.recordTelemetry(id, poweredSample(40, 34.0600, -118.2500, 3000L, 20.0, "driving_ev"))
+        store.recordTelemetry(id, poweredSample(40, 34.0700, -118.2500, 5000L, 40.0, "driving_gas"))
+        store.recordTelemetry(id, poweredSample(40, 34.0800, -118.2500, 7000L, 40.0, "driving_gas"))
+        store.recordTelemetry(id, poweredSample(40, 34.0900, -118.2500, 9000L, 20.0, "driving_ev"))
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 10_000L, "")
+        val routeKey = store.getTripsJson(40).getJSONObject(0).getString("id")
+
+        val modes = store.routes.getTripDriveModesJson(routeKey)
+
+        assertEquals(3, modes.length())
+        assertEquals(listOf(1000L, 5000L, 9000L), (0 until 3).map { modes.getJSONObject(it).getLong("atMs") })
+        assertEquals(listOf(false, true, false), (0 until 3).map { modes.getJSONObject(it).getBoolean("gas") })
+        assertEquals(0, store.routes.getTripDriveModesJson("not-a-key").length())
+        assertEquals(0, store.routes.getTripDriveModesJson(null).length())
+    }
+
+    @Test
     fun lifetimeEnergyIsNotLimitedByTheRecentTripsReadCap() {
         repeat(2) { index ->
             val start = 1_000_000L + index * 100_000L

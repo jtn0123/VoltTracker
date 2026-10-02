@@ -18,6 +18,7 @@ import android.util.Log
 import android.view.ViewGroup
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.result.ActivityResult
 import androidx.activity.result.ActivityResultLauncher
@@ -27,9 +28,14 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdNotifications
 import com.volttracker.obdpoc.service.ObdService
+import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.service.PermissionGate
+import com.volttracker.obdpoc.update.UpdateCoordinator
+import com.volttracker.obdpoc.update.UpdateManager
+import com.volttracker.obdpoc.update.UpdatePrompt
 import org.json.JSONObject
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -37,7 +43,9 @@ import java.util.concurrent.RejectedExecutionException
 
 open class MainActivity :
     ComponentActivity(),
-    DashboardHost {
+    DashboardHost,
+    TroubleshooterHost,
+    BackupHost {
     private var webView: WebView? = null
     private var dashboardPublisher: DashboardPublisher? = null
     private var dashboardRoot: FrameLayout? = null
@@ -181,15 +189,16 @@ open class MainActivity :
         DashboardBackPressCallback(
             { webView },
             {
-                if (!moveTaskToBack(true)) finish()
+                if (!isTaskRoot || !moveTaskToBack(true)) finish()
             },
         )
 
     // Default Back when the dashboard has nothing to dismiss. evaluateJavascript is async so the
     // press is already consumed by the time we decide; onBackPressedDispatcher.onBackPressed()
-    // only re-runs registered callbacks (it does NOT perform the OS finish), so we background the
-    // app ourselves. moveTaskToBack keeps the live Activity/WebView and state alive (like Home);
-    // finish() is the fallback if this somehow isn't the task root.
+    // only re-runs registered callbacks (it does NOT perform the OS finish), so we leave ourselves.
+    // Opened from the Compose dashboard (the usual case now), finish() returns to it; backgrounding
+    // the task there sent the whole app Home. As the task root, moveTaskToBack keeps the live
+    // Activity/WebView and state alive (like Home).
 
     private var prefs: SharedPreferences? = null
 
@@ -197,7 +206,7 @@ open class MainActivity :
 
     @JvmField var dataBackup: DataBackup? = null
 
-    @JvmField var backupController: BackupController? = null
+    @JvmField var backupController: BackupController<*>? = null
 
     @JvmField var permissionGate: PermissionGate? = null
 
@@ -209,7 +218,7 @@ open class MainActivity :
     // existing null checks and RuntimeException handling around store reads.
     @Volatile override var localStore: ObdLocalStore? = null
 
-    @JvmField var troubleshooter: TroubleshooterBridge? = null
+    @JvmField var troubleshooter: TroubleshooterBridge<*>? = null
 
     // Per-trip GPX/CSV export orchestration (read route -> write cache file -> record export ->
     // share). Lazily built so it survives the test seam that skips super.onCreate(); holds the body
@@ -245,6 +254,15 @@ open class MainActivity :
             publishAppState = publishAppStateCommand,
             hasNotificationPermission = { permissionGate?.hasNotifications() == true },
             ensureNotificationPermission = { requirePermissionGate().ensureNotifications() },
+        )
+    }
+
+    private val carControlHost by lazy {
+        CarControlHostDelegate(
+            activity = this,
+            prefs = { prefs },
+            publishAppState = publishAppStateCommand,
+            toast = { message -> callDashboard("showToast", message) },
         )
     }
 
@@ -300,6 +318,7 @@ open class MainActivity :
             publishTrip = { routeKey, receipt ->
                 callDashboard(if (receipt) "openTripReceipt" else "openTrip", routeKey)
             },
+            publishView = { view -> callDashboard("restoreView", view) },
         )
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
@@ -385,7 +404,7 @@ open class MainActivity :
 
     override fun requireDataBackup(): DataBackup = checkNotNull(dataBackup) { "DataBackup is not ready" }
 
-    override fun requireBackupController(): BackupController =
+    override fun requireBackupController(): BackupController<*> =
         checkNotNull(backupController) {
             "BackupController is not ready"
         }
@@ -393,7 +412,7 @@ open class MainActivity :
     override fun requirePermissionGate(): PermissionGate =
         checkNotNull(permissionGate) { "PermissionGate is not ready" }
 
-    fun requireTroubleshooter(): TroubleshooterBridge =
+    fun requireTroubleshooter(): TroubleshooterBridge<*> =
         checkNotNull(troubleshooter) { "TroubleshooterBridge is not ready" }
 
     private fun submitBackground(task: Runnable) {
@@ -431,6 +450,35 @@ open class MainActivity :
         }
     }
 
+    private fun offerUpdate(result: UpdateManager.CheckResult) {
+        val build = UpdatePrompt.offeredBuild(result) ?: return
+        if (!isActivityResumed || isFinishing || isDestroyed) return
+        try {
+            AlertDialog
+                .Builder(this)
+                .setTitle(R.string.update_offer_title)
+                .setMessage(getString(R.string.update_offer_message, build.tag))
+                .setPositiveButton(R.string.update_offer_install) { _, _ -> installOfferedUpdate(build.tag) }
+                .setNegativeButton(R.string.update_offer_later, null)
+                .show()
+        } catch (ex: RuntimeException) {
+            Log.w(TAG, "update dialog failed", ex)
+        }
+    }
+
+    private fun installOfferedUpdate(tag: String) {
+        Toast.makeText(this, getString(R.string.update_downloading, tag), Toast.LENGTH_SHORT).show()
+        UpdateCoordinator.shared(this).downloadAndInstall { percent ->
+            val message =
+                when (UpdatePrompt.progress(percent)) {
+                    UpdatePrompt.Progress.FAILED -> R.string.update_download_failed
+                    UpdatePrompt.Progress.INSTALLING -> R.string.update_opening_installer
+                    UpdatePrompt.Progress.NONE -> null
+                }
+            if (message != null) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         // C6: branded splash. Must run before super.onCreate() — it swaps the
         // launch theme (Theme.VoltTracker.Splash: brand-dark background + the
@@ -439,6 +487,7 @@ open class MainActivity :
         installSplashScreen()
         StartupTrace.mark("activity_on_create_start")
         super.onCreate(savedInstanceState)
+        ClassicDashboardPresence.onCreated()
         dashboardTripDeepLink.capture(intent)
         restoreFilePicker =
             registerForActivityResult(ActivityResultContracts.StartActivityForResult(), this::onRestoreFilePicked)
@@ -642,6 +691,8 @@ open class MainActivity :
             mainHandler.removeCallbacks(postReadyDashboardRefreshRunnable)
             mainHandler.postDelayed(postReadyDashboardRefreshRunnable, POST_READY_REFRESH_DELAY_MS)
         }
+        // One silent release check per process start; an offered build gets a native dialog.
+        UpdateCoordinator.shared(this).autoCheckOnce(::offerUpdate)
         // M2: on every foreground entry, fire a one-shot alert for any tracked maintenance item that
         // has newly gone overdue. Off the UI thread; failures must never crash a resume.
         submitBackground {
@@ -668,6 +719,7 @@ open class MainActivity :
     }
 
     override fun onDestroy() {
+        ClassicDashboardPresence.onDestroyed()
         backupController?.dispose()
         val storeToClose = localStore
         // Detach first so late bridge callbacks cannot acquire the handle while teardown drains the
@@ -864,11 +916,7 @@ open class MainActivity :
             service.putExtra(ObdService.EXTRA_DETAIL_STAGE, detailStage)
         }
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                startForegroundService(service)
-            } else {
-                startService(service)
-            }
+            ObdServiceLauncher.start(this, service)
         } catch (ex: RuntimeException) {
             Log.w(TAG, "startObdService blocked", ex)
             troubleshooter?.clearPendingTestConnectionStop()
@@ -928,15 +976,8 @@ open class MainActivity :
         requireTroubleshooter().onAdapterStatusForReadyNotify(status)
     }
 
-    private fun reportAppVisibility(foreground: Boolean) {
-        val service = Intent(this, ObdService::class.java)
-        service.action = if (foreground) ObdService.ACTION_APP_FOREGROUND else ObdService.ACTION_APP_BACKGROUND
-        try {
-            startService(service)
-        } catch (ignored: RuntimeException) {
-            // Visibility is diagnostic only.
-        }
-    }
+    // In-process, not startService: a start command waits on pending prefs writes (ANR on pause).
+    private fun reportAppVisibility(foreground: Boolean) = AppVisibility.report(foreground)
 
     private fun callDashboard(
         functionName: String,
@@ -981,7 +1022,7 @@ open class MainActivity :
 
     override fun getInsightsJson(): String = storageReader.insightsJson()
 
-    open fun launchRestoreFilePicker(intent: Intent) {
+    override fun launchRestoreFilePicker(intent: Intent) {
         restoreFilePicker?.launch(intent)
     }
 
@@ -1038,6 +1079,10 @@ open class MainActivity :
 
     override fun dashboardExperience(): DashboardExperienceCommands = dashboardExperienceHost
 
+    override fun sharedDisplayPrefs(): SharedDisplayPrefs? = prefs?.let(::SharedDisplayPrefs)
+
+    override fun carControls(): CarControlCommands = carControlHost
+
     private fun maybeAutoConnect(
         trigger: String,
         observedAddress: String?,
@@ -1075,6 +1120,9 @@ open class MainActivity :
     companion object {
         const val EXTRA_OPEN_TRIP = "com.volttracker.obdpoc.extra.OPEN_TRIP"
         const val EXTRA_OPEN_TRIP_RECEIPT = "com.volttracker.obdpoc.extra.OPEN_TRIP_RECEIPT"
+
+        /** Opens the classic dashboard on one of its tabs (see [DashboardTripDeepLink.OPENABLE_VIEWS]). */
+        const val EXTRA_OPEN_VIEW = "com.volttracker.obdpoc.extra.OPEN_VIEW"
 
         /** Shared logcat tag. Canonical home is [AppPrefs.LOG_TAG]; kept here as a compatibility alias. */
         const val TAG = AppPrefs.LOG_TAG

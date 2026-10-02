@@ -1,259 +1,547 @@
 package com.volttracker.obdpoc.ui.insights
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.volttracker.obdpoc.ui.components.MiniBars
-import com.volttracker.obdpoc.ui.components.VoltBottomNav
+import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.components.CappedTextScale
+import com.volttracker.obdpoc.ui.components.DASH
+import com.volttracker.obdpoc.ui.components.EmptyAction
+import com.volttracker.obdpoc.ui.components.EmptyLink
+import com.volttracker.obdpoc.ui.components.IconSquare
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
+import com.volttracker.obdpoc.ui.components.PillTone
+import com.volttracker.obdpoc.ui.components.VoltButton
+import com.volttracker.obdpoc.ui.components.VoltEmptyState
+import com.volttracker.obdpoc.ui.components.VoltIcons
 import com.volttracker.obdpoc.ui.components.VoltLabel
+import com.volttracker.obdpoc.ui.components.VoltLoading
 import com.volttracker.obdpoc.ui.components.VoltPanel
-import com.volttracker.obdpoc.ui.components.VoltStat
-import com.volttracker.obdpoc.ui.components.VoltStatusPill
-import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.components.VoltScreen
+import com.volttracker.obdpoc.ui.components.VoltSegmented
+import com.volttracker.obdpoc.ui.components.connectionDot
+import com.volttracker.obdpoc.ui.components.demoAction
+import com.volttracker.obdpoc.ui.components.retryAction
+import com.volttracker.obdpoc.ui.components.unitStyle
+import com.volttracker.obdpoc.ui.drive.oneDecimal
+import com.volttracker.obdpoc.ui.theme.LocalVoltPalette
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltTheme
 import com.volttracker.obdpoc.ui.theme.VoltType
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
+import kotlin.math.ceil
 
-/** The Insights tab: lifetime efficiency, driving patterns, battery health, vehicle. */
+/**
+ * The Insights tab (mockups `S.insights`): the share of driving done on electricity over the
+ * chosen week / month / year / all time, with electric and gas miles stacked per week (or day,
+ * month, year); what that saved against gas; the energy it used; efficiency by speed; and a note
+ * when a cell of the pack is drifting low.
+ */
 @Composable
 fun InsightsScreen(
     state: InsightsUiState,
     modifier: Modifier = Modifier,
-    onSelectTab: (VoltTab) -> Unit = {},
+    onPeriod: (InsightsPeriod) -> Unit = {},
+    onOpenMaintenance: () -> Unit = {},
 ) {
-    Box(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .background(VoltColors.bg),
+    val summary = state.summary()
+    VoltScreen(
+        title = "Insights",
+        subtitle = summary.window.title,
+        dot = connectionDot(state.connected, state.connecting),
+        modifier = modifier,
+        onRefresh = LocalVoltNav.current.refresh,
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 20.dp)
-                    .padding(top = 18.dp, bottom = 118.dp),
-        ) {
-            InsightsHeader(state)
-            Spacer(Modifier.height(30.dp))
-            EfficiencyHero(state)
-            Spacer(Modifier.height(26.dp))
-            LifetimePanel(state)
-            Spacer(Modifier.height(14.dp))
-            EfficiencyBySpeed(state)
-            Spacer(Modifier.height(14.dp))
-            MonthlyDistance(state)
-            Spacer(Modifier.height(14.dp))
-            BatteryHealth(state)
-            Spacer(Modifier.height(14.dp))
-            VehiclePanel(state)
+        VoltSegmented(
+            options = InsightsPeriod.entries.map { it.label },
+            selectedIndex = state.period.ordinal,
+            onSelect = { onPeriod(InsightsPeriod.entries[it]) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        summary.story(state.units)?.let {
+            StoryCard(it)
+            Spacer(Modifier.height(10.dp))
         }
-        VoltBottomNav(
-            selected = VoltTab.INSIGHTS,
-            onSelect = onSelectTab,
-            modifier =
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-        )
+        // A period with nothing in it offers the way out: every drive there is.
+        val showAll = EmptyAction("Show all time") { onPeriod(InsightsPeriod.ALL) }
+        ElectricHero(summary, state.units, state.history, showAll.takeIf { state.period != InsightsPeriod.ALL })
+        Spacer(Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            SavedTile(state, summary, Modifier.weight(1f).fillMaxHeight())
+            EnergyTile(state, summary, Modifier.weight(1f).fillMaxHeight())
+        }
+        Spacer(Modifier.height(10.dp))
+        SpeedCard(state.speedEfficiency, state.units, loading = !state.speedsLoaded)
+        state.cellDrift?.let {
+            Spacer(Modifier.height(10.dp))
+            CellNote(it)
+        }
+        Spacer(Modifier.height(10.dp))
+        MaintenanceCard(onOpenMaintenance)
     }
 }
 
+/** The maintenance log hasn't moved to these screens yet; this is the way to it. */
 @Composable
-private fun InsightsHeader(state: InsightsUiState) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text = "Insights", style = VoltType.screenTitle, color = VoltColors.textPrimary)
-        VoltStatusPill(
-            text = state.statusLabel,
-            dotColor = if (state.connected) VoltColors.energy else VoltColors.textTertiary,
-        )
-    }
-}
-
-@Composable
-private fun EfficiencyHero(state: InsightsUiState) {
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
+private fun MaintenanceCard(onOpen: () -> Unit) {
+    VoltPanel {
+        VoltLabel("Maintenance")
         Text(
-            text = state.lifetimeMiPerKwh?.let { String.format(Locale.US, "%.1f", it) } ?: "--",
-            style = VoltType.display,
+            text = MAINTENANCE_BODY,
+            style = VoltType.body,
+            color = VoltColors.textSecondary,
+            modifier = Modifier.padding(top = 8.dp),
+        )
+        VoltButton(MAINTENANCE_OPEN, Modifier.fillMaxWidth().padding(top = 10.dp), onClick = onOpen)
+    }
+}
+
+/** The period in plain sentences, above the charts. */
+@Composable
+private fun StoryCard(sentences: List<String>) {
+    VoltPanel {
+        VoltLabel("In short")
+        Text(
+            text = sentences.joinToString(" "),
+            style = VoltType.body,
             color = VoltColors.textPrimary,
-        )
-        Text(
-            text = "MI / KWH LIFETIME",
-            style = VoltType.heroUnit,
-            color = VoltColors.textTertiary,
-        )
-        Spacer(Modifier.height(14.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(26.dp)) {
-            Text(
-                text = "City  ${state.cityMiPerKwh?.let { String.format(Locale.US, "%.1f", it) } ?: "--"}",
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
-            Text(
-                text = "Highway  ${state.highwayMiPerKwh?.let { String.format(Locale.US, "%.1f", it) } ?: "--"}",
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LifetimePanel(state: InsightsUiState) {
-    VoltPanel {
-        VoltLabel("Lifetime · ${state.driveCount} drives")
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            VoltStat(label = "Distance", value = String.format(Locale.US, "%.0f", state.lifetimeMiles), unit = "mi")
-            VoltStat(label = "Drive time", value = state.driveTimeLabel)
-            VoltStat(label = "Top speed", value = "${state.topSpeedMph}", unit = "mph", alignEnd = true)
-        }
-    }
-}
-
-@Composable
-private fun EfficiencyBySpeed(state: InsightsUiState) {
-    VoltPanel {
-        VoltLabel("Efficiency vs speed")
-        if (state.efficiencyPeakLabel != null) {
-            Spacer(Modifier.height(6.dp))
-            Text(
-                text = state.efficiencyPeakLabel,
-                style = VoltType.body,
-                color = VoltColors.textPrimary,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        MiniBars(
-            values = state.efficiencyBySpeed.map { it.value.toFloat() },
-            labels = state.efficiencyBySpeed.map { it.label },
-            highlightIndex = state.efficiencyPeakIndex,
-            barHeight = 80.dp,
-        )
-        Spacer(Modifier.height(6.dp))
-        Text(
-            text = "speed (mph)",
-            style = VoltType.caption,
-            color = VoltColors.textTertiary,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
+            modifier = Modifier.padding(top = 8.dp),
         )
     }
 }
 
 @Composable
-private fun MonthlyDistance(state: InsightsUiState) {
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            VoltLabel("Driving · monthly")
-            Text(
-                text = String.format(Locale.US, "%.0f mi avg", state.avgMilesPerMonth),
-                style = VoltType.valueSmall,
-                color = VoltColors.textSecondary,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
-        MiniBars(
-            values = state.monthlyMiles.map { it.value.toFloat() },
-            labels = state.monthlyMiles.map { it.label },
-        )
-    }
-}
-
-@Composable
-private fun BatteryHealth(state: InsightsUiState) {
-    VoltPanel {
-        VoltLabel("HV battery")
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            VoltStat(
-                label = "Health",
-                value = state.batteryHealthPercent?.let { "$it%" } ?: "--",
-                valueColor = VoltColors.energy,
-            )
-            VoltStat(label = "Voltage", value = String.format(Locale.US, "%.0f", state.packVolts), unit = "V")
-            VoltStat(label = "Temp", value = "${state.packTempF}°F", alignEnd = true)
-        }
-    }
-}
-
-@Composable
-private fun VehiclePanel(state: InsightsUiState) {
-    VoltPanel {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column {
-                VoltLabel("Vehicle")
-                Spacer(Modifier.height(5.dp))
-                Text(text = state.vehicleLabel, style = VoltType.valueSmall, color = VoltColors.textPrimary)
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                VoltLabel("Odometer")
-                Spacer(Modifier.height(5.dp))
+private fun ElectricHero(
+    summary: PeriodSummary,
+    units: VoltUnits,
+    history: HistoryLoad,
+    showAll: EmptyAction?,
+) {
+    val nav = LocalVoltNav.current
+    VoltPanel(padding = PaddingValues(16.dp, 16.dp, 16.dp, 12.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+            Column(Modifier.weight(1f)) {
+                VoltLabel("Driven on electricity")
                 Text(
-                    text = String.format(Locale.US, "%,d mi", state.odometerMiles),
-                    style = VoltType.valueSmall,
+                    text =
+                        buildAnnotatedString {
+                            append(summary.electricPct?.toString() ?: DASH)
+                            if (summary.electricPct != null) withStyle(unitStyle(HERO_UNIT_SP)) { append("%") }
+                        },
+                    style = VoltType.display.copy(fontSize = HERO_SP.sp, lineHeight = HERO_SP.sp),
                     color = VoltColors.textPrimary,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+                summary.deltaText()?.let { DeltaLine(it, (summary.deltaPts ?: 0) >= 0) }
+            }
+            if (summary.trips.isNotEmpty()) Legend(summary, units)
+        }
+        Spacer(Modifier.height(14.dp))
+        if (summary.trips.isEmpty()) {
+            when (history) {
+                HistoryLoad.LOADING -> VoltLoading("Loading drives…")
+                HistoryLoad.FAILED ->
+                    VoltEmptyState(
+                        "Drives couldn't be read",
+                        body = "Your logged drives are safe.",
+                        action = nav.retryAction(),
+                        inCard = false,
+                    )
+                HistoryLoad.LOADED ->
+                    VoltEmptyState(
+                        "No drives in this period yet",
+                        body = "Pick a longer period, or drive with the adapter connected.",
+                        action = showAll ?: nav.demoAction(),
+                        inCard = false,
+                    )
+            }
+        } else {
+            ModeBars(summary.buckets, units)
+        }
+    }
+}
+
+@Composable
+private fun Legend(
+    summary: PeriodSummary,
+    units: VoltUnits,
+) {
+    val unit = units.distanceUnit
+    Column(Modifier.padding(top = 22.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        LegendLine(VoltColors.energy, "${wholeMiles(summary.evMiles, units)} $unit electric")
+        LegendLine(VoltColors.gas, "${wholeMiles(summary.gasMiles, units)} $unit gas")
+        Text(
+            "${wholeMiles(summary.totalMiles, units)} $unit total",
+            style = VoltType.caption.copy(fontWeight = FontWeight.Medium),
+            color = VoltColors.textSecondary,
+        )
+    }
+}
+
+@Composable
+private fun DeltaLine(
+    text: String,
+    up: Boolean,
+) {
+    val (change, rest) = text.substringBefore(" vs ") to text.substringAfter(" vs ", "")
+    Text(
+        text =
+            buildAnnotatedString {
+                withStyle(
+                    SpanStyle(color = if (up) VoltColors.energy else VoltColors.gas),
+                ) { append(change) }
+                if (rest.isNotEmpty()) append(" vs $rest")
+            },
+        style = VoltType.body.copy(fontWeight = FontWeight.Medium),
+        color = VoltColors.textSecondary,
+        modifier = Modifier.padding(top = 4.dp),
+    )
+}
+
+@Composable
+private fun LegendLine(
+    color: Color,
+    text: String,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Canvas(Modifier.size(9.dp)) { drawRoundRect(color, cornerRadius = CornerRadius(3.dp.toPx())) }
+        Text(text, style = VoltType.caption.copy(fontWeight = FontWeight.Medium), color = VoltColors.textPrimary)
+    }
+}
+
+/** Electric over gas miles, one rounded column per bar with the gas at its foot. */
+@Composable
+private fun ModeBars(
+    buckets: List<ModeBucket>,
+    units: VoltUnits,
+) {
+    val pal = LocalVoltPalette.current
+    val max = buckets.maxOfOrNull { it.evMiles + it.gasMiles }?.takeIf { it > 0.0 } ?: 1.0
+    val unit = units.distanceUnit
+    val described =
+        buckets.joinToString("; ") {
+            "${it.label}: ${wholeMiles(it.evMiles, units)} $unit electric, ${wholeMiles(it.gasMiles, units)} $unit gas"
+        }
+    Row(Modifier.fillMaxWidth().semantics { contentDescription = described }) {
+        buckets.forEach { b ->
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                Canvas(Modifier.fillMaxWidth().height(BARS_DP.dp)) {
+                    val width = minOf(size.width * BAR_FILL, BAR_MAX_DP.dp.toPx())
+                    val left = (size.width - width) / 2
+                    val gap = 4.dp.toPx()
+                    val radius = CornerRadius(minOf(RADIUS_DP.dp.toPx(), width / 2))
+                    val gasH = (b.gasMiles / max * size.height).toFloat()
+                    val evH = (b.evMiles / max * size.height).toFloat()
+                    val minH = MIN_SEGMENT_DP.dp.toPx()
+                    var bottom = size.height
+                    if (b.gasMiles > 0.0) {
+                        val h = maxOf(gasH, minH)
+                        drawRoundRect(pal.gas, Offset(left, bottom - h), Size(width, h), radius)
+                        bottom -= h + gap
+                    }
+                    if (b.evMiles > 0.0) {
+                        val h = maxOf(evH - if (b.gasMiles > 0.0) gap else 0f, minH)
+                        drawRoundRect(pal.ev, Offset(left, bottom - h), Size(width, h), radius)
+                    }
+                }
+                Text(
+                    b.label,
+                    style = VoltType.label.copy(letterSpacing = 0.04.sp, fontSize = 12.sp),
+                    color = VoltColors.textTertiary,
+                    maxLines = 1,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
         }
-        Spacer(Modifier.height(12.dp))
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = String.format(Locale.US, "%.0f mi logged", state.loggedMiles),
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
-            Text(
-                text = "Maintenance: ${state.maintenanceLabel}",
-                style = VoltType.caption,
-                color = VoltColors.textSecondary,
-            )
+    }
+}
+
+@Composable
+private fun SavedTile(
+    state: InsightsUiState,
+    summary: PeriodSummary,
+    modifier: Modifier,
+) {
+    val saved = summary.saved
+    val units = state.units
+    Tile("Saved vs gas", modifier) {
+        if (saved == null) {
+            TileValue(DASH, null)
+            TileNote(if (units.metric) "Needs a gas price and fuel economy" else "Needs a gas price and mpg")
+            EmptyLink(EmptyAction("Open Settings", LocalVoltNav.current.openSettings))
+        } else {
+            val (dollars, cents) = dollarsAndCents(saved)
+            TileValue(dollars, cents, unitLeadingSpace = false)
+            val price = dollarsAndCents(units.gasPrice(state.gasPrice)).let { it.first + it.second }
+            val economy =
+                state.gasMpg?.let { mpg ->
+                    if (units.metric) units.economyText(mpg) else "${wholeMpg(mpg)} mpg"
+                }
+            TileNote(listOfNotNull("at $price/${units.gasVolumeUnit}", economy).joinToString(" · "))
         }
     }
 }
 
-@Preview(widthDp = 412, heightDp = 1400)
+@Composable
+private fun EnergyTile(
+    state: InsightsUiState,
+    summary: PeriodSummary,
+    modifier: Modifier,
+) {
+    Tile("Energy", modifier) {
+        if (summary.kwh <= 0.0) {
+            TileValue(DASH, null)
+            TileNote("No energy logged")
+        } else {
+            TileValue(String.format(Locale.US, "%,d", Math.round(summary.kwh)), "kWh")
+            val cost =
+                state.homeRate.takeIf { it > 0.0 }?.let { rate ->
+                    dollarsAndCents(summary.kwh * rate).let { it.first + it.second }
+                }
+            TileNote(listOfNotNull(cost, summary.miPerKwh?.let(state.units::efficiencyText)).joinToString(" · "))
+        }
+    }
+}
+
+@Composable
+private fun Tile(
+    label: String,
+    modifier: Modifier,
+    content: @Composable () -> Unit,
+) {
+    VoltPanel(modifier = modifier, padding = PaddingValues(14.dp)) {
+        VoltLabel(label)
+        Spacer(Modifier.height(5.dp))
+        content()
+    }
+}
+
+@Composable
+private fun TileValue(
+    value: String,
+    small: String?,
+    unitLeadingSpace: Boolean = true,
+) {
+    Text(
+        text =
+            buildAnnotatedString {
+                append(value)
+                if (small !=
+                    null
+                ) {
+                    withStyle(unitStyle(TILE_UNIT_SP)) { append(if (unitLeadingSpace) " $small" else small) }
+                }
+            },
+        style = VoltType.value.copy(fontSize = TILE_SP.sp),
+        color = VoltColors.textPrimary,
+    )
+}
+
+@Composable
+private fun TileNote(text: String) {
+    if (text.isEmpty()) return
+    Text(text, style = VoltType.caption, color = VoltColors.textSecondary, modifier = Modifier.padding(top = 4.dp))
+}
+
+@Composable
+private fun SpeedCard(
+    bands: List<SpeedEfficiency>,
+    units: VoltUnits,
+    loading: Boolean,
+) {
+    VoltPanel {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            VoltLabel("Efficiency by speed", Modifier.weight(1f))
+            Text(
+                "${units.efficiencyUnit} · ${units.speedUnit}",
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+            )
+        }
+        val best = bands.best()
+        if (best == null) {
+            if (loading) {
+                VoltLoading("Loading…", rows = 2)
+            } else {
+                VoltEmptyState(
+                    "Not enough electric driving yet",
+                    body = "Efficiency by speed appears once this period has a few electric drives.",
+                    inCard = false,
+                )
+            }
+            return@VoltPanel
+        }
+        Text(
+            text =
+                buildAnnotatedString {
+                    append("Most efficient around ")
+                    withStyle(SpanStyle(color = VoltColors.energy)) {
+                        append(units.speedText(best.midMph.toDouble()))
+                    }
+                },
+            style = VoltType.body.copy(fontSize = 15.sp, fontWeight = FontWeight.Medium),
+            color = VoltColors.textPrimary,
+            modifier = Modifier.padding(top = 6.dp, bottom = 8.dp),
+        )
+        CappedTextScale { SpeedBars(bands, best, units) }
+    }
+}
+
+@Composable
+private fun SpeedBars(
+    bands: List<SpeedEfficiency>,
+    best: SpeedEfficiency,
+    units: VoltUnits,
+) {
+    val pal = LocalVoltPalette.current
+    val measurer = rememberTextMeasurer()
+    val axis = VoltType.label.copy(color = pal.faint, fontSize = 12.sp, letterSpacing = 0.04.sp)
+    val bestStyle = axis.copy(color = pal.ev, fontWeight = FontWeight.SemiBold)
+    // Bars are drawn in the shown unit. In kWh/100 km lower is better, so the best band is the
+    // shortest bar there, still picked by mi/kWh and still the one highlighted.
+    val value = { band: SpeedEfficiency -> units.efficiency(band.miPerKwh) ?: 0.0 }
+    val scale = if (units.metric) METRIC_SCALE else 1.0
+    val top = maxOf(SPEED_MIN_TOP * scale, ceil(bands.maxOf(value) + VALUE_HEADROOM * scale))
+    val step = GRID_STEP * scale
+    val described =
+        bands.joinToString("; ") {
+            "${units.speedText(it.midMph.toDouble())}: ${oneDecimal(value(it))} ${units.efficiencyUnit}"
+        }
+    Canvas(Modifier.fillMaxWidth().height(SPEED_DP.dp).semantics { contentDescription = described }) {
+        val labelRoom = LABEL_ROOM_DP.dp.toPx()
+        val chartH = size.height - labelRoom
+        // Room above the tallest bar for the best band's value.
+        val headroom = VALUE_ROOM_DP.dp.toPx()
+        val y = { v: Double -> (chartH - v / top * (chartH - headroom)).toFloat() }
+        // The grid figures sit in a gutter left of the bars, centred on their lines, so a tall bar
+        // never runs through its own scale.
+        val gridLabels = generateSequence(step) { it + step }.takeWhile { it < top }.toList()
+        val measured = gridLabels.map { measurer.measure(oneDecimalOrWhole(it), axis) }
+        val gutter = (measured.maxOfOrNull { it.size.width } ?: 0) + GUTTER_GAP_DP.dp.toPx()
+        gridLabels.forEachIndexed { i, line ->
+            drawLine(pal.line, Offset(gutter, y(line)), Offset(size.width, y(line)), 1.dp.toPx())
+            val label = measured[i]
+            drawAxisText(label, Offset(0f, (y(line) - label.size.height / 2f).coerceAtLeast(0f)))
+        }
+        val slot = (size.width - gutter) / bands.size
+        bands.forEachIndexed { i, band ->
+            val isBest = band == best
+            val barW = slot - 2 * BAR_INSET_DP.dp.toPx()
+            val x = gutter + i * slot + BAR_INSET_DP.dp.toPx()
+            val h = chartH - y(value(band))
+            drawRoundRect(
+                if (isBest) pal.ev else pal.ev.copy(alpha = DIM_BAR_ALPHA),
+                Offset(x, chartH - h),
+                Size(barW, h),
+                CornerRadius(RADIUS_DP.dp.toPx()),
+            )
+            val label = measurer.measure(units.speed(band.midMph.toDouble()).toString(), axis)
+            drawAxisText(label, Offset(x + (barW - label.size.width) / 2, chartH + 8.dp.toPx()))
+            if (isBest) {
+                val figure = measurer.measure(oneDecimal(value(band)), bestStyle)
+                drawAxisText(
+                    figure,
+                    Offset(
+                        x + (barW - figure.size.width) / 2,
+                        chartH - h - figure.size.height - 4.dp.toPx(),
+                    ),
+                )
+            }
+        }
+    }
+}
+
+private fun DrawScope.drawAxisText(
+    layout: TextLayoutResult,
+    at: Offset,
+) = drawText(layout, topLeft = at)
+
+@Composable
+private fun CellNote(drift: CellDrift) {
+    VoltPanel {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            IconSquare(VoltIcons.Cells, tone = PillTone.WARN, size = 40.dp, iconSize = 20.dp)
+            Column(Modifier.weight(1f)) {
+                Text("Cell ${drift.cell} trending low", style = VoltType.bodyStrong, color = VoltColors.textPrimary)
+                Text(
+                    text =
+                        "It sits ${drift.belowMeanMv} mV lower than the average cell and has dropped " +
+                            "${drift.driftMv} mV over ${drift.days} days. Worth watching.",
+                    style = VoltType.caption,
+                    color = VoltColors.textSecondary,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun wholeMpg(mpg: Double): String = if (mpg % 1.0 == 0.0) mpg.toInt().toString() else oneDecimal(mpg)
+
+private fun oneDecimalOrWhole(v: Double): String = if (v % 1.0 == 0.0) v.toInt().toString() else oneDecimal(v)
+
+private const val HERO_SP = 64
+internal const val MAINTENANCE_OPEN = "Open maintenance log"
+private const val MAINTENANCE_BODY =
+    "Log oil changes, tire rotations and other service, with reminders when it's due. " +
+        "It opens in the classic dashboard, under Vehicle."
+private const val HERO_UNIT_SP = 26
+private const val TILE_SP = 28
+private const val TILE_UNIT_SP = 14
+private const val BARS_DP = 112
+private const val BAR_FILL = 0.62f
+private const val BAR_MAX_DP = 60
+private const val RADIUS_DP = 6
+private const val MIN_SEGMENT_DP = 4
+private const val SPEED_DP = 164
+private const val LABEL_ROOM_DP = 24
+private const val BAR_INSET_DP = 8
+private const val DIM_BAR_ALPHA = 0.32f
+private const val SPEED_MIN_TOP = 5.0
+private const val GRID_STEP = 2.0
+private const val VALUE_HEADROOM = 0.3
+
+/** kWh/100 km figures run about 2.5× the mi/kWh ones: the grid and headroom scale with them. */
+private const val METRIC_SCALE = 2.5
+private const val VALUE_ROOM_DP = 18
+private const val GUTTER_GAP_DP = 6
+
+@Preview(widthDp = 412, heightDp = 1100)
 @Composable
 private fun InsightsScreenPreview() {
     VoltTheme { InsightsScreen(InsightsUiState.demo) }

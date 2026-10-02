@@ -33,15 +33,18 @@ set -euo pipefail
 # Resolve to mobile/android regardless of caller cwd (scripts/ -> mobile/android).
 cd "$(dirname "$0")/.."
 
-PKG="com.volttracker.obdpoc"
+# Debug builds install as their own app ID (applicationIdSuffix ".debug"); class names and
+# intent actions keep the source package, so they are spelled out in full against CODE_PKG.
+PKG="com.volttracker.obdpoc.debug"
+CODE_PKG="com.volttracker.obdpoc"
 # Debug-only exported alias for the non-exported classic dashboard activity —
 # see app/src/debug/AndroidManifest.xml. The smoke installs the debug APK, so
 # the alias is always present here.
-MAIN_ACTIVITY="$PKG/.DebugClassicDashboard"
+MAIN_ACTIVITY="$PKG/$CODE_PKG.DebugClassicDashboard"
 # Full component path: ObdService moved to the service/ subpackage in the A3 restructure.
-OBD_SERVICE="$PKG/.service.ObdService"
-ACTION_DEMO="$PKG.action.DEMO"
-ACTION_DISCONNECT="$PKG.action.DISCONNECT"
+OBD_SERVICE="$PKG/$CODE_PKG.service.ObdService"
+ACTION_DEMO="$CODE_PKG.action.DEMO"
+ACTION_DISCONNECT="$CODE_PKG.action.DISCONNECT"
 ARTIFACT_DIR="build/emulator-smoke"
 SCREENSHOT_DIR="$ARTIFACT_DIR/screenshots"
 LOGCAT="build/emulator-smoke-logcat.txt"

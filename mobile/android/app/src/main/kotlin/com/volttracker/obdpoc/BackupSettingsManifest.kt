@@ -73,6 +73,10 @@ object BackupSettingsManifest {
         context: Context,
         manifest: JSONObject?,
     ) {
+        // Shared display prefs travel in the dashboard block (their WebView names); native owns them
+        // now, so restore them here too — a restore started from the Compose UI has no WebView to do it.
+        SharedDisplayPrefs(context.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE))
+            .applyAll(manifest?.optJSONObject("dashboard")?.optJSONObject("preferences"))
         val native = manifest?.optJSONObject("native") ?: return
         val identityKeys = native.optJSONArray("vehicleIdentityKeys")
         if (identityKeys != null) {
@@ -127,6 +131,7 @@ object BackupSettingsManifest {
             } catch (_: RuntimeException) {
                 JSONObject()
             }
+        mergeSharedDisplayPrefs(dashboard, SharedDisplayPrefs(prefs))
         val native =
             JSONObject()
                 .put("eventNotifications", JSONObject(EventNotificationPrefs(prefs).stateJson()))
@@ -151,6 +156,22 @@ object BackupSettingsManifest {
             .put("schemaVersion", SCHEMA_VERSION)
             .put("dashboard", dashboard)
             .put("native", native)
+    }
+
+    /**
+     * Native is the source of truth for the shared display prefs, so its values win over whatever the
+     * WebView exported (and fill them in when the backup was started from the Compose UI).
+     */
+    private fun mergeSharedDisplayPrefs(
+        dashboard: JSONObject,
+        shared: SharedDisplayPrefs,
+    ) {
+        val snapshot = JSONObject(shared.snapshotJson())
+        if (snapshot.length() == 0) return
+        val preferences =
+            dashboard.optJSONObject("preferences") ?: JSONObject().also { dashboard.put("preferences", it) }
+        if (!dashboard.has("schemaVersion")) dashboard.put("schemaVersion", 1)
+        for (key in snapshot.keys()) preferences.put(key, snapshot.get(key))
     }
 
     private const val TABLE_NAME = "volt_backup_settings"

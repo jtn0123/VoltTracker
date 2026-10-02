@@ -38,7 +38,7 @@
   overflow: auto;
   overscroll-behavior: contain;
   word-break: break-word;
-  font-family: ui-monospace, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .error-banner button {
@@ -60,7 +60,7 @@
 
 /* Numbered first-run guidance for sparse/empty tabs. Shown only while the
      empty-state card is visible, so it fills the void without crowding the
-     populated view. Badges pick up the active tab's accent. */
+     populated view. */
 .empty-hints {
   display: grid;
   gap: 9px;
@@ -85,7 +85,7 @@
   border: 1px solid var(--line);
   background: var(--fill);
   color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-weight: 800;
 }
@@ -117,22 +117,11 @@
   margin-top: 0;
 }
 
-body[data-active-view="charge"] .empty-hints b {
-  border-color: rgba(var(--ev-rgb), 0.34);
-  background: rgba(var(--ev-rgb), 0.1);
-  color: var(--ev-soft);
-}
-
-body[data-active-view="drive"] .empty-hints b {
-  border-color: rgba(var(--volt-rgb), 0.34);
-  background: rgba(var(--volt-rgb), 0.1);
+/* Step badges carry the one accent on every tab. */
+.empty-hints b {
+  border-color: transparent;
+  background: rgba(var(--volt-rgb), 0.12);
   color: var(--volt-soft);
-}
-
-body[data-active-view="insights"] .empty-hints b {
-  border-color: rgba(var(--mixed-rgb), 0.34);
-  background: rgba(var(--mixed-rgb), 0.1);
-  color: var(--mixed-soft);
 }
 
 .hero {
@@ -155,18 +144,18 @@ body[data-active-view="insights"] .empty-hints b {
   border: 1px solid var(--line);
   box-shadow: var(--shadow-card);
   /* State-reactive accent (telemetry.ts sets data-power-state): the whole
-       hero tints as one — orange drive, green regen, neutral otherwise. */
+       hero tints as one — teal drive, green regen, neutral otherwise. */
   --hero-accent: var(--soft);
-  --hero-accent-rgb: 170, 170, 180;
+  --hero-accent-rgb: 135, 147, 160;
   --hero-accent-soft: var(--soft);
 }
 
-/* Coast is LIVE (car moving, ~0 kW): warm desaturated tint. Gray is
+/* Coast is LIVE (car moving, ~0 kW): a quiet tint of the accent. Gray is
      reserved for idle/no-data. */
 .live-card[data-power-state="coast"] {
-  --hero-accent: #c08a66;
-  --hero-accent-rgb: 192, 138, 102;
-  --hero-accent-soft: #e8c4a8;
+  --hero-accent: var(--volt-soft-dim);
+  --hero-accent-rgb: var(--volt-rgb);
+  --hero-accent-soft: var(--volt-soft);
 }
 
 .live-card[data-power-state="drive"] {
@@ -188,6 +177,44 @@ body[data-active-view="insights"] .empty-hints b {
   gap: 12px;
 }
 
+/* EV / gas mode pill — the hero's lead label while a fresh rpm reading says
+     which drivetrain is working: green = electric, amber = gas engine. */
+.drive-mode-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 28px;
+  padding: 0 12px 0 10px;
+  border-radius: 999px;
+  background: rgba(var(--ev-rgb), 0.14);
+  color: var(--ev-soft);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.drive-mode-chip[data-drive-mode="gas"] {
+  background: rgba(var(--gas-rgb), 0.16);
+  color: var(--gas);
+}
+
+.drive-mode-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ev);
+}
+
+.drive-mode-chip[data-drive-mode="gas"] .drive-mode-dot {
+  background: var(--gas);
+}
+
+/* The plain "Speed" kicker only stands in while the mode pill is hidden. */
+.drive-mode-chip:not([hidden]) + .live-head-kicker {
+  display: none;
+}
+
 /* Live-rate chip (v2 design): uppercase, tracked-out, and colored to match its
      dot — green while live, dimmed while waiting, warn when stale (below). */
 .rate-chip {
@@ -204,6 +231,43 @@ body[data-active-view="insights"] .empty-hints b {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
+}
+
+.live-head-chips {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+/* Gear chip (PRNDL): just the letter, in a quiet rounded square — the chip's
+     aria-label says "Gear", so the visible label is dropped to declutter. */
+.gear-chip {
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--fill-bold);
+  color: var(--muted);
+}
+
+.gear-chip .gear-chip-label {
+  display: none;
+}
+
+.gear-chip strong {
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* A tentative decode (not yet confirmed on the car) is dimmed. */
+.gear-chip[data-confidence="tentative"] strong,
+.gear-chip[data-confidence="unknown"] strong {
+  color: var(--muted);
 }
 
 .rate-dot {
@@ -326,9 +390,9 @@ body[data-active-view="insights"] .empty-hints b {
   transition: color var(--motion-medium) var(--motion-ease);
 }
 
-/* Design tones: soft orange for drive, green for regen. */
+/* Accent for drive, EV green for regen. */
 .power-state[data-state="drive"] {
-  color: var(--volt-soft-dim);
+  color: var(--volt);
 }
 
 .power-state[data-state="regen"] {
@@ -383,7 +447,7 @@ body[data-active-view="insights"] .empty-hints b {
   /* Full-opacity --soft: the old extra opacity 0.7 multiplied the dimmest
        text token below readable contrast at this 10px size. */
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 650;
   letter-spacing: 0.05em;
@@ -406,10 +470,16 @@ body[data-active-view="insights"] .empty-hints b {
   gap: 12px;
 }
 
+/* Lets the SOC column shrink so its caption wraps under the number (below). */
+.battery-head > :first-child {
+  min-width: 0;
+}
+
 .battery-soc {
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
+  gap: 2px 8px;
   margin-top: 6px;
 }
 
@@ -422,9 +492,12 @@ body[data-active-view="insights"] .empty-hints b {
   font-variant-numeric: tabular-nums;
 }
 
+/* Stays one line: on a narrow phone the "≈ 26 mi EV range" caption drops under
+     the SOC number instead of wrapping into a three-line sliver beside it. */
 .battery-soc-sub {
   font-size: 12px;
   color: var(--soft);
+  white-space: nowrap;
 }
 
 /* Two right-hand head columns (v2 design): Pack temp + Pack kW side by side. */
@@ -546,10 +619,17 @@ body[data-active-view="insights"] .empty-hints b {
 }
 
 .charge-kpi strong {
-  margin-top: 4px;
-  font-size: 22px;
-  font-weight: 700;
+  margin-top: 6px;
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 600;
   letter-spacing: -0.01em;
+}
+
+/* "Set rate" stands in for the Est. cost value while no rate is configured. */
+.charge-kpi .charge-kpi-link {
+  margin: 2px 0 0 -9px;
+  font-size: 15px;
 }
 
 /* Est. cost tints green once a rate/energy is known (design estCostColor). */
@@ -596,7 +676,7 @@ body[data-active-view="insights"] .empty-hints b {
 
 /* ===== 4. Charge history list ===== */
 
-/* Per-session charge history. Green to match the Charge tab accent. */
+/* Per-session charge history. Green = charging energy. */
 .charge-session-list {
   display: grid;
   gap: 8px;
@@ -611,12 +691,11 @@ body[data-active-view="insights"] .empty-hints b {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 12px;
-  border: 1px solid var(--line-soft);
+  padding: 12px 14px;
+  border: 1px solid transparent;
   border-radius: 12px;
   overflow: hidden;
-  /* v2 design: rows sit in the darker inset tone. */
-  background: var(--inset);
+  background: var(--fill-soft);
 }
 
 /* Per-row energy bar: width is this charge's kWh relative to the biggest
@@ -651,9 +730,9 @@ body[data-active-view="insights"] .empty-hints b {
   margin-top: 3px;
   color: var(--muted);
   /* 12px, not 11px: this line carries the substantive per-charge data
-       (SOC delta · kW · duration) — keep it at glance size. Monospace + tabular
-       nums align the figures column-to-column (v2 design). */
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+       (SOC delta · kW · duration) — keep it at glance size. Tabular nums align
+       the figures column-to-column. */
+  font-family: var(--font-ui);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
   line-height: 1.3;
@@ -959,10 +1038,10 @@ canvas {
   border: 0;
   border-radius: 10px;
   background: transparent;
-  /* v2 design: links are the light-blue accent (#9bdcff), 700 — a distinct
+  /* Links are the one accent (--link), 700 — a distinct
        "tappable" voice instead of plain body text. Token so light mode can
        swap in a darker ink (base.css). */
-  color: var(--link, #9bdcff);
+  color: var(--link, #2bd4c4);
   font-size: 12.5px;
   font-weight: 700;
   /* A header action must keep its intrinsic width and never wrap — otherwise a long title
@@ -1154,7 +1233,7 @@ canvas {
 .review-grid span {
   display: block;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.12em;
@@ -1167,7 +1246,9 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
   font-size: 20px;
+  font-weight: 600;
 }
 
 /* Insights Vehicle stats → bare columns (scoped so Charge #reviewCard keeps
@@ -1190,7 +1271,7 @@ canvas {
 
 #vehicleVin {
   font-size: 14px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
 
@@ -1231,20 +1312,19 @@ canvas {
   background: rgba(var(--bad-rgb), 0.08);
 }
 
-/* v2 design: the DTC scan is a translucent green outline button (ghost), not a
-     solid fill — one filled primary per screen, and this row's real action is a
-     read, not a commit. */
+/* The DTC scan is a tinted accent button (not a solid fill — one filled
+     primary per screen, and this row's real action is a read, not a commit). */
 .dtc-action-row .scan {
-  border-color: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.32);
-  background: rgba(var(--view-accent-rgb, var(--ok-rgb)), 0.1);
-  color: var(--view-accent-soft, var(--ok-soft));
-  font-weight: 800;
+  border-color: transparent;
+  background: rgba(var(--volt-rgb), 0.14);
+  color: var(--volt-soft);
+  font-weight: 700;
 }
 
 /* Quick scan: a quiet sibling — subtle fill + full text tone (v2 design). */
 .dtc-action-row .scan-quick {
-  border-color: var(--line-strong);
-  background: var(--fill-soft);
+  border-color: transparent;
+  background: var(--fill-strong);
   color: var(--text);
   font-weight: 700;
 }
@@ -1341,7 +1421,7 @@ canvas {
   border-radius: 999px;
   border: 1px solid var(--line-strong);
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10.5px;
   font-weight: 700;
   transition:
@@ -1493,7 +1573,7 @@ canvas {
 }
 
 .dtc-detail-frame-grid strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
 }
@@ -1550,7 +1630,7 @@ canvas {
   background: var(--fill-soft);
   color: var(--text);
   font-size: 15px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   letter-spacing: 0.04em;
 }
 
@@ -1566,7 +1646,7 @@ canvas {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-weight: 800;
   font-size: 16px;
   letter-spacing: 0.04em;
@@ -1635,29 +1715,21 @@ canvas {
 .dtc-status-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .dtc-status-grid div {
   min-width: 0;
-  padding: 10px;
-  border-radius: var(--radius-md);
-}
-
-.dtc-status-grid div:first-child {
-  /* Neutral primary cell (design counts are untinted); the old orange clashed
-       with the green Diagnostics accent. */
-  border-color: var(--line);
-  background: var(--fill-soft);
+  padding: 10px 0;
 }
 
 .dtc-status-grid span {
   display: block;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
@@ -1667,7 +1739,9 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: var(--font-display);
   font-size: 20px;
+  font-weight: 600;
 }
 
 .warning-list,
@@ -1730,7 +1804,7 @@ header.signal-console-head {
   border-radius: 999px;
   background: rgba(var(--ok-rgb), 0.1);
   color: var(--ok-soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -1779,6 +1853,9 @@ header.signal-console-head {
 .diag-recovery {
   display: grid;
   gap: 12px;
+  /* .panel carries no padding of its own; without this the tone dot sat on
+       the card border and the copy/button ran to its edges. */
+  padding: 16px 20px;
 }
 
 .diag-recovery__head {
@@ -1916,7 +1993,7 @@ header.signal-console-head {
 .live-signals-group {
   margin: 14px 0 4px;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1968,14 +2045,14 @@ header.signal-console-head {
   border-radius: 999px;
   background: var(--surface-overlay);
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .live-signal-value {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 13px;
   font-weight: 700;
   white-space: nowrap;
@@ -2123,7 +2200,7 @@ header.signal-console-head {
 .soh-trend-stats strong,
 .charge-cost-trend-stats strong,
 .live-charge-stats strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-display);
   font-size: 14px;
 }
 
@@ -2140,7 +2217,7 @@ header.signal-console-head {
   display: inline-flex;
   align-items: baseline;
   gap: 2px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 14px;
 }
 
@@ -2180,10 +2257,10 @@ header.signal-console-head {
   flex: 0 0 auto;
   min-height: var(--touch-min, 44px);
   padding: 0 14px;
-  border: 1px solid rgba(var(--ev-rgb), 0.3);
+  border: 0;
   border-radius: 999px;
-  background: rgba(var(--ev-rgb), 0.08);
-  color: var(--ev-soft, var(--ev));
+  background: rgba(var(--volt-rgb), 0.12);
+  color: var(--volt-soft);
   font: inherit;
   font-size: 12px;
   font-weight: 700;
@@ -2192,7 +2269,7 @@ header.signal-console-head {
 
 .cell-toggle-btn:hover,
 .cell-toggle-btn:focus-visible {
-  background: rgba(var(--ev-rgb), 0.14);
+  background: rgba(var(--volt-rgb), 0.18);
 }
 
 /* 96-group voltage heatmap. Each box is a short bar tinted inline by
@@ -2337,7 +2414,7 @@ header.signal-console-head {
 .signal-section-label {
   margin: 16px 0 -2px;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.14em;
@@ -2369,16 +2446,11 @@ header.signal-console-head {
   line-height: 1.35;
 }
 
-/* Probe-mode picker: a 2x2 segmented control. Own styling (green accent) so
-     it matches the Signals tab rather than inheriting the orange map layer pills.
-
-     The selected-button tint is tokenized via --seg-accent-rgb / --seg-accent-soft
-     (defaulting to the Signals green) so the same control can re-skin its active
-     state per screen — see .pref-seg below, which retints it to the Settings amber
-     so the chosen Units/Text-size button speaks the Settings color language. */
+/* Probe-mode picker: a 2x2 segmented control. The selected-button tint is
+     tokenized via --seg-accent-rgb / --seg-accent-soft (the one accent). */
 .signal-stage-tabs {
-  --seg-accent-rgb: 53, 230, 160;
-  --seg-accent-soft: var(--ok-soft);
+  --seg-accent-rgb: var(--volt-rgb);
+  --seg-accent-soft: var(--volt-soft);
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 6px;
@@ -2391,7 +2463,7 @@ header.signal-console-head {
   border-radius: 10px;
   background: var(--fill-soft);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
   font-weight: 740;
   letter-spacing: 0.05em;
@@ -2414,34 +2486,13 @@ header.signal-console-head {
 }
 
 .signal-stage-tabs button.is-active {
-  border-color: rgba(var(--seg-accent-rgb), 0.42);
+  border-color: rgba(var(--seg-accent-rgb), 0.36);
   color: var(--seg-accent-soft);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(var(--seg-accent-rgb), 0.18),
-      rgba(var(--seg-accent-rgb), 0.06)
-    ),
-    var(--fill-soft);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.08),
-    0 6px 16px rgba(var(--seg-accent-rgb), 0.12);
+  background: rgba(var(--seg-accent-rgb), 0.14);
 }
 
-/* Settings → Preferences reuses the segmented control for Units / Text-size.
-     Retint the active/hover accent to the Settings amber (the --warn family the
-     Settings tab uses everywhere) so the selected option matches that screen's
-     color language instead of reading as the Signals green. */
-.pref-seg {
-  --seg-accent-rgb: 255, 184, 74;
-  --seg-accent-soft: var(--warn-soft);
-}
-
-/* Insights "This week" toggle: purple accent (the Insights tab color). */
-.week-mode-tabs {
-  --seg-accent-rgb: var(--mixed-rgb);
-  --seg-accent-soft: var(--mixed-soft);
-}
+/* Settings Units/Text-size and the Insights week toggle reuse this control;
+   every segmented control shares the one accent. */
 
 /* v2 design: the Settings Units/Text-size and Insights week toggles are
      sentence-case sans buttons, not the Signals monospace uppercase pills. */
@@ -2465,12 +2516,12 @@ header.signal-console-head {
   border-radius: 999px;
 }
 
-/* Run-probe = the page's primary action, so it carries the tab's green fill. */
+/* Run-probe = the page's primary action, so it carries the accent fill. */
 .signal-probe-btn {
   flex: 1 1 auto;
-  border-color: rgba(var(--ok-rgb), 0.45);
-  color: var(--on-ok);
-  background: linear-gradient(180deg, var(--ok-bright), var(--ok));
+  border-color: transparent;
+  color: var(--on-volt);
+  background: var(--volt);
   font-weight: 800;
   letter-spacing: 0.01em;
 }
@@ -2526,9 +2577,9 @@ header.signal-console-head {
 }
 
 .signal-filter-grid button b {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-display);
   font-size: 22px;
-  font-weight: 800;
+  font-weight: 600;
   line-height: 1;
   color: var(--text);
 }
@@ -2564,41 +2615,13 @@ header.signal-console-head {
 }
 
 .signal-filter-grid button.is-active {
-  border-color: rgba(var(--ok-rgb), 0.45);
-  background:
-    linear-gradient(
-      180deg,
-      rgba(var(--ok-rgb), 0.14),
-      rgba(var(--ok-rgb), 0.04)
-    ),
-    var(--fill-soft);
+  border-color: rgba(var(--volt-rgb), 0.4);
+  background: rgba(var(--volt-rgb), 0.12);
   color: var(--text);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 6px 16px rgba(var(--ok-rgb), 0.1);
 }
 
 .signal-filter-grid button.is-active span {
-  color: var(--ok-soft);
-}
-
-/* The filter-grid active fill is still a hard-coded bright green (the stage-tabs
-     above were tokenized via --seg-accent-rgb; this grid was not). On light, that
-     bright green washes out, so retint the active state to a readable dark green. */
-@media (prefers-color-scheme: light) {
-  .signal-filter-grid button.is-active {
-    border-color: rgba(4, 120, 87, 0.55);
-    color: #04684b;
-    background:
-      linear-gradient(180deg, rgba(4, 120, 87, 0.16), rgba(4, 120, 87, 0.06)),
-      var(--fill-soft);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.6),
-      0 4px 12px rgba(4, 120, 87, 0.14);
-  }
-  .signal-filter-grid button.is-active span {
-    color: #04684b;
-  }
+  color: var(--volt-soft);
 }
 
 .warning-item,
@@ -2610,9 +2633,9 @@ header.signal-console-head {
 .real-insight-item {
   min-width: 0;
   padding: 10px;
-  border: 1px solid var(--line-soft);
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--inset);
+  background: var(--fill-soft);
 }
 
 .warning-item {
@@ -2648,7 +2671,7 @@ header.signal-console-head {
   border-radius: 999px;
   background: var(--fill);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
@@ -2723,7 +2746,7 @@ header.signal-console-head {
   border-radius: 999px;
   color: var(--muted);
   background: var(--fill);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -2780,7 +2803,9 @@ header.signal-console-head {
 
 .dtc-item {
   display: grid;
-  grid-template-columns: minmax(78px, auto) minmax(0, 1fr) auto auto;
+  /* Code column is capped so a wide "permanent — won't clear" tag wraps
+       under the code instead of squeezing the description to one word/line. */
+  grid-template-columns: minmax(78px, 34%) minmax(0, 1fr) auto auto;
   align-items: start;
   gap: 12px;
   /* v2: the row opens the detail sheet (causes/freeze frame moved there). */
@@ -2842,7 +2867,7 @@ header.signal-console-head {
 .dtc-example-header {
   margin-top: 4px;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.12em;
@@ -2859,7 +2884,7 @@ header.signal-console-head {
   grid-column: 1 / -1;
   margin-top: 4px;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -2894,7 +2919,7 @@ header.signal-console-head {
   display: block;
   margin-bottom: 4px;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   font-weight: 760;
   letter-spacing: 0.1em;
@@ -3007,7 +3032,7 @@ header.signal-console-head {
 }
 
 .dtc-search:focus-visible {
-  outline: 2px solid var(--accent, #4cc4ff);
+  outline: 2px solid var(--accent, #2bd4c4);
   outline-offset: 2px;
 }
 
@@ -3098,7 +3123,7 @@ header.signal-console-head {
 }
 
 .dtc-item[data-status="freeze-frame"] {
-  border-color: rgba(var(--mixed-rgb), 0.28);
+  border-color: var(--line-strong);
 }
 
 .timeline-item {
@@ -3146,7 +3171,7 @@ header.signal-console-head {
 
 .pid-frame-item b {
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   white-space: nowrap;
 }
@@ -3171,9 +3196,10 @@ header.signal-console-head {
   min-height: 32px;
   padding: 0 10px;
   border-radius: 10px;
-  background: rgba(var(--volt-rgb), 0.13);
-  color: var(--volt);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* A stored fault is a caution, never the brand accent. */
+  background: rgba(var(--warn-rgb), 0.13);
+  color: var(--warn);
+  font-family: var(--font-mono);
   font-size: 16px;
   letter-spacing: 0.03em;
 }
@@ -3189,8 +3215,8 @@ header.signal-console-head {
 }
 
 .dtc-item[data-status="freeze-frame"] .dtc-code {
-  background: rgba(var(--mixed-rgb), 0.14);
-  color: var(--mixed);
+  background: var(--fill-bold);
+  color: var(--text);
 }
 
 .dtc-code-block b {
@@ -3214,7 +3240,7 @@ header.signal-console-head {
   display: block;
   margin-top: 2px;
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
 }
 

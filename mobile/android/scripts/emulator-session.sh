@@ -49,5 +49,28 @@ trap cleanup_session_logcat EXIT
 
 bash "$android_dir/scripts/emulator-smoke.sh" || exit $?
 
-cd "$android_dir" || exit 1
-./gradlew --no-daemon --configuration-cache :app:connectedDebugAndroidTest || exit $?
+# Instrumented tests, run straight through adb rather than `gradlew connectedDebugAndroidTest`.
+# The workflow's build step already produced both APKs and emulator-smoke.sh installed the app;
+# a second Gradle invocation here missed the configuration cache, forked a fresh daemon and
+# recompiled/re-dexed/re-packaged both APKs (~2.5 min measured) to run ~15 s of tests. The
+# rebuild happened because app/build.gradle's benchmarkDebugTarget switch (meant for the
+# startup Macrobenchmark) matches any task name containing "connectedDebugAndroidTest" and
+# flips the debug APK to debuggable=false/profileable=true. The tests now run against the SAME
+# debuggable debug APK the shell smoke above just exercised (and that ships as latest-debug).
+test_apk="$android_dir/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk"
+instrumentation_log="$build_dir/emulator-instrumentation.txt"
+runner="com.volttracker.obdpoc.debug.test/androidx.test.runner.AndroidJUnitRunner"
+
+adb install -r -t "$test_apk" || exit $?
+# Match Gradle's fresh start: instrumentation restarts the target process anyway, but stop the
+# demo telemetry the shell smoke left running so the tests begin from a quiet app.
+adb shell am force-stop com.volttracker.obdpoc.debug || true
+# `am instrument` exits 0 even when tests fail or the process crashes, so its exit status is not
+# the verdict — check-instrumentation-output.sh parses the transcript instead.
+adb shell am instrument -w "$runner" 2>&1 | tee "$instrumentation_log"
+adb_status=${PIPESTATUS[0]}
+if [ "$adb_status" -ne 0 ]; then
+  echo "::error title=Instrumented tests::adb shell am instrument exited $adb_status"
+  exit "$adb_status"
+fi
+bash "$android_dir/scripts/check-instrumentation-output.sh" "$instrumentation_log" || exit $?

@@ -1,10 +1,18 @@
 package com.volttracker.obdpoc.materialize
 
-/** Immutable bundle of the session identity and time bounds the materializers operate on. */
+/**
+ * Immutable bundle of the session identity and time bounds the materializers operate on.
+ * [tripRulesVersion] is the session's stamped [TripSplitRules] version; sessions recorded before
+ * gear-aware splitting are [TripSplitRules.LEGACY] and materialize exactly as they always did.
+ * [userSplits] are the session's active user split points ("Split trip here"); they only take
+ * effect under the gear-aware rules (see [TripSplitRules.analyze]).
+ */
 class MaterializerInput(
     @JvmField val sessionId: Long,
     @JvmField val startedAtMs: Long,
     @JvmField val closedAtMs: Long,
+    @JvmField val tripRulesVersion: Int = TripSplitRules.LEGACY,
+    @JvmField val userSplits: List<TripSplitRules.Span> = emptyList(),
 ) {
     init {
         // Reject impossible windows so a clock glitch or a swapped argument fails fast instead of

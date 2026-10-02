@@ -6,17 +6,16 @@ import android.app.Service
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.AutoScanController
 import com.volttracker.obdpoc.BluetoothStateReporter
+import com.volttracker.obdpoc.CarCommand
 import com.volttracker.obdpoc.CompetingAppDetector
 import com.volttracker.obdpoc.DatabaseOperationLease
 import com.volttracker.obdpoc.EnhancedPidProfiles
@@ -136,6 +135,10 @@ open class ObdService :
 
     override var sessionStartedAtMs = 0L
 
+    // Adapter address the current session was started for (null for demo / no session).
+    @Volatile
+    private var sessionAddress: String? = null
+
     // The session-outcome record (state/detail/failureClass/voltage/competingApps) is written by
     // broadcastStatus + the probe/detector setters on the poll/IO, side-effect, and main threads,
     // and read back as ONE consistent snapshot by closeSessionLog and every status broadcast.
@@ -153,12 +156,17 @@ open class ObdService :
         }
     }
 
-    // Flipped by APP_FOREGROUND/APP_BACKGROUND intents on the main thread and read on the poll/IO
-    // thread (background-sample accounting) — @Volatile for the cross-thread visibility edge. It
+    // Flipped by AppVisibility on the main thread and read on the poll/IO thread
+    // (background-sample accounting) — @Volatile for the cross-thread visibility edge. It
     // is deliberately NOT part of sessionOutcome: it is never read together with the outcome
     // fields, so folding it in would only add contention on the visibility flags.
     @Volatile
     override var appInForeground = true
+
+    // The activities report resume/pause through this in-process listener instead of a
+    // startService round trip: a start command makes ActivityThread wait for every pending
+    // SharedPreferences apply() on the main thread, which froze the app when a share sheet paused it.
+    private val appVisibilityListener = AppVisibility.Listener { recordAppVisibility(it) }
 
     // Written on the main thread (foreground start/stop) and read on the poll/IO thread;
     // @Volatile for the same independent-flag reasoning as appInForeground.
@@ -251,10 +259,8 @@ open class ObdService :
         // a previous stopped instance before this one starts publishing authoritative values.
         LiveDashboardSnapshot.reset()
         val openedStore = ObdLocalStore(this)
-        val recoveredSessions = ObdSessionRecovery.recover(this)
-        if (recoveredSessions > 0) {
-            Log.w(AppPrefs.LOG_TAG, "recovered $recoveredSessions sessions interrupted by process death")
-        }
+        // Before any new session can open, so recovery can never mark the new one interrupted.
+        ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
         localStore = openedStore
         locationTracker = LocationManagerTracker(this)
         notifications = ObdNotifications(this)
@@ -277,6 +283,11 @@ open class ObdService :
                 { store, sessionId -> tripSummaryNotifier?.notifyMaterializedTrip(store, sessionId) },
             )
         engine = createPollingEngine()
+        // Start from the current screen state (a session can start while the app is backgrounded),
+        // then follow every later resume/pause. Registered after the recorder exists because the
+        // listener hands visibility changes to it.
+        appInForeground = AppVisibility.isForeground
+        AppVisibility.addListener(appVisibilityListener)
         sdpProbe = SdpProbe(this)
         // The ACL hook keeps mid-drive recovery working while the Activity is gone (B3): when
         // the OS reports the active adapter's link is back, wake the engine's extended
@@ -296,6 +307,9 @@ open class ObdService :
         }
         refreshCompetingAppsAsync()
     }
+
+    /** Seam for [ObdSessionRecovery.recoverSafely]; `open` so a test can simulate a failing database. */
+    open fun recoverInterruptedSessions(): Int = ObdSessionRecovery.recover(this)
 
     /**
      * Factory for the polling engine, created once in [onCreate]. Behavior-identical to the inline
@@ -344,21 +358,24 @@ open class ObdService :
                 stopSelf()
                 return START_NOT_STICKY
             }
-            ACTION_APP_FOREGROUND -> {
-                recordAppVisibility(true)
-                val active = running.get()
-                if (!active) stopSelf(startId)
-                return if (active) START_STICKY else START_NOT_STICKY
-            }
-            ACTION_APP_BACKGROUND -> {
-                recordAppVisibility(false)
-                val active = running.get()
-                if (!active) stopSelf(startId)
-                return if (active) START_STICKY else START_NOT_STICKY
-            }
             ACTION_CANCEL_RETRY -> {
                 requestCancelRetry()
                 broadcastStatus("idle", getString(R.string.status_retry_cancelled), false)
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
+            }
+            ACTION_CAR_CONTROL -> {
+                // Never starts a session: only a live one can run a car command, and the engine
+                // refuses (recording why) when none is polling. Unknown names are ignored.
+                CarCommand.fromWireName(intent.getStringExtra(EXTRA_CAR_COMMAND))?.let(engine::requestCarControl)
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
+            }
+            ACTION_BODY_TEST -> {
+                // Like a car command, only meaningful on a live session; never starts one.
+                if (running.get()) engine.requestBodyTest(BODY_TEST_MS)
                 val active = running.get()
                 if (!active) stopSelf(startId)
                 return if (active) START_STICKY else START_NOT_STICKY
@@ -370,6 +387,18 @@ open class ObdService :
             }
             ACTION_CONNECT -> {
                 val address = intent.getStringExtra(EXTRA_ADDRESS)
+                // A repeat CONNECT (double tap, auto-connect racing a manual one) while this same
+                // adapter is connected and polling must not tear down the working live session:
+                // field logs showed 5 healthy sessions discarded 6-35 s in exactly this way.
+                if (running.get() &&
+                    recorder.activeMode() == ObdLocalStore.MODE_OBD &&
+                    SessionStateMachine.isRedundantConnect(sessionStateMachine.phase(), sessionAddress, address)
+                ) {
+                    recorder.logEvent("duplicate_connect_ignored")
+                    val outcome = sessionOutcome.get()
+                    broadcastStatus(outcome.state, outcome.detail, false)
+                    return START_STICKY
+                }
                 activeName = adapterNameFrom(intent)
                 startObdSession(address, false)
                 return START_STICKY
@@ -407,6 +436,7 @@ open class ObdService :
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onDestroy() {
+        AppVisibility.removeListener(appVisibilityListener)
         stopCurrentSession(getString(R.string.status_service_stopped))
         // Drop the foreground state right away: the persistence drain below runs off the main
         // thread, and the dying service must not keep its notification alive meanwhile (B4).
@@ -598,8 +628,9 @@ open class ObdService :
         if (request.refreshCompetingApps) {
             refreshCompetingAppsAsync()
         }
-        if (!startForegroundSession(request.foregroundText)) {
-            broadcastStatus("blocked", getString(R.string.status_foreground_blocked), true)
+        val blockedDetail = startForegroundSession(request)
+        if (blockedDetail != null) {
+            broadcastStatus("blocked", blockedDetail, true)
             // The service was launched via startForegroundService but never reached the
             // foreground: without a session to own, it must stop itself or Android eventually
             // kills the process with a RemoteServiceException for the missing startForeground
@@ -612,6 +643,7 @@ open class ObdService :
             acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
+        sessionAddress = request.address
         // Anchor for the connect→first-sample latency spans (debug builds only; see StartupTrace).
         StartupTrace.mark("${StartupTrace.OBD_CONNECT_REQUEST}:${request.mode}")
         sessionStateMachine.start(request.phase, request.phaseDetail)
@@ -875,26 +907,50 @@ open class ObdService :
         sendBroadcast(intent)
     }
 
-    private fun startForegroundSession(text: String): Boolean {
-        val notification = notifications.build(text)
+    /**
+     * Puts the service in the state [request]'s session needs (see [ForegroundServicePolicy]).
+     * Returns null on success, or the user-facing reason the session cannot start.
+     */
+    private fun startForegroundSession(request: SessionStartRequest): String? {
+        val plan =
+            ForegroundServicePolicy.plan(
+                request.mode,
+                Build.VERSION.SDK_INT,
+                hasBluetoothConnectPermission() || hasBluetoothScanPermission(),
+                hasLocationPermission(),
+            )
+        val serviceType =
+            when (plan) {
+                ForegroundPlan.Background -> {
+                    // The demo runs as a plain started service: drop any foreground state (and its
+                    // notification) a previous real session left behind.
+                    ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+                    foregroundServiceActive = false
+                    activeForegroundServiceType = 0
+                    return null
+                }
+                ForegroundPlan.MissingNearbyDevicesPermission -> {
+                    recorder.logEvent("foreground_skipped", "reason", "missing_nearby_devices_permission")
+                    return getString(R.string.status_foreground_needs_nearby_devices)
+                }
+                is ForegroundPlan.Foreground -> plan.serviceType
+            }
         return try {
-            val serviceType =
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) currentForegroundServiceType() else null
-            enterForeground(notification, serviceType)
+            enterForeground(notifications.build(request.foregroundText), serviceType)
             if (serviceType != null) {
                 activeForegroundServiceType = serviceType
             }
             foregroundServiceActive = true
-            true
+            null
         } catch (ex: SecurityException) {
             onStartForegroundRefused("startForegroundSession", ex)
-            false
+            getString(R.string.status_foreground_blocked)
         } catch (ex: IllegalStateException) {
             // API 31+ throws ForegroundServiceStartNotAllowedException (an IllegalStateException
             // subclass) instead of SecurityException when background FGS starts are blocked;
             // route it to the same "blocked" fallback instead of crashing the process.
             onStartForegroundRefused("startForegroundSession", ex)
-            false
+            getString(R.string.status_foreground_blocked)
         }
     }
 
@@ -926,15 +982,6 @@ open class ObdService :
         activeForegroundServiceType = 0
     }
 
-    @RequiresApi(Build.VERSION_CODES.Q)
-    private fun currentForegroundServiceType(): Int {
-        var serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE
-        if (hasLocationPermission()) {
-            serviceType = serviceType or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-        }
-        return serviceType
-    }
-
     private fun reevaluateForegroundServiceType() {
         if (!running.get() || !foregroundServiceActive) {
             return
@@ -942,7 +989,7 @@ open class ObdService :
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             return
         }
-        val desired = currentForegroundServiceType()
+        val desired = ForegroundServicePolicy.serviceType(hasLocationPermission())
         if (desired == activeForegroundServiceType) {
             return
         }
@@ -1015,7 +1062,8 @@ open class ObdService :
                 "sampleGapCount",
                 engine.sampleGapCount().toString(),
             )
-            if (running.get()) {
+            // A background (demo) session owns no notification, so there is nothing to refresh.
+            if (running.get() && foregroundServiceActive) {
                 updateNotification(foregroundNotificationText())
                 reevaluateForegroundServiceType()
             }
@@ -1067,9 +1115,13 @@ open class ObdService :
         const val ACTION_CLEAR_DTC = "com.volttracker.obdpoc.action.CLEAR_DTC"
         const val ACTION_DEMO = "com.volttracker.obdpoc.action.DEMO"
         const val ACTION_DISCONNECT = "com.volttracker.obdpoc.action.DISCONNECT"
-        const val ACTION_APP_FOREGROUND = "com.volttracker.obdpoc.action.APP_FOREGROUND"
-        const val ACTION_APP_BACKGROUND = "com.volttracker.obdpoc.action.APP_BACKGROUND"
         const val ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY"
+        const val ACTION_CAR_CONTROL = "com.volttracker.obdpoc.action.CAR_CONTROL"
+        const val ACTION_BODY_TEST = "com.volttracker.obdpoc.action.BODY_TEST"
+
+        /** How long a body test listens: long enough to walk round the car opening things. */
+        const val BODY_TEST_MS = 60_000L
+        const val EXTRA_CAR_COMMAND = "car_command"
         const val BROADCAST_TELEMETRY = "com.volttracker.obdpoc.broadcast.TELEMETRY"
         const val BROADCAST_STATUS = "com.volttracker.obdpoc.broadcast.STATUS"
         const val EXTRA_ADDRESS = "address"

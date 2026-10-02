@@ -57,6 +57,26 @@ class TpmsDiscoveryRunnerTest {
         }
     }
 
+    @Test
+    fun tireStageAsksTheBodyComputerWithItsReplyFilterThenRestoresIt() {
+        val service = FakeService()
+        val engine = FakeEngine(service)
+
+        TpmsDiscoveryRunner(service, engine).run("AA:BB:CC:DD:EE:FF", EnhancedPidProfiles.STAGE_TIRES)
+
+        val bcm = engine.commands.indexOf("ATSH241")
+        assertTrue("the BCM header is probed", bcm >= 0)
+        assertEquals(
+            listOf("ATSH241", "ATCRA641", "22C901", "22C902", "ATAR"),
+            engine.commands.subList(bcm, bcm + 5),
+        )
+        val torque = engine.commands.indexOf("ATSH751")
+        assertEquals(listOf("ATSH751", "ATCRA7XX"), engine.commands.subList(torque, torque + 2))
+        assertEquals("ATAR", engine.commands.subList(torque, engine.commands.size).first { it == "ATAR" })
+        val raw = service.lastTelemetry()!!.getString("raw")
+        assertTrue(raw.contains("22C901"))
+    }
+
     private class FakeService : ObdService() {
         val statuses: MutableList<String?> = ArrayList()
         val statusDetails: MutableList<String?> = ArrayList()

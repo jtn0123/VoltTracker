@@ -35,4 +35,24 @@ interface ObdTripEditStore {
         routeKey: String?,
         hidden: Boolean,
     ): Boolean
+
+    /**
+     * Splits the trip identified by [routeKey] at its in-trip Park stop [stopStartMs]..[stopEndMs]
+     * ("Split trip here"), persisting a user split point (see [ObdTripSplits]). The first half keeps
+     * the trip's label and favorite; the second half starts fresh. Returns null when the key is
+     * unparseable, the session predates gear-aware splitting, or the span is not a Park stop of
+     * that trip.
+     */
+    fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: Long,
+        stopEndMs: Long,
+    ): TripSplitOutcome?
+
+    /**
+     * Undoes a user split ("merge back") identified by its [splitKey] (`sessionId:start:end`). The
+     * merged trip takes the first half's label and favorite. Returns null when no such split is
+     * active.
+     */
+    fun mergeTripSplit(splitKey: String?): TripSplitOutcome?
 }

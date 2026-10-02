@@ -105,7 +105,7 @@ import { VD } from "./vd-registry";
         allTripsLoading = false;
         allTripsLoaded = true;
       }
-    } catch (_err) {
+    } catch {
       allTripsLoading = false;
       VD.reportNativeReadError(
         { ok: false, error: "trips_page_read_failed", message: "Could not load older drives." },
@@ -142,7 +142,7 @@ import { VD } from "./vd-registry";
         tripsRead.complete();
         VD.setState({ tripsLoaded: true });
       }
-    } catch (_err) {
+    } catch {
       handleTripsBridgeFailure();
     }
   }
@@ -209,7 +209,7 @@ import { VD } from "./vd-registry";
         renderInsightStats();
         renderInsightScatter();
       }
-    } catch (_err) {
+    } catch {
       handleInsightsBridgeFailure();
     }
   }
@@ -227,7 +227,7 @@ import { VD } from "./vd-registry";
     // Lifetime "% of driving on electric" (speed-weighted over classified EV vs
     // gas samples). Null until the classifier has seen real driving, so keep
     // the placeholder rather than a misleading 0%.
-    const evPct = insights.electricDrivingPct == null ? NaN : Number(insights.electricDrivingPct);
+    const evPct = insights.electricDrivingPct == null ? Number.NaN : Number(insights.electricDrivingPct);
     VD.setText("insightElectricPct", Number.isFinite(evPct) ? `${Math.round(evPct)}%` : "--");
     renderSavingsVsGas();
     renderDriveTrend();
@@ -254,8 +254,8 @@ import { VD } from "./vd-registry";
     const trips = (Array.isArray(state.trips) ? state.trips : []) as VoltTrip[];
     const pts: Array<{ tempC: number; rangeMi: number }> = [];
     for (const trip of trips) {
-      const tempC = trip.avgOutsideTempC == null ? NaN : Number(trip.avgOutsideTempC);
-      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const tempC = trip.avgOutsideTempC == null ? Number.NaN : Number(trip.avgOutsideTempC);
+      const energy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       const meters = Number(trip.distanceMeters);
       if (!Number.isFinite(tempC) || !Number.isFinite(energy) || energy <= 0 || !(meters > 0)) continue;
       const miPerKwh = meters / 1609.344 / energy;
@@ -315,8 +315,8 @@ import { VD } from "./vd-registry";
       return v || fallback;
     };
     const lineColor = token("--line-soft", "rgba(255,255,255,0.06)");
-    const axisColor = token("--soft", "#8b8c99");
-    const dotColor = token("--ev", "#b8e63b");
+    const axisColor = token("--soft", "#8793a0");
+    const dotColor = token("--ev", "#5fd37a");
     const svgNs = "http://www.w3.org/2000/svg";
     const w = 330;
     const h = 140;
@@ -355,9 +355,9 @@ import { VD } from "./vd-registry";
           x: padL - 5,
           y: yOf(r) + 3,
           fill: axisColor,
-          "font-size": 9,
+          "font-size": 10,
           "text-anchor": "end",
-          "font-family": "ui-monospace,monospace"
+          "font-family": "inherit"
         },
         units.distanceKm(r * KM_PER_MILE).value
       );
@@ -370,9 +370,9 @@ import { VD } from "./vd-registry";
           x: xOf(t),
           y: h - padB + 14,
           fill: axisColor,
-          "font-size": 9,
+          "font-size": 10,
           "text-anchor": "middle",
-          "font-family": "ui-monospace,monospace"
+          "font-family": "inherit"
         },
         units.tempText(t)
       );
@@ -411,7 +411,7 @@ import { VD } from "./vd-registry";
         r: 4,
         fill: dotColor,
         opacity: inPeak ? 1 : 0.45,
-        stroke: token("--bg-top", "#12131a"),
+        stroke: token("--bg-top", "#0e131a"),
         "stroke-width": 1.5
       });
     }
@@ -451,7 +451,7 @@ import { VD } from "./vd-registry";
       const day = days[idx]!;
       day.miles += meters / 1609.344;
       day.trips += 1;
-      const energy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const energy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       if (Number.isFinite(energy) && energy > 0) {
         // Pair distance with energy: only miles from energy-logged trips may feed
         // the mi/kWh denominator. Adding every trip's miles (day.miles) but only
@@ -502,12 +502,13 @@ import { VD } from "./vd-registry";
     const chart = el("thisWeekChart");
     if (chart) {
       const aria = `${mode === "eff" ? "Efficiency" : "Distance"} per day this week; ${headline.replace(/ · /g, ", ")}`;
-      // v2 design week chart: green bars, today highlighted (others dimmed),
-      // per-day value labels, and dashed placeholders for no-drive days.
+      // Week chart: accent bars for distance, EV green for efficiency; today
+      // highlighted (others dimmed), per-day value labels, and dashed
+      // placeholders for no-drive days.
       const todayIdx = (today.getDay() + 6) % 7;
       chart.replaceChildren(
         VD.buildMonthlyTrendSvg(WEEK_DAY_LABELS, values, aria, chart, {
-          colorVar: "--ev",
+          colorVar: mode === "eff" ? "--ev" : "--volt",
           highlightIndex: todayIdx,
           showValues: true,
           valueFormat: (v: number) => (mode === "eff" ? v.toFixed(1) : String(Math.round(v))),
@@ -569,7 +570,7 @@ import { VD } from "./vd-registry";
         byKey.set(key, { label, ms: firstMs, meters });
       }
       totalMeters += meters;
-      const tripEnergy = trip.energyKwh == null ? NaN : Number(trip.energyKwh);
+      const tripEnergy = trip.energyKwh == null ? Number.NaN : Number(trip.energyKwh);
       if (Number.isFinite(tripEnergy) && tripEnergy > 0) {
         energyKwh += tripEnergy;
         energyMeters += meters;
@@ -587,7 +588,7 @@ import { VD } from "./vd-registry";
     VD.setText("driveTrendLatest", distText(latest.meters));
     VD.setText("driveTrendAvg", distText(totalMeters / buckets.length));
     const miles = energyMeters / 1609.344;
-    const miPerKwh = energyKwh > 0 && miles > 0 ? miles / energyKwh : NaN;
+    const miPerKwh = energyKwh > 0 && miles > 0 ? miles / energyKwh : Number.NaN;
     VD.setText("driveTrendEff", Number.isFinite(miPerKwh) ? units.efficiencyText(miPerKwh) : "--");
     // Estimated electric cost per displayed-distance unit: real integrated kWh
     // billed at the home rate. Approximate (public charging is billed at the
@@ -696,6 +697,8 @@ import { VD } from "./vd-registry";
       // with a path to set them instead of leaving the advertised savings
       // permanently hidden.
       row.hidden = false;
+      // "prompt" collapses the "--" figure; the note + Settings link carry the row.
+      row.dataset.state = "prompt";
       VD.setText("insightSavings", "--");
       setSavingsNotePrompt();
       return;
@@ -716,6 +719,7 @@ import { VD } from "./vd-registry";
       ...(blendedEnergyKwh !== undefined ? { energyKwh: blendedEnergyKwh } : {})
     });
     row.hidden = false;
+    row.dataset.state = "ready";
     // Show the magnitude; a leading "-" would read as "you spent more" only when
     // EV electricity is pricier than the gas it replaced (rare but possible).
     VD.setText("insightSavings", formatSignedMoney(savings));
@@ -808,10 +812,10 @@ import { VD } from "./vd-registry";
     // distinct from drive efficiency.
     const whmiInst = pts.map((p, i) => {
       const mph = mphArr[i] ?? 0;
-      if (mph <= 4) return NaN;
+      if (mph <= 4) return Number.NaN;
       const kW = powerAt(Number(p.atMs));
-      if (!Number.isFinite(kW)) return NaN;
-      if (kW <= 0) return NaN;
+      if (!Number.isFinite(kW)) return Number.NaN;
+      if (kW <= 0) return Number.NaN;
       return (kW * 1000) / mph;
     });
     for (let i = 0; i < pts.length; i += 1) {
@@ -1136,7 +1140,7 @@ import { VD } from "./vd-registry";
     // City/Highway averages per drive rather than per correlated sample.
     routes.forEach((route, routeIdx) => {
       enrichRouteEff(route);
-      const pts = (route && route.points) || [];
+      const pts = (route?.points) || [];
       for (let i = 0; i < pts.length; i += 1) {
         const point = pts[i]!;
         // enrichRouteEff sets eff = null for all-regen/idle windows (no positive
@@ -1213,17 +1217,16 @@ import { VD } from "./vd-registry";
     // literals — this keeps the scatter (gridlines, axis labels, grade-coded
     // dots, trend line) legible in BOTH the dark and light themes instead of
     // hardcoding dark-only colors. Fallbacks mirror the dark token defaults.
-    // Resolve on the chart host so --view-accent cascades in — the chart
-    // speaks its own tab's color (purple on Insights) instead of borrowing
-    // Drive orange. Blue stays as the secondary series color for dots.
+    // Resolve on the chart host so --view-accent (the one accent) cascades
+    // in for the trend path; EV green carries the efficiency series.
     const tokens = getComputedStyle(chart);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)"); // gridlines
-    const axisColor = token("--muted", "#aaaab4"); // axis tick labels
-    const trendColor = token("--view-accent", token("--volt", "#ff7a45")); // best-fit trend path
-    const evColor = token("--ev", "#b8e63b"); // bars/curve accent + headline
-    const dotColor = token("--map-accent", "#4cc4ff"); // grade-normalized scatter dots
+    const axisColor = token("--muted", "#9aa5b1"); // axis tick labels
+    const trendColor = token("--view-accent", token("--volt", "#2bd4c4")); // best-fit trend path
+    const evColor = token("--ev", "#5fd37a"); // bars/curve accent + headline
+    const dotColor = token("--map-accent", "#2bd4c4"); // grade-normalized scatter dots
     const w = Math.max(300, chart.clientWidth || 360);
     const h = 280;
     const padL = 38;
@@ -1270,7 +1273,7 @@ import { VD } from "./vd-registry";
         y: h - padB + 15,
         fill: axisColor,
         "font-size": 10.5,
-        "font-family": "ui-monospace,monospace",
+        "font-family": "inherit",
         "text-anchor": "middle"
       });
     }
@@ -1287,7 +1290,7 @@ import { VD } from "./vd-registry";
         y: yS(gy) + 3,
         fill: axisColor,
         "font-size": 10.5,
-        "font-family": "ui-monospace,monospace",
+        "font-family": "inherit",
         "text-anchor": "end"
       });
     }
@@ -1320,10 +1323,10 @@ import { VD } from "./vd-registry";
     // SVG presentation attributes can't read CSS vars, so resolve the extra
     // chrome tokens to literals here and pass them down. v2 design: non-peak
     // bars are translucent green (the same family as the peak), not grey.
-    const evRgb = token("--ev-rgb", "184, 230, 59");
+    const evRgb = token("--ev-rgb", "95, 211, 122");
     const idleBar = `rgba(${evRgb}, 0.28)`;
     const idleWhisker = token("--line-strong", "rgba(255,255,255,0.28)");
-    const bgColor = token("--bg", "#07080c");
+    const bgColor = token("--bg", "#0b0f14");
     const view = scatterView();
     if (view === "bars") {
       renderBuckets(svg, buckets, peak, xOf, yS, {
@@ -1344,7 +1347,7 @@ import { VD } from "./vd-registry";
       y: h - 4,
       fill: axisColor,
       "font-size": 10.5,
-      "font-family": "ui-monospace,monospace",
+      "font-family": "inherit",
       "text-anchor": "end"
     });
     // Y-axis unit annotation (efficiency), rotated to read up the left gutter so
@@ -1354,7 +1357,7 @@ import { VD } from "./vd-registry";
       y: padT + (h - padT - padB) / 2,
       fill: axisColor,
       "font-size": 10.5,
-      "font-family": "ui-monospace,monospace",
+      "font-family": "inherit",
       "text-anchor": "middle",
       transform: `rotate(-90 10 ${(padT + (h - padT - padB) / 2).toFixed(1)})`
     });
@@ -1537,5 +1540,3 @@ import { VD } from "./vd-registry";
     });
   })();
 })();
-
-export {};

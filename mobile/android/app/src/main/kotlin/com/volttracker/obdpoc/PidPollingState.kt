@@ -35,14 +35,29 @@ class PidPollingState(
     private val lastRawSetAtMsByCommand = ConcurrentHashMap<String, Long>()
 
     // Negative-PID cache: PIDs that answer "NO DATA" on this car for [MAX_CONSECUTIVE_NO_DATA]
-    // consecutive polls *while the bus is otherwise alive* are dropped from the schedule for the rest
-    // of the session, so we stop paying their (often full-timeout) round-trip every rotation. Cleared
-    // by reset(), so each new session re-probes every PID from scratch.
+    // consecutive polls *while the bus is otherwise alive* are dropped from the schedule, so we stop
+    // paying their (often full-timeout) round-trip every rotation. A dropped PID is not dead forever:
+    // it is re-probed once its back-off expires (see [reprobeDelayMsFor]) and a live answer puts it
+    // straight back on its normal cadence. Cleared by reset(), so each new session re-probes every
+    // PID from scratch.
     private val consecutiveNoDataByCommand = ConcurrentHashMap<String, Int>()
 
+    // command -> wall-clock time at which the retired PID may be re-probed.
+    private val disabledUntilMsByCommand = ConcurrentHashMap<String, Long>()
+
+    // PIDs that returned a live value at least once this session. Such a PID is proven supported, so
+    // a later NO-DATA streak means its module went quiet (car switched off / plugged in), not that
+    // the car lacks it — it is re-probed quickly rather than parked for the long back-off. Field logs
+    // showed the old retire-for-the-session rule dropping speed, RPM and pack current the moment the
+    // car was parked, then never polling them again when it was driven off in the same session.
     // newSetFromMap(ConcurrentHashMap) rather than ConcurrentHashMap.newKeySet(): the latter needs
     // API 24 and minSdk is 23. Same concurrent-set semantics, available on every supported device.
-    private val disabledCommands: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+    private val everLiveCommands: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
+    // PIDs whose first retirement was already logged, so a re-probe that misses again doesn't spam
+    // a fresh pid_disabled_no_data event every back-off period.
+    private val disableLoggedCommands: MutableSet<String> =
+        Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
     // Wall-clock of the last cycle that returned at least one fresh PID value. The engine reads the
     // age of this (see [msSinceLastLiveData]) to notice a fully asleep bus and end the session
@@ -50,6 +65,10 @@ class PidPollingState(
     // insurance: it is written and read on the poll thread today, but the engine could move the
     // read off-thread without that being obviously unsafe.
     @Volatile private var lastLiveDataAtMs = 0L
+
+    // Cycles that returned at least one fresh value. Unlike [lastLiveDataAtMs] it cannot collide
+    // with a frozen test clock, so "did HS-CAN answer since X" is a plain counter comparison.
+    @Volatile private var liveCycleCount = 0L
     private var clock = Clock { System.currentTimeMillis() }
 
     /** Time source, overridable in tests. */
@@ -70,7 +89,9 @@ class PidPollingState(
         lastPolledAtMsByCommand.clear()
         lastRawSetAtMsByCommand.clear()
         consecutiveNoDataByCommand.clear()
-        disabledCommands.clear()
+        disabledUntilMsByCommand.clear()
+        everLiveCommands.clear()
+        disableLoggedCommands.clear()
         lastLiveDataAtMs = clock.nowMs()
     }
 
@@ -78,8 +99,15 @@ class PidPollingState(
 
     fun dueForCurrentCycle(): List<PidSpec> {
         val due = if (isInitialCycle()) PidSchedule.firstSampleSpecs() else PidSchedule.dueOnCycle(cycleNum)
-        // Drop PIDs the negative-PID cache has retired this session so we stop re-issuing dead reads.
-        return if (disabledCommands.isEmpty()) due else due.filterNot { disabledCommands.contains(it.command) }
+        // Drop PIDs the negative-PID cache has retired, unless their re-probe back-off has expired.
+        if (disabledUntilMsByCommand.isEmpty()) {
+            return due
+        }
+        val now = clock.nowMs()
+        return due.filterNot { spec ->
+            val until = disabledUntilMsByCommand[spec.command]
+            until != null && now < until
+        }
     }
 
     fun advanceCycle() {
@@ -160,6 +188,7 @@ class PidPollingState(
         }
         val specsByHeader = groupByHeader(due)
         var switched = false
+        var receiveFilterSet = false
         for (header in Header.entries) {
             val headerSpecs = specsByHeader[header] ?: continue
             if (header != Header.BROADCAST) {
@@ -174,45 +203,86 @@ class PidPollingState(
                     )
                     continue
                 }
-                engine.sendCommand(headerCommand, 1500)
+                receiveFilterSet = selectHeader(header, headerCommand, receiveFilterSet)
                 switched = true
             }
-            val extraBatch =
-                if (mode01BatchSupported) {
-                    batchableMode01(headerSpecs, batchedTier1, header)
-                } else {
-                    emptyList()
-                }
-            val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
-            if (batchedExtra) {
-                extraBatch.forEach { outcomes.add(it.command to PollOutcome.LIVE) }
-            }
-            for (spec in headerSpecs) {
-                if (
-                    batchedTier1 &&
-                    header == Header.BROADCAST &&
-                    PidSchedule.isMode01BatchCommand(spec.command)
-                ) {
-                    continue
-                }
-                if (batchedExtra && extraBatch.contains(spec)) {
-                    continue
-                }
-                val response = engine.sendRecoverableCommand(spec.command, 1500)
-                appendRawTo(rawThisCycle, spec.command, response)
-                val now = clock.nowMs()
-                lastPolledAtMsByCommand[spec.command] = now
-                val outcome = classifyOutcome(response)
-                if (outcome == PollOutcome.LIVE) {
-                    putLastRaw(spec.command, response, now)
-                }
-                outcomes.add(spec.command to outcome)
-            }
+            pollHeaderGroup(header, headerSpecs, batchedTier1, rawThisCycle, outcomes)
+        }
+        if (receiveFilterSet) {
+            engine.sendCommand(PidSchedule.RESTORE_AUTO_RECEIVE_COMMAND, 1500)
         }
         if (switched) {
             engine.sendCommand(PidSchedule.RESTORE_BROADCAST_HEADER_COMMAND, 1500)
         }
         applyNoDataCache(outcomes)
+    }
+
+    /**
+     * Polls one header's due PIDs (the header is already selected): any extra Mode 01 PIDs are
+     * batched into one request when the adapter supports it, and PIDs a batch already answered
+     * this cycle are not asked again.
+     */
+    @Throws(IOException::class)
+    private fun pollHeaderGroup(
+        header: Header,
+        headerSpecs: List<PidSpec>,
+        batchedTier1: Boolean,
+        rawThisCycle: StringBuilder,
+        outcomes: MutableList<Pair<String, PollOutcome>>,
+    ) {
+        val extraBatch =
+            if (mode01BatchSupported) {
+                batchableMode01(headerSpecs, batchedTier1, header)
+            } else {
+                emptyList()
+            }
+        val batchedExtra = extraBatch.size >= 2 && tryBatchMode01Group(extraBatch, rawThisCycle)
+        if (batchedExtra) {
+            extraBatch.forEach { outcomes.add(it.command to PollOutcome.LIVE) }
+        }
+        for (spec in headerSpecs) {
+            val inTier1Batch =
+                batchedTier1 && header == Header.BROADCAST && PidSchedule.isMode01BatchCommand(spec.command)
+            if (inTier1Batch || (batchedExtra && extraBatch.contains(spec))) {
+                continue
+            }
+            outcomes.add(spec.command to pollOne(spec.command, rawThisCycle))
+        }
+    }
+
+    /** One PID read: records the raw reply, the poll time and (when live) the last good reply. */
+    @Throws(IOException::class)
+    private fun pollOne(
+        command: String,
+        rawThisCycle: StringBuilder,
+    ): PollOutcome {
+        val response = engine.sendRecoverableCommand(command, 1500)
+        appendRawTo(rawThisCycle, command, response)
+        val now = clock.nowMs()
+        lastPolledAtMsByCommand[command] = now
+        val outcome = classifyOutcome(response)
+        if (outcome == PollOutcome.LIVE) {
+            putLastRaw(command, response, now)
+        }
+        return outcome
+    }
+
+    /**
+     * Switches to [header] and, for a node outside the 7E0-7E7 range, points the receive filter at
+     * its reply ID. Such headers are declared last in [Header], so the filter never has to be undone
+     * before another 7Ex block; the caller restores it once at the end of the cycle. Returns whether
+     * a custom receive filter is active afterwards.
+     */
+    @Throws(IOException::class)
+    private fun selectHeader(
+        header: Header,
+        headerCommand: String,
+        receiveFilterSet: Boolean,
+    ): Boolean {
+        engine.sendCommand(headerCommand, 1500)
+        val filterCommand = header.receiveFilterCommand ?: return receiveFilterSet
+        engine.sendCommand(filterCommand, 1500)
+        return true
     }
 
     /**
@@ -226,13 +296,25 @@ class PidPollingState(
         if (outcomes.isEmpty()) {
             return
         }
+        val now = clock.nowMs()
         val anyLive = outcomes.any { it.second == PollOutcome.LIVE }
         if (anyLive) {
-            lastLiveDataAtMs = clock.nowMs()
+            lastLiveDataAtMs = now
+            liveCycleCount += 1
         }
         for ((command, outcome) in outcomes) {
             if (outcome == PollOutcome.LIVE) {
                 consecutiveNoDataByCommand.remove(command)
+                everLiveCommands.add(command)
+                if (disabledUntilMsByCommand.remove(command) != null) {
+                    service.recorder.logEvent("pid_reenabled", "command", command)
+                }
+                continue
+            }
+            if (disabledUntilMsByCommand.containsKey(command)) {
+                // A re-probe of a retired PID that still didn't answer: back off again. The retire
+                // decision was already made, so a silent bus doesn't un-retire it either.
+                disabledUntilMsByCommand[command] = now + reprobeDelayMsFor(command)
                 continue
             }
             if (outcome == PollOutcome.ERROR) {
@@ -243,21 +325,46 @@ class PidPollingState(
             }
             val streak = (consecutiveNoDataByCommand[command] ?: 0) + 1
             consecutiveNoDataByCommand[command] = streak
-            if (streak >= MAX_CONSECUTIVE_NO_DATA && disabledCommands.add(command)) {
-                service.recorder.logEvent(
-                    "pid_disabled_no_data",
-                    "command",
-                    command,
-                    "consecutiveNoData",
-                    streak.toString(),
-                )
+            if (streak >= MAX_CONSECUTIVE_NO_DATA) {
+                retire(command, streak, now)
             }
         }
     }
 
+    private fun retire(
+        command: String,
+        streak: Int,
+        now: Long,
+    ) {
+        val delayMs = reprobeDelayMsFor(command)
+        disabledUntilMsByCommand[command] = now + delayMs
+        if (disableLoggedCommands.add(command)) {
+            service.recorder.logEvent(
+                "pid_disabled_no_data",
+                "command",
+                command,
+                "consecutiveNoData",
+                streak.toString(),
+                "reprobeMs",
+                delayMs.toString(),
+            )
+        }
+    }
+
+    /**
+     * Back-off before a retired PID is polled again: short for a PID that answered earlier this
+     * session (its module is just asleep and will be needed the moment the car wakes), long for one
+     * that never answered (almost certainly unsupported; the periodic re-probe is only a safety net
+     * for a session that began with that module asleep).
+     */
+    private fun reprobeDelayMsFor(command: String): Long =
+        if (everLiveCommands.contains(command)) REPROBE_ANSWERED_PID_MS else REPROBE_SILENT_PID_MS
+
     private fun classifyOutcome(response: String): PollOutcome =
         when {
             ObdElmDecode.isNoDataResponse(response) -> PollOutcome.NO_DATA
+            ObdElmDecode.isUnsupportedNegativeResponse(response) -> PollOutcome.NO_DATA
+            ObdElmDecode.isNegativeResponse(response) -> PollOutcome.ERROR
             ObdElmDecode.isElmErrorResponse(response) -> PollOutcome.ERROR
             else -> PollOutcome.LIVE
         }
@@ -268,14 +375,17 @@ class PidPollingState(
         ERROR,
     }
 
+    /** Monotonic count of poll cycles that returned at least one fresh PID value. */
+    fun liveCycleCount(): Long = liveCycleCount
+
     /** Milliseconds since the most recent cycle that returned any fresh PID value. */
     fun msSinceLastLiveData(): Long = maxOf(0L, clock.nowMs() - lastLiveDataAtMs)
 
-    /** Count of PIDs the negative-PID cache has disabled this session (logging + tests). */
-    fun disabledCommandCount(): Int = disabledCommands.size
+    /** Count of PIDs the negative-PID cache currently has retired (logging + tests). */
+    fun disabledCommandCount(): Int = disabledUntilMsByCommand.size
 
-    /** True if [command] is currently retired by the negative-PID cache. */
-    fun isCommandDisabled(command: String): Boolean = disabledCommands.contains(command)
+    /** True if [command] is currently retired by the negative-PID cache (pending its re-probe). */
+    fun isCommandDisabled(command: String): Boolean = disabledUntilMsByCommand.containsKey(command)
 
     @Throws(IOException::class)
     private fun tryBatchTier1Mode01(
@@ -292,7 +402,8 @@ class PidPollingState(
         }
         val batched = ObdProtocol.buildMode01MultiCommand(PidSchedule.MODE_01_BATCH_PIDS_HEX)
         val response = engine.sendRecoverableCommand(batched, 1500)
-        if (!ObdProtocol.responseContainsAllMode01Pids(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)) {
+        val frames = ObdMode01Batch.split(response, PidSchedule.MODE_01_BATCH_PIDS_HEX)
+        if (frames == null) {
             consecutiveBatchMisses += 1
             if (consecutiveBatchMisses >= MAX_CONSECUTIVE_BATCH_MISSES) {
                 mode01BatchSupported = false
@@ -322,7 +433,7 @@ class PidPollingState(
         val now = clock.nowMs()
         appendRawTo(rawThisCycle, batched, response)
         for (command in PidSchedule.MODE_01_BATCH_COMMANDS) {
-            putLastRaw(command, response, now)
+            putLastRaw(command, frames.getValue(command.substring(2)), now)
             lastPolledAtMsByCommand[command] = now
         }
         return true
@@ -336,13 +447,11 @@ class PidPollingState(
         val pidHex = group.map { it.command.substring(2) }
         val batched = ObdProtocol.buildMode01MultiCommand(pidHex)
         val response = engine.sendRecoverableCommand(batched, 1500)
-        if (!ObdProtocol.responseContainsAllMode01Pids(response, pidHex)) {
-            return false
-        }
+        val frames = ObdMode01Batch.split(response, pidHex) ?: return false
         val now = clock.nowMs()
         appendRawTo(rawThisCycle, batched, response)
         for (spec in group) {
-            putLastRaw(spec.command, response, now)
+            putLastRaw(spec.command, frames.getValue(spec.command.substring(2)), now)
             lastPolledAtMsByCommand[spec.command] = now
         }
         return true
@@ -363,10 +472,16 @@ class PidPollingState(
 
         /**
          * Consecutive bus-alive NO-DATA replies before the negative-PID cache stops scheduling a PID
-         * for the rest of the session. 3 keeps a single transient miss from disabling a supported PID
+         * (until its re-probe back-off expires). 3 keeps a single transient miss from disabling a supported PID
          * while still retiring a genuinely-unsupported one within a few of its poll cycles.
          */
         const val MAX_CONSECUTIVE_NO_DATA: Int = 3
+
+        /** Re-probe back-off for a retired PID that answered earlier this session. */
+        const val REPROBE_ANSWERED_PID_MS: Long = 30_000L
+
+        /** Re-probe back-off for a retired PID that has never answered this session. */
+        const val REPROBE_SILENT_PID_MS: Long = 5L * 60_000L
 
         /**
          * Consecutive incomplete mode-01 batch frames before we permanently fall back to single-PID

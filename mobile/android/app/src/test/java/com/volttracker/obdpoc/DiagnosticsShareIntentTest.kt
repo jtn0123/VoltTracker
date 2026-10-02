@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Parcelable
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -496,7 +497,7 @@ class DiagnosticsShareIntentTest {
                     for (k in kids) wipe(k)
                 }
             }
-            f.delete()
+            f.deleteOrLog()
         }
     }
 }

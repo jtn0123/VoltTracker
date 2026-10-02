@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.engine
 
 import com.volttracker.obdpoc.DiagnosticScanProfile
+import com.volttracker.obdpoc.FreezeFrame
 import com.volttracker.obdpoc.ObdElmDecode
 import com.volttracker.obdpoc.ObdProbes
 import com.volttracker.obdpoc.ObdProtocol
@@ -59,18 +60,7 @@ class DiagnosticScanRunner(
         StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:adapter_identity")
 
         publishProgress("Checking standard OBD protocols, capability pages, and VIN...")
-        var vinResponse: String? = null
-        for (protocol in ObdProbes.PROTOCOL_PROBES) {
-            probeCommand(protocol, 1800, raw)
-            for (capability in ObdProbes.CAPABILITY_PROBES) {
-                probeCommand(capability, if (capability == "0100") 9000 else 3500, raw)
-            }
-            val thisVin = probeCommand("0902", 6000, raw)
-            if (vinResponse == null && ObdProtocol.parseVin(thisVin) != null) {
-                vinResponse = thisVin
-            }
-            probeCommand("03", 3500, raw)
-        }
+        val vinResponse = probeProtocolsForVin(raw)
 
         StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:protocol_vin")
 
@@ -107,39 +97,17 @@ class DiagnosticScanRunner(
         // FULL-only deep sweep: freeze frames, live data, and the slow Volt HV / charger /
         // transmission / brake / TPMS discovery headers. A QUICK scan stops after the generic
         // DTC reads above so a stored-code check returns in seconds.
+        // The freeze frame only exists alongside a stored code, so a quick scan of a clean car
+        // skips it; a full scan always looks.
+        val freezeFrame = if (full || dtcCodes.isNotEmpty()) readFreezeFrame(raw) else null
         if (full) {
             runDeepProbes(raw)
             StartupTrace.mark("${StartupTrace.OBD_SCAN_STAGE}:deep_probes")
         }
         probeCommand("ATSH7DF", 1800, raw)
 
-        if (vinResponse != null) {
-            val vin = ObdProtocol.parseVin(vinResponse)
-            val store = service.localStore
-            if (vin != null && store != null) {
-                try {
-                    store.upsertVehicleFromVin(vin)
-                } catch (ex: RuntimeException) {
-                    service.recorder?.logError("vin_persist_failed", ex)
-                }
-            }
-        }
-
-        val sample = JSONObject()
-        try {
-            sample.put("source", "scan")
-            sample.put("connected", true)
-            sample.put("adapter", service.activeName)
-            sample.put("updatedAt", System.currentTimeMillis())
-            engine.appendLocation(sample)
-            sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
-            sample.put("dtcScanValid", dtcScanValid)
-            sample.put("scanProfile", profile.wireName)
-            sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
-        } catch (_: JSONException) {
-            // Local values are safe.
-        }
-        service.broadcastTelemetry(sample)
+        persistVin(vinResponse)
+        service.broadcastTelemetry(scanSample(profile, raw, dtcScanValid, freezeFrame))
         StartupTrace.mark("${StartupTrace.OBD_SCAN_COMPLETE}:${profile.wireName}")
         service.broadcastStatus(
             "scan-complete",
@@ -154,6 +122,63 @@ class DiagnosticScanRunner(
     }
 
     /**
+     * Sweeps every standard protocol with its capability pages, VIN and stored-code reads. Returns
+     * the first VIN reply that parses, or null when no protocol produced one.
+     */
+    @Throws(IOException::class)
+    private fun probeProtocolsForVin(raw: StringBuilder): String? {
+        var vinResponse: String? = null
+        for (protocol in ObdProbes.PROTOCOL_PROBES) {
+            probeCommand(protocol, 1800, raw)
+            for (capability in ObdProbes.CAPABILITY_PROBES) {
+                probeCommand(capability, if (capability == "0100") 9000 else 3500, raw)
+            }
+            val thisVin = probeCommand("0902", 6000, raw)
+            if (vinResponse == null && ObdProtocol.parseVin(thisVin) != null) {
+                vinResponse = thisVin
+            }
+            probeCommand("03", 3500, raw)
+        }
+        return vinResponse
+    }
+
+    /** Records the car the VIN identifies; a store failure is logged, never fatal to the scan. */
+    private fun persistVin(vinResponse: String?) {
+        val vin = ObdProtocol.parseVin(vinResponse ?: return) ?: return
+        val store = service.localStore ?: return
+        try {
+            store.upsertVehicleFromVin(vin)
+        } catch (ex: RuntimeException) {
+            service.recorder?.logError("vin_persist_failed", ex)
+        }
+    }
+
+    /** The scan's telemetry payload: codes, freeze frame, profile and the raw probe tail. */
+    private fun scanSample(
+        profile: DiagnosticScanProfile,
+        raw: StringBuilder,
+        dtcScanValid: Boolean,
+        freezeFrame: JSONObject?,
+    ): JSONObject {
+        val sample = JSONObject()
+        try {
+            sample.put("source", "scan")
+            sample.put("connected", true)
+            sample.put("adapter", service.activeName)
+            sample.put("updatedAt", System.currentTimeMillis())
+            engine.appendLocation(sample)
+            sample.put("dtcCodes", JSONArray(dtcCodes.toList()))
+            sample.put("dtcScanValid", dtcScanValid)
+            sample.put("scanProfile", profile.wireName)
+            if (freezeFrame != null) sample.put("freezeFrame", freezeFrame)
+            sample.put("raw", ObdElmDecode.tail(raw.toString(), 7200))
+        } catch (_: JSONException) {
+            // Local values are safe.
+        }
+        return sample
+    }
+
+    /**
      * The FULL-depth probe stages skipped by a QUICK scan: Mode-02 freeze frames, the live-data
      * probe set, and every Volt-specific HV / charger / powertrain / transmission / brake / TPMS
      * discovery header.
@@ -161,13 +186,6 @@ class DiagnosticScanRunner(
     @Throws(IOException::class)
     private fun runDeepProbes(raw: StringBuilder) {
         probeCommand("0200", 3500, raw)
-        probeCommand("0202", 3500, raw)
-        probeCommand("0204", 3200, raw)
-        probeCommand("0205", 3200, raw)
-        probeCommand("020C", 3200, raw)
-        probeCommand("020D", 3200, raw)
-        probeCommand("0211", 3200, raw)
-        probeCommand("0242", 3200, raw)
 
         for (probe in ObdProbes.LIVE_PROBES) {
             probeCommand(probe, 3200, raw)
@@ -220,6 +238,25 @@ class DiagnosticScanRunner(
                 probeCommand(probe, 4200, raw)
             }
         }
+    }
+
+    /**
+     * Frame 00 of the car's freeze frame: the code that triggered it, then each snapshot reading
+     * (see [FreezeFrame]). Null when the car has none (no code answers `02 02 00`).
+     */
+    @Throws(IOException::class)
+    private fun readFreezeFrame(raw: StringBuilder): JSONObject? {
+        val dtcReply = probeCommand(FreezeFrame.DTC_REQUEST, 3500, raw)
+        val dtc =
+            ObdProtocol
+                .parseDiagnosticTroubleCodes(FreezeFrame.DTC_REQUEST, dtcReply, "7DF")
+                .firstOrNull()
+                ?.code ?: return null
+        val readings =
+            FreezeFrame.PIDS.mapNotNull { pid ->
+                FreezeFrame.parse(pid, probeCommand(FreezeFrame.request(pid), 3200, raw))
+            }
+        return FreezeFrame.toJson(dtc, readings)
     }
 
     @Throws(IOException::class)

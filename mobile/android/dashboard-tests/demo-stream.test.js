@@ -1,5 +1,6 @@
 // Browser demo stream drive/charge cycle (actions-demo.ts). The stream runs a
-// compressed "day with the car": 60 s driving, 30 s parked on a Level-2
+// compressed "day with the car": a 60 s trip (EV, a gas stretch, regen
+// braking, parked in P), then 30 s on a Level-2
 // charger. The charge window is the only way demo mode can feed the Charge
 // tab's live time-to-full hero, and the drive window must explicitly zero
 // chargerPowerKw — samples merge into state.telemetry, so a stale charger
@@ -55,8 +56,8 @@ describe('browser demo stream drive/charge cycle', () => {
     const t = VD.state.telemetry;
     expect(t.vehicleState).toBe('charging');
     expect(t.speedKph).toBe(0);
-    expect(t.chargerPowerKw).toBeGreaterThanOrEqual(6.5);
-    expect(t.chargerPowerKw).toBeLessThanOrEqual(8);
+    expect(t.chargerPowerKw).toBeGreaterThanOrEqual(3);
+    expect(t.chargerPowerKw).toBeLessThanOrEqual(4);
 
     const card = document.getElementById('liveChargeCard');
     expect(card.hidden).toBe(false);
@@ -100,6 +101,54 @@ describe('browser demo stream drive/charge cycle', () => {
     expect(t.chargerPowerKw).toBe(0);
     expect(t.speedKph).toBeGreaterThan(0);
     expect(document.getElementById('liveChargeCard').hidden).toBe(true);
+  });
+
+  it('runs a short gas stretch mid-trip, then EV again', async () => {
+    await startDemoStream();
+    const VD = window.VoltDashboard;
+    vi.advanceTimersByTime(19000); // t = 20, EV leg
+    expect(VD.state.telemetry.vehicleState).toBe('driving_ev');
+    expect(VD.state.telemetry.rpm).toBe(0);
+    expect(VD.state.mode).toBe('ev');
+    vi.advanceTimersByTime(20000); // t = 40, gas leg
+    expect(VD.state.telemetry.vehicleState).toBe('driving_gas');
+    expect(VD.state.telemetry.rpm).toBeGreaterThan(500);
+    expect(VD.state.mode).toBe('gas');
+    vi.advanceTimersByTime(10000); // t = 50, braking: engine off again
+    expect(VD.state.telemetry.rpm).toBe(0);
+    expect(VD.state.mode).toBe('ev');
+  });
+
+  it('shows regen while driving on electricity', async () => {
+    await startDemoStream();
+    const powers = [];
+    for (let i = 0; i < 35; i += 1) {
+      powers.push(window.VoltDashboard.state.telemetry.powerKw);
+      vi.advanceTimersByTime(1000);
+    }
+    expect(powers.some((kw) => kw < -0.5)).toBe(true);
+  });
+
+  it('regen-brakes to a stop and parks in P before the charger', async () => {
+    await startDemoStream();
+    const VD = window.VoltDashboard;
+    vi.advanceTimersByTime(47000); // t = 48, braking starts
+    const speeds = [];
+    for (let i = 0; i < 6; i += 1) {
+      expect(VD.state.telemetry.powerKw).toBeLessThan(-0.5);
+      speeds.push(VD.state.telemetry.speedKph);
+      vi.advanceTimersByTime(1000);
+    }
+    expect(speeds[0]).toBeGreaterThan(speeds[5]);
+    // t = 54..59: parked, not yet charging.
+    const t = VD.state.telemetry;
+    expect(t.speedKph).toBe(0);
+    expect(t.vehicleState).toBe('parked');
+    expect(t.prndlState).toBe('P');
+    expect(t.chargerPowerKw).toBe(0);
+    const parkedAt = [t.latitude, t.longitude];
+    vi.advanceTimersByTime(4000); // t = 58, still parked, marker stays put
+    expect([VD.state.telemetry.latitude, VD.state.telemetry.longitude]).toEqual(parkedAt);
   });
 
   it('does not start (or resurrect) the stream if the demo was stopped during the chunk load', async () => {

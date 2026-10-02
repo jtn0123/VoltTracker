@@ -2,41 +2,64 @@ package com.volttracker.obdpoc.ui
 
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
-import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.github.takahirom.roborazzi.captureRoboImage
-import com.volttracker.obdpoc.ui.insights.InsightsScreen
+import com.volttracker.obdpoc.ui.components.VoltTab
+import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
-import com.volttracker.obdpoc.ui.theme.VoltTheme
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
+import com.volttracker.obdpoc.ui.trips.TripsUiState
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.ParameterizedRobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Headless screenshot renders of the Compose Insights screen. */
-@RunWith(AndroidJUnit4::class)
+/**
+ * The Insights tab over the demo's month (the mockups' `S-insights-<theme>.png`), its week and
+ * year, a month with no costs set / no speed data / no drifting cell, and nothing logged — in
+ * OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
+ * build/outputs/roborazzi/insights-<state>-<theme>.png; every case also proves the screen composes.
+ */
+@RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h915dp-420dpi")
-class InsightsScreenshotTest {
+@Config(qualifiers = "w412dp-h1000dp-420dpi")
+class InsightsScreenshotTest(
+    private val stateName: String,
+    private val theme: ThemeCase,
+) {
     @get:Rule
     val compose = createComposeRule()
 
-    // Taller-than-viewport render so the full scrollable content is visible in
-    // the before/after review images (the real screen scrolls).
     @Test
-    @Config(qualifiers = "w412dp-h1180dp-420dpi")
-    fun insightsScreenDemoState() {
-        compose.setContent {
-            VoltTheme { InsightsScreen(InsightsUiState.demo) }
-        }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-insights.png")
+    fun capture() {
+        val state =
+            VoltAppUiState(insights = STATES.getValue(stateName), settings = theme.applyTo(SettingsUiState.demo))
+        compose.setContent { VoltApp(state, initialTab = VoltTab.INSIGHTS) }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/insights-$stateName-${theme.key}.png")
     }
 
-    @Test
-    fun insightsScreenEmptyState() {
-        compose.setContent {
-            VoltTheme { InsightsScreen(InsightsUiState()) }
-        }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/after-insights-empty.png")
+    companion object {
+        private val demo = InsightsUiState.demo
+
+        private val STATES =
+            mapOf(
+                "month" to demo,
+                "week" to demo.copy(period = InsightsPeriod.WEEK),
+                "year" to demo.copy(period = InsightsPeriod.YEAR),
+                "bare" to demo.copy(gasMpg = null, speedEfficiency = emptyList(), cellDrift = null),
+                "empty" to InsightsUiState(nowMs = TripsUiState.DEMO_NOW_MS),
+                "loading" to
+                    InsightsUiState(
+                        nowMs = TripsUiState.DEMO_NOW_MS,
+                        history = HistoryLoad.LOADING,
+                        speedsLoaded = false,
+                    ),
+                "metric" to demo.copy(metricUnits = true),
+            )
+
+        @JvmStatic
+        @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-{1}")
+        fun cases(): List<Array<Any>> = STATES.keys.flatMap { name -> ThemeCase.THEMES.map { arrayOf<Any>(name, it) } }
     }
 }

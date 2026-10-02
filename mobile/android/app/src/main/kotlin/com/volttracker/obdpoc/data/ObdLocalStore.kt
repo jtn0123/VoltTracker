@@ -27,7 +27,7 @@ import java.io.File
  * |---------------------------------------------------|----------------------------------------|
  * | Session/telemetry/GPS/event writes                | [ObdSessionStore] (this class)         |
  * | Session/telemetry/storage reads                   | [ObdQueryStore] (this class)           |
- * | Trip edits (label / favorite / hide)              | [tripEdits] -> [ObdTripEditStore]      |
+ * | Trip edits (label / favorite / hide / split)      | [tripEdits] -> [ObdTripEditStore]      |
  * | Route + live-track + SOH-history projections      | [routes] -> [ObdRouteQueryStore]       |
  * | Read-side dashboard JSON projections              | [projections] -> [StoreProjections]    |
  * | Enhanced-capability signal logs                   | [signalLogs] -> [ObdSignalLogStore]    |
@@ -49,11 +49,14 @@ open class ObdLocalStore(
     private val vehicles = ObdStoreVehicles(helper, VinKeyHasher(context.applicationContext))
     private val materialize = ObdStoreMaterialize(helper)
 
-    /** Trip-edit writes (labels, favorites, hide/restore) from the dashboard bridge. */
-    open val tripEdits: ObdTripEditStore = ObdStoreTripEdits(writer, trips)
+    /** Trip-edit writes (labels, favorites, hide/restore, split/merge) from the dashboard bridge. */
+    open val tripEdits: ObdTripEditStore = ObdStoreTripEdits(helper, writer, trips) { rematerializeTrips(it) }
 
     /** Route/track projections for the dashboard's map views and the pack-health trend. */
     open val routes: ObdRouteQueryStore = ObdStoreRoutes(helper, reports)
+
+    /** Insights aggregates the trip rows can't answer (efficiency by speed, cell drift). */
+    open val insights: ObdStoreInsights by lazy { ObdStoreInsights(helper) }
 
     /** Detailed enhanced-capability signal logs (list/export/delete + probe-history checks). */
     open val signalLogs: ObdSignalLogStore = ObdStoreSignalLogs(reports)
@@ -404,9 +407,39 @@ open class ObdLocalStore(
         startedAtMs: Long,
         closedAtMs: Long,
     ) {
-        val input = MaterializerInput(sessionId, startedAtMs, closedAtMs)
+        val input = materializerInput(sessionId, startedAtMs, closedAtMs)
         persistTrips(sessionId, TripMaterializer.materialize(input, this))
         persistChargeSessions(sessionId, ChargeSessionMaterializer.materialize(input, this))
+    }
+
+    private fun materializerInput(
+        sessionId: Long,
+        startedAtMs: Long,
+        closedAtMs: Long,
+    ): MaterializerInput =
+        MaterializerInput(
+            sessionId,
+            startedAtMs,
+            closedAtMs,
+            materialize.readTripRulesVersion(sessionId),
+            materialize.readUserTripSplits(sessionId),
+        )
+
+    /**
+     * Re-cuts an already-materialized session's saved `trip_segments` after a user split/merge, so
+     * saved trips agree with the trip list and map. Sessions that were never materialized (still
+     * recording, demo, or materialization disabled) are left alone; a failure is logged and leaves
+     * the previous segments in place.
+     */
+    private fun rematerializeTrips(session: ObdSessionRecord) {
+        if (session.endedAtMs <= 0L || session.endedAtMs < session.startedAtMs) return
+        if (!materialize.hasTripSegments(session.id)) return
+        try {
+            val input = materializerInput(session.id, session.startedAtMs, session.endedAtMs)
+            materialize.replaceTrips(session.id, TripMaterializer.materialize(input, this))
+        } catch (ex: RuntimeException) {
+            Log.w("VoltTracker", "trip re-materialization failed for session ${session.id}", ex)
+        }
     }
 
     open override fun clearAllData() {

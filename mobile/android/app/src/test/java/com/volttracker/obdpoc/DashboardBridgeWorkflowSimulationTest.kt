@@ -581,7 +581,7 @@ class DashboardBridgeWorkflowSimulationTest {
 
         override fun requireDataBackup(): DataBackup = unsupported("data backup")
 
-        override fun requireBackupController(): BackupController = unsupported("backup controller")
+        override fun requireBackupController(): BackupController<*> = unsupported("backup controller")
 
         override fun onDashboardReady() = Unit
 

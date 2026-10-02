@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc
 
 import android.os.Looper
+import com.volttracker.obdpoc.data.TripSplitOutcome
+import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -287,5 +289,87 @@ class VoltBridgeTripEditsTest {
         assertEquals("ready", activity.lastStatusState)
         assertEquals("Trip added to favorites.", activity.lastStatusDetail)
         assertFalse(activity.lastStatusBlocked)
+    }
+
+    // ---- splitTripAtStop / mergeTripSplit ----------------------------------------------------
+
+    private fun splitPayloads(): List<JSONObject> =
+        activity.dashboardPayloads.filter { it.first == "tripSplitChanged" }.map { JSONObject(it.second.orEmpty()) }
+
+    @Test
+    fun splitTripAtStopConfirmsPersistsAndPublishesTheNewTripKeys() {
+        activity.store.splitTripReturn =
+            TripSplitOutcome("12:1500:1600", false, listOf("12:1000:1500", "12:1601:2000"))
+
+        tripEdits.splitTripAtStop(" 12:1000:2000 ", "1500", " 1600 ")
+        drain()
+
+        assertEquals("Split trip here?", activity.lastConfirmationTitle)
+        assertEquals("12:1000:2000", activity.store.lastSplitRouteKey)
+        assertEquals(1500L, activity.store.lastSplitStopStartMs)
+        assertEquals(1600L, activity.store.lastSplitStopEndMs)
+        assertEquals("ready", activity.lastStatusState)
+        assertTrue(activity.storageSummaryCalls > 0)
+        val payload = splitPayloads().single()
+        assertEquals("12:1500:1600", payload.getString("splitKey"))
+        assertFalse(payload.getBoolean("merged"))
+        assertEquals("12:1601:2000", payload.getJSONArray("routeKeys").getString(1))
+    }
+
+    @Test
+    fun splitTripAtStopReportsBlockedWhenStoreRefusesOrThrows() {
+        tripEdits.splitTripAtStop("12:1000:2000", "1500", "1600")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(splitPayloads().isEmpty())
+
+        activity.store.throwSplitTrip = true
+        tripEdits.splitTripAtStop("12:1000:2000", "1500", "1600")
+        drain()
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(activity.lastStatusBlocked)
+        assertTrue(splitPayloads().isEmpty())
+    }
+
+    @Test
+    fun splitTripAtStopRejectsBadInputsWithoutConfirming() {
+        tripEdits.splitTripAtStop("   ", "1500", "1600")
+        tripEdits.splitTripAtStop("12:1000:2000", "soon", "1600")
+        tripEdits.splitTripAtStop("12:1000:2000", "1500", null)
+        tripEdits.splitTripAtStop("12:1000:2000", "1600", "1500")
+        drain()
+
+        assertNull(activity.lastConfirmationTitle)
+        assertNull(activity.store.lastSplitRouteKey)
+        assertEquals("blocked", activity.lastStatusState)
+    }
+
+    @Test
+    fun mergeTripSplitPersistsWithoutConfirmAndPublishesTheMergedKey() {
+        activity.store.mergeTripSplitReturn = TripSplitOutcome("12:1500:1600", true, listOf("12:1000:2000"))
+
+        tripEdits.mergeTripSplit(" 12:1500:1600 ")
+        drain()
+
+        assertNull("merging back is the undo, so it does not ask first", activity.lastConfirmationTitle)
+        assertEquals("12:1500:1600", activity.store.lastMergedSplitKey)
+        assertEquals("ready", activity.lastStatusState)
+        val payload = splitPayloads().single()
+        assertTrue(payload.getBoolean("merged"))
+        assertEquals("12:1000:2000", payload.getJSONArray("routeKeys").getString(0))
+    }
+
+    @Test
+    fun mergeTripSplitRejectsBlankKeyAndReportsStoreRefusal() {
+        tripEdits.mergeTripSplit(" ")
+        drain()
+        assertNull(activity.store.lastMergedSplitKey)
+        assertEquals("blocked", activity.lastStatusState)
+
+        tripEdits.mergeTripSplit("12:1500:1600")
+        drain()
+        assertEquals("12:1500:1600", activity.store.lastMergedSplitKey)
+        assertEquals("blocked", activity.lastStatusState)
+        assertTrue(splitPayloads().isEmpty())
     }
 }

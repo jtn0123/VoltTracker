@@ -29,7 +29,8 @@ object VoltTrackerSchema {
                 supported_pids TEXT,
                 sample_count INTEGER NOT NULL DEFAULT 0,
                 last_event_at_ms INTEGER,
-                created_at_ms INTEGER NOT NULL
+                created_at_ms INTEGER NOT NULL,
+                trip_rules_version INTEGER NOT NULL DEFAULT 0
             )
             """.trimIndent(),
         )
@@ -64,6 +65,8 @@ object VoltTrackerSchema {
                 app_foreground INTEGER,
                 raw TEXT,
                 json TEXT NOT NULL,
+                prndl_raw INTEGER,
+                door_open INTEGER,
                 FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE CASCADE
             )
             """.trimIndent(),

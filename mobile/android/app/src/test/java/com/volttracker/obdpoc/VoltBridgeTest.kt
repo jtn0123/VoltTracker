@@ -366,6 +366,12 @@ class VoltBridgeTest {
                 "setKeepScreenAwake",
                 "setTripSummaryNotify",
                 "setActiveDashboardView",
+                // Experimental car controls (native PIN + confirmation).
+                "getCarControlState",
+                "getMapTileConfig",
+                "setCarControlsEnabled",
+                "requestCarControl",
+                "lockCarControls",
                 // M1 event notifications + M3 auto-scan settings.
                 "getEventNotificationState",
                 "setChargeCompleteNotify",
@@ -374,6 +380,8 @@ class VoltBridgeTest {
                 "setHighPackTempNotify",
                 // M2 charge target SOC.
                 "setChargeTargetSoc",
+                "getSharedPrefs",
+                "setSharedPref",
                 "setAutoScanOnConnect",
                 // M2 maintenance-overdue alert toggle.
                 "setMaintenanceDueNotify",
@@ -417,6 +425,8 @@ class VoltBridgeTest {
                 "restoreTrip",
                 "setTripLabel",
                 "setTripFavorite",
+                "splitTripAtStop",
+                "mergeTripSplit",
                 "addMaintenanceEntry",
                 "getMaintenanceLog",
                 "deleteMaintenanceEntry",

@@ -190,6 +190,10 @@ object ObdStoreSupport {
             cursor.getString(cursor.getColumnIndexOrThrow("supported_pids")),
             cursor.getInt(cursor.getColumnIndexOrThrow("sample_count")),
             nullableLong(cursor, "last_event_at_ms"),
+            // trip_rules_version: legacy (0) when the cursor does not carry the column.
+            cursor.getColumnIndex("trip_rules_version").let { idx ->
+                if (idx < 0 || cursor.isNull(idx)) 0 else cursor.getInt(idx)
+            },
         )
 
     @JvmStatic
@@ -354,6 +358,7 @@ object ObdStoreSupport {
             "supported_pids",
             "sample_count",
             "last_event_at_ms",
+            "trip_rules_version",
         )
 
     private fun requireKnownTable(table: String): String {

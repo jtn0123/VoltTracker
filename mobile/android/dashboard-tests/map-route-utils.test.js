@@ -25,15 +25,15 @@ describe('map-route-utils.ts', () => {
   });
 
   it('buckets efficiency colors and invalid values', () => {
-    expect(mapEffColor('not-a-number')).toBe('#6a6a72');
-    expect(mapEffColor(4.2)).toBe('#b8e63b');
-    expect(mapEffColor(3.1)).toBe('#ffb84a');
-    expect(mapEffColor(1.9)).toBe('#ff6b5f');
+    expect(mapEffColor('not-a-number')).toBe('#6b7682');
+    expect(mapEffColor(4.2)).toBe('#5fd37a');
+    expect(mapEffColor(3.1)).toBe('#f2c94c');
+    expect(mapEffColor(1.9)).toBe('#ff6b6b');
     // Regen / no-data segments carry eff === null. These must read as grey
     // ("no data"), never fall through Number(null) === 0 into the worst red band.
-    expect(mapEffColor(null)).toBe('#6a6a72');
-    expect(mapEffColor(undefined)).toBe('#6a6a72');
-    expect(mapEffColor('')).toBe('#6a6a72');
+    expect(mapEffColor(null)).toBe('#6b7682');
+    expect(mapEffColor(undefined)).toBe('#6b7682');
+    expect(mapEffColor('')).toBe('#6b7682');
   });
 
   it('numOrNaN maps null/empty to NaN so isFinite guards fire (Number(null) === 0 trap)', () => {

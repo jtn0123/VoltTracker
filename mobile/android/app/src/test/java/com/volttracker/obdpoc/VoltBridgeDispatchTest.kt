@@ -8,6 +8,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdMaintenanceLogStore
 import com.volttracker.obdpoc.data.ObdSignalLogStore
 import com.volttracker.obdpoc.data.ObdTripEditStore
+import com.volttracker.obdpoc.data.TripSplitOutcome
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.PermissionGate
 import org.json.JSONArray
@@ -25,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowAlertDialog
 
 /**
  * Exercises the actual dispatch behavior of the [VoltBridge] `@JavascriptInterface` surface — the
@@ -751,6 +753,14 @@ class VoltBridgeDispatchTest {
         assertEquals("12:1000:2000", activity.store.lastTripFavoriteRouteKey)
         assertEquals(true, activity.store.lastTripFavorite)
 
+        bridge.splitTripAtStop("12:1000:2000", "1500", "1600")
+        drain()
+        assertEquals("12:1000:2000", activity.store.lastSplitTripRouteKey)
+
+        bridge.mergeTripSplit("12:1500:1600")
+        drain()
+        assertEquals("12:1500:1600", activity.store.lastMergedSplitKey)
+
         bridge.addMaintenanceEntry(JSONObject().put("type", "Coolant").put("note", "Flush").toString())
         drain()
         assertEquals("Coolant", activity.store.lastMaintenanceType)
@@ -940,6 +950,52 @@ class VoltBridgeDispatchTest {
     /** Seeds the device catalog with a valid remembered adapter for the `*Last` dispatch paths. */
     private fun rememberLastDevice() {
         activity.requireDeviceCatalog().remember(VALID_ADDRESS, "Saved adapter")
+    }
+
+    // ---- map tiles ---------------------------------------------------------------------------
+
+    @Test
+    fun mapTileConfigComesFromTheSingleTileSource() {
+        // The build's key (blank in tests unless configured) decides between "no tiles" and templates.
+        assertEquals(
+            com.volttracker.obdpoc.map.StadiaTiles
+                .webViewConfigJson(),
+            bridge.getMapTileConfig(),
+        )
+        if (BuildConfig.STADIA_API_KEY.isBlank()) assertEquals("{}", bridge.getMapTileConfig())
+    }
+
+    // ---- car controls ----------------------------------------------------------------------
+
+    @Test
+    fun carControlsAreOffByDefaultAndOnlyNativeDialogsTurnThemOn() {
+        CarControlAuth.resetForTest()
+        val state = JSONObject(bridge.getCarControlState())
+        assertTrue(state.getBoolean("available"))
+        assertFalse(state.getBoolean("enabled"))
+
+        ShadowAlertDialog.reset()
+        bridge.requestCarControl("lock")
+        drain()
+        assertNull("disabled controls show no command dialog", ShadowAlertDialog.getLatestAlertDialog())
+        assertNull(activity.lastServiceAction)
+
+        bridge.setCarControlsEnabled(true)
+        drain()
+        val dialog = ShadowAlertDialog.getLatestAlertDialog()
+        assertEquals(CarControlHostDelegate.ENABLE_WARNING, shadowOf(dialog).message.toString())
+        assertFalse(
+            "nothing is enabled until a PIN is set",
+            JSONObject(bridge.getCarControlState()).getBoolean("enabled"),
+        )
+
+        CarControlAuth.recordPinAttempt(true, System.currentTimeMillis())
+        bridge.lockCarControls()
+        assertFalse(JSONObject(bridge.getCarControlState()).getBoolean("unlocked"))
+        bridge.setCarControlsEnabled(false)
+        drain()
+        assertFalse(JSONObject(bridge.getCarControlState()).getBoolean("enabled"))
+        CarControlAuth.resetForTest()
     }
 
     /**
@@ -1295,6 +1351,8 @@ class VoltBridgeDispatchTest {
         var setTripFavoriteReturn = false
         var lastTripFavoriteRouteKey: String? = null
         var lastTripFavorite: Boolean? = null
+        var lastSplitTripRouteKey: String? = null
+        var lastMergedSplitKey: String? = null
         var addMaintenanceReturn = -1L
         var lastMaintenanceType: String? = null
         var lastMaintenanceNote: String? = null
@@ -1350,6 +1408,20 @@ class VoltBridgeDispatchTest {
                     lastTripFavoriteRouteKey = routeKey
                     lastTripFavorite = favorite
                     return setTripFavoriteReturn
+                }
+
+                override fun splitTripAtStop(
+                    routeKey: String?,
+                    stopStartMs: Long,
+                    stopEndMs: Long,
+                ): TripSplitOutcome? {
+                    lastSplitTripRouteKey = routeKey
+                    return null
+                }
+
+                override fun mergeTripSplit(splitKey: String?): TripSplitOutcome? {
+                    lastMergedSplitKey = splitKey
+                    return null
                 }
             }
 

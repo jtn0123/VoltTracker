@@ -25,6 +25,13 @@ object PrefsKeyOwnership {
             // auto-scan throttle/toggle (auto_scan_*).
             Owner("event-notifications", listOf("notify_", "auto_scan_")),
             Owner("auto-connect", listOf("auto_connect_")),
+            // Experimental car controls: the opt-in flag and the salted PIN hash (never the PIN).
+            Owner("car-controls", listOf(CarControlSettings.PREFIX)),
+            // Display prefs shared by both dashboards (units, rates, accessibility), keyed by the
+            // WebView pref name.
+            Owner("shared-display", listOf(SharedDisplayPrefs.PREFIX)),
+            // Compose UI preferences (Settings → Appearance).
+            Owner("compose-ui", listOf(com.volttracker.obdpoc.ui.theme.AppearancePrefs.PREFIX)),
             // Bare activity-owned keys with no shared prefix (kept explicit so the test catches a
             // future bare key that accidentally collides with one of the prefixed namespaces).
             Owner("activity-misc", listOf("raw_retention_days")),

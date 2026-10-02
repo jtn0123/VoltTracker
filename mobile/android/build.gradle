@@ -79,7 +79,11 @@ def dashboardStartupBudgetBytes = 412_000L
 // "map imagery loads from OpenStreetMap/CARTO" notice in the lazy map chunk
 // (map.ts#maybeShowMapPrivacyNotice, ~0.4 KB). Copy resolves through the eager
 // bundle's VD.t so the chunk does not re-bundle the i18n catalog.
-def dashboardLazySupportBudgetBytes = 90_500L
+// 90.5k → 91k (polish pass, 2026-09-26): #80's split-trip UI left the bucket
+// 24 B under its ceiling; funds the Demo / Testing stream's SW-CAN body fields
+// (doors, hood, hatch, alarm, windows, blower, remote start: ~0.26 KB in
+// actions-demo.js) so demo previews every Body & comfort row.
+def dashboardLazySupportBudgetBytes = 91_000L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyExpertBudgetBytes = 40_000L
 // Detail-panel chunks split OUT of the eager app.js in the G2 startup-headroom
@@ -100,7 +104,7 @@ def dashboardLazyCssBudgetBytes = 23_500L
 def dashboardDtcDataBudgetBytes = 380_000L
 // Keep destination-specific controls in the matching bounded bucket instead of
 // charging every on-demand interaction to the generic support allowance.
-def dashboardLazyPanelFiles = ["js/insights-panel.js", "js/connection-tools.js"]
+def dashboardLazyPanelFiles = ["js/insights-panel.js", "js/connection-tools.js", "js/car-controls.js"]
 def dashboardLazyExpertFiles = ["js/signals-panel.js", "js/scrubber.js"]
 def dashboardLazyDetailFiles = ["js/charge-history.js", "js/maintenance-panel.js", "js/dtc-detail.js"]
 def dashboardDtcDataFiles = ["js/dtc-lookup.js", "js/dtc-causes.js"]
@@ -574,6 +578,8 @@ tasks.register("privacyScan", Exec) {
         // undeclared producer/consumer link that Gradle 9.6+ fails the build over.
         exclude "mobile/android/app/src/main/assets/dashboard/js/**"
         exclude "mobile/android/app/src/main/assets/dashboard/lib/leaflet/**"
+        // Same for the gitignored DTC table :app:generateDtcTable writes.
+        exclude "mobile/android/app/src/main/assets/dtc/**"
     })
     inputs.file(file("tools/privacy-scan.py"))
     inputs.file(file("tools/privacy-scan-allowlist.txt"))

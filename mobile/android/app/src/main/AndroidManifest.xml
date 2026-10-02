@@ -56,7 +56,8 @@
         android:supportsRtl="true"
         android:theme="@style/AppTheme"
         android:usesCleartextTraffic="false">
-        <!-- Native Compose dashboard — the launcher experience. -->
+        <!-- Native Compose dashboard — the launcher experience. Every tab (Drive, Trips, Charge,
+             Insights, Car, Health, Settings) lives here. -->
         <activity
             android:name=".ComposeDashboardActivity"
             android:exported="true"
@@ -68,9 +69,10 @@
             </intent-filter>
         </activity>
 
-        <!-- Classic WebView dashboard. Still hosts trips/history/settings and the
-             connection troubleshooter; reachable from the Compose Settings tab and
-             the home-screen widget until the native screens absorb those flows. -->
+        <!-- Classic WebView dashboard. No longer the launcher: it is reached only from inside the
+             app (Settings -> Advanced -> "Open classic dashboard", trip-summary notification taps)
+             for the tools the native screens lack: raw PIDs, logs, the signal workspace and the
+             troubleshooter. Not exported; debug builds add a launch alias (src/debug). -->
         <activity
             android:name=".MainActivity"
             android:exported="false"
@@ -78,6 +80,9 @@
             android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboardHidden|uiMode|density|fontScale">
         </activity>
 
+        <!-- connectedDevice|location cover real adapter sessions only. The demo stream runs as a
+             plain started service (no startForeground), because on Android 14+ both types need
+             runtime permissions a fresh install lacks; see service/ForegroundServicePolicy.kt. -->
         <service
             android:name="com.volttracker.obdpoc.service.ObdService"
             android:exported="false"
@@ -85,7 +90,7 @@
 
         <!-- Home-screen widget (M10a). exported="true" is required: the system AppWidget host is a
              separate process and delivers APPWIDGET_UPDATE to this receiver. The widget only reads a
-             persisted snapshot and launches MainActivity, so it exposes no sensitive surface.
+             persisted snapshot and launches ComposeDashboardActivity, so it exposes no sensitive surface.
              android:permission="BIND_APPWIDGET" gates APPWIDGET_UPDATE to the system widget host so
              other apps cannot spam update broadcasts; our own in-app refresh uses a direct
              AppWidgetManager.updateAppWidget call (see WidgetUpdater.requestRefresh), not a

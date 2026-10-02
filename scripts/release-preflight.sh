@@ -17,12 +17,12 @@ REQUIRE_RELEASE_CANDIDATE_EVIDENCE="${REQUIRE_RELEASE_CANDIDATE_EVIDENCE:-1}" \
 echo "== dashboard dependency audits =="
 (
   cd "${ROOT}/mobile/android/dashboard-tests"
-  npm ci
+  npm ci --ignore-scripts
   npm audit --audit-level=high
 )
 (
   cd "${ROOT}/mobile/android/dashboard-e2e"
-  npm ci
+  npm ci --ignore-scripts
   npm audit --audit-level=high
 )
 

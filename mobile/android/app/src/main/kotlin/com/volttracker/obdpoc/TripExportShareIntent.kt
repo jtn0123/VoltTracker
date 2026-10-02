@@ -6,6 +6,7 @@ import android.net.Uri
 import android.util.Log
 import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.data.TripTrackFormatter
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
@@ -160,7 +161,7 @@ object TripExportShareIntent {
                 }
             }
             if (pointCount <= 0) {
-                file.delete()
+                file.deleteOrLog()
                 null
             } else {
                 AllTripsExportFile(TripExportFile(file, Format.CSV, pointCount), tripCount)

@@ -25,6 +25,8 @@ import {
 import type { MapSessionFilter } from "./map-session-list";
 import { loadStylesheetWithRetry } from "./lazy-styles";
 import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signatures";
+import { mergeDemoTrip, parseTripSplitChange, splitDemoTrip, userSplitKey } from "./trip-split";
+import type { DemoTripRow, DemoTripSplitResult, TripSplitSpan } from "./trip-split";
 // VD: this file is a LAZY chunk (own esbuild bundle) — every call into the
 // eager bundle and every entry point it publishes crosses the chunk boundary
 // through the VD registry (see vd-registry.ts).
@@ -51,6 +53,8 @@ import { VD } from "./vd-registry";
     durationMs: number;
     startMs: number;
     endMs: number;
+    /** A gear-confirmed stop in Park inside the trip (native TripSplitRules). */
+    parked?: boolean;
   };
 
   type MutablePolylineLayer = LeafletLayer & {
@@ -207,65 +211,43 @@ import { VD } from "./vd-registry";
     return point;
   }
 
-  function createRemoteTileLayer(map: LeafletMapInstance): LeafletLayer {
-    const tiles = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd",
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap, &copy; CARTO"
-    });
-    // Track tile errors and swap to the plain OSM basemap if CARTO is unreachable (DNS block, CDN
-    // outage, regional restriction). Single tile misses are common on mobile networks, so only a
-    // run of failures should surface as a user-visible map problem.
+  type MapTileConfig = { dark?: unknown; light?: unknown; attribution?: unknown };
+
+  const LIGHT_SCHEME = "(prefers-color-scheme: light)";
+
+  // Basemap tiles come from native (StadiaTiles.kt, the one source of truth for both maps):
+  // Stadia Maps URL templates for the dark and light styles, or `{}` when the build has no
+  // key. No key means no tile layer at all: the plain map background plus the route, never a
+  // keyless fallback provider.
+  function mapTileSource(): { url: string; attribution: string } | null {
+    const cfg = VD.parsePayload<MapTileConfig>(VD.callBridge("getMapTileConfig"), {}) || {};
+    const light = typeof matchMedia === "function" && matchMedia(LIGHT_SCHEME).matches;
+    const url = light ? cfg.light : cfg.dark;
+    return typeof url === "string" && url.startsWith("https://tiles.stadiamaps.com/")
+      ? { url, attribution: String(cfg.attribution || "") }
+      : null;
+  }
+
+  function createRemoteTileLayer(): LeafletLayer | null {
+    const source = mapTileSource();
+    if (!source) return null;
+    const tiles = L.tileLayer(source.url, { maxZoom: 19, attribution: source.attribution });
+    // Single tile misses are common on mobile networks, so only a run of failures surfaces as a
+    // user-visible map problem; the route keeps drawing from local data either way.
     let tileErrorCount = 0;
-    let fallbackErrorCount = 0;
-    let fallbackActivated = false;
-    // In-flight requests on the removed primary layer can still settle after the
-    // fallback takes over; ignore them so they cannot clear or re-raise the banner.
     tiles.on("tileload", () => {
-      if (fallbackActivated) return;
       tileErrorCount = 0;
       setMapTileError(false);
     });
     tiles.on("tileerror", (event: LeafletTileErrorEvent) => {
-      if (fallbackActivated) return;
       tileErrorCount += 1;
-      const src = (event && event.tile && event.tile.src) || "unknown";
-      if (tileErrorCount <= 2) {
-        if (bridge && typeof bridge.logClientError === "function") {
-          bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
-        }
+      if (tileErrorCount <= 2 && bridge && typeof bridge.logClientError === "function") {
+        // Drop the query string: it carries the API key, and client errors reach shared logs.
+        const src = String((event && event.tile && event.tile.src) || "unknown").split("?")[0];
+        bridge.logClientError("map.tileerror", "Basemap tile failed: " + src);
       }
       if (tileErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
         setMapTileError(true, "Map tiles are not loading. Routes still work; retry when the network is back.");
-      }
-      if (tileErrorCount >= MAP_TILE_FALLBACK_THRESHOLD && !fallbackActivated) {
-        fallbackActivated = true;
-        try {
-          map.removeLayer(tiles);
-          const fallback = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-            attribution: "© OpenStreetMap",
-            maxZoom: 19
-          });
-          fallback.on("tileload", () => {
-            fallbackErrorCount = 0;
-            setMapTileError(false);
-          });
-          fallback.on("tileerror", () => {
-            fallbackErrorCount += 1;
-            if (fallbackErrorCount >= MAP_TILE_WARNING_THRESHOLD) {
-              setMapTileError(true, "Backup map tiles are also unavailable. Routes still work without basemap tiles.");
-            }
-          });
-          fallback.addTo(map);
-          remoteTileLayer = fallback;
-          if (bridge && typeof bridge.logClientError === "function") {
-            bridge.logClientError("map.fallback", "Switched to OSM basemap after tile errors");
-          }
-        } catch (err) {
-          if (bridge && typeof bridge.logClientError === "function") {
-            bridge.logClientError("map.fallback_failed", String(err));
-          }
-        }
       }
     });
     return tiles;
@@ -296,7 +278,7 @@ import { VD } from "./vd-registry";
 
   // ── Map-tile privacy disclosure (E1) ────────────────────────────────────
   // Basemap tile requests are the app's only routine network egress: they tell
-  // the OpenStreetMap/CARTO tile servers the approximate area being viewed
+  // the Stadia Maps tile servers the approximate area being viewed
   // (tile coordinates). Everything else — routes, OBD samples — stays local.
   // Disclose that honestly the first time the Map renders on this install; a
   // "Got it" tap persists the dismissal via prefs (vt.pref.* localStorage), so
@@ -328,7 +310,6 @@ import { VD } from "./vd-registry";
   });
 
   const MAP_TILE_WARNING_THRESHOLD = 3;
-  const MAP_TILE_FALLBACK_THRESHOLD = 6;
   // Cap on stop markers drawn (and counted in the badge) so a long stop-and-go
   // drive can't flood the map; keep the badge count and the drawn markers in sync.
   const MAX_DRAWN_STOPS = 20;
@@ -340,13 +321,13 @@ import { VD } from "./vd-registry";
     if (!map || typeof L === "undefined") return;
     VD.setState({ mapRemoteTilesEnabled: true });
     if (!remoteTileLayer) {
-      remoteTileLayer = createRemoteTileLayer(map);
-      remoteTileLayer.addTo(map);
+      remoteTileLayer = createRemoteTileLayer();
+      if (remoteTileLayer) remoteTileLayer.addTo(map);
     }
   }
 
-  // Creates the Leaflet map once. Remote basemap tiles are always on so route
-  // context stays consistent across Map and Trips.
+  // Creates the Leaflet map once. Remote basemap tiles are always on (when the
+  // build has a tile key) so route context stays consistent across Map and Trips.
   function ensureMap() {
     if (mapInstance) return mapInstance;
     if (typeof L === "undefined") return null;
@@ -354,7 +335,7 @@ import { VD } from "./vd-registry";
     if (!container) return null;
     const map: LeafletMapInstance = L.map(container, { zoomControl: false, attributionControl: true });
     map.setView([39.5, -98.35], 4);
-    // Keep the OSM/CARTO credit but drop Leaflet's default "Leaflet" prefix
+    // Keep the Stadia/OpenMapTiles/OSM credit but drop Leaflet's default "Leaflet" prefix
     // (with flag glyph) — the stock chrome rendered at body size over the
     // legend. The pill styling lives in screens-map.css.
     if (map.attributionControl && typeof map.attributionControl.setPrefix === "function") {
@@ -362,6 +343,8 @@ import { VD } from "./vd-registry";
     }
     mapInstance = map;
     syncRemoteTiles();
+    // Follow the system light/dark switch: rebuild the tile layer in the matching style.
+    if (typeof matchMedia === "function") matchMedia(LIGHT_SCHEME).addEventListener?.("change", retryMapTiles);
     if (typeof VD.scrubberAttachMap === "function") VD.scrubberAttachMap(map);
     // Tap anywhere on the map → snap the scrubber to the closest route point.
     map.on("click", (e: { latlng?: LeafletLatLng }) => {
@@ -513,7 +496,8 @@ import { VD } from "./vd-registry";
     const isLiveRoute = routeIsLive(route);
     const hasMapContent = hasRoute || (isLiveRoute && points.some(isValidRoutePoint));
     const layer = isLiveRoute ? "routes" : state.mapLayer;
-    const stops = hasRoute ? detectStops(points.filter(isValidRoutePoint)) : [];
+    const parkStops = routeParkStops(route);
+    const stops = hasRoute ? stopsForRoute(points.filter(isValidRoutePoint), parkStops) : [];
 
     const frame = el("mapFrame");
     if (frame) frame.dataset.layer = layer;
@@ -609,12 +593,18 @@ import { VD } from "./vd-registry";
         ? `$${(tripEnergyKwh * homeRate).toFixed(2)}`
         : homeRate > 0 || !hasMapContent
           ? "--"
-          : "set rate"
+          : "Set rate"
     );
     // v2 design: a computed cost tints soft green (matches the Charge tab's
     // Est. cost treatment); placeholders stay quiet.
     const mapCostEl = el("mapCost");
     if (mapCostEl) mapCostEl.dataset.state = hasCost ? "recorded" : "empty";
+    // No pack energy for this drive: energy + cost have nothing to show, so their
+    // cells collapse instead of printing "--" (the text contract is unchanged).
+    const energyCell = el("mapEnergy")?.parentElement;
+    if (energyCell) energyCell.hidden = !hasTripEnergy;
+    const costCell = mapCostEl?.parentElement;
+    if (costCell) costCell.hidden = !hasTripEnergy;
     // Fullscreen drive summary mirrors the sheet header (which fullscreen hides).
     VD.setText("mapFsInfoTitle", textOf("mapTitle") || "Drive");
     VD.setText("mapFsInfoSub", [textOf("mapKicker"), textOf("mapDistance")].filter((part) => part && part !== "--").join(" · "));
@@ -626,7 +616,7 @@ import { VD } from "./vd-registry";
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     syncRemoteTiles();
     maybeShowMapPrivacyNotice();
-    drawMapRoute(points, hasRoute, layer, routeSession);
+    drawMapRoute(points, hasRoute, layer, routeSession, parkStops);
     if (hasRoute && typeof VD.renderScrubber === "function") VD.renderScrubber(route);
     else if (typeof VD.hideScrubber === "function") VD.hideScrubber();
     renderMapListsIfChanged(routes);
@@ -1076,7 +1066,13 @@ import { VD } from "./vd-registry";
   }
 
   // Draws the selected route on Leaflet as routes / heat / stops layer groups.
-  function drawMapRoute(points: VoltRoutePoint[], hasRoute: boolean, layer: string, routeSession: MapRouteSession) {
+  function drawMapRoute(
+    points: VoltRoutePoint[],
+    hasRoute: boolean,
+    layer: string,
+    routeSession: MapRouteSession,
+    parkStops: VoltParkStop[] = []
+  ) {
     const container = el("mapLeaflet");
     if (!container || !container.offsetWidth || !container.offsetHeight) return;
     const map = ensureMap();
@@ -1137,7 +1133,7 @@ import { VD } from "./vd-registry";
         radius: 8,
         color: "#fff",
         weight: 2,
-        fillColor: isLiveRoute ? "#4cc4ff" : "#ff7a45",
+        fillColor: isLiveRoute ? "#7ae8dc" : "#2bd4c4",
         fillOpacity: 1
       });
       mapLayerGroups.routes = L.layerGroup([onlyMarker()]);
@@ -1152,13 +1148,13 @@ import { VD } from "./vd-registry";
       }
       return;
     }
-    const routeColor = isLiveRoute ? "#4cc4ff" : "#ff7a45";
-    const routeEndColor = isLiveRoute ? "#4cc4ff" : "#ff7141";
+    const routeColor = isLiveRoute ? "#7ae8dc" : "#2bd4c4";
+    const routeEndColor = isLiveRoute ? "#7ae8dc" : "#1fb8a9";
     // Direction-of-travel cue: a thin overlay of round dashes whose CSS animation
     // flows start -> end (chronological draw order = direction travelled). Subtle
     // (no extra weight, just a moving stipple) so it reads as "which way" without
     // shouting. The class drives the dash pattern + keyframes (screens.css).
-    const flowColor = isLiveRoute ? "#dff4ff" : "#fff0e6";
+    const flowColor = isLiveRoute ? "#f0fffd" : "#e6fffc";
 
     const outerRoute = L.polyline(latlngs, { color: routeColor, weight: 9, opacity: 0.16 }) as MutablePolylineLayer;
     const innerRoute = L.polyline(latlngs, { color: routeColor, weight: 3.5, opacity: 1 }) as MutablePolylineLayer;
@@ -1194,11 +1190,11 @@ import { VD } from "./vd-registry";
       };
     }
 
-    const bands: Record<string, LatLngSegment[]> = { "#ff6b4a": [], "#ffd23f": [], "#7ee06a": [] };
+    const bands: Record<string, LatLngSegment[]> = { "#ff6b6b": [], "#f2c94c": [], "#5fd37a": [] };
     const heatStats: Record<string, { meters: number; seconds: number }> = {
-      "#ff6b4a": { meters: 0, seconds: 0 },
-      "#ffd23f": { meters: 0, seconds: 0 },
-      "#7ee06a": { meters: 0, seconds: 0 }
+      "#ff6b6b": { meters: 0, seconds: 0 },
+      "#f2c94c": { meters: 0, seconds: 0 },
+      "#5fd37a": { meters: 0, seconds: 0 }
     };
     for (let i = 1; i < drawable.length; i += 1) {
       const previousPoint = drawable[i - 1];
@@ -1207,7 +1203,7 @@ import { VD } from "./vd-registry";
       const latLng = latlngs[i];
       if (!previousPoint || !point || !previousLatLng || !latLng) continue;
       const speed = segmentSpeedMps(previousPoint, point);
-      const color = speed < 8 ? "#ff6b4a" : (speed < 18 ? "#ffd23f" : "#7ee06a");
+      const color = speed < 8 ? "#ff6b6b" : (speed < 18 ? "#f2c94c" : "#5fd37a");
       const bucket = bands[color];
       if (bucket) bucket.push([previousLatLng, latLng]);
       const bandStat = heatStats[color];
@@ -1218,9 +1214,9 @@ import { VD } from "./vd-registry";
       }
     }
     const HEAT_BAND_LABELS: Record<string, { label: string; tone: string }> = {
-      "#ff6b4a": { label: "Slow stretches", tone: "bad" },
-      "#ffd23f": { label: "Steady stretches", tone: "warn" },
-      "#7ee06a": { label: "Fast stretches", tone: "ok" }
+      "#ff6b6b": { label: "Slow stretches", tone: "bad" },
+      "#f2c94c": { label: "Steady stretches", tone: "warn" },
+      "#5fd37a": { label: "Fast stretches", tone: "ok" }
     };
     mapLayerGroups.heat = L.layerGroup();
     Object.entries(bands).forEach(([color, segments]) => {
@@ -1245,16 +1241,16 @@ import { VD } from "./vd-registry";
     mapLayerGroups.stops = L.layerGroup([
       L.polyline(latlngs, { color: routeColor, weight: 2.5, opacity: 0.4 })
     ]);
-    const stops = detectStops(drawable).slice(0, MAX_DRAWN_STOPS);
+    const stops = stopsForRoute(drawable, parkStops).slice(0, MAX_DRAWN_STOPS);
     stops.forEach((stop) => {
       const radius = Math.min(13, 7 + stop.durationMs / 120000);
       const marker = L.circleMarker([stop.lat, stop.lng], {
-        radius, color: "#ffd7b0", weight: 3, fillColor: "#ff8a3d", fillOpacity: 0.38
-      }).bindTooltip(`Stop · ${VD.formatDuration(stop.durationMs)}`);
+        radius, color: "#e8edf2", weight: 3, fillColor: "#8793a0", fillOpacity: 0.38
+      }).bindTooltip(stop.parked ? `${parkStopLabel(stop.durationMs)} · in Park` : `Stop · ${VD.formatDuration(stop.durationMs)}`);
       // Tap a stop -> arrived / back-on-road times in the detail card.
       marker.on("click", () => {
         showSegPop({
-          title: "Stop",
+          title: stop.parked ? "Stopped in Park" : "Stop",
           sub: `Arrived ${fmtClockTime(stop.startMs)} · back on road ${fmtClockTime(stop.endMs)}`,
           stat: VD.formatDuration(stop.durationMs),
           tone: "warn"
@@ -1288,10 +1284,10 @@ import { VD } from "./vd-registry";
       }
     }
     const EFF_BAND_LABELS: Record<string, { label: string; tone: string }> = {
-      "#b8e63b": { label: "Efficient stretches", tone: "ok" },
-      "#ffb84a": { label: "Average-efficiency stretches", tone: "warn" },
-      "#ff6b5f": { label: "Low-efficiency stretches", tone: "bad" },
-      "#6a6a72": { label: "No power data", tone: "idle" }
+      "#5fd37a": { label: "Efficient stretches", tone: "ok" },
+      "#f2c94c": { label: "Average-efficiency stretches", tone: "warn" },
+      "#ff6b6b": { label: "Low-efficiency stretches", tone: "bad" },
+      "#6b7682": { label: "No power data", tone: "idle" }
     };
     mapLayerGroups.eff = L.layerGroup();
     // Soft white halo underneath the colored segments so the route reads
@@ -1316,8 +1312,8 @@ import { VD } from "./vd-registry";
       });
       line.addTo(mapLayerGroups.eff);
     });
-    L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#b8e63b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
-    L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b5f", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(firstLatLng, { radius: 6, color: "#fff", weight: 2, fillColor: "#5fd37a", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
+    L.circleMarker(lastLatLng, { radius: 7, color: "#fff", weight: 2, fillColor: "#ff6b6b", fillOpacity: 1 }).addTo(mapLayerGroups.eff);
 
     // Drive-event diamonds (hard braking / rapid accel) ride every layer
     // except Stops. Fresh marker instances per group — a Leaflet layer can
@@ -1604,10 +1600,10 @@ import { VD } from "./vd-registry";
     const tokens = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
-    const axisColor = token("--muted", "#aaaab4");
-    const evColor = token("--ev", "#b8e63b");
-    const downColor = token("--map-accent", "#4cc4ff");
-    const upColor = token("--bad", "#ff6b5f");
+    const axisColor = token("--muted", "#9aa5b1");
+    const evColor = token("--ev", "#5fd37a");
+    const downColor = token("--map-accent", "#2bd4c4");
+    const upColor = token("--bad", "#ff6b6b");
     const w = 320;
     const h = 220;
     const padL = 34;
@@ -1640,11 +1636,11 @@ import { VD } from "./vd-registry";
     };
     for (let gx = 0; gx <= axisMaxMph; gx += 15) {
       appendLine({ x1: xOf(gx), y1: padT, x2: xOf(gx), y2: h - padB, stroke: lineColor });
-      appendText(String(Math.round(speedToDisplay(gx))), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle" });
+      appendText(String(Math.round(speedToDisplay(gx))), { x: xOf(gx), y: h - padB + 14, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "middle" });
     }
     for (let gy = 0; gy <= 7; gy += 1) {
       appendLine({ x1: padL, y1: yS(gy), x2: w - padR, y2: yS(gy), stroke: lineColor });
-      appendText(String(Math.round(effToDisplay(gy))), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+      appendText(String(Math.round(effToDisplay(gy))), { x: padL - 6, y: yS(gy) + 3, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "end" });
     }
     pool.forEach((p) => {
       svg.append(setSvgAttrs(document.createElementNS(ns, "circle"), {
@@ -1655,9 +1651,9 @@ import { VD } from "./vd-registry";
         "fill-opacity": 0.55,
       }));
     });
-    appendText(`speed (${speedUnitLabel}) ->`, { x: w - padR, y: h - 4, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end" });
+    appendText(`speed (${speedUnitLabel}) ->`, { x: w - padR, y: h - 4, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "end" });
     // Y-axis (efficiency) unit annotation, rotated up the left gutter.
-    appendText(effUnitLabel, { x: 9, y: padT + (h - padT - padB) / 2, fill: axisColor, "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle", transform: `rotate(-90 9 ${(padT + (h - padT - padB) / 2).toFixed(1)})` });
+    appendText(effUnitLabel, { x: 9, y: padT + (h - padT - padB) / 2, fill: axisColor, "font-size": 10, "font-family": "inherit", "text-anchor": "middle", transform: `rotate(-90 9 ${(padT + (h - padT - padB) / 2).toFixed(1)})` });
     return svg;
   }
 
@@ -1727,8 +1723,8 @@ import { VD } from "./vd-registry";
     const tokens = getComputedStyle(document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
-    const axisColor = token("--muted", "#aaaab4");
-    const traceColor = token("--map-accent", "#4cc4ff");
+    const axisColor = token("--muted", "#9aa5b1");
+    const traceColor = token("--map-accent", "#2bd4c4");
     const ns = "http://www.w3.org/2000/svg";
     const setSvgAttrs = VD.setSvgAttrs;
     const w = 320;
@@ -1754,7 +1750,7 @@ import { VD } from "./vd-registry";
       }));
       const label = setSvgAttrs(document.createElementNS(ns, "text"), {
         x: padL - 5, y: (y + 3).toFixed(1), fill: axisColor,
-        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+        "font-size": 10, "font-family": "inherit", "text-anchor": "end",
       });
       label.textContent = altText(alt);
       svg.append(label);
@@ -1777,7 +1773,7 @@ import { VD } from "./vd-registry";
     }));
     const distLabel = setSvgAttrs(document.createElementNS(ns, "text"), {
       x: w - padR, y: h - 4, fill: axisColor,
-      "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "end",
+      "font-size": 10, "font-family": "inherit", "text-anchor": "end",
     });
     distLabel.textContent = `distance (${VD.units.distanceUnit()}) ->`;
     svg.append(distLabel);
@@ -1849,9 +1845,9 @@ import { VD } from "./vd-registry";
     ]);
     const d = "M" + coords.map((c) => `${(c[0] as number).toFixed(1)},${(c[1] as number).toFixed(1)}`).join(" L");
     const fill = document.createElementNS(ns, "path") as SVGElement;
-    VD.setSvgAttrs(fill, { d: `${d} L${w},${h} L0,${h} Z`, fill: "rgba(76,196,255,0.14)" });
+    VD.setSvgAttrs(fill, { d: `${d} L${w},${h} L0,${h} Z`, fill: "rgba(43,212,196,0.14)" });
     const line = document.createElementNS(ns, "path") as SVGElement;
-    VD.setSvgAttrs(line, { d, fill: "none", stroke: "#4cc4ff", "stroke-width": 2, "stroke-linejoin": "round" });
+    VD.setSvgAttrs(line, { d, fill: "none", stroke: "#2bd4c4", "stroke-width": 2, "stroke-linejoin": "round" });
     svg.append(fill, line);
     card.hidden = false;
     const maxSpeed = VD.units.speed(maxV * 3.6);
@@ -1863,33 +1859,153 @@ import { VD } from "./vd-registry";
   }
 
   // Stops along the drive (v2): same detection as the map's Stops layer,
-  // listed with arrive time + dwell duration.
+  // listed with arrive time + dwell duration. Stops the car spent in Park
+  // (gear-confirmed, native TripSplitRules) read "Stopped N min".
   function renderTripDetailStops(route: MapRoute): void {
     const card = el("tripDetailStopsCard");
     const list = el("tripDetailStops");
     if (!card || !list) return;
-    const stops = detectStops((route.points || []).filter(isValidRoutePoint)).slice(0, 6);
+    const stops = stopsForRoute((route.points || []).filter(isValidRoutePoint), routeParkStops(route)).slice(0, 6);
     if (!stops.length) {
       card.hidden = true;
       list.replaceChildren();
       return;
     }
     card.hidden = false;
+    const splittable = canEditTripSplits(route);
+    // GPS stops are numbered on their own count so a Park stop between them
+    // doesn't leave a gap ("Stop 1", "Stopped 4 min", "Stop 2").
+    let gpsStopNumber = 0;
     list.replaceChildren(
-      ...stops.map((stop, i) => {
+      ...stops.map((stop) => {
         const row = document.createElement("div");
         row.className = "trip-detail-stop-row";
         const dot = document.createElement("span");
         dot.className = "trip-detail-stop-dot";
         const name = document.createElement("span");
         name.className = "trip-detail-stop-name";
-        name.textContent = `Stop ${i + 1} · ${fmtClockTime(stop.startMs)}`;
         const dur = document.createElement("b");
-        dur.textContent = VD.formatDuration(stop.durationMs);
         row.append(dot, name, dur);
+        if (stop.parked) {
+          row.dataset.stopKind = "park";
+          name.textContent = `${parkStopLabel(stop.durationMs)} · ${fmtClockTime(stop.startMs)}`;
+          dur.textContent = "in Park";
+          if (splittable) row.append(tripSplitButton({ startMs: stop.startMs, endMs: stop.endMs }));
+        } else {
+          gpsStopNumber += 1;
+          name.textContent = `Stop ${gpsStopNumber} · ${fmtClockTime(stop.startMs)}`;
+          dur.textContent = VD.formatDuration(stop.durationMs);
+        }
         return row;
       })
     );
+  }
+
+  // "Split trip here" / merge back (trip-split.ts). Offered only on stored trips
+  // the native side can re-cut (or any Demo / Testing trip — demo re-cuts its own
+  // in-memory sample data and never reaches the bridge).
+  function canEditTripSplits(route: MapRoute): boolean {
+    if (routeIsLive(route) || !tripDetailRouteKey) return false;
+    if (VD.isDemoActive()) return true;
+    return Boolean(bridge && typeof bridge.splitTripAtStop === "function");
+  }
+
+  function tripSplitButton(stop: TripSplitSpan): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "link-btn trip-detail-stop-split";
+    button.textContent = "Split trip here";
+    // A per-row closure (not a data attribute read back later): the stop span is
+    // this row's own data.
+    button.addEventListener("click", () => splitTripAtStop(stop));
+    return button;
+  }
+
+  function splitTripAtStop(stop: TripSplitSpan): void {
+    const routeKey = tripDetailRouteKey;
+    if (!routeKey) return;
+    if (VD.isDemoActive()) {
+      applyDemoTripSplit(splitDemoTrip(demoRoutes(), demoTrips(), routeKey, stop, routeDistanceMeters));
+      return;
+    }
+    if (!bridge) return;
+    try {
+      bridge.splitTripAtStop(routeKey, String(stop.startMs), String(stop.endMs));
+    } catch (_err) {
+      VD.setStatus({ state: "blocked", detail: "Could not split this drive." });
+    }
+  }
+
+  // Merge-back keys for the open sheet: the user splits bounding this trip.
+  const tripDetailMergeKeys = { before: "", after: "" };
+
+  function renderTripDetailMerge(route: MapRoute): void {
+    const editable = canEditTripSplits(route);
+    tripDetailMergeKeys.before = editable ? userSplitKey(route, "before") : "";
+    tripDetailMergeKeys.after = editable ? userSplitKey(route, "after") : "";
+    const prev = el("tripDetailMergePrev");
+    const next = el("tripDetailMergeNext");
+    if (prev) prev.hidden = !tripDetailMergeKeys.before;
+    if (next) next.hidden = !tripDetailMergeKeys.after;
+    const row = el("tripDetailMerge");
+    if (row) row.hidden = !tripDetailMergeKeys.before && !tripDetailMergeKeys.after;
+  }
+
+  function mergeTripSplit(splitKey: string): void {
+    if (!splitKey) return;
+    if (VD.isDemoActive()) {
+      applyDemoTripSplit(mergeDemoTrip(demoRoutes(), demoTrips(), splitKey, routeDistanceMeters));
+      return;
+    }
+    if (!bridge) return;
+    try {
+      bridge.mergeTripSplit(splitKey);
+    } catch (_err) {
+      VD.setStatus({ state: "blocked", detail: "Could not merge these drives." });
+    }
+  }
+
+  function demoRoutes(): MapRoute[] {
+    const routes = (state.storage || {}).recentRoutes;
+    return Array.isArray(routes) ? (routes as MapRoute[]) : [];
+  }
+
+  function demoTrips(): DemoTripRow[] {
+    return Array.isArray(state.trips) ? (state.trips as DemoTripRow[]) : [];
+  }
+
+  // Demo / Testing: swap the re-cut sample routes + trip rows into the demo
+  // payloads (never the bridge), repaint, then follow the same path a native
+  // tripSplitChanged answer takes.
+  function applyDemoTripSplit(result: DemoTripSplitResult | null): void {
+    if (!result) {
+      VD.setStatus({ state: "demo", detail: "Demo drive unchanged." });
+      return;
+    }
+    VD.setState({
+      storage: { ...(state.storage || {}), recentRoutes: result.routes },
+      trips: result.trips
+    });
+    captureDemoPreview();
+    renderDemoSurfaces();
+    onTripSplitChanged(result.change);
+    VD.setStatus({ state: "demo", detail: result.change.merged ? "Demo trips merged." : "Demo trip split." });
+  }
+
+  // Native answer to splitTripAtStop / mergeTripSplit (via actions.ts, which
+  // also reloads the rollups) and the demo path's equivalent: trip keys changed,
+  // so drop cached route geometry and move an open sheet onto the trip that now
+  // holds it (the first half, or the merged trip) — or close it when that trip
+  // is not loaded yet.
+  function onTripSplitChanged(payload: unknown): void {
+    const change = parseTripSplitChange(VD.parsePayload<unknown>(payload, null));
+    if (!change) return;
+    invalidateFetchedRouteCache();
+    const sheet = el("tripDetailSheet");
+    if (!sheet || sheet.hidden) return;
+    const nextKey = change.routeKeys[0] || "";
+    if (nextKey && openTripDetail(nextKey)) return;
+    el("tripDetailClose")?.click();
   }
 
   // The trip-list row for a route key (state.trips is the source the list
@@ -2074,9 +2190,11 @@ import { VD } from "./vd-registry";
       receiptFavorite.textContent = favorite ? "Favorited" : "Favorite";
       receiptFavorite.setAttribute("aria-pressed", String(favorite));
     }
-    const fallback = `${session.mode || "Drive"} · ${session.adapterName || "OBD adapter"}`;
-    VD.setText("tripDetailTitle", label || fallback);
-    VD.setText("tripDetailSub", label ? fallback : "");
+    // Unnamed drives read "Evening drive" like the drive-picker chips, not the
+    // raw "obd · <adapter>" source line, which moves to the subtitle.
+    VD.setText("tripDetailTitle", label || daypartDriveLabel(stats.startedAtMs));
+    const sub = el("tripDetailSub");
+    if (sub) sub.textContent = session.adapterName || "OBD adapter";
     VD.setText("tripDetailDistance", stats.distanceMeters > 0 ? VD.formatDistance(stats.distanceMeters) : "--");
     VD.setText("tripDetailDuration", stats.durationMs > 0 ? VD.formatDuration(stats.durationMs) : "--");
     const avg = VD.units.speed(stats.avgKph);
@@ -2086,13 +2204,15 @@ import { VD } from "./vd-registry";
     VD.setText("tripDetailEfficiency", stats.miPerKwh != null && stats.miPerKwh > 0 ? VD.units.efficiencyText(stats.miPerKwh) : "--");
     renderTripDetailCost(stats, routeKey);
     VD.setText("tripDetailPoints", stats.pointCount > 0 ? String(stats.pointCount) : "--");
-    VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? VD.formatWhen(stats.startedAtMs) : "--");
-    VD.setText("tripDetailEnd", Number.isFinite(stats.endedAtMs) ? VD.formatWhen(stats.endedAtMs) : "--");
+    // Absolute times, like the drive chips: "1d ago" for both ends told nothing.
+    VD.setText("tripDetailStart", Number.isFinite(stats.startedAtMs) ? fmtChipDate(stats.startedAtMs) : "--");
+    VD.setText("tripDetailEnd", fmtClockTime(stats.endedAtMs));
     renderTripDetailEvSplit(routeKey);
     renderTripDetailScatter(route);
     renderTripDetailElevation(route);
     renderTripDetailSpeed(route);
     renderTripDetailStops(route);
+    renderTripDetailMerge(route);
     // Footer actions carry the route key: View-on-map selects this drive via
     // the shared [data-map-session] path; export reuses the per-row CSV path.
     const viewBtn = el("tripDetailViewMap");
@@ -2102,12 +2222,24 @@ import { VD } from "./vd-registry";
     // Reveal the sheet here so the function is self-contained; actions.ts then
     // layers the focus trap on top (it re-sets hidden=false too, harmlessly).
     sheet.hidden = false;
+    // Drops .app's layer-promotion transform (base.css) so the fixed sheet sits
+    // over the viewport instead of the bottom of the long Map page.
+    setTripDetailActive(true);
     return true;
   }
 
   function closeTripDetail() {
     const sheet = el("tripDetailSheet");
     if (sheet) sheet.hidden = true;
+    setTripDetailActive(false);
+  }
+
+  // Flagged on <body> for the sheet's own styling and on <html> (the page scroller) so the
+  // page underneath the scrim cannot scroll. A class, not html:has(): a :has() on the root
+  // re-matches on every DOM mutation, and on older Android WebViews that style churn on each
+  // live sample kept the UI thread from ever going idle.
+  function setTripDetailActive(on: boolean) {
+    for (const node of [document.body, document.documentElement]) node.classList.toggle("trip-detail-active", on);
   }
 
   function selectedMapRoute(storage: VoltStorageSummary, availableRoutes?: MapRoute[]): MapRoute {
@@ -2229,6 +2361,53 @@ import { VD } from "./vd-registry";
       });
       return marker;
     });
+  }
+
+  // In-trip Park stops native attaches to a gear-aware route (>= 2 min in Park,
+  // too short to end the trip). Absent on older routes, which keep GPS-only stops.
+  function routeParkStops(route: VoltRoute | null | undefined): VoltParkStop[] {
+    const raw = route ? route.parkStops : null;
+    if (!Array.isArray(raw)) return [];
+    return raw.filter((stop): stop is VoltParkStop => {
+      if (!stop || typeof stop !== "object") return false;
+      const s = stop as VoltParkStop;
+      return Number.isFinite(Number(s.startMs)) && Number(s.endMs) > Number(s.startMs);
+    });
+  }
+
+  function parkStopLabel(durationMs: number): string {
+    return `Stopped ${Math.max(1, Math.round(durationMs / 60000))} min`;
+  }
+
+  // GPS-detected stops with the gear-confirmed Park stops merged in: a GPS stop
+  // overlapping a Park stop is replaced by it; a Park stop GPS missed is placed at
+  // the route point nearest its middle. Without Park stops this is detectStops.
+  function stopsForRoute(points: VoltRoutePoint[], parkStops: VoltParkStop[]): MapStop[] {
+    const gps = detectStops(points);
+    if (!parkStops.length) return gps;
+    const merged = gps.filter((stop) =>
+      !parkStops.some((park) => stop.startMs <= Number(park.endMs) && stop.endMs >= Number(park.startMs)));
+    for (const park of parkStops) {
+      const startMs = Number(park.startMs);
+      const endMs = Number(park.endMs);
+      const at = pointNearestTime(points, (startMs + endMs) / 2);
+      if (!at) continue;
+      merged.push({ lat: at.lat, lng: at.lng, durationMs: endMs - startMs, startMs, endMs, parked: true });
+    }
+    return merged.sort((a, b) => a.startMs - b.startMs);
+  }
+
+  function pointNearestTime(points: VoltRoutePoint[], atMs: number): VoltRoutePoint | null {
+    let best: VoltRoutePoint | null = null;
+    let bestGap = Infinity;
+    for (const point of points) {
+      const gap = Math.abs(Number(point.atMs) - atMs);
+      if (Number.isFinite(gap) && gap < bestGap) {
+        best = point;
+        bestGap = gap;
+      }
+    }
+    return best;
   }
 
   // A stop is a sustained run (>= 45 s) of near-zero movement between GPS points.
@@ -2434,6 +2613,13 @@ import { VD } from "./vd-registry";
       startSoc: 73, socDrop: 18, accW: 380,  // morning descent
       elevShift: 4
     });
+    // A 4-min stop in Park mid-drive (native TripSplitRules: >= 2 min in Park but
+    // short of a trip split), so the demo exercises the "Stopped N min" trip-detail
+    // row and the map's Park stop. Kept off today's drive, the default map view.
+    const parkStartMs = yesterday.session.startedAtMs +
+      Math.round((yesterday.session.endedAtMs - yesterday.session.startedAtMs) * 0.45);
+    const parkMs = 4 * 60 * 1000;
+    yesterday.parkStops = [{ startMs: parkStartMs, endMs: parkStartMs + parkMs, durationMs: parkMs, doorOpened: false }];
     const routes = [today, yesterday, earlier];
 
     // Per-trip ambient + efficiency so the demo exercises the v2
@@ -2474,9 +2660,9 @@ import { VD } from "./vd-registry";
     // touches persisted real-device data.
     const sampleCharges = [
       // Newest is in-progress (no end time) so the active-charge state renders.
-      { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 7.1, energyKwh: 3.0 },
-      { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 7.2, energyKwh: 11.8 },
-      { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 7.0, energyKwh: 9.6 },
+      { id: 4, startedAtMs: now - 38 * 60 * 1000, endedAtMs: null, chargerType: "level2", startSoc: 54, endSoc: 71, powerKw: 3.6, energyKwh: 3.0 },
+      { id: 3, startedAtMs: now - 24 * hour, endedAtMs: now - 24 * hour + Math.round(3.4 * hour), chargerType: "level2", startSoc: 24, endSoc: 91, powerKw: 3.6, energyKwh: 11.8 },
+      { id: 2, startedAtMs: now - 48 * hour, endedAtMs: now - 48 * hour + Math.round(3.0 * hour), chargerType: "level2", startSoc: 36, endSoc: 90, powerKw: 3.5, energyKwh: 9.6 },
       { id: 1, startedAtMs: now - 96 * hour, endedAtMs: now - 96 * hour + Math.round(4.6 * hour), chargerType: "level1", startSoc: 58, endSoc: 88, powerKw: 1.3, energyKwh: 5.2 }
     ];
     // SOC kept close to the live browser-demo stream (~77%) so Drive's live tile
@@ -2560,7 +2746,7 @@ import { VD } from "./vd-registry";
         chargeSummary: {
           chargeSessionCount: sampleCharges.length,
           chargingHintCount: 6,
-          maxPowerKw: 7.2,
+          maxPowerKw: 3.6,
           latest: sampleCharges[0] ?? null,
           recentSessions: sampleCharges
         },
@@ -2713,6 +2899,9 @@ import { VD } from "./vd-registry";
     mapTileRetry.addEventListener("click", retryMapTiles);
   }
 
+  el("tripDetailMergePrev")?.addEventListener("click", () => mergeTripSplit(tripDetailMergeKeys.before));
+  el("tripDetailMergeNext")?.addEventListener("click", () => mergeTripSplit(tripDetailMergeKeys.after));
+
   Object.assign(VD, {
     renderMapLoaded: true,
     ensureMap,
@@ -2739,7 +2928,8 @@ import { VD } from "./vd-registry";
     loadSampleData,
     loadDemoScenario,
     setTripRoute: applyTripRoutePayload,
-    invalidateFetchedRouteCache
+    invalidateFetchedRouteCache,
+    onTripSplitChanged
   });
 
 export {};

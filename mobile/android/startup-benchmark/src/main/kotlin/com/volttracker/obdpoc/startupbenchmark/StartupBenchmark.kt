@@ -43,7 +43,7 @@ class StartupBenchmark {
     }
 
     private companion object {
-        const val TARGET_PACKAGE = "com.volttracker.obdpoc"
+        const val TARGET_PACKAGE = "com.volttracker.obdpoc.debug"
         const val DASHBOARD_READY_DESCRIPTION = "VoltTracker dashboard ready"
         const val DASHBOARD_READY_TIMEOUT_MS = 10_000L
         const val STARTUP_ITERATIONS = 5

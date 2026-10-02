@@ -120,18 +120,29 @@ import { VD } from "./vd-registry";
   let scrubHasEff = false;
   let scrubCursors: HTMLElement[] = [];
 
-  // v2 design: the scrub speed tone is the softer #ff9d6e, not full volt orange.
-  const SCRUB_SPEED = "#ff9d6e";
-  const SCRUB_ELEV = "#8b94ad";
-  const SCRUB_SOC = "#a48cff";
-  const SCRUB_EFF = "#b8e63b";
+  // Chart palette (base.css --chart-* tokens): speed is the Volt teal,
+  // battery/efficiency are EV greens, terrain is neutral slate. Resolved from
+  // the theme on each render so light mode gets its deeper, AA-safe inks;
+  // the literals are the dark defaults.
+  let SCRUB_SPEED = "#2bd4c4";
+  let SCRUB_ELEV = "#8793a0";
+  let SCRUB_SOC = "#a8edb9";
+  let SCRUB_EFF = "#5fd37a";
+  function syncScrubPalette() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name: string, fallback: string) => cs.getPropertyValue(name).trim() || fallback;
+    SCRUB_SPEED = v("--chart-speed", SCRUB_SPEED);
+    SCRUB_ELEV = v("--chart-elev", SCRUB_ELEV);
+    SCRUB_SOC = v("--chart-soc", SCRUB_SOC);
+    SCRUB_EFF = v("--chart-eff", SCRUB_EFF);
+  }
 
   const scrubClamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
   // Number(null) is 0 (finite!), which would silently coerce missing samples
   // into real readings. Treat null/undefined as NaN BEFORE coercion so a
   // null-eff regen segment stays "missing" instead of becoming 0.0.
-  const scrubNum = (v: unknown) => (v == null ? NaN : Number(v));
+  const scrubNum = (v: unknown) => (v == null ? Number.NaN : Number(v));
 
   function scrubberAttachMap(map: ScrubMapHandle) {
     scrubMap = map;
@@ -170,11 +181,11 @@ import { VD } from "./vd-registry";
         c += 1;
       }
     }
-    return c ? s / c : NaN;
+    return c ? s / c : Number.NaN;
   }
 
   function buildScrubData(route: ScrubRoute): ScrubPoint[] {
-    const pts = ((route && route.points) || []).filter(isValidScrubPoint) as ScrubRoutePoint[];
+    const pts = ((route?.points) || []).filter(isValidScrubPoint) as ScrubRoutePoint[];
     const n = pts.length;
     if (n < 2) return [];
     const d = pts.map((p) => ({
@@ -203,7 +214,7 @@ import { VD } from "./vd-registry";
         haversineMetersJs(previousPoint.lat, previousPoint.lng, point.lat, point.lng);
     }
     const lastPoint = d[n - 1];
-    const total = (lastPoint && lastPoint.distM) || 1;
+    const total = (lastPoint?.distM) || 1;
 
     // speed — prefer the GPS-reported value, derive from geometry if missing
     const rawMph = pts.map((p, i) => {
@@ -285,8 +296,8 @@ import { VD } from "./vd-registry";
 
   function isValidScrubPoint(point: unknown): point is ScrubRoutePoint {
     const candidate = point as ScrubRoutePoint | null;
-    const lat = Number(candidate && candidate.lat);
-    const lng = Number(candidate && candidate.lng);
+    const lat = Number(candidate?.lat);
+    const lng = Number(candidate?.lng);
     // Reject exact (0,0) "null island" GPS sentinel — see isValidRoutePoint in map-route-utils.
     if (lat === 0 && lng === 0) return false;
     return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
@@ -425,10 +436,10 @@ import { VD } from "./vd-registry";
         (h - padB) +
         " L0 " +
         (h - padB) +
-        ' Z" fill="rgba(139,148,173,0.16)"/>' +
+        ' Z" fill="rgba(135,147,160,0.16)"/>' +
         '<path d="' +
         tLine +
-        '" fill="none" stroke="rgba(139,148,173,0.5)" stroke-width="1.3"/>';
+        '" fill="none" stroke="rgba(135,147,160,0.5)" stroke-width="1.3"/>';
     }
     inner +=
       '<path d="' +
@@ -495,7 +506,7 @@ import { VD } from "./vd-registry";
   }
 
   function scrubChip(k: string, v: string | number, opts: ScrubChipOptions = {}) {
-    opts = opts || {};
+    opts ||= {};
     const chip = document.createElement("div");
     if (opts.dim) chip.className = "scrub-dim";
     const label = document.createElement("span");
@@ -509,6 +520,7 @@ import { VD } from "./vd-registry";
   }
 
   function fillScrubReadout(s: ScrubSample) {
+    syncScrubPalette();
     const socValue = s.soc;
     const effValue = s.eff;
     const socText =
@@ -527,40 +539,42 @@ import { VD } from "./vd-registry";
     const elevUnit = metricUnits ? "m" : "ft";
     // Value is the bare number; the unit lives in the label (like Speed) so a
     // large elevation like "1220 ft" isn't clipped by the nowrap readout cell.
-    const elevText = scrubHasElev
-      ? String(metricUnits ? Math.round(s.elevFt * 0.3048) : Math.round(s.elevFt))
-      : "--";
+    const elevText = String(metricUnits ? Math.round(s.elevFt * 0.3048) : Math.round(s.elevFt));
     const effDisplay =
       scrubHasEff && effValue !== null && Number.isFinite(effValue)
         ? metricUnits
           ? (effValue / 0.621371).toFixed(1)
           : effValue.toFixed(1)
         : effText;
-    node.replaceChildren(
+    // Tracks this drive didn't record (no elevation, no SOC) are left out of the
+    // readout instead of printing "--" cells.
+    const chips = [
       // Unit lives in the label (like Speed/Efficiency): baking it into the value
       // ("128.4 mi") clipped to "128.…" in the nowrap readout cell, losing the unit.
       scrubChip(`Distance ${dist.unit}`, String(dist.value)),
       // Unit lives in the label (like the efficiency chip below): "44 mph" was
       // one character too wide for the six-across readout cell and clipped to
       // "44 …" — the bare number always fits.
-      scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED }),
-      scrubChip(scrubHasElev ? `Elevation ${elevUnit}` : "Elevation", elevText, {
-        color: scrubHasElev ? SCRUB_ELEV : null
-      }),
-      scrubChip("Grade", scrubHasElev ? scrubGrade(s.grade) : "--"),
-      scrubChip(
-        "Battery",
-        socText,
-        { color: scrubHasSoc ? SCRUB_SOC : null }
-      ),
-      // The label already carries the unit, so the value is just the number —
-      // repeating the unit here overflowed the compact readout cell.
-      scrubChip(
-        units.efficiencyUnit(),
-        effDisplay,
-        { dim: !scrubHasEff, color: scrubHasEff ? SCRUB_EFF : null }
-      )
+      scrubChip(`Speed ${units.speedUnit()}`, String(speedVal), { color: SCRUB_SPEED })
+    ];
+    if (scrubHasElev) {
+      chips.push(
+        scrubChip(`Elevation ${elevUnit}`, elevText, { color: SCRUB_ELEV }),
+        scrubChip("Grade", scrubGrade(s.grade))
+      );
+    }
+    if (scrubHasSoc) chips.push(scrubChip("Battery", socText, { color: SCRUB_SOC }));
+    // The label already carries the unit, so the value is just the number —
+    // repeating the unit here overflowed the compact readout cell.
+    chips.push(
+      scrubChip(units.efficiencyUnit(), effDisplay, {
+        dim: !scrubHasEff,
+        color: scrubHasEff ? SCRUB_EFF : null
+      })
     );
+    node.replaceChildren(...chips);
+    // Four chips sit on one row; any other count keeps the three-column grid.
+    node.dataset.cols = String(chips.length);
   }
 
   // ----- render + interaction -----------------------------------------------
@@ -581,7 +595,8 @@ import { VD } from "./vd-registry";
 
   function renderScrubCharts() {
     const chart = el("scrubChart");
-    if (!chart || !chart.clientWidth) return;
+    if (!chart?.clientWidth) return;
+    syncScrubPalette();
     paintScrub(chart, drawScrubCombo(chart.clientWidth));
     const stack = el("scrubStack");
     if (stack && scrubExpanded) {
@@ -590,13 +605,13 @@ import { VD } from "./vd-registry";
       // header label needs to reflect the user's unit preference).
       const metric = units.system() === "metric";
       const tracks: ScrubTrack[] = [
-        ["mph", SCRUB_SPEED, "rgba(255,122,69,0.16)", `SPEED ${units.speedUnit().toUpperCase()}`, false]
+        ["mph", SCRUB_SPEED, "rgba(43,212,196,0.16)", `SPEED ${units.speedUnit().toUpperCase()}`, false]
       ];
       if (scrubHasElev) {
         tracks.push([
           "elevFt",
           SCRUB_ELEV,
-          "rgba(139,148,173,0.18)",
+          "rgba(135,147,160,0.18)",
           `ELEVATION ${metric ? "M" : "FT"}`,
           true
         ]);
@@ -605,7 +620,7 @@ import { VD } from "./vd-registry";
         tracks.push([
           "soc",
           SCRUB_SOC,
-          "rgba(164,140,255,0.16)",
+          "rgba(168,237,185,0.16)",
           "BATTERY %",
           false
         ]);
@@ -614,7 +629,7 @@ import { VD } from "./vd-registry";
         tracks.push([
           "eff",
           SCRUB_EFF,
-          "rgba(184,230,59,0.16)",
+          "rgba(95,211,122,0.16)",
           `EFFICIENCY ${units.efficiencyUnit().toUpperCase()}`,
           false
         ]);
@@ -644,7 +659,7 @@ import { VD } from "./vd-registry";
       if (scrubHasElev) {
         paintScrub(
           elevStrip,
-          drawScrubTrack(chart.clientWidth, "elevFt", "#a48cff", "rgba(164,140,255,0.18)", "", true)
+          drawScrubTrack(chart.clientWidth, "elevFt", SCRUB_ELEV, "rgba(135,147,160,0.2)", "", true)
         );
         bindScrubChart(elevStrip);
       }
@@ -820,14 +835,12 @@ import { VD } from "./vd-registry";
     );
 
     if (scrubMap) {
-      if (!scrubTrail) {
-        scrubTrail = L.polyline([], {
-          color: "#e8f7ff",
-          weight: 2.5,
-          opacity: 0.95,
-          interactive: false
-        }) as ScrubTrailHandle;
-      }
+      scrubTrail ||= L.polyline([], {
+        color: "#e8f7ff",
+        weight: 2.5,
+        opacity: 0.95,
+        interactive: false
+      }) as ScrubTrailHandle;
       scrubTrail.addTo(scrubMap);
       if (!scrubMarker) {
         const firstPoint = scrubData[0];
@@ -942,7 +955,7 @@ import { VD } from "./vd-registry";
       // Readout cells glow while playing so the live numbers read as active.
       el("scrubReadout")?.classList.add("is-playing");
       const lastPoint = scrubData[scrubData.length - 1];
-      const totalMi = (lastPoint && lastPoint.distMi) || 22;
+      const totalMi = (lastPoint?.distMi) || 22;
       // ~1 second per mile, with a sane 8-22s floor/ceiling so very short or
       // very long drives still play in a watchable window.
       const dur = Math.min(22000, Math.max(8000, totalMi * 1000));
@@ -1016,5 +1029,3 @@ import { VD } from "./vd-registry";
     scrubberAttachMap,
     scrubAtLatLng
   });
-
-export {};

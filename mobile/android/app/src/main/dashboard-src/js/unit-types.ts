@@ -33,6 +33,8 @@ export type Kph = Quantity<"kph">;
 export type Mph = Quantity<"mph">;
 export type Celsius = Quantity<"C">;
 export type Fahrenheit = Quantity<"F">;
+export type Kpa = Quantity<"kPa">;
+export type Liters = Quantity<"L">;
 
 // Exact by definition (international mile), not rounded — the reciprocal is derived rather
 // than written as its own literal so the two directions cannot drift apart.
@@ -49,6 +51,8 @@ export const kph = (value: number): Kph => value as Kph;
 export const mph = (value: number): Mph => value as Mph;
 export const celsius = (value: number): Celsius => value as Celsius;
 export const fahrenheit = (value: number): Fahrenheit => value as Fahrenheit;
+export const kpa = (value: number): Kpa => value as Kpa;
+export const liters = (value: number): Liters => value as Liters;
 
 // --- conversions ---------------------------------------------------------------------------
 export const kmToMiles = (value: Km): Miles => (value * MI_PER_KM) as Miles;

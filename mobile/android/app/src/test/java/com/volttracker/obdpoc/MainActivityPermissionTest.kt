@@ -7,6 +7,7 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.webkit.WebView
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.PermissionGate
 import org.junit.Assert.assertEquals
@@ -192,7 +193,7 @@ class MainActivityPermissionTest {
     }
 
     @Test
-    fun appVisibilityReportIsBestEffortWhenServiceDispatchIsDenied() {
+    fun appVisibilityReportStaysInProcessAndNeverDispatchesTheService() {
         val activity = harnessActivity()
         activity.startServiceFailure = SecurityException("service dispatch denied")
         val method =
@@ -202,10 +203,17 @@ class MainActivityPermissionTest {
             )
         method.isAccessible = true
 
-        method.invoke(activity, true)
-        method.invoke(activity, false)
+        try {
+            method.invoke(activity, false)
+            assertFalse(AppVisibility.isForeground)
+            method.invoke(activity, true)
+            assertTrue(AppVisibility.isForeground)
 
-        assertEquals(2, activity.startServiceCalls)
+            // A start command would make ActivityThread wait on pending prefs writes (the pause ANR).
+            assertEquals(0, activity.startServiceCalls)
+        } finally {
+            AppVisibility.resetForTest()
+        }
     }
 
     @Test

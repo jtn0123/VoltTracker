@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.util.Log
 import android.webkit.JavascriptInterface
+import com.volttracker.obdpoc.map.StadiaTiles
 
 /**
  * The [JavascriptInterface] surface the dashboard WebView calls into. The method count is
@@ -121,6 +122,31 @@ class VoltBridge(
     fun setActiveDashboardView(view: String?) {
         val clean = bridgeSafe(view, BRIDGE_MAX_LABEL_LEN)
         activity.runOnUiThread { activity.dashboardExperience().setActiveDashboardView(clean) }
+    }
+
+    // Experimental car controls. JavaScript can only read state and ASK for a command by name:
+    // the PIN entry and the per-command confirmation are native dialogs owned by the delegate, and
+    // the engine re-checks the opt-in, the one-shot confirmation and the parked gate before sending.
+    @JavascriptInterface
+    fun getCarControlState(): String = activity.carControls().getCarControlStateJson()
+
+    /** The Map tab's basemap tiles (see [StadiaTiles.webViewConfigJson]); `{}` when the build has no key. */
+    @JavascriptInterface
+    fun getMapTileConfig(): String = StadiaTiles.webViewConfigJson()
+
+    @JavascriptInterface
+    fun setCarControlsEnabled(enabled: Boolean) {
+        activity.carControls().setCarControlsEnabled(enabled)
+    }
+
+    @JavascriptInterface
+    fun requestCarControl(command: String?) {
+        activity.carControls().requestCarControl(command)
+    }
+
+    @JavascriptInterface
+    fun lockCarControls() {
+        activity.carControls().relockCarControls()
     }
 
     @JavascriptInterface
@@ -307,6 +333,25 @@ class VoltBridge(
         favorite: Boolean,
     ) {
         tripEdits.setTripFavorite(routeKey, favorite)
+    }
+
+    /**
+     * "Split trip here": after a confirm, splits the stored trip [routeKey] into two at its in-trip
+     * Park stop [stopStartMs]..[stopEndMs] (epoch-ms strings). Answers with `tripSplitChanged`.
+     */
+    @JavascriptInterface
+    fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: String?,
+        stopEndMs: String?,
+    ) {
+        tripEdits.splitTripAtStop(routeKey, stopStartMs, stopEndMs)
+    }
+
+    /** Merges a user-split trip back into one ([splitKey] from the route's `userSplitBefore/After`). */
+    @JavascriptInterface
+    fun mergeTripSplit(splitKey: String?) {
+        tripEdits.mergeTripSplit(splitKey)
     }
 
     /** Records a maintenance-log entry from the Insights add-entry form (M5). */

@@ -57,7 +57,7 @@ Production source layout under `app/src/main/kotlin/com/volttracker/obdpoc/`:
 
 | Layer    | Files                                                                       | What it does                                                      | Entry point                |
 |----------|-----------------------------------------------------------------------------|-------------------------------------------------------------------|----------------------------|
-| UI       | `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*`                    | Hosts the WebView; bridges TypeScript calls back to the service   | `MainActivity.onCreate`    |
+| UI       | `ComposeDashboardActivity.kt`, `ui/*`; `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*` | Native Compose launcher; the classic WebView (advanced tools) is one tap away in Settings | `ComposeDashboardActivity.onCreate` |
 | Service  | `ObdService.kt`, `ObdNotifications.kt`, `PermissionGate.kt`                 | Foreground lifecycle, status broadcasts, runtime permissions       | `ObdService.onStartCommand`|
 | Engine   | `ObdPollingEngine.kt`, `SessionRecorder.kt`, `ObdProtocol.kt`, `ElmConnection.kt`, `ObdElmDecode.kt`, `ObdProbes.kt`, `location/*` | Bluetooth IO, ELM327 init, polling loop, parsing, GPS | `ObdPollingEngine.runBluetoothLoop` |
 | Data     | `data/*` (`ObdLocalStore`, `VoltTrackerDb`, `ObdStoreReports`, `ObdStoreTrips`, `ObdStoreSupport`, record DTOs) | SQLite schema, writes, queries, JSON projections for the dashboard | `ObdLocalStore`            |
@@ -79,7 +79,7 @@ branching off the polling engine):
 ```mermaid
 flowchart LR
     subgraph UI
-        MA["MainActivity<br/>(WebView dashboard)"]
+        MA["MainActivity<br/>(classic WebView, non-launcher)"]
         VB["VoltBridge<br/>(JS bridge)"]
     end
     subgraph Service
@@ -240,6 +240,19 @@ The debug APK will be at:
 app/build/outputs/apk/debug/app-debug.apk
 ```
 
+### Map tiles
+
+Basemap tiles come from [Stadia Maps](https://stadiamaps.com) and need an API key. Add it to
+`local.properties` (gitignored) in this directory:
+
+```properties
+STADIA_API_KEY=your-stadia-key
+```
+
+CI and release builds read the `STADIA_API_KEY` environment variable instead, sourced from the
+repository secret of the same name. With no key the app still builds and runs; the maps just
+draw routes on a plain background with no tiles. Never commit a key.
+
 ### Pre-commit hooks (optional)
 
 Run Spotless locally before each commit so format failures surface before CI:
@@ -398,8 +411,9 @@ scrcpy
 - Bluetooth permissions are requested at runtime on Android 12+.
 - A foreground service keeps the OBD session alive while polling.
 - The WebView only loads local assets from `app/src/main/assets/dashboard`.
-- The Map and Trips route views use remote CARTO basemap tiles by default, with
-  OpenStreetMap fallback when CARTO is unavailable. Route, OBD, and GPS history
+- The Map and Trips route views use remote Stadia Maps basemap tiles when the build
+  has a `STADIA_API_KEY` (see "Map tiles" below); without a key they draw routes on a
+  plain background and fetch no tiles. Route, OBD, and GPS history
   still come from on-device storage, but tile providers can see requested tile
   coordinates.
 - The service uses the standard ELM327 serial UUID: `00001101-0000-1000-8000-00805F9B34FB`.
@@ -419,7 +433,7 @@ files/obd-logs/latest.txt
 After reconnecting the phone with USB debugging (bash):
 
 ```sh
-pkg="com.volttracker.obdpoc"
+pkg="com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 out="./field-test-latest.jsonl"
 latest=$(adb shell run-as "$pkg" cat files/obd-logs/latest.txt | tr -d '\r')
 adb exec-out run-as "$pkg" cat "files/obd-logs/$latest" > "$out"
@@ -428,7 +442,7 @@ adb exec-out run-as "$pkg" cat "files/obd-logs/$latest" > "$out"
 Or with PowerShell:
 
 ```powershell
-$pkg = "com.volttracker.obdpoc"
+$pkg = "com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 $out = ".\field-test-latest.jsonl"
 $latest = adb shell run-as $pkg cat files/obd-logs/latest.txt
 adb exec-out run-as $pkg cat "files/obd-logs/$latest" > $out
@@ -439,7 +453,7 @@ Those logs include status transitions, connection failures, every ELM327 command
 The SQLite database can also be pulled after a test (bash):
 
 ```sh
-pkg="com.volttracker.obdpoc"
+pkg="com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 out="./field-test-db.db"
 adb exec-out run-as "$pkg" cat databases/volttracker_obd_poc.db > "$out"
 ```
@@ -447,7 +461,7 @@ adb exec-out run-as "$pkg" cat databases/volttracker_obd_poc.db > "$out"
 Or with PowerShell:
 
 ```powershell
-$pkg = "com.volttracker.obdpoc"
+$pkg = "com.volttracker.obdpoc.debug"  # run-as needs the debug build, which has its own app ID
 $out = ".\field-test-db.db"
 adb exec-out run-as $pkg cat databases/volttracker_obd_poc.db > $out
 ```

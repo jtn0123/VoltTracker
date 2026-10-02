@@ -59,6 +59,10 @@ describe('native payload fuzzing', () => {
       const payload = `${prefixes[Math.floor(random() * prefixes.length)]}${randomString(random)}`;
       invokeFuzzCallback(native, callback, payload, iteration, '0x42524944');
     }
+
+    // The dashboard is still alive and wired after 1000 malformed payloads.
+    expect(callbacks.every((name) => typeof native[name] === 'function')).toBe(true);
+    expect(window.VoltDashboard).toBeDefined();
   });
 });
 

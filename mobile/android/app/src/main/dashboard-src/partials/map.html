@@ -28,9 +28,9 @@
     hidden
   >
     <span id="mapPrivacyNoticeCopy">
-      Map imagery loads from OpenStreetMap/CARTO servers. They receive the
-      approximate area you view (map-tile coordinates) &mdash; never your
-      routes, telemetry, or identity.
+      Map imagery loads from Stadia Maps servers. They receive the approximate
+      area you view (map-tile coordinates) &mdash; never your routes, telemetry,
+      or identity.
     </span>
     <button type="button" id="mapPrivacyGotItBtn" class="link-btn">
       Got it
@@ -291,6 +291,16 @@
     </div>
   </div>
 
+  <!-- Dimmed scrim behind the trip-detail sheet. Shown only while
+       body.trip-detail-active (set by map.ts on every open path); tapping it runs
+       the same closeTripDetail action as Done / Escape / Android back. -->
+  <div
+    id="tripDetailBackdrop"
+    class="trip-detail-backdrop"
+    data-action="closeTripDetail"
+    aria-hidden="true"
+  ></div>
+
   <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
        button; populated by map.ts#openTripDetail from the route projection +
        trip rollup. Modal dialog with a focus trap (actions.ts), so it overlays
@@ -463,6 +473,16 @@
       </header>
       <div id="tripDetailStops" class="trip-detail-stops"></div>
     </article>
+    <!-- Merge back a "Split trip here" split (map.ts#renderTripDetailMerge):
+         shown only when a user split bounds this drive. -->
+    <div class="trip-detail-merge" id="tripDetailMerge" hidden>
+      <button type="button" class="link-btn" id="tripDetailMergePrev" hidden>
+        Merge with previous trip
+      </button>
+      <button type="button" class="link-btn" id="tripDetailMergeNext" hidden>
+        Merge with next trip
+      </button>
+    </div>
     <div class="trip-detail-actions">
       <button
         type="button"

@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.data
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
 import com.volttracker.obdpoc.VehicleActivityThresholds
+import com.volttracker.obdpoc.materialize.TripSplitRules
 import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.atan2
@@ -84,7 +85,7 @@ object DriveWindowDetector {
         if (fallbackEndMs <= fallbackStartMs) {
             return emptyList()
         }
-        val spans = splitSpans(data)
+        val spans = splitSpans(data, gearAnalysis(session.tripRulesVersion, data.activitySamples, data.userSplits))
         if (spans.isEmpty()) {
             return listOf(DriveWindow(session.id, 0, fallbackStartMs, fallbackEndMs))
         }
@@ -126,10 +127,69 @@ object DriveWindowDetector {
         return null
     }
 
-    private fun splitSpans(data: SessionData): List<SplitSpan> {
+    /**
+     * In-trip Park stops ([TripSplitRules]) between [startMs] and [endMs] of a gear-aware session;
+     * always empty for a legacy session, which is never queried. A stop the user split the trip at
+     * ([ObdTripSplits]) is a trip boundary now, not an in-trip stop, so it is never listed.
+     */
+    @JvmStatic
+    fun parkStopsForWindow(
+        db: SQLiteDatabase,
+        session: ObdSessionRecord,
+        startMs: Long,
+        endMs: Long,
+    ): List<TripSplitRules.ParkStop> {
+        if (!TripSplitRules.appliesTo(session.tripRulesVersion) || endMs <= startMs) {
+            return emptyList()
+        }
+        val samples = ArrayList<TripSplitRules.GearSample>()
+        db
+            .rawQuery(
+                "SELECT captured_at_ms, prndl_raw, door_open FROM ${VoltTrackerDb.TABLE_TELEMETRY} " +
+                    "WHERE session_id = ? AND captured_at_ms >= ? AND captured_at_ms <= ? " +
+                    "AND (prndl_raw IS NOT NULL OR door_open IS NOT NULL) " +
+                    "ORDER BY captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
+                arrayOf(session.id.toString(), startMs.toString(), endMs.toString()),
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    samples.add(
+                        TripSplitRules.GearSample(
+                            cursor.getLong(0),
+                            if (cursor.isNull(1)) null else cursor.getInt(1),
+                            if (cursor.isNull(2)) null else cursor.getInt(2) != 0,
+                        ),
+                    )
+                }
+            }
+        val userSplits = ObdTripSplits.activeSplits(db, session.id)
+        return TripSplitRules.analyze(session.tripRulesVersion, samples, userSplits).stopsWithin(startMs, endMs)
+    }
+
+    private fun gearAnalysis(
+        rulesVersion: Int,
+        samples: List<ActivitySample>,
+        userSplits: List<TripSplitRules.Span>,
+    ): TripSplitRules.Analysis {
+        if (!TripSplitRules.appliesTo(rulesVersion)) {
+            return TripSplitRules.Analysis.NONE
+        }
+        return TripSplitRules.analyze(
+            rulesVersion,
+            samples.map { TripSplitRules.GearSample(it.atMs, it.prndlRaw, it.doorOpen) },
+            userSplits,
+        )
+    }
+
+    /** Mirrors TripMaterializer.splitSpans so both splitters cut a session the same way. */
+    private fun splitSpans(
+        data: SessionData,
+        gear: TripSplitRules.Analysis,
+    ): List<SplitSpan> {
         val spans = mutableListOf<SplitSpan>()
         spans.addAll(gpsStopSpans(data))
         spans.addAll(inactiveTelemetrySpans(data))
+        spans.removeAll { gear.governs(it.startMs, it.endMs) }
+        gear.splitSpans.mapTo(spans) { SplitSpan(it.startMs, it.endMs) }
         return spans
     }
 
@@ -340,6 +400,11 @@ object DriveWindowDetector {
             dataBySession[sessionId]?.locationSamples = samples
         }
         readTelemetrySamplesBySession(db, ids, dataBySession)
+        // User split points only ever apply to gear-aware sessions, so legacy sessions skip the read.
+        val gearAwareIds = sessions.filter { TripSplitRules.appliesTo(it.tripRulesVersion) }.map { it.id }.distinct()
+        ObdTripSplits.activeSplitsBySession(db, gearAwareIds).forEach { (sessionId, spans) ->
+            dataBySession[sessionId]?.userSplits = spans
+        }
         return dataBySession
     }
 
@@ -446,7 +511,7 @@ object DriveWindowDetector {
         db
             .rawQuery(
                 "SELECT session_id, captured_at_ms, speed_kph, rpm, voltage, power_kw, pack_current_a, " +
-                    "latitude, longitude " +
+                    "latitude, longitude, prndl_raw, door_open " +
                     "FROM ${VoltTrackerDb.TABLE_TELEMETRY} WHERE session_id IN (${selection.placeholders}) " +
                     "ORDER BY session_id DESC, captured_at_ms ASC LIMIT $MAX_SAMPLE_ROWS",
                 selection.args,
@@ -464,6 +529,8 @@ object DriveWindowDetector {
                                 nullableDouble(cursor, "voltage"),
                                 nullableDouble(cursor, "power_kw"),
                                 nullableDouble(cursor, "pack_current_a"),
+                                nullableInt(cursor, "prndl_raw"),
+                                nullableInt(cursor, "door_open")?.let { it != 0 },
                             ),
                         )
                     if (!cursor.isNull(7) && !cursor.isNull(8)) {
@@ -538,6 +605,8 @@ object DriveWindowDetector {
         val voltage: Double?,
         val powerKw: Double?,
         val packCurrentA: Double?,
+        val prndlRaw: Int?,
+        val doorOpen: Boolean?,
     )
 
     private class DataBounds(
@@ -552,6 +621,7 @@ object DriveWindowDetector {
         var locationSamples: List<RouteSample> = emptyList(),
         var telemetryRouteSamples: List<RouteSample> = emptyList(),
         var activitySamples: List<ActivitySample> = emptyList(),
+        var userSplits: List<TripSplitRules.Span> = emptyList(),
     )
 
     private class SessionSelection(

@@ -360,14 +360,14 @@ type ChartPoint = {
     // is picked up). Mirrors the insights-panel.ts / map.ts scatter pattern. The
     // gradient/glow/wash are rgba fades derived from the resolved --volt / --text
     // channels so they track the theme instead of being dark-only literals.
-    // v2 design: the trace is always volt orange (the design's fixed #ff7a45),
-    // resolved from the theme token so light mode keeps its darker orange.
+    // The speed trace is the accent series (Volt teal), resolved from the theme
+    // token so light mode gets its deeper teal.
     const tokens = getComputedStyle(el("liveHeroCard") || document.documentElement);
     const token = (name: string, fallback: string) =>
       (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const mutedColor = token("--muted", "#5d5e69"); // empty-state label
-    const voltColor = token("--volt", "#ff7a45"); // trace stroke
-    const voltRgb = rgbChannels(voltColor, "255, 122, 69"); // fill base
+    const mutedColor = token("--muted", "#9aa5b1"); // empty-state label
+    const voltColor = token("--volt", "#2bd4c4"); // trace stroke
+    const voltRgb = rgbChannels(voltColor, "43, 212, 196"); // fill base
 
     // Sign over the full sample window (not just first+last): at the cap the
     // window scrolls, and a shifted series can keep the same length + boundary
@@ -401,7 +401,7 @@ type ChartPoint = {
     // v2 design: a bare full-bleed sparkline — no gridlines or background wash.
     if (samples.length < 2) {
       ctx.fillStyle = mutedColor;
-      ctx.font = "11px ui-monospace, monospace";
+      ctx.font = "12px sans-serif";
       ctx.textAlign = "center";
       ctx.fillText(t("drive.trace.waitingForSamples"), w / 2, h / 2);
       return;
@@ -463,7 +463,7 @@ type ChartPoint = {
     if (!host) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 58; // v2 design microchart height
+    const h = 88; // microchart height (matches .live-dom-chart)
     const padT = 14;
     const padB = 10;
     const samples = state.powerHistory || [];
@@ -479,7 +479,9 @@ type ChartPoint = {
     }
     const ZERO_PCT = 0.55; // zero line a touch below center so regen has room.
     const zeroY = padT + ZERO_PCT * (h - padT - padB);
-    const cap = Math.max(60, samples.length);
+    // Bars start wide and settle to the full 60 s window as samples arrive, so a
+    // fresh session reads as a chart rather than a sliver at the right edge.
+    const cap = Math.max(30, samples.length);
     const chart = domNode("div", "live-dom-chart live-power-chart");
     chart.style.height = h + "px";
     const zero = domNode("span", "live-power-zero");
@@ -540,9 +542,6 @@ type ChartPoint = {
     if (!host) return;
     const w = targetWidth(host);
     if (!w) return;
-    const h = 58; // v2 design microchart height
-    const padT = 14;
-    const padB = 12;
     const samples = state.socHistory || [];
     // Include the OLDEST sample: at the 240-sample cap the window scrolls while
     // length + newest value can stay identical (a repeated newest reading), so
@@ -563,6 +562,12 @@ type ChartPoint = {
     const obsLo = Math.min(...samples);
     const obsHi = Math.max(...samples);
     const observed = obsHi - obsLo;
+    // A session that has barely moved the pack (< 1%) gets a compact strip plus a
+    // plain-language note instead of a tall, mostly blank chart.
+    const flat = observed < 1;
+    const h = flat ? 44 : 88; // full height matches .live-dom-chart
+    const padT = flat ? 10 : 14;
+    const padB = flat ? 10 : 12;
     let lo: number;
     let hi: number;
     if (observed < MIN_RANGE) {
@@ -612,7 +617,14 @@ type ChartPoint = {
       chart.append(segment);
     });
     host.dataset.chartState = "ready";
-    host.replaceChildren(chart);
+    host.dataset.chartSize = flat ? "compact" : "full";
+    if (flat) {
+      const note = domNode("p", "live-chart-note");
+      note.textContent = `Steady around ${Math.round(samples[samples.length - 1]!)}% this session`;
+      host.replaceChildren(chart, note);
+    } else {
+      host.replaceChildren(chart);
+    }
   }
 
   // ----- top-level driver ---------------------------------------------------

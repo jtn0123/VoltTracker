@@ -18,7 +18,7 @@
 // evaluation order. See vd-registry.ts for the policy.
 import { VD } from "./vd-registry";
 import { metersToKm, milesToKm } from "./unit-types";
-import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
+import type { Celsius, Km, Kph, Kpa, Liters, Meters, Miles } from "./unit-types";
 
   const PREFIX = "vt.pref.";
   const keyListeners: Record<string, Array<(value: unknown) => void>> = {};
@@ -38,7 +38,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       console.warn(
         "prefs: localStorage is unavailable; preferences will not persist across app restarts this session."
       );
-    } catch (_err) {
+    } catch {
       /* console is best-effort on legacy WebViews */
     }
     try {
@@ -58,7 +58,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
           if (toast.textContent === notice) toast.hidden = true;
         }, 6000);
       }, 0);
-    } catch (_err) {
+    } catch {
       /* notice is best-effort; prefs still work in-memory */
     }
   }
@@ -66,7 +66,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
   function store(): Storage | null {
     try {
       if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
-    } catch (_err) {
+    } catch {
       // Some WebView configurations throw on localStorage access (e.g. storage
       // disabled). Fall back to in-memory so callers still get their defaults.
     }
@@ -81,7 +81,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     if (s) {
       try {
         return s.getItem(PREFIX + key);
-      } catch (_err) {
+      } catch {
         noteStorageFallback();
         /* fall through to memory */
       }
@@ -95,7 +95,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       try {
         s.setItem(PREFIX + key, serialized);
         return;
-      } catch (_err) {
+      } catch {
         noteStorageFallback();
         /* fall through to memory */
       }
@@ -109,7 +109,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       list.slice().forEach((cb) => {
         try {
           cb(value);
-        } catch (_err) {
+        } catch {
           /* a bad subscriber must not break the others */
         }
       });
@@ -123,7 +123,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     if (raw == null) return fallback;
     try {
       return JSON.parse(raw) as T;
-    } catch (_err) {
+    } catch {
       return fallback;
     }
   }
@@ -132,17 +132,86 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     let serialized: string;
     try {
       serialized = JSON.stringify(value);
-    } catch (_err) {
+    } catch {
       return;
     }
     rawSet(key, serialized);
+    if (isSharedKey(key)) pushShared(key, serialized);
     notify(key, value);
   }
+
+  // ----- shared display prefs (native source of truth) ------------------------
+  // These keys are shared with the native Compose dashboard. Native
+  // (SharedDisplayPrefs.kt) owns them: localStorage is only a boot-time cache.
+  // At load, native values overwrite the cache. A key native has never seen is
+  // migrated up from the cache, so an existing install keeps its rates and units.
+  // Every set() writes through, and returning to the foreground re-syncs,
+  // because the other UI may have changed a value while this page was hidden.
+  const SHARED_PREF_KEYS = [
+    "units",
+    "pricePerKwh",
+    "publicPricePerKwh",
+    "mpg",
+    "gasPricePerGal",
+    "chargeTargetSoc",
+    "fontScale",
+    "highContrast",
+    "quietTelemetry",
+  ] as const;
+
+  function isSharedKey(key: string): boolean {
+    return (SHARED_PREF_KEYS as readonly string[]).includes(key);
+  }
+
+  function pushShared(key: string, serialized: string): void {
+    try {
+      const bridge = window.VoltTrackerAndroid;
+      if (bridge && typeof bridge.setSharedPref === "function") bridge.setSharedPref(key, serialized);
+    } catch {
+      /* bridge absent in browser preview / older host — the local value still applies */
+    }
+  }
+
+  function nativeSharedSnapshot(): Record<string, unknown> | null {
+    try {
+      const bridge = window.VoltTrackerAndroid;
+      if (!bridge || typeof bridge.getSharedPrefs !== "function") return null;
+      const parsed: unknown = JSON.parse(bridge.getSharedPrefs());
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Pulls native values into the local cache and pushes up any key native lacks.
+  // Returns the keys whose local value changed.
+  function syncSharedPrefs(): string[] {
+    const snapshot = nativeSharedSnapshot();
+    if (!snapshot) return [];
+    const changed: string[] = [];
+    SHARED_PREF_KEYS.forEach((key) => {
+      const local = rawGet(key);
+      if (Object.prototype.hasOwnProperty.call(snapshot, key)) {
+        const serialized = JSON.stringify(snapshot[key]);
+        if (serialized !== local) {
+          rawSet(key, serialized);
+          changed.push(key);
+        }
+      } else if (local != null) {
+        pushShared(key, local);
+      }
+    });
+    return changed;
+  }
+
+  // Boot-time pull. It runs before any renderer reads a pref, so nothing needs
+  // to be notified.
+  syncSharedPrefs();
 
   // Subscribe to changes for one key, or "*" for all changes. Returns an
   // unsubscribe function.
   function subscribe(key: string, callback: (value: unknown) => void): () => void {
-    const list = keyListeners[key] || (keyListeners[key] = []);
+    const list = (keyListeners[key] ||= []);
     list.push(callback);
     return () => {
       const current = keyListeners[key];
@@ -184,7 +253,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       if (raw == null) return;
       try {
         preferences[key] = JSON.parse(raw);
-      } catch (_err) {
+      } catch {
         /* a corrupt preference is omitted instead of poisoning the backup */
       }
     });
@@ -196,7 +265,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     if (typeof parsed === "string") {
       try {
         parsed = JSON.parse(parsed);
-      } catch (_err) {
+      } catch {
         return false;
       }
     }
@@ -208,6 +277,13 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     BACKUP_PREF_KEYS.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(values, key)) set(key, values[key]);
     });
+    applyAllPrefs();
+    return true;
+  }
+
+  // Re-applies every pref-driven surface after values changed underneath the UI
+  // (a backup restore, or a change made in the native dashboard).
+  function applyAllPrefs(): void {
     applyUnitsAttr();
     syncUnitButtons();
     applyAccessibilityAttrs();
@@ -215,7 +291,16 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     applyDriveTiles();
     renderTilesEditor();
     rerenderForUnits();
-    return true;
+  }
+
+  // Coming back from the native dashboard: adopt anything changed there while
+  // this page was hidden, fire the key subscribers (numeric inputs, charge
+  // target presets), then re-apply the pref-driven surfaces once.
+  function resyncSharedPrefs(): void {
+    const changed = syncSharedPrefs();
+    if (!changed.length) return;
+    changed.forEach((key) => notify(key, get<unknown>(key, null)));
+    applyAllPrefs();
   }
 
   export const prefs = { get, set, subscribe, exportForBackup, restoreFromBackup };
@@ -257,6 +342,16 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     return { value: Math.round(metric ? celsius : celsius * 9 / 5 + 32), unit: metric ? "°C" : "°F" };
   }
 
+  // Tire pressure: kPa for metric, psi (whole numbers, like a gauge) for imperial.
+  function pressureText(value: Kpa): string {
+    return unitSystem() === "metric" ? `${Math.round(value)} kPa` : `${Math.round(value * 0.1450377)} psi`;
+  }
+
+  // Fuel volume: litres for metric, US gallons for imperial.
+  function volumeText(value: Liters): string {
+    return unitSystem() === "metric" ? `${value.toFixed(1)} L` : `${(value * 0.264172).toFixed(1)} gal`;
+  }
+
   // Efficiency source is always mi/kWh; metric shows km/kWh.
   function efficiencyText(miPerKwh: number): string {
     const metric = unitSystem() === "metric";
@@ -287,6 +382,8 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       const t = temp(value);
       return `${t.value}${t.unit}`;
     },
+    pressureText,
+    volumeText,
     efficiencyText,
     efficiencyUnit: () => (unitSystem() === "metric" ? "km/kWh" : "mi/kWh"),
   };
@@ -300,7 +397,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
   function applyUnitsAttr(): void {
     try {
       if (document.body) document.body.dataset.units = unitSystem();
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
   }
@@ -368,7 +465,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       try {
         if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
         if (typeof VD.updateDiagnostics === "function") VD.updateDiagnostics();
-      } catch (_err) {
+      } catch {
         /* the next telemetry/storage render will fill the newly visible tools */
       }
     }
@@ -395,7 +492,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       document.querySelectorAll<HTMLElement>("[data-live-telemetry]").forEach((node) => {
         node.setAttribute("aria-live", quietTelemetry() ? "off" : "polite");
       });
-    } catch (_err) {
+    } catch {
       /* no-op: a missing documentElement (non-DOM host) leaves defaults intact */
     }
   }
@@ -653,7 +750,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     const safe = (fn: unknown) => {
       try {
         if (typeof fn === "function") (fn as () => void)();
-      } catch (_err) {
+      } catch {
         /* a single renderer failing must not block the others */
       }
     };
@@ -668,7 +765,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     try {
       const view = VD.state && VD.state.view;
       if (view && typeof VD.setView === "function") VD.setView(view);
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
     window.scrollTo({ top: scrollY, behavior: "auto" });
@@ -698,12 +795,12 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       if (bridge && typeof bridge.setChargeTargetSoc === "function") {
         bridge.setChargeTargetSoc(clamped);
       }
-    } catch (_err) {
+    } catch {
       /* bridge absent in browser preview / older host — pref still drives the ETA */
     }
     try {
       if (typeof VD.updateLiveUi === "function") VD.updateLiveUi();
-    } catch (_err) {
+    } catch {
       /* no-op */
     }
     syncChargeTargetPresets();
@@ -799,7 +896,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       // making those values impossible to type. Persisting (set) and the bridge
       // push (onCommit) also wait for the field to settle (commitEdit) so
       // intermediate keystrokes never stick.
-      const parsed = parseFloat(input.value);
+      const parsed = Number.parseFloat(input.value);
       if (Number.isFinite(parsed) && parsed > max) {
         input.value = String(max);
         showClampHint();
@@ -810,7 +907,7 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
     // push it across the bridge. Only the settled value is stored/pushed, so
     // typing "120" no longer commits "12" then "120" mid-entry.
     const commitEdit = () => {
-      const parsed = parseFloat(input.value);
+      const parsed = Number.parseFloat(input.value);
       const clamped = Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
       const reflect = Number.isFinite(parsed)
         ? clamped !== parsed
@@ -821,10 +918,10 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
       if (Number.isFinite(parsed) && clamped !== parsed) showClampHint();
       else clearHint();
       set(prefKey, clamped);
-      if (options && options.onCommit) {
+      if (options?.onCommit) {
         try {
           options.onCommit(clamped);
-        } catch (_err) {
+        } catch {
           /* a bridge hiccup must not break the input */
         }
       }
@@ -1008,6 +1105,16 @@ import type { Celsius, Km, Kph, Meters, Miles } from "./unit-types";
   // Keeping those lifecycles separate prevents a late/missed ready event from
   // leaving visible preference controls inert.
   bindPreferencesClickHandler();
+
+  // At most once per document, like the click handler above.
+  (function bindSharedPrefsResync(): void {
+    const doc = document as Document & { __voltPrefsResyncBound?: boolean };
+    if (doc.__voltPrefsResyncBound) return;
+    doc.__voltPrefsResyncBound = true;
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") resyncSharedPrefs();
+    });
+  })();
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootPrefsUi);

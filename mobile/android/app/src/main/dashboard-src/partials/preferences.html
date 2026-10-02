@@ -227,6 +227,47 @@
     ></small>
   </article>
 
+  <article id="carControlsSettingsCard" class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Car controls</span>
+        <h3>Car controls (experimental)</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Car controls (experimental)</strong>
+        <small
+          >Lock, unlock, lights, remote start and windows from the Drive tab.
+          OBDLink adapter only; car must be parked.</small
+        >
+      </div>
+      <button
+        type="button"
+        id="carControlsToggle"
+        class="tile-toggle pref-toggle"
+        data-on="false"
+        aria-pressed="false"
+        aria-describedby="carControlsWarning"
+      >
+        Off
+      </button>
+    </div>
+    <p id="carControlsWarning" class="car-controls-warning">
+      Sends body commands to your car over the OBD port. The command frames come
+      from the open-source OVMS project and have not been tested on your car.
+      Turning this on asks you to set a PIN; every command needs the PIN (valid
+      for 5 minutes) and a confirmation. Commands are refused unless the car is
+      parked and stopped. Off by default.
+    </p>
+    <small
+      id="carControlsSettingsStatus"
+      class="status-copy"
+      role="status"
+      aria-live="polite"
+    ></small>
+  </article>
+
   <article id="settingsAccessibility" class="panel pref-card">
     <div class="card-head">
       <div>
@@ -379,7 +420,7 @@
   <!--
     Open-source licenses (C3). Everything third-party that ships INSIDE the
     app: the vendored Leaflet build (lib/leaflet), the remote basemap tile
-    data (OpenStreetMap via CARTO — ODbL attribution required), and the
+    data (OpenStreetMap via OpenMapTiles and Stadia Maps — ODbL attribution required), and the
     bundled Space Grotesk font (fonts/SpaceGroteskVar.woff2; its full OFL
     text ships beside it as fonts/OFL.txt). BSD/OFL require the copyright
     notice to travel with the distribution, so each entry expands to that
@@ -417,12 +458,12 @@
       <li>
         <details>
           <summary>
-            <strong>CARTO basemaps</strong>
-            <small>Tile service &middot; dark basemap style</small>
+            <strong>Stadia Maps basemaps</strong>
+            <small>Tile service &middot; Alidade Smooth styles</small>
           </summary>
           <p>
-            Map tiles &copy; CARTO (carto.com/attributions), rendered from
-            OpenStreetMap data.
+            Map tiles &copy; Stadia Maps (stadiamaps.com) &copy; OpenMapTiles
+            (openmaptiles.org), rendered from OpenStreetMap data.
           </p>
         </details>
       </li>
@@ -449,9 +490,9 @@
     disclosure lives on. Full detail: docs/privacy-data-handling.md.
   -->
   <p id="mapPrivacyFooter" class="status-copy app-version-footer">
-    Map imagery: OpenStreetMap/CARTO &mdash; their tile servers receive the
-    approximate map area viewed. Everything else stays on this device (see the
-    privacy notes in docs/privacy-data-handling.md).
+    Map imagery: Stadia Maps &mdash; their tile servers receive the approximate
+    map area viewed. Everything else stays on this device (see the privacy notes
+    in docs/privacy-data-handling.md).
   </p>
 
   <!--

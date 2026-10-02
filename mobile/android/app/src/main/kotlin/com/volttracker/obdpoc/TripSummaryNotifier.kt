@@ -12,6 +12,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import org.json.JSONObject
 import java.util.Locale
 
@@ -111,7 +112,6 @@ class TripSummaryNotifier(
         private const val TRIP_REQUEST_CODE = 4306
         private const val TRIP_LOOKBACK = 20
         private const val MIN_SUMMARY_DISTANCE_METERS = 300.0
-        private const val METERS_PER_MILE = 1609.344
 
         private fun format1(value: Double): String = String.format(Locale.getDefault(), "%.1f", value)
     }

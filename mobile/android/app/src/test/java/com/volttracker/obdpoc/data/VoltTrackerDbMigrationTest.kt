@@ -35,6 +35,66 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun migrationStepsCoverEveryVersionOnceInOrder() {
+        assertEquals(
+            (2..VoltTrackerDb.DATABASE_VERSION).toList(),
+            VoltTrackerMigrations.STEPS.map { it.version },
+        )
+        assertEquals(
+            "every step has a distinct log label",
+            VoltTrackerMigrations.STEPS.size,
+            VoltTrackerMigrations.STEPS
+                .map { it.label }
+                .toSet()
+                .size,
+        )
+    }
+
+    @Test
+    fun downgradeFromANewerBuild_keepsDataInsteadOfCrashing() {
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_downgrade.db"
+        context.deleteDatabase(name)
+
+        // 1. Current schema with one session, then stamp it as if a newer build wrote it.
+        newHelper = VoltTrackerDb(context, name)
+        newHelper!!.writableDatabase.execSQL(
+            "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS} (started_at_ms, created_at_ms, status, mode) VALUES (1, 1, 'completed', 'obd')",
+        )
+        newHelper!!.writableDatabase.version = VoltTrackerDb.DATABASE_VERSION + 3
+        newHelper!!.close()
+
+        // 2. Reopen with this (older) build: the default onDowngrade would throw here.
+        newHelper = VoltTrackerDb(context, name)
+        val db = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, db.version)
+        db.rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { cursor ->
+            cursor.moveToFirst()
+            assertEquals("the downgrade must keep existing sessions", 1, cursor.getInt(0))
+        }
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
+    fun recentMigrationSteps_rerunCleanlyOnACurrentSchema() {
+        // After a downgrade the newer build re-runs its steps above the recorded version on a
+        // schema that already has them, so every recent step must be re-runnable.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_rerun.db"
+        context.deleteDatabase(name)
+        val helper = VoltTrackerDb(context, name)
+        newHelper = helper
+        val db = helper.writableDatabase
+        helper.onUpgrade(db, RERUNNABLE_FROM_VERSION, VoltTrackerDb.DATABASE_VERSION)
+        assertTrue(readColumnNames(db, VoltTrackerDb.TABLE_TELEMETRY).contains("prndl_raw"))
+        helper.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun freshInstall_createsPruneIndexes() {
         val context = RuntimeEnvironment.getApplication()
         // Use a distinct DB name so this test doesn't trample others. Robolectric reuses the app
@@ -833,6 +893,55 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun upgradeFromV16_addsGearAwareTripColumnsWithoutTouchingExistingTrips() {
+        // The v16->v17 migration adds the gear-aware trip-split columns (TripSplitRules). Existing
+        // sessions must come out as legacy (trip_rules_version 0) and existing telemetry rows with
+        // NULL gear/door — no backfill from the row JSON, even when it carries a PRNDL reading —
+        // so trips saved before the cutover keep their exact windows and route keys. The two
+        // tables are created with their v16-era DDL, because the current DDL has the columns.
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v16_v17.db"
+        context.deleteDatabase(name)
+
+        val v16Helper =
+            object : LegacyHelper(context, name, 16) {
+                override fun onCreate(db: SQLiteDatabase) {
+                    super.onCreate(db)
+                    db.execSQL(
+                        "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS}" +
+                            " (mode, started_at_ms, status, created_at_ms) VALUES ('obd', 1000, 'complete', 1000)",
+                    )
+                    db.execSQL(
+                        "INSERT INTO ${VoltTrackerDb.TABLE_TELEMETRY} (session_id, captured_at_ms, json)" +
+                            " VALUES (1, 2000, '{\"prndlRaw\":8,\"prndlState\":\"P\"}')",
+                    )
+                }
+            }
+        val v16Db = v16Helper.writableDatabase
+        assertFalse(readColumnNames(v16Db, VoltTrackerDb.TABLE_SESSIONS).contains("trip_rules_version"))
+        assertFalse(readColumnNames(v16Db, VoltTrackerDb.TABLE_TELEMETRY).contains("prndl_raw"))
+        v16Helper.close()
+
+        newHelper = VoltTrackerDb(context, name)
+        val newDb = newHelper!!.writableDatabase
+        assertEquals(VoltTrackerDb.DATABASE_VERSION, newDb.version)
+        assertTrue(readColumnNames(newDb, VoltTrackerDb.TABLE_TELEMETRY).containsAll(listOf("prndl_raw", "door_open")))
+        newDb.rawQuery("SELECT trip_rules_version FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { cursor ->
+            assertTrue("pre-existing session must survive", cursor.moveToFirst())
+            assertEquals("existing sessions keep the legacy trip rules", 0, cursor.getInt(0))
+        }
+        newDb.rawQuery("SELECT prndl_raw, door_open FROM ${VoltTrackerDb.TABLE_TELEMETRY}", null).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertTrue("no backfill of the gear column", cursor.isNull(0))
+            assertTrue(cursor.isNull(1))
+        }
+
+        newHelper!!.close()
+        newHelper = null
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -977,7 +1086,10 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 16
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 17
+
+        // Steps above this version are guarded (IF NOT EXISTS / column checks) and so re-runnable.
+        private const val RERUNNABLE_FROM_VERSION = 8
 
         private val V7_INDEXES =
             arrayOf(

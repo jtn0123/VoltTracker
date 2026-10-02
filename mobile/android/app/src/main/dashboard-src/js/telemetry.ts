@@ -20,9 +20,10 @@ import type { MapRoutePoint } from "./map-route-utils";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { setStorage } from "./storage-status";
-import { initialTelemetryState } from "./telemetry-state";
+import { initialSessionTotals, initialTelemetryState } from "./telemetry-state";
 import { VD } from "./vd-registry";
-import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
+import { celsius, km, kpa, kph as kphOf, liters, meters as metersOf } from "./unit-types";
+import { driveGear, gearDisplayText } from "./gear";
 
   type PayloadRecord = Record<string, unknown>;
   type LiveCellGroup = HTMLElement | Element | null;
@@ -75,7 +76,8 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     "lastChargeEnergyWh", "lastChargeEnergyStaleMs",
     // Motor & drive.
     "motorAPowerKw", "motorAVoltage", "motorACurrentA", "motorAStaleMs", "motorBPowerKw",
-    "motorBVoltage", "motorBCurrentA", "motorBStaleMs", "prndlState", "prndlStateStaleMs",
+    "motorBVoltage", "motorBCurrentA", "motorBStaleMs", "prndlState", "prndlRaw", "gearConfidence",
+    "prndlStateStaleMs",
     "evDistanceThisCycleKm", "evDistanceThisCycleStaleMs", "odometerKm", "odometerMiles",
     "odometerStaleMs",
     // Thermal & fluids.
@@ -83,7 +85,29 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     "transmissionTempStaleMs", "engineOilTempC", "engineOilTempStaleMs", "engineOilLifePct",
     "engineOilLifeStaleMs", "batteryCoolantPumpRpm", "batteryCoolantPumpStaleMs",
     "batteryCoolantValveRaw", "batteryCoolantValveStaleMs", "batteryHeaterPowerW",
-    "batteryHeaterPowerStaleMs",
+    "batteryHeaterPowerStaleMs", "motorTempC", "motorTempStaleMs", "inverterTempC",
+    "inverterTempStaleMs", "displayedSocPct", "displayedSocStaleMs", "packResistanceMohm",
+    "packResistanceStaleMs", "hvIsolationKohm", "hvIsolationStaleMs", "chargerAcVoltage",
+    "chargerAcCurrentA", "chargerAcPowerKw", "chargerAcStaleMs", "motorBTempC", "motorBTempStaleMs",
+    "evRangeKm", "evRangeStaleMs", "batteryHeaterPct", "batteryHeaterPctStaleMs", "pemCoolantTempC",
+    "pemCoolantStaleMs", "lifetimeChargeEnergyKwh", "lifetimeChargeEnergyStaleMs", "packSection1TempC",
+    "packSection2TempC", "packSection3TempC", "packSection4TempC", "packSection5TempC",
+    "packSection6TempC", "packSectionTempStaleMs",
+    // SW-CAN (GMLAN) broadcasts from the OBDLink listen window (SwcanReadings.kt).
+    "aux12vVoltage", "aux12vSocPct", "aux12vCurrentA", "aux12vStaleMs", "tirePressureFlKpa",
+    "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
+    "doorLockState", "doorLockSource", "doorLockStaleMs", "doorFlState", "doorFrState",
+    "doorRlState", "doorRrState", "hoodState", "trunkState", "doorStatusStaleMs", "alarmState",
+    "alarmStaleMs", "windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct", "windowStaleMs",
+    "cabinTempEstC", "blowerPct", "acState", "acCompressorRpm", "acEvapTempC", "heaterCoreTempC",
+    "coolantHeaterKw", "climateStaleMs", "peCoolantTempC", "peCoolantStaleMs",
+    "chargeCurrentLimitA", "chargeLimitStaleMs", "clusterEvRangeKm", "fuelRangeKm", "rangeStaleMs",
+    "cycleEnergyUsedKwh", "cycleEvDistanceKm", "cycleFuelDistanceKm", "cycleFuelUsedL",
+    "driveCycleStaleMs", "remoteStartState",
+    // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
+    // present while controls are enabled, so they must blank when a sample omits them.
+    "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
+    "carControlLastOutcome", "carControlLastDetail", "carControlLastAtMs",
     // Location. appendLocation() early-returns with no fix, so the whole group must clear
     // together or a tunnel leaves a stale position behind a fresh-looking provider label.
     "latitude", "longitude", "accuracyM", "gpsSpeedMps", "bearingDeg", "locationAgeMs",
@@ -125,6 +149,11 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
   // what tells us the fix is stale. Generous enough to ride out ordinary ~1 Hz
   // gaps without flapping.
   const GPS_FIX_STALE_MS = 15000;
+  // Max age (ms) of the car's own EV range estimate (2241A6, polled every 24
+  // cycles) before the Drive tiles stop presenting it. Native already ages the
+  // carry-forward out after ~its poll period; this guards replayed/backfilled
+  // samples so an old estimate never reads as the current range.
+  const EV_RANGE_STALE_MS = 120_000;
   // Below this duration, formatShortDuration shows one decimal (e.g. "1.5s").
   const SHORT_DURATION_DECIMAL_CUTOFF_MS = 10000;
   const LIVE_ROUTE_HYDRATION_RETRY_MS = 5_000;
@@ -344,6 +373,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
       socHistory: [],
       sessionStartSoc: null,
       sessionDistanceM: 0,
+      ...initialSessionTotals(),
       sessionLastLat: null,
       sessionLastLng: null,
       liveRouteStartedAtMs: null,
@@ -834,6 +864,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       pushBounded(state.speedHistory, kph, 48);
+      if (kph > state.sessionMaxSpeedKph) setState({ sessionMaxSpeedKph: kph });
     }
     // Drive-tab live charts: power bars and SOC trace. Same fixed-window
     // discipline as the speed history.
@@ -841,6 +872,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     if (Number.isFinite(power)) {
       pushBounded(state.powerHistory, power, 60);
     }
+    accumulateSessionEnergy(sample, power);
     const soc = Number(sample.soc);
     if (Number.isFinite(soc)) {
       // Capture the session-start SOC so the "Δ since session" chip on the
@@ -878,6 +910,22 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
       else recordQueuedLivePosition(lat, lon);
     }
+  }
+
+  // Net HV energy for the in-progress drive (the Drive "Current drive" card's energy,
+  // cost and efficiency): pack power integrated between consecutive samples on their own
+  // clocks. A gap over 10 s (adapter blip, paused WebView) or a plugged-in sample adds
+  // nothing, so a charge window or an outage never books phantom drive energy.
+  function accumulateSessionEnergy(sample: PayloadRecord, powerKw: number) {
+    const at = Number(sample.updatedAt);
+    if (!(at > 0)) return;
+    const stepS = (at - state.sessionEnergyAtMs) / 1000;
+    const counts = state.sessionEnergyAtMs > 0 && stepS > 0 && stepS <= 10 &&
+      Number.isFinite(powerKw) && !(Number(sample.chargerPowerKw) > 0);
+    setState({
+      sessionEnergyAtMs: at,
+      ...(counts ? { sessionEnergyKwh: state.sessionEnergyKwh + (powerKw * stepS) / 3600 } : {})
+    });
   }
 
   // Resume catch-up: the native side buffers the samples broadcast while the Activity was
@@ -998,6 +1046,27 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
       }
     });
     updateRateChip(isStale);
+    renderDriveMode();
+  }
+
+  // EV vs gas pill on the speed hero. Engine rpm is the signal that says the gas
+  // engine is turning (a Volt reports a real 0 in EV mode), so a fresh rpm >= this
+  // floor reads as "Gas engine"; a fresh lower reading as "Electric". No reading,
+  // or a stale one, hides the pill. Presentation only — no state is derived here.
+  const GAS_RPM_MIN = 300;
+  let lastDriveMode = "";
+  function renderDriveMode() {
+    const chip = el("driveModeChip");
+    if (!chip) return;
+    const raw = (state.telemetry || {}).rpm;
+    const rpm = Number(raw);
+    const known = raw != null && raw !== "" && Number.isFinite(rpm) && !isTelemetryStale();
+    chip.hidden = !known;
+    const mode = !known ? "unknown" : rpm >= GAS_RPM_MIN ? "gas" : "ev";
+    if (lastDriveMode === mode) return;
+    lastDriveMode = mode;
+    chip.dataset.driveMode = mode;
+    if (known) setText("driveModeLabel", mode === "gas" ? "Gas engine" : "Electric");
   }
 
   // True once any live data has been observed this session — either a counted
@@ -1027,11 +1096,11 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     const chip = el("liveRateChip");
     if (!chip) return;
     const samples = hasLiveSamples();
-    // The data-state / logic key stays the short token so the CSS state selectors
-    // and the checks below keep working; the visible label appends the ~1 Hz poll
-    // cadence when live to match the v2 design chip ("LIVE · 1 HZ").
+    // The data-state token doubles as the visible label ("live" / "stale" /
+    // "waiting"); the poll cadence was dropped from the chip to declutter the
+    // speed hero header.
     const state = samples && isStale ? "stale" : samples ? "live" : "waiting";
-    const label = state === "live" ? "live · 1 Hz" : state;
+    const label = state;
     setDataState(chip, state);
     chip.dataset.reconnectActive = samples && isStale && bridge ? "true" : "false";
     if (samples && isStale) {
@@ -1102,6 +1171,29 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     });
   }
 
+  // The car's own EV range estimate (km), or null when it hasn't reported, is
+  // negative, or its last read is older than EV_RANGE_STALE_MS.
+  function freshEvRangeKm(t: VoltTelemetry): number | null {
+    const raw = t.evRangeKm;
+    const n = Number(raw);
+    if (raw == null || raw === "" || !Number.isFinite(n) || n < 0) return null;
+    const ageMs = Number(t.evRangeStaleMs);
+    if (t.evRangeStaleMs != null && Number.isFinite(ageMs) && ageMs > EV_RANGE_STALE_MS) return null;
+    return n;
+  }
+
+  // Drive hero gear chip (v2): the PRNDL letter beside the live-rate chip.
+  function renderDriveGear(t: VoltTelemetry) {
+    const chip = el("driveGearChip");
+    if (!chip) return;
+    const gear = driveGear(t);
+    chip.hidden = gear == null;
+    if (!gear) return;
+    setText("driveGearValue", gear.text);
+    chip.setAttribute("aria-label", gear.label);
+    chip.dataset.confidence = gear.confidence;
+  }
+
   export function updateLiveUi() {
     const t = state.telemetry;
     const kph = Number(t.speedKph);
@@ -1145,6 +1237,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     // a Volt, and the visible 0 keeps the 3×2 tile grid even); only a missing
     // value collapses the tile.
     setOptionalLiveText("rpmValue", t.rpm == null || t.rpm === "" ? "--" : t.rpm);
+    renderDriveMode();
     // voltageValue is the aux 12V (ATRV from the ELM adapter), labelled accordingly
     // in the partial. The HV traction-pack voltage is rendered via drivePackVoltage below.
     setOptionalLiveText(
@@ -1196,9 +1289,13 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     };
     liveNum("moreMotorA", t.motorAPowerKw, (n) => `${n.toFixed(1)} kW`);
     liveNum("moreMotorB", t.motorBPowerKw, (n) => `${n.toFixed(1)} kW`);
-    const gear = t.prndlState == null || t.prndlState === "" ? null : String(t.prndlState);
-    setOptionalLiveText("moreGear", gear || "--");
-    liveNum("moreEvRange", t.evDistanceThisCycleKm, (n) => units.distanceText(km(n)));
+    setOptionalLiveText("moreGear", gearDisplayText(t) || "--");
+    renderDriveGear(t);
+    // EV range is the car's own estimate (2241A6 → evRangeKm), never the
+    // distance driven this cycle (222487 → evDistanceThisCycleKm), which used
+    // to be mislabelled here. Missing or stale → hidden rather than guessed.
+    const evRangeKm = freshEvRangeKm(t);
+    liveNum("moreEvRange", evRangeKm, (n) => units.distanceText(km(n)));
     liveNum("moreTransTemp", t.transmissionTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreAmbient", t.outsideTempC, (n) => units.tempText(celsius(n)));
     liveNum("moreOilLife", t.engineOilLifePct, (n) => `${Math.round(n)}%`);
@@ -1211,7 +1308,6 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     // v2 design: the SOC caption doubles as the EV-range note ("≈ 26 mi EV
     // range") once the enhanced range signal reports; otherwise it stays the
     // static "state of charge" label so the number is never unexplained.
-    const evRangeKm = finiteNum(t.evDistanceThisCycleKm);
     setText(
       "driveSocSub",
       evRangeKm != null && evRangeKm > 0
@@ -1266,7 +1362,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
       setDataState(powerDetail, detailState);
     }
     // State-reactive hero (X1): the whole speed+power cluster tints from one
-    // accent — orange under drive power, green in regen, neutral coasting —
+    // accent — teal under drive power, green in regen, neutral coasting —
     // via the --hero-accent custom property keyed off this attribute
     // (components.css). The speed-trace canvas reads the same property.
     const heroCard = el("liveHeroCard");
@@ -1388,33 +1484,58 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     label: string;
     group: string;
     unit?: string;
+    /** A metric quantity shown in the user's units (see SIGNAL_KIND_TEXT). */
+    kind?: SignalKind;
     staleKey?: string;
     text?: boolean;
     enhanced?: boolean;
+    /** Display text for a reporting row, when the raw value is not shown as-is. */
+    display?: (t: PayloadRecord) => string | null;
   };
-  const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging"];
+  // Rows carrying a metric quantity follow the user's units (prefs.ts), like the
+  // rest of the dashboard: °C/°F, km/mi, km/h/mph, kPa/psi, L/gal.
+  type SignalKind = "temp" | "distance" | "speed" | "pressure" | "volume";
+  const SIGNAL_KIND_TEXT: Record<SignalKind, (n: number) => string> = {
+    temp: (n) => units.tempText(celsius(n)),
+    distance: (n) => units.distanceText(km(n)),
+    speed: (n) => units.speedText(kphOf(n)),
+    pressure: (n) => units.pressureText(kpa(n)),
+    volume: (n) => units.volumeText(liters(n)),
+  };
+  const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging", "Body & comfort"];
   const LIVE_SIGNALS: LiveSignalSpec[] = [
-    { key: "speedKph", label: "Speed", group: "Core", unit: "km/h", staleKey: "speedKphStaleMs" },
+    { key: "speedKph", label: "Speed", group: "Core", kind: "speed", staleKey: "speedKphStaleMs" },
     { key: "rpm", label: "Engine RPM", group: "Core", staleKey: "rpmStaleMs" },
     { key: "soc", label: "State of charge", group: "Core", unit: "%", staleKey: "socStaleMs" },
     { key: "voltage", label: "Adapter 12V", group: "Core", unit: "V", staleKey: "voltageStaleMs" },
-    { key: "coolantC", label: "Coolant temp", group: "Core", unit: "°C", staleKey: "coolantCStaleMs" },
+    { key: "coolantC", label: "Coolant temp", group: "Core", kind: "temp", staleKey: "coolantCStaleMs" },
     { key: "loadPct", label: "Engine load", group: "Core", unit: "%", staleKey: "loadPctStaleMs" },
     { key: "throttlePct", label: "Throttle / pedal", group: "Core", unit: "%", staleKey: "throttlePctStaleMs" },
-    { key: "odometerKm", label: "Odometer", group: "Core", unit: "km", staleKey: "odometerStaleMs" },
+    { key: "odometerKm", label: "Odometer", group: "Core", kind: "distance", staleKey: "odometerStaleMs" },
     { key: "fuelLevelPct", label: "Fuel level", group: "Core", unit: "%", staleKey: "fuelLevelStaleMs" },
     { key: "engineRunTimeSec", label: "Engine run time", group: "Core", unit: "s", staleKey: "engineRunTimeStaleMs" },
     { key: "controlModuleVoltage", label: "Module voltage", group: "Core", unit: "V", staleKey: "controlModuleVoltageStaleMs" },
-    { key: "intakeAirTempC", label: "Intake air temp", group: "Core", unit: "°C", staleKey: "intakeAirTempStaleMs" },
-    { key: "engineOilTempC", label: "Engine oil temp", group: "Core", unit: "°C", staleKey: "engineOilTempStaleMs" },
+    { key: "intakeAirTempC", label: "Intake air temp", group: "Core", kind: "temp", staleKey: "intakeAirTempStaleMs" },
+    { key: "engineOilTempC", label: "Engine oil temp", group: "Core", kind: "temp", staleKey: "engineOilTempStaleMs" },
     { key: "packVoltage", label: "HV pack voltage", group: "Battery", unit: "V", staleKey: "packVoltageStaleMs", enhanced: true },
     { key: "packCurrentA", label: "HV pack current", group: "Battery", unit: "A", staleKey: "packCurrentAStaleMs", enhanced: true },
     { key: "powerKw", label: "HV pack power", group: "Battery", unit: "kW", staleKey: "powerKwStaleMs", enhanced: true },
-    { key: "batteryTemp", label: "HV battery temp", group: "Battery", unit: "°C", staleKey: "batteryTempStaleMs", enhanced: true },
+    { key: "batteryTemp", label: "HV battery temp", group: "Battery", kind: "temp", staleKey: "batteryTempStaleMs", enhanced: true },
     { key: "sohPct", label: "Battery health", group: "Battery", unit: "%", staleKey: "sohPctStaleMs", enhanced: true },
     { key: "capacityAh", label: "Pack capacity", group: "Battery", unit: "Ah", staleKey: "capacityAhStaleMs", enhanced: true },
     { key: "packEnergyKwh", label: "Pack energy", group: "Battery", unit: "kWh", staleKey: "packEnergyKwhStaleMs", enhanced: true },
     { key: "hvBatteryRawSoc", label: "Raw SOC", group: "Battery", unit: "%", staleKey: "hvBatteryRawSocStaleMs", enhanced: true },
+    { key: "displayedSocPct", label: "Displayed SOC", group: "Battery", unit: "%", staleKey: "displayedSocStaleMs", enhanced: true },
+    { key: "packResistanceMohm", label: "Internal resistance", group: "Battery", unit: "mΩ", staleKey: "packResistanceStaleMs", enhanced: true },
+    { key: "hvIsolationKohm", label: "HV isolation", group: "Battery", unit: "kΩ", staleKey: "hvIsolationStaleMs", enhanced: true },
+    { key: "evRangeKm", label: "EV range (car estimate)", group: "Battery", kind: "distance", staleKey: "evRangeStaleMs", enhanced: true },
+    { key: "batteryHeaterPct", label: "Battery heater duty", group: "Battery", unit: "%", staleKey: "batteryHeaterPctStaleMs", enhanced: true },
+    { key: "packSection1TempC", label: "Pack section 1 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
+    { key: "packSection2TempC", label: "Pack section 2 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
+    { key: "packSection3TempC", label: "Pack section 3 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
+    { key: "packSection4TempC", label: "Pack section 4 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
+    { key: "packSection5TempC", label: "Pack section 5 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
+    { key: "packSection6TempC", label: "Pack section 6 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
     { key: "minCellVoltage", label: "Min cell voltage", group: "Battery", unit: "V", staleKey: "minCellVoltageStaleMs", enhanced: true },
     { key: "maxCellVoltage", label: "Max cell voltage", group: "Battery", unit: "V", staleKey: "maxCellVoltageStaleMs", enhanced: true },
     { key: "cellBalanceMv", label: "Cell spread", group: "Battery", unit: "mV", staleKey: "cellBalanceStaleMs", enhanced: true },
@@ -1425,18 +1546,64 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     { key: "motorBCurrentA", label: "Motor B current", group: "Motor & drive", unit: "A", staleKey: "motorBStaleMs", enhanced: true },
     { key: "motorAPowerKw", label: "Motor A power", group: "Motor & drive", unit: "kW", enhanced: true },
     { key: "motorBPowerKw", label: "Motor B power", group: "Motor & drive", unit: "kW", enhanced: true },
-    { key: "prndlState", label: "Gear (PRNDL)", group: "Motor & drive", text: true, staleKey: "prndlStateStaleMs", enhanced: true },
-    { key: "evDistanceThisCycleKm", label: "EV distance (cycle)", group: "Motor & drive", unit: "km", staleKey: "evDistanceThisCycleStaleMs", enhanced: true },
+    { key: "prndlState", label: "Gear (PRNDL)", group: "Motor & drive", text: true, staleKey: "prndlStateStaleMs", enhanced: true, display: gearDisplayText },
+    { key: "evDistanceThisCycleKm", label: "EV distance (cycle)", group: "Motor & drive", kind: "distance", staleKey: "evDistanceThisCycleStaleMs", enhanced: true },
     { key: "engineTorqueNm", label: "Engine torque", group: "Motor & drive", unit: "Nm", staleKey: "engineTorqueStaleMs", enhanced: true },
-    { key: "transmissionTempC", label: "Transmission temp", group: "Motor & drive", unit: "°C", staleKey: "transmissionTempStaleMs", enhanced: true },
-    { key: "outsideTempC", label: "Outside temp", group: "Motor & drive", unit: "°C", staleKey: "outsideTempStaleMs", enhanced: true },
+    { key: "transmissionTempC", label: "Transmission temp", group: "Motor & drive", kind: "temp", staleKey: "transmissionTempStaleMs", enhanced: true },
+    { key: "outsideTempC", label: "Outside temp", group: "Motor & drive", kind: "temp", staleKey: "outsideTempStaleMs", enhanced: true },
+    { key: "motorTempC", label: "Motor A temp", group: "Motor & drive", kind: "temp", staleKey: "motorTempStaleMs", enhanced: true },
+    { key: "motorBTempC", label: "Motor B temp", group: "Motor & drive", kind: "temp", staleKey: "motorBTempStaleMs", enhanced: true },
+    { key: "pemCoolantTempC", label: "Power electronics coolant", group: "Motor & drive", kind: "temp", staleKey: "pemCoolantStaleMs", enhanced: true },
+    { key: "inverterTempC", label: "Inverter temp", group: "Motor & drive", kind: "temp", staleKey: "inverterTempStaleMs", enhanced: true },
     { key: "chargingMode", label: "Charging mode", group: "Charging", text: true, staleKey: "chargingModeStaleMs", enhanced: true },
     { key: "chargingLevel", label: "Charging level", group: "Charging", text: true, staleKey: "chargingLevelStaleMs", enhanced: true },
     { key: "chargerHvVoltage", label: "Charger HV voltage", group: "Charging", unit: "V", staleKey: "chargerHvVoltageStaleMs", enhanced: true },
     { key: "chargerHvCurrent", label: "Charger HV current", group: "Charging", unit: "A", staleKey: "chargerHvCurrentStaleMs", enhanced: true },
     { key: "chargerPowerKw", label: "Charger power", group: "Charging", unit: "kW", staleKey: "chargerPowerStaleMs", enhanced: true },
+    { key: "chargerAcVoltage", label: "Charger AC voltage", group: "Charging", unit: "V", staleKey: "chargerAcStaleMs", enhanced: true },
+    { key: "chargerAcCurrentA", label: "Charger AC current", group: "Charging", unit: "A", staleKey: "chargerAcStaleMs", enhanced: true },
+    { key: "chargerAcPowerKw", label: "Charger AC power", group: "Charging", unit: "kW", staleKey: "chargerAcStaleMs", enhanced: true },
     { key: "lastChargeEnergyWh", label: "Last charge energy", group: "Charging", unit: "Wh", staleKey: "lastChargeEnergyStaleMs", enhanced: true },
+    { key: "lifetimeChargeEnergyKwh", label: "Lifetime charge energy", group: "Charging", unit: "kWh", staleKey: "lifetimeChargeEnergyStaleMs", enhanced: true },
     { key: "hvBatteryChargeCount", label: "Charge count", group: "Charging", staleKey: "hvBatteryChargeCountStaleMs", enhanced: true },
+    // SW-CAN (GMLAN) broadcasts: only an OBDLink (STN) adapter can hear these, in a short listen
+    // window every ~45 s, so their age is typically tens of seconds. Decodes are unconfirmed on the car.
+    { key: "chargeCurrentLimitA", label: "Charge current limit", group: "Charging", unit: "A", staleKey: "chargeLimitStaleMs", enhanced: true },
+    { key: "cycleEnergyUsedKwh", label: "Energy since full charge", group: "Charging", unit: "kWh", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleEvDistanceKm", label: "EV distance since full charge", group: "Charging", kind: "distance", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleFuelDistanceKm", label: "Gas distance since full charge", group: "Charging", kind: "distance", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "cycleFuelUsedL", label: "Fuel used (cycle)", group: "Charging", kind: "volume", staleKey: "driveCycleStaleMs", enhanced: true },
+    { key: "clusterEvRangeKm", label: "EV range (cluster)", group: "Motor & drive", kind: "distance", staleKey: "rangeStaleMs", enhanced: true },
+    { key: "fuelRangeKm", label: "Gas range", group: "Motor & drive", kind: "distance", staleKey: "rangeStaleMs", enhanced: true },
+    { key: "peCoolantTempC", label: "Power electronics coolant (broadcast)", group: "Motor & drive", kind: "temp", staleKey: "peCoolantStaleMs", enhanced: true },
+    { key: "aux12vVoltage", label: "12V battery", group: "Body & comfort", unit: "V", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "aux12vSocPct", label: "12V state of charge", group: "Body & comfort", unit: "%", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "aux12vCurrentA", label: "12V current", group: "Body & comfort", unit: "A", staleKey: "aux12vStaleMs", enhanced: true },
+    { key: "tirePressureFlKpa", label: "Tire front left", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureFrKpa", label: "Tire front right", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureRlKpa", label: "Tire rear left", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "tirePressureRrKpa", label: "Tire rear right", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
+    { key: "doorLockState", label: "Locks", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
+    { key: "doorLockSource", label: "Last lock source", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
+    { key: "doorFlState", label: "Door front left", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorFrState", label: "Door front right", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorRlState", label: "Door rear left", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "doorRrState", label: "Door rear right", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "hoodState", label: "Hood", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "trunkState", label: "Hatch", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
+    { key: "alarmState", label: "Alarm", group: "Body & comfort", text: true, staleKey: "alarmStaleMs", enhanced: true },
+    { key: "remoteStartState", label: "Remote start", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
+    { key: "windowFlPct", label: "Window front left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowFrPct", label: "Window front right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowRrPct", label: "Window rear right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "cabinTempEstC", label: "Cabin temp (est.)", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acState", label: "A/C", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
+    { key: "blowerPct", label: "Blower", group: "Body & comfort", unit: "%", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acCompressorRpm", label: "A/C compressor", group: "Body & comfort", unit: "rpm", staleKey: "climateStaleMs", enhanced: true },
+    { key: "acEvapTempC", label: "Evaporator air temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
+    { key: "heaterCoreTempC", label: "Heater core temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
+    { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
   ];
 
   function formatSignalAge(ms: number) {
@@ -1464,11 +1631,21 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     return String(Number(n.toFixed(Math.abs(n) < 10 ? 3 : 2)));
   }
 
+  function liveSignalText(spec: LiveSignalSpec, raw: unknown, t: PayloadRecord): string {
+    if (spec.display) return spec.display(t) ?? String(raw);
+    if (spec.text) return String(raw);
+    const n = Number(raw);
+    if (spec.kind && Number.isFinite(n)) return SIGNAL_KIND_TEXT[spec.kind](n);
+    // "%" hugs the number ("80%", "40% open") like the Drive tiles; other units get a space.
+    const unit = spec.unit ? (spec.unit.startsWith("%") ? spec.unit : ` ${spec.unit}`) : "";
+    return `${formatSignalValue(raw)}${unit}`;
+  }
+
   // Signature of the last renderLiveSignals() paint. A parked/flat car pushes the
   // same telemetry every rAF, and renderLiveSignals() otherwise rebuilds ~45 rows
   // each frame; this dirty-check (mirroring renderCellGrid's lastCellGridSig)
   // hashes the (value, staleAge) tuples for every LIVE_SIGNALS key plus the filter
-  // mode + hasLiveData, and early-returns when nothing changed.
+  // mode, the unit system + hasLiveData, and early-returns when nothing changed.
   let lastLiveSignalsSig = "";
 
   function renderLiveSignals() {
@@ -1485,11 +1662,12 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     // inputs that change the rendered output (filter mode, live-data state). Skip
     // the full rebuild when it matches the previous paint.
     const sig =
-      `${filter}|${hasLiveData ? 1 : 0}|` +
+      `${filter}|${units.system()}|${hasLiveData ? 1 : 0}|` +
       LIVE_SIGNALS
         .map((spec) => {
           const raw = t[spec.key];
-          const v = raw === undefined || raw === null ? "" : String(raw);
+          const shown = spec.display ? spec.display(t) : null;
+          const v = shown ?? (raw === undefined || raw === null ? "" : String(raw));
           const age = spec.staleKey ? String(t[spec.staleKey] ?? "") : "";
           return `${v}:${age}`;
         })
@@ -1530,13 +1708,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
 
         const value = document.createElement("strong");
         value.className = "live-signal-value";
-        // Degree units hug the number ("85°C", matching units.tempText); all
-        // other units get the usual space ("3.4 kW").
-        value.textContent = has
-          ? (spec.text
-              ? String(raw)
-              : `${formatSignalValue(raw)}${spec.unit ? (spec.unit.startsWith("°") ? "" : " ") + spec.unit : ""}`)
-          : "no data";
+        value.textContent = has ? liveSignalText(spec, raw, t) : "no data";
 
         const age = document.createElement("small");
         age.className = "live-signal-age";

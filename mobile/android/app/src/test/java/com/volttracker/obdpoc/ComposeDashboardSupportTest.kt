@@ -27,11 +27,11 @@ class ComposeDashboardSupportTest {
     @Test
     fun noRememberedAdapterOpensClassicDashboard() {
         assertEquals(
-            ConnectAction.OPEN_CLASSIC,
+            ConnectAction.CHOOSE_ADAPTER,
             ComposeDashboardSupport.decideConnectAction("", hasConnectPermission = true, bluetoothEnabled = true),
         )
         assertEquals(
-            ConnectAction.OPEN_CLASSIC,
+            ConnectAction.CHOOSE_ADAPTER,
             ComposeDashboardSupport.decideConnectAction(null, hasConnectPermission = true, bluetoothEnabled = true),
         )
     }
@@ -143,7 +143,7 @@ class ComposeDashboardSupportTest {
 
         val upToDate =
             ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.UpToDate)
-        assertEquals("Up to date", upToDate.statusLabel)
+        assertEquals("You're up to date", upToDate.statusLabel)
         assertNull(upToDate.availableTag)
         val noBuilds =
             ComposeDashboardSupport.updateBanner(com.volttracker.obdpoc.update.UpdateManager.CheckResult.NoBuilds)
@@ -202,5 +202,48 @@ class ComposeDashboardSupportTest {
         assertTrue(drive.connected)
         assertEquals(2, drive.speedTrace.size)
         assertEquals(39, drive.speedMph)
+    }
+
+    @Test
+    fun aFinishedSessionsTailIsNotReplayedUnderANotConnectedStatus() {
+        LiveDashboardSnapshot.recordStatus(JSONObject().put("state", "disconnected"))
+        LiveDashboardSnapshot.recordTelemetry(JSONObject().put("updatedAt", 1_000L).put("speedKph", 32))
+
+        val store = LiveUiStateStore()
+        ComposeDashboardSupport.replayServiceSnapshot(store)
+
+        assertFalse(store.state.value.drive.connected)
+        assertTrue(
+            store.state.value.drive.speedTrace
+                .isEmpty(),
+        )
+        assertTrue(
+            store.state.value.drive.powerTrace
+                .isEmpty(),
+        )
+    }
+
+    // --- blockedStatusDetail -------------------------------------------------
+
+    @Test
+    fun blockedStatusSurfacesItsDetail() {
+        val json = JSONObject().put("state", "blocked").put("blocked", true).put("detail", " Allow Nearby devices ")
+
+        assertEquals(
+            "Allow Nearby devices",
+            ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, json.toString()),
+        )
+    }
+
+    @Test
+    fun unblockedBlankOrForeignBroadcastsSurfaceNothing() {
+        val ok = JSONObject().put("state", "demo").put("blocked", false).put("detail", "Demo running")
+        val blank = JSONObject().put("state", "blocked").put("blocked", true).put("detail", "  ")
+        val blocked = JSONObject().put("state", "blocked").put("blocked", true).put("detail", "x")
+
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, ok.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, blank.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_TELEMETRY, blocked.toString()))
+        assertNull(ComposeDashboardSupport.blockedStatusDetail(ObdService.BROADCAST_STATUS, "not json"))
     }
 }

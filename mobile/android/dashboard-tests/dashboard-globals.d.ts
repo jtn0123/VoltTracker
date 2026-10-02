@@ -449,6 +449,10 @@ interface DashboardState {
   socHistory: number[];
   sessionStartSoc: number | null;
   sessionDistanceM: number;
+  /** Live-drive running totals — see telemetry-state.ts#initialSessionTotals. */
+  sessionMaxSpeedKph: number;
+  sessionEnergyKwh: number;
+  sessionEnergyAtMs: number;
   sessionLastLat: number | null;
   sessionLastLng: number | null;
   lastSampleAt: number;
@@ -489,10 +493,31 @@ interface PowerTrackSample {
   powerKw: number | string;
 }
 
+/** An in-trip stop in Park (native TripSplitRules): >= 2 min, too short to end the trip. */
+interface VoltParkStop {
+  startMs: number;
+  endMs: number;
+  durationMs?: number;
+  doorOpened?: boolean;
+}
+
+/** A user split point ("Split trip here") bounding a route; `key` is what mergeTripSplit takes. */
+interface VoltUserSplit {
+  key: string;
+  startMs: number;
+  endMs: number;
+}
+
 /** A logged drive/route the map renders and the scrubber walks. */
 interface VoltRoute {
   points?: VoltRoutePoint[];
   powerTrack?: PowerTrackSample[];
+  /** Gear-aware routes only; absent on routes recorded before gear-aware trip splitting. */
+  parkStops?: VoltParkStop[];
+  /** Set when a user split ends the previous trip where this one starts (merge back across it). */
+  userSplitBefore?: VoltUserSplit;
+  /** Set when a user split ends this trip (merge back with the next one). */
+  userSplitAfter?: VoltUserSplit;
   session?: { id?: string | number; [key: string]: unknown };
   pointCount?: number;
   distanceMeters?: number;
@@ -680,6 +705,8 @@ interface VoltRestoreProgress {
       distanceUnit(): string;
       temp(celsius: number): { value: number; unit: string };
       tempText(celsius: number): string;
+      pressureText(kpa: number): string;
+      volumeText(liters: number): string;
       efficiencyText(miPerKwh: number): string;
       efficiencyUnit(): string;
     };
@@ -770,6 +797,10 @@ interface VoltRestoreProgress {
     ensureChargeHistoryModule(): Promise<VoltDashboard>;
     /** G2 split: the Insights maintenance log list + add-entry form. */
     ensureMaintenancePanelModule(): Promise<VoltDashboard>;
+    /** Experimental car controls card + Settings opt-in (lazy; loaded after startup). */
+    ensureCarControlsModule(): Promise<VoltDashboard>;
+    /** Registered by car-controls.ts once loaded. */
+    renderCarControls?(): void;
     /** G2 split: the DTC detail bottom sheet + scan-progress narration. */
     ensureDtcDetailModule(): Promise<VoltDashboard>;
     ensureSignalsModule(): Promise<VoltDashboard>;
@@ -971,6 +1002,8 @@ interface VoltRestoreProgress {
     shareTripCard?(): boolean;
     /** Hide the per-trip detail sheet (M7). */
     closeTripDetail?(): void;
+    /** Native `tripSplitChanged` answer to splitTripAtStop / mergeTripSplit: refresh trips + the open sheet. */
+    onTripSplitChanged?(payload: unknown): void;
     setMapTileError(show: boolean, detail?: string): void;
     retryMapTiles(): void;
     loadSampleData(): void;
@@ -1065,6 +1098,10 @@ interface VoltRestoreProgress {
     restoreTrip(routeKey: string): void;
     setTripLabel(routeKey: string, label: string): void;
     setTripFavorite(routeKey: string, favorite: boolean): void;
+    /** "Split trip here": confirms, then splits the stored trip at its in-trip Park stop (epoch-ms strings). Answers via VoltTrackerNative.tripSplitChanged. */
+    splitTripAtStop(routeKey: string, stopStartMs: string, stopEndMs: string): void;
+    /** Merges a user-split trip back into one; `splitKey` comes from a route's userSplitBefore/After. */
+    mergeTripSplit(splitKey: string): void;
     addMaintenanceEntry(json: string): void;
     getMaintenanceLog(): string;
     deleteMaintenanceEntry(id: string): void;
@@ -1080,12 +1117,20 @@ interface VoltRestoreProgress {
     setLowSocNotify(enabled: boolean, thresholdPct: number): void;
     setHighPackTempNotify(enabled: boolean, thresholdC: number): void;
     setChargeTargetSoc(targetPct: number): void;
+    getSharedPrefs(): string;
+    setSharedPref(key: string, json: string): boolean;
     setAutoScanOnConnect(enabled: boolean): void;
     setMaintenanceDueNotify(enabled: boolean): void;
     getDashboardExperienceState(): string;
     setKeepScreenAwake(enabled: boolean): void;
     setTripSummaryNotify(enabled: boolean): void;
     setActiveDashboardView(view: string): void;
+    getCarControlState(): string;
+    /** Map-tab basemap tiles: JSON `{dark, light, attribution}` (Stadia URL templates), or `{}` with no key. */
+    getMapTileConfig(): string;
+    setCarControlsEnabled(enabled: boolean): void;
+    requestCarControl(command: string): void;
+    lockCarControls(): void;
     connectLast(): void;
     scanLast(): void;
     quickScanLast(): void;

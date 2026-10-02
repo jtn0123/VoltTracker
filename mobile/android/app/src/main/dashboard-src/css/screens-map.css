@@ -266,7 +266,7 @@
     background: var(--surface-overlay);
     color: var(--text);
     border-color: var(--line-marker);
-    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-family: var(--font-ui);
   }
 
   .map-legend {
@@ -275,10 +275,14 @@
        it reads as a quiet reference, not a control. Still aria-hidden. */
     position: absolute;
     z-index: 1100;
-    bottom: 12px;
+    /* Sits above the attribution pill (bottom-right, ~28px with its margin) so a
+       wide legend never runs into it; wraps instead of overflowing a narrow frame. */
+    bottom: 36px;
     left: 12px;
+    max-width: calc(100% - 24px);
+    flex-wrap: wrap;
     display: none;
-    gap: 8px;
+    gap: 4px 8px;
     padding: 5px 9px;
     border: 1px solid var(--line);
     border-radius: 999px;
@@ -642,7 +646,9 @@
     flex: 1;
     /* v2 design: full 44px touch height + 13px/700 labels. */
     min-height: 44px;
-    padding: 0 14px;
+    /* 8px side padding + nowrap: at 14px "▶ Play route" wrapped onto two lines on phones. */
+    padding: 0 8px;
+    white-space: nowrap;
     border: 1px solid var(--line-strong);
     border-radius: 999px;
     background: var(--fill);
@@ -656,6 +662,8 @@
 
   /* Primary scrubber action carries the Map tab's blue accent (not global orange). */
   .scrub-btn:first-child {
+    /* The primary Play/Pause label is the longest; give it the extra width. */
+    flex: 1.4;
     background: var(--map-accent);
     color: var(--on-map-accent);
     border-color: transparent;

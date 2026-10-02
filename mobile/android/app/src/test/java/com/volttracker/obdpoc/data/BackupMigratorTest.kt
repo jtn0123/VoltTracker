@@ -224,9 +224,9 @@ class BackupMigratorTest {
         }
 
     private fun deleteFamily(f: File) {
-        f.delete()
-        File(f.path + "-wal").delete()
-        File(f.path + "-shm").delete()
-        File(f.path + "-journal").delete()
+        f.deleteOrLog()
+        File(f.path + "-wal").deleteOrLog()
+        File(f.path + "-shm").deleteOrLog()
+        File(f.path + "-journal").deleteOrLog()
     }
 }

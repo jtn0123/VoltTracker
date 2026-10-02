@@ -152,6 +152,9 @@
   overflow: hidden;
   background: var(--surface-map);
   box-shadow: var(--shadow-card);
+  /* Keeps Leaflet's pane/control z-indices (400+) inside the map, so page
+       overlays like the trip-detail sheet (z-index 42) paint above it. */
+  isolation: isolate;
 }
 
 .map-canvas {
@@ -204,6 +207,26 @@
 
 .map-overlay-top > * {
   pointer-events: auto;
+}
+
+/* When the layer tabs, Follow and full-screen buttons don't fit one row (a
+     live drive on most phones), the right-hand buttons wrap under the tabs,
+     still right-aligned, instead of running off the map's edge. */
+.map-overlay-top {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+
+.map-overlay-top .map-top-right {
+  margin-left: auto;
+}
+
+/* Phone widths: slightly tighter layer tabs keep tabs + Follow + full-screen
+     on one row at ~412 px. */
+@media (max-width: 439px) {
+  .map-overlay-top .map-layer-tabs button {
+    padding: 0 8px;
+  }
 }
 
 /* ===== 3. Map tab chrome (layer pills, route-flow, Leaflet controls, legend) ===== */
@@ -440,24 +463,31 @@
   grid-column: auto;
 }
 
-/* EV-vs-gas savings (Insights). v2 design: an inset dark card — kicker and
-     value stacked on top, then the note on the left with the Settings pill on
-     the right. */
+/* EV-vs-gas savings (Insights): a divider-separated section of the
+     Lifetime card (not a card-in-card) — kicker and value stacked on top, then
+     the note on the left with the Settings pill on the right. */
 .map-sheet-savings {
   display: grid;
   gap: 6px;
-  margin-top: 12px;
-  padding: 12px;
-  border-radius: 12px;
-  background: var(--inset);
+  margin-top: 16px;
+  padding: 16px 0 0;
+  border-top: 1px solid var(--line-soft);
+  background: transparent;
 }
 
 .map-sheet-savings strong {
   display: block;
-  margin-top: 2px;
-  font-size: 18px;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--ev);
+}
+
+/* Prefs not set yet: no "--" figure, just the prompt line + Settings link. */
+.map-sheet-savings[data-state="prompt"] strong {
+  display: none;
 }
 
 .map-sheet-savings small {
@@ -474,30 +504,25 @@
   color: var(--ev-soft);
 }
 
-/* v2 design: the Vehicle card's Add-maintenance link speaks the Insights
-   purple accent, not the global link blue. */
-#addMaintenanceBtn {
-  color: var(--mixed-soft);
-}
-
-/* v2 design: the Settings tap-through in the savings row is a purple pill
-     (the Insights accent), not a bare text link. */
+/* The Settings tap-through in the savings row is an accent pill, not a bare
+     text link. */
 .map-sheet-savings .link-btn {
   margin: -6px 0 -6px 6px;
   padding: 7px 12px;
-  border: 1px solid rgba(var(--mixed-rgb), 0.32);
+  border: 0;
   border-radius: 999px;
-  background: rgba(var(--mixed-rgb), 0.08);
-  color: var(--mixed-soft);
+  background: rgba(var(--volt-rgb), 0.12);
+  color: var(--volt-soft);
 }
 
-/* Recorded-drive rows as individual rounded inset cards with a blue distance
-     pill; scoped to .map-list so Charge/Insights lists are untouched. */
+/* Recorded-drive rows: borderless rounded rows on a faint fill with an
+     accent distance pill; scoped to .map-list so Charge/Insights lists are
+     untouched. */
 .map-list .history-row {
-  border: 1px solid var(--line-soft);
-  border-top: 1px solid var(--line-soft);
+  border: 1px solid transparent;
+  border-top: 1px solid transparent;
   border-radius: var(--radius-md);
-  background: var(--inset);
+  background: var(--fill-soft);
 }
 
 .map-list .history-row > b {
@@ -505,7 +530,6 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: rgba(var(--map-accent-rgb), 0.12);
-  /* Design pill ink: the soft accent (#c7edff), not full map blue. */
   color: var(--accent-soft);
   font-size: 12px;
   font-weight: 700;
@@ -533,7 +557,7 @@
 }
 
 .map-list-search input {
-  background: var(--inset);
+  background: var(--fill-soft);
   border-color: var(--line);
 }
 
@@ -552,11 +576,33 @@
   background: var(--volt);
 }
 
+/* Charges / Peak power / Est. cost: ONE summary card split into three
+     columns by hairlines, instead of three separate boxes. */
 .charge-grid {
   display: grid;
-  /* Three tiles, one row (v2: Plug-ins / Peak power / Est. cost). */
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
+  gap: 0;
+  padding: 16px 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
+}
+
+.charge-grid[hidden] {
+  display: none;
+}
+
+.charge-grid > .charge-kpi {
+  padding: 0 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.charge-grid > .charge-kpi + .charge-kpi {
+  border-left: 1px solid var(--line-soft);
 }
 
 /* On the narrowest phones the two KPI columns get cramped, so stack to a
@@ -594,7 +640,7 @@
 }
 
 /* Maintenance status as a pill (matches the app's badge language) instead of
-     a bare bold word. watch = warn, pending = the Insights purple, manual = neutral. */
+     a bare bold word. watch = warn (caution); pending/manual stay neutral. */
 .maint-tag {
   flex: 0 0 auto;
   padding: 5px 11px;
@@ -602,9 +648,9 @@
   border-radius: 999px;
   background: var(--fill);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   white-space: nowrap;
@@ -614,12 +660,6 @@
   border-color: rgba(var(--warn-rgb), 0.3);
   background: rgba(var(--warn-rgb), 0.1);
   color: var(--warn-soft);
-}
-
-.maint-tag[data-tag="pending"] {
-  border-color: rgba(var(--mixed-rgb), 0.3);
-  background: rgba(var(--mixed-rgb), 0.1);
-  color: var(--mixed-soft);
 }
 
 /* Per-entry "Remove" on a real maintenance row (M5). Quiet by default; reddens on press so a
@@ -782,9 +822,16 @@
 /* Hairline divider above the connect card's state strip (scoped so
      #insightStatsCard .state-grid is unaffected). */
 .connect-card .state-grid {
+  /* Content-sized columns: four equal quarters clipped "21k rows" to "21k ro…". */
+  display: flex;
+  justify-content: space-between;
   margin-top: 16px;
   padding-top: 14px;
   border-top: 1px solid var(--line);
+}
+
+.connect-card .state-grid div {
+  flex: 0 1 auto;
 }
 
 /* Demoted, compact backup/restore card; keeps all four real actions. */
@@ -867,7 +914,7 @@ pre {
   border-radius: var(--radius-md);
   background: var(--inset-deep);
   color: var(--muted);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   line-height: 1.45;
   white-space: pre-wrap;
@@ -1276,9 +1323,10 @@ body.map-full-active .bottom-nav {
     background-color var(--motion-fast) var(--motion-ease),
     color var(--motion-fast) var(--motion-ease);
 }
+/* Same flat accent-tint selection as every other segmented control. */
 .eff-view-btn.is-active {
-  background: var(--tab-accent);
-  color: var(--on-tab-accent);
+  background: rgba(var(--volt-rgb), 0.16);
+  color: var(--volt-soft);
 }
 .eff-view-btn:not(.is-active):hover {
   color: var(--text);
@@ -1350,9 +1398,38 @@ body.map-full-active .bottom-nav {
   max-height: 78vh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  z-index: 40;
+  z-index: 42;
   padding: var(--card-pad-lg);
+  /* Opaque sheet surface: .panel's raised card fill is slightly translucent,
+       which let the trip list behind the sheet show through. */
+  background: var(--surface-modal);
   box-shadow: 0 16px 48px var(--shadow);
+}
+
+/* Scrim behind the sheet: the shared --scrim token (light + dark) and the DTC
+     sheet's fade, over the bottom nav (z 40). While it is up the page under it
+     is scroll-locked; a tap on it closes the sheet (data-action). */
+.trip-detail-backdrop {
+  display: none;
+}
+
+body.trip-detail-active .trip-detail-backdrop {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 41;
+  background: var(--scrim);
+  animation: backdrop-fade 200ms ease both;
+}
+
+html.trip-detail-active {
+  overflow: hidden;
+}
+
+/* The sheet is centred with a transform; .panel's hover lift (pointer devices)
+     would replace it and slide the sheet half off-screen. */
+.trip-detail-sheet:hover {
+  transform: translateX(-50%);
 }
 
 .trip-detail-head {
@@ -1393,7 +1470,7 @@ body.map-full-active .bottom-nav {
 
 .trip-detail-stats strong,
 .trip-detail-times strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-display);
   font-size: 14px;
   font-variant-numeric: tabular-nums;
 }
@@ -1405,8 +1482,9 @@ body.map-full-active .bottom-nav {
   gap: 6px;
 }
 
-/* C9 touch audit: read-only info rows (map.ts renderTripDetailStops) with no
-   click handling — 40px is layout rhythm, not a touch target. */
+/* C9 touch audit: info rows (map.ts renderTripDetailStops) — 40px is layout
+   rhythm, not a touch target. The only control in a row is a Park stop's
+   "Split trip here" .link-btn, which carries its own 44px touch minimum. */
 .trip-detail-stop-row {
   display: flex;
   align-items: center;
@@ -1435,9 +1513,23 @@ body.map-full-active .bottom-nav {
 
 .trip-detail-stop-row b {
   color: var(--warn);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 12px;
   font-variant-numeric: tabular-nums;
+}
+
+.trip-detail-stop-row .trip-detail-stop-split {
+  flex: 0 0 auto;
+  margin-inline-end: -4px;
+  font-size: 12px;
+}
+
+.trip-detail-merge {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  margin-top: 10px;
 }
 
 .trip-detail-actions {
@@ -1564,7 +1656,7 @@ body.map-full-active .bottom-nav {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10.5px;
   color: var(--muted);
 }
@@ -1642,7 +1734,7 @@ body.map-full-active .bottom-nav {
      cursor stays white). */
 #scrubChart {
   border-radius: var(--radius-md);
-  background: var(--inset);
+  background: var(--fill-ghost);
   overflow: hidden;
 }
 
@@ -1660,13 +1752,11 @@ body.map-full-active .bottom-nav {
   height: 52px;
 }
 
-/* Force monospace on the in-chart SVG <text> labels. The markup sets a
-     font-family presentation attribute, but it loses to the inherited sans-serif
-     body font once the SVG renders, so the labels came out in the wrong face. A
-     real CSS rule wins the cascade. */
+/* In-chart SVG <text> labels use the UI sans (tabular digits inherit from
+     body) — one type voice for every chart. */
 .scrub-chart svg text,
 .scrub-track svg text {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
 }
 
 .scrub-cursor {
@@ -1721,7 +1811,7 @@ body.map-full-active .bottom-nav {
   height: 52px;
   margin-top: 6px;
   border-radius: var(--radius-md);
-  background: var(--inset);
+  background: var(--fill-ghost);
   overflow: hidden;
   touch-action: none;
   cursor: ew-resize;
@@ -1747,11 +1837,11 @@ body.map-full-active .bottom-nav {
 }
 
 .scrub-elev .scrub-cursor {
-  border-left-color: rgba(var(--mixed-rgb), 0.75);
+  border-left-color: var(--soft);
 }
 
 .scrub-elev .scrub-cursor::before {
-  background: rgba(var(--mixed-rgb), 0.9);
+  background: var(--soft);
 }
 
 /* ===== 10. "More signals" chip card ===== */
@@ -1760,56 +1850,37 @@ body.map-full-active .bottom-nav {
      unit-bearing values room (4 columns clipped them and wrapped labels). It's a
      standalone panel, so it drops the readout's footer border-top, and the
      readout's single-row vertical dividers (which misalign once cells hide). */
-/* v2 tile vocabulary: same bordered 14px tiles as the Drive signal grid, so
-     the enhanced signals read as more of the same system, not a second style. */
+/* Same signal-grid vocabulary as the Drive live readout: one card, a
+     3-column grid of label-over-value cells, no per-cell boxes. */
 .more-signals {
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  border: 0;
-  border-top: none;
-  background: transparent;
-  box-shadow: none;
-  padding: 0;
-  gap: 8px;
+  border-top: 0;
+  padding: 16px 18px;
+  gap: 16px 12px;
 }
 
 /* .more-signals.scrub-readout (double class) outranks the shared
      .scrub-readout cell/kicker/strong rules that follow in this file. */
 .more-signals.scrub-readout div {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-raised);
-  min-height: 44px;
+  padding: 0;
   text-align: left;
 }
 
-.more-signals.scrub-readout .kicker {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+.more-signals.scrub-readout div + div {
+  border-left: 0;
 }
 
-.more-signals.scrub-readout .kicker[data-tone="volt"] {
-  color: var(--volt);
-}
-.more-signals.scrub-readout .kicker[data-tone="ev"] {
-  color: var(--ev);
-}
-.more-signals.scrub-readout .kicker[data-tone="warn"] {
-  color: var(--warn);
-}
-.more-signals.scrub-readout .kicker[data-tone="mixed"] {
-  color: var(--mixed);
-}
-.more-signals.scrub-readout .kicker[data-tone="accent"] {
-  color: var(--accent);
+.more-signals.scrub-readout .kicker {
+  color: var(--soft);
+  font-size: 11px;
+  letter-spacing: 0.06em;
 }
 
 .more-signals.scrub-readout strong {
-  margin-top: 3px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 15px;
-  font-weight: 700;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 19px;
+  font-weight: 600;
 }
 
 .more-signals.is-empty {
@@ -1848,18 +1919,23 @@ body.map-full-active .bottom-nav {
   color: var(--soft);
 }
 
-/* Map scrub readout: gapped inset chips with mono values; scoped to .scrubber
-     so the Drive .live-readout is untouched. */
+/* Map scrub readout: an open 3 × 2 grid of label-over-value cells (no
+     per-cell inset boxes); scoped to .scrubber so the Drive .live-readout is
+     untouched. Labels colored by the chart legend keep their tint. */
 .scrubber .scrub-readout {
-  gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px 12px;
+  margin-top: 14px;
   border-top: 0;
   background: transparent;
 }
 
+.scrubber .scrub-readout[data-cols="4"] {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .scrubber .scrub-readout div {
-  padding: 7px 8px;
-  border-radius: var(--radius-input);
-  background: var(--inset);
+  padding: 0;
   text-align: left;
 }
 
@@ -1867,9 +1943,15 @@ body.map-full-active .bottom-nav {
   border-left: 0;
 }
 
+.scrubber .scrub-readout .kicker {
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+}
+
 .scrubber .scrub-readout strong {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 13px;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
 }
 
 .scrub-stack {
@@ -2009,19 +2091,13 @@ body.map-full-active .bottom-nav {
   flex: 0 0 auto;
   padding: 2px 7px;
   border-radius: 999px;
-  background: rgba(var(--warn-rgb), 0.12);
-  /* v2 design: soft amber (#ffd37f) for dawn/day pills. */
-  color: var(--warn-soft);
+  /* Time of day is a label, not a status: one neutral pill for all. */
+  background: var(--fill-bold);
+  color: var(--muted);
   font-size: 9px;
-  font-weight: 750;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-}
-
-.map-drive-chip .tod-pill[data-tod="dusk"],
-.map-drive-chip .tod-pill[data-tod="night"] {
-  background: rgba(var(--mixed-rgb), 0.14);
-  color: var(--mixed-soft);
 }
 
 .map-drive-chip .dl {
@@ -2040,7 +2116,7 @@ body.map-full-active .bottom-nav {
   align-items: center;
   gap: 6px;
   margin-top: 5px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
   color: var(--muted);
 }
@@ -2182,11 +2258,10 @@ body.map-full-active .bottom-nav {
   animation: drive-source-pulse 1.8s ease-in-out infinite;
 }
 .drive-source-badge[data-source="demo"] {
-  border-left-color: var(--accent, #6ec6ff);
+  border-left-color: var(--mixed);
 }
 .drive-source-badge[data-source="demo"] .drive-source-dot {
-  background: var(--accent, #6ec6ff);
-  box-shadow: 0 0 8px rgba(110, 198, 255, 0.6);
+  background: var(--mixed);
 }
 .drive-source-badge[data-source="offline"] {
   border-left-color: var(--warn);
@@ -2281,7 +2356,7 @@ body.map-full-active .bottom-nav {
   display: flex;
   gap: 8px;
   margin-top: 5px;
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-ui);
   font-size: 11px;
   color: var(--muted);
 }
@@ -2371,17 +2446,14 @@ button.drive-now-chip:focus-visible {
   box-shadow: 0 0 8px rgba(var(--volt-rgb), 0.55);
 }
 
-/* v2 design driveTiles: six live signals as a 3-column grid of individually
-     bordered tiles (not one panel strip). The outer element drops its inherited
-     .scrub-readout/.panel chrome so each tile is its own card. */
+/* Six live signals as ONE card holding an open 3-column grid (label over
+     value, no per-tile boxes) — the old six bordered tiles read as clutter. */
 .live-readout {
   margin: 0;
-  padding: 0;
-  border: 0;
+  padding: 18px 20px;
   border-top: 0;
-  background: transparent;
-  box-shadow: none;
-  gap: 8px;
+  background: var(--surface-raised);
+  gap: 18px 12px;
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
@@ -2407,23 +2479,31 @@ button.drive-now-chip:focus-visible {
   display: none;
 }
 
-/* Micro-charts row — power bars + SOC trace. */
+/* Micro-charts — power bars + SOC trace share ONE card, stacked full-width
+     so each chart gets the whole row (they were two cramped half-width cards).
+     The inner .live-micro articles drop their own panel chrome. */
 .live-microcharts {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-@media (max-width: 390px) {
-  .live-microcharts {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-card);
 }
 
 .live-micro {
-  padding: 12px 14px;
-  /* v2 design: micro cards sit a step below full panels — 16px radius. */
-  border-radius: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.live-micro + .live-micro {
+  padding-top: 18px;
+  border-top: 1px solid var(--line-soft);
 }
 
 /* v2 design: the micro chart sits bare in its card — no inset box chrome. */
@@ -2433,13 +2513,30 @@ button.drive-now-chip:focus-visible {
 }
 
 .live-micro .live-trace-chart {
-  min-height: 58px;
+  min-height: 88px;
 }
 
-/* Empty micro-chart placeholder matches the populated trace height. */
+/* Waiting micro-charts collapse to a slim skeleton strip instead of holding
+     88px of blank card; the chart grows to full height with real samples. */
+.live-micro .live-trace-chart[data-chart-state="empty"],
+.live-micro .live-trace-chart[data-chart-state="empty"] .live-chart-empty {
+  min-height: 44px;
+}
+
 .live-micro .live-chart-empty {
-  min-height: 58px;
-  padding: 8px;
+  padding: 6px 0;
+}
+
+/* A flat session (SOC moved < 1%) renders a compact strip + a one-line note. */
+.live-micro .live-trace-chart[data-chart-size="compact"],
+.live-trace-chart[data-chart-size="compact"] .live-dom-chart {
+  min-height: 44px;
+}
+
+.live-chart-note {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
 }
 
 .live-micro header {
@@ -2449,21 +2546,12 @@ button.drive-now-chip:focus-visible {
   gap: 8px;
 }
 
-/* v2 design: the micro-card corner tag is a bare unit label ("kW" / "%"),
-     tinted per chart — not a live value chip. */
+/* The micro-card corner tag is a bare, neutral unit label ("kW" / "%"). */
 .live-micro .micro-tag {
-  font-size: 10px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 600;
   white-space: nowrap;
-  color: var(--muted);
-}
-
-.live-micro .micro-tag[data-kind="power"] {
-  color: var(--volt-soft-dim);
-}
-
-.live-micro .micro-tag[data-kind="soc"] {
-  color: var(--ev-soft);
+  color: var(--soft);
 }
 
 /* Tone-chip variants removed (v2 design): the tag is a static unit label. */
@@ -2498,7 +2586,7 @@ button.drive-now-chip:focus-visible {
   padding: 8px 12px;
   position: relative;
   color: var(--soft);
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-ui);
   font-size: 10px;
   user-select: none;
 }
@@ -2539,7 +2627,7 @@ button.drive-now-chip:focus-visible {
 
 .live-dom-chart {
   position: relative;
-  min-height: 58px;
+  min-height: 88px;
   overflow: hidden;
 }
 
@@ -2564,24 +2652,22 @@ button.drive-now-chip:focus-visible {
 
 .live-power-bar {
   min-height: 1px;
-  border-radius: 999px;
-  opacity: 0.86;
+  border-radius: 2px;
 }
 
+/* Chart palette: drive power is the accent series, regen is EV green. */
 .live-power-bar.is-drive {
   background: var(--volt);
-  box-shadow: 0 0 10px rgba(var(--volt-rgb), 0.22);
 }
 
 .live-power-bar.is-regen {
   background: var(--ev);
-  box-shadow: 0 0 10px rgba(var(--ev-rgb), 0.2);
 }
 
 .live-soc-segment {
   height: 2px;
   border-radius: 999px;
-  /* v2 design: the SOC session trace is EV green (#b8e63b), not purple. */
+  /* Battery series = EV green. */
   background: var(--ev);
   box-shadow: none;
   transform-origin: 0 50%;
@@ -2607,14 +2693,13 @@ button.drive-now-chip:focus-visible {
      (unlike the base .scrub-readout): auto-fit wraps the six cells at narrow
      widths and cells can hide via [data-live-cell].is-empty, so any div + div
      divider lands on row-start cells. The 4px gap is the separator. */
-/* Each signal is a bordered 14px tile, left-aligned (design tiles), min 44px. */
 .live-readout div {
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: var(--surface-raised);
-  min-height: 44px;
+  padding: 0;
   text-align: left;
+}
+
+.live-readout div + div {
+  border-left: 0;
 }
 
 [data-live-cell].is-empty {
@@ -2642,32 +2727,20 @@ button.drive-now-chip:focus-visible {
   display: none;
 }
 
+/* Neutral labels: tile color used to be decorative (orange RPM, lime
+     throttle, purple GPS) and meant nothing. */
 .live-readout .kicker {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
+  color: var(--soft);
+  font-size: 11px;
+  letter-spacing: 0.06em;
 }
-/* Restore the per-signal tone tint the shared .scrub-readout muted rule
-     otherwise suppresses (design tints each tile label; RPM uses the softer
-     #ff9d6e-family orange, not full volt). */
-.live-readout .kicker[data-tone="volt"] {
-  color: var(--volt-soft-dim);
-}
-.live-readout .kicker[data-tone="ev"] {
-  color: var(--ev);
-}
-.live-readout .kicker[data-tone="warn"] {
-  color: var(--warn);
-}
-.live-readout .kicker[data-tone="mixed"] {
-  color: var(--mixed);
-}
-/* Monospace value, left-aligned in the tile (design ui-monospace 15px). */
+
 .live-readout strong {
-  margin-top: 3px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 15px;
-  font-weight: 700;
+  margin-top: 4px;
+  font-family: var(--font-display);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
 }
 
 /* ===== 13. Validation card ===== */
@@ -2683,17 +2756,20 @@ button.drive-now-chip:focus-visible {
   padding: 16px 20px;
 }
 
+/* Flex, not a fixed 4-column grid: stats with no value hide their cell, and
+     the remaining ones share the row instead of leaving holes. */
 .trip-stats {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 12px;
+  margin-top: 12px;
 }
 
 .trip-stats > div {
   display: flex;
+  flex: 1 1 0;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -2705,8 +2781,8 @@ button.drive-now-chip:focus-visible {
   font-family: var(--font-display);
   /* Scales with the viewport so "4.7 mi/kWh" fits its quarter-width column
        on a narrow phone instead of ellipsizing the unit away. */
-  font-size: clamp(14px, 4.4vw, 18px);
-  font-weight: 700;
+  font-size: clamp(18px, 5.4vw, 24px);
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
   overflow: hidden;
@@ -2714,8 +2790,24 @@ button.drive-now-chip:focus-visible {
   white-space: nowrap;
 }
 
-.trip-stats > div:last-child strong {
-  color: var(--ev);
+/* Narrow phones: four quarter-width columns clipped the "Efficiency" label at
+     the card edge, so a full set of four wraps to a 2 × 2 grid (three fit one row). */
+@media (max-width: 379px) {
+  .trip-stats[data-cols="4"] > div {
+    flex-basis: 40%;
+  }
+}
+
+/* The "View on map" link's tap box is taller than the kicker; centre them on
+     one line instead of dropping the link's text below the title. */
+.trip-card .card-head {
+  align-items: center;
+}
+
+/* ...and let that 44px tap box bleed into the card padding so it doesn't
+     push the stats down (the hit area is unchanged). */
+.trip-card .card-head .link-btn {
+  margin-block: -12px;
 }
 
 /* The energy/cost footer keeps its .trip-energy-strip typography but loses
@@ -2979,4 +3071,123 @@ button.drive-now-chip:focus-visible {
       rgba(var(--tab-accent-rgb), 0.12);
     box-shadow: inset 0 0 0 1px rgba(var(--tab-accent-rgb), 0.22);
   }
+}
+
+/* Experimental car controls card (Drive tab, car-controls.ts). */
+.car-controls-card {
+  padding: 16px 20px;
+}
+
+.car-controls-card[hidden] {
+  display: none;
+}
+
+.car-controls-card .card-head {
+  align-items: center;
+  gap: 10px;
+}
+
+/* Badge + Show/Hide sit together on the trailing edge; the 44px tap box of the
+     disclosure bleeds into the card padding instead of growing the header. */
+.car-controls-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  background: var(--fill-bold);
+}
+
+.car-controls-expand {
+  margin-block: -8px;
+}
+
+.car-controls-gate {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Gate state is carried by a status dot; the sentence stays readable ink. */
+.car-controls-gate[data-tone]::before {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  border-radius: 50%;
+  vertical-align: 1px;
+  background: var(--soft);
+}
+
+.car-controls-gate[data-tone="ok"]::before {
+  background: var(--ok);
+}
+
+.car-controls-gate[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.car-controls-gate[data-tone="warn"]::before {
+  background: var(--warn);
+}
+
+.car-controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.car-control-btn {
+  min-height: var(--touch-min);
+  padding: 6px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--fill-strong);
+  color: var(--text);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.car-control-btn:disabled {
+  opacity: 0.45;
+}
+
+/* Narrow phones: keep "Stop remote start" / "Windows down" on one line so the
+     grid rows read evenly. */
+@media (max-width: 379px) {
+  .car-control-btn {
+    padding: 6px 6px;
+    font-size: 13px;
+  }
+}
+
+.car-controls-result {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: var(--text);
+}
+
+.car-controls-result[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.car-controls-result[data-tone="warn"] {
+  color: var(--warn);
+}
+
+.car-controls-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.car-controls-warning {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: var(--muted);
 }

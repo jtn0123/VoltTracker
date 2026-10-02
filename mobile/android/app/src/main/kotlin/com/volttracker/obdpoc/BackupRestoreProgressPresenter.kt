@@ -13,7 +13,7 @@ import kotlin.math.ceil
  * emitter must also observe the worker thread's interrupt state at call time.
  */
 class BackupRestoreProgressPresenter(
-    private val activity: MainActivity,
+    private val activity: BackupHost,
     private val isCancelled: () -> Boolean,
 ) {
     fun show(

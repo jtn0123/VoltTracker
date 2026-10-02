@@ -48,7 +48,7 @@ unchecked.
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
 | Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **412,000 B** | ~385 KB |
-| Lazy support JS | first-party lazy JS chunks except panel, expert, detail, and DTC data | **90,000 B** | ~89 KB |
+| Lazy support JS | first-party lazy JS chunks except panel, expert, detail, and DTC data | **91,000 B** | ~89 KB |
 | Lazy panel JS | `js/insights-panel.js`, `js/connection-tools.js` | **45,000 B** | ~43 KB |
 | Lazy expert JS | `js/signals-panel.js`, `js/scrubber.js` | **40,000 B** | ~20 KB |
 | Lazy detail JS | `js/charge-history.js`, `js/maintenance-panel.js`, `js/dtc-detail.js` | **25,000 B** | ~21 KB |

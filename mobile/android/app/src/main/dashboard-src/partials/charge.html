@@ -43,7 +43,7 @@
     <details class="empty-preview">
       <summary>What will appear here?</summary>
       <p>
-        Plug-ins, peak charging power, estimated cost, battery-cell balance, and
+        Charges, peak charging power, estimated cost, battery-cell balance, and
         long-term pack-health trends unlock as each kind of reading is recorded.
       </p>
     </details>
@@ -176,9 +176,11 @@
     </p>
   </article>
 
-  <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
-       session count lives in the Recent-charges headline ("29.6 kWh across 4
-       charges") and detection status in the source badge + live hero chip. -->
+  <!-- Three KPI tiles (v2 design): Charges / Peak power / Est. cost. "Charges"
+       is the logged charge-session count — the same number the Recent-charges
+       headline totals ("29.6 kWh across 4 charges"), never the raw per-sample
+       charge-transition hint count. Detection status lives in the source badge
+       + live hero chip. -->
   <section
     id="chargeSummaryGrid"
     class="charge-grid"
@@ -188,8 +190,8 @@
     <!-- v2 design: label + number only — no explainer captions on the first two
          tiles (Est. cost keeps its caption because it doubles as the rate prompt). -->
     <article class="panel charge-kpi">
-      <header><span>Plug-ins</span></header>
-      <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
+      <header><span>Charges</span></header>
+      <strong id="realChargeCount" aria-live="polite" aria-atomic="true"
         >0</strong
       >
     </article>
@@ -205,6 +207,19 @@
         >--</strong
       >
       <small id="chargeEnergyHint">Set rate in Settings</small>
+      <!-- With no rate set the tile shows this subtle link in place of a "--"
+           value (charge-history.ts#renderChargeEnergy). -->
+      <button
+        type="button"
+        class="link-btn charge-kpi-link"
+        id="chargeRateLink"
+        data-nav-jump="settings"
+        data-settings-target="settingsDisplay"
+        data-settings-focus="pricePerKwhInput"
+        hidden
+      >
+        Set rate
+      </button>
     </article>
   </section>
 

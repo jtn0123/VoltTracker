@@ -121,7 +121,7 @@ describe('dashboard layout css', () => {
     // rgba(21,23,32,0.92) / light counterpart in the light block) — a solid
     // background-color fallback must stay so content can't bleed through.
     expect(navRule).toMatch(/background-color\s*:\s*var\(--surface-nav\)/);
-    expect(baseCss).toMatch(/--surface-nav\s*:\s*rgba\(21,23,32,0\.92\)/);
+    expect(baseCss).toMatch(/--surface-nav\s*:\s*rgba\(20,26,33,0\.92\)/);
     expect(navRule).toMatch(/border\s*:\s*1px\s+solid\s+var\(--line-strong\)/);
     expect(navRule).toMatch(/border-radius\s*:\s*24px/);
     expect(navRule).toMatch(/z-index\s*:\s*40/);
@@ -166,13 +166,13 @@ describe('dashboard layout css', () => {
     // literal is drift back to a hardcoded color.
     const cssFiles = ['base.css', 'components.css', 'screens.css', 'screens-map.css', 'status-tools.css', 'troubleshooter.css'];
     const tones = [
-      { token: '--volt-rgb', triplet: [255, 122, 69], hexToken: '--volt', hex: '#ff7a45' },
-      { token: '--ev-rgb', triplet: [184, 230, 59], hexToken: '--ev', hex: '#b8e63b' },
-      { token: '--ok-rgb', triplet: [53, 230, 160], hexToken: '--ok', hex: '#35e6a0' },
-      { token: '--warn-rgb', triplet: [255, 184, 74], hexToken: '--warn', hex: '#ffb84a' },
-      { token: '--bad-rgb', triplet: [255, 107, 95], hexToken: '--bad', hex: '#ff6b5f' },
-      { token: '--mixed-rgb', triplet: [164, 140, 255], hexToken: '--mixed', hex: '#a48cff' },
-      { token: '--map-accent-rgb', triplet: [76, 196, 255], hexToken: '--map-accent', hex: '#4cc4ff' },
+      { token: '--volt-rgb', triplet: [43, 212, 196], hexToken: '--volt', hex: '#2bd4c4' },
+      { token: '--ev-rgb', triplet: [95, 211, 122], hexToken: '--ev', hex: '#5fd37a' },
+      { token: '--ok-rgb', triplet: [95, 211, 122], hexToken: '--ok', hex: '#5fd37a' },
+      { token: '--warn-rgb', triplet: [242, 201, 76], hexToken: '--warn', hex: '#f2c94c' },
+      { token: '--bad-rgb', triplet: [255, 107, 107], hexToken: '--bad', hex: '#ff6b6b' },
+      { token: '--mixed-rgb', triplet: [167, 139, 250], hexToken: '--mixed', hex: '#a78bfa' },
+      { token: '--gas-rgb', triplet: [255, 159, 67], hexToken: '--gas', hex: '#ff9f43' },
     ];
 
     const baseCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/base.css'), 'utf8');
@@ -218,10 +218,10 @@ describe('dashboard layout css', () => {
     const mapCss = readFileSync(resolve(DASHBOARD_ASSETS, 'css/screens-map.css'), 'utf8');
 
     // New tokens resolve to the exact literals they replaced (dark default).
-    expect(baseCss).toMatch(/--ev-deep:\s*#8fbf2e;/);
-    expect(baseCss).toMatch(/--ok-deep:\s*#1f9c6c;/);
+    expect(baseCss).toMatch(/--ev-deep:\s*#3faf5b;/);
+    expect(baseCss).toMatch(/--ok-deep:\s*#3faf5b;/);
     expect(baseCss).toMatch(/--route-halo:\s*rgba\(255,\s*255,\s*255,\s*0\.32\);/);
-    expect(baseCss).toMatch(/--bad-soft-rgb:\s*255,\s*192,\s*187;/);
+    expect(baseCss).toMatch(/--bad-soft-rgb:\s*255,\s*179,\s*179;/);
 
     // ...and the consuming rules reference the tokens.
     expect(componentsCss).toMatch(/linear-gradient\(90deg,\s*var\(--ev-deep\),\s*var\(--ev\)\)/);

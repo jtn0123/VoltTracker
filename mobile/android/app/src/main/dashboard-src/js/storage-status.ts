@@ -867,19 +867,6 @@ import { kph } from "./unit-types";
       .join(", ") || "Only unknown state samples stored.";
   }
 
-  function selectedRouteForOverview(storage: VoltStorageSummary): VoltRoute {
-    if (typeof VD.selectedMapRoute === "function") {
-      return VD.selectedMapRoute(storage);
-    }
-    const routes = Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [];
-    if (!routes.length) return {};
-    const selectedId = String(state.selectedMapSessionId || "");
-    const selected = selectedId
-      ? routes.find((route) => String((route.session || {}).id || "") === selectedId)
-      : null;
-    return (selected || routes[0] || {}) as VoltRoute;
-  }
-
   // The latest battery/telemetry reading the Insights hero renders — preferring
   // the stored battery snapshot, then the battery/overview telemetry echoes.
   function latestInsightReading(storage: VoltStorageSummary): Record<string, unknown> {
@@ -903,7 +890,7 @@ import { kph } from "./unit-types";
   function hasInsightContent(): boolean {
     const storage = state.storage || {};
     const insightsSummary = state.insights || {};
-    const insightSoc = Number(latestInsightReading(storage).soc);
+    const insightSoc = Number(currentPackReading(storage).reading.soc);
     return (
       Number(insightsSummary.tripCount || 0) > 0 ||
       Number(insightsSummary.totalDistanceMeters || 0) > 0 ||
@@ -1124,82 +1111,146 @@ import { kph } from "./unit-types";
     VD.applyCellSnapshot(snapshot);
   }
 
-  // Drive's "This trip" card (v2 design): time + efficiency from the trip
-  // rollup that matches the overview route, plus the net HV energy + estimated
-  // electricity cost footer. Distance/max speed are written by the caller from
-  // the overview payload. Without a rate the footer's right side stays a
-  // "set rate for cost" Settings jump; without energy it shows "--" so the
-  // card never invents a figure.
-  function renderThisTripCard(route: VoltRoute, routeDistance: number): void {
-    const cost = el("tripCostValue") as HTMLButtonElement | null;
-    const sessionId = String(((route || {}).session || {}).id || "");
-    const trips = Array.isArray(state.trips) ? (state.trips as VoltTrip[]) : [];
-    const trip = sessionId
-      ? trips.find((row) => String(row.id) === sessionId) || null
-      : null;
-    const durationMs = trip && trip.durationMs != null ? Number(trip.durationMs) : NaN;
-    setText(
-      "tripTimeValue",
-      Number.isFinite(durationMs) && durationMs > 0 && typeof VD.formatDuration === "function"
-        ? VD.formatDuration(durationMs)
-        : "--"
-    );
-    const energyKwh = trip && trip.energyKwh != null ? Number(trip.energyKwh) : NaN;
-    const hasEnergy = Number.isFinite(energyKwh) && energyKwh > 0;
-    const tripMeters = trip && trip.distanceMeters != null ? Number(trip.distanceMeters) : routeDistance;
-    const miles = Number.isFinite(tripMeters) && tripMeters > 0 ? tripMeters / 1609.344 : NaN;
-    setText(
-      "tripEffValue",
-      hasEnergy && Number.isFinite(miles) && miles > 0
-        ? units.efficiencyText(miles / energyKwh)
-        : "--"
-    );
+  // The ONE drive the Drive tab's trip card describes. While samples stream it is the drive in
+  // progress (session distance/clock plus the running max-speed and net-energy totals
+  // telemetry.ts accumulates); otherwise the most recent stored trip — its rollup row when
+  // loaded, else its route. Every field on the card comes from this one object, so the card
+  // can no longer pair a lifetime total with the latest trip.
+  type TripSummary = { live: boolean; atMs: number; meters: number; durationMs: number; maxKph: number; energyKwh: number };
+
+  function newest<T>(rows: T[], startOf: (row: T) => number): T | null {
+    return rows.reduce<T | null>((best, row) => (best && startOf(best) >= startOf(row) ? best : row), null);
+  }
+
+  // "2h ago" for the trip card kicker and the snapshot-age caption: both label how old a
+  // stored figure is, so they share one relative-time wording.
+  function ago(ms: number): string {
+    return VD.formatWhen(ms);
+  }
+
+  function thisTripSummary(storage: VoltStorageSummary): TripSummary | null {
+    if (liveSampleFresh()) {
+      const session = (state.appState || {}).session || {};
+      const startedAt = Number(state.liveRouteStartedAtMs || 0);
+      return {
+        live: true,
+        atMs: Date.now(),
+        meters: Number(state.sessionDistanceM || 0),
+        durationMs: Number(state.telemetry.sessionMs || session.sessionMs || 0) || (startedAt > 0 ? Date.now() - startedAt : 0),
+        maxKph: state.sessionMaxSpeedKph,
+        energyKwh: state.sessionEnergyKwh
+      };
+    }
+    const trip = newest(Array.isArray(state.trips) ? state.trips : [], (row) => Number(row.startedAtMs || 0));
+    const route = newest(Array.isArray(storage.recentRoutes) ? storage.recentRoutes : [], (row) => Number((row.session || {}).startedAtMs || 0));
+    const routeSession = (route && route.session) || {};
+    const routeStart = Number(routeSession.startedAtMs || 0);
+    if (trip && Number(trip.startedAtMs || 0) >= routeStart) {
+      return {
+        live: false,
+        atMs: Number(trip.endedAtMs || trip.startedAtMs || 0),
+        meters: Number(trip.distanceMeters || 0),
+        durationMs: Number(trip.durationMs || 0),
+        maxKph: Number(trip.maxSpeedKph ?? NaN),
+        energyKwh: Number(trip.energyKwh ?? NaN)
+      };
+    }
+    if (!route) return null;
+    const routeEnd = Number(routeSession.endedAtMs || 0);
+    const peakMps = (route.points || []).reduce((max, point) => Math.max(max, Number(point.speedMps) || 0), 0);
+    return {
+      live: false,
+      atMs: routeEnd || routeStart,
+      meters: Number(route.distanceMeters || 0),
+      durationMs: routeEnd > routeStart && routeStart > 0 ? routeEnd - routeStart : 0,
+      maxKph: peakMps * 3.6,
+      energyKwh: NaN
+    };
+  }
+
+  // Drive's trip card (v2 design): distance, time, max speed and efficiency plus the net HV
+  // energy + estimated electricity cost footer, all from thisTripSummary(). The kicker says
+  // which drive it is. Without a rate the footer's right side stays a "set rate for cost"
+  // Settings jump; without energy it shows "--" so the card never invents a figure.
+  function renderThisTripCard(): void {
+    const trip = thisTripSummary(state.storage || {});
+    const meters = trip ? trip.meters : 0;
+    setText("thisTripKicker", trip && trip.live ? "Current drive" : trip ? `Last trip · ${ago(trip.atMs)}` : "Last trip");
+    setText("overviewDistance", meters > 0 ? VD.formatDistance(meters) : "--");
+    setText("tripTimeValue", trip && trip.durationMs > 0 ? VD.formatDuration(trip.durationMs) : "--");
+    setText("overviewMaxSpeed", trip && trip.maxKph > 0 ? units.speedText(kph(trip.maxKph)) : "--");
+    const energyKwh = trip ? trip.energyKwh : NaN;
+    // Floors keep a just-started live drive from flashing "0.0 kWh" or an absurd mi/kWh.
+    const hasEnergy = energyKwh >= 0.05;
+    const miles = meters / 1609.344;
+    setText("tripEffValue", hasEnergy && miles >= 0.1 ? units.efficiencyText(miles / energyKwh) : "--");
     setText("tripEnergyValue", hasEnergy ? `${energyKwh.toFixed(1)} kWh` : "--");
-    if (!cost) return;
     const rate = prefs.get<number>("pricePerKwh", 0);
+    // Placeholders collapse instead of printing "--": a stat without a value hides
+    // its cell (Distance stays as the card's anchor), and the energy/cost footer
+    // only shows once there is energy to price. The "--" text stays underneath
+    // so the value contract is unchanged.
+    let shown = 1;
+    for (const id of ["tripTimeValue", "overviewMaxSpeed", "tripEffValue"]) {
+      const cell = el(id)?.parentElement;
+      if (!cell) continue;
+      cell.hidden = el(id)?.textContent === "--";
+      if (!cell.hidden) shown += 1;
+    }
+    // Narrow phones wrap only a full set of four stats to 2 × 2; three or fewer stay on one row.
+    const stats = el("overviewDistance")?.closest<HTMLElement>(".trip-stats");
+    if (stats) stats.dataset.cols = String(shown);
+    toggleHidden("tripEnergyStrip", !hasEnergy);
+    const cost = el("tripCostValue") as HTMLButtonElement | null;
+    if (!cost) return;
     if (hasEnergy && rate > 0) {
       cost.textContent = `≈ $${(energyKwh * rate).toFixed(2)}`;
       setDataState(cost, "recorded");
       cost.disabled = true;
     } else if (rate > 0) {
       // Rate is set but this drive logged no pack power — nothing to estimate.
-      cost.textContent = routeDistance > 0 ? "no energy logged" : "--";
+      cost.textContent = meters > 0 ? "no energy logged" : "--";
       setDataState(cost, "waiting");
       cost.disabled = true;
     } else {
-      cost.textContent = "set rate for cost";
+      cost.textContent = "Set rate";
       setDataState(cost, "waiting");
       cost.disabled = false;
     }
   }
 
-  export function renderRealV2Ui() {
-    const storage = state.storage || {};
-    const overview: Record<string, unknown> = storage.overview || {};
-    const charge = storage.chargeSummary || {};
-    const route = selectedRouteForOverview(storage);
-    const hasRows = VD.dbRowCount(storage) > 0;
-    const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
-    const latest = latestInsightReading(storage);
-    toggleHidden("appEmptyState", hasRows);
-    toggleHidden("chargeEmptyState", hasCharge);
-    toggleHidden("chargeSummaryGrid", !hasCharge);
+  // A live (or demo-live) sample counts as current for this long after it landed. Past it the
+  // trip card falls back to the last stored trip and the Insights hero to the stored snapshot.
+  const LIVE_FRESH_MS = 30_000;
+  // [reading key, live telemetry key]: the pack fields the Insights hero + stat row read,
+  // overlaid from the live sample so no surface pairs a live SOC with stale pack figures.
+  const LIVE_PACK_FIELDS: Array<[string, string]> = [
+    ["soc", "soc"], ["vehicleState", "vehicleState"], ["powerKw", "powerKw"], ["packPowerKw", "powerKw"],
+    ["packVoltage", "packVoltage"], ["batteryTempC", "batteryTemp"], ["sohPct", "sohPct"]
+  ];
+
+  function liveSampleFresh(): boolean {
+    const last = Number(state.lastSampleAt || 0);
+    return last > 0 && Date.now() - last <= LIVE_FRESH_MS;
+  }
+
+  // The reading every battery surface agrees on: the fresh live sample when there is one
+  // (Drive's tiles already show it), otherwise the latest stored snapshot.
+  function currentPackReading(storage: VoltStorageSummary): { reading: Record<string, unknown>; live: boolean } {
+    const snapshot = latestInsightReading(storage);
+    if (!liveSampleFresh() || !(Number(state.telemetry.soc ?? NaN) > 0)) return { reading: snapshot, live: false };
+    const sample = state.telemetry as Record<string, unknown>;
+    const reading = { ...snapshot };
+    for (const [key, liveKey] of LIVE_PACK_FIELDS) if (sample[liveKey] != null) reading[key] = sample[liveKey];
+    return { reading, live: true };
+  }
+
+  function renderPackHero(): void {
+    // A live SOC is Insights content too, so the first-run guide yields to it.
     toggleHidden("insightsEmptyState", hasInsightContent());
-    const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
-    setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
-    setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(kph(Number(overview.maxSpeedKph))) : "--");
+    const { reading: latest, live } = currentPackReading(state.storage || {});
     const soc = Number(latest.soc);
     const power = Number(latest.powerKw ?? latest.packPowerKw);
-    renderThisTripCard(route, routeDistance);
-
-    setText("realChargeHints", Number(charge.chargingHintCount || 0));
-    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
-    // Charge history is an on-demand lazy chunk (charge-history.ts); treat its
-    // renderer as an optional subscriber, like updateEnhancedCapabilityUi.
-    if (typeof VD.renderChargeSessions === "function") VD.renderChargeSessions(charge);
-    renderBatterySohTrend();
-    refreshCellSnapshot();
-
     const ring = el("realPackRing");
     const ringValue = el("realPackValue");
     if (Number.isFinite(soc) && soc > 0) {
@@ -1218,7 +1269,10 @@ import { kph } from "./unit-types";
       setText("realPackTitle", `Pack at ${socRound}%${socRound <= 15 ? " — low" : socRound <= 30 ? " — getting low" : ""}`);
       const stateText = latest.vehicleState && latest.vehicleState !== "unknown" ? String(latest.vehicleState) : "";
       const powerText = Number.isFinite(power) ? (power < -0.05 ? `Regenerating ${Math.abs(power).toFixed(1)} kW` : power > 0.05 ? `Drawing ${power.toFixed(1)} kW` : "") : "";
-      setText("realPackCopy", [stateText, powerText].filter(Boolean).join(" · ") || "From the latest logged reading.");
+      // Say where the number comes from: the live feed, or a stored snapshot and how old it is.
+      const atMs = Number(latest.capturedAtMs || latest.updatedAt || 0);
+      const source = live ? "Live" : atMs > 0 ? `Last logged ${ago(atMs)}` : "Last logged reading";
+      setText("realPackCopy", [source, stateText, powerText].filter(Boolean).join(" · "));
     } else {
       if (ring) {
         ring.style.setProperty("--v", "0");
@@ -1230,6 +1284,39 @@ import { kph } from "./unit-types";
       setText("realPackCopy", "Battery charge, power, and pack health appear here once the adapter has logged a few readings.");
     }
     if (typeof VD.renderPackStats === "function") VD.renderPackStats(latest);
+  }
+
+  // Samples are streaming right now (a live or demo session). The Drive "Waiting for your
+  // car" empty state keys off stored rows, so without this it sat above live tiles until the
+  // first rows were written (forever in the Demo / Testing "empty" scenario).
+  function liveDataFlowing(): boolean {
+    const status = String((state.status || {}).state || "").toLowerCase();
+    return Number(state.lastSampleAt || 0) > 0 && ["connected", "demo", "scanning", "scan-complete"].includes(status);
+  }
+
+  function syncAppEmptyState(): void {
+    toggleHidden("appEmptyState", VD.dbRowCount(state.storage || {}) > 0 || liveDataFlowing());
+  }
+
+  export function renderRealV2Ui() {
+    const storage = state.storage || {};
+    const charge = storage.chargeSummary || {};
+    const chargeCount = Number(charge.chargeSessionCount || 0);
+    const hasCharge = chargeCount > 0 || Number(charge.chargingHintCount || 0) > 0;
+    toggleHidden("chargeEmptyState", hasCharge);
+    toggleHidden("chargeSummaryGrid", !hasCharge);
+    renderThisTripCard();
+
+    // Logged charge sessions — the same count the Recent-charges headline totals, not the
+    // raw per-sample charge_transition_hint flags (chargingHintCount), which over-count.
+    setText("realChargeCount", chargeCount);
+    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
+    // Charge history is an on-demand lazy chunk (charge-history.ts); treat its
+    // renderer as an optional subscriber, like updateEnhancedCapabilityUi.
+    if (typeof VD.renderChargeSessions === "function") VD.renderChargeSessions(charge);
+    renderBatterySohTrend();
+    refreshCellSnapshot();
+    renderPackHero();
 
     if (typeof VD.renderMaintenanceList === "function") VD.renderMaintenanceList();
     renderVehicleUi();
@@ -1329,13 +1416,19 @@ import { kph } from "./unit-types";
     state.storage,
     dtcDataLoaded()
   ]);
+  registerRenderer("storage:empty", syncAppEmptyState, () => [state.storage, liveDataFlowing()]);
   registerRenderer("storage:v2", renderRealV2Ui, () => [
     state.storage,
     state.trips,
     state.insights,
-    state.appState,
-    state.selectedMapSessionId
+    state.appState
   ]);
+  // The trip card and pack hero also follow the live stream between storage broadcasts (a
+  // browser demo never broadcasts), so a new sample repaints just those two.
+  registerRenderer("storage:live", () => {
+    renderThisTripCard();
+    renderPackHero();
+  }, () => [state.telemetry, state.sessionDistanceM, liveSampleFresh()]);
 
   Object.assign(VD, {
     isNativeError,

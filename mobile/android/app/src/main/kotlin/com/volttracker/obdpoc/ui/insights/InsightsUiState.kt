@@ -1,76 +1,92 @@
 package com.volttracker.obdpoc.ui.insights
 
-/** One labeled bar (efficiency bucket, monthly distance, weekly distance…). */
-data class LabeledValue(
+import com.volttracker.obdpoc.ui.HistoryLoad
+import com.volttracker.obdpoc.ui.settings.SettingsUiState
+import com.volttracker.obdpoc.ui.trips.TripSummary
+import com.volttracker.obdpoc.ui.trips.TripsDemo
+import com.volttracker.obdpoc.ui.trips.TripsUiState
+import com.volttracker.obdpoc.ui.units.VoltUnits
+
+/** The span the Insights tab summarises. */
+enum class InsightsPeriod(
     val label: String,
-    val value: Double,
+) {
+    WEEK("Week"),
+    MONTH("Month"),
+    YEAR("Year"),
+    ALL("All"),
+}
+
+/** Electric efficiency in one 10-mph band ([mph] is its lower edge). */
+data class SpeedEfficiency(
+    val mph: Int,
+    val miPerKwh: Double,
+)
+
+/** A cell sitting [belowMeanMv] under the pack mean, [driftMv] lower than [days] days before. */
+data class CellDrift(
+    val cell: Int,
+    val belowMeanMv: Int,
+    val driftMv: Int,
+    val days: Int,
 )
 
 /**
- * Everything the Insights screen renders, as one immutable value.
- * Pure data — previewable and screenshot-testable with no service running.
+ * Everything the Insights screen renders, as one immutable value: the logged drives (the
+ * period figures and bars are worked out from them), the selected period's efficiency by speed,
+ * any drifting cell, and the cost settings. Pure data — previewable with no service running.
  */
 data class InsightsUiState(
     val connected: Boolean = false,
+    /** The link is coming up (or a scan is running): the header dot shows it. */
+    val connecting: Boolean = false,
     val statusLabel: String = "No adapter",
-    val lifetimeMiPerKwh: Double? = null,
-    val cityMiPerKwh: Double? = null,
-    val highwayMiPerKwh: Double? = null,
-    val lifetimeMiles: Double = 0.0,
-    val driveCount: Int = 0,
-    val driveTimeLabel: String = "--",
-    val topSpeedMph: Int = 0,
-    /** Efficiency by speed bucket; the sweet spot is highlighted. */
-    val efficiencyBySpeed: List<LabeledValue> = emptyList(),
-    val efficiencyPeakIndex: Int? = null,
-    val efficiencyPeakLabel: String? = null,
-    val monthlyMiles: List<LabeledValue> = emptyList(),
-    val avgMilesPerMonth: Double = 0.0,
-    val batteryHealthPercent: Int? = null,
-    val packVolts: Double = 0.0,
-    val packTempF: Int = 0,
-    val vehicleLabel: String = "",
-    val odometerMiles: Int = 0,
-    val loggedMiles: Double = 0.0,
-    val maintenanceLabel: String = "none logged",
+    val period: InsightsPeriod = InsightsPeriod.MONTH,
+    val trips: List<TripSummary> = emptyList(),
+    /** Efficiency by speed for [period]; empty until read, or when too little was logged. */
+    val speedEfficiency: List<SpeedEfficiency> = emptyList(),
+    val cellDrift: CellDrift? = null,
+    val nowMs: Long = 0L,
+    val homeRate: Double = 0.0,
+    val gasMpg: Double? = null,
+    val gasPrice: Double = 0.0,
+    /** Whether the logged drives have been read yet (demo and previews are always loaded). */
+    val history: HistoryLoad = HistoryLoad.LOADED,
+    /** Whether [speedEfficiency] has been read for [period]; false while that read is running. */
+    val speedsLoaded: Boolean = true,
+    /** Settings → Units: how distances, speeds and temperatures are shown. */
+    val metricUnits: Boolean = false,
 ) {
+    val units: VoltUnits get() = VoltUnits.of(metricUnits)
+
     companion object {
-        /** Sample state mirroring the demo scenario's history. */
-        val demo =
-            InsightsUiState(
-                connected = true,
-                statusLabel = "Live · 1 Hz",
-                lifetimeMiPerKwh = 4.5,
-                cityMiPerKwh = 3.7,
-                highwayMiPerKwh = 4.6,
-                lifetimeMiles = 24.0,
-                driveCount = 3,
-                driveTimeLabel = "1h 15m",
-                topSpeedMph = 65,
-                efficiencyBySpeed =
-                    listOf(
-                        LabeledValue("15", 2.9),
-                        LabeledValue("30", 4.3),
-                        LabeledValue("45", 4.7),
-                        LabeledValue("60", 4.2),
-                    ),
-                efficiencyPeakIndex = 2,
-                efficiencyPeakLabel = "Most efficient near 45 mph — about 4.7 mi/kWh",
-                monthlyMiles =
-                    listOf(
-                        LabeledValue("May", 210.0),
-                        LabeledValue("Jun", 168.0),
-                        LabeledValue("Jul", 189.0),
-                        LabeledValue("Aug", 19.0),
-                    ),
-                avgMilesPerMonth = 146.0,
-                batteryHealthPercent = 91,
-                packVolts = 364.0,
-                packTempF = 73,
-                vehicleLabel = "2017 Chevrolet Volt",
-                odometerMiles = 48_213,
-                loggedMiles = 24.0,
-                maintenanceLabel = "none logged",
+        /** The demo's efficiency by speed (a Volt's usual curve, best around 45 mph). */
+        val DEMO_SPEEDS =
+            listOf(
+                SpeedEfficiency(10, 4.2),
+                SpeedEfficiency(20, 4.5),
+                SpeedEfficiency(30, 4.6),
+                SpeedEfficiency(40, 4.7),
+                SpeedEfficiency(50, 4.1),
+                SpeedEfficiency(60, 3.5),
+                SpeedEfficiency(70, 3.0),
             )
+
+        val DEMO_CELL_DRIFT = CellDrift(cell = 47, belowMeanMv = 18, driftMv = 12, days = 14)
+
+        /** Sample state over the demo's drive history (the same drives the Trips demo lists). */
+        val demo: InsightsUiState
+            get() =
+                InsightsUiState(
+                    connected = true,
+                    statusLabel = "Live",
+                    trips = TripsDemo.trips(TripsUiState.DEMO_NOW_MS),
+                    speedEfficiency = DEMO_SPEEDS,
+                    cellDrift = DEMO_CELL_DRIFT,
+                    nowMs = TripsUiState.DEMO_NOW_MS,
+                    homeRate = SettingsUiState.DEMO_HOME_RATE,
+                    gasMpg = SettingsUiState.DEMO_GAS_MPG,
+                    gasPrice = SettingsUiState.DEMO_GAS_PRICE,
+                )
     }
 }

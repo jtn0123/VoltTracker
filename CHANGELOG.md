@@ -1,6 +1,464 @@
 # CHANGELOG
 
 
+## v0.57.0 (2026-10-01)
+
+### ✳️ New
+
+- Read tire pressure from the body computer
+  ([#121](https://github.com/jtn0123/VoltTracker/pull/121),
+  [`43ac431`](https://github.com/jtn0123/VoltTracker/commit/43ac431e441c58953dfe2ce4c98c1519bb4ca047))
+
+
+## v0.56.1 (2026-10-01)
+
+### 🔺 Fix
+
+- Harden the app before phone install ([#120](https://github.com/jtn0123/VoltTracker/pull/120),
+  [`5409026`](https://github.com/jtn0123/VoltTracker/commit/54090262125ad6ee68c69834007d02f204a52d4c))
+
+
+## v0.56.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Usefulness pass — trip and charge receipts, insights in plain words, battery health trend
+  ([#119](https://github.com/jtn0123/VoltTracker/pull/119),
+  [`adf7971`](https://github.com/jtn0123/VoltTracker/commit/adf7971b0f7aec11e0170ab2bbce0ab5e5f553a0))
+
+
+## v0.55.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Ux pass — one connection status everywhere, a way out of every empty screen, pull to
+  refresh ([#118](https://github.com/jtn0123/VoltTracker/pull/118),
+  [`c9b3b1e`](https://github.com/jtn0123/VoltTracker/commit/c9b3b1ec09a40ee0bdf5067a09afafdc79034306))
+
+
+## v0.54.0 (2026-09-30)
+
+### ✳️ New
+
+- **ui**: Motion pass — screen transitions, gliding gauge, press and haptic feedback, loading
+  skeletons ([#117](https://github.com/jtn0123/VoltTracker/pull/117),
+  [`4d7fa21`](https://github.com/jtn0123/VoltTracker/commit/4d7fa211f425c6d303d2b412837b9cba77e37198))
+
+
+## v0.53.0 (2026-09-30)
+
+### 🔺 Fix
+
+- Batch 2 on-car follow-ups — body test, parked listen, trips, labels
+  ([#113](https://github.com/jtn0123/VoltTracker/pull/113),
+  [`3cb3d23`](https://github.com/jtn0123/VoltTracker/commit/3cb3d23cf81689821cfccb313fe56f53665f733e))
+
+- **build**: Unblock releases — privacyScan skips the generated DTC table
+  ([#116](https://github.com/jtn0123/VoltTracker/pull/116),
+  [`93131e0`](https://github.com/jtn0123/VoltTracker/commit/93131e0fecdc79846a09d77c363ade58e63c0323))
+
+- **obd**: On-car fixes for dash soc, fuel, engine-on and adapter timing
+  ([#112](https://github.com/jtn0123/VoltTracker/pull/112),
+  [`770b058`](https://github.com/jtn0123/VoltTracker/commit/770b0586cd829f29cd8083b2fc2b314bf0a77343))
+
+- **service**: Stop the pause-time ANR behind prefs fsyncs
+  ([#103](https://github.com/jtn0123/VoltTracker/pull/103),
+  [`b3b150f`](https://github.com/jtn0123/VoltTracker/commit/b3b150fb34628ee844c1ae0be6b1c4a84ad00886))
+
+- **ui**: Consistent charge eta, readable tiles and units
+  ([#110](https://github.com/jtn0123/VoltTracker/pull/110),
+  [`f0b32d9`](https://github.com/jtn0123/VoltTracker/commit/f0b32d9676095909329dfa783946b8a15b5eb6f5))
+
+- **ui**: Demo headers say "Sample data"; cockpit holds up at large text
+  ([#105](https://github.com/jtn0123/VoltTracker/pull/105),
+  [`85c8770`](https://github.com/jtn0123/VoltTracker/commit/85c8770ef45150e474d8d9485ce00798f2563223))
+
+- **ui**: Dogfood pass on the compose dashboard with demo mode
+  ([#108](https://github.com/jtn0123/VoltTracker/pull/108),
+  [`b13f939`](https://github.com/jtn0123/VoltTracker/commit/b13f9399a3d22572be87e3c533dc262f2b5c34f1))
+
+- **ui**: Offline and large-text polish from the visual pass
+  ([#115](https://github.com/jtn0123/VoltTracker/pull/115),
+  [`296ad63`](https://github.com/jtn0123/VoltTracker/commit/296ad63ff4f4e70155d3e298f27f603bb2d45d06))
+
+- **ui**: Polish pass 3 — accessibility, motion, placeholders, large text, wording
+  ([#104](https://github.com/jtn0123/VoltTracker/pull/104),
+  [`fb7260e`](https://github.com/jtn0123/VoltTracker/commit/fb7260e2001a5e9ebb618ca32172ce6372db9c7b))
+
+### 🔷 Changed
+
+- **dev**: Reliable local emulator testing script
+  ([#107](https://github.com/jtn0123/VoltTracker/pull/107),
+  [`30954dc`](https://github.com/jtn0123/VoltTracker/commit/30954dcbb2e3f3bdc7458001cdcf3f1f00735452))
+
+### ✳️ New
+
+- Native freeze frame and all-readings screens, scan-complete label, body-test sim
+  ([#114](https://github.com/jtn0123/VoltTracker/pull/114),
+  [`87a7998`](https://github.com/jtn0123/VoltTracker/commit/87a7998cd26810ff6c0dee0a2f6fc8aace4d5a80))
+
+- **ui**: First-run setup card on drive ([#111](https://github.com/jtn0123/VoltTracker/pull/111),
+  [`e6e38df`](https://github.com/jtn0123/VoltTracker/commit/e6e38df98534e7cab09867f1c720c59c4295a19c))
+
+- **ui**: Make the new Compose dashboard the app launcher
+  ([#106](https://github.com/jtn0123/VoltTracker/pull/106),
+  [`697ea87`](https://github.com/jtn0123/VoltTracker/commit/697ea878cff5f44c5f38374191dfd7b1d9928a7a))
+
+- **ui**: Native live signals, landscape drive, classic back returns
+  ([#109](https://github.com/jtn0123/VoltTracker/pull/109),
+  [`5093038`](https://github.com/jtn0123/VoltTracker/commit/50930383bfa612f8a8df55ebf55190379f01d9df))
+
+- **ui**: Polish theme legibility, controls and touch targets
+  ([#101](https://github.com/jtn0123/VoltTracker/pull/101),
+  [`3bbb999`](https://github.com/jtn0123/VoltTracker/commit/3bbb9999aa198006e7d810907a690bdec76a9b4d))
+
+- **ui**: Units everywhere, loading states and stale-value fixes
+  ([#102](https://github.com/jtn0123/VoltTracker/pull/102),
+  [`add92b9`](https://github.com/jtn0123/VoltTracker/commit/add92b9c1b17267d94971eaec13ed24fcf8aaffb))
+
+- **ui**: Wire the Health screen to real trouble codes, scan and clear
+  ([#100](https://github.com/jtn0123/VoltTracker/pull/100),
+  [`e5fe481`](https://github.com/jtn0123/VoltTracker/commit/e5fe48164957005e5825c923aff7491748168612))
+
+
+## v0.52.0 (2026-09-28)
+
+### ✳️ New
+
+- **map**: Replace the broken CARTO basemap with Stadia Maps
+  ([#99](https://github.com/jtn0123/VoltTracker/pull/99),
+  [`6bd32b8`](https://github.com/jtn0123/VoltTracker/commit/6bd32b888777c984720ab73011eef7ee5f739acb))
+
+
+## v0.51.0 (2026-09-28)
+
+### ✳️ New
+
+- **car**: Redesign car tab with top-down tires, body state and car controls
+  ([#98](https://github.com/jtn0123/VoltTracker/pull/98),
+  [`bc89ce3`](https://github.com/jtn0123/VoltTracker/commit/bc89ce385e6b74f841968f27a181243fd86904ad))
+
+
+## v0.50.0 (2026-09-28)
+
+### ✳️ New
+
+- **insights**: Redesign insights tab with electric share, weekly bars and speed efficiency
+  ([#97](https://github.com/jtn0123/VoltTracker/pull/97),
+  [`c669fbe`](https://github.com/jtn0123/VoltTracker/commit/c669fbe4a30ff3ff836c80c8a5effda1178585c5))
+
+
+## v0.49.0 (2026-09-28)
+
+### ✳️ New
+
+- **trips**: Redesign trips tab with ev/gas route map and grouped drives
+  ([#96](https://github.com/jtn0123/VoltTracker/pull/96),
+  [`bac8e5b`](https://github.com/jtn0123/VoltTracker/commit/bac8e5b701321f8f85a8c9847c054d7cb5dd6ea5))
+
+
+## v0.48.0 (2026-09-28)
+
+### ✳️ New
+
+- **charge**: Redesign charge tab with session curve and logged sessions
+  ([#95](https://github.com/jtn0123/VoltTracker/pull/95),
+  [`005045d`](https://github.com/jtn0123/VoltTracker/commit/005045d249a9a8a6414c48bbe1c3ab40a5d5eda6))
+
+- **demo**: Drive arc with regen, a gas stretch and a park
+  ([#94](https://github.com/jtn0123/VoltTracker/pull/94),
+  [`c26c611`](https://github.com/jtn0123/VoltTracker/commit/c26c6119fbddcd89e880678171d7f814144ca533))
+
+- **settings**: Wire compose settings tools through shared helpers
+  ([#92](https://github.com/jtn0123/VoltTracker/pull/92),
+  [`236209a`](https://github.com/jtn0123/VoltTracker/commit/236209abc119c609ed896467061531b35d7aacca))
+
+- **ui**: Oled Black (5 accents), Saddle Leather and Latte themes
+  ([#93](https://github.com/jtn0123/VoltTracker/pull/93),
+  [`520beec`](https://github.com/jtn0123/VoltTracker/commit/520beec243ca904b63813d913ca10701d3647515))
+
+
+## v0.47.0 (2026-09-28)
+
+### ✳️ New
+
+- **settings**: Shared native display prefs, live-wired compose settings
+  ([#91](https://github.com/jtn0123/VoltTracker/pull/91),
+  [`46ec1fe`](https://github.com/jtn0123/VoltTracker/commit/46ec1fec1224c048ee79fc2d3aeb2be0f54c97cb))
+
+
+## v0.46.0 (2026-09-28)
+
+### ✳️ New
+
+- **ui**: Drive redesign — Arc ring (Focus) + Cockpit (Detailed), live-wired
+  ([#90](https://github.com/jtn0123/VoltTracker/pull/90),
+  [`e9ffc5c`](https://github.com/jtn0123/VoltTracker/commit/e9ffc5c31ac019bf49166a40af339469aada4f16))
+
+
+## v0.45.1 (2026-09-28)
+
+### 🔺 Fix
+
+- **service**: Demo mode starts without Bluetooth/location permissions
+  ([#89](https://github.com/jtn0123/VoltTracker/pull/89),
+  [`d69604b`](https://github.com/jtn0123/VoltTracker/commit/d69604ba8e43463035919ac6c82b37d49d3fe7d5))
+
+
+## v0.45.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: 5-tab redesign navigation, gear Settings, Car tab + Health route; demo charges at 3.6 kW
+  ([#88](https://github.com/jtn0123/VoltTracker/pull/88),
+  [`5a45e56`](https://github.com/jtn0123/VoltTracker/commit/5a45e56187326fa02784f21e01bcacca93646f7f))
+
+
+## v0.44.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: Redesign theme tokens (dark + light), fonts, Appearance setting
+  ([#87](https://github.com/jtn0123/VoltTracker/pull/87),
+  [`2074fa3`](https://github.com/jtn0123/VoltTracker/commit/2074fa352e427cddb0f81aafe18f9ad2e5992e7b))
+
+
+## v0.43.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: Bold layout pass — collapse empty fields, EV/gas chip, compact charts
+  ([#86](https://github.com/jtn0123/VoltTracker/pull/86),
+  [`0702475`](https://github.com/jtn0123/VoltTracker/commit/0702475653956918c1e2e5960a624659f53d921c))
+
+
+## v0.42.0 (2026-09-27)
+
+### ✳️ New
+
+- **ui**: "clean EV" theme — calm tokens, Volt-teal accent, color for meaning
+  ([#85](https://github.com/jtn0123/VoltTracker/pull/85),
+  [`260f071`](https://github.com/jtn0123/VoltTracker/commit/260f071d858696336692c6c88fa693f8933f7351))
+
+
+## v0.41.3 (2026-09-26)
+
+### 🔺 Fix
+
+- **dashboard**: One-drive trip card, live-first SOC, consistent charge count, trip-detail scrim
+  ([#84](https://github.com/jtn0123/VoltTracker/pull/84),
+  [`704b572`](https://github.com/jtn0123/VoltTracker/commit/704b572442a36864a23629e34d8f0f18fe2dcf57))
+
+
+## v0.41.2 (2026-09-26)
+
+### 🔺 Fix
+
+- **dashboard**: Polish round 2 — gear chip, unit-aware live signals, trip-detail sheet
+  ([#82](https://github.com/jtn0123/VoltTracker/pull/82),
+  [`d4d43f6`](https://github.com/jtn0123/VoltTracker/commit/d4d43f62fc3ac8ea232e68d4d5a1d4ce7d088a41))
+
+### 🔷 Changed
+
+- Cut ~2-4 min off the Android PR critical path; always report ci-success
+  ([#83](https://github.com/jtn0123/VoltTracker/pull/83),
+  [`8484473`](https://github.com/jtn0123/VoltTracker/commit/84844739c1879d85876d43fa195633be7e0a8a4c))
+
+
+## v0.41.1 (2026-09-26)
+
+### 🔺 Fix
+
+- **ui**: Polish pass over car controls, gear, SW-CAN and EV range UI
+  ([#81](https://github.com/jtn0123/VoltTracker/pull/81),
+  [`2df6652`](https://github.com/jtn0123/VoltTracker/commit/2df6652bd1da92843564d1f46c8dde2744c22ac7))
+
+
+## v0.41.0 (2026-09-26)
+
+### ✳️ New
+
+- **trips**: Split a trip at an in-trip park stop
+  ([#80](https://github.com/jtn0123/VoltTracker/pull/80),
+  [`5f09342`](https://github.com/jtn0123/VoltTracker/commit/5f09342e17e0f956b63285f0a63cbefba34fd666))
+
+
+## v0.40.1 (2026-09-26)
+
+### 🔺 Fix
+
+- Ev range caption uses the car's estimate; 22437D 0xFFFF is "not available"
+  ([#79](https://github.com/jtn0123/VoltTracker/pull/79),
+  [`1c14219`](https://github.com/jtn0123/VoltTracker/commit/1c14219d4aa5741a044e9fadab45e0a23c71d365))
+
+
+## v0.40.0 (2026-09-26)
+
+### ✳️ New
+
+- **controls**: Safety-gated experimental car controls (untested on car)
+  ([#77](https://github.com/jtn0123/VoltTracker/pull/77),
+  [`e1a5f00`](https://github.com/jtn0123/VoltTracker/commit/e1a5f00d26a37dee5eeae915cf7dabae82a9a990))
+
+
+## v0.39.0 (2026-09-26)
+
+### ✳️ New
+
+- **trips**: Decode PRNDL gear and split trips on Park (new trips only)
+  ([#78](https://github.com/jtn0123/VoltTracker/pull/78),
+  [`3ad7a44`](https://github.com/jtn0123/VoltTracker/commit/3ad7a44210a6aeb1fc97877438745ee5c6616729))
+
+
+## v0.38.0 (2026-09-26)
+
+### 🔺 Fix
+
+- **charge**: An idling engine at a standstill is not an EVSE charge
+  ([#74](https://github.com/jtn0123/VoltTracker/pull/74),
+  [`1cb74e6`](https://github.com/jtn0123/VoltTracker/commit/1cb74e600123542579338676e38cab2201fdc30d))
+
+- **obd**: End-of-drive drops end cleanly; ignore a redundant CONNECT
+  ([#76](https://github.com/jtn0123/VoltTracker/pull/76),
+  [`b38f750`](https://github.com/jtn0123/VoltTracker/commit/b38f750af31eab015eb1c4eefbd1b52fc29a8a72))
+
+- **obd**: Re-probe retired PIDs so a parked-then-driven session gets speed back
+  ([#73](https://github.com/jtn0123/VoltTracker/pull/73),
+  [`132f547`](https://github.com/jtn0123/VoltTracker/commit/132f54727087ed1bbc3e8d8dbc7a3766f03c25de))
+
+### ✳️ New
+
+- **obd**: Listen-only SW-CAN (GMLAN) broadcast reading on OBDLink adapters
+  ([#75](https://github.com/jtn0123/VoltTracker/pull/75),
+  [`eba6dc3`](https://github.com/jtn0123/VoltTracker/commit/eba6dc3fd5ba7febcf210d03dc460a502f71a214))
+
+- **obd**: Poll the OVMS Volt readings we skipped; read motor temps from their own nodes
+  ([#72](https://github.com/jtn0123/VoltTracker/pull/72),
+  [`f346b56`](https://github.com/jtn0123/VoltTracker/commit/f346b565619a857aa33212296082b594eccfc9d5))
+
+
+## v0.37.0 (2026-09-26)
+
+### 🔺 Fix
+
+- **obd**: Read the standard J1979 multi-PID reply so batching works
+  ([#70](https://github.com/jtn0123/VoltTracker/pull/70),
+  [`d968e9e`](https://github.com/jtn0123/VoltTracker/commit/d968e9e5032caa91d572236a5b1f78cd36089c42))
+
+### ✳️ New
+
+- **obd**: Poll displayed SOC, pack resistance, isolation, motor/inverter temps and charger AC
+  ([#71](https://github.com/jtn0123/VoltTracker/pull/71),
+  [`6d7ed6f`](https://github.com/jtn0123/VoltTracker/commit/6d7ed6fdb60d607cc78cdb9fb8069b267fc63580))
+
+
+## v0.36.6 (2026-09-26)
+
+### 🔺 Fix
+
+- **elm**: Don't cut replies short on the adapter's echo
+  ([#69](https://github.com/jtn0123/VoltTracker/pull/69),
+  [`6c30646`](https://github.com/jtn0123/VoltTracker/commit/6c306469ee211a1011ef6e1eca6db6ff8f066f1d))
+
+
+## v0.36.5 (2026-09-26)
+
+### 🔺 Fix
+
+- **obd**: Retire refused PIDs and read the GM odometer
+  ([#68](https://github.com/jtn0123/VoltTracker/pull/68),
+  [`db19f24`](https://github.com/jtn0123/VoltTracker/commit/db19f2459a526f98dbdd2bab3cf7382d241edb90))
+
+### 🔷 Changed
+
+- **obd**: Virtual Volt adapter and per-PID scorecard
+  ([#67](https://github.com/jtn0123/VoltTracker/pull/67),
+  [`ccdc703`](https://github.com/jtn0123/VoltTracker/commit/ccdc7033c9f860302d7716ecde7507c50ce3ebf2))
+
+
+## v0.36.4 (2026-09-26)
+
+### 🔺 Fix
+
+- **ui**: Open the full dashboard at launch until Compose reaches parity
+  ([#66](https://github.com/jtn0123/VoltTracker/pull/66),
+  [`80dbf4b`](https://github.com/jtn0123/VoltTracker/commit/80dbf4b6797caa38a1007bb49795ca199c7e0754))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/setup-java from 5.7.0 to 6.0.0
+  ([#40](https://github.com/jtn0123/VoltTracker/pull/40),
+  [`b17765e`](https://github.com/jtn0123/VoltTracker/commit/b17765e8e6e850af6d4ccb48685cf248d26b70d1))
+
+- **deps**: Bump agp from 9.2.1 to 9.3.2 in /mobile/android
+  ([#38](https://github.com/jtn0123/VoltTracker/pull/38),
+  [`daf9568`](https://github.com/jtn0123/VoltTracker/commit/daf956849241bf1a3832bec85f7d480a3bc53a93))
+
+- **deps**: Bump agp from 9.3.2 to 9.4.0 in /mobile/android
+  ([#48](https://github.com/jtn0123/VoltTracker/pull/48),
+  [`75ec3ac`](https://github.com/jtn0123/VoltTracker/commit/75ec3aca64ca0e38c527157c214967a3279aeb32))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#29](https://github.com/jtn0123/VoltTracker/pull/29),
+  [`bd8bf45`](https://github.com/jtn0123/VoltTracker/commit/bd8bf457b6dd67735c8a95d4e465a1251b0b5e8d))
+
+- **deps**: Bump com.diffplug.spotless in /mobile/android
+  ([#49](https://github.com/jtn0123/VoltTracker/pull/49),
+  [`2a9ab6c`](https://github.com/jtn0123/VoltTracker/commit/2a9ab6cd3926f3d0f34f6c57a148750fc3da134a))
+
+- **deps**: Bump google/osv-scanner-action/osv-scanner-action
+  ([#26](https://github.com/jtn0123/VoltTracker/pull/26),
+  [`8387488`](https://github.com/jtn0123/VoltTracker/commit/83874885e4594c675b7773e38296db933a6f3dd4))
+
+- **deps**: Bump gradle-wrapper from 9.7.0 to 9.7.1 in /mobile/android
+  ([#33](https://github.com/jtn0123/VoltTracker/pull/33),
+  [`6c50dbc`](https://github.com/jtn0123/VoltTracker/commit/6c50dbce6139f8164d5d65f4a15b4f719567ec73))
+
+- **deps**: Bump gradle/actions/wrapper-validation from 6.2.0 to 6.3.0
+  ([#39](https://github.com/jtn0123/VoltTracker/pull/39),
+  [`82b0106`](https://github.com/jtn0123/VoltTracker/commit/82b0106489c76fccd66e31de927513caee005381))
+
+- **deps**: Bump roborazzi from 1.72.0 to 1.73.0 in /mobile/android
+  ([#45](https://github.com/jtn0123/VoltTracker/pull/45),
+  [`c33f9e7`](https://github.com/jtn0123/VoltTracker/commit/c33f9e79cc68ae7016a923a11c2d543ad8bfd170))
+
+- **deps**: Bump softprops/action-gh-release from 3.0.1 to 3.0.3
+  ([#44](https://github.com/jtn0123/VoltTracker/pull/44),
+  [`26cd2e6`](https://github.com/jtn0123/VoltTracker/commit/26cd2e6c9b803776ac4f73aa1b804fabdd7acc78))
+
+- **deps**: Bump the androidx group across 1 directory with 2 updates
+  ([#23](https://github.com/jtn0123/VoltTracker/pull/23),
+  [`f3d0d0b`](https://github.com/jtn0123/VoltTracker/commit/f3d0d0bf6019349256f8146e38c6468b51636440))
+
+- **deps**: Bump the codeql-action group with 2 updates
+  ([#43](https://github.com/jtn0123/VoltTracker/pull/43),
+  [`fe11e48`](https://github.com/jtn0123/VoltTracker/commit/fe11e4895c3c4471dc73846e4d006cda68d86708))
+
+- **deps-dev**: Bump browserslist ([#46](https://github.com/jtn0123/VoltTracker/pull/46),
+  [`abd61aa`](https://github.com/jtn0123/VoltTracker/commit/abd61aa988fe02b96c9a1bcea61ac2861067bfa3))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#37](https://github.com/jtn0123/VoltTracker/pull/37),
+  [`0f64fcd`](https://github.com/jtn0123/VoltTracker/commit/0f64fcd2162c4dc0ac00d6f19989fc998c2385f7))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#41](https://github.com/jtn0123/VoltTracker/pull/41),
+  [`240dfe7`](https://github.com/jtn0123/VoltTracker/commit/240dfe769a1894ae35ffe1824ee9eed2a103b048))
+
+- **deps-dev**: Bump typescript in /mobile/android/dashboard-tests
+  ([#11](https://github.com/jtn0123/VoltTracker/pull/11),
+  [`a3f5ca5`](https://github.com/jtn0123/VoltTracker/commit/a3f5ca50ab5df563cda19c5022c748bb886f929d))
+
+- **deps-dev**: Bump typescript-eslint ([#42](https://github.com/jtn0123/VoltTracker/pull/42),
+  [`3e1240f`](https://github.com/jtn0123/VoltTracker/commit/3e1240ff4ada75d144ded0246d78b03f9e8885ec))
+
+### 🔷 Changed
+
+- Fix emulator smoke renderer crashes and retain diagnostics
+  ([#47](https://github.com/jtn0123/VoltTracker/pull/47),
+  [`53d41e6`](https://github.com/jtn0123/VoltTracker/commit/53d41e6383815c04a3e00482b2a0bf929dbf0550))
+
+
 ## v0.36.3 (2026-08-25)
 
 ### 🔺 Fix

@@ -218,6 +218,19 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun hotLaneJ1979BatchReplyFillsEachPid() {
+        state.setMode01BatchSupported(true)
+        engine.responses["010D0C49"] = "410D320C0BB84980\r>"
+
+        state.runScheduledPolls(specs("010D", "010C", "0149"), StringBuilder())
+
+        assertEquals(listOf("010D0C49"), engine.commandLog.filter { it.startsWith("01") })
+        assertEquals("410D32", state.lastRaw("010D"))
+        assertEquals("410C0BB8", state.lastRaw("010C"))
+        assertEquals("414980", state.lastRaw("0149"))
+    }
+
+    @Test
     fun incompleteExtraBatchFallsBackToPerPidWithoutDisablingTier1() {
         state.setMode01BatchSupported(true)
         // The batched reply is missing the SOC (5B) frame, so the group batch must fail and the
@@ -368,6 +381,52 @@ class PidPollingStateTest {
         }
     }
 
+    @Test
+    fun motorGeneratorNodesSetAndThenRestoreTheReceiveFilter() {
+        // 0x257 / 0x258 reply on 0x657 / 0x658, outside the adapter's automatic 7E8-7EF filter.
+        state.runScheduledPolls(specs("010D", "22434F", "2228CB", "22368F"), StringBuilder())
+
+        assertEquals(
+            listOf(
+                "010D",
+                "ATSH7E4",
+                "22434F",
+                "ATSH257",
+                "ATCRA657",
+                "2228CB",
+                "ATSH258",
+                "ATCRA658",
+                "22368F",
+                "ATAR",
+                "ATSH7DF",
+            ),
+            engine.commandLog,
+        )
+    }
+
+    @Test
+    fun headersWithoutACustomReceiveFilterNeverTouchIt() {
+        state.runScheduledPolls(specs("22434F", "2240D7"), StringBuilder())
+
+        assertEquals(listOf("ATSH7E4", "22434F", "ATSH7E7", "2240D7", "ATSH7DF"), engine.commandLog)
+    }
+
+    @Test
+    fun onlyNonDiagnosticRangeNodesDeclareAReceiveFilter() {
+        for (header in PidSchedule.Header.entries) {
+            val at = header.atCommand
+            val expectsFilter = at != null && !at.startsWith("ATSH7E")
+            assertEquals("receive filter for $header", expectsFilter, header.receiveFilterCommand != null)
+        }
+        // The engine only restores the auto filter at the end of a cycle, so every filtered header
+        // must come after every unfiltered one or a later 7Ex block would be deafened.
+        val firstFiltered = PidSchedule.Header.entries.indexOfFirst { it.receiveFilterCommand != null }
+        val lastUnfiltered = PidSchedule.Header.entries.indexOfLast { it.receiveFilterCommand == null }
+        assertTrue("filtered headers must be declared last", firstFiltered > lastUnfiltered)
+        assertEquals("ATCRA657", PidSchedule.Header.MOTOR_GEN_A_257.receiveFilterCommand)
+        assertEquals("ATCRA658", PidSchedule.Header.MOTOR_GEN_B_258.receiveFilterCommand)
+    }
+
     // ---- Negative-PID cache + idle-data clock ---------------------------------------
 
     @Test
@@ -390,6 +449,25 @@ class PidPollingStateTest {
             "a retired PID must drop out of the schedule",
             state.dueForCurrentCycle().none { it.command == "015C" },
         )
+    }
+
+    @Test
+    fun pidTheCarRefusesIsRetiredLikeNoData() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["221154"] = "7F 22 31\r>" // request out of range: module lacks this DID
+        engine.responses["222429"] = "7F 22 22\r>" // conditions not correct: situational
+        val due = specs("010D", "221154", "222429")
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+
+        assertTrue("an explicit 'not supported' reply must retire the PID", state.isCommandDisabled("221154"))
+        assertFalse("a situational refusal must not retire the PID", state.isCommandDisabled("222429"))
+        assertNull("a refusal is not a value to carry forward", state.lastRaw("222429"))
     }
 
     @Test
@@ -446,6 +524,93 @@ class PidPollingStateTest {
             nowMs += 1_000
         }
         assertFalse("an intermittently-answering PID must not be retired", state.isCommandDisabled("015C"))
+    }
+
+    @Test
+    fun aPidThatAnsweredEarlierIsReprobedSoonAfterTheCarWakes() {
+        // Field log shape: speed/RPM/pack current answer while driving, go NO DATA once the car is
+        // parked (another module keeps answering, so the bus looks alive), then must come back when
+        // the car is driven off again in the same session.
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["22434F"] = "62 43 4F 48\r>" // BECM keeps answering while parked
+        engine.responses["010D"] = "41 0D 28\r>"
+        val due = specs("010D", "22434F")
+
+        state.runScheduledPolls(due, StringBuilder())
+        nowMs += 1_000
+        engine.responses["010D"] = "NO DATA\r>" // car parked: ECM asleep
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertTrue("a quiet PID is parked while its module sleeps", state.isCommandDisabled("010D"))
+        assertTrue(state.dueForCurrentCycle().none { it.command == "010D" })
+
+        nowMs += PidPollingState.REPROBE_ANSWERED_PID_MS
+        assertTrue(
+            "a PID that answered this session must be re-probed after the short back-off",
+            state.dueForCurrentCycle().any { it.command == "010D" },
+        )
+
+        engine.responses["010D"] = "41 0D 30\r>" // driving again
+        state.runScheduledPolls(due, StringBuilder())
+        assertFalse("a live re-probe answer restores the PID", state.isCommandDisabled("010D"))
+        assertEquals("41 0D 30\r>", state.lastRaw("010D"))
+    }
+
+    @Test
+    fun aPidThatNeverAnsweredWaitsTheLongBackoffAndStaysRetiredOnAMiss() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["015C"] = "NO DATA\r>"
+        val due = specs("010D", "015C")
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(due, StringBuilder())
+            nowMs += 1_000
+        }
+        assertTrue(state.isCommandDisabled("015C"))
+        // Move to the cycle slot where the deep-lane 015C is scheduled.
+        val slot = findSpec("015C").phaseOffset
+        repeat(slot) { state.advanceCycle() }
+        assertFalse(state.isInitialCycle())
+
+        nowMs += PidPollingState.REPROBE_ANSWERED_PID_MS
+        assertTrue(
+            "an unproven PID is not re-probed on the short back-off",
+            state.dueForCurrentCycle().none { it.command == "015C" },
+        )
+
+        nowMs += PidPollingState.REPROBE_SILENT_PID_MS
+        val reprobeDue = state.dueForCurrentCycle()
+        assertTrue("the long back-off eventually re-probes it", reprobeDue.any { it.command == "015C" })
+
+        // The re-probe misses again, even on a fully silent cycle: it goes straight back to sleep.
+        engine.responses.remove("010D")
+        engine.commandLog.clear()
+        state.runScheduledPolls(specs("015C"), StringBuilder())
+        assertEquals(listOf("015C"), engine.commandLog)
+        assertTrue("a missed re-probe keeps the PID retired", state.isCommandDisabled("015C"))
+        assertTrue(state.dueForCurrentCycle().none { it.command == "015C" })
+    }
+
+    @Test
+    fun resetForgetsRetiredAndProvenPids() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "41 0D 28\r>"
+        engine.responses["015C"] = "NO DATA\r>"
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(specs("010D", "015C"), StringBuilder())
+            nowMs += 1_000
+        }
+        assertEquals(1, state.disabledCommandCount())
+
+        state.reset()
+
+        assertEquals("a new session re-probes every PID", 0, state.disabledCommandCount())
+        assertFalse(state.isCommandDisabled("015C"))
     }
 
     @Test

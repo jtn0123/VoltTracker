@@ -4,8 +4,12 @@
 # AGP compiles these rules into the APK's ART profile; androidx.profileinstaller installs
 # them on devices without Play-delivered compilation. Rules are HSP (hot/startup/post-startup)
 # and deliberately scoped to what runs before the dashboard handshake:
-#   process bootstrap -> Activity onCreate -> WebView bootstrap/bridge -> store open.
+#   process bootstrap -> Activity onCreate -> first Compose frame (the launcher), and the classic
+#   WebView path: Activity onCreate -> WebView bootstrap/bridge -> store open.
 HSPLcom/volttracker/obdpoc/VoltTrackerApp;->**(**)**
+HSPLcom/volttracker/obdpoc/ComposeDashboardActivity;->**(**)**
+HSPLcom/volttracker/obdpoc/ComposeSettingsStore;->**(**)**
+HSPLcom/volttracker/obdpoc/ui/**;->**(**)**
 HSPLcom/volttracker/obdpoc/MainActivity;->**(**)**
 HSPLcom/volttracker/obdpoc/WebViewBootstrap;->**(**)**
 HSPLcom/volttracker/obdpoc/VoltBridge;->**(**)**

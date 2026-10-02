@@ -27,7 +27,7 @@ import { asDataTone, setDataTone } from "./dataset-state";
 import { t } from "./i18n";
 import { createFocusTrap } from "./focus-trap";
 import type { FocusTrap } from "./focus-trap";
-import { initialTelemetryState } from "./telemetry-state";
+import { initialSessionTotals, initialTelemetryState } from "./telemetry-state";
 import {
   consumeRerunRequest,
   invalidateRenderCache,
@@ -139,7 +139,7 @@ import { VD } from "./vd-registry";
         if (typeof console !== "undefined" && console && console.warn) {
           console.warn(message);
         }
-      } catch (ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       try {
         if (
           window.VoltTrackerAndroid &&
@@ -147,7 +147,7 @@ import { VD } from "./vd-registry";
         ) {
           window.VoltTrackerAndroid.logClientError("bindListenerGuarded", message);
         }
-      } catch (ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       return false;
     }
     node.addEventListener(event, handler, opts);
@@ -180,6 +180,7 @@ import { VD } from "./vd-registry";
   let troubleshooterModulePromise: Promise<VoltDashboard> | null = null;
   let signalsModulePromise: Promise<VoltDashboard> | null = null;
   let connectionToolsModulePromise: Promise<VoltDashboard> | null = null;
+  let carControlsModulePromise: Promise<VoltDashboard> | null = null;
 
   // Error-banner dedupe: an error storm (e.g. a reconnect loop, or a render
   // error repeating once per telemetry tick) calls reportClientError with the
@@ -227,12 +228,12 @@ import { VD } from "./vd-registry";
         const node = el("errorBanner");
         if (node) node.hidden = false;
       }
-    } catch (ignored) {}
+    } catch { /* The error banner is best-effort; never throw from the error reporter. */ }
     try {
       if (bridge && typeof bridge.logClientError === "function") {
         bridge.logClientError(String(label || "error"), message);
       }
-    } catch (ignored) {}
+    } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
   }
 
   // callBridge invokes a dashboard->native bridge method ONLY if it exists on
@@ -255,12 +256,12 @@ import { VD } from "./vd-registry";
         const message = "bridge." + String(name) + " is not available on this native version";
         try {
           console.warn(message);
-        } catch (ignored) {}
+        } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
         try {
           if (target && typeof target.logClientError === "function") {
             target.logClientError("bridge.missing", message);
           }
-        } catch (ignored) {}
+        } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       }
       return undefined;
     }
@@ -271,12 +272,12 @@ import { VD } from "./vd-registry";
       const message = "bridge." + String(name) + " failed: " + detail;
       try {
         console.warn(message);
-      } catch (ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       try {
         if (target && typeof target.logClientError === "function") {
           target.logClientError("bridge.call_failed", message);
         }
-      } catch (ignored) {}
+      } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
       return undefined;
     }
   }
@@ -501,7 +502,7 @@ import { VD } from "./vd-registry";
         });
       }
       restoreProgressTrap.activate();
-      try { node.focus({ preventScroll: true }); } catch (ignored) {}
+      try { node.focus({ preventScroll: true }); } catch { /* Focus is a nicety; an element that can't take focus is fine. */ }
     }
   }
 
@@ -519,15 +520,15 @@ import { VD } from "./vd-registry";
   }
 
   window.addEventListener("error", (event) => {
-    const stack = event && event.error && event.error.stack;
+    const stack = event?.error?.stack;
     reportClientError("window.error", stack || (event && event.message) || "Script error");
   }, { signal: errorController.signal });
 
   window.addEventListener("unhandledrejection", (event) => {
-    const reason = event && event.reason;
+    const reason = event?.reason;
     reportClientError(
       "unhandledrejection",
-      (reason && reason.stack) || String(reason || "Unhandled promise rejection")
+      (reason?.stack) || String(reason || "Unhandled promise rejection")
     );
   }, { signal: errorController.signal });
 
@@ -539,7 +540,7 @@ import { VD } from "./vd-registry";
       const directive = (event && event.violatedDirective) || "?";
       const blocked = (event && event.blockedURI) || "?";
       bridge?.logClientError?.("csp.violation", directive + " " + blocked);
-    } catch (_err) { /* logClientError best-effort */ }
+    } catch { /* logClientError best-effort */ }
   }, { signal: errorController.signal });
 
   (function bindErrorBannerDismiss() {
@@ -742,9 +743,9 @@ import { VD } from "./vd-registry";
           // console.warn for dev/logcat, plus the status toast so the user
           // sees it on whatever tab they are on.
           try {
-            console.warn("DTC data chunk failed to load:", err && err.message);
-          } catch (ignored) {}
-          reportClientError("dtcData.load", err && err.message);
+            console.warn("DTC data chunk failed to load:", err?.message);
+          } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
+          reportClientError("dtcData.load", err?.message);
           notifyChunkLoadFailed();
           if (typeof VD.setStatus === "function") {
             VD.setStatus({ state: "blocked", detail: "Diagnostic code database failed to load." });
@@ -775,7 +776,7 @@ import { VD } from "./vd-registry";
         })
         .catch((err) => {
           leafletRuntimePromise = null;
-          reportClientError("leaflet.load", err && err.message);
+          reportClientError("leaflet.load", err?.message);
           throw err;
         });
     }
@@ -784,23 +785,21 @@ import { VD } from "./vd-registry";
 
   export function ensureMapModule() {
     if (mapModuleLoaded()) return Promise.resolve(VD);
-    if (!mapModulePromise) {
-      mapModulePromise = ensureLeafletRuntime()
-        .then(() => loadDashboardScript("js/scrubber.js"))
-        .then(() => loadDashboardScript("js/map.js"))
-        .then(() => {
-          if (!mapModuleLoaded() || typeof VD.renderMap !== "function") {
-            throw new Error("Map script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          mapModulePromise = null;
-          reportClientError("map.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    mapModulePromise ||= ensureLeafletRuntime()
+      .then(() => loadDashboardScript("js/scrubber.js"))
+      .then(() => loadDashboardScript("js/map.js"))
+      .then(() => {
+        if (!mapModuleLoaded() || typeof VD.renderMap !== "function") {
+          throw new Error("Map script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        mapModulePromise = null;
+        reportClientError("map.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return mapModulePromise;
   }
 
@@ -814,21 +813,19 @@ import { VD } from "./vd-registry";
   // through VD.buildMonthlyTrendSvg / VD.monthBucketKey from this chunk.
   export function ensureChargeHistoryModule() {
     if (chargeHistoryModuleLoaded()) return Promise.resolve(VD);
-    if (!chargeHistoryModulePromise) {
-      chargeHistoryModulePromise = loadDashboardScript("js/charge-history.js")
-        .then(() => {
-          if (!chargeHistoryModuleLoaded()) {
-            throw new Error("Charge-history script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          chargeHistoryModulePromise = null;
-          reportClientError("chargeHistory.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    chargeHistoryModulePromise ||= loadDashboardScript("js/charge-history.js")
+      .then(() => {
+        if (!chargeHistoryModuleLoaded()) {
+          throw new Error("Charge-history script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        chargeHistoryModulePromise = null;
+        reportClientError("chargeHistory.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return chargeHistoryModulePromise;
   }
 
@@ -842,22 +839,40 @@ import { VD } from "./vd-registry";
   // log as it loads, so broadcasts from before the load are never lost.
   export function ensureMaintenancePanelModule() {
     if (maintenancePanelModuleLoaded()) return Promise.resolve(VD);
-    if (!maintenancePanelModulePromise) {
-      maintenancePanelModulePromise = loadDashboardScript("js/maintenance-panel.js")
-        .then(() => {
-          if (!maintenancePanelModuleLoaded()) {
-            throw new Error("Maintenance script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          maintenancePanelModulePromise = null;
-          reportClientError("maintenancePanel.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    maintenancePanelModulePromise ||= loadDashboardScript("js/maintenance-panel.js")
+      .then(() => {
+        if (!maintenancePanelModuleLoaded()) {
+          throw new Error("Maintenance script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        maintenancePanelModulePromise = null;
+        reportClientError("maintenancePanel.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return maintenancePanelModulePromise;
+  }
+
+  // Experimental car controls (Drive card + Settings opt-in). Loaded after startup: the card is
+  // hidden unless the user opted in natively, and the opt-in toggle only needs to be live by
+  // the time Settings is opened.
+  export function ensureCarControlsModule() {
+    if (typeof VD.renderCarControls === "function") return Promise.resolve(VD);
+    carControlsModulePromise ||= loadDashboardScript("js/car-controls.js")
+      .then(() => {
+        if (typeof VD.renderCarControls !== "function") {
+          throw new Error("Car controls script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        carControlsModulePromise = null;
+        reportClientError("carControls.load", err?.message);
+        throw err;
+      });
+    return carControlsModulePromise;
   }
 
   function dtcDetailModuleLoaded() {
@@ -869,21 +884,19 @@ import { VD } from "./vd-registry";
   // or starting a diagnostic scan.
   export function ensureDtcDetailModule() {
     if (dtcDetailModuleLoaded()) return Promise.resolve(VD);
-    if (!dtcDetailModulePromise) {
-      dtcDetailModulePromise = loadDashboardScript("js/dtc-detail.js")
-        .then(() => {
-          if (!dtcDetailModuleLoaded()) {
-            throw new Error("DTC-detail script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          dtcDetailModulePromise = null;
-          reportClientError("dtcDetail.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    dtcDetailModulePromise ||= loadDashboardScript("js/dtc-detail.js")
+      .then(() => {
+        if (!dtcDetailModuleLoaded()) {
+          throw new Error("DTC-detail script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        dtcDetailModulePromise = null;
+        reportClientError("dtcDetail.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return dtcDetailModulePromise;
   }
 
@@ -893,22 +906,20 @@ import { VD } from "./vd-registry";
 
   export function ensureInsightsModule() {
     if (insightsModuleLoaded()) return Promise.resolve(VD);
-    if (!insightsModulePromise) {
-      insightsModulePromise = ensureChargeHistoryModule()
-        .then(() => loadDashboardScript("js/insights-panel.js"))
-        .then(() => {
-          if (!insightsModuleLoaded()) {
-            throw new Error("Insights script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          insightsModulePromise = null;
-          reportClientError("insights.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    insightsModulePromise ||= ensureChargeHistoryModule()
+      .then(() => loadDashboardScript("js/insights-panel.js"))
+      .then(() => {
+        if (!insightsModuleLoaded()) {
+          throw new Error("Insights script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        insightsModulePromise = null;
+        reportClientError("insights.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return insightsModulePromise;
   }
 
@@ -918,21 +929,19 @@ import { VD } from "./vd-registry";
 
   export function ensureSignalsModule() {
     if (signalsModuleLoaded()) return Promise.resolve(VD);
-    if (!signalsModulePromise) {
-      signalsModulePromise = loadDashboardScript("js/signals-panel.js")
-        .then(() => {
-          if (!signalsModuleLoaded()) {
-            throw new Error("Signals script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          signalsModulePromise = null;
-          reportClientError("signals.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    signalsModulePromise ||= loadDashboardScript("js/signals-panel.js")
+      .then(() => {
+        if (!signalsModuleLoaded()) {
+          throw new Error("Signals script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        signalsModulePromise = null;
+        reportClientError("signals.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return signalsModulePromise;
   }
 
@@ -952,6 +961,7 @@ import { VD } from "./vd-registry";
     if (insightsModulePromise) pending.push(insightsModulePromise.catch(() => undefined));
     if (signalsModulePromise) pending.push(signalsModulePromise.catch(() => undefined));
     if (connectionToolsModulePromise) pending.push(connectionToolsModulePromise.catch(() => undefined));
+    if (carControlsModulePromise) pending.push(carControlsModulePromise.catch(() => undefined));
     if (leafletRuntimePromise) pending.push(leafletRuntimePromise.catch(() => undefined));
     if (mapModulePromise) pending.push(mapModulePromise.catch(() => undefined));
     if (troubleshooterModulePromise) {
@@ -992,21 +1002,19 @@ import { VD } from "./vd-registry";
 
   export function ensureTroubleshooterModule() {
     if (troubleshooterModuleLoaded()) return Promise.resolve(VD);
-    if (!troubleshooterModulePromise) {
-      troubleshooterModulePromise = loadDashboardScript("js/troubleshooter.js")
-        .then(() => {
-          if (!troubleshooterModuleLoaded()) {
-            throw new Error("Troubleshooter script loaded but expected globals were not registered.");
-          }
-          return VD;
-        })
-        .catch((err) => {
-          troubleshooterModulePromise = null;
-          reportClientError("troubleshooter.load", err && err.message);
-          notifyChunkLoadFailed();
-          throw err;
-        });
-    }
+    troubleshooterModulePromise ||= loadDashboardScript("js/troubleshooter.js")
+      .then(() => {
+        if (!troubleshooterModuleLoaded()) {
+          throw new Error("Troubleshooter script loaded but expected globals were not registered.");
+        }
+        return VD;
+      })
+      .catch((err) => {
+        troubleshooterModulePromise = null;
+        reportClientError("troubleshooter.load", err?.message);
+        notifyChunkLoadFailed();
+        throw err;
+      });
     return troubleshooterModulePromise;
   }
 
@@ -1089,6 +1097,7 @@ import { VD } from "./vd-registry";
     // Running session distance in meters, derived from haversine-stepped GPS
     // samples. Reset on session start; surfaced in the Drive "Recording" chip.
     sessionDistanceM: 0,
+    ...initialSessionTotals(),
     sessionLastLat: null,
     sessionLastLng: null,
     // Tracked by telemetry.js for the BT-disconnected stale-data indicator.
@@ -1283,7 +1292,7 @@ import { VD } from "./vd-registry";
       if (typeof console !== "undefined" && console && console.warn) {
         console.warn(message);
       }
-    } catch (ignored) {}
+    } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
     try {
       if (
         window.VoltTrackerAndroid &&
@@ -1291,7 +1300,7 @@ import { VD } from "./vd-registry";
       ) {
         window.VoltTrackerAndroid.logClientError("setTarget", message);
       }
-    } catch (ignored) {}
+    } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
   }
 
   export function setText(id: string, value: unknown) {
@@ -1386,11 +1395,11 @@ import { VD } from "./vd-registry";
   }
 
   function viewNodes(): HTMLElement[] {
-    return cachedViewNodes || (cachedViewNodes = Array.from(document.querySelectorAll<HTMLElement>(".view")));
+    return (cachedViewNodes ||= Array.from(document.querySelectorAll<HTMLElement>(".view")));
   }
 
   function navNodes(): HTMLElement[] {
-    return cachedNavNodes || (cachedNavNodes = Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
+    return (cachedNavNodes ||= Array.from(document.querySelectorAll<HTMLElement>("[data-nav]")));
   }
 
   export function hydrateConnectionTools(): boolean {
@@ -1408,22 +1417,20 @@ import { VD } from "./vd-registry";
 
   export function ensureConnectionToolsModule(): Promise<VoltDashboard> {
     if (typeof VD.bindConnectionTools === "function") return Promise.resolve(VD);
-    if (!connectionToolsModulePromise) {
-      connectionToolsModulePromise = loadDashboardScript("js/connection-tools.js")
-        .then(() => {
-          if (typeof VD.bindConnectionTools !== "function") {
-            throw new Error("Connection tools loaded without registering their binder.");
-          }
-          VD.bindConnectionTools();
-          return VD;
-        })
-        .catch((err) => {
-          connectionToolsModulePromise = null;
-          reportClientError("connectionTools.load", err && err.message);
-          VD.showToast?.("Connection tools failed to load", true);
-          throw err;
-        });
-    }
+    connectionToolsModulePromise ||= loadDashboardScript("js/connection-tools.js")
+      .then(() => {
+        if (typeof VD.bindConnectionTools !== "function") {
+          throw new Error("Connection tools loaded without registering their binder.");
+        }
+        VD.bindConnectionTools();
+        return VD;
+      })
+      .catch((err) => {
+        connectionToolsModulePromise = null;
+        reportClientError("connectionTools.load", err?.message);
+        VD.showToast?.("Connection tools failed to load", true);
+        throw err;
+      });
     return connectionToolsModulePromise;
   }
 
@@ -1487,7 +1494,7 @@ import { VD } from "./vd-registry";
     if (VD.bridge && typeof VD.bridge.setActiveDashboardView === "function") {
       try {
         VD.bridge.setActiveDashboardView(view);
-      } catch (_err) {
+      } catch {
         /* an older native host simply does not receive view-aware window policy */
       }
     }
@@ -1547,7 +1554,7 @@ import { VD } from "./vd-registry";
         if (VD.bridge && typeof VD.bridge.requestTripRoute === "function") {
           try {
             VD.bridge.requestTripRoute(clean);
-          } catch (_err) {
+          } catch {
             /* the trips payload may already contain enough route data */
           }
         }
@@ -1570,9 +1577,10 @@ import { VD } from "./vd-registry";
 
   function swipeBlocked(target: EventTarget | null): boolean {
     if (document.body.classList.contains("map-full-active")) return true;
-    // The DTC detail sheet's backdrop is a plain sibling <div> (no dialog
-    // role), so a swipe starting on it wouldn't be caught by closest() below.
-    if (document.body.classList.contains("dtc-detail-active")) return true;
+    // The DTC and trip-detail sheets' backdrops are plain sibling <div>s (no
+    // dialog role), so a swipe starting on one wouldn't be caught by closest() below.
+    const sheetOpen = document.body.classList;
+    if (sheetOpen.contains("dtc-detail-active") || sheetOpen.contains("trip-detail-active")) return true;
     const node = target instanceof Element ? target : null;
     if (!node) return true;
     return Boolean(
@@ -1667,8 +1675,8 @@ import { VD } from "./vd-registry";
       return true;
     }
     const ts = VD.troubleshooter;
-    const isOpen = ts && ts.isOpen;
-    const close = ts && ts.close;
+    const isOpen = ts?.isOpen;
+    const close = ts?.close;
     if (typeof isOpen === "function" && typeof close === "function" && isOpen()) {
       close();
       return true;
@@ -1758,6 +1766,7 @@ import { VD } from "./vd-registry";
       socHistory: [],
       sessionStartSoc: null,
       sessionDistanceM: 0,
+      ...initialSessionTotals(),
       sessionLastLat: null,
       sessionLastLng: null,
       liveRouteStartedAtMs: null,
@@ -1895,6 +1904,7 @@ import { VD } from "./vd-registry";
     ensureInsightsModule,
     ensureChargeHistoryModule,
     ensureMaintenancePanelModule,
+    ensureCarControlsModule,
     ensureDtcDetailModule,
     ensureSignalsModule,
     hydrateConnectionTools,
@@ -1910,5 +1920,3 @@ import { VD } from "./vd-registry";
     realViewMeta
   });
   applyDiagnosticsMode();
-
-export {};

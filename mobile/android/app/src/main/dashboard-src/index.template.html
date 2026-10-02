@@ -8,8 +8,9 @@
     />
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
-  map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
-  unreachable (see map.js error handler). No remote scripts ever, and no
+  map tiles from Stadia Maps (tiles.stadiamaps.com; URL templates come from the
+  native StadiaTiles.kt, and a build without a key loads no tiles at all — there
+  is no fallback tile host). No remote scripts ever, and no
   'unsafe-inline' anywhere: style-src is 'self' because nothing sets inline
   styles CSP cares about — Leaflet positions tiles/markers via CSSOM
   (el.style.prop, which style-src does not restrict), our own code uses
@@ -18,7 +19,7 @@
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://tiles.stadiamaps.com; script-src 'self'; style-src 'self'; connect-src 'self' https://tiles.stadiamaps.com; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <!-- Display face (base.css @font-face). Preloaded so the first paint of the

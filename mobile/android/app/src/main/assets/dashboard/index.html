@@ -8,8 +8,9 @@
     />
     <!--
   Content-Security-Policy: the dashboard ships entirely from app assets and fetches
-  map tiles from the CARTO CDN, with a fallback to OpenStreetMap when CARTO is
-  unreachable (see map.js error handler). No remote scripts ever, and no
+  map tiles from Stadia Maps (tiles.stadiamaps.com; URL templates come from the
+  native StadiaTiles.kt, and a build without a key loads no tiles at all — there
+  is no fallback tile host). No remote scripts ever, and no
   'unsafe-inline' anywhere: style-src is 'self' because nothing sets inline
   styles CSP cares about — Leaflet positions tiles/markers via CSSOM
   (el.style.prop, which style-src does not restrict), our own code uses
@@ -18,7 +19,7 @@
 -->
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; img-src 'self' data: https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; script-src 'self'; style-src 'self'; connect-src 'self' https://*.basemaps.cartocdn.com https://*.tile.openstreetmap.org; base-uri 'none'; form-action 'none';"
+      content="default-src 'self'; img-src 'self' data: https://tiles.stadiamaps.com; script-src 'self'; style-src 'self'; connect-src 'self' https://tiles.stadiamaps.com; base-uri 'none'; form-action 'none';"
     />
     <title>Volt Tracker OBD</title>
     <!-- Display face (base.css @font-face). Preloaded so the first paint of the
@@ -572,14 +573,42 @@
          aria-atomic="false" re-announced each changed text node separately. -->
     <article id="liveHeroCard" class="panel live-card" data-power-state="coast">
       <div class="live-head">
-        <span class="kicker">Vehicle speed</span>
-        <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
-             live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
-             updateRateChip() in telemetry.js. -->
-        <span id="liveRateChip" class="rate-chip" data-state="waiting"
-          ><span class="rate-dot"></span
-          ><span id="liveRateLabel">waiting</span></span
+        <!-- EV / gas mode pill (telemetry.ts#renderDriveMode, from engine rpm):
+             green "Electric" while the engine is off, amber "Gas engine" while it
+             turns. Hidden with no fresh rpm reading; the plain kicker after it
+             shows instead (a sibling rule, not :has()). -->
+        <span
+          id="driveModeChip"
+          class="drive-mode-chip"
+          data-drive-mode="unknown"
+          role="status"
+          aria-live="polite"
+          hidden
+          ><span class="drive-mode-dot" aria-hidden="true"></span
+          ><span id="driveModeLabel">Electric</span></span
         >
+        <span class="kicker live-head-kicker">Speed</span>
+        <span class="live-head-chips">
+          <!-- Gear selector (PRNDL) from the car's gear PID. Hidden with no
+               fresh reading; an unknown code shows "—" (gear.ts#driveGear). -->
+          <span
+            id="driveGearChip"
+            class="rate-chip gear-chip"
+            role="img"
+            aria-label="Gear"
+            data-live-tile="true"
+            hidden
+            ><span class="gear-chip-label" aria-hidden="true">Gear</span
+            ><strong id="driveGearValue" aria-hidden="true">--</strong></span
+          >
+          <!-- Live-rate chip reflects sample freshness: waiting (no samples yet) /
+               live (fresh) / stale (no sample for STALE_THRESHOLD_MS). Driven by
+               updateRateChip() in telemetry.js. -->
+          <span id="liveRateChip" class="rate-chip" data-state="waiting"
+            ><span class="rate-dot"></span
+            ><span id="liveRateLabel">waiting</span></span
+          >
+        </span>
       </div>
       <div
         class="speed-row"
@@ -720,7 +749,7 @@
     </article>
 
     <!-- Live readout — same .scrub-readout pattern as the Map scrubber: 6
-         compact cells, monospace tabular-nums, color-coded kickers. Replaces
+         compact cells, tabular-nums, neutral labels (color is for status). Replaces
          the old .mini-grid + .drive-signal-grid clutter. -->
     <div
       id="liveReadout"
@@ -731,32 +760,32 @@
       aria-label="Live OBD signals"
     >
       <div data-live-cell="true" data-tile-key="rpm">
-        <span class="kicker" data-tone="volt">RPM</span>
+        <span class="kicker">RPM</span>
         <strong id="rpmValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="aux12v">
         <!-- This is ATRV (12V auxiliary battery, ~12-14 V) — NOT the HV traction
              pack. The 300+ V pack reading lives in the HV Battery panel above. -->
-        <span class="kicker" data-tone="muted">Aux 12V</span>
+        <span class="kicker">Aux 12V</span>
         <strong id="voltageValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="coolant">
-        <span class="kicker" data-tone="warn">Coolant</span>
+        <span class="kicker">Coolant</span>
         <strong id="coolantValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="throttle">
         <!-- Sourced from PID 0149 (drive-by-wire accelerator pedal) when the
              vehicle supports it; falls back to 0111 (ICE throttle body) for
              vehicles where 0149 isn't responding. -->
-        <span class="kicker" data-tone="ev">Throttle</span>
+        <span class="kicker">Throttle</span>
         <strong id="throttleValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="load">
-        <span class="kicker" data-tone="ev">Load</span>
+        <span class="kicker">Load</span>
         <strong id="loadValue" data-live-tile="true">--</strong>
       </div>
       <div data-live-cell="true" data-tile-key="gps">
-        <span class="kicker" data-tone="mixed">GPS</span>
+        <span class="kicker">GPS</span>
         <strong id="gpsValue" data-live-tile="true">--</strong>
       </div>
     </div>
@@ -805,47 +834,47 @@
     aria-label="Enhanced Volt signals"
   >
     <div data-live-cell="true">
-      <span class="kicker" data-tone="volt">Motor A</span>
+      <span class="kicker">Motor A</span>
       <strong id="moreMotorA" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="accent">Motor B</span>
+      <span class="kicker">Motor B</span>
       <strong id="moreMotorB" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="ev">Gear</span>
+      <span class="kicker">Gear</span>
       <strong id="moreGear" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="mixed">EV range</span>
+      <span class="kicker">EV range</span>
       <strong id="moreEvRange" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="warn">Trans temp</span>
+      <span class="kicker">Trans temp</span>
       <strong id="moreTransTemp" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="muted">Ambient</span>
+      <span class="kicker">Ambient</span>
       <strong id="moreAmbient" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="warn">Oil life</span>
+      <span class="kicker">Oil life</span>
       <strong id="moreOilLife" data-live-tile="true">--</strong>
     </div>
     <div data-live-cell="true">
-      <span class="kicker" data-tone="ev">Torque</span>
+      <span class="kicker">Torque</span>
       <strong id="moreTorque" data-live-tile="true">--</strong>
     </div>
   </div>
 
-  <!-- "This trip" rollup (v2 design): one card for the latest drive — distance,
-       time, max speed, efficiency — with the net HV energy + estimated cost
-       footer. Distance/max come from the overview payload (ids kept from the
-       old overview grid); time/efficiency/energy come from the matching trip
-       rollup. Rendered by storage-status.ts#renderThisTripCard. -->
+  <!-- Trip card (v2 design): ONE drive — the one in progress while samples
+       stream ("Current drive"), else the most recent stored trip ("Last trip ·
+       2h ago") — distance, time, max speed, efficiency, with the net HV energy +
+       estimated cost footer. Every figure comes from that one drive (ids kept
+       from the old overview grid). Rendered by storage-status.ts#renderThisTripCard. -->
   <article class="panel trip-card" id="thisTripCard">
     <header class="card-head">
-      <span class="kicker">This trip</span>
+      <span class="kicker" id="thisTripKicker">Last trip</span>
       <button type="button" class="link-btn" data-nav-jump="map">
         View on map &#8594;
       </button>
@@ -886,6 +915,106 @@
       >
         set rate for cost
       </button>
+    </div>
+  </article>
+
+  <!-- Experimental car controls. Hidden unless the user turned them on in
+       Settings (native PIN setup) or Demo / Testing is running. Buttons only
+       ASK: the native side shows the PIN + confirmation dialog, and the
+       polling engine re-checks the parked/adapter gate before sending.
+       Rendered by car-controls.ts. -->
+  <article
+    class="panel car-controls-card"
+    id="carControlsCard"
+    aria-labelledby="carControlsTitle"
+    hidden
+  >
+    <header class="card-head">
+      <div>
+        <span class="kicker">Controls</span>
+        <h3 id="carControlsTitle">Car controls</h3>
+      </div>
+      <span class="car-controls-badge">Experimental</span>
+      <!-- Demo keeps the simulated controls folded behind this disclosure so
+           they don't dominate the Drive tab; car-controls.ts owns the state. -->
+      <button
+        type="button"
+        class="link-btn car-controls-expand"
+        id="carControlsExpand"
+        aria-expanded="false"
+        aria-controls="carControlsBody"
+        hidden
+      >
+        Show
+      </button>
+    </header>
+    <div id="carControlsBody" class="car-controls-body">
+      <p
+        id="carControlsGate"
+        class="car-controls-gate"
+        data-tone="warn"
+        role="status"
+        aria-live="polite"
+      >
+        Connect to the car to use controls.
+      </p>
+      <div class="car-controls-grid" role="group" aria-label="Car commands">
+        <button type="button" class="car-control-btn" data-car-control="lock">
+          Lock
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="unlock">
+          Unlock
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="flash">
+          Flash lights
+        </button>
+        <button type="button" class="car-control-btn" data-car-control="locate">
+          Horn + lights
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="remote_start"
+        >
+          Remote start
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="remote_stop"
+        >
+          Stop remote start
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="windows_down"
+        >
+          Windows down
+        </button>
+        <button
+          type="button"
+          class="car-control-btn"
+          data-car-control="windows_up"
+        >
+          Windows up
+        </button>
+      </div>
+      <p
+        id="carControlsResult"
+        class="car-controls-result"
+        role="status"
+        aria-live="polite"
+        hidden
+      ></p>
+      <div class="car-controls-foot">
+        <small id="carControlsPinState" class="status-copy"
+          >PIN needed for each command</small
+        >
+        <button type="button" class="link-btn" id="carControlsRelockBtn" hidden>
+          Lock PIN now
+        </button>
+      </div>
     </div>
   </article>
 
@@ -944,9 +1073,9 @@
     hidden
   >
     <span id="mapPrivacyNoticeCopy">
-      Map imagery loads from OpenStreetMap/CARTO servers. They receive the
-      approximate area you view (map-tile coordinates) &mdash; never your
-      routes, telemetry, or identity.
+      Map imagery loads from Stadia Maps servers. They receive the approximate
+      area you view (map-tile coordinates) &mdash; never your routes, telemetry,
+      or identity.
     </span>
     <button type="button" id="mapPrivacyGotItBtn" class="link-btn">
       Got it
@@ -1207,6 +1336,16 @@
     </div>
   </div>
 
+  <!-- Dimmed scrim behind the trip-detail sheet. Shown only while
+       body.trip-detail-active (set by map.ts on every open path); tapping it runs
+       the same closeTripDetail action as Done / Escape / Android back. -->
+  <div
+    id="tripDetailBackdrop"
+    class="trip-detail-backdrop"
+    data-action="closeTripDetail"
+    aria-hidden="true"
+  ></div>
+
   <!-- Per-trip detail sheet (M7). Opened from a map-session row's "Details"
        button; populated by map.ts#openTripDetail from the route projection +
        trip rollup. Modal dialog with a focus trap (actions.ts), so it overlays
@@ -1379,6 +1518,16 @@
       </header>
       <div id="tripDetailStops" class="trip-detail-stops"></div>
     </article>
+    <!-- Merge back a "Split trip here" split (map.ts#renderTripDetailMerge):
+         shown only when a user split bounds this drive. -->
+    <div class="trip-detail-merge" id="tripDetailMerge" hidden>
+      <button type="button" class="link-btn" id="tripDetailMergePrev" hidden>
+        Merge with previous trip
+      </button>
+      <button type="button" class="link-btn" id="tripDetailMergeNext" hidden>
+        Merge with next trip
+      </button>
+    </div>
     <div class="trip-detail-actions">
       <button
         type="button"
@@ -1531,7 +1680,7 @@
     <details class="empty-preview">
       <summary>What will appear here?</summary>
       <p>
-        Plug-ins, peak charging power, estimated cost, battery-cell balance, and
+        Charges, peak charging power, estimated cost, battery-cell balance, and
         long-term pack-health trends unlock as each kind of reading is recorded.
       </p>
     </details>
@@ -1664,9 +1813,11 @@
     </p>
   </article>
 
-  <!-- Three KPI tiles (v2 design): Plug-ins / Peak power / Est. cost. The
-       session count lives in the Recent-charges headline ("29.6 kWh across 4
-       charges") and detection status in the source badge + live hero chip. -->
+  <!-- Three KPI tiles (v2 design): Charges / Peak power / Est. cost. "Charges"
+       is the logged charge-session count — the same number the Recent-charges
+       headline totals ("29.6 kWh across 4 charges"), never the raw per-sample
+       charge-transition hint count. Detection status lives in the source badge
+       + live hero chip. -->
   <section
     id="chargeSummaryGrid"
     class="charge-grid"
@@ -1676,8 +1827,8 @@
     <!-- v2 design: label + number only — no explainer captions on the first two
          tiles (Est. cost keeps its caption because it doubles as the rate prompt). -->
     <article class="panel charge-kpi">
-      <header><span>Plug-ins</span></header>
-      <strong id="realChargeHints" aria-live="polite" aria-atomic="true"
+      <header><span>Charges</span></header>
+      <strong id="realChargeCount" aria-live="polite" aria-atomic="true"
         >0</strong
       >
     </article>
@@ -1693,6 +1844,19 @@
         >--</strong
       >
       <small id="chargeEnergyHint">Set rate in Settings</small>
+      <!-- With no rate set the tile shows this subtle link in place of a "--"
+           value (charge-history.ts#renderChargeEnergy). -->
+      <button
+        type="button"
+        class="link-btn charge-kpi-link"
+        id="chargeRateLink"
+        data-nav-jump="settings"
+        data-settings-target="settingsDisplay"
+        data-settings-focus="pricePerKwhInput"
+        hidden
+      >
+        Set rate
+      </button>
     </article>
   </section>
 
@@ -2869,6 +3033,47 @@
     ></small>
   </article>
 
+  <article id="carControlsSettingsCard" class="panel pref-card">
+    <div class="card-head">
+      <div>
+        <span class="kicker">Car controls</span>
+        <h3>Car controls (experimental)</h3>
+      </div>
+    </div>
+    <div class="pref-row">
+      <div class="pref-label">
+        <strong>Car controls (experimental)</strong>
+        <small
+          >Lock, unlock, lights, remote start and windows from the Drive tab.
+          OBDLink adapter only; car must be parked.</small
+        >
+      </div>
+      <button
+        type="button"
+        id="carControlsToggle"
+        class="tile-toggle pref-toggle"
+        data-on="false"
+        aria-pressed="false"
+        aria-describedby="carControlsWarning"
+      >
+        Off
+      </button>
+    </div>
+    <p id="carControlsWarning" class="car-controls-warning">
+      Sends body commands to your car over the OBD port. The command frames come
+      from the open-source OVMS project and have not been tested on your car.
+      Turning this on asks you to set a PIN; every command needs the PIN (valid
+      for 5 minutes) and a confirmation. Commands are refused unless the car is
+      parked and stopped. Off by default.
+    </p>
+    <small
+      id="carControlsSettingsStatus"
+      class="status-copy"
+      role="status"
+      aria-live="polite"
+    ></small>
+  </article>
+
   <article id="settingsAccessibility" class="panel pref-card">
     <div class="card-head">
       <div>
@@ -3021,7 +3226,7 @@
   <!--
     Open-source licenses (C3). Everything third-party that ships INSIDE the
     app: the vendored Leaflet build (lib/leaflet), the remote basemap tile
-    data (OpenStreetMap via CARTO — ODbL attribution required), and the
+    data (OpenStreetMap via OpenMapTiles and Stadia Maps — ODbL attribution required), and the
     bundled Space Grotesk font (fonts/SpaceGroteskVar.woff2; its full OFL
     text ships beside it as fonts/OFL.txt). BSD/OFL require the copyright
     notice to travel with the distribution, so each entry expands to that
@@ -3059,12 +3264,12 @@
       <li>
         <details>
           <summary>
-            <strong>CARTO basemaps</strong>
-            <small>Tile service &middot; dark basemap style</small>
+            <strong>Stadia Maps basemaps</strong>
+            <small>Tile service &middot; Alidade Smooth styles</small>
           </summary>
           <p>
-            Map tiles &copy; CARTO (carto.com/attributions), rendered from
-            OpenStreetMap data.
+            Map tiles &copy; Stadia Maps (stadiamaps.com) &copy; OpenMapTiles
+            (openmaptiles.org), rendered from OpenStreetMap data.
           </p>
         </details>
       </li>
@@ -3091,9 +3296,9 @@
     disclosure lives on. Full detail: docs/privacy-data-handling.md.
   -->
   <p id="mapPrivacyFooter" class="status-copy app-version-footer">
-    Map imagery: OpenStreetMap/CARTO &mdash; their tile servers receive the
-    approximate map area viewed. Everything else stays on this device (see the
-    privacy notes in docs/privacy-data-handling.md).
+    Map imagery: Stadia Maps &mdash; their tile servers receive the approximate
+    map area viewed. Everything else stays on this device (see the privacy notes
+    in docs/privacy-data-handling.md).
   </p>
 
   <!--
@@ -3330,9 +3535,7 @@
     </div>
     <div class="dtc-status-grid">
       <div><span>Codes</span><strong id="dtcTotalCount">0</strong></div>
-      <div>
-        <span>Current/stored</span><strong id="dtcStoredCount">0</strong>
-      </div>
+      <div><span>Stored</span><strong id="dtcStoredCount">0</strong></div>
       <div><span>Pending</span><strong id="dtcPendingCount">0</strong></div>
       <div><span>Permanent</span><strong id="dtcPermanentCount">0</strong></div>
       <div><span>Freeze-frame</span><strong id="dtcFreezeCount">0</strong></div>

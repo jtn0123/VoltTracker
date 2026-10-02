@@ -40,15 +40,51 @@ function demoRawFrames(sample: {
   ].join("\n");
 }
 
-// A compressed "day with the car" cycle: 60 s of driving (30 EV + 30 gas),
-// then 30 s parked on a Level-2 charger. The charge window is what feeds the
+// A compressed "day with the car" cycle: a 60 s trip, then 30 s parked on a
+// Level-2 charger. The trip is EV with regen dips until 36 s, the engine runs
+// 36-48 s, regen braking to a stop 48-54 s, then parked in P until the charger
+// is plugged in at 60 s. The charge window is what feeds the
 // Charge tab's live time-to-full hero in demo mode — without it the most
 // prominent Charge component could never be previewed. Mirrors
 // DemoPollingLoop.kt's native cycle; keep the two in step.
 const DEMO_DRIVE_PHASE_S = 60;
 const DEMO_CYCLE_S = 90;
-const DEMO_CHARGER_KW = 7.2;
-// Exaggerated vs the real ~0.014%/s a 7.2 kW charger manages, so the SOC
+const DEMO_GAS_AT_S = 36;
+const DEMO_BRAKE_AT_S = 48;
+const DEMO_PARK_AT_S = 54;
+const DEMO_BRAKE_S = 6; // DEMO_PARK_AT_S - DEMO_BRAKE_AT_S
+
+// Legs of the cycle (DemoPollingLoop's DemoLeg); 3 = parked, 4 = charging.
+const LEG_EV = 0;
+const LEG_GAS = 1;
+const LEG_BRAKING = 2;
+
+// Which leg of the cycle this second falls in (DemoPollingLoop.legAt).
+function demoLegAt(phase: number, charging: boolean): number {
+  if (charging) return 4;
+  if (phase >= DEMO_PARK_AT_S) return 3; // parked
+  if (phase >= DEMO_BRAKE_AT_S) return LEG_BRAKING;
+  if (phase >= DEMO_GAS_AT_S) return LEG_GAS;
+  return LEG_EV;
+}
+
+// EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
+// mostly drive with regen dips, peaking ~25 kW. Braking regenerates hard.
+function demoPowerKw(leg: number, driveT: number, phase: number): number {
+  if (leg === LEG_EV) return 6 + 14 * Math.sin(driveT / 3.1) + 5 * Math.sin(driveT / 1.3);
+  if (leg === LEG_GAS) return 30 + Math.sin(driveT / 3) * 9;
+  if (leg === LEG_BRAKING) return -(8 + (10 * (DEMO_PARK_AT_S - phase)) / DEMO_BRAKE_S);
+  return 0;
+}
+
+// Speed follows the v2 design prototype's demo series (34 + 9sin + 4sin mph,
+// converted to kph) — a gentle 25–47 mph urban band.
+function demoCruiseKph(driveT: number): number {
+  return (34 + 9 * Math.sin(driveT / 4.2) + 4 * Math.sin(driveT / 1.7)) * 1.609;
+}
+// 3.6 kW is the 2017 Volt's onboard-charger ceiling on Level 2.
+const DEMO_CHARGER_KW = 3.6;
+// Exaggerated vs the real ~0.007%/s a 3.6 kW charger manages, so the SOC
 // visibly climbs within the 30 s demo charge window. The drive-phase drain is
 // matched so each cycle is SOC-neutral (0.06 * 60 == 0.12 * 30): the sawtooth
 // repeats forever instead of drifting into a cap and plateauing there.
@@ -68,6 +104,7 @@ export function runBrowserDemoStream(
   if (!state.demoActive) return;
   let t = 0;
   let driveT = 0;
+  let routeT = 0;
   VD.setStatus({ state: "connected", detail: "Browser-only demo is running." });
   // Begin from an empty live route so a re-started browser demo doesn't append onto the
   // previous run's track (stopDemo/stopAll clear it, but a bare start would not).
@@ -78,36 +115,35 @@ export function runBrowserDemoStream(
     t += 1;
     const phase = t % DEMO_CYCLE_S;
     const charging = phase >= DEMO_DRIVE_PHASE_S;
-    // The route clock only advances while driving, so the map marker parks
-    // during the charge window instead of orbiting an unplugged charger.
+    const leg = demoLegAt(phase, charging);
+    const moving = leg <= LEG_BRAKING;
+    // The sine clock runs for the whole trip; the route clock only while moving,
+    // so the map marker stays put once the car parks.
     if (!charging) driveT += 1;
-    const gas = !charging && Math.floor(driveT / 30) % 2 === 1;
+    if (moving) routeT += 1;
+    const gas = leg === LEG_GAS;
     VD.setState({ mode: gas ? "gas" : "ev" });
-    // EV power follows the v2 design prototype's demo bars (6 + 14sin + 5sin):
-    // mostly drive with regen dips, peaking ~25 kW.
-    const powerKw = charging ? 0
-      : gas ? 30 + Math.sin(driveT / 3) * 9
-      : 6 + 14 * Math.sin(driveT / 3.1) + 5 * Math.sin(driveT / 1.3);
+    const powerKw = demoPowerKw(leg, driveT, phase);
     // 0 while driving (not omitted: samples merge into state.telemetry, so a
     // stale charger reading from the last charge window would otherwise pin
     // the live charge card open forever).
     const chargerPowerKw = charging
       ? Number((DEMO_CHARGER_KW + 0.3 * Math.sin(t / 5)).toFixed(1))
       : 0;
-    const routeDrift = Math.sin(driveT / 40);
+    const routeDrift = Math.sin(routeT / 40);
     const lat = 34.11872 + routeDrift * 0.004;
     const lng = -118.30064 - Math.abs(routeDrift) * 0.012;
-    // Speed follows the v2 design prototype's demo series (34 + 9sin + 4sin mph,
-    // converted to kph) — a gentle 25–47 mph urban band.
-    const speedKph = charging
-      ? 0
-      : Math.round((34 + 9 * Math.sin(driveT / 4.2) + 4 * Math.sin(driveT / 1.7)) * 1.609);
+    // Braking eases linearly from the cruise speed at 48 s to a stop at 54 s.
+    const speedKph = Math.round(leg < LEG_BRAKING ? demoCruiseKph(driveT)
+      : leg === LEG_BRAKING
+        ? (demoCruiseKph(driveT - (phase - DEMO_BRAKE_AT_S)) * (DEMO_PARK_AT_S - phase)) / DEMO_BRAKE_S
+        : 0);
     const rpm = gas ? Math.round(1260 + 420 * Math.sin(driveT / 2.1)) : 0;
     // 80 °C = the design's steady 176 °F coolant.
     const coolantC = Math.round(80 + Math.sin(t / 8));
     // Throttle/load track the design's tile formulas (14+9sin / 20+7sin).
-    const loadPct = charging ? 4 : Math.round(20 + 7 * Math.sin(driveT / 3.3));
-    const throttlePct = charging ? 0 : Math.round(14 + 9 * Math.sin(driveT / 2.2));
+    const loadPct = moving ? Math.round(20 + 7 * Math.sin(driveT / 3.3)) : 4;
+    const throttlePct = leg < LEG_BRAKING ? Math.round(14 + 9 * Math.sin(driveT / 2.2)) : 0;
     const voltage = 14.2;
     // Continuous periodic sawtooth (61.2..64.8), derived from the cycle phase
     // rather than accumulated — always below the 100% default target, so the
@@ -132,10 +168,8 @@ export function runBrowserDemoStream(
       sampleCount: t,
       sessionMs: t * 1000,
       supportedPids: "browser demo",
-      vehicleState: charging ? "charging"
-        : powerKw < -0.5 ? "regen"
-        : gas ? "driving (gas)"
-        : "driving",
+      // The classifier's payload keys (VehicleState.asPayloadKey); braking is still an EV drive.
+      vehicleState: charging ? "charging" : !moving ? "parked" : gas ? "driving_gas" : "driving_ev",
       speedKph,
       rpm,
       coolantC,
@@ -148,10 +182,10 @@ export function runBrowserDemoStream(
       batteryTemp: 22.8 + 0.3 * Math.sin(t / 8),
       // GPS fix quality for the design's "±4 m" GPS tile (±13 ft imperial).
       accuracyM: 4,
-      // Remaining EV range, SOC-proportional off a ~66 km full-charge range —
-      // at the demo's ~63% SOC this reads "≈ 26 mi EV range" under the SOC
-      // number and in the enhanced-signals card, matching the design demo.
-      evDistanceThisCycleKm: Number(((soc / 100) * 66).toFixed(1)),
+      // EV distance driven this cycle (222487) — ~0.9 km/min over the drive
+      // phase. Distinct from the range estimate below; the UI must never label
+      // this one as "EV range".
+      evDistanceThisCycleKm: Number((Math.min(phase, DEMO_PARK_AT_S) * 0.015).toFixed(1)),
       minCellVoltage,
       maxCellVoltage,
       cellBalanceMv: cellSpreadMv,
@@ -173,9 +207,57 @@ export function runBrowserDemoStream(
       sohPct: 91,
       packEnergyKwh: Number(((soc / 100) * 14).toFixed(1)),
       hvBatteryRawSoc: Number((soc + 2).toFixed(1)),
-      motorAPowerKw: charging ? 0 : Number((powerKw * 0.6).toFixed(1)),
+      motorAPowerKw: moving ? Number((powerKw * 0.6).toFixed(1)) : 0,
       transmissionTempC: Number((68 + 3 * Math.sin(t / 7)).toFixed(1)),
-      prndlState: charging ? "P" : "D",
+      prndlState: moving ? "D" : "P",
+      // Raw PRNDL codes (VoltGear.kt): 8 = Park, 3 = Drive, both confirmed from field logs.
+      prndlRaw: moving ? 3 : 8,
+      gearConfidence: "confirmed",
+      motorTempC: Number((55 + 5 * Math.sin(t / 9)).toFixed(1)),
+      inverterTempC: Number((42 + 3 * Math.sin(t / 8)).toFixed(1)),
+      displayedSocPct: Number(soc.toFixed(1)),
+      packResistanceMohm: 148.5,
+      hvIsolationKohm: 2000,
+      motorBTempC: Number((48 + 4 * Math.sin(t / 10)).toFixed(1)),
+      // The car's own remaining EV range (2241A6), SOC-proportional off a
+      // ~66 km full-charge range — at the demo's ~63% SOC this reads
+      // "≈ 26 mi EV range" under the SOC number, matching the design demo.
+      evRangeKm: Math.round((soc / 100) * 66),
+      batteryHeaterPct: 0,
+      pemCoolantTempC: Number((38 + 2 * Math.sin(t / 11)).toFixed(1)),
+      lifetimeChargeEnergyKwh: 2198.1,
+      packSection1TempC: 23, packSection2TempC: 24, packSection3TempC: 22,
+      packSection4TempC: 23, packSection5TempC: 24, packSection6TempC: 22,
+      ...(charging ? { chargerAcVoltage: 240, chargerAcCurrentA: 14, chargerAcPowerKw: 3.4 } : {}),
+      // SW-CAN (GMLAN) broadcasts heard by the OBDLink listen window (mirrors DemoPollingLoop.kt).
+      aux12vVoltage: charging ? 13.9 : 14.1,
+      aux12vSocPct: 86,
+      aux12vCurrentA: charging ? 3.5 : 6,
+      tirePressureFlKpa: 260,
+      tirePressureFrKpa: 264,
+      tirePressureRlKpa: 256,
+      tirePressureRrKpa: 260,
+      doorLockState: charging ? "unlocked" : "locked",
+      doorLockSource: "fob",
+      doorFlState: "closed",
+      doorFrState: "closed",
+      doorRlState: "closed",
+      doorRrState: "closed",
+      hoodState: "closed",
+      trunkState: "closed",
+      windowFlPct: 0,
+      windowFrPct: 0,
+      windowRlPct: 0,
+      windowRrPct: 0,
+      alarmState: "disarmed",
+      blowerPct: 35,
+      remoteStartState: "off",
+      cabinTempEstC: Number((21 + Math.sin(t / 15)).toFixed(1)),
+      acState: "on",
+      peCoolantTempC: Number((32 + 2 * Math.sin(t / 10)).toFixed(1)),
+      clusterEvRangeKm: Number(((soc / 100) * 66).toFixed(1)),
+      fuelRangeKm: 471,
+      ...(charging ? { chargeCurrentLimitA: 12 } : {}),
       latitude: lat,
       longitude: lng,
       updatedAt: Date.now(),

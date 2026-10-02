@@ -167,7 +167,13 @@ import { VD } from "./vd-registry";
     const price = prefs.get<number>("pricePerKwh", 0);
     const hint = el("chargeEnergyHint");
     const costEl = el("chargeEnergyCost");
-    if (total > 0 && price > 0) {
+    const rateLink = el("chargeRateLink");
+    const hasCost = total > 0 && price > 0;
+    // No cost to show: the "--" value collapses; an unset rate becomes a subtle
+    // "Set rate" link, a set rate with no energy yet keeps its caption.
+    if (costEl) costEl.hidden = !hasCost;
+    if (rateLink) rateLink.hidden = hasCost || price > 0;
+    if (hasCost) {
       VD.setText("chargeEnergyCost", formatMoney(chargeCostFor(sessions)));
       if (costEl) costEl.dataset.state = "recorded";
       const rates = chargeRates();
@@ -200,7 +206,7 @@ import { VD } from "./vd-registry";
       // already set a $/kWh rate to "Set rate in Settings" is misleading — the cost
       // just can't be computed until a session records energy.
       VD.setText("chargeEnergyHint", price > 0 ? "No charge energy logged yet" : "Set rate in Settings");
-      if (hint) hint.hidden = false;
+      if (hint) hint.hidden = !(price > 0);
     }
     renderChargeCostTrend(sessions);
   }
@@ -285,13 +291,12 @@ import { VD } from "./vd-registry";
     const maxV = Math.max(...values, 0) || 1;
     // Theme-aware colors: CSS variables don't cascade into SVG fill/stroke, so
     // resolve the tokens once (mirrors the insights scatter approach).
-    // Resolve on the chart's host so --view-accent cascades in: the same
-    // builder renders green bars on Charge and purple on Insights instead of
-    // painting Drive orange onto every tab.
+    // Series color follows meaning: charging energy passes colorVar "--ev"
+    // (green); everything else is the one accent (--view-accent = Volt teal).
     const tokens = getComputedStyle(host || document.documentElement);
     const token = (name: string, fallback: string) => (tokens.getPropertyValue(name) || "").trim() || fallback;
-    const barColor = token(opts?.colorVar || "--view-accent", token("--volt", "#ff7a45"));
-    const axisColor = token("--muted", "#aaaab4");
+    const barColor = token(opts?.colorVar || "--view-accent", token("--volt", "#2bd4c4"));
+    const axisColor = token("--muted", "#9aa5b1");
     const lineColor = token("--line", "rgba(255,255,255,0.1)");
     const make = (tag: string, attrs: Record<string, string | number>) =>
       setSvgAttrs(document.createElementNS(ns, tag) as SVGElement, attrs);
@@ -339,7 +344,7 @@ import { VD } from "./vd-registry";
         if (opts?.showValues && v > 0) {
           const valLabel = make("text", {
             x: cx.toFixed(1), y: Math.max(padT + 7, baselineY - barH - 4).toFixed(1), fill: axisColor,
-            "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+            "font-size": 10, "font-family": "inherit", "text-anchor": "middle",
           });
           valLabel.textContent = opts.valueFormat ? opts.valueFormat(v) : String(Math.round(v));
           svg.appendChild(valLabel);
@@ -347,7 +352,7 @@ import { VD } from "./vd-registry";
       }
       const label = make("text", {
         x: cx.toFixed(1), y: (h - padB + 16).toFixed(1), fill: axisColor,
-        "font-size": 9, "font-family": "ui-monospace,monospace", "text-anchor": "middle",
+        "font-size": 10, "font-family": "inherit", "text-anchor": "middle",
       });
       // Show every label when few buckets; thin to every other when crowded,
       // but always keep the most-recent (last) label so it's never dropped when
@@ -398,14 +403,16 @@ import { VD } from "./vd-registry";
       const aria = `Monthly charging ${showCost ? "cost" : "energy"} trend, latest ${
         showCost ? "$" + latest.toFixed(2) : latest.toFixed(1) + " kWh"
       }`;
-      chart.replaceChildren(buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart));
+      chart.replaceChildren(
+        buildMonthlyTrendSvg(buckets.map((b) => b.label), values, aria, chart, { colorVar: "--ev" }),
+      );
     }
   }
 
   function chargeNum(value: unknown) {
     // Native sends JSON null for missing fields; coerce those to NaN so a real
     // 0 reading and "no data" don't both render as "0".
-    return value == null || value === "" ? NaN : Number(value);
+    return value == null || value === "" ? Number.NaN : Number(value);
   }
 
   function chargerLabel(type: unknown) {
@@ -445,7 +452,7 @@ import { VD } from "./vd-registry";
     const endSoc = chargeNum(session.endSoc);
     const power = chargeNum(session.powerKw);
     const endedAtMs = chargeNum(session.endedAtMs);
-    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : NaN;
+    const durationMs = Number.isFinite(endedAtMs) ? endedAtMs - Number(session.startedAtMs) : Number.NaN;
     const parts: string[] = [];
     if (Number.isFinite(startSoc) && Number.isFinite(endSoc)) parts.push(`${Math.round(startSoc)}% → ${Math.round(endSoc)}%`);
     if (Number.isFinite(power) && power > 0) parts.push(`${power.toFixed(1)} kW`);
@@ -463,7 +470,7 @@ import { VD } from "./vd-registry";
     small.textContent = parts.length ? parts.join(" · ") : "charge details pending";
     center.append(strong, small);
     const right = document.createElement("b");
-    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : NaN;
+    const socGain = Number.isFinite(startSoc) && Number.isFinite(endSoc) ? endSoc - startSoc : Number.NaN;
     if (Number.isFinite(energy) && energy > 0) {
       right.textContent = `${energy.toFixed(1)} kWh`;
     } else if (Number.isFinite(socGain) && socGain > 0) {
@@ -481,7 +488,7 @@ import { VD } from "./vd-registry";
       const n = Number(v);
       if (Number.isFinite(n)) return n;
     }
-    return NaN;
+    return Number.NaN;
   }
 
   // HV-pack detail. The battery snapshot already rides in the storage payload —
@@ -537,5 +544,3 @@ import { VD } from "./vd-registry";
   // an already-open Charge/Insights tab hydrates the moment the chunk arrives.
   if (typeof VD.renderRealV2Ui === "function") VD.renderRealV2Ui();
 })();
-
-export {};

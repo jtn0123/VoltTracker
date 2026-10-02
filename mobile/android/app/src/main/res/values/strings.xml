@@ -76,6 +76,10 @@
     <!-- Event notifications (EventNotifier / EventNotificationDecider — M1) -->
     <string name="notification_events_channel_name">Volt Tracker alerts</string>
     <string name="notification_events_channel_description">Charge-complete, new diagnostic codes, battery threshold, and overdue-maintenance alerts.</string>
+    <string name="compose_restore_use_classic">The classic dashboard is open, so restore from there: Settings → Data → Restore.</string>
+    <string name="compose_export_running">Exporting trips…</string>
+    <string name="compose_storage_unavailable">Local storage isn\'t ready. Try again in a moment.</string>
+    <string name="compose_notifications_denied">Alerts are saved, but Android notifications are off for Volt Tracker. Turn them on in system settings to receive them.</string>
     <string name="notification_charge_complete_title">Charge complete</string>
     <string name="notification_charge_complete_text">Added %1$s kWh this charge. Tap to view charge details.</string>
     <string name="notification_charge_complete_text_no_energy">Charging finished. Tap to view charge details.</string>
@@ -106,6 +110,7 @@
     <!-- ObdService session statuses -->
     <string name="status_disconnected">Disconnected.</string>
     <string name="status_retry_cancelled">Retry cancelled.</string>
+    <string name="status_foreground_needs_nearby_devices">Volt Tracker needs the \"Nearby devices\" permission to talk to your OBD adapter. Open Android Settings &gt; Apps &gt; Volt Tracker &gt; Permissions, allow Nearby devices, then try again. Demo mode works without it.</string>
     <string name="status_foreground_blocked">Android blocked foreground logging. Check notification and nearby-device permissions, then try again.</string>
     <string name="status_worker_start_failed">Could not start the OBD logging worker.</string>
     <string name="status_service_stopped">Service stopped.</string>
@@ -238,4 +243,11 @@
     <string name="widget_updated_days">Updated %1$dd ago</string>
     <string name="widget_updated_stale">%1$s (stale)</string>
     <string name="widget_content_description">Volt Tracker: %1$s state of charge, %2$s. %3$s</string>
+    <string name="update_offer_title">Update available</string>
+    <string name="update_offer_message">Volt Tracker %1$s is ready to install.</string>
+    <string name="update_offer_install">Install</string>
+    <string name="update_offer_later">Later</string>
+    <string name="update_downloading">Downloading %1$s…</string>
+    <string name="update_download_failed">Update download failed. It will be offered again next launch.</string>
+    <string name="update_opening_installer">Opening Android\'s installer…</string>
 </resources>

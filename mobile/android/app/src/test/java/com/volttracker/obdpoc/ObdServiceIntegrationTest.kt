@@ -8,17 +8,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.database.sqlite.SQLiteDatabaseCorruptException
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.location.LocationTracker
+import com.volttracker.obdpoc.service.AppVisibility
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -72,6 +75,7 @@ class ObdServiceIntegrationTest {
 
     @After
     fun tearDown() {
+        AppVisibility.resetForTest()
         for (receiver in receivers) {
             try {
                 RuntimeEnvironment.getApplication().unregisterReceiver(receiver)
@@ -119,7 +123,72 @@ class ObdServiceIntegrationTest {
         assertEquals("DEMO opens a 'demo'-mode session", ObdLocalStore.MODE_DEMO, service.recorder.activeMode())
         assertEquals("DEMO labels the adapter as the synthetic stream", "Demo stream", service.activeName)
         assertTrue("DEMO marks the session running", service.running.get())
-        assertTrue("DEMO brings up the foreground service", service.foregroundServiceActive)
+        assertFalse(
+            "DEMO runs as a plain started service: no FGS type fits a stream with no car/adapter/GPS",
+            service.foregroundServiceActive,
+        )
+    }
+
+    @Test
+    fun demoStartsOnAFreshInstallWithoutAnyRuntimePermission() {
+        // Regression: after `pm clear`, the demo asked for the connectedDevice FGS type, which
+        // Android 14+ refuses without Nearby devices permission, so "Start demo" did nothing.
+        val controller =
+            newController(
+                ForegroundRefusedObdService::class.java,
+                intentFor(ObdService.ACTION_DEMO, null, null, null),
+                grantNearbyDevices = false,
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        controller.startCommand(0, 1)
+
+        assertTrue("the demo must start without Bluetooth or location permission", service.running.get())
+        assertFalse("the demo never enters the foreground", service.foregroundServiceActive)
+        assertFalse("the demo must not stop itself", shadowOf(service).isStoppedBySelf)
+        assertTrue(
+            "no blocked status may be broadcast for the demo",
+            captured.status.none { it.optBoolean("blocked") },
+        )
+    }
+
+    @Test
+    fun demoAfterALiveSessionDropsTheForegroundState() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.create().startCommand(0, 1).get()
+        assertTrue("precondition: the live session is in the foreground", service.foregroundServiceActive)
+
+        controller.withIntent(intentFor(ObdService.ACTION_DEMO, null, null, null)).startCommand(0, 2)
+
+        assertEquals(ObdLocalStore.MODE_DEMO, service.recorder.activeMode())
+        assertFalse("switching to the demo leaves the foreground", service.foregroundServiceActive)
+        assertEquals("the FGS type is cleared with it", 0, activeForegroundServiceType(service))
+    }
+
+    @Test
+    fun connectWithoutNearbyDevicesPermissionBlocksWithAnActionableMessage() {
+        val controller =
+            newController(
+                TestObdService::class.java,
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+                grantNearbyDevices = false,
+            )
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        controller.startCommand(0, 1)
+
+        assertFalse("no session may run without Nearby devices permission", service.running.get())
+        assertFalse(service.foregroundServiceActive)
+        val status = captured.lastStatus()
+        assertNotNull("the refusal must be broadcast, not silent", status)
+        assertEquals("blocked", status?.optString("state"))
+        assertEquals(
+            service.getString(R.string.status_foreground_needs_nearby_devices),
+            status?.optString("detail"),
+        )
+        assertTrue("the orphaned service stops itself", shadowOf(service).isStoppedBySelf)
     }
 
     @Test
@@ -165,6 +234,74 @@ class ObdServiceIntegrationTest {
         assertTrue(
             "foreground service type should include LOCATION when GPS permission is available",
             activeForegroundServiceType(service) and ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION != 0,
+        )
+    }
+
+    @Test
+    fun repeatConnectToTheConnectedAdapterKeepsTheLiveSession() {
+        // Field regression: a second CONNECT (double tap / auto-connect racing a manual one) tore down
+        // a healthy, polling session a few seconds in and restarted it as a new throwaway session.
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+        service.broadcastStatus("connected", "Live", false)
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        val captured = captureBroadcasts()
+
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "aa:bb:cc:dd:ee:ff", "Garage ELM", null),
+            ).startCommand(0, 2)
+
+        assertEquals("the live session must not be restarted", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+        assertTrue("the live session keeps running", service.running.get())
+        val status = captured.lastStatus()
+        assertNotNull("the ignored CONNECT re-publishes the current status so the UI re-syncs", status)
+        assertEquals("connected", status!!.optString("state"))
+        assertEquals("Live", status.optString("detail"))
+    }
+
+    @Test
+    fun connectWhileStillConnectingOrToAnotherAdapterStillRestarts() {
+        val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+
+        // Still connecting (no "connected" status yet): a new CONNECT is a deliberate retry.
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            ).startCommand(0, 2)
+        assertNotEquals("a CONNECT while connecting restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+
+        // Connected, but the user picked a different adapter: switch to it.
+        service.broadcastStatus("connected", "Live", false)
+        service.sessionStartedAtMs = RESTART_SENTINEL_MS
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "11:22:33:44:55:66", "Other ELM", null),
+            ).startCommand(0, 3)
+        assertNotEquals("a CONNECT to another adapter restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
+        assertEquals("Other ELM", service.activeName)
+    }
+
+    @Test
+    fun connectDuringAConnectedScanSessionStartsALiveSession() {
+        val controller = newController(intentFor(ObdService.ACTION_SCAN, "AA:BB:CC:DD:EE:FF", "Scanner", null))
+        val service = controller.get()
+        controller.create().startCommand(0, 1)
+        service.broadcastStatus("connected", "Scanning", false)
+
+        controller
+            .withIntent(
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            ).startCommand(0, 2)
+
+        assertEquals(
+            "CONNECT replaces a scan with a live session",
+            ObdLocalStore.MODE_OBD,
+            service.recorder.activeMode(),
         )
     }
 
@@ -227,31 +364,37 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
-    fun appVisibilityActionsStopIdleServiceButKeepActiveSessionSticky() {
-        val idleController = newController(null)
-        val idleService = idleController.create().get()
-
-        val idleBackground =
-            idleService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 1)
-
-        assertEquals(Service.START_NOT_STICKY, idleBackground)
-        assertFalse("background action records the app as backgrounded", idleService.appInForeground)
-        assertTrue("idle background action should stop the service", shadowOf(idleService).isStoppedBySelf)
-
-        val activeController =
+    fun appVisibilityReachesTheServiceInProcessWithoutAStartCommand() {
+        val controller =
             newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
-        val activeService = activeController.create().get()
-        activeController.startCommand(0, 1)
+        val service = controller.create().get()
+        controller.startCommand(0, 1)
+        assertTrue("a fresh service starts from the current (foreground) screen state", service.appInForeground)
 
-        val activeBackground =
-            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_BACKGROUND, null, null, null), 0, 2)
-        val activeForeground =
-            activeService.onStartCommand(intentFor(ObdService.ACTION_APP_FOREGROUND, null, null, null), 0, 3)
+        // The activities call AppVisibility.report from onPause/onResume; no Intent is sent, so
+        // ActivityThread never runs QueuedWork.waitToFinish for it (the share-sheet ANR).
+        AppVisibility.report(false)
+        assertFalse("pause records the app as backgrounded", service.appInForeground)
+        AppVisibility.report(true)
+        assertTrue("resume records the app as foregrounded again", service.appInForeground)
+        assertFalse("visibility changes must not stop an active service", shadowOf(service).isStoppedBySelf)
+        assertNull(
+            "no start command is issued for visibility",
+            shadowOf(RuntimeEnvironment.getApplication()).nextStartedService,
+        )
+    }
 
-        assertEquals(Service.START_STICKY, activeBackground)
-        assertEquals(Service.START_STICKY, activeForeground)
-        assertTrue("foreground action records the app as foregrounded again", activeService.appInForeground)
-        assertFalse("active visibility changes must not stop the service", shadowOf(activeService).isStoppedBySelf)
+    @Test
+    fun serviceCreatedWhileBackgroundedStartsBackgroundedAndStopsListeningAfterDestroy() {
+        AppVisibility.report(false)
+        val controller = newController(null)
+        val service = controller.create().get()
+        assertFalse("a service created behind another app starts backgrounded", service.appInForeground)
+
+        controller.destroy()
+        controllers.remove(controller)
+        AppVisibility.report(true)
+        assertFalse("a destroyed service is no longer notified", service.appInForeground)
     }
 
     // ---- null / unrecognized start commands ------------------------------------------
@@ -486,6 +629,23 @@ class ObdServiceIntegrationTest {
     // ---- B6: foreground refusal must not leave an orphaned started service ----------
 
     @Test
+    fun aFailingSessionRecoveryDoesNotCrashServiceStartup() {
+        // B1: a locked/damaged database or full disk used to throw out of onCreate, killing the
+        // service on every start. Recovery is now best-effort and a demo still runs afterwards.
+        val controller =
+            newController(
+                RecoveryFailsObdService::class.java,
+                intentFor(ObdService.ACTION_DEMO, null, null, null),
+            )
+        val service = controller.create().get()
+
+        controller.startCommand(0, 1)
+
+        assertTrue("recovery was attempted", (service as RecoveryFailsObdService).attempted)
+        assertTrue("the service still starts a session after recovery fails", service.running.get())
+    }
+
+    @Test
     fun foregroundRefusalStopsTheOrphanedServiceWithoutAWakeLock() {
         val controller =
             newController(
@@ -620,10 +780,18 @@ class ObdServiceIntegrationTest {
     private fun newController(intent: Intent?): ServiceController<TestObdService> =
         newController(TestObdService::class.java, intent)
 
+    /**
+     * Grants Nearby devices by default, as on a set-up install: without it, Android 14+ refuses the
+     * connectedDevice foreground type and the service blocks every real session up front.
+     */
     private fun <T : ObdService> newController(
         serviceClass: Class<T>,
         intent: Intent?,
+        grantNearbyDevices: Boolean = true,
     ): ServiceController<T> {
+        if (grantNearbyDevices) {
+            shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
+        }
         val controller =
             if (intent != null) {
                 Robolectric.buildService(serviceClass, intent)
@@ -695,6 +863,16 @@ class ObdServiceIntegrationTest {
      */
     open class TestObdService : ObdService() {
         override fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(NeutralizedHost(this))
+    }
+
+    /** [TestObdService] whose startup session recovery hits a broken database (B1). */
+    class RecoveryFailsObdService : TestObdService() {
+        var attempted = false
+
+        override fun recoverInterruptedSessions(): Int {
+            attempted = true
+            throw SQLiteDatabaseCorruptException("simulated corrupt database")
+        }
     }
 
     /**
@@ -798,5 +976,9 @@ class ObdServiceIntegrationTest {
         override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) = Unit
 
         override fun maybeRunAutoDtcScan(engineRef: ObdPollingEngine?) = Unit
+    }
+
+    private companion object {
+        const val RESTART_SENTINEL_MS = 1L
     }
 }

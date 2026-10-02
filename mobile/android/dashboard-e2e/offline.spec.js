@@ -7,7 +7,7 @@
 // (context.route), which mirrors airplane mode in the WebView: the asset origin still resolves
 // (file:///android_asset there, http://127.0.0.1 here) while every external host is unreachable.
 const { test, expect } = require('@playwright/test');
-const { loadDemoScenario, openDashboard, setView } = require('./harness');
+const { FAKE_MAP_TILE_CONFIG, loadDemoScenario, openDashboard, setView } = require('./harness');
 
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]']);
 
@@ -37,7 +37,7 @@ test('tabs still switch and demo data still renders with no network', async ({ p
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'charge');
   // Charge history is local data: the KPIs fill in instead of the empty state.
   await expect(page.locator('#chargeEmptyState')).toBeHidden();
-  await expect(page.locator('#realChargeHints')).toHaveText(/^\d+$/);
+  await expect(page.locator('#realChargeCount')).toHaveText(/^\d+$/);
 
   await page.locator('nav.bottom-nav [data-nav="insights"]').click();
   await expect(page.locator('body')).toHaveAttribute('data-active-view', 'insights');
@@ -60,7 +60,8 @@ test('map tab draws the local route and shows tile-failure messaging instead of 
   page.on('pageerror', (err) => pageErrors.push(err && err.message ? err.message : String(err)));
   await blockExternalNetwork(context);
 
-  await openDashboard(page);
+  // A keyed build (fake key; every request is blocked above, so nothing reaches Stadia).
+  await openDashboard(page, { mapTileConfig: FAKE_MAP_TILE_CONFIG });
   await loadDemoScenario(page, 'typical');
   await setView(page, 'map');
 
@@ -71,7 +72,7 @@ test('map tab draws the local route and shows tile-failure messaging instead of 
   await expect(page.locator('#mapLeaflet .leaflet-overlay-pane path').first()).toBeAttached();
 
   // Only the basemap tiles are remote, so the dashboard surfaces the tile banner (>= 3 tile
-  // errors; both the CARTO primary and the OSM fallback are unreachable offline).
+  // errors; the fake-key Stadia layer is unreachable offline).
   await expect(page.locator('#mapTileError')).toBeVisible({ timeout: 20_000 });
   await expect(page.locator('#mapTileErrorCopy')).toContainText(/tiles/i);
   await expect(page.locator('#mapTileRetryBtn')).toBeVisible();

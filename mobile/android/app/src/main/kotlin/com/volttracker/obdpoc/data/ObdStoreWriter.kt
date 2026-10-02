@@ -7,6 +7,7 @@ import android.util.Log
 import androidx.core.database.sqlite.transaction
 import com.volttracker.obdpoc.EnhancedPidProfile
 import com.volttracker.obdpoc.EnhancedPidProfiles
+import com.volttracker.obdpoc.materialize.TripSplitRules
 import org.json.JSONException
 import org.json.JSONObject
 
@@ -55,6 +56,8 @@ class ObdStoreWriter(
         values.put("started_at_ms", startedAtMs)
         values.put("status", ObdLocalStore.STATUS_ACTIVE)
         values.put("created_at_ms", System.currentTimeMillis())
+        // New sessions get gear-aware trip splitting; rows from before v17 stay legacy (0).
+        values.put("trip_rules_version", TripSplitRules.CURRENT)
         return helper.writableDatabase.insertOrThrow(VoltTrackerDb.TABLE_SESSIONS, null, values)
     }
 

@@ -75,7 +75,7 @@ class ElmConnectionTest {
         val input = ReplyStream("41 0C 1880\r")
         val out = TriggerOutputStream(input)
         // Monotonic clock: every read advances 50 ms, so the loop always terminates (at the 5000 ms
-        // deadline if nothing else) — but the 250 ms quiet-period exit should fire long before that.
+        // deadline if nothing else) — but the 500 ms quiet-period exit should fire long before that.
         val now = AtomicLong(0L)
         val clock = ElmConnection.Clock { now.getAndAdd(50L) }
         val connection = ElmConnection(input, out, clock)
@@ -92,6 +92,56 @@ class ElmConnectionTest {
                 "(exited at ${now.get()} ms)",
             now.get() < 1500L,
         )
+    }
+
+    @Test
+    fun echoedCommandDoesNotStartTheQuietPeriodBeforeASlowEcuAnswers() {
+        // Real-car capture: with echo on, "010D" arrives at once but the ECU answers ~400 ms later.
+        // The quiet-period exit used to fire on the echo alone and return just "010D".
+        val now = AtomicLong(0L)
+        val input = StagedStream(now, listOf(0L to "010D\r", 400L to "41 0D 28\r\r>"))
+        val connection = ElmConnection(input, TriggerOutputStream(input.trigger), { now.getAndAdd(25L) })
+
+        val response = connection.transact("010D", 1500L) { true }
+
+        assertEquals("010D\r41 0D 28\r\r>", response)
+        assertFalse(connection.lastTransactTruncated)
+    }
+
+    @Test
+    fun promptHeldForTheAdaptiveTimeoutIsStillRead() {
+        // On-car capture: after the SW-CAN restore's ATSP6 the OBDLink sends the reply at once but
+        // holds the '>' ~400 ms (ATST64) while adaptive timing relearns. That is not a dropped prompt.
+        val now = AtomicLong(0L)
+        val input = StagedStream(now, listOf(0L to "4104B4\r", 400L to "\r>"))
+        val connection = ElmConnection(input, TriggerOutputStream(input.trigger), { now.getAndAdd(25L) })
+
+        val response = connection.transact("0104", 1500L) { true }
+
+        assertEquals("4104B4\r\r>", response)
+        assertFalse(connection.lastTransactTruncated)
+    }
+
+    @Test
+    fun searchingStatusDoesNotStartTheQuietPeriod() {
+        val now = AtomicLong(0L)
+        val input = StagedStream(now, listOf(0L to "SEARCHING...\r", 600L to "41 00 BE 1F B8 10\r\r>"))
+        val connection = ElmConnection(input, TriggerOutputStream(input.trigger), { now.getAndAdd(25L) })
+
+        val response = connection.transact("0100", 3000L) { true }
+
+        assertTrue("the protocol-search reply must be read in full", response.endsWith(">"))
+    }
+
+    @Test
+    fun replyBeyondEchoIgnoresEchoAndStatusText() {
+        assertFalse(ElmConnection.hasReplyBeyondEcho("010D\r", "010D"))
+        assertFalse(ElmConnection.hasReplyBeyondEcho("  010d \r\n", "010D"))
+        assertFalse(ElmConnection.hasReplyBeyondEcho("0100\rSEARCHING...\r", "0100"))
+        assertFalse(ElmConnection.hasReplyBeyondEcho("", "010D"))
+        assertTrue(ElmConnection.hasReplyBeyondEcho("010D\r41 0D 28", "010D"))
+        assertTrue(ElmConnection.hasReplyBeyondEcho("41 0D 28", "010D"))
+        assertTrue(ElmConnection.hasReplyBeyondEcho("NO DATA", "010D"))
     }
 
     @Test
@@ -187,6 +237,8 @@ class ElmConnectionTest {
         private var pos = 0
         private var released = false
 
+        val isReleased: Boolean get() = released
+
         fun release() {
             released = true
         }
@@ -198,6 +250,41 @@ class ElmConnectionTest {
                 return -1
             }
             return data[pos++].toInt() and 0xFF
+        }
+    }
+
+    /**
+     * Delivers each (atMs, text) part once the command is written and the shared clock reaches
+     * atMs, so a test can model an echo that arrives at once and a reply that arrives later.
+     */
+    private class StagedStream(
+        private val now: AtomicLong,
+        parts: List<Pair<Long, String>>,
+    ) : InputStream() {
+        val trigger = ReplyStream("")
+        private val staged = parts.map { (atMs, text) -> atMs to text.toByteArray(StandardCharsets.US_ASCII) }
+        private var partIndex = 0
+        private var pos = 0
+        private var writtenAtMs = -1L
+
+        private fun current(): ByteArray? {
+            if (trigger.available() == 0 && writtenAtMs < 0 && !triggered()) return null
+            if (writtenAtMs < 0) writtenAtMs = now.get()
+            while (partIndex < staged.size && pos >= staged[partIndex].second.size) {
+                partIndex++
+                pos = 0
+            }
+            val part = staged.getOrNull(partIndex) ?: return null
+            return if (now.get() - writtenAtMs >= part.first) part.second else null
+        }
+
+        private fun triggered(): Boolean = trigger.isReleased
+
+        override fun available(): Int = current()?.let { it.size - pos } ?: 0
+
+        override fun read(): Int {
+            val part = current() ?: return -1
+            return part[pos++].toInt() and 0xFF
         }
     }
 

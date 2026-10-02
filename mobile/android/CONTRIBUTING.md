@@ -29,9 +29,12 @@ open app/build/reports/lint-results-debug.html
 # Linux:
 xdg-open app/build/reports/lint-results-debug.html
 
-# 3) Install on a paired phone and launch the main activity
+# 3) Install on a paired phone and launch the app (the native Compose dashboard).
+#    Debug builds install as their own app, com.volttracker.obdpoc.debug ("Volt Tracker
+#    Debug"), beside any release install. The classic WebView dashboard has a debug-only
+#    alias: com.volttracker.obdpoc.DebugClassicDashboard
 ./gradlew :app:installDebug && \
-  adb shell am start -n com.volttracker.obdpoc/.MainActivity
+  adb shell am start -n com.volttracker.obdpoc.debug/com.volttracker.obdpoc.ComposeDashboardActivity
 
 # 4) Dashboard tests (vitest + jsdom — fast, no Android emulator)
 npm --prefix dashboard-tests test
@@ -175,7 +178,7 @@ PR as the work.
 
 | Layer    | Files                                                                       | Entry point                |
 |----------|-----------------------------------------------------------------------------|----------------------------|
-| UI       | `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*`                    | `MainActivity.onCreate`    |
+| UI       | `ComposeDashboardActivity.kt`, `ui/*` (launcher); `MainActivity.kt`, `VoltBridge.kt`, `assets/dashboard/*` (classic WebView) | `ComposeDashboardActivity.onCreate` |
 | Service  | `ObdService.kt`, `ObdNotifications.kt`, `PermissionGate.kt`                 | `ObdService.onStartCommand`|
 | Engine   | `ObdPollingEngine.kt`, `SessionRecorder.kt`, `ObdProtocol.kt`, …            | `ObdPollingEngine.runBluetoothLoop` |
 | Data     | `data/*` (`ObdLocalStore`, `VoltTrackerDb`, `ObdStore*`, record DTOs)       | `ObdLocalStore`            |

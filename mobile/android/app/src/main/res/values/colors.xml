@@ -1,5 +1,5 @@
 <resources>
-    <color name="volt_dark">#08080C</color>
+    <color name="volt_dark">#0B0F14</color>
 
     <!-- Home-screen widget palette (light home screens). Mirrored in values-night/colors.xml so
          the widget stays readable on dark home screens. -->

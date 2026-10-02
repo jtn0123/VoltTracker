@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.util.Log
+import com.volttracker.obdpoc.data.deleteOrLog
 import java.io.BufferedReader
 import java.io.BufferedWriter
 import java.io.File
@@ -197,7 +198,7 @@ class RollingAppLog {
         // Reset the birth marker so the new live file starts a fresh 7-day window. Best-effort:
         // a stale marker would make the next rotation fire too early (also acceptable) rather than
         // too late, so it's not catastrophic. Try once.
-        bornFile.delete()
+        bornFile.deleteOrLog()
         cachedBornMs = 0L
     }
 

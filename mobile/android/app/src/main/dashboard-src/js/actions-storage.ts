@@ -22,7 +22,7 @@ function logBridgeFailure(bridge: VoltBridge | null, label: string, detail: stri
   const errorDetail = err instanceof Error && err.message ? err.message : String(err || "");
   try {
     bridge.logClientError(label, errorDetail ? `${detail} ${errorDetail}` : detail);
-  } catch (_ignored) {}
+  } catch { /* Logging is best-effort; a failing logger must not break the UI. */ }
 }
 
 export function createStorageActions({ VD, bridge, withBusy }: StorageActionContext) {
@@ -65,7 +65,7 @@ export function createStorageActions({ VD, bridge, withBusy }: StorageActionCont
       document.body.append(link);
       link.click();
       return true;
-    } catch (_err) {
+    } catch {
       return false;
     } finally {
       link?.remove();

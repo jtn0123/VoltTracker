@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.materialize
 
+import com.volttracker.obdpoc.VehicleActivityThresholds
+
 /**
  * Conservative charge-session materializer.
  *
@@ -81,88 +83,102 @@ object ChargeSessionMaterializer {
         input: MaterializerInput?,
         data: MaterializerData?,
     ): List<ChargeSession> {
-        val result = ArrayList<ChargeSession>()
         if (input == null || data == null) {
-            return result
+            return emptyList()
         }
         val telemetry = data.readTelemetrySamples(input.sessionId)
         if (telemetry.isEmpty()) {
             // Without telemetry we have no continuous window to anchor a charge session on.
-            return result
+            return emptyList()
         }
 
-        // Walk the samples once, tracking per run whether the high-confidence pack-current signal
-        // ever fires inside it; if it does that run materializes OBSERVED, otherwise the fallback
-        // voltage heuristic produces a WEAK row.
-        var usedPackCurrent = false
-        var currentRun = ArrayList<TelemetrySample>()
-        var interruptions = 0
-        // Timestamp of the first breaking sample of an as-yet-unresolved break, or null when the
-        // run is not currently interrupted. Drives the transient-break debounce below.
-        var pendingBreakStartMs: Long? = null
-
+        // Walk the samples once; [RunBuilder] tracks per run whether the high-confidence
+        // pack-current signal ever fires inside it. If it does, that run materializes OBSERVED,
+        // otherwise the fallback voltage heuristic produces a WEAK row.
+        val runs = RunBuilder()
         for (sample in telemetry) {
             val plugged = isPluggedSample(sample)
             if (plugged != PluggedReason.NOT_PLUGGED) {
-                if (currentRun.isNotEmpty()) {
-                    val breakStartMs = pendingBreakStartMs
-                    val hadTransientBreak = breakStartMs != null
-                    // With sparse telemetry there may be only one breaking row. Re-check the break
-                    // duration when charging resumes; otherwise a multi-minute drive is treated as
-                    // a one-sample blip and two physical charges are stitched together.
-                    val sustainedBreak =
-                        breakStartMs != null && sample.capturedAtMs - breakStartMs > Tunables.BREAK_DEBOUNCE_MS
-                    pendingBreakStartMs = null
-                    val gap = sample.capturedAtMs - currentRun[currentRun.size - 1].capturedAtMs
-                    if (gap > Tunables.SPLIT_GAP_MS || sustainedBreak) {
-                        // This boundary is a SPLIT, not an interruption — so don't count the pending
-                        // transient break against the run being closed. Finalize with the flag state
-                        // as of ITS OWN samples; the incoming sample's evidence belongs to the run
-                        // that starts with it.
-                        val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
-                        if (finalized != null) {
-                            result.add(finalized)
-                        }
-                        currentRun = ArrayList()
-                        interruptions = 0
-                        usedPackCurrent = false
-                    } else if (hadTransientBreak || gap > Tunables.MAX_GAP_MS) {
-                        // The run continues: a transient break (movement/discharge that resumed
-                        // before BREAK_DEBOUNCE_MS) or a moderate gap counts as exactly one
-                        // interruption, never both for the same resume.
-                        interruptions += 1
-                    }
-                }
-                if (plugged == PluggedReason.PACK_CURRENT) {
-                    usedPackCurrent = true
-                }
-                currentRun.add(sample)
-            } else if (currentRun.isNotEmpty() && breaksChargeRun(sample)) {
-                val breakStart = pendingBreakStartMs ?: sample.capturedAtMs
-                pendingBreakStartMs = breakStart
-                if (sample.capturedAtMs - breakStart >= Tunables.BREAK_DEBOUNCE_MS) {
-                    // Sustained movement/discharge: a real drive (or an unplug-and-leave), so split.
-                    val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
-                    if (finalized != null) {
-                        result.add(finalized)
-                    }
-                    currentRun = ArrayList()
-                    interruptions = 0
-                    usedPackCurrent = false
-                    pendingBreakStartMs = null
-                }
+                runs.addPlugged(sample, plugged)
+            } else if (runs.isOpen() && breaksChargeRun(sample)) {
+                runs.noteBreak(sample)
             }
             // Non-plugged samples between plugged runs are ignored — only the gap timestamp matters
             // and that is computed off the last plugged sample. Sustained movement/discharge is the
             // exception: it breaks the candidate so a drive cannot be stitched into a charge.
         }
-        if (currentRun.isNotEmpty()) {
-            val finalized = finalizeRun(currentRun, interruptions, usedPackCurrent)
-            if (finalized != null) {
-                result.add(finalized)
+        return runs.finish()
+    }
+
+    /** The charge run being built plus every finished session, for one pass over the samples. */
+    private class RunBuilder {
+        private val result = ArrayList<ChargeSession>()
+        private var currentRun = ArrayList<TelemetrySample>()
+        private var interruptions = 0
+        private var usedPackCurrent = false
+
+        // Timestamp of the first breaking sample of an as-yet-unresolved break, or null when the
+        // run is not currently interrupted. Drives the transient-break debounce.
+        private var pendingBreakStartMs: Long? = null
+
+        fun isOpen(): Boolean = currentRun.isNotEmpty()
+
+        fun addPlugged(
+            sample: TelemetrySample,
+            reason: PluggedReason,
+        ) {
+            if (currentRun.isNotEmpty()) resumeOrSplit(sample)
+            if (reason == PluggedReason.PACK_CURRENT) {
+                usedPackCurrent = true
+            }
+            currentRun.add(sample)
+        }
+
+        private fun resumeOrSplit(sample: TelemetrySample) {
+            val breakStartMs = pendingBreakStartMs
+            val hadTransientBreak = breakStartMs != null
+            // With sparse telemetry there may be only one breaking row. Re-check the break
+            // duration when charging resumes; otherwise a multi-minute drive is treated as
+            // a one-sample blip and two physical charges are stitched together.
+            val sustainedBreak =
+                breakStartMs != null && sample.capturedAtMs - breakStartMs > Tunables.BREAK_DEBOUNCE_MS
+            pendingBreakStartMs = null
+            val gap = sample.capturedAtMs - currentRun[currentRun.size - 1].capturedAtMs
+            if (gap > Tunables.SPLIT_GAP_MS || sustainedBreak) {
+                // This boundary is a SPLIT, not an interruption — so don't count the pending
+                // transient break against the run being closed. Finalize with the flag state
+                // as of ITS OWN samples; the incoming sample's evidence belongs to the run
+                // that starts with it.
+                closeRun()
+            } else if (hadTransientBreak || gap > Tunables.MAX_GAP_MS) {
+                // The run continues: a transient break (movement/discharge that resumed
+                // before BREAK_DEBOUNCE_MS) or a moderate gap counts as exactly one
+                // interruption, never both for the same resume.
+                interruptions += 1
             }
         }
-        return result
+
+        fun noteBreak(sample: TelemetrySample) {
+            val breakStart = pendingBreakStartMs ?: sample.capturedAtMs
+            pendingBreakStartMs = breakStart
+            if (sample.capturedAtMs - breakStart >= Tunables.BREAK_DEBOUNCE_MS) {
+                // Sustained movement/discharge: a real drive (or an unplug-and-leave), so split.
+                closeRun()
+                pendingBreakStartMs = null
+            }
+        }
+
+        fun finish(): List<ChargeSession> {
+            if (currentRun.isNotEmpty()) closeRun()
+            return result
+        }
+
+        private fun closeRun() {
+            finalizeRun(currentRun, interruptions, usedPackCurrent)?.let(result::add)
+            currentRun = ArrayList()
+            interruptions = 0
+            usedPackCurrent = false
+        }
     }
 
     /** Why a sample qualified as plugged, or [NOT_PLUGGED] if it didn't. */
@@ -179,6 +195,8 @@ object ChargeSessionMaterializer {
      * makes `speed_kph` NULL for most of the session). For weaker signals we still require a valid
      * stationary speed reading because the aux-voltage heuristic is too noisy to trust on its own.
      */
+    private fun isEngineRunning(rpm: Int?): Boolean = rpm != null && rpm > VehicleActivityThresholds.ENGINE_READY_RPM
+
     private fun isPluggedSample(sample: TelemetrySample?): PluggedReason {
         if (sample == null) {
             return PluggedReason.NOT_PLUGGED
@@ -190,7 +208,10 @@ object ChargeSessionMaterializer {
                 packCurrent.isFinite() &&
                 packCurrent <= -Tunables.CHARGING_PACK_CURRENT_A_THRESHOLD
         val clearlyMoving = speed != null && speed.isFinite() && speed > Tunables.STATIONARY_SPEED_KPH
-        if (clearlyMoving) {
+        if (clearlyMoving || isEngineRunning(sample.rpm)) {
+            // A running engine at a standstill (range-extender idling, e.g. warming up or
+            // hold/mountain mode) pushes tens of amps INTO the pack with no EVSE attached; field
+            // logs showed that as phantom OBSERVED "charges". An EVSE charge never spins the engine.
             return PluggedReason.NOT_PLUGGED
         }
         if (strongCharging) {

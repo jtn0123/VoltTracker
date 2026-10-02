@@ -2,10 +2,13 @@ package com.volttracker.obdpoc.engine
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
+import android.content.Context
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.BluetoothAdapters
+import com.volttracker.obdpoc.CarCommand
+import com.volttracker.obdpoc.CarControlSettings
 import com.volttracker.obdpoc.ConnectionFailureClassifier
 import com.volttracker.obdpoc.ConnectionRetryCoordinator
 import com.volttracker.obdpoc.DemoPollingLoop
@@ -16,6 +19,7 @@ import com.volttracker.obdpoc.FailureClass
 import com.volttracker.obdpoc.LiveSampleReader
 import com.volttracker.obdpoc.OBDLog
 import com.volttracker.obdpoc.ObdElmDecode
+import com.volttracker.obdpoc.ObdMode01Batch
 import com.volttracker.obdpoc.ObdProbes
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.PidPollingState
@@ -45,6 +49,8 @@ open class ObdPollingEngine(
     private val service: EngineHost,
     private val sleeper: LoopSleeper = LoopSleeper { millis -> defaultPollingSleep(millis) },
     private val extendedReconnectTier: ExtendedReconnectTier = ExtendedReconnectTier(),
+    swcanPolicy: SwcanListenRunner.Policy = SwcanListenRunner.Policy(),
+    carControlPolicy: CarControlRunner.Policy = CarControlRunner.Policy(),
 ) : LiveSampleReader.SampleContext {
     fun interface LoopSleeper {
         fun sleep(millis: Long): Boolean
@@ -60,6 +66,8 @@ open class ObdPollingEngine(
     private val sessionHealth: SessionHealthTracker
     private val pidPolling: PidPollingState
     private val liveSampleReader: LiveSampleReader
+    private val swcanListener: SwcanListenRunner
+    private val carControl: CarControlSession
 
     // Written on the poll/IO thread, read on the main thread when closeSessionLog finalizes the
     // session row — @Volatile for the cross-thread visibility edge so the finalized row can't
@@ -77,6 +85,10 @@ open class ObdPollingEngine(
     // to sleep with the car" disconnect (parked/plugged/charging) apart from a real mid-drive drop.
     private var lastVehicleState = ""
 
+    // Last non-"unknown" vehicleState — the car's modules go quiet one by one as it powers down, so
+    // the final samples before an end-of-drive disconnect often read "unknown" right after "parked".
+    private var lastKnownVehicleState = ""
+
     // Set true by initializeElm327 on every (re)connect; the poll loop runs the deferred VIN/batch/
     // voltage probes once, right after the first sample is broadcast, then clears it.
     private var deferredInitProbesPending = false
@@ -90,6 +102,63 @@ open class ObdPollingEngine(
         tpmsDiscoveryRunner = TpmsDiscoveryRunner(service, this)
         cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
+        swcanListener = SwcanListenRunner(SwcanIo(), swcanPolicy)
+        val carControlIo =
+            CarControlEngineIo(
+                adapter = SwcanIo(),
+                listener = swcanListener,
+                settings =
+                    CarControlSettings {
+                        service.androidContext.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+                    },
+                sleep = { ms -> sleeper.sleep(ms) && service.running.get() },
+            )
+        carControl = CarControlSession(CarControlRunner(carControlIo, carControlPolicy), service.recorder::logError)
+    }
+
+    /** Queues a user-confirmed car command for the live poll loop; safe from any thread. */
+    fun requestCarControl(command: CarCommand) = carControl.request(command)
+
+    /** See [SwcanListenRunner.requestBodyTest]; ignored (and logged) off an OBDLink. */
+    fun requestBodyTest(durationMs: Long) = swcanListener.requestBodyTest(durationMs)
+
+    /** The last sample's road speed, read by the SW-CAN runner on the same poll thread. */
+    private var lastSpeedKph = Double.NaN
+
+    /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
+    private inner class SwcanIo : SwcanListenRunner.Io {
+        override fun send(
+            command: String,
+            timeoutMs: Long,
+        ): String = sendCommand(command, timeoutMs)
+
+        override fun monitor(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+        ): ElmConnection.MonitorResult =
+            synchronized(service.ioLock) {
+                connection.monitor(command, listenMs, stopTimeoutMs, service.running::get)
+            }
+
+        override fun reinitialize() {
+            initializeElm327()
+        }
+
+        override fun liveCycleCount(): Long = pidPolling.liveCycleCount()
+
+        override fun msSinceLiveData(): Long = pidPolling.msSinceLastLiveData()
+
+        override fun <T> exclusive(block: () -> T): T = synchronized(service.ioLock) { block() }
+
+        override fun isStationary(): Boolean = lastSpeedKph.let { !it.isNaN() && it <= MOVING_SPEED_KPH }
+
+        override fun logEvent(
+            event: String,
+            vararg pairs: String,
+        ) {
+            service.recorder.logEvent(event, *pairs)
+        }
     }
 
     fun beginSession(supportedPidsSeed: String?) {
@@ -99,12 +168,16 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
+        lastSpeedKph = Double.NaN
+        lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
         firstSampleTimingLogged = false
         extendedReconnectTier.reset()
         pidPolling.reset()
         liveSampleReader.reset()
+        swcanListener.resetSession()
+        carControl.resetSession()
     }
 
     /**
@@ -522,15 +595,15 @@ open class ObdPollingEngine(
         // A link drop while the car was last seen parked/plugged/charging is the adapter going to
         // sleep with the car, not a connection fault — record a clean end (drive saved) instead of a
         // red "reconnect failed" error so a normal drive isn't mislabeled as a failure.
-        if (failureClass == FailureClass.CONNECT_TIMEOUT &&
-            isVehicleOffDisconnect(decision.everConnected, lastVehicleState)
-        ) {
+        if (VehicleOffDisconnect.endsAsVehicleOff(failureClass, ex, decision.everConnected, lastKnownVehicleState)) {
             service.recorder.logEvent(
                 "ended_vehicle_off",
                 "phase",
                 "reconnect_exhausted",
                 "lastVehicleState",
                 lastVehicleState,
+                "lastKnownVehicleState",
+                lastKnownVehicleState,
             )
             service.clearLastFailureClass()
             service.broadcastStatus(
@@ -698,21 +771,34 @@ open class ObdPollingEngine(
 
     @Throws(IOException::class)
     private fun pollUntilStoppedOrBroken() {
+        carControl.whileLive { pollLiveSamples() }
+    }
+
+    @Throws(IOException::class)
+    private fun pollLiveSamples() {
         while (service.isSessionRunnerActive()) {
             val sample = liveSampleReader.read(this)
             if (sample.length() == 0) {
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
+            lastSpeedKph = freshSpeedKph(sample)
+            appendSwcanReadings(sample)
+            carControl.appendTo(sample)
             service.broadcastTelemetry(sample)
             logFirstSampleTiming()
             lastVehicleState = sample.optString("vehicleState", lastVehicleState)
+            lastKnownVehicleState = VehicleOffDisconnect.stickyKnownState(lastKnownVehicleState, lastVehicleState)
             // First real data is on screen — now run the deferred connect-time probes (VIN, mode-01
             // batch capability, aux voltage) that we moved off the pre-first-sample critical path.
             if (deferredInitProbesPending) {
                 deferredInitProbesPending = false
                 runDeferredInitProbes()
             }
+            // Low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner).
+            swcanListener.afterSample()
+            // A user-confirmed car command, if one is waiting (see CarControlRunner).
+            carControl.afterSample()
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
             if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {
@@ -833,7 +919,7 @@ open class ObdPollingEngine(
             sendEscape(600)
             sendCommand("ATPC", 1400)
             sendCommand("ATSP0", 1400)
-            throw IOException("Adapter did not answer the standard OBD PID probe.")
+            throw VehicleBusSilentException("Adapter did not answer the standard OBD PID probe.")
         }
         OBDLog.event("ObdPollingEngine", "protocol_init", mapOf("ok" to true))
         // The VIN, mode-01 batch-capability, and voltage probes used to run here — synchronously
@@ -855,6 +941,15 @@ open class ObdPollingEngine(
         probeAndPersistVin()
         probeMode01Batch()
         service.maybeRunVoltageProbe(this)
+        swcanListener.probeAdapter()
+    }
+
+    private fun appendSwcanReadings(sample: JSONObject) {
+        try {
+            swcanListener.appendTo(sample, sample.optLong("updatedAt", System.currentTimeMillis()))
+        } catch (ex: JSONException) {
+            service.recorder.logError("swcan_sample_encoding_error", ex)
+        }
     }
 
     /**
@@ -918,7 +1013,7 @@ open class ObdPollingEngine(
     private fun probeMode01Batch() {
         try {
             val probeResponse = sendCommand("010D0C", 1500)
-            val ok = ObdProtocol.responseContainsAllMode01Pids(probeResponse, listOf("0D", "0C"))
+            val ok = ObdMode01Batch.split(probeResponse, listOf("0D", "0C")) != null
             pidPolling.setMode01BatchSupported(ok)
             service.recorder.logEvent(
                 "mode01_batch_probe",
@@ -1154,3 +1249,19 @@ open class ObdPollingEngine(
         }
     }
 }
+
+/**
+ * The sample's speed, or NaN when the car stopped refreshing it (it's off, or asleep): a stale
+ * speed doesn't mean "parked with the car on", so only a fresh one earns the longer parked
+ * SW-CAN windows.
+ */
+private fun freshSpeedKph(sample: JSONObject): Double =
+    if (sample.optLong("speedKphStaleMs", 0L) <=
+        FRESH_SPEED_MS
+    ) {
+        sample.optDouble("speedKph", Double.NaN)
+    } else {
+        Double.NaN
+    }
+
+private const val FRESH_SPEED_MS = 10_000L

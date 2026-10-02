@@ -120,4 +120,20 @@ class SessionStateMachineTest {
         state.stop(null)
         assertEquals("", state.detail())
     }
+
+    @Test
+    fun onlyAConnectToTheAlreadyConnectedAdapterIsRedundant() {
+        val connected = SessionStateMachine.Phase.CONNECTED
+        assertTrue(SessionStateMachine.isRedundantConnect(connected, "AA:BB:CC:DD:EE:FF", "aa:bb:cc:dd:ee:ff"))
+        assertFalse(SessionStateMachine.isRedundantConnect(connected, "AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66"))
+        assertFalse(SessionStateMachine.isRedundantConnect(connected, "AA:BB:CC:DD:EE:FF", null))
+        assertFalse(SessionStateMachine.isRedundantConnect(connected, "AA:BB:CC:DD:EE:FF", ""))
+        assertFalse(SessionStateMachine.isRedundantConnect(connected, null, "AA:BB:CC:DD:EE:FF"))
+        for (phase in SessionStateMachine.Phase.values().filter { it != connected }) {
+            assertFalse(
+                "$phase must keep the restart behaviour",
+                SessionStateMachine.isRedundantConnect(phase, "AA:BB:CC:DD:EE:FF", "AA:BB:CC:DD:EE:FF"),
+            )
+        }
+    }
 }

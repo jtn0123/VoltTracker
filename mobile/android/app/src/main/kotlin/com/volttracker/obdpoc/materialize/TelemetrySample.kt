@@ -10,6 +10,10 @@ package com.volttracker.obdpoc.materialize
  * the pack" without the false-positive risk of relying on the auxiliary 12V [adapterVoltage].
  * [powerKw] is the pre-multiplied convenience copy of the same values for dashboards that don't want
  * to integrate.
+ *
+ * [prndlRaw] is the fresh raw PRNDL code (null when missing or stale, and on every row recorded
+ * before the column existed) and [doorOpen] whether a SW-CAN read reported a door/hatch open; both
+ * feed [TripSplitRules].
  */
 class TelemetrySample(
     @JvmField val capturedAtMs: Long,
@@ -20,6 +24,8 @@ class TelemetrySample(
     @JvmField val packCurrentA: Double?,
     @JvmField val powerKw: Double?,
     @JvmField val socPct: Double?,
+    @JvmField val prndlRaw: Int? = null,
+    @JvmField val doorOpen: Boolean? = null,
 ) {
     // Back-compat constructor: callers that pre-date the pack_voltage column pass null.
     constructor(

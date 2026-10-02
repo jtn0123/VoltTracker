@@ -27,6 +27,7 @@ class LiveSampleReader(
      * (one session) so a persistently malformed PID does not spam the log every poll cycle.
      */
     private val parseFailureReported = HashSet<String>()
+    private var bcmTiresLogged = false
 
     /**
      * Consecutive speed-poll cycles on which PID 010D returned the 0xFF sentinel. The Volt reports
@@ -44,6 +45,7 @@ class LiveSampleReader(
      */
     fun reset() {
         parseFailureReported.clear()
+        bcmTiresLogged = false
         consecutiveSpeedSentinels = 0
     }
 
@@ -133,8 +135,10 @@ class LiveSampleReader(
             appendCellBalanceFields(sample)
             appendChargingFields(sample)
             appendEnhancedContextFields(sample)
+            appendOvmsFields(sample)
 
             val now = System.currentTimeMillis()
+            appendBcmTires(sample, now)
             pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now)
             pidPolling.putStaleMsIfTracked(sample, "speedKphStaleMs", "010D", now)
             pidPolling.putStaleMsIfTracked(sample, "rpmStaleMs", "010C", now)
@@ -159,7 +163,7 @@ class LiveSampleReader(
                 "221154",
                 "015C",
             )
-            putStaleMsForPresentValue(sample, "odometerKm", "odometerStaleMs", "01A6", now)
+            putStaleMsForFirstPresentValue(sample, "odometerKm", "odometerStaleMs", now, "2234B2", "01A6")
             pidPolling.putStaleMsIfTracked(sample, "coolantCStaleMs", "0105", now)
             pidPolling.putStaleMsIfTracked(sample, "batteryTempStaleMs", "22434F", now)
             pidPolling.putStaleMsIfTracked(sample, "packVoltageStaleMs", "222429", now)
@@ -169,6 +173,7 @@ class LiveSampleReader(
             putPowerStaleMsIfKnown(sample, now)
             putChargingStaleMs(sample, now)
             putEnhancedContextStaleMs(sample, now)
+            putOvmsStaleMs(sample, now)
 
             val sampleCount = context.incrementSampleCount()
             sample.put("source", "obd")
@@ -218,7 +223,7 @@ class LiveSampleReader(
             if (!EnhancedPidProfiles.isPositiveResponse(command, raw)) {
                 continue
             }
-            if (ObdProtocol.parseKnownValue(command, raw) != null) {
+            if (ObdProtocol.parseKnownValue(command, raw) != null || BcmTirePressure.parse(raw) != null) {
                 continue
             }
             // A recognized no-reading sentinel (all-zero Mode 22 payload, or the 0xFF speed sentinel)
@@ -269,7 +274,7 @@ class LiveSampleReader(
         putNumeric(sample, "engineRunTimeSec", "011F", 0)
         putNumeric(sample, "fuelLevelPct", "012F", 0)
         putNumericFirst(sample, "engineOilTempC", 0, "221154", "015C")
-        putNumeric(sample, "odometerKm", "01A6", 1)
+        putNumericFirst(sample, "odometerKm", 1, "2234B2", "01A6")
         if (sample.has("odometerKm")) {
             sample.put("odometerMiles", round1(sample.optDouble("odometerKm") * 0.621371))
         }
@@ -366,6 +371,12 @@ class LiveSampleReader(
         putDerivedChargerPower(sample)
         putText(sample, "chargingMode", "224373")
         putText(sample, "chargingLevel", "224531")
+        putNumeric(sample, "chargerAcVoltage", "224368", 0)
+        putNumeric(sample, "chargerAcCurrentA", "224369", 1)
+        if (sample.has("chargerAcVoltage") && sample.has("chargerAcCurrentA")) {
+            val watts = sample.getDouble("chargerAcVoltage") * sample.getDouble("chargerAcCurrentA")
+            sample.put("chargerAcPowerKw", round1(watts / 1000.0))
+        }
     }
 
     @Throws(JSONException::class)
@@ -378,13 +389,65 @@ class LiveSampleReader(
         putDerivedMotorPower(sample, "motorAPowerKw", "222885", "222883")
         putDerivedMotorPower(sample, "motorBPowerKw", "222886", "222884")
         putNumeric(sample, "evDistanceThisCycleKm", "222487", 2)
-        putText(sample, "prndlState", "222889")
+        putGear(sample)
         putNumericFirst(sample, "transmissionTempC", 0, "22194001", "221940")
         putNumeric(sample, "batteryCoolantPumpRpm", "2241B2", 0)
         putNumeric(sample, "batteryCoolantValveRaw", "2241B4", 0)
         putNumeric(sample, "batteryHeaterPowerW", "2241B6", 0)
         putNumeric(sample, "outsideTempRawC", "22801E", 1)
         putNumeric(sample, "outsideTempC", "22801F", 1)
+        putNumeric(sample, "motorTempC", "2228CB", 0)
+        putNumeric(sample, "inverterTempC", "221C26", 0)
+        putNumeric(sample, "displayedSocPct", "228334", 1)
+        putNumeric(sample, "packResistanceMohm", "2240E9", 1)
+        putNumeric(sample, "hvIsolationKohm", "2243A6", 0)
+    }
+
+    /** Readings the OVMS Volt/Ampera module polls on a MY2017 that this app previously skipped. */
+    @Throws(JSONException::class)
+    private fun appendOvmsFields(sample: JSONObject) {
+        putNumeric(sample, "motorBTempC", "22368F", 0)
+        putNumeric(sample, "evRangeKm", "2241A6", 0)
+        putNumeric(sample, "batteryHeaterPct", "22439E", 0)
+        putNumeric(sample, "pemCoolantTempC", "221C43", 0)
+        putNumeric(sample, "lifetimeChargeEnergyKwh", "224389", 1)
+        // Spelled out rather than looped: the dashboard's sample-contract test reads keys literally.
+        putNumeric(sample, "packSection1TempC", "2240D7", 0)
+        putNumeric(sample, "packSection2TempC", "2240D9", 0)
+        putNumeric(sample, "packSection3TempC", "2240DB", 0)
+        putNumeric(sample, "packSection4TempC", "2240DD", 0)
+        putNumeric(sample, "packSection5TempC", "2240DF", 0)
+        putNumeric(sample, "packSection6TempC", "2240E1", 0)
+    }
+
+    @Throws(JSONException::class)
+    private fun putOvmsStaleMs(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        putStaleMsForPresentValue(sample, "motorBTempC", "motorBTempStaleMs", "22368F", now)
+        putStaleMsForPresentValue(sample, "evRangeKm", "evRangeStaleMs", "2241A6", now)
+        putStaleMsForPresentValue(sample, "batteryHeaterPct", "batteryHeaterPctStaleMs", "22439E", now)
+        putStaleMsForPresentValue(sample, "pemCoolantTempC", "pemCoolantStaleMs", "221C43", now)
+        putStaleMsForPresentValue(
+            sample,
+            "lifetimeChargeEnergyKwh",
+            "lifetimeChargeEnergyStaleMs",
+            "224389",
+            now,
+        )
+        // The six sections are read as one block, so one freshness figure (the stalest) covers them.
+        val present =
+            PACK_SECTION_TEMP_COMMANDS.filterIndexed {
+                index,
+                _,
+                ->
+                sample.has("packSection${index + 1}TempC")
+            }
+        val stalest = present.mapNotNull { pidPolling.staleMsFor(it, now) }.maxOrNull()
+        if (stalest != null) {
+            sample.put("packSectionTempStaleMs", stalest)
+        }
     }
 
     @Throws(JSONException::class)
@@ -500,6 +563,42 @@ class LiveSampleReader(
             now,
         )
         putStaleMsForPresentValue(sample, "outsideTempC", "outsideTempStaleMs", "22801F", now)
+        putStaleMsForPresentValue(sample, "motorTempC", "motorTempStaleMs", "2228CB", now)
+        putStaleMsForPresentValue(sample, "inverterTempC", "inverterTempStaleMs", "221C26", now)
+        putStaleMsForPresentValue(sample, "displayedSocPct", "displayedSocStaleMs", "228334", now)
+        putStaleMsForPresentValue(sample, "packResistanceMohm", "packResistanceStaleMs", "2240E9", now)
+        putStaleMsForPresentValue(sample, "hvIsolationKohm", "hvIsolationStaleMs", "2243A6", now)
+        putStaleMsForPresentValue(sample, "chargerAcVoltage", "chargerAcStaleMs", "224368", now)
+    }
+
+    /**
+     * Tire pressures read from the body control module ([BcmTirePressure]), under the same keys the
+     * SW-CAN tire frame fills. A fresher SW-CAN value, when one is heard, replaces these later in
+     * the sample (see SwcanReadings.appendTo).
+     */
+    @Throws(JSONException::class)
+    private fun appendBcmTires(
+        sample: JSONObject,
+        now: Long,
+    ) {
+        val raw = pidPolling.lastRaw(BcmTirePressure.COMMAND)
+        val tires = BcmTirePressure.parse(raw) ?: return
+        if (!bcmTiresLogged) {
+            // Once per session: the raw reply and the chosen scale, so a drive log confirms both.
+            bcmTiresLogged = true
+            service.recorder.logEvent(
+                "bcm_tires_first_read",
+                "response",
+                ObdProtocol.summarize(raw),
+                "kpaPerCount",
+                tires.kpaPerCount.toString(),
+            )
+        }
+        tires.flKpa?.let { putRoundedNumeric(sample, "tirePressureFlKpa", it, 0) }
+        tires.frKpa?.let { putRoundedNumeric(sample, "tirePressureFrKpa", it, 0) }
+        tires.rlKpa?.let { putRoundedNumeric(sample, "tirePressureRlKpa", it, 0) }
+        tires.rrKpa?.let { putRoundedNumeric(sample, "tirePressureRrKpa", it, 0) }
+        pidPolling.putStaleMsIfTracked(sample, "tirePressureStaleMs", BcmTirePressure.COMMAND, now)
     }
 
     @Throws(JSONException::class)
@@ -637,6 +736,20 @@ class LiveSampleReader(
         }
     }
 
+    /**
+     * PRNDL: `prndlState` carries the decoded letter (`?` for a code we have never seen),
+     * `prndlRaw` the raw code so the [VoltGear] table can be confirmed from logs, and
+     * `gearConfidence` how sure that decode is.
+     */
+    @Throws(JSONException::class)
+    private fun putGear(sample: JSONObject) {
+        val raw = ObdProtocol.parseKnownValue("222889", pidPolling.lastRaw("222889"))?.valueNumeric ?: return
+        val gear = VoltGear.decode(raw.toInt()) ?: return
+        sample.put("prndlState", gear.letter)
+        sample.put("prndlRaw", gear.raw)
+        sample.put("gearConfidence", gear.confidence.wireName)
+    }
+
     @Throws(JSONException::class)
     private fun putDerivedChargerPower(sample: JSONObject) {
         val voltage = ObdProtocol.parseKnownValue("22436B", pidPolling.lastRaw("22436B"))
@@ -698,5 +811,8 @@ class LiveSampleReader(
     private companion object {
         /** Consecutive 010D 0xFF sentinels required before treating it as a plugged hint. */
         private const val SPEED_SENTINEL_PLUGGED_CYCLES = 2
+
+        /** BECM (7E7) pack-section temperature DIDs, sections 1-6 in order. */
+        private val PACK_SECTION_TEMP_COMMANDS = listOf("2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1")
     }
 }

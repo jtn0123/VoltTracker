@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.data.deleteOrLog
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
@@ -288,7 +289,7 @@ object BackupCrypto {
             }
             succeeded = true
         } finally {
-            if (!succeeded) dest.delete()
+            if (!succeeded) dest.deleteOrLog()
         }
     }
 

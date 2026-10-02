@@ -35,7 +35,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c # v6.0.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         if: matrix.language == 'java-kotlin'
         with:
           distribution: temurin
@@ -49,7 +49,7 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
 
-      - uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           languages: ${{ matrix.language }}
           build-mode: ${{ matrix.build-mode }}
@@ -59,8 +59,12 @@ jobs:
         working-directory: mobile/android
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon :app:assembleDebug
+          # CodeQL only needs the compiler invocations (its Kotlin/Java extractors hook
+          # javac/kotlinc), not dex/merge/package — assembleDebug spent ~1-1.5 min on those.
+          # --no-build-cache is load-bearing: a FROM-CACHE compile task never runs the
+          # compiler, so CodeQL would silently extract no Java/Kotlin at all.
+          ./gradlew --no-daemon --no-build-cache :app:compileDebugKotlin :app:compileDebugJavaWithJavac
 
-      - uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4
+      - uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4
         with:
           category: "/language:${{ matrix.language }}"

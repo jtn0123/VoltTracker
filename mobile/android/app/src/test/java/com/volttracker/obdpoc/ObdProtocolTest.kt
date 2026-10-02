@@ -313,6 +313,29 @@ class ObdProtocolTest {
     }
 
     @Test
+    fun lastChargeEnergyNotAvailableSentinelDecodesAsNoValue() {
+        // Regression: OVMS treats 0xFFFF as "not available"; it used to decode as 655,350 Wh.
+        assertNull(ObdProtocol.parseKnownValue("22437D", "62437DFFFF"))
+        // The largest real word just below the sentinel still decodes.
+        val nearMax = ObdProtocol.parseKnownValue("22437D", "62437DFFFE")?.valueNumeric
+        assertEquals(655_340.0, nearMax ?: Double.NaN, 0.01)
+    }
+
+    @Test
+    fun byteOver2_55PercentPidsReachExactlyOneHundredAtFullScale() {
+        // Regression: A / 2.55 at 0xFF floated to 100.00000000000001 and failed the 0–100 % range
+        // check, dropping a legitimate full-scale reading. 100 / 255 lands exactly on 100.
+        for (command in listOf("22435F", "22433F", "22439E")) {
+            val reply = "6" + command.substring(1)
+            val full = ObdProtocol.parseKnownValue(command, reply + "FF")
+            assertNotNull("$command at 0xFF must decode", full)
+            assertEquals(command, 100.0, full?.valueNumeric ?: Double.NaN, 0.0)
+            val empty = ObdProtocol.parseKnownValue(command, reply + "00")?.valueNumeric
+            assertEquals(command, 0.0, empty ?: Double.NaN, 0.0)
+        }
+    }
+
+    @Test
     fun chargeAndSocDetailPidsDecode() {
         val count = ObdProtocol.parseKnownValue("2243A5", "7EC056243A506C9")
         assertNotNull(count)
@@ -526,6 +549,34 @@ class ObdProtocolTest {
         val pedal = ObdProtocol.parseKnownValue("224501", "62450104D2")
         assertNotNull(pedal)
         assertEquals(12.34, pedal!!.valueNumeric!!, 0.01)
+    }
+
+    @Test
+    fun ovmsPollListPidsDecode() {
+        // Scales from the OVMS Volt/Ampera module (vehicle_voltampera.cpp, tested on a MY2017).
+        val motorB = ObdProtocol.parseKnownValue("22368F", "62368F58")
+        assertEquals("motor B temperature", motorB!!.name)
+        assertEquals(48.0, motorB.valueNumeric!!, 0.01)
+
+        // Real reply seen on the target car at a 14 % SOC: the cluster's EV range bottoms out at 0.
+        assertEquals(0.0, ObdProtocol.parseKnownValue("2241A6", "6241A60000")!!.valueNumeric!!, 0.01)
+        val range = ObdProtocol.parseKnownValue("2241A6", "6241A61400")
+        assertEquals("km", range!!.unit)
+        assertEquals(80.0, range.valueNumeric!!, 0.01) // 0x1400 / 64
+        assertNull("an implausible range is decode garbage", ObdProtocol.parseKnownValue("2241A6", "6241A6FFFF"))
+
+        assertEquals(100.0, ObdProtocol.parseKnownValue("22439E", "62439EFF")!!.valueNumeric!!, 0.01)
+        assertEquals(50.2, ObdProtocol.parseKnownValue("22439E", "62439E80")!!.valueNumeric!!, 0.1)
+
+        // Real reply seen on the target car: 0x00218A49 Wh = 2198.089 kWh lifetime.
+        val lifetime = ObdProtocol.parseKnownValue("224389", "62438900218A49")
+        assertEquals("lifetime charge energy", lifetime!!.name)
+        assertEquals("kWh", lifetime.unit)
+        assertEquals(2198.089, lifetime.valueNumeric!!, 0.001)
+        assertNull("a 4-byte DID needs all four bytes", ObdProtocol.parseKnownValue("224389", "624389218A"))
+
+        val pem = ObdProtocol.parseKnownValue("221C43", "621C4350")
+        assertEquals(40.0, pem!!.valueNumeric!!, 0.01)
     }
 
     @Test
@@ -1198,6 +1249,37 @@ class ObdProtocolTest {
         // Real-shape ELM327 response to "010D0C": 41 0D 50 (speed=80 kph) + 41 0C 0B B8 (RPM=750).
         val response = "41 0D 50 41 0C 0B B8\r\r>"
         assertTrue(ObdProtocol.responseContainsAllMode01Pids(response, listOf("0D", "0C")))
+    }
+
+    @Test
+    fun splitMode01Batch_readsTheJ1979MultiPidReplyTheVoltSends() {
+        // Real capture from the target car: "010D0C" -> one 41, then PID/data pairs.
+        val frames = ObdMode01Batch.split("010D0C\r410D100C0000\r\r>", listOf("0D", "0C"))
+        assertEquals(mapOf("0D" to "410D10", "0C" to "410C0000"), frames)
+        assertEquals(16, ObdProtocol.parseSpeedKph(frames!!.getValue("0D")))
+        assertEquals(0f, ObdProtocol.parseRpm(frames.getValue("0C"))!!, 0.01f)
+    }
+
+    @Test
+    fun splitMode01Batch_reassemblesAMultiFrameReply() {
+        val response = "008\r0: 41 0D 32 0C 0B B8\r1: 49 80 00 00 00 00 00\r\r>"
+        val frames = ObdMode01Batch.split(response, listOf("0D", "0C", "49"))
+        assertEquals(mapOf("0D" to "410D32", "0C" to "410C0BB8", "49" to "414980"), frames)
+    }
+
+    @Test
+    fun splitMode01Batch_keepsPerPidMarkerRepliesWorking() {
+        val frames = ObdMode01Batch.split("41 0D 50 41 0C 0B B8\r\r>", listOf("0D", "0C"))
+        assertEquals(mapOf("0D" to "410D50", "0C" to "410C0BB8"), frames)
+    }
+
+    @Test
+    fun splitMode01Batch_missingOrTruncatedPidIsNull() {
+        assertNull(ObdMode01Batch.split("410D10\r>", listOf("0D", "0C")))
+        assertNull(ObdMode01Batch.split("410D100C00\r>", listOf("0D", "0C")))
+        assertNull(ObdMode01Batch.split("NO DATA\r>", listOf("0D", "0C")))
+        assertNull(ObdMode01Batch.split(null, listOf("0D")))
+        assertNull(ObdMode01Batch.split("410D10", listOf()))
     }
 
     @Test

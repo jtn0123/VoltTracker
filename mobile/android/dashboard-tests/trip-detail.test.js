@@ -225,9 +225,12 @@ describe('per-trip detail sheet (M7)', () => {
     seed();
     document.querySelector('#mapSessionList [data-trip-detail]').click();
     expect(document.getElementById('tripDetailSheet').hidden).toBe(false);
+    // Lifts .app's transform so the fixed sheet is viewport-anchored (base.css).
+    expect(document.body.classList.contains('trip-detail-active')).toBe(true);
 
     VD.handleAction('closeTripDetail');
     expect(document.getElementById('tripDetailSheet').hidden).toBe(true);
+    expect(document.body.classList.contains('trip-detail-active')).toBe(false);
   });
 
   it('returns false (and does not open) for an unknown route key', () => {
@@ -316,6 +319,82 @@ describe('per-trip detail sheet (M7)', () => {
       // Only a text node + a real <button>; no smuggled markup.
       expect(note.querySelector('script')).toBeNull();
       expect(note.querySelector('button[data-nav-jump="settings"]')).not.toBeNull();
+    });
+  });
+  describe('in-trip Park stops (gear-aware trips)', () => {
+    function openWith(parkStops, points) {
+      const data = driveStorage({});
+      const route = data.storage.recentRoutes[0];
+      if (points) route.points = points;
+      if (parkStops) route.parkStops = parkStops;
+      VD.state.trips = data.trips;
+      VD.state.storage = data.storage;
+      VD.renderMap();
+      VD.openTripDetail(data.trips[0].id);
+      return Array.from(document.querySelectorAll('#tripDetailStops .trip-detail-stop-row'));
+    }
+
+    it('lists a native Park stop as "Stopped N min" in Park', () => {
+      const rows = openWith([{ startMs: BASE + 60_000, endMs: BASE + 60_000 + 4.5 * 60_000, durationMs: 4.5 * 60_000, doorOpened: false }]);
+      expect(document.getElementById('tripDetailStopsCard').hidden).toBe(false);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].dataset.stopKind).toBe('park');
+      expect(rows[0].querySelector('.trip-detail-stop-name').textContent).toMatch(/^Stopped 5 min · /);
+      expect(rows[0].querySelector('b').textContent).toBe('in Park');
+    });
+
+    it('keeps older trips without Park stops exactly as before (GPS stops only)', () => {
+      const rows = openWith(undefined);
+      expect(rows).toHaveLength(0);
+      expect(document.getElementById('tripDetailStopsCard').hidden).toBe(true);
+    });
+
+    it('replaces the GPS stop it overlaps instead of listing the stop twice', () => {
+      // Moving, then 3 stationary minutes, then moving again: GPS detects one stop.
+      const points = [];
+      let lat = 34.05;
+      for (let i = 0; i < 16; i += 1) {
+        const parked = i >= 5 && i <= 11;
+        if (!parked) lat += 0.003;
+        points.push({ lat, lng: -118.25, atMs: BASE + i * 30_000, speedMps: parked ? 0 : 20, altM: 100, eff: 3.5 });
+      }
+      const gpsOnly = openWith(undefined, points.map((p) => ({ ...p })));
+      expect(gpsOnly).toHaveLength(1);
+      expect(gpsOnly[0].dataset.stopKind).toBeUndefined();
+      expect(gpsOnly[0].querySelector('.trip-detail-stop-name').textContent).toMatch(/^Stop 1 · /);
+
+      const merged = openWith(
+        [{ startMs: BASE + 5 * 30_000, endMs: BASE + 11 * 30_000, durationMs: 6 * 30_000, doorOpened: false }],
+        points.map((p) => ({ ...p })),
+      );
+      expect(merged).toHaveLength(1);
+      expect(merged[0].dataset.stopKind).toBe('park');
+      expect(merged[0].querySelector('.trip-detail-stop-name').textContent).toMatch(/^Stopped 3 min · /);
+    });
+
+    it('numbers the GPS stops consecutively around a Park stop', () => {
+      // Three stationary spells; the middle one is a gear-confirmed Park stop.
+      const points = [];
+      let lat = 34.05;
+      for (let i = 0; i < 40; i += 1) {
+        const parked = (i >= 5 && i <= 11) || (i >= 17 && i <= 23) || (i >= 29 && i <= 35);
+        if (!parked) lat += 0.003;
+        points.push({ lat, lng: -118.25, atMs: BASE + i * 30_000, speedMps: parked ? 0 : 20, altM: 100, eff: 3.5 });
+      }
+      const rows = openWith(
+        [{ startMs: BASE + 17 * 30_000, endMs: BASE + 23 * 30_000, durationMs: 6 * 30_000, doorOpened: false }],
+        points,
+      );
+      const names = rows.map((row) => row.querySelector('.trip-detail-stop-name').textContent);
+      expect(names).toHaveLength(3);
+      expect(names[0]).toMatch(/^Stop 1 · /);
+      expect(names[1]).toMatch(/^Stopped 3 min · /);
+      expect(names[2]).toMatch(/^Stop 2 · /);
+    });
+
+    it('ignores malformed Park stop entries', () => {
+      const rows = openWith([null, { startMs: 'x' }, { startMs: BASE + 60_000, endMs: BASE }]);
+      expect(rows).toHaveLength(0);
     });
   });
 });

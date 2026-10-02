@@ -78,7 +78,86 @@ class DemoPollingLoopTest {
     fun chargerPowerIsLevel2WhileChargingAndZeroWhileDriving() {
         assertEquals(0.0, DemoPollingLoop.demoChargerPowerKw(30.0), 1e-9)
         val charging = DemoPollingLoop.demoChargerPowerKw(75.0)
-        assertTrue("expected a plausible L2 draw, got $charging", charging in 6.5..8.0)
+        assertTrue("expected a plausible L2 draw, got $charging", charging in 3.0..4.0)
         assertEquals(0.0, DemoPollingLoop.demoChargerPowerKw(95.0), 1e-9)
+    }
+
+    @Test
+    fun driveArcRunsEvThenGasThenBrakesAndParksBeforeCharging() {
+        assertEquals(DemoLeg.EV, DemoPollingLoop.legAt(0.0))
+        assertEquals(DemoLeg.EV, DemoPollingLoop.legAt(35.9))
+        assertEquals(DemoLeg.GAS, DemoPollingLoop.legAt(36.0))
+        assertEquals(DemoLeg.BRAKING, DemoPollingLoop.legAt(48.0))
+        assertEquals(DemoLeg.PARKED, DemoPollingLoop.legAt(54.0))
+        assertEquals(DemoLeg.CHARGING, DemoPollingLoop.legAt(60.0))
+        // The next cycle starts over in EV.
+        assertEquals(DemoLeg.EV, DemoPollingLoop.legAt(95.0))
+        assertEquals("driving_gas", DemoLeg.GAS.vehicleState)
+        assertEquals("parked", DemoLeg.PARKED.vehicleState)
+    }
+
+    @Test
+    fun engineRunsOnlyOnTheGasLeg() {
+        for (second in 0 until 90) {
+            val t = second.toDouble()
+            val rpm = DemoPollingLoop.demoRpm(t)
+            if (DemoPollingLoop.legAt(t) == DemoLeg.GAS) {
+                assertTrue("rpm at $t", rpm > 500)
+            } else {
+                assertEquals("rpm at $t", 0L, rpm)
+            }
+        }
+    }
+
+    @Test
+    fun evLegDipsIntoRegenAndBrakingRegeneratesToAStop() {
+        val evPower = (0 until 36).map { DemoPollingLoop.demoPowerKw(it.toDouble()) }
+        assertTrue("EV leg must show regen dips", evPower.any { it < -0.5 })
+        assertTrue("EV leg must mostly drive", evPower.count { it > 0 } > evPower.size / 2)
+        val brakingSpeeds = (48..54).map { DemoPollingLoop.demoSpeedKph(it.toDouble()) }
+        assertTrue(
+            "braking must slow monotonically: $brakingSpeeds",
+            brakingSpeeds.zipWithNext().all { (a, b) ->
+                b <= a
+            },
+        )
+        assertEquals(0L, brakingSpeeds.last())
+        for (second in 48 until 54) {
+            assertTrue(DemoPollingLoop.demoPowerKw(second.toDouble()) < -0.5)
+            assertTrue(DemoPollingLoop.demoSpeedKph(second.toDouble()) > 0)
+        }
+    }
+
+    @Test
+    fun parkedAndChargingAreStationary() {
+        for (second in 54 until 90) {
+            assertEquals(0L, DemoPollingLoop.demoSpeedKph(second.toDouble()))
+        }
+        assertEquals(0.0, DemoPollingLoop.demoPowerKw(56.0), 1e-9)
+        assertEquals(0.0, DemoPollingLoop.demoPowerKw(70.0), 1e-9)
+        // The map clock freezes from the park onward and resumes with the next drive.
+        assertEquals(54.0, DemoPollingLoop.routeSeconds(58.0), 1e-9)
+        assertEquals(54.0, DemoPollingLoop.routeSeconds(89.0), 1e-9)
+        assertEquals(64.0, DemoPollingLoop.routeSeconds(100.0), 1e-9)
+    }
+
+    @Test
+    fun mapMarkerGroundSpeedMatchesTheSpeedometer() {
+        // The marker's own speed, sampled around the loop, must sit in the 25-47 mph band the
+        // speedometer shows (the old loop covered it at ~79 mph, so the map's average disagreed).
+        val metersPerDegree = 111_320.0
+        for (routeT in listOf(0.0, 20.0, 45.0, 90.0, 140.0)) {
+            val dLat = DemoPollingLoop.demoLatitude(routeT + 1) - DemoPollingLoop.demoLatitude(routeT)
+            val dLon =
+                (DemoPollingLoop.demoLongitude(routeT + 1) - DemoPollingLoop.demoLongitude(routeT)) *
+                    Math.cos(Math.toRadians(34.0522))
+            val mph = Math.hypot(dLat, dLon) * metersPerDegree * 2.23694
+            assertTrue("marker speed $mph mph at $routeT s", mph in 25.0..50.0)
+        }
+    }
+
+    @Test
+    fun demoCellSpreadIsSteadyAndSmall() {
+        assertEquals(14, DemoPollingLoop.DEMO_CELL_SPREAD_MV)
     }
 }

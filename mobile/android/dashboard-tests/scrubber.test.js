@@ -267,6 +267,31 @@ describe('scrubber.ts', () => {
     return null;
   }
 
+  it('omits the Elevation, Grade and Battery chips when the route has no such data', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    const route = withTwoPointRoute();
+    VD.renderScrubber(route);
+    VD.scrubAtLatLng(route.points[1].lat, route.points[1].lng);
+    const labels = [...document.querySelectorAll('#scrubReadout > div .kicker')].map((k) => k.textContent);
+    expect(labels.length).toBeGreaterThan(0);
+    for (const gone of ['Elevation', 'Grade', 'Battery']) {
+      expect(labels.some((l) => l.startsWith(gone))).toBe(false);
+    }
+    expect(document.getElementById('scrubReadout').dataset.cols).toBe(String(labels.length));
+  });
+
+  it('keeps the Elevation and Battery chips when the route carries them', () => {
+    const VD = window.VoltDashboard;
+    giveChartWidth();
+    const route = withGappyRoute();
+    VD.renderScrubber(route);
+    VD.scrubAtLatLng(route.points[2].lat, route.points[2].lng);
+    expect(readoutValue('Battery')).not.toBeNull();
+    const labels = [...document.querySelectorAll('#scrubReadout > div .kicker')].map((k) => k.textContent);
+    expect(labels.some((l) => l.startsWith('Elevation'))).toBe(true);
+  });
+
   it('interpolates SOC at an interior point even though socTrack only has endpoints', () => {
     const VD = window.VoltDashboard;
     const route = withGappyRoute();
@@ -356,7 +381,7 @@ describe('scrubber.ts', () => {
     giveChartWidth();
     VD.renderScrubber(withNullEffRoute());
     // The eff trace is the lime path in the combo chart.
-    const effPath = document.querySelector('#scrubChart svg path[stroke="#b8e63b"]');
+    const effPath = document.querySelector('#scrubChart svg path[stroke="#5fd37a"]');
     expect(effPath).not.toBeNull();
     const d = effPath.getAttribute('d');
     // Points 1-2 are null: the line breaks and restarts (two M commands),
@@ -375,7 +400,7 @@ describe('scrubber.ts', () => {
     giveChartWidth();
     VD.renderScrubber(route);
     // Number(null) === 0 used to flip scrubHasEff on for all-null routes.
-    expect(document.querySelector('#scrubChart svg path[stroke="#b8e63b"]')).toBeNull();
+    expect(document.querySelector('#scrubChart svg path[stroke="#5fd37a"]')).toBeNull();
   });
 
   // ----- resize must re-bind the rebuilt detail tracks ------------------------

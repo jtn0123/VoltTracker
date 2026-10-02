@@ -29,7 +29,7 @@ import java.io.File
 @Config(sdk = [34])
 class DiagnosticsHostDelegateTest {
     private var controller: ActivityController<HarnessActivity>? = null
-    private var bridge: TroubleshooterBridge? = null
+    private var bridge: TroubleshooterBridge<*>? = null
     private var delegate: DiagnosticsHostDelegate? = null
     private var troubleshooterReads = 0
     private var openSetupGuideCalls = 0

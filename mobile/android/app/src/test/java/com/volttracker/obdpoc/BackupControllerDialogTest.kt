@@ -10,6 +10,7 @@ import android.os.Bundle
 import android.os.Looper
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.VoltTrackerDb
+import com.volttracker.obdpoc.data.deleteOrLog
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -106,7 +107,7 @@ class BackupControllerDialogTest {
         ddl: SQLiteDatabase.() -> Unit,
     ): File {
         val file = File(activity.cacheDir, fileName)
-        file.delete()
+        file.deleteOrLog()
         val db = SQLiteDatabase.openOrCreateDatabase(file.path, null)
         try {
             db.ddl()
@@ -315,7 +316,7 @@ class BackupControllerDialogTest {
     @Test
     fun missingRestoreUriPublishesOpenFailedWithoutOfferingDialog() {
         val missing = File(activity.cacheDir, "restore-source-missing.db")
-        missing.delete()
+        missing.deleteOrLog()
         val data = Intent().setData(Uri.fromFile(missing))
 
         activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
@@ -348,7 +349,7 @@ class BackupControllerDialogTest {
         )
         assertEquals("Restore failed", activity.restoreProgress.last().title)
         assertNull("newer backups must not reach the restore-mode dialog", ShadowAlertDialog.getLatestAlertDialog())
-        newer.delete()
+        newer.deleteOrLog()
     }
 
     @Test
@@ -370,7 +371,7 @@ class BackupControllerDialogTest {
         )
         assertEquals("blocked", activity.restoreProgress.last().tone)
         assertNull("failed migration must not offer merge/replace choices", ShadowAlertDialog.getLatestAlertDialog())
-        brokenLegacy.delete()
+        brokenLegacy.deleteOrLog()
     }
 
     @Test
@@ -391,7 +392,7 @@ class BackupControllerDialogTest {
         )
         assertEquals("Restore failed", activity.restoreProgress.last().title)
         assertNull("decrypt failures must not offer merge/replace choices", ShadowAlertDialog.getLatestAlertDialog())
-        backup.delete()
+        backup.deleteOrLog()
     }
 
     @Test

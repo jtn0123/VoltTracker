@@ -234,36 +234,21 @@ open class ElmConnection
             var responseCapped = false
             while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
                 val available = inputStream.available()
-                if (available > 0) {
-                    val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
-                    if (read > 0) {
-                        lastByteAtMs = clock.nowMs()
-                        val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
-                        val remaining = MAX_RESPONSE_CHARS - response.length
-                        if (remaining <= 0) {
-                            responseCapped = true
-                            break
-                        }
-                        response.append(chunk, 0, minOf(chunk.length, remaining))
-                        if (chunk.length > remaining || response.length >= MAX_RESPONSE_CHARS) {
-                            responseCapped = true
-                            break
-                        }
-                        if (chunk.indexOf('>') >= 0) {
-                            break
-                        }
-                    }
-                } else {
-                    // The '>' prompt hasn't arrived. If a response already came in and the adapter has
-                    // since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
-                    // almost certainly dropped the prompt — stop here instead of burning the rest of
-                    // the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
-                    if (response.isNotEmpty() && clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS) {
+                if (available <= 0) {
+                    if (promptLikelyDropped(response, command, lastByteAtMs) || !sleep(25)) {
                         break
                     }
-                    if (!sleep(25)) {
-                        break
-                    }
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read <= 0) {
+                    continue
+                }
+                lastByteAtMs = clock.nowMs()
+                val step = appendTransactChunk(response, String(buffer, 0, read, StandardCharsets.US_ASCII))
+                responseCapped = step == TransactStep.CAPPED
+                if (step != TransactStep.MORE) {
+                    break
                 }
             }
             val text = response.toString()
@@ -275,6 +260,120 @@ open class ElmConnection
                         clock.nowMs() >= deadline
                 )
             return text
+        }
+
+        private enum class TransactStep { MORE, PROMPT, CAPPED }
+
+        /** Appends [chunk] up to the response cap and says whether [transact] should keep reading. */
+        private fun appendTransactChunk(
+            response: StringBuilder,
+            chunk: String,
+        ): TransactStep {
+            val remaining = MAX_RESPONSE_CHARS - response.length
+            if (remaining <= 0) {
+                return TransactStep.CAPPED
+            }
+            response.append(chunk, 0, minOf(chunk.length, remaining))
+            return when {
+                chunk.length > remaining || response.length >= MAX_RESPONSE_CHARS -> TransactStep.CAPPED
+                chunk.indexOf('>') >= 0 -> TransactStep.PROMPT
+                else -> TransactStep.MORE
+            }
+        }
+
+        /**
+         * The '>' prompt hasn't arrived. If a response already came in and the adapter has
+         * since gone quiet for longer than any normal inter-frame gap, the ELM327 v1.4b
+         * almost certainly dropped the prompt — stop here instead of burning the rest of
+         * the timeout, so the caller's prompt-recovery runs now (saves ~1 s+ per drop).
+         * Only real reply text starts the quiet clock: with echo on (e.g. ATE0 not yet
+         * applied) the echoed command, or a "SEARCHING..." status, arrives at once while a
+         * busy ECU can take 300 ms+ to answer. Cutting there loses the value and lets the
+         * late reply bleed into the next command.
+         */
+        private fun promptLikelyDropped(
+            response: CharSequence,
+            command: String,
+            lastByteAtMs: Long,
+        ): Boolean =
+            hasReplyBeyondEcho(response, command) &&
+                clock.nowMs() - lastByteAtMs >= NO_PROMPT_QUIET_PERIOD_MS
+
+        /** Result of a [monitor] call. */
+        class MonitorResult(
+            /** Everything the adapter printed, including any `STOPPED` marker and `>` prompt. */
+            @JvmField val text: String,
+            /** True when the adapter returned to its `>` prompt (on its own or after the stop byte). */
+            @JvmField val gotPrompt: Boolean,
+            /** True when the adapter ended monitoring by itself before the listen window closed. */
+            @JvmField val endedEarly: Boolean,
+            /** True when the output hit the response cap and was cut short. */
+            @JvmField val capped: Boolean,
+        )
+
+        /**
+         * Runs an adapter monitor command (OBDLink `STM`) for [listenMs], then stops it the way the
+         * OBDLink manual prescribes — send any single character, then wait up to [stopTimeoutMs]
+         * for `STOPPED` and the `>` prompt. The stop byte is consumed by the adapter and never
+         * reaches the vehicle bus. Output is bounded like [transact].
+         */
+        @Throws(IOException::class)
+        open fun monitor(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            keepWaiting: KeepWaiting,
+        ): MonitorResult {
+            val out = output ?: throw IOException("Adapter stream is not open")
+            val inputStream = input ?: throw IOException("Adapter stream is not open")
+            lastTransactTruncated = false
+            drainInput()
+            out.write((command + "\r").toByteArray(StandardCharsets.US_ASCII))
+            out.flush()
+            val response = StringBuilder()
+            responseCapped = false
+            if (readUntilPrompt(inputStream, response, clock.nowMs() + maxOf(0L, listenMs), keepWaiting)) {
+                lastTransactTruncated = responseCapped
+                return MonitorResult(response.toString(), true, true, responseCapped)
+            }
+            out.write('\r'.code)
+            out.flush()
+            val stopped = readUntilPrompt(inputStream, response, clock.nowMs() + maxOf(0L, stopTimeoutMs), keepWaiting)
+            lastTransactTruncated = responseCapped
+            return MonitorResult(response.toString(), stopped, false, responseCapped)
+        }
+
+        // Set by readUntilPrompt when output past MAX_RESPONSE_CHARS was discarded.
+        private var responseCapped = false
+
+        /**
+         * Appends adapter output to [response] (discarding anything past the cap, but still reading
+         * so the prompt is found) until the `>` prompt, [deadline], or [keepWaiting] going false.
+         * Returns true when the prompt arrived.
+         */
+        private fun readUntilPrompt(
+            inputStream: InputStream,
+            response: StringBuilder,
+            deadline: Long,
+            keepWaiting: KeepWaiting,
+        ): Boolean {
+            val buffer = ByteArray(128)
+            while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (!sleep(20)) break
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                if (read == 0) continue
+                val chunk = String(buffer, 0, read, StandardCharsets.US_ASCII)
+                val remaining = maxOf(0, MAX_RESPONSE_CHARS - response.length)
+                response.append(chunk, 0, minOf(chunk.length, remaining))
+                if (chunk.length > remaining) responseCapped = true
+                if (chunk.indexOf('>') >= 0) return true
+            }
+            return false
         }
 
         /** Sends the ELM escape byte and drains whatever the adapter echoes back. */
@@ -326,18 +425,39 @@ open class ElmConnection
             }
         }
 
-        private companion object {
+        companion object {
             // Once a response has arrived, this much continued silence with still no '>' prompt means
             // the ELM327 v1.4b dropped the prompt (a known quirk). It is far longer than a normal
             // inter-frame gap (<100 ms), so a legitimate slow multi-frame reply is not truncated; it
             // just lets prompt-recovery start ~1 s+ sooner than waiting out the full command timeout.
-            const val NO_PROMPT_QUIET_PERIOD_MS = 250L
+            // It must also outlast ATST64 (400 ms): right after an ATSP the adaptive timer restarts
+            // at that ceiling, so an OBDLink holds its prompt up to 400 ms after the last frame.
+            // Cutting at 250 ms turned every post-SW-CAN restore into 2-4 ~1 s recoveries on the car.
+            private const val NO_PROMPT_QUIET_PERIOD_MS = 500L
 
             // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
             // Keep a single command response bounded so it cannot exhaust the app process heap.
-            const val MAX_RESPONSE_CHARS = 64 * 1024
+            private const val MAX_RESPONSE_CHARS = 64 * 1024
 
-            fun sleep(millis: Long): Boolean =
+            /** True when [response] holds more than the echoed [command] and ELM status lines. */
+            @VisibleForTesting
+            internal fun hasReplyBeyondEcho(
+                response: CharSequence,
+                command: String,
+            ): Boolean {
+                var rest = response.trimStart()
+                if (rest.startsWith(command, ignoreCase = true)) {
+                    rest = rest.substring(command.length)
+                }
+                return rest
+                    .toString()
+                    .replace(SEARCHING_STATUS, "", ignoreCase = true)
+                    .any { !it.isWhitespace() }
+            }
+
+            private const val SEARCHING_STATUS = "SEARCHING..."
+
+            private fun sleep(millis: Long): Boolean =
                 try {
                     Thread.sleep(millis)
                     true
