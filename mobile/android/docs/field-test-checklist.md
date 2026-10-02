@@ -3,6 +3,10 @@
 Use this before a real-car or adapter test so runtime findings become useful
 regression evidence instead of one-off notes.
 
+For release dogfooding, the driver/tester must be a non-developer and the
+observer must not provide tap-by-tap help. Record hesitation and wrong turns;
+do not silently coach around them.
+
 ## Before The Drive
 
 - Record app version, branch/commit, Android version, WebView version, phone model,
@@ -31,6 +35,9 @@ regression evidence instead of one-off notes.
 - Record whether the issue reproduced once or repeatedly.
 - Convert any protocol/runtime anomaly into a sanitized fixture or note why it
   cannot safely be stored.
+- Record whether setup, first drive, trip review, charge review, and code scan
+  were completed without facilitator help. Re-test every repeated wrong turn
+  after the UI or copy is fixed.
 
 ## Artifact Names
 

@@ -12,6 +12,7 @@ python "${ROOT}/.github/scripts/semantic_release_dry_run.py"
 echo "== release candidate evidence =="
 REQUIRE_RELEASE_CANDIDATE_EVIDENCE="${REQUIRE_RELEASE_CANDIDATE_EVIDENCE:-1}" \
   REQUIRE_READY_TO_TAG="${REQUIRE_READY_TO_TAG:-1}" \
+  REQUIRE_END_USER_DOGFOOD="${REQUIRE_END_USER_DOGFOOD:-1}" \
   "${ROOT}/scripts/check-release-candidate-evidence.sh"
 
 echo "== dashboard dependency audits =="

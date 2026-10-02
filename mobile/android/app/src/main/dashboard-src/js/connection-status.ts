@@ -9,6 +9,7 @@ import type { DataStateValue } from "./dataset-state";
 import { resolveDeviceLocale, t } from "./i18n";
 import { parsePayload, state } from "./core";
 import { units } from "./prefs";
+import { deriveProductState, renderProductStatusBadge } from "./product-state";
 import { formatDuration, formatWhen, gpsText } from "./telemetry";
 // VD is imported (never window-read) for the setStatus/updateTelemetry observer
 // wraps below — those must re-read and re-assign the live registry slots so
@@ -181,6 +182,7 @@ type RecoveryView = {
 // values are checked by setDataState at the call site.
 function deriveRecoveryView(): RecoveryView {
   const state = dashboardState();
+  const product = deriveProductState(state);
   const app: VoltAppState = state.appState || {};
   const adapter: VoltAdapterState = app.adapter || {};
   const session: VoltSessionState = app.session || {};
@@ -225,18 +227,18 @@ function deriveRecoveryView(): RecoveryView {
   // real adapter failure) both surface the blocker, not the demo banner.
   if (blockedState && !btPermNeeded && !btOff) {
     return {
-      tone: "bad", state: "blocked", kicker: "Needs attention",
+      tone: "bad", state: "blocked", kicker: product.label,
       title: "Adapter isn't responding",
-      next: String(status.detail || "Check the OBD dongle is seated and the car is awake, then try again."),
-      pill: "blocked", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+      next: product.detail,
+      pill: "attention", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
     };
   }
   if (demo) {
     return {
-      tone: "demo", state: "demo", kicker: "Demo / Testing",
-      title: "Demo / Testing is running",
-      next: "Sample data is isolated from your real OBD history. Stop it any time to return to live data.",
-      pill: "demo", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+      tone: "demo", state: "demo", kicker: product.label,
+      title: "Explore with sample data",
+      next: product.detail,
+      pill: "preview", bt, source, actionLabel: "View preview Drive", actionTarget: "drive"
     };
   }
   if (btPermNeeded) {
@@ -257,30 +259,38 @@ function deriveRecoveryView(): RecoveryView {
   }
   if (connecting) {
     return {
-      tone: "live", state: "connecting", kicker: "Working",
-      title: "Connecting to adapter…",
-      next: "Handshaking with the OBD adapter. This usually takes a few seconds.",
+      tone: "live", state: "connecting", kicker: product.label,
+      title: "Preparing live logging…",
+      next: product.detail,
       pill: "connecting", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    };
+  }
+  if (product.key === "needs-attention" && product.freshness === "stale") {
+    return {
+      tone: "warn", state: "stale", kicker: product.label,
+      title: "New car readings have stopped",
+      next: product.detail,
+      pill: "attention", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
     };
   }
   if (connected && samples > 0) {
     return {
-      tone: "ok", state: "live", kicker: "Healthy",
+      tone: "ok", state: "live", kicker: product.label,
       title: "Live data is flowing",
       // Keep the live sample count OUT of this string: #diagRecoveryNext is an
       // aria-live="polite" region and view.next feeds the render signature, so
       // embedding the ~1 Hz count re-announced the whole panel every second to a
       // screen reader while driving. The running count is shown on the samples tile.
-      next: "The consoles below show live signal detail.",
-      pill: "live", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+      next: product.detail,
+      pill: "recording", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
     };
   }
   if (connected) {
     return {
-      tone: "live", state: "waiting", kicker: "Connected",
-      title: "Connected — waiting for data",
-      next: "Adapter is linked. Start driving, or run a scan, to see live signals.",
-      pill: "waiting", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
+      tone: "live", state: "waiting", kicker: product.label,
+      title: "Adapter connected",
+      next: product.detail,
+      pill: "ready", bt, source, actionLabel: "View live Drive", actionTarget: "drive"
     };
   }
   if (voltage != null && voltage <= 12.7) {
@@ -300,17 +310,17 @@ function deriveRecoveryView(): RecoveryView {
         ? adapterName
         : String(lastDevice.address || adapter.address || "") || "Your last adapter";
     return {
-      tone: "ok", state: "idle", kicker: "Ready",
-      title: "Ready to reconnect",
+      tone: "ok", state: "idle", kicker: product.label,
+      title: "Your adapter is remembered",
       next: `${rememberedName} is remembered. Reconnect when you want live OBD logging.`,
-      pill: "idle", bt, source, actionLabel: "Reconnect in Settings", actionTarget: "settings"
+      pill: "ready", bt, source, actionLabel: "Reconnect in Settings", actionTarget: "settings"
     };
   }
   return {
-    tone: "idle", state: "idle", kicker: "Get started",
+    tone: "idle", state: "idle", kicker: product.label,
     title: "No adapter connected yet",
-    next: "Connect an OBD adapter in Settings to start live logging — or run Demo / Testing below to explore the app with sample data.",
-    pill: "idle", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
+    next: product.detail,
+    pill: "ready", bt, source, actionLabel: "Open connection settings", actionTarget: "settings"
   };
 }
 
@@ -378,8 +388,6 @@ function adapterNameForRecovery(): string {
 type StatusRow = [string, string];
 
 const ACTIVE_TRIP_STATES = ["connected", "connecting", "initializing", "scanning", "scan-complete", "demo"];
-const GLOBAL_STALE_THRESHOLD_MS = 3000;
-
 let popoverDismiss: AbortController | null = null;
 // Contains Tab within the popover and restores focus to the opening badge on close.
 let popoverOpener: HTMLElement | null = null;
@@ -468,25 +476,7 @@ function sampleTimestampMs(): number {
 
 function renderGlobalFreshness() {
   const state = dashboardState();
-  const status = state.status || {};
-  const stateName = String(status.state || "idle");
-  const active = Boolean(state.demoActive) || ACTIVE_TRIP_STATES.includes(stateName.toLowerCase());
-  const sampleAt = sampleTimestampMs();
-  const ageMs = sampleAt > 0 ? Math.max(0, Date.now() - sampleAt) : 0;
-  const freshness = !active ? "idle" : sampleAt <= 0 ? "waiting" : ageMs > GLOBAL_STALE_THRESHOLD_MS ? "stale" : "fresh";
-  const badge = el("stateBadge");
-  if (badge) {
-    badge.dataset.freshness = freshness;
-    const suffix = freshness === "stale" ? " · stale" : freshness === "waiting" ? " · waiting" : "";
-    const text = el("stateText");
-    if (text) text.textContent = stateName + suffix;
-    badge.setAttribute(
-      "aria-label",
-      freshness === "stale"
-        ? `Connection status: ${stateName}. Last sample ${formatRelative(sampleAt)}.`
-        : `Connection status: ${stateName}.`,
-    );
-  }
+  renderProductStatusBadge(state, el("stateBadge"), el("stateText"));
   renderStatusPopover();
 }
 
@@ -539,12 +529,12 @@ function renderStatusPopover() {
   const popover = statusPopoverEl();
   if (!popover || popover.hidden) return;
   const status: VoltStatus = dashboardState().status || {};
-  const stateName = String(status.state || "idle");
-  setDataState(el("statusPopoverState"), asDataState(stateName));
+  const product = deriveProductState(dashboardState());
+  setDataState(el("statusPopoverState"), product.dataState);
   const pillText = el("statusPopoverStateText");
-  if (pillText) pillText.textContent = stateName;
+  if (pillText) pillText.textContent = product.label;
   const detail = el("statusPopoverDetail");
-  if (detail) detail.textContent = String(status.detail || t("status.detail.ready"));
+  if (detail) detail.textContent = product.detail || t("status.detail.ready");
   renderRows(el("statusPopoverConnection"), connectionRows(status));
   renderRows(el("statusPopoverTrip"), tripRows(status));
 }

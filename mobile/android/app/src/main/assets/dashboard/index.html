@@ -461,7 +461,7 @@
         aria-controls="statusPopover"
       >
         <span class="visually-hidden">Connection status: </span
-        ><span class="dot"></span><span id="stateText">idle</span>
+        ><span class="dot"></span><span id="stateText">Ready to connect</span>
       </button>
     </div>
   </div>
@@ -485,10 +485,12 @@
         class="badge status-popover__state"
         data-state="idle"
       >
-        <span class="dot"></span><span id="statusPopoverStateText">idle</span>
+        <span class="dot"></span><span id="statusPopoverStateText">Ready to connect</span>
       </span>
     </div>
-    <p id="statusPopoverDetail" class="status-popover__detail">Ready.</p>
+    <p id="statusPopoverDetail" class="status-popover__detail">
+      Connect your OBD adapter when you want to start logging.
+    </p>
     <dl id="statusPopoverConnection" class="status-popover__rows"></dl>
     <h3 class="status-popover__section">Trip</h3>
     <dl id="statusPopoverTrip" class="status-popover__rows"></dl>
@@ -534,16 +536,20 @@
        guidance must be the first thing a new user sees, not a screenful of
        dead gauges with the "how to start" card below the fold. Hidden by
        storage-status.ts#toggleHidden("appEmptyState") once any rows exist. -->
-  <article id="appEmptyState" class="panel empty-state">
-    <span class="kicker">No live data</span>
-    <h2>Waiting for your car</h2>
-    <p>
-      Connect the OBD adapter to stream live speed, power, and battery — or
-      preview every screen with sample data, no car needed.
+  <article
+    id="appEmptyState"
+    class="panel empty-state product-state-card"
+    data-availability="empty"
+  >
+    <span id="appEmptyEyebrow" class="product-state-eyebrow">Ready to connect</span>
+    <h2 id="appEmptyTitle">Connect once. Logging starts automatically.</h2>
+    <p id="appEmptyCopy">
+      VoltTracker saves drives on this phone whenever your OBD adapter is connected.
+      You can also explore safely with sample data.
     </p>
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
-    <div class="empty-state-actions">
+    <div id="appEmptyActions" class="empty-state-actions">
       <button
         type="button"
         class="primary primary-action"
@@ -556,7 +562,7 @@
       </button>
     </div>
     <details class="empty-preview drive-empty-preview">
-      <summary>What will appear here?</summary>
+      <summary>What gets recorded?</summary>
       <p>
         Live speed, electric and engine power, battery state, trip efficiency,
         and data-health checks appear automatically with the first fresh sample.
@@ -727,6 +733,7 @@
       class="scrub-readout live-readout panel"
       role="group"
       data-optional-live-group="true"
+      data-layout-contract="fixed"
       data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >
@@ -1107,11 +1114,16 @@
         <b id="mapFsInfoPill"></b>
       </div>
 
-      <div id="mapEmpty" class="map-empty" role="status" aria-live="polite">
+      <div
+        id="mapEmpty"
+        class="map-empty product-state-inline"
+        data-availability="empty"
+        role="status"
+        aria-live="polite"
+      >
         <span
-          ><strong>No GPS route yet</strong> Start a logged drive with location
-          permission enabled. The route will draw here from on-device SQLite
-          samples.</span
+          ><strong>No saved route yet</strong> Record a drive with location enabled
+          and its route will appear here automatically.</span
         >
         <button
           type="button"
@@ -1505,12 +1517,16 @@
       <small id="chargeSourceSub">Connect an adapter to start logging</small>
     </span>
   </div>
-  <article id="chargeEmptyState" class="panel empty-state">
-    <span class="kicker">Charging</span>
-    <h2>No charging sessions yet</h2>
+  <article
+    id="chargeEmptyState"
+    class="panel empty-state product-state-card"
+    data-availability="empty"
+  >
+    <span class="product-state-eyebrow">Charging history</span>
+    <h2>Your first charge will appear here automatically.</h2>
     <p>
-      Plug in your Volt with the adapter connected and charging sessions will
-      show up here automatically.
+      Leave the adapter connected while charging. VoltTracker will save the
+      session, peak power, energy, and duration on this phone.
     </p>
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
@@ -1522,14 +1538,14 @@
         data-settings-target="settingsConnection"
         data-settings-focus="deviceSelect"
       >
-        Set up the adapter in Settings
+        Connect adapter
       </button>
       <button type="button" class="demo link-btn" data-action="demo">
-        Preview with Demo / Testing
+        Preview sample charge
       </button>
     </div>
     <details class="empty-preview">
-      <summary>What will appear here?</summary>
+      <summary>What gets recorded?</summary>
       <p>
         Plug-ins, peak charging power, estimated cost, battery-cell balance, and
         long-term pack-health trends unlock as each kind of reading is recorded.
@@ -1841,31 +1857,28 @@
   </article>
 </section>
 <section id="view-insights" class="view" data-view="insights">
-  <article id="insightsEmptyState" class="panel empty-state">
-    <span class="kicker">Insights</span>
-    <h2>Not enough data yet</h2>
+  <article
+    id="insightsEmptyState"
+    class="panel empty-state product-state-card"
+    data-availability="empty"
+  >
+    <span class="product-state-eyebrow">Building your baseline</span>
+    <h2>Insights begin after a few recorded drives.</h2>
     <p>
-      Pack health, lifetime totals, and estimated savings vs gas appear here
-      once you've logged a few drives with the adapter connected.
+      Keep the adapter connected during normal trips. VoltTracker will turn those
+      drives into efficiency, battery, and cost trends.
     </p>
     <ol class="empty-hints" aria-label="How insights build up">
       <li>
         <b aria-hidden="true">1</b
         ><span
-          >Connect the adapter and log a few drives — even short ones.</span
+          >Record two or three normal drives.</span
         >
       </li>
       <li>
         <b aria-hidden="true">2</b
         ><span
-          >Pack health, efficiency, and lifetime totals build up
-          automatically.</span
-        >
-      </li>
-      <li>
-        <b aria-hidden="true">3</b
-        ><span
-          >Run a car-code scan anytime to check for stored diagnostics.</span
+          >Add your electricity rate later if you want cost estimates.</span
         >
       </li>
     </ol>

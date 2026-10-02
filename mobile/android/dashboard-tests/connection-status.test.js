@@ -114,9 +114,9 @@ describe('connection-status.ts — status popover', () => {
 
     expect(popover().hidden).toBe(false);
     expect(badge().getAttribute('aria-expanded')).toBe('true');
-    expect(document.getElementById('statusPopoverState').dataset.state).toBe('connected');
-    expect(document.getElementById('statusPopoverStateText').textContent).toBe('connected');
-    expect(document.getElementById('statusPopoverDetail').textContent).toBe('Streaming OBD data.');
+    expect(document.getElementById('statusPopoverState').dataset.state).toBe('live');
+    expect(document.getElementById('statusPopoverStateText').textContent).toBe('Recording drive');
+    expect(document.getElementById('statusPopoverDetail').textContent).toContain('saved on this phone');
     const connection = document.getElementById('statusPopoverConnection').textContent;
     expect(connection).toContain('OBDLink MX+ (...44:55)');
     expect(connection).toContain('Ready');
@@ -226,8 +226,8 @@ describe('connection-status.ts — status popover', () => {
     badge().click();
     window.VoltTrackerNative.setStatus({ state: 'connecting', detail: 'Connecting to OBDLink...', bluetoothReady: true });
 
-    expect(document.getElementById('statusPopoverStateText').textContent).toBe('connecting');
-    expect(document.getElementById('statusPopoverDetail').textContent).toBe('Connecting to OBDLink...');
+    expect(document.getElementById('statusPopoverStateText').textContent).toBe('Connecting');
+    expect(document.getElementById('statusPopoverDetail').textContent).toContain('preparing live logging');
   });
 
   it('surfaces stale sample freshness in the global badge and status details', async () => {
@@ -237,7 +237,7 @@ describe('connection-status.ts — status popover', () => {
     window.VoltTrackerNative.updateTelemetry({ source: 'obd', sampleCount: 5, speedKph: 32, updatedAt: staleAt });
 
     expect(document.getElementById('stateBadge').dataset.freshness).toBe('stale');
-    expect(document.getElementById('stateText').textContent).toContain('stale');
+    expect(document.getElementById('stateText').textContent).toBe('Live data paused');
     badge().click();
     expect(document.getElementById('statusPopoverConnection').textContent).toContain('Last sample');
     expect(document.getElementById('statusPopoverConnection').textContent).toMatch(/ago/);

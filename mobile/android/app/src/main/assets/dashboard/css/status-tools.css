@@ -17,7 +17,7 @@
   max-width: min(92vw, 480px);
   padding: 10px 16px;
   border: 1px solid var(--line-strong);
-  border-radius: 999px;
+  border-radius: 14px;
   background:
     linear-gradient(180deg, var(--sheen-soft), transparent 40%),
     var(--surface-float);
@@ -25,7 +25,19 @@
   color: var(--text);
   font-size: 13px;
   line-height: 1.4;
-  text-align: center;
+  text-align: left;
+}
+
+/* Product states are short owner-facing phrases, so the global badge no longer
+   needs room for raw combinations such as "connected · waiting". */
+#stateBadge[data-product-state] {
+  max-width: 168px;
+}
+
+#stateBadge[data-product-state] #stateText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .status-undo {

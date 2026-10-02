@@ -2603,10 +2603,9 @@ button.drive-now-chip:focus-visible {
 }
 
 /* Slight bump on the live-readout cells so values breathe — the 4px 0
-     baseline was too cramped on mid-density phones. No sibling hairlines here
-     (unlike the base .scrub-readout): auto-fit wraps the six cells at narrow
-     widths and cells can hide via [data-live-cell].is-empty, so any div + div
-     divider lands on row-start cells. The 4px gap is the separator. */
+     baseline was too cramped on mid-density phones. The fixed six-slot Drive
+     grid keeps its 3x2 geometry even when a real vehicle does not report every
+     PID, so the graph row below never moves between Demo and live OBD. */
 /* Each signal is a bordered 14px tile, left-aligned (design tiles), min 44px. */
 .live-readout div {
   padding: 10px 12px;
@@ -2619,6 +2618,17 @@ button.drive-now-chip:focus-visible {
 
 [data-live-cell].is-empty {
   display: none;
+}
+
+/* A fixed layout slot communicates missing capability without collapsing.
+   The data stays honest (the value remains "--") while the component position
+   remains identical across Demo and real-car sources. */
+.live-readout [data-live-cell].is-unavailable {
+  background: var(--fill-ghost);
+}
+
+.live-readout [data-live-cell].is-unavailable strong {
+  color: var(--soft);
 }
 
 .live-readout.is-empty {
@@ -2639,6 +2649,13 @@ button.drive-now-chip:focus-visible {
 .view.is-prelive .trip-card,
 .view.is-prelive .session-footer-btn,
 .view.is-prelive > .hero {
+  display: none;
+}
+
+/* One intentional page-level empty state replaces Insights' battery shell,
+   lifetime dashes, and vehicle placeholders. Those surfaces return together
+   once the first useful rollup exists. */
+#view-insights[data-availability="empty"] > :not(#insightsEmptyState) {
   display: none;
 }
 

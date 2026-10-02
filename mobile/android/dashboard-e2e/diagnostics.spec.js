@@ -22,7 +22,7 @@ test('Run probe with no adapter mirrors blocked feedback into the card badge', a
   await showAdvancedDiagnostics(page);
   await page.locator('#detailProbeBtn').click();
 
-  await expect(page.locator('#stateText')).toHaveText('blocked');
+  await expect(page.locator('#stateText')).toHaveText('Needs attention');
   await expect(page.locator('#statusCopy')).toContainText(/adapter/i);
   await expect(page.locator('#enhancedBadge')).toHaveText('blocked');
   await expect(page.locator('#enhancedBadge')).toHaveAttribute('data-state', 'blocked');
@@ -46,7 +46,7 @@ test('Start Demo / Testing visibly starts the sandbox from Diagnostics', async (
   await page.locator('[data-demo-toggle]').click();
 
   await expect.poll(() => page.evaluate(() => window.VoltDashboard.state.demoActive)).toBe(true);
-  await expect(page.locator('#stateText')).toHaveText('demo');
+  await expect(page.locator('#stateText')).toHaveText('Preview mode');
   await expect(page.locator('[data-demo-toggle]')).toHaveText('Stop Demo / Testing');
   await expect(page.locator('#statusCopy')).toContainText(/demo/i);
 });

@@ -76,6 +76,7 @@ jobs:
       - name: Release preflight
         env:
           REQUIRE_RELEASE_CANDIDATE_EVIDENCE: "1"
+          REQUIRE_END_USER_DOGFOOD: "1"
         run: ./scripts/release-preflight.sh
 
       - name: Install python-semantic-release

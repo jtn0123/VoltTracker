@@ -29,6 +29,7 @@ import { staticRouteDrawSignature, tripGeometrySignature } from "./render-signat
 // eager bundle and every entry point it publishes crosses the chunk boundary
 // through the VD registry (see vd-registry.ts).
 import { VD } from "./vd-registry";
+import { applyDataAvailability, deriveDataAvailability } from "./product-state";
 
   const state = VD.state;
   const bridge = VD.bridge;
@@ -600,7 +601,12 @@ import { VD } from "./vd-registry";
     const tripRow = hasMapContent && !isLiveRoute ? tripRowForKey(String(routeSession.id || "")) : null;
     const tripEnergyKwh = tripRow && tripRow.energyKwh != null ? Number(tripRow.energyKwh) : NaN;
     const hasTripEnergy = Number.isFinite(tripEnergyKwh) && tripEnergyKwh > 0;
-    VD.setText("mapEnergy", hasTripEnergy ? `${tripEnergyKwh.toFixed(1)} kWh` : "--");
+    VD.setText("mapEnergy", hasTripEnergy ? `${tripEnergyKwh.toFixed(1)} kWh` : hasMapContent ? "Not recorded" : "Not available");
+    const energyCell = el("mapEnergy")?.parentElement || null;
+    applyDataAvailability(
+      energyCell,
+      deriveDataAvailability({ supported: !hasMapContent || hasTripEnergy, hasData: hasTripEnergy }),
+    );
     const homeRate = VD.prefs.get<number>("pricePerKwh", 0);
     const hasCost = hasTripEnergy && homeRate > 0;
     VD.setText(
@@ -622,6 +628,10 @@ import { VD } from "./vd-registry";
     syncMapBottomCards();
     const empty = el("mapEmpty");
     if (empty) empty.hidden = hasMapContent;
+    applyDataAvailability(
+      el("view-map"),
+      deriveDataAvailability({ hasData: hasMapContent }),
+    );
 
     if (hasRoute && typeof VD.enrichRouteEff === "function") VD.enrichRouteEff(route);
     syncRemoteTiles();

@@ -78,7 +78,7 @@ describe('daily-use quality-of-life controls', () => {
 
   it('Charge starts with one useful empty card instead of empty analytical chrome', () => {
     expect(document.getElementById('chargeEmptyState').hidden).toBe(false);
-    expect(document.querySelector('#chargeEmptyState summary').textContent).toMatch(/What will appear/i);
+    expect(document.querySelector('#chargeEmptyState summary').textContent).toMatch(/What gets recorded/i);
     expect(document.getElementById('chargeSummaryGrid').hidden).toBe(true);
     expect(document.getElementById('cellBalanceCard').hidden).toBe(true);
     expect(document.getElementById('sohTrendCard').hidden).toBe(true);
@@ -128,7 +128,7 @@ describe('daily-use quality-of-life controls', () => {
     window.VoltDashboard.renderDriveSourceBadge();
     const drive = document.querySelector('[data-view="drive"]');
     expect(drive.classList.contains('is-prelive')).toBe(true);
-    expect(document.querySelector('.drive-empty-preview summary').textContent).toMatch(/What will appear/i);
+    expect(document.querySelector('.drive-empty-preview summary').textContent).toMatch(/What gets recorded/i);
   });
 
   it('remembers the preferred historical map layer and detail disclosure in backups', async () => {

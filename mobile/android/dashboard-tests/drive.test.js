@@ -47,32 +47,49 @@ describe('drive.ts', () => {
     expect(host.children.length).toBe(0);
   });
 
-  it('moves the Demo / Testing marker to the topbar line and keeps the chip strip empty', () => {
+  it('uses the single product-state badge during preview and keeps legacy demo markers hidden', () => {
     const VD = window.VoltDashboard;
     VD.state.demoActive = true;
     VD.state.telemetry = { sampleCount: 12, soc: 78, sessionMs: 30_000 };
     VD.renderDriveNowChips();
-    // The purple "demo" pill sits right next to the header line, so a strip
-    // chip would repeat the same state a third time — the strip stays empty.
+    // The Preview mode badge is the only global marker; both legacy duplicate
+    // surfaces stay hidden.
     const host = document.getElementById('driveNowChips');
     expect(host.children.length).toBe(0);
     const line = document.getElementById('topDemoInfo');
-    expect(line.hidden).toBe(false);
-    expect(line.textContent).toContain('Demo / Testing');
-    // Header meta is SOC-only now: two fragments overflowed the topbar into
-    // "60 samples · …" on phone widths, and the sample count lives in the
-    // session footnote on Drive.
-    expect(document.getElementById('topDemoMeta').textContent).toBe('78% SOC');
+    expect(line.hidden).toBe(true);
   });
 
   it('hides the topbar Demo / Testing line again when the demo stops', () => {
     const VD = window.VoltDashboard;
     VD.state.demoActive = true;
     VD.renderDriveNowChips();
-    expect(document.getElementById('topDemoInfo').hidden).toBe(false);
+    expect(document.getElementById('topDemoInfo').hidden).toBe(true);
     VD.state.demoActive = false;
     VD.renderDriveNowChips();
     expect(document.getElementById('topDemoInfo').hidden).toBe(true);
+  });
+
+  it('collapses instruments only for a truly empty preview, not stored demo history', () => {
+    const VD = window.VoltDashboard;
+    const driveView = document.getElementById('view-drive');
+    VD.state.demoActive = true;
+    VD.state.telemetry = {};
+    VD.state.trips = [];
+    VD.state.storage = {};
+    VD.renderDriveLive();
+    expect(driveView.classList.contains('is-prelive')).toBe(true);
+    expect(document.getElementById('appEmptyTitle').textContent).toContain('no drive data');
+    expect(document.getElementById('appEmptyActions').hidden).toBe(true);
+
+    VD.state.storage = { sampleCount: 24 };
+    VD.renderDriveLive();
+    expect(driveView.classList.contains('is-prelive')).toBe(false);
+
+    VD.state.demoActive = false;
+    VD.renderDriveLive();
+    expect(document.getElementById('appEmptyTitle').textContent).toContain('Connect once');
+    expect(document.getElementById('appEmptyActions').hidden).toBe(false);
   });
 
   it('does not show "Recording" when status is idle even if adapter/session state is stale', () => {
@@ -196,18 +213,63 @@ describe('drive.ts', () => {
     expect(strokeSpy).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the optional live readout collapsed until a signal arrives', () => {
+  it('keeps the Drive signal grid layout stable when real-car signals are unavailable', () => {
     const VD = window.VoltDashboard;
     const group = document.getElementById('liveReadout');
+    const cells = Array.from(group.querySelectorAll('[data-live-cell]'));
 
     VD.updateLiveUi();
-    expect(group.classList.contains('is-empty')).toBe(true);
+    expect(group.dataset.layoutContract).toBe('fixed');
+    expect(group.classList.contains('is-empty')).toBe(false);
+    expect(cells).toHaveLength(6);
+    expect(cells.every((cell) => cell.classList.contains('is-unavailable'))).toBe(true);
+    expect(cells.some((cell) => cell.classList.contains('is-empty'))).toBe(false);
 
     VD.state.telemetry = { rpm: 1234 };
     VD.updateLiveUi();
 
     expect(group.classList.contains('is-empty')).toBe(false);
     expect(document.getElementById('rpmValue').textContent).toContain('1234');
+    expect(cells).toHaveLength(6);
+    expect(cells.some((cell) => cell.classList.contains('is-empty'))).toBe(false);
+    expect(cells.filter((cell) => cell.classList.contains('is-unavailable'))).toHaveLength(5);
+  });
+
+  it('uses one Drive layout signature for complete demo and sparse live telemetry', () => {
+    const VD = window.VoltDashboard;
+    const group = document.getElementById('liveReadout');
+    const layoutSignature = () => ({
+      groupCollapsed: group.classList.contains('is-empty'),
+      slots: Array.from(group.querySelectorAll('[data-live-cell]')).map((cell) => ({
+        key: cell.dataset.tileKey,
+        collapsed: cell.classList.contains('is-empty'),
+      })),
+    });
+
+    VD.state.demoActive = true;
+    VD.state.telemetry = {
+      source: 'demo',
+      rpm: 0,
+      voltage: 13.8,
+      coolantC: 81,
+      throttlePct: 18,
+      loadPct: 24,
+      latitude: 42.33,
+      longitude: -83.05,
+      accuracyM: 4,
+    };
+    VD.updateLiveUi();
+    const demoLayout = layoutSignature();
+
+    VD.state.demoActive = false;
+    VD.state.telemetry = {
+      source: 'obd',
+      rpm: 0,
+      voltage: 13.8,
+    };
+    VD.updateLiveUi();
+
+    expect(layoutSignature()).toEqual(demoLayout);
   });
 
   it('renders power and SOC chart marks as HTML DOM nodes when live samples exist', () => {

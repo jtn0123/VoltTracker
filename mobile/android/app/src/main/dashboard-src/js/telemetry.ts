@@ -13,12 +13,17 @@ import {
   setText,
   state
 } from "./core";
+<<<<<<< ours
 import { registerRenderer } from "./render-pass";
 import { asDataState, setDataState, setDataTone } from "./dataset-state";
+=======
+import { setDataState, setDataTone } from "./dataset-state";
+>>>>>>> theirs
 import { LIVE_ROUTE_ID, appendLiveRoutePoint, haversineMetersJs, liveSampleTimeMs } from "./map-route-utils";
 import type { MapRoutePoint } from "./map-route-utils";
 import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
+import { renderProductStatusBadge } from "./product-state";
 import { setStorage } from "./storage-status";
 import { initialTelemetryState } from "./telemetry-state";
 import { VD } from "./vd-registry";
@@ -252,10 +257,13 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     const parsed = parsePayload<unknown>(payload, {});
     validatePayload("setStatus", parsed);
     const status = asPayloadRecord(parsed) as VoltStatus;
+<<<<<<< ours
     setState({ status });
     const badge = el("stateBadge");
+=======
+    state.status = status;
+>>>>>>> theirs
     const next = status.state || "idle";
-    setDataState(badge, asDataState(next));
     if (!wasActive && isActiveStatus() && !state.demoActive && resetArmed) {
       resetTelemetry();
       resetArmed = false;
@@ -265,7 +273,7 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     // session, so it must not re-zero the JS session baseline.
     if (isTerminalStopStatus(next)) resetArmed = true;
     hydrateLiveRouteIfActive();
-    setText("stateText", next);
+    renderProductStatusBadge(state, el("stateBadge"), el("stateText"));
     setText("statusCopy", status.detail || "Ready.");
     showStatusToast(status.detail, next);
     if (status.lastAddress) setState({ lastDevice: { address: status.lastAddress, name: status.lastName || "" } });
@@ -749,8 +757,21 @@ import { celsius, km, kph as kphOf, meters as metersOf } from "./unit-types";
     const cell = node.closest("[data-live-cell]");
     if (!cell) return;
     const text = String(value == null || value === "" ? "--" : value).trim();
-    cell.classList.toggle("is-empty", text === "--");
-    syncOptionalLiveGroup(cell.closest("[data-optional-live-group]"));
+    const empty = text === "--";
+    const group = cell.closest("[data-optional-live-group]");
+    // Layout is a presentation contract, not a side-effect of whichever PIDs a
+    // data source happens to report. Drive's six primary signal slots therefore
+    // stay mounted for sparse real-car telemetry just as they do for the complete
+    // demo scenario. Other optional groups retain their compact/collapsible
+    // behaviour. The partial owns this policy through one data attribute, so
+    // Demo and native OBD samples cannot select different component trees.
+    const fixedLayout = group?.getAttribute("data-layout-contract") === "fixed";
+    cell.classList.toggle("is-unavailable", empty && fixedLayout);
+    cell.classList.toggle("is-empty", empty && !fixedLayout);
+    cell.setAttribute("data-availability", empty ? "unavailable" : "ready");
+    if (empty) node.setAttribute("aria-label", "Not available");
+    else node.removeAttribute("aria-label");
+    syncOptionalLiveGroup(group);
   }
 
   function syncOptionalLiveGroup(group: LiveCellGroup) {

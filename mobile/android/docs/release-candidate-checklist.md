@@ -34,6 +34,26 @@ what each level proves and does not prove.
 - Real adapter:
 - Real car / OBD:
 
+## End-User Dogfood Gate
+
+This is a release gate, not an optional polish note. Use at least three people
+who did not build the feature. A facilitator may observe and record hesitation,
+but may not tell participants where to tap. Any repeated wrong turn or request
+for help is a release blocker until it is fixed and re-tested.
+
+- End-user dogfood participants:
+- Setup without facilitator help:
+- First drive without facilitator help:
+- Trip review without facilitator help:
+- Charge review without facilitator help:
+- Code scan without facilitator help:
+- Repeated hesitation issues resolved:
+- Dogfood evidence:
+
+For each workflow, record time to completion, wrong turns, exact words that
+caused hesitation, and the final screenshot or recording. Use `yes` only after
+all participants complete that workflow without instruction.
+
 ## Evidence To Attach
 
 - JSONL session log:

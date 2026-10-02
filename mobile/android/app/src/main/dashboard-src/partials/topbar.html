@@ -66,7 +66,7 @@
         aria-controls="statusPopover"
       >
         <span class="visually-hidden">Connection status: </span
-        ><span class="dot"></span><span id="stateText">idle</span>
+        ><span class="dot"></span><span id="stateText">Ready to connect</span>
       </button>
     </div>
   </div>
@@ -90,10 +90,12 @@
         class="badge status-popover__state"
         data-state="idle"
       >
-        <span class="dot"></span><span id="statusPopoverStateText">idle</span>
+        <span class="dot"></span><span id="statusPopoverStateText">Ready to connect</span>
       </span>
     </div>
-    <p id="statusPopoverDetail" class="status-popover__detail">Ready.</p>
+    <p id="statusPopoverDetail" class="status-popover__detail">
+      Connect your OBD adapter when you want to start logging.
+    </p>
     <dl id="statusPopoverConnection" class="status-popover__rows"></dl>
     <h3 class="status-popover__section">Trip</h3>
     <dl id="statusPopoverTrip" class="status-popover__rows"></dl>

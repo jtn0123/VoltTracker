@@ -84,7 +84,7 @@ test('malformed bridge JSON falls back cleanly and the dashboard stays functiona
 
   // parsePayload swallowed the garbage into fallbacks: status is the idle fallback (not blank,
   // not crashed) and the screen chrome is still painted.
-  await expect(page.locator('#stateText')).toHaveText('idle');
+  await expect(page.locator('#stateText')).toHaveText('Ready to connect');
   await expect(page.locator('#statusCopy')).toHaveText('Ready.');
   await expect(page.locator('#screenTitle')).not.toBeEmpty();
 
@@ -127,7 +127,7 @@ test('a native error envelope surfaces as a blocked status instead of silence', 
   });
 
   // The failure is surfaced, not swallowed: blocked state + the native message in the status copy.
-  await expect(page.locator('#stateText')).toHaveText('blocked');
+  await expect(page.locator('#stateText')).toHaveText('Needs attention');
   await expect(page.locator('#statusCopy')).toContainText(/could not read local storage/i);
 
   // And the dashboard is still navigable — an error status must not wedge the UI.

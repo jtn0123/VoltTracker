@@ -22,6 +22,11 @@ import { dbRowCount, formatDuration } from "./telemetry";
 import { units } from "./prefs";
 import { t } from "./i18n";
 import { numberSeriesSignature } from "./render-signatures";
+import {
+  applyDataAvailability,
+  deriveDataAvailability,
+  deriveProductState,
+} from "./product-state";
 
 import { VD } from "./vd-registry";
 import { meters, metersToKm } from "./unit-types";
@@ -168,36 +173,21 @@ type ChartPoint = {
     };
   }
 
-  // Demo / Testing header line (topbar .top-status): the single demo marker.
-  // While a demo runs, the purple state pill already says "demo" right next to
-  // this line, so the strip chip that used to repeat it on Drive is gone — the
-  // label + live sample/SOC meta live here instead, on every tab.
+  // The product-state badge is the single global answer during preview. Keep
+  // the legacy line hidden so wide layouts do not reintroduce a second demo
+  // label beside "Preview mode"; detailed source/sample information lives in
+  // the badge popover.
   function renderTopDemoInfo() {
     const line = el("topDemoInfo") as HTMLButtonElement | null;
     if (!line) return;
-    if (!state.demoActive) {
-      line.hidden = true;
-      return;
-    }
-    const tm = state.telemetry || {};
-    const session = (state.appState || {}).session || {};
-    const meta: string[] = [];
-    // SOC only — the sample count lives in the session footnote, and two meta
-    // fragments overflow the header into "60 samples · …" on phone widths.
-    // Number(null) is 0 and 0% is a lie the hero contradicts; only a present,
-    // finite reading earns a header chip.
-    const soc = tm.soc == null ? NaN : Number(tm.soc);
-    if (Number.isFinite(soc) && soc > 0) meta.push(Math.round(soc) + "% SOC");
-    else if (Number(session.sampleCount || tm.sampleCount || 0)) meta.push("live sample data");
-    setText("topDemoMeta", meta.length ? meta.join(" · ") : "sample data");
-    line.hidden = false;
+    line.hidden = true;
   }
 
   function renderDriveNowChips() {
     renderTopDemoInfo();
     const host = el("driveNowChips");
     const rec = el("driveRecording");
-    // During a demo the topbar carries the Demo / Testing line + purple pill, so
+    // During a demo the topbar's Preview mode badge carries the state, so
     // neither the strip nor the Settings recording footer repeats it.
     if (state.demoActive) {
       if (host) host.replaceChildren();
@@ -244,6 +234,10 @@ type ChartPoint = {
     );
   }
 
+  function driveHasStoredData() {
+    return dbRowCount(state.storage || {}) > 0 || (state.trips || []).length > 0;
+  }
+
   type SourceKind = "demo" | "live" | "offline" | "empty";
 
   function deriveSource(): { kind: SourceKind; label: string; sub: string } {
@@ -251,32 +245,26 @@ type ChartPoint = {
     const adapter = app.adapter || {};
     const status = state.status || {};
     const stateName = String(status.state || (app.session || {}).state || "").toLowerCase();
-    const connecting = ["connecting", "initializing"].includes(stateName);
+    const product = deriveProductState(state);
+    const connecting = product.key === "connecting";
     const connected =
       adapter.connected === true ||
       ["connected", "scanning", "scan-complete"].includes(stateName);
-    const live = driveHasLiveSamples();
-
     if (state.demoActive) {
-      return { kind: "demo", label: "Demo data", sub: "Isolated from your real history" };
+      return { kind: "demo", label: product.label, sub: product.detail };
     }
     if (connecting && !connected) {
-      return { kind: "live", label: "Live car data", sub: "Connecting to your OBD adapter" };
+      return { kind: "live", label: product.label, sub: product.detail };
     }
     if (connected) {
-      return live
-        ? { kind: "live", label: "Live car data", sub: "Streaming from your OBD adapter" }
-        : { kind: "live", label: "Live car data", sub: "Adapter linked — waiting for first sample" };
+      return { kind: "live", label: product.label, sub: product.detail };
     }
     // Not connected: distinguish "have saved history" (offline) from "nothing yet".
-    const storage = state.storage || {};
-    const hasStored =
-      dbRowCount(storage) > 0 ||
-      (state.trips || []).length > 0;
+    const hasStored = driveHasStoredData();
     if (hasStored) {
-      return { kind: "offline", label: "Offline · stored data", sub: "Showing saved history — connect for live" };
+      return { kind: "offline", label: "Saved drives available", sub: "Connect when you want new live data" };
     }
-    return { kind: "empty", label: "No data yet", sub: "Connect an adapter to start logging" };
+    return { kind: "empty", label: product.label, sub: product.detail };
   }
 
   // Add a one-time class the first time live data appears so CSS can play a
@@ -289,6 +277,10 @@ type ChartPoint = {
   // a preview too, so both live tabs carry the same provenance marker.
   function renderDriveSourceBadge() {
     const src = deriveSource();
+    const setExactText = (id: string, value: string) => {
+      const node = el(id);
+      if (node && node.textContent !== value) node.textContent = value;
+    };
     const apply = (badgeId: string, labelId: string, subId: string) => {
       const badge = el(badgeId);
       if (!badge) return;
@@ -301,9 +293,27 @@ type ChartPoint = {
     apply("driveSourceBadge", "driveSourceLabel", "driveSourceSub");
     apply("chargeSourceBadge", "chargeSourceLabel", "chargeSourceSub");
 
-    // The topbar carries the stable live state on every tab: the "demo" pill +
-    // Demo / Testing line during a preview, or the adapter/"connected" pill while
-    // connected. Settings adds the fast-changing #driveRecording progress at its
+    const emptyActions = el("appEmptyActions");
+    if (state.demoActive) {
+      setExactText("appEmptyEyebrow", "Empty preview");
+      setExactText("appEmptyTitle", "This sample scenario has no drive data.");
+      setExactText(
+        "appEmptyCopy",
+        "Choose another sample scenario in Vehicle Health, or stop Preview mode to return to your car.",
+      );
+      if (emptyActions) emptyActions.hidden = true;
+    } else {
+      setExactText("appEmptyEyebrow", "Ready to connect");
+      setExactText("appEmptyTitle", "Connect once. Logging starts automatically.");
+      setExactText(
+        "appEmptyCopy",
+        "VoltTracker saves drives on this phone whenever your OBD adapter is connected. You can also explore safely with sample data.",
+      );
+      if (emptyActions) emptyActions.hidden = false;
+    }
+
+    // The topbar carries the stable product state on every tab. Settings adds
+    // the fast-changing #driveRecording progress at its
     // bottom. A full-width source banner still repeats that connection truth, so
     // hide both badges for demo AND live. Offline/empty (not connected) keep the
     // banner as their per-tab provenance marker.
@@ -322,7 +332,19 @@ type ChartPoint = {
     if (driveView) {
       // Live samples lift the collapse even when the source still derives as
       // "empty" (e.g. telemetry arriving before the adapter flags connected).
-      driveView.classList.toggle("is-prelive", src.kind === "empty" && !driveHasLiveSamples());
+      driveView.classList.toggle(
+        "is-prelive",
+        !driveHasLiveSamples() &&
+          (src.kind === "empty" || (src.kind === "demo" && !driveHasStoredData())),
+      );
+      applyDataAvailability(
+        driveView as HTMLElement,
+        deriveDataAvailability({
+          loading: productStateIsConnecting(),
+          hasData: driveHasLiveSamples() || driveHasStoredData(),
+          stale: deriveProductState(state).freshness === "stale",
+        }),
+      );
     }
 
     const hero = document.querySelector(".view[data-view=\"drive\"] .hero");
@@ -330,6 +352,10 @@ type ChartPoint = {
       firstSampleRevealed = true;
       hero.classList.add("is-first-sample");
     }
+  }
+
+  function productStateIsConnecting() {
+    return deriveProductState(state).key === "connecting";
   }
 
   // ----- live speed trace ---------------------------------------------------

@@ -37,7 +37,11 @@ import { validatePayload } from "./payload-validators";
 import { prefs, units } from "./prefs";
 import { registerRenderer } from "./render-pass";
 import { storageRollupSignature } from "./render-signatures";
+<<<<<<< ours
 import { kph } from "./unit-types";
+=======
+import { applyDataAvailability, deriveDataAvailability } from "./product-state";
+>>>>>>> theirs
 
 // Module scope (the old IIFE wrapper is redundant under ESM and blocks
 // `export` declarations).
@@ -1180,11 +1184,20 @@ import { kph } from "./unit-types";
     const route = selectedRouteForOverview(storage);
     const hasRows = VD.dbRowCount(storage) > 0;
     const hasCharge = Number(charge.chargeSessionCount || charge.chargingHintCount || 0) > 0;
+    const hasInsights = hasInsightContent();
     const latest = latestInsightReading(storage);
     toggleHidden("appEmptyState", hasRows);
     toggleHidden("chargeEmptyState", hasCharge);
     toggleHidden("chargeSummaryGrid", !hasCharge);
-    toggleHidden("insightsEmptyState", hasInsightContent());
+    toggleHidden("insightsEmptyState", hasInsights);
+    applyDataAvailability(
+      el("view-charge"),
+      deriveDataAvailability({ hasData: hasCharge }),
+    );
+    applyDataAvailability(
+      el("view-insights"),
+      deriveDataAvailability({ hasData: hasInsights }),
+    );
     const routeDistance = Number(route.distanceMeters || overview.distanceMeters || 0);
     setText("overviewDistance", routeDistance ? VD.formatDistance(routeDistance) : "--");
     setText("overviewMaxSpeed", overview.maxSpeedKph ? units.speedText(kph(Number(overview.maxSpeedKph))) : "--");
@@ -1193,7 +1206,13 @@ import { kph } from "./unit-types";
     renderThisTripCard(route, routeDistance);
 
     setText("realChargeHints", Number(charge.chargingHintCount || 0));
-    setText("realChargePower", charge.maxPowerKw ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "--");
+    const hasChargePower = Number.isFinite(Number(charge.maxPowerKw)) && Number(charge.maxPowerKw) > 0;
+    setText("realChargePower", hasChargePower ? `${Number(charge.maxPowerKw).toFixed(1)} kW` : "Not recorded");
+    const chargePowerCell = el("realChargePower")?.closest(".charge-kpi") as HTMLElement | null;
+    applyDataAvailability(
+      chargePowerCell,
+      deriveDataAvailability({ supported: hasChargePower, hasData: hasChargePower }),
+    );
     // Charge history is an on-demand lazy chunk (charge-history.ts); treat its
     // renderer as an optional subscriber, like updateEnhancedCapabilityUi.
     if (typeof VD.renderChargeSessions === "function") VD.renderChargeSessions(charge);

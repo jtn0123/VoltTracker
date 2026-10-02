@@ -38,16 +38,20 @@
        guidance must be the first thing a new user sees, not a screenful of
        dead gauges with the "how to start" card below the fold. Hidden by
        storage-status.ts#toggleHidden("appEmptyState") once any rows exist. -->
-  <article id="appEmptyState" class="panel empty-state">
-    <span class="kicker">No live data</span>
-    <h2>Waiting for your car</h2>
-    <p>
-      Connect the OBD adapter to stream live speed, power, and battery — or
-      preview every screen with sample data, no car needed.
+  <article
+    id="appEmptyState"
+    class="panel empty-state product-state-card"
+    data-availability="empty"
+  >
+    <span id="appEmptyEyebrow" class="product-state-eyebrow">Ready to connect</span>
+    <h2 id="appEmptyTitle">Connect once. Logging starts automatically.</h2>
+    <p id="appEmptyCopy">
+      VoltTracker saves drives on this phone whenever your OBD adapter is connected.
+      You can also explore safely with sample data.
     </p>
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
-    <div class="empty-state-actions">
+    <div id="appEmptyActions" class="empty-state-actions">
       <button
         type="button"
         class="primary primary-action"
@@ -60,7 +64,7 @@
       </button>
     </div>
     <details class="empty-preview drive-empty-preview">
-      <summary>What will appear here?</summary>
+      <summary>What gets recorded?</summary>
       <p>
         Live speed, electric and engine power, battery state, trip efficiency,
         and data-health checks appear automatically with the first fresh sample.
@@ -231,6 +235,7 @@
       class="scrub-readout live-readout panel"
       role="group"
       data-optional-live-group="true"
+      data-layout-contract="fixed"
       data-empty="Waiting for live OBD signals"
       aria-label="Live OBD signals"
     >

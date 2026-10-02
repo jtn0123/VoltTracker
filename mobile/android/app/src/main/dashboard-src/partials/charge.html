@@ -17,12 +17,16 @@
       <small id="chargeSourceSub">Connect an adapter to start logging</small>
     </span>
   </div>
-  <article id="chargeEmptyState" class="panel empty-state">
-    <span class="kicker">Charging</span>
-    <h2>No charging sessions yet</h2>
+  <article
+    id="chargeEmptyState"
+    class="panel empty-state product-state-card"
+    data-availability="empty"
+  >
+    <span class="product-state-eyebrow">Charging history</span>
+    <h2>Your first charge will appear here automatically.</h2>
     <p>
-      Plug in your Volt with the adapter connected and charging sessions will
-      show up here automatically.
+      Leave the adapter connected while charging. VoltTracker will save the
+      session, peak power, energy, and duration on this phone.
     </p>
     <!-- v2 design: the empty card is kicker + heading + one paragraph + the two
          actions — no numbered how-to list. -->
@@ -34,14 +38,14 @@
         data-settings-target="settingsConnection"
         data-settings-focus="deviceSelect"
       >
-        Set up the adapter in Settings
+        Connect adapter
       </button>
       <button type="button" class="demo link-btn" data-action="demo">
-        Preview with Demo / Testing
+        Preview sample charge
       </button>
     </div>
     <details class="empty-preview">
-      <summary>What will appear here?</summary>
+      <summary>What gets recorded?</summary>
       <p>
         Plug-ins, peak charging power, estimated cost, battery-cell balance, and
         long-term pack-health trends unlock as each kind of reading is recorded.
