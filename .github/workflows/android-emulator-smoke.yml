@@ -1,10 +1,10 @@
 name: Android emulator smoke
 
-# STATUS: SUPPLEMENTAL scheduled/manual smoke. The pull-request-required WebView
-# smoke lives in `.github/workflows/android.yml` and is included in `ci-success`.
+# STATUS: SUPPLEMENTAL scheduled/manual smoke. The per-PR WebView smoke lives in
+# `.github/workflows/android.yml` (informational; not part of `ci-success`).
 #
 # This job intentionally does not run on PRs: dashboard/startup PRs already boot
-# an emulator through the required `emulator-smoke` job in android.yml. Keeping
+# an emulator through the `emulator-smoke` job in android.yml. Keeping
 # this lane scheduled/manual avoids a second slow emulator run and still leaves
 # an on-demand artifact source for investigating hosted-emulator drift.
 #

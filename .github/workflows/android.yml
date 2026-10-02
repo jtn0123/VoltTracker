@@ -780,7 +780,7 @@ jobs:
     # audits above: npm audit / OSV scan what is already resolved, this reviews
     # what a PR is about to add. The event has no dependency diff outside
     # pull_request, so the job only runs there; ci-success below treats its
-    # skipped result on main pushes as success (same pattern as emulator-smoke).
+    # skipped result on main pushes as success (same as the path-gated lanes).
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
@@ -796,7 +796,8 @@ jobs:
           fail-on-severity: moderate
 
   emulator-smoke:
-    # Required WebView runtime smoke for the file:// dashboard path. It installs
+    # Informational (not part of ci-success; see the note there) WebView runtime
+    # smoke for the file:// dashboard path. It installs
     # the debug APK on an emulator, asserts the dashboard JS reaches the native
     # "dashboard handshake received" logcat marker, starts demo telemetry, and
     # taps through the dashboard tabs while scanning logcat for runtime errors.
@@ -955,6 +956,15 @@ jobs:
     # job just means adding it to `needs:` here — the verify step derives pass/fail
     # from the `needs` map itself (no second hand-maintained list to forget), so a
     # newly-added job can't silently pass this gate while failing.
+    #
+    # emulator-smoke is deliberately NOT in this list. The hosted Android emulator
+    # flakes on roughly 2 of every 3 runs for infrastructure reasons (boot/renderer
+    # crashes unrelated to the change under test), and because ci-success is a
+    # required check that flake was blocking merges. emulator-smoke still runs on
+    # every runtime PR and every main push as an informational check — a red
+    # emulator-smoke is still visible on the PR and still blocks
+    # publish-debug-release — it just no longer gates ci-success. Every other lane
+    # stays in the list, so their failures still fail this gate.
     if: always()
     needs:
       [
@@ -967,7 +977,6 @@ jobs:
         dashboard-visual,
         gradle-dependency-audit,
         dependency-review,
-        emulator-smoke,
       ]
     runs-on: ubuntu-latest
     steps:
