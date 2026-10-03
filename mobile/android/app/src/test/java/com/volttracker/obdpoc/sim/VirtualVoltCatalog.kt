@@ -127,10 +127,12 @@ object VirtualVoltCatalog {
             entry("7E4", "2240E9", Evidence.GUESS, both("6240E9012C")), // 150 mOhm
             entry("7E4", "2243A6", Evidence.GUESS, both("6243A650")), // 2000 kOhm
             // OVMS Volt/Ampera poll list (MY2017). 41A6 and 4389 are REAL: their replies turned up
-            // in the 2026 phone logs when another app on the bus asked for them (0 km at a 14 %
-            // SOC; 0x00218A49 Wh = 2198.1 kWh lifetime). The heater, PEM coolant and pack-section
-            // replies below are the car's own bytes from 2026-09-29.
-            entry("7E4", "2241A6", Evidence.REAL, both("6241A60000")),
+            // in the 2026 phone logs when another app on the bus asked for them (41A6 = 0 km at a
+            // 14 % SOC; 0x00218A49 Wh = 2198.1 kWh lifetime). The heater, PEM coolant and
+            // pack-section replies below are the car's own bytes from 2026-09-29.
+            // 41A6 keeps the car's layout at 55 km (1/64 km), matching the cluster range frame and the
+            // 54.9 % dash SOC; the car's own 0 km came with an empty pack.
+            entry("7E4", "2241A6", Evidence.REAL, both("6241A60DC0")),
             entry("7E4", "224389", Evidence.REAL, both("62438900218A49")),
             entry("7E4", "22439E", Evidence.REAL, both("62439E00")), // heater off
             entry("7E4", "221C43", Evidence.REAL, both("621C4350")), // 40 C

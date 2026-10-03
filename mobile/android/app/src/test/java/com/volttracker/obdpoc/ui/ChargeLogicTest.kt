@@ -77,7 +77,7 @@ class ChargeLogicTest {
         assertNull(fast.energyKwh)
         assertEquals("L1", slow.level)
         assertEquals(40, slow.fromSoc)
-        assertEquals(89, slow.toSoc)
+        assertEquals(88, slow.toSoc) // 88.6 truncates like every other SOC figure
         assertEquals(6.5, slow.energyKwh ?: Double.NaN, 1e-9)
         assertFalse(slow.publicCharger)
     }

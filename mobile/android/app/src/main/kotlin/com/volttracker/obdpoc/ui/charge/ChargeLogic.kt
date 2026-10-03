@@ -10,7 +10,6 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.pow
-import kotlin.math.roundToInt
 
 /** The SOC the driver knows: the cluster's figure when the car reports it, else the raw pack SOC. */
 val ChargeUiState.shownSocPercent: Double get() = displayedSocPercent ?: socPercent
@@ -72,9 +71,11 @@ fun ChargeUiState.sessionRows(
                 SessionRow(
                     title = partOfDay(sampleAtMs, zone),
                     live = true,
-                    detail = sessionDetail(level, fromSoc?.roundToInt(), shownSocPercent.roundToInt()),
-                    fromSoc = fromSoc?.roundToInt(),
-                    toSoc = shownSocPercent.roundToInt(),
+                    // Whole percent truncated, like the ring and the car's own gauge, so a live
+                    // 54.9 % reads 54 here too, not 55.
+                    detail = sessionDetail(level, fromSoc?.toInt(), shownSocPercent.toInt()),
+                    fromSoc = fromSoc?.toInt(),
+                    toSoc = shownSocPercent.toInt(),
                     energyKwh = addedKwh,
                     cost = costText(addedKwh, homeRate),
                 ),
@@ -228,8 +229,8 @@ object ChargeHistory {
             startedAtMs = started,
             endedAtMs = optNumber(row, "endedAtMs")?.toLong()?.takeIf { it > 0 },
             level = levelFromChargerType(type),
-            fromSoc = optNumber(row, "startSoc")?.roundToInt(),
-            toSoc = optNumber(row, "endSoc")?.roundToInt(),
+            fromSoc = optNumber(row, "startSoc")?.toInt(),
+            toSoc = optNumber(row, "endSoc")?.toInt(),
             energyKwh = optNumber(row, "energyKwh")?.takeIf { it >= 0.0 },
             publicCharger = isPublicCharger(type),
         )
