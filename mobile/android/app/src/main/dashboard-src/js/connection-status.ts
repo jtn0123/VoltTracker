@@ -484,8 +484,12 @@ function renderGlobalFreshness() {
   if (badge) {
     badge.dataset.freshness = freshness;
     const suffix = freshness === "stale" ? " · stale" : freshness === "waiting" ? " · waiting" : "";
+    // Runs on every telemetry sample. Assigning textContent replaces the text node even when the
+    // text is unchanged, so an unguarded write is a DOM mutation per sample. Under jsdom 30 each
+    // mutation also costs a full-tree walk on the next document lookup (startup-budget.test.js).
     const text = el("stateText");
-    if (text) text.textContent = stateName + suffix;
+    const label = stateName + suffix;
+    if (text && text.textContent !== label) text.textContent = label;
     badge.setAttribute(
       "aria-label",
       freshness === "stale"

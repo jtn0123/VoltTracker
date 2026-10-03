@@ -225,6 +225,12 @@ describe('dashboard startup budget', () => {
       return callbacks.length;
     };
 
+    // The deterministic half of the budget: enqueueing must not touch the DOM tree at all (the
+    // render frame does that). A same-value textContent write per sample slipped through once and
+    // only showed up as timing flake after jsdom 30 made every tree mutation expensive.
+    const treeMutations = new MutationObserver(() => {});
+    treeMutations.observe(document.body, { childList: true, subtree: true });
+
     try {
       const enqueueStart = performance.now();
       for (let index = 0; index < TELEMETRY_BURST_COUNT; index += 1) {
@@ -239,7 +245,9 @@ describe('dashboard startup budget', () => {
         });
       }
       const enqueueElapsedMs = performance.now() - enqueueStart;
+      const enqueueTreeMutations = treeMutations.takeRecords().length;
 
+      expect(enqueueTreeMutations).toBe(0);
       expect(callbacks.length).toBe(1);
       expect(enqueueElapsedMs).toBeLessThan(100);
 
@@ -251,6 +259,7 @@ describe('dashboard startup budget', () => {
       expect(document.getElementById('speedValue').textContent).not.toBe('--');
       expect(flushElapsedMs).toBeLessThan(750);
     } finally {
+      treeMutations.disconnect();
       window.requestAnimationFrame = originalRaf;
     }
   });
