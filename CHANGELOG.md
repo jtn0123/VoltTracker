@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.57.6 (2026-10-03)
+
+### 🔺 Fix
+
+- **health**: Show a stored code as stored, and run trouble-code scans against the virtual Volt
+  ([#152](https://github.com/jtn0123/VoltTracker/pull/152),
+  [`7a5d3d2`](https://github.com/jtn0123/VoltTracker/commit/7a5d3d2facd5fb1d8bb7fef1c2b3aed420c4ecc5))
+
+### 🔷 Changed
+
+- Fix every Kotlin compiler warning instead of living with them
+  ([#151](https://github.com/jtn0123/VoltTracker/pull/151),
+  [`93f08b3`](https://github.com/jtn0123/VoltTracker/commit/93f08b33ef4d7a6d614713b8a44653cf5c091fb4))
+
+
 ## v0.57.5 (2026-10-03)
 
 ### 🔺 Fix
