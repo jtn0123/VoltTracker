@@ -31,10 +31,15 @@ contain VIN frames.
 
 - **Confirmed:** door lock, 12 V voltage (SOC byte `0xFF` = not available),
   A/C state, A/C compressor/evap, cabin temp, dash SOC `228334`, fuel level `012F`
-  fix.
-- **Suspect:** blower. The decoder reads `d[1]`, but only `d[2]` changed on a fan
-  change.
-- **Never seen:** TPMS, door ajar FL/FR/RL/RR, hood, trunk, windows.
+  fix, blower (byte 2), and gas range (sent from source `0x60`).
+- **Confirmed from the same session's polling:** `015B`, motor A/B voltage and current,
+  motor A/B temperature, EV distance this cycle, coolant valve, heater power and duty,
+  PEM coolant, outside air raw/filtered, and the six pack-section temperatures. All are
+  `Evidence.REAL` in the sim, so the scorecard gates them.
+- **Refused:** `221C26` inverter temperature on 7E1 (`7F 22 31` every time).
+- **Never seen:** TPMS, door ajar FL/FR/RL/RR, hood, trunk. Four window-status frames
+  were heard, but they don't fit the decoder's idle pattern; mapping them needs the body
+  test.
 - **Unverified:** freeze frame (#114), TPMS from BCM (#121). Car controls have
   never been sent (#77).
 
@@ -68,11 +73,11 @@ paths are relative to `app/src/main/dashboard-src/js/`. `(inst)` = `app/src/andr
 | Body | 12 V battery voltage / SOC / current | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, VirtualVoltSwcanTest, CarTabLogicTest | Real car (voltage) | None. The SOC byte `0xFF` (not available on this car) used to read as 100%; #142 drops it and pins the captured frame in both tests. |
 | Body | Climate: A/C state, cabin temp estimate | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, LiveCarStateTest, LiveDriveMappingTest, CarTabLogicTest, VirtualVoltSwcanTest | Real car | None for the decoders; the sim broadcasts the captured A/C state, A/C compressor/evap, and cabin frames as REAL (#143). Cabin temp was seen once in 5 min on the car. |
 | Body | A/C compressor rpm / evaporator temp | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest | Real car | Decoder test only. Not in the sim catalog and has no mapping test (shown only in All readings and classic signals). |
-| Body | Blower % | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest | JVM logic | SUSPECT on the car, and the test pins the suspect `d[1]`. Re-derive from the capture (`d[2]` went 0x44→0x22). |
+| Body | Blower % | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, VirtualVoltSwcanTest | Sim | Re-derived from the capture: byte 2 (0x44, then 0x22 while running, 0 when off). Byte 1 held a stray 0x45 after shut-off that read as a running fan and could confirm a remote start. Confirm the speed steps in the body test. |
 | Body | TPMS over SW-CAN (`0x103D4040`), top-down car | `SwcanFrameDecoder.kt`, `ui/car/CarTopView.kt` | SwcanFrameDecoderTest, VirtualVoltSwcanTest, LiveCarStateTest, CarTabLogicTest | Sim | Never seen on the car; probably needs the wheels rolling. Car batch. |
 | Body | TPMS from BCM (`22C901` on 0x241) + Car › Tire test | `BcmTirePressure.kt`, `engine/TpmsDiscoveryRunner.kt` | BcmTirePressureTest, TpmsDiscoveryRunnerTest, ComposeDashboardToolsTest, VoltAppNavigationTest, VirtualVoltScorecardTest | Sim (ungated) | Unverified on the car (#121). Scale (1.373 vs 4 kPa/count) and wheel order are unknown. Car batch. |
 | Body | Doors ajar FL/FR/RL/RR, hood, trunk, windows | `SwcanFrameDecoder.kt`, `ui/live/CarBodyMapper.kt` | SwcanFrameDecoderTest, LiveCarStateTest, CarTabLogicTest, VirtualVoltSwcanTest (FL only) | Sim (FL door) | Never seen on the car. Windows aren't in the sim. Car batch: body test while opening each one. |
-| Body | Other SW-CAN: cluster EV/gas range, cycle energy/distance, PE coolant, charge-current limit, alarm, remote-start state, heater | `SwcanFrameDecoder.kt`, `SwcanReadings.kt` | SwcanFrameDecoderTest, SwcanReadingsTest, VirtualVoltSwcanTest, live-signals.test | Sim (alarm/heater decoder-only) | Every sim frame is an OVMS-derived guess; none is car-confirmed. Car batch (opportunistic). |
+| Body | Other SW-CAN: cluster EV/gas range, cycle energy/distance, PE coolant, charge-current limit, alarm, remote-start state, heater | `SwcanFrameDecoder.kt`, `SwcanReadings.kt` | SwcanFrameDecoderTest, SwcanReadingsTest, VirtualVoltSwcanTest, live-signals.test | Sim (alarm/heater decoder-only) | Gas range is captured from the car (source `0x60`); the rest are OVMS-derived guesses. Car batch (opportunistic). |
 | Body | Body test (60 s continuous listen) | `engine/SwcanListenRunner.kt`, `ui/car/CarScreen.kt` | SwcanListenRunnerTest, VirtualVoltSwcanTest | Sim | The Compose "Body test" row → service wiring is untested; the Tire test has an equivalent test. |
 | Body | Car tab: lock badge, 12 V/climate/tires/windows tiles, stale/missing lines | `ui/car/CarScreen.kt`, `ui/car/CarLogic.kt` | CarScreenshotTest, CarTabLogicTest, LiveCarStateTest, emulator-smoke.sh | Emulator | Opened with demo data on the emulator, but tile values are asserted only on the JVM. |
 | Controls | Gate: OBDLink only, Park, fresh data, live session, rate limit | `CarControlGate.kt` | CarControlGateTest, VirtualVoltCarControlTest | Sim | None in software. |
@@ -130,13 +135,14 @@ paths are relative to `app/src/main/dashboard-src/js/`. `(inst)` = `app/src/andr
 Closed since the survey:
 - the 12 V SOC bug (#142);
 - emulator nav geometry and Compose screens opened on the emulator (#141);
-- car-confirmed readings locked into the sim as `Evidence.REAL` (#143).
+- car-confirmed readings locked into the sim as `Evidence.REAL` (#143);
+- the blower decoder, re-derived from the capture, and about 20 more sim replies taken
+  from the 2026-09-29 polling.
 
 1. **Sim → Compose.** Run VirtualVolt (DRIVING and CHARGING), feed `wirePayloads` into `LiveUiStateStore`, render `VoltApp`, and assert Drive SOC/range, Car lock/12 V/climate, and Charge power/ETA.
 2. **DTC + freeze frame in the sim.** Answer modes 03/07/0A/02/04 in `VirtualVolt`, then test Full scan → Health codes → Freeze frame screen → Clear → earlier codes.
 3. **Compose values on a device.** The smoke proves each Compose screen opens. Add an androidTest that runs the Compose demo and asserts live values on Drive and Car, then does the Settings › Advanced → classic → back round trip.
-4. **Blower decoder.** Re-derive it from the 2026-09-29 capture (`d[2]` moved, `d[1]` didn't), then fix the decoder and its test. Confirm in the car batch.
-5. **Untested Compose wiring.** Cover Car › Body test → service action (mirror `theTireTestRunsTheTireProbeOnTheRememberedAdapter`), the Settings paired-adapter list → `PickAdapter`, and auto-connect on Compose resume.
+4. **Untested Compose wiring.** Cover Car › Body test → service action (mirror `theTireTestRunsTheTireProbeOnTheRememberedAdapter`), the Settings paired-adapter list → `PickAdapter`, and auto-connect on Compose resume.
 
 ### Real car (batch for one opportunistic session; never a blocker)
 

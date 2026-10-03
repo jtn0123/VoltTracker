@@ -164,6 +164,24 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
+    fun blowerReadsByteTwoAsCapturedOnTheCar() {
+        // 2026-09-29 capture, in order: climate on (fan high, then lower), still running, then off.
+        // The frame right after it stops carries 0x45 in byte 1; reading that as the blower showed
+        // a running fan (and would confirm a remote start) with the fan off.
+        val sequence =
+            listOf(
+                intArrayOf(0x20, 0x00, 0x44, 0x00) to 27.0,
+                intArrayOf(0x20, 0x00, 0x22, 0x00) to 13.0,
+                intArrayOf(0x20, 0x45, 0x22, 0x00) to 13.0,
+                intArrayOf(0x00, 0x45, 0x00, 0x00) to 0.0,
+                intArrayOf(0x00, 0x00, 0x00, 0x00) to 0.0,
+            )
+        for ((bytes, expected) in sequence) {
+            assertEquals(expected, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, *bytes)[SwcanField.BLOWER])
+        }
+    }
+
+    @Test
     fun climateFrames() {
         val compressor = decode(SwcanFrameDecoder.ID_AC_COMPRESSOR, 0, 0x60, 0xD1, 0x94)
         assertEquals(8.0, compressor[SwcanField.AC_EVAP_TEMP])
@@ -175,8 +193,8 @@ class SwcanFrameDecoderTest {
         assertTrue(decode(SwcanFrameDecoder.ID_PE_COOLANT, 0).isEmpty())
         assertEquals(45.0, decode(SwcanFrameDecoder.ID_HEATER_CORE, 0, 0, 85)[SwcanField.HEATER_CORE_TEMP])
         assertTrue(decode(SwcanFrameDecoder.ID_HEATER_CORE, 0, 0, 0).isEmpty())
-        assertEquals(39.0, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0, 100)[SwcanField.BLOWER])
-        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0).isEmpty())
+        assertEquals(13.0, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0x20, 0, 0x22, 0)[SwcanField.BLOWER])
+        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0, 0).isEmpty())
         assertEquals(21.0, decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0, 0, 0, 0, 0, 0x7A)[SwcanField.CABIN_TEMP])
         assertTrue(decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0, 0, 0).isEmpty())
         assertEquals("on", decode(SwcanFrameDecoder.ID_CLIMATE_GENERAL, 0x20)[SwcanField.AC_STATE])
@@ -208,6 +226,8 @@ class SwcanFrameDecoderTest {
         assertEquals(55.0, decode(0x0C2EC040, 0, 0x1B, 0x80)[SwcanField.CLUSTER_EV_RANGE])
         assertTrue(decode(0x102EC0CB, 0, 0x1B).isEmpty())
         assertEquals(471.0, decode(0x104480CB, 0, 0, 0x75, 0xC0)[SwcanField.FUEL_RANGE])
+        // The 2017 Volt sends the gas range from source 0x60 (on-car capture, 2026-09-29).
+        assertEquals(378.0, decode(0x10448060, 0, 0, 0x5E, 0x8D)[SwcanField.FUEL_RANGE])
         assertTrue(decode(0x104480CB, 0, 0, 0, 0).isEmpty(), "0 = car not on yet")
         assertTrue(decode(0x104480CB, 0, 0, 0x75).isEmpty())
     }

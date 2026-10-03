@@ -244,7 +244,7 @@ object SwcanFrameDecoder {
                 if (d.size >= 3 && d[2] != 0) listOf(num(SwcanField.HEATER_CORE_TEMP, d[2] - 40.0, 0)) else none()
             ID_CHARGE_LIMIT -> chargeLimit(d)
             ID_CLIMATE_GENERAL -> acState(d)
-            ID_CLIMATE_BASIC -> if (d.size >= 2) listOf(num(SwcanField.BLOWER, d[1] * 0.39, 0)) else none()
+            ID_CLIMATE_BASIC -> blower(d)
             ID_CABIN_TEMP -> if (d.size >= 6) listOf(num(SwcanField.CABIN_TEMP, d[5] / 2.0 - 40.0, 1)) else none()
             ID_REMOTE_START -> remoteStart(d)
             else -> null
@@ -381,6 +381,15 @@ object SwcanFrameDecoder {
             2 -> listOf(text(SwcanField.AC_STATE, "on"))
             else -> none()
         }
+    }
+
+    // Climate control basic status: byte 2 is the blower, 0.392 % per count. On a 2017 Volt
+    // (2026-09-29 capture) byte 2 read 0x44 then 0x22 while the climate ran and 0x00 when it stopped,
+    // and byte 1 stayed 0 the whole time it ran, then read 0x45 for a frame after it stopped. So the
+    // blower is byte 2, not byte 1 as the community decoder has it.
+    private fun blower(d: IntArray): List<SwcanReading> {
+        if (d.size < 3) return none()
+        return listOf(num(SwcanField.BLOWER, d[2] * PERCENT_PER_COUNT, 0))
     }
 
     // High Volt Time Based Charge: up to four selectable charge-current levels plus the index of

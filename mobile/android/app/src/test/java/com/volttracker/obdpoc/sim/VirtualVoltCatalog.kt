@@ -8,7 +8,10 @@ package com.volttracker.obdpoc.sim
  *
  * - [Evidence.REAL] — these exact bytes (or bytes of this exact shape) came off the target car.
  *   Sources: ObdProtocolTest "real captures", docs/pid-validation-2026-06-03.md,
- *   docs/field-test-2026-05-19.md, docs/obd-log-findings-2026-06-16.md.
+ *   docs/field-test-2026-05-19.md, docs/obd-log-findings-2026-06-16.md, and the 2026-09-29 on-car
+ *   session (parked, car on, A/C running, pack at 14 % raw; not committed, it carries the VIN).
+ *   Where the car's state then doesn't fit a mode (driving, charging), the reply keeps the car's
+ *   byte layout at a plausible value and the comment gives what the car actually sent.
  * - [Evidence.SEEN] — the car is recorded answering this PID, but the bytes were not kept; the
  *   reply is synthesized from the decoder's formula at a plausible value.
  * - [Evidence.DEAD] — the car is recorded refusing this PID (NO DATA or a 7F negative reply);
@@ -58,7 +61,8 @@ object VirtualVoltCatalog {
             entry("7DF", "0111", Evidence.REAL, both("41115D")),
             entry("7DF", "0105", Evidence.REAL, both("410563")),
             entry("7DF", "0149", Evidence.GUESS, split("414933", "414900")),
-            entry("7DF", "015B", Evidence.GUESS, both("415B99")),
+            // The car answered 415B22..415B24 (13-14 %) on 2026-09-29; same shape, a mid value.
+            entry("7DF", "015B", Evidence.REAL, both("415B99")),
             entry("7DF", "010F", Evidence.GUESS, both("410F46")),
             entry("7DF", "0142", Evidence.SEEN, both("414236B0")),
             entry("7DF", "011F", Evidence.SEEN, both("411F012C")),
@@ -76,13 +80,18 @@ object VirtualVoltCatalog {
             // --- Mode 22 on 7E1 (hybrid powertrain) -----------------------------------------
             entry("7E1", "222414", Evidence.REAL, split("622414FE87", "6224140000")),
             entry("7E1", "222429", Evidence.REAL, both("6224295806")),
-            entry("7E1", "222883", Evidence.GUESS, split("62288300C8", "6228830000")),
-            entry("7E1", "222884", Evidence.GUESS, split("6228840064", "6228840000")),
-            entry("7E1", "222885", Evidence.GUESS, both("6228858980")),
-            entry("7E1", "222886", Evidence.GUESS, both("6228868980")),
+            // Motor currents, signed 0.05 A: parked on 2026-09-29 the car sent FFF4 (-0.6 A) and
+            // FFF6 (-0.5 A), and as low as FD9C (-30.6 A). Driving is a mid value.
+            entry("7E1", "222883", Evidence.REAL, split("62288300C8", "622883FFF4")),
+            entry("7E1", "222884", Evidence.REAL, split("6228840064", "622884FFF6")),
+            // Motor voltages: 8340 (336.0 V) from the car with the pack at 352 V.
+            entry("7E1", "222885", Evidence.REAL, both("6228858340")),
+            entry("7E1", "222886", Evidence.REAL, both("6228868340")),
             entry("7E1", "222889", Evidence.SEEN, split("62288903", "62288908")), // D / P (VoltGear)
-            entry("7E1", "221C26", Evidence.GUESS, both("621C2650")), // 40 C
-            entry("7E1", "222487", Evidence.GUESS, both("62248704D2")),
+            // Every read on 2026-09-29 came back 7F 22 31: this car's 7E1 has no inverter temperature.
+            entry("7E1", "221C26", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
+            // The car sent 6224870000 (0 km, parked); driving is 12.34 km.
+            entry("7E1", "222487", Evidence.REAL, split("62248704D2", "6224870000")),
             // --- Mode 22 on 7E2 (transmission) -----------------------------------------------
             entry("7E2", "221940", Evidence.DEAD, both(null)),
             entry("7E2", "22194001", Evidence.DEAD, both(null)),
@@ -92,8 +101,10 @@ object VirtualVoltCatalog {
             entry("7E4", "22436C", Evidence.REAL, chargingOnly("62436C00C8")),
             entry("7E4", "224373", Evidence.SEEN, split("6243730000", "624373FFFF")),
             entry("7E4", "224531", Evidence.SEEN, split("62453100", "62453102")),
-            entry("7E4", "224368", Evidence.GUESS, chargingOnly("62436878")), // 240 V
-            entry("7E4", "224369", Evidence.GUESS, chargingOnly("62436946")), // 14 A
+            // Charger AC input: the car answers 62436800 / 62436900 when not plugged in (2026-09-29).
+            // The app only asks while charging; there the reply is 240 V / 14 A in the same layout.
+            entry("7E4", "224368", Evidence.REAL, chargingOnly("62436878")), // 240 V
+            entry("7E4", "224369", Evidence.REAL, chargingOnly("62436946")), // 14 A
             entry("7E4", "2243AF", Evidence.SEEN, both("6243AF89F9")),
             // The car answered 62833400 (0 %, pack at 14 % raw) on 2026-09-29; same shape, a mid value.
             entry("7E4", "228334", Evidence.REAL, both("6283348C")), // 54.9 %
@@ -104,10 +115,12 @@ object VirtualVoltCatalog {
             // Real logs (2026-07): every read of 22435F came back 7F 22 31.
             entry("7E4", "22435F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             entry("7E4", "2241B2", Evidence.REAL, both("6241B208E5")),
-            entry("7E4", "2241B4", Evidence.GUESS, both("6241B402")),
-            entry("7E4", "2241B6", Evidence.GUESS, both("6241B60000")),
-            entry("7E4", "22801E", Evidence.GUESS, both("62801E78")),
-            entry("7E4", "22801F", Evidence.GUESS, both("62801F78")),
+            // Coolant valve, heater power and outside air (raw 26.5 C, filtered 27 C), from the car on
+            // 2026-09-29.
+            entry("7E4", "2241B4", Evidence.REAL, both("6241B400")),
+            entry("7E4", "2241B6", Evidence.REAL, both("6241B60000")),
+            entry("7E4", "22801E", Evidence.REAL, both("62801E85")),
+            entry("7E4", "22801F", Evidence.REAL, both("62801F86")),
             entry("7E4", "2243A5", Evidence.SEEN, both("6243A50456")),
             entry("7E4", "22437D", Evidence.SEEN, both("62437D0339")),
             entry("7E4", "2241A3", Evidence.GUESS, both("6241A30205")),
@@ -115,29 +128,32 @@ object VirtualVoltCatalog {
             entry("7E4", "2243A6", Evidence.GUESS, both("6243A650")), // 2000 kOhm
             // OVMS Volt/Ampera poll list (MY2017). 41A6 and 4389 are REAL: their replies turned up
             // in the 2026 phone logs when another app on the bus asked for them (0 km at a 14 %
-            // SOC; 0x00218A49 Wh = 2198.1 kWh lifetime). The rest have never been read on this car.
+            // SOC; 0x00218A49 Wh = 2198.1 kWh lifetime). The heater, PEM coolant and pack-section
+            // replies below are the car's own bytes from 2026-09-29.
             entry("7E4", "2241A6", Evidence.REAL, both("6241A60000")),
             entry("7E4", "224389", Evidence.REAL, both("62438900218A49")),
-            entry("7E4", "22439E", Evidence.GUESS, both("62439E00")), // heater off
-            entry("7E4", "221C43", Evidence.GUESS, both("621C4350")), // 40 C
-            entry("7E7", "2240D7", Evidence.GUESS, both("6240D73F")), // 23 C
-            entry("7E7", "2240D9", Evidence.GUESS, both("6240D940")),
-            entry("7E7", "2240DB", Evidence.GUESS, both("6240DB3E")),
-            entry("7E7", "2240DD", Evidence.GUESS, both("6240DD3F")),
-            entry("7E7", "2240DF", Evidence.GUESS, both("6240DF40")),
-            entry("7E7", "2240E1", Evidence.GUESS, both("6240E13E")),
+            entry("7E4", "22439E", Evidence.REAL, both("62439E00")), // heater off
+            entry("7E4", "221C43", Evidence.REAL, both("621C4350")), // 40 C
+            entry("7E7", "2240D7", Evidence.REAL, both("6240D745")), // 29 C
+            entry("7E7", "2240D9", Evidence.REAL, both("6240D944")),
+            entry("7E7", "2240DB", Evidence.REAL, both("6240DB45")),
+            entry("7E7", "2240DD", Evidence.REAL, both("6240DD45")),
+            entry("7E7", "2240DF", Evidence.REAL, both("6240DF45")),
+            entry("7E7", "2240E1", Evidence.REAL, both("6240E146")),
             // --- Mode 22 on the drive-unit motor-generator nodes (replies on 0x657 / 0x658) ------
-            entry("257", "2228CB", Evidence.GUESS, split("6228CB5A", null)), // 50 C; asleep off-drive
-            entry("258", "22368F", Evidence.GUESS, split("62368F58", null)), // 48 C
+            // 57 C / 56 C from the car on 2026-09-29 (car on). Still assumed asleep while charging.
+            entry("257", "2228CB", Evidence.REAL, split("6228CB61", null)),
+            entry("258", "22368F", Evidence.REAL, split("62368F60", null)),
             // Body module tires, FL RL FR RR at 4 kPa/count (240-252 kPa); unconfirmed on the car.
             entry("241", "22C901", Evidence.GUESS, both("62C9013C3D3E3F")),
         )
 
     /**
      * SW-CAN (GMLAN) broadcast frames the virtual car puts on OBD pin 1, printed the way an OBDLink
-     * shows them in `STM` with `ATH1 ATS1` (29-bit id as four bytes, then data). All [Evidence.GUESS]:
-     * built from the OVMS vehicle_voltampera decoders at plausible values, never captured from this
-     * car. Each line's decoded value is noted beside it; SwcanFrameDecoderTest pins the same math.
+     * shows them in `STM` with `ATH1 ATS1` (29-bit id as four bytes, then data). [Evidence.GUESS]
+     * frames are built from the OVMS vehicle_voltampera decoders at plausible values; [Evidence.REAL]
+     * ones are copied from the 2026-09-29 capture. Each line's decoded value is noted beside it;
+     * SwcanFrameDecoderTest pins the same math.
      */
     class SwcanFrame(
         val evidence: Evidence,
@@ -169,12 +185,15 @@ object VirtualVoltCatalog {
             SwcanFrame(Evidence.REAL, "10 44 00 99 10 00 00 00 8D 8B 46", listOf("cabinTempEstC")),
             // A/C on; captured on the car 2026-09-29.
             SwcanFrame(Evidence.REAL, "10 73 40 99 20 00 00 A0 00 00", listOf("acState")),
+            // Blower 13 % (byte 2) while the climate ran; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "10 81 40 99 20 00 22 00", listOf("blowerPct")),
             // Evaporator 10.0 C, compressor 4132 rpm while the A/C ran; captured on the car 2026-09-29.
             SwcanFrame(Evidence.REAL, "10 27 00 CB 00 64 10 24 00", listOf("acEvapTempC", "acCompressorRpm")),
             // cluster EV range 55 km (GMLAN PID 0x176)
             SwcanFrame(Evidence.GUESS, "10 2E C0 CB 00 1B 80 00 00 00 00 00", listOf("clusterEvRangeKm")),
-            // gas range 471 km (GMLAN PID 0x224)
-            SwcanFrame(Evidence.GUESS, "10 44 80 CB 00 00 75 C0", listOf("fuelRangeKm")),
+            // Gas range 378 km (GMLAN PID 0x224). The car sends it from source 0x60, not the 0xCB the
+            // community decoders show; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "10 44 80 60 00 00 5E 8D", listOf("fuelRangeKm")),
             // 8.3 kWh used since the last full charge (GMLAN PID 0x141)
             SwcanFrame(Evidence.GUESS, "10 28 20 CB 00 00 00 53 00 00 00 00", listOf("cycleEnergyUsedKwh")),
             // 52.0 km on battery, 0 km on gas since the last full charge (GMLAN PID 0x225)
