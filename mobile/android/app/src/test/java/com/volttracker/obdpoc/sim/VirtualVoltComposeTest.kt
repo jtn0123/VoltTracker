@@ -14,6 +14,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.core.content.ContextCompat
 import com.volttracker.obdpoc.ComposeDashboardSupport
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.service.ObdService
@@ -173,8 +174,12 @@ class VirtualVoltComposeTest {
                 addAction(ObdService.BROADCAST_TELEMETRY)
                 addAction(ObdService.BROADCAST_STATUS)
             }
-        // SDK 30: no exported flag (ContextCompat would demand the app's receiver permission).
-        service.application.registerReceiver(receiver, filter)
+        // Registered the way ComposeDashboardActivity registers it. Below API 33 ContextCompat guards a
+        // not-exported receiver with the app's own signature permission, which an installed app holds
+        // and Robolectric has to be told about.
+        val app = service.application
+        shadowOf(app).grantPermissions("${app.packageName}$RECEIVER_PERMISSION_SUFFIX")
+        ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
         VirtualVoltTestSupport.waitFor("$mode drive to collect $SAMPLES samples", WAIT_TIMEOUT_MS) {
             service.engineSamples.size >= SAMPLES
@@ -182,7 +187,7 @@ class VirtualVoltComposeTest {
         // Deliver what the service has broadcast so far, then stop listening before the session
         // ends: the screens are read mid-session, not after the disconnect clears them.
         shadowOf(Looper.getMainLooper()).idle()
-        service.application.unregisterReceiver(receiver)
+        app.unregisterReceiver(receiver)
         val telemetry = synchronized(service.wirePayloads) { service.wirePayloads.toList() }
         service.running.set(false)
         VirtualVoltTestSupport.waitFor("$mode adapter to close", WAIT_TIMEOUT_MS) { adapter.closeCalls.get() > 0 }
@@ -216,6 +221,9 @@ class VirtualVoltComposeTest {
         const val SAMPLES = 40
         const val WAIT_TIMEOUT_MS = 60_000L
         const val MI_PER_KM = 0.621371
+
+        /** androidx.core's per-app permission for not-exported receivers before API 33. */
+        const val RECEIVER_PERMISSION_SUFFIX = ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
 
         /** 228334 = 0x8C, as the decoder reports it. */
         const val DISPLAYED_SOC = 54.9
