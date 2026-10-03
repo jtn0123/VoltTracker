@@ -19,3 +19,5 @@ desktop dashboard pass as proof that the Android WebView or real OBD path works.
 When summarizing a change, state the highest validation level reached and list
 the exact command or field-test artifact. If a real-car check did not run, say
 so plainly.
+
+Per-feature status: [feature-coverage.md](feature-coverage.md).
