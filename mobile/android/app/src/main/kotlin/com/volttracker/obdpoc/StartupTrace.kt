@@ -24,6 +24,12 @@ object StartupTrace {
     const val OBD_SCAN_STAGE = "obd_scan_stage"
     const val OBD_SCAN_COMPLETE = "obd_scan_complete"
 
+    // Compose dashboard marks: the emulator smoke's positive signals for the launcher. A screen
+    // mark is "compose_screen:<view>" (the classic view name from screenViewName). Both are
+    // TEST CONTRACTS with scripts/emulator-smoke.sh — EmulatorSmokeContractTest pins both sides.
+    const val COMPOSE_SCREEN = "compose_screen"
+    const val COMPOSE_FIRST_TELEMETRY = "compose_first_telemetry"
+
     private val baseElapsedMs = AtomicLong(SystemClock.elapsedRealtime())
 
     fun reset(reason: String) {

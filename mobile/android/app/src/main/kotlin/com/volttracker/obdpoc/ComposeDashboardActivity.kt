@@ -75,6 +75,9 @@ class ComposeDashboardActivity :
     /** The classic dashboard's name for the visible screen ("charge", …), from [VoltApp]. */
     private var shownView: String? = null
 
+    /** Whether this screen has received a telemetry broadcast yet (gates the one-shot trace mark). */
+    private var telemetrySeen = false
+
     /** Whether a session is logging; a seam so tests can hold one open without a real adapter. */
     internal var loggingProbe: () -> Boolean = ObdService::hasActiveSession
 
@@ -110,7 +113,11 @@ class ComposeDashboardActivity :
             ) {
                 val json = intent.getStringExtra(ObdService.EXTRA_JSON)
                 ComposeDashboardSupport.routeServiceBroadcast(intent.action, json, store)
-                if (intent.action == ObdService.BROADCAST_TELEMETRY) dtc.onTelemetry(MainActivityUtils.parseJson(json))
+                if (intent.action == ObdService.BROADCAST_TELEMETRY) {
+                    dtc.onTelemetry(MainActivityUtils.parseJson(json))
+                    if (!telemetrySeen) StartupTrace.mark(StartupTrace.COMPOSE_FIRST_TELEMETRY)
+                    telemetrySeen = true
+                }
                 if (intent.action == ObdService.BROADCAST_STATUS) {
                     // Keep-screen-awake only holds while a session is logging.
                     experience.onLoggingStateChanged()
@@ -636,6 +643,7 @@ class ComposeDashboardActivity :
     }
 
     private fun onScreenShown(view: String) {
+        StartupTrace.mark("${StartupTrace.COMPOSE_SCREEN}:$view")
         shownView = view
         experience.setActiveDashboardView(view)
         loadHistoryFor(view)
