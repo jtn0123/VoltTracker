@@ -7,6 +7,7 @@ import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
 import com.volttracker.obdpoc.sim.VirtualVoltScorecardTest.VirtualVoltService
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,7 +52,8 @@ class VirtualVoltSwcanTest {
             assertTrue("$mode SW-CAN fields never reached the dashboard: $missing", missing.isEmpty())
             assertTrue("$mode: at least two listen windows", adapter.commands().count { it == "STM" } >= 2)
             val latest = wire.last { it.has("aux12vVoltage") }
-            assertEquals(12.6, latest.getDouble("aux12vVoltage"), 1e-9)
+            assertEquals(12.7, latest.getDouble("aux12vVoltage"), 1e-9)
+            assertFalse("the car never sends a 12 V SOC", latest.has("aux12vSocPct"))
             assertTrue(latest.has("aux12vStaleMs"))
         }
     }

@@ -147,11 +147,12 @@ object VirtualVoltCatalog {
 
     private val SWCAN_COMMON: List<SwcanFrame> =
         listOf(
-            // 12.6 V, 85 %, -2.0 A
+            // 12.7 V, 0.0 A; captured on the car 2026-09-29. BatSOC is 0xFF (not available), so no
+            // aux12vSocPct.
             SwcanFrame(
-                Evidence.GUESS,
-                "10 24 80 40 00 00 60 D9 00 FC 00 00",
-                listOf("aux12vVoltage", "aux12vSocPct", "aux12vCurrentA"),
+                Evidence.REAL,
+                "10 24 80 40 00 00 61 FF FF 00 00",
+                listOf("aux12vVoltage", "aux12vCurrentA"),
             ),
             // FL 260, RL 256, FR 264, RR 260 kPa
             SwcanFrame(

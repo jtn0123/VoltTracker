@@ -106,6 +106,17 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
+    fun battery12vDropsTheNotAvailableSocByte() {
+        // Captured on a 2017 Volt (2026-09-29): BatSOC is 0xFF in every frame, which must not read
+        // as a steady 100 %. Voltage and current still decode.
+        val f = SwcanFrameDecoder.parseLine("10 24 80 40 00 00 61 FF FF 00 00")!!
+        val v = SwcanFrameDecoder.decode(f).associate { it.field to it.value }
+        assertEquals(12.7, v[SwcanField.AUX12V_VOLTAGE])
+        assertNull(v[SwcanField.AUX12V_SOC])
+        assertEquals(0.0, v[SwcanField.AUX12V_CURRENT])
+    }
+
+    @Test
     fun tirePressuresDropMissingSensors() {
         val v = decode(SwcanFrameDecoder.ID_TPMS, 0, 0, 0x41, 0x40, 0x42, 0xFF)
         assertEquals(260.0, v[SwcanField.TIRE_FL])
