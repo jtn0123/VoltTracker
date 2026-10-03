@@ -18,6 +18,9 @@ import java.util.concurrent.atomic.AtomicInteger
  * Replies come from [VirtualVoltCatalog] and are formatted the way an ELM327 prints them with
  * `ATE0 ATS0 ATH0 ATCAF1` (the app's init): hex without spaces, ISO-TP multi-frame replies in
  * `NNN / 0: / 1:` segmented form, and `NO DATA` when the addressed module stays silent.
+ *
+ * The car is 11-bit 500 kbps CAN only: after `ATSP7` / `ATSP8` (29-bit) every request answers
+ * NO DATA until `ATSP0` / `ATSP6` puts the adapter back. Its trouble-code memory is [faults].
  */
 class VirtualVolt(
     private val mode: VirtualVoltCatalog.Mode,
@@ -88,6 +91,32 @@ class VirtualVolt(
     }
 
     val body = BodyState()
+
+    /**
+     * The car's trouble-code memory, answering Modes 03 / 07 / 0A / 02 / 04. Clean by default,
+     * matching the only scan of the real car (2026-06-16, docs/obd-log-findings-2026-06-16.md): five
+     * modules each answered `4300`, `4700` and `4A00`, and there was no freeze frame. A code set
+     * with [Faults.set] answers in SAE J1979 form (never seen on this car): the ECM reports it
+     * stored and permanent, with its freeze frame ([FREEZE_FRAME]).
+     */
+    class Faults {
+        /** The ECM's confirmed code as its two J1979 bytes ("0128" for P0128), or null. */
+        @Volatile var stored: String? = null
+
+        /** The ECM's permanent code: Mode 04 can't erase it; the car drops it after the fault passes. */
+        @Volatile var permanent: String? = null
+
+        /** Sets [code] (e.g. "P0128") stored and permanent, with its freeze frame. */
+        fun set(code: String) {
+            val system = "PCBU".indexOf(code[0])
+            require(system >= 0 && code.length == 5) { "not a trouble code: $code" }
+            val bytes = "%X".format((system shl 2) or code[1].digitToInt()) + code.substring(2)
+            stored = bytes
+            permanent = bytes
+        }
+    }
+
+    val faults = Faults()
 
     @Volatile
     private var highVoltageWakeup = false
@@ -173,8 +202,12 @@ class VirtualVolt(
             }
             command.startsWith("ST") -> if (stn) "OK" else "?"
             command == "ATDPN" -> protocol
-            command == "ATSP6" -> {
+            command == "ATSP0" || command == "ATSP6" -> {
                 protocol = HS_PROTOCOL
+                "OK"
+            }
+            command.startsWith("ATSP") -> {
+                protocol = command.removePrefix("ATSP")
                 "OK"
             }
             command.startsWith("ATSH") -> {
@@ -196,6 +229,7 @@ class VirtualVolt(
             command == "0902" && header == BROADCAST -> segmented(vinPayload())
             isMode01Batch(command) && header == BROADCAST -> mode01Batch(command)
             !replyPassesFilter() -> NO_DATA
+            isFaultRequest(command) -> faultReply(command)
             else -> VirtualVoltCatalog.find(header, command)?.replies?.get(mode) ?: NO_DATA
         }
 
@@ -254,6 +288,46 @@ class VirtualVolt(
         return filter == "%03X".format(replyId)
     }
 
+    /** A trouble-code service for the ECM, physically (7E0) or by broadcast; frame 00 only for Mode 02. */
+    private fun isFaultRequest(command: String): Boolean =
+        (header == BROADCAST || header == ECM) &&
+            (command in DTC_SERVICES || (command.length == 6 && command.startsWith("02") && command.endsWith("00")))
+
+    private fun faultReply(command: String): String {
+        val stored = faults.stored
+        return when (command) {
+            "03" -> modules("4300", stored?.let { "4301$it" })
+            "07" -> modules("4700", null)
+            "0A" -> modules("4A00", faults.permanent?.let { "4A01$it" })
+            "04" -> {
+                // Clearing erases the stored code and its freeze frame; the permanent code stays.
+                faults.stored = null
+                modules("44", null)
+            }
+            // Mode 02: only the ECM keeps a freeze frame, and only alongside a stored code.
+            else -> stored?.let { freezeFrame(command.substring(2, 4), it) } ?: NO_DATA
+        }
+    }
+
+    /** Each module's reply on its own line (ATH0): the ECM's first, then the others' on a broadcast. */
+    private fun modules(
+        clean: String,
+        ecm: String?,
+    ): String {
+        val first = ecm ?: clean
+        return if (header == ECM) first else (listOf(first) + List(OTHER_DTC_MODULES) { clean }).joinToString("\r")
+    }
+
+    private fun freezeFrame(
+        pid: String,
+        storedCode: String,
+    ): String? =
+        when (pid) {
+            "00" -> "420000" + "%08X".format(FREEZE_FRAME_PAGE)
+            "02" -> "420200$storedCode"
+            else -> FREEZE_FRAME[pid]?.let { "42${pid}00$it" }
+        }
+
     private fun isMode01Batch(command: String): Boolean =
         command.length > 4 && command.length % 2 == 0 && command.startsWith("01") && command.all(::isHex)
 
@@ -276,6 +350,7 @@ class VirtualVolt(
 
     private companion object {
         const val BROADCAST = "7DF"
+        const val ECM = "7E0"
         const val NO_DATA = "NO DATA"
         const val HS_PROTOCOL = "6"
         const val SWCAN_PROTOCOL = "61"
@@ -291,10 +366,43 @@ class VirtualVolt(
 
         /** Shortest listen that catches an event-only frame (a body test chunk is 5 s). */
         const val EVENT_LISTEN_MS = 3_000L
+
+        val DTC_SERVICES = setOf("03", "07", "0A", "04")
+
+        /** The modules besides the ECM that answered the real car's generic trouble-code reads. */
+        const val OTHER_DTC_MODULES = 4
+
+        /**
+         * Frame 00 the ECM saves with a stored code, as each PID's data bytes: a cold engine pulling
+         * at 45 mph, which is what a thermostat code (P0128) looks like.
+         */
+        val FREEZE_FRAME =
+            linkedMapOf(
+                "04" to "4D", // 30 % load
+                "05" to "5A", // 50 °C coolant: below the thermostat's regulating temperature
+                "0C" to "1AF8", // 1726 rpm
+                "0D" to "48", // 72 km/h
+                "0F" to "37", // 15 °C intake air
+                "11" to "26", // 15 % throttle
+                "1F" to "00F0", // 240 s since the engine started
+                "2F" to "80", // 50 % fuel
+                "42" to "3732", // 14.13 V
+            )
+
+        /** `02 00 00`'s supported-PID bitmap: bit 31 is PID 01 … bit 0 is PID 20. */
+        val FREEZE_FRAME_PAGE: Long =
+            (listOf("02") + FREEZE_FRAME.keys)
+                .map { it.toInt(16) }
+                .filter { it in 1..0x20 }
+                .fold(0L) { bits, pid -> bits or (1L shl (32 - pid)) }
         val STPX = Regex("STPXH:([0-9A-F]+),D:([0-9A-F]*),R:\\d+")
 
-        // 17 characters like a real VIN, but obviously synthetic (VINs never contain I, O or Q).
-        const val VIN = "SYNTHETICVOLTVIN0"
+        /**
+         * A synthetic 2017 Volt VIN: GM's 1G1 maker code, model year H, a valid check digit, and an
+         * all-zero serial no car carries. It has to be a well-formed VIN: the app rightly rejects
+         * one containing I, O or Q, so the old placeholder never reached the vehicle record.
+         */
+        const val VIN = "1G1RC6S5XHU000000"
 
         fun isHex(c: Char): Boolean = c in '0'..'9' || c in 'A'..'F'
 
