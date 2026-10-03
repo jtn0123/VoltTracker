@@ -1,6 +1,90 @@
 # CHANGELOG
 
 
+## v0.57.1 (2026-10-03)
+
+### 🔺 Fix
+
+- Clear mechanical SonarCloud TypeScript findings
+  ([#123](https://github.com/jtn0123/VoltTracker/pull/123),
+  [`e994b35`](https://github.com/jtn0123/VoltTracker/commit/e994b35996f534d560ef5ed4c30b9ca49cb6261a))
+
+- Clear SonarCloud security and bug findings
+  ([#122](https://github.com/jtn0123/VoltTracker/pull/122),
+  [`7952555`](https://github.com/jtn0123/VoltTracker/commit/7952555aa78b0c0423227e89d9519689762253ca))
+
+- Split a second batch of complex functions flagged by SonarCloud
+  ([#129](https://github.com/jtn0123/VoltTracker/pull/129),
+  [`9e10c85`](https://github.com/jtn0123/VoltTracker/commit/9e10c85f40c7bbbf60294e5d3ad882df5a9cbd0f))
+
+- Split the most complex functions flagged by SonarCloud
+  ([#124](https://github.com/jtn0123/VoltTracker/pull/124),
+  [`f89bd30`](https://github.com/jtn0123/VoltTracker/commit/f89bd30e8df0a8a78134c2c8128ce39bbd84a6da))
+
+### 🔷 Changed
+
+- **deps**: Bump actions/setup-java from 6.0.0 to 6.0.1
+  ([#59](https://github.com/jtn0123/VoltTracker/pull/59),
+  [`77191d1`](https://github.com/jtn0123/VoltTracker/commit/77191d125dd704429f2835097cfc73950321f97a))
+
+- **deps**: Bump com.diffplug.spotless from 8.10.1 to 8.10.3 in /mobile/android
+  ([#54](https://github.com/jtn0123/VoltTracker/pull/54),
+  [`f309c59`](https://github.com/jtn0123/VoltTracker/commit/f309c5916eb0964346f624e5fb555c0a3dd41cae))
+
+- **deps**: Bump google/osv-scanner-action/osv-scanner-action
+  ([#60](https://github.com/jtn0123/VoltTracker/pull/60),
+  [`a076dec`](https://github.com/jtn0123/VoltTracker/commit/a076dec6048a3e8e94c7c005a059c00203ae3e8b))
+
+- **deps**: Bump org.jetbrains.kotlin.plugin.compose from 2.4.10 to 2.4.20 in /mobile/android
+  ([#61](https://github.com/jtn0123/VoltTracker/pull/61),
+  [`f62c69d`](https://github.com/jtn0123/VoltTracker/commit/f62c69d5a7143bf239bb51c4fad794c02b0dbde1))
+
+- **deps**: Bump org.robolectric:robolectric from 4.16.1 to 4.17 in /mobile/android in the test-deps
+  group across 1 directory ([#58](https://github.com/jtn0123/VoltTracker/pull/58),
+  [`41d7e16`](https://github.com/jtn0123/VoltTracker/commit/41d7e167fe6a943e15d005e9e2982b6cbcfd102b))
+
+- **deps**: Bump roborazzi from 1.73.0 to 1.74.0 in /mobile/android
+  ([#62](https://github.com/jtn0123/VoltTracker/pull/62),
+  [`3f34cbf`](https://github.com/jtn0123/VoltTracker/commit/3f34cbfcae95425052771e78ed41c64e0f3fb9fc))
+
+- **deps**: Bump the androidx group across 1 directory with 3 updates
+  ([#128](https://github.com/jtn0123/VoltTracker/pull/128),
+  [`ea445eb`](https://github.com/jtn0123/VoltTracker/commit/ea445eb06e6090ffc7a9400e040f548cee779ea6))
+
+- **deps**: Bump the codeql-action group across 1 directory with 2 updates
+  ([#56](https://github.com/jtn0123/VoltTracker/pull/56),
+  [`e31a617`](https://github.com/jtn0123/VoltTracker/commit/e31a617117ce9125bd932717dee0f026ab37bd45))
+
+- **deps-dev**: Bump @playwright/test in /mobile/android/dashboard-e2e
+  ([#51](https://github.com/jtn0123/VoltTracker/pull/51),
+  [`2f23928`](https://github.com/jtn0123/VoltTracker/commit/2f23928c2aced6276186623c0c52e21c445d3686))
+
+- **deps-dev**: Bump eslint in /mobile/android/dashboard-tests
+  ([#63](https://github.com/jtn0123/VoltTracker/pull/63),
+  [`709f773`](https://github.com/jtn0123/VoltTracker/commit/709f773eabc7128fa0e3c6ff41fe2b0ada503517))
+
+- **deps-dev**: Bump typescript-eslint ([#127](https://github.com/jtn0123/VoltTracker/pull/127),
+  [`820839b`](https://github.com/jtn0123/VoltTracker/commit/820839b79fa428b3357862e0ae476ff8c8a368bb))
+
+- **deps-dev**: Bump vitest + @vitest/coverage-istanbul to 5.0.3
+  ([#130](https://github.com/jtn0123/VoltTracker/pull/130),
+  [`a5c2837`](https://github.com/jtn0123/VoltTracker/commit/a5c28373c6166efa1bc5fb3717a8901fb98a0a0a))
+
+### 🔷 Changed
+
+- Fix silently broken release, weekly smoke and latest-debug lanes
+  ([#140](https://github.com/jtn0123/VoltTracker/pull/140),
+  [`28f8266`](https://github.com/jtn0123/VoltTracker/commit/28f8266b6696fcccd530e5a9e554897615ee6e17))
+
+- Stop gating ci-success on flaky emulator-smoke
+  ([#139](https://github.com/jtn0123/VoltTracker/pull/139),
+  [`f8d8a3a`](https://github.com/jtn0123/VoltTracker/commit/f8d8a3aa35969bf6b69ca8c4cedb3c70f2e24297))
+
+- **dependabot**: Group vitest with @vitest/* in dashboard-tests
+  ([#131](https://github.com/jtn0123/VoltTracker/pull/131),
+  [`05899cc`](https://github.com/jtn0123/VoltTracker/commit/05899cc8b22967bace6d985b3290cdba89521141))
+
+
 ## v0.57.0 (2026-10-01)
 
 ### ✳️ New
