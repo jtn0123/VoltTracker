@@ -67,7 +67,7 @@ class VirtualVolt(
     val transmitted: MutableList<String> = Collections.synchronizedList(ArrayList())
 
     /**
-     * The simulated body: null fields mean "as the catalog broadcasts it" (locked by fob, no
+     * The simulated body: null fields mean "as the catalog broadcasts it" (locked from the panel, no
      * remote-start or window frames), so the listen-only tests see exactly the catalog.
      */
     class BodyState {
