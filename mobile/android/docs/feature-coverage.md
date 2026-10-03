@@ -1,0 +1,146 @@
+# Feature Coverage
+
+Date: 2026-10-02 (surveyed at `f8d8a3aa3`; updated for #141, #142, and #143)
+
+For every user-facing feature: what automated proof exists, the highest
+validation level it reaches, and the gap. Treat the "Gap / next step" column as
+the to-do list for making every feature provably work. Re-survey after feature
+PRs; levels are from grepping the test suites, not from memory.
+
+## Levels
+
+Lowest to highest. "Highest" is the strongest level that exercises *this*
+behavior. The engine tops out at Sim and the classic WebView at Emulator. Compose
+screens are opened on the emulator, but their values are asserted only at JVM
+screenshot.
+
+| Level | Source | Proves | Caveat |
+|---|---|---|---|
+| JVM logic | `app/src/test/**` (JUnit, Robolectric SQLite, raw-frame replay) | Kotlin logic, parsers, stores. | No device, no UI. |
+| JVM screenshot | `app/src/test/**/ui/*` (Robolectric Compose, Roborazzi) | The Compose screen composes; semantics/click assertions where present. | No Roborazzi baselines are committed and nothing runs compare/verify, so a capture proves composition, not appearance. |
+| Sim | `app/src/test/**/sim/VirtualVolt*` | Real `ObdService` + polling engine against a fake ELM327/STN, up to the dashboard payload. | Only `Evidence.REAL`/`SEEN` rows are gated. Answers `NO DATA` to modes 02/03/04/07/0A. Stops at the wire payload; nothing feeds a Compose screen. |
+| jsdom | `dashboard-tests/*.test.js` (vitest) | Classic dashboard TS behavior and native-payload contracts. | Not Android WebView. |
+| Playwright | `dashboard-e2e/*.spec.js` | Classic dashboard in desktop Chromium with the mock bridge. | Not Android WebView. |
+| Emulator | `scripts/emulator-smoke.sh` + `app/src/androidTest` (3 tests) | Debug APK installs. The Compose launcher opens Drive (with demo telemetry), Trips, Charge, Insights, Car, Health, and Settings without a fatal logcat. The classic WebView handshakes, demo telemetry flows, and all 6 classic tabs render. | Compose screens are opened by `DebugLaunch` intent and proven by `StartupTrace` marks plus a screenshot; no Compose values are asserted on the device. Gating in `ci-success` again since #141. |
+| Real car | Field notes (`field-test-2026-05-19.md`, `pid-validation-2026-06-03.md`, `enhanced-discovery-tracker.md`) and the 2026-09-29 on-car session | Adapter, protocol, and decoder behavior on the 2017 Volt + OBDLink MX+. | Only the exercised route/session. |
+
+## Real-car status (2026-09-29 session)
+
+Raw SW-CAN capture, parked about 5 minutes. Captures are kept off-repo because they
+contain VIN frames.
+
+- **Confirmed:** door lock, 12 V voltage (SOC byte `0xFF` = not available),
+  A/C state, A/C compressor/evap, cabin temp, dash SOC `228334`, fuel level `012F`
+  fix.
+- **Suspect:** blower. The decoder reads `d[1]`, but only `d[2]` changed on a fan
+  change.
+- **Never seen:** TPMS, door ajar FL/FR/RL/RR, hood, trunk, windows.
+- **Unverified:** freeze frame (#114), TPMS from BCM (#121). Car controls have
+  never been sent (#77).
+
+## Matrix
+
+Kotlin paths are relative to `app/src/main/kotlin/com/volttracker/obdpoc/`; `.ts`
+paths are relative to `app/src/main/dashboard-src/js/`. `(inst)` = `app/src/androidTest`.
+
+| Area | Feature | Main code | Tests | Highest level | Gap / next step |
+|---|---|---|---|---|---|
+| Shell | Compose launcher: 5 tabs, gear Settings, pushed routes, system/predictive back | `ComposeDashboardActivity.kt`, `ui/VoltApp.kt` | LauncherManifestTest, VoltAppNavigationTest, MotionReelTest, ComposeDashboardToolsTest, ActivityVisibilitySignalTest | Emulator | The smoke opens each tab and pushed route by intent, so tapping the nav and system/predictive back are covered only on the JVM. |
+| Shell | UX: one connection status, empty states with a way out, pull to refresh, motion/haptics | `ui/components/VoltConnectRow.kt`, `ui/components/VoltRefresh.kt`, `ui/components/PageMotion.kt` | UxPassTest, PolishScreenTest, LiveUiStateStoreTest, LiveHistoryAndUnitsTest, MotionReelTest | JVM screenshot | Status comes from hand-built JSON, never from a service session. Haptics are not asserted. |
+| Shell | First-run setup card on Drive | `ui/drive/GetStarted.kt` | GetStartedTest | JVM screenshot | None at JVM level. |
+| Shell | Settings › Advanced opens the classic dashboard; Compose hands off to classic (rename drive, maintenance log, restore) and back returns | `ComposeDashboardActivity.kt`, `DashboardBackPressCallback.kt` | VoltAppNavigationTest, ComposeDashboardToolsTest, ReceiptScreensTest, DashboardBackPressCallbackTest | JVM screenshot | Compose → classic → back round trip never run on a device. Cover it in the Compose emulator smoke. |
+| Connect | Pick paired adapter; Bluetooth/location/notification permission prompts | `ui/settings/PairedAdapters.kt`, `PairedAdapterReader.kt`, `ConnectPermissionFlow.kt` | PairedAdapterReaderTest, ConnectPermissionFlowTest, PermissionGateTest, MainActivityPermissionTest, UxPassTest | JVM logic | Compose paired-adapter list (blocked state, tap → `PickAdapter`) has no UI test. Add one to SettingsScreenTest. |
+| Connect | Connect, ELM init, protocol detect, session state | `engine/ElmConnection.kt`, `SessionStateMachine.kt`, `service/ObdService.kt` | ElmConnectionTest, ElmConnectionExtraTest, ElmConnectionMonitorTest, SessionStateMachineTest, ObdServiceIntegrationTest, VirtualVoltScorecardTest | Real car | None. |
+| Connect | Auto-connect to the remembered adapter | `AutoConnectController.kt` | AutoConnectControllerTest, ComposeSettingsStoreTest | JVM logic | The `maybeConnect` trigger in the Compose activity is untested. Add a Robolectric resume test. |
+| Connect | Retry, extended reconnect, vehicle-off clean end ("drive saved") | `ConnectionRetryCoordinator.kt`, `ExtendedReconnectTier.kt`, `engine/VehicleOffDisconnect.kt` | ConnectionRetryCoordinatorTest, ExtendedReconnectTierTest, ObdPollingEngineExtendedReconnectTest, VehicleOffDisconnectTest | JVM logic | Add a Sim scenario where the car goes silent mid-drive; assert a clean end with the drive kept. |
+| Connect | Failure help: classifier, competing-app detection, troubleshooter, test connection, wait-for-adapter notify | `ConnectionFailureClassifier.kt`, `CompetingAppDetector.kt`, `TroubleshooterBridge.kt` | ConnectionFailureClassifierTest, CompetingAppDetectorTest, TroubleshooterBridgeTest, TroubleshooterBridgeConnectionTest, ComposeDashboardToolsTest, SettingsScreenTest, troubleshooter.test, connection-tools.test | jsdom | The competing-app warning exists only in the classic troubleshooter; Compose never shows it. |
+| Connect | Foreground service, wake lock, background logging | `service/ObdService.kt`, `service/ForegroundServicePolicy.kt` | ForegroundServicePolicyTest, ObdServiceWakeLockTest, ObdServiceLauncherTest, ObdServiceDemoSmokeTest (inst) | Emulator | Backgrounded real session unconfirmed (WAITING-FIELD-BACKGROUND is still open). Car batch. |
+| Live | Standard mode 01 (speed, rpm, coolant, load, pedal, SOC, module V, run time) + 255 km/h sentinel filter | `ObdMode01Batch.kt`, `PidSchedule.kt`, `SpeedPlausibilityFilter.kt` | PidScheduleTest, ObdProtocolTest, ObdElmDecodeContractTest, ObdProtocolReplayTest, SpeedPlausibilityFilterTest, VirtualVoltScorecardTest | Real car | None. |
+| Live | Volt mode 22: pack V/I/power, pack temp, charger AC/HV, charge mode, raw SOC, charge count | `ObdVoltMode22ParserRegistry.kt`, `ObdElmDecode.kt` | ObdVoltMode22ParserRegistryTest, ObdElmDecodeContractTest, EnhancedPidProfilesTest, VirtualVoltScorecardTest | Real car | None. |
+| Live | #112 on-car fixes: dash SOC `228334` + EV range `2241A6` early first read, fuel `012F` cadence | `PidSchedule.kt` | PidScheduleTest (driveHeadlineReadingsArrive…), LiveUiStateStoreTest, DriveLogicTest, VirtualVoltScorecardTest | Real car | None. `228334` is `Evidence.REAL` in the sim since #143, so the scorecard gates it. |
+| Live | HV capacity / SOH `2241A3` | `PidSchedule.kt`, `ObdVoltMode22ParserRegistry.kt` | ObdVoltMode22ParserRegistryTest, ObdReplaySimulationTest, LiveHealthStateTest | Sim (ungated) | No positive `6241A3` seen on this car. Car batch. |
+| Live | Cell voltages: min/max `224329`/`22432B`, 96-cell probe, spread | `engine/CellVoltageProbeRunner.kt`, `ObdVoltCellVoltageDecoder.kt` | CellVoltageProbeRunnerTest, HealthLogicTest, cell-grid.test, cell-balance.test | Real car (min/max) | 96-cell probe not confirmed on the car and not in the sim. |
+| Live | Drive state: gear, EV/gas/regen/park/charging, engine-on notice | `VoltGear.kt`, `classify/VehicleStateClassifier.kt` | VoltGearTest, VehicleStateClassifierTest, LiveDriveMappingTest, DriveScreenTest, gear.test | Real car | R/N/L gear codes are still `TENTATIVE` in `VoltGear`. Car batch (opportunistic). |
+| Live | Drive tab: Focus arc ring, Cockpit, landscape, energy flow | `ui/drive/DriveScreen.kt`, `ui/drive/ArcGauge.kt` | DriveScreenshotTest, DriveScreenTest, DriveLandscapeTest, DriveLogicTest | JVM screenshot | Fed hand-built `DriveUiState`. Add a Sim → `LiveUiStateStore` → `VoltApp` test. |
+| Live | Live signals; All readings with search | `ui/diag/LiveSignalsScreen.kt`, `ui/diag/AllReadingsScreen.kt` | LiveSignalsTest, AllReadingsTest, HealthDetailScreenshotTest, VoltAppNavigationTest | JVM screenshot | Search is tested as filter logic only; typing is never driven. |
+| Body | SW-CAN listen windows; HS polling resumes; plain ELM327 stays on HS-CAN | `engine/SwcanListenRunner.kt` | SwcanListenRunnerTest, VirtualVoltSwcanTest | Real car | The 1.2 s/45 s production window hears only about 30% of event-only frames. Body test is the workaround. |
+| Body | Door lock state + source | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, SwcanReadingsTest, LiveCarStateTest, VirtualVoltSwcanTest | Real car | None. The sim broadcasts the captured frame as REAL (#143). |
+| Body | 12 V battery voltage / SOC / current | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, VirtualVoltSwcanTest, CarTabLogicTest | Real car (voltage) | None. The SOC byte `0xFF` (not available on this car) used to read as 100%; #142 drops it and pins the captured frame in both tests. |
+| Body | Climate: A/C state, cabin temp estimate | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest, LiveCarStateTest, LiveDriveMappingTest, CarTabLogicTest, VirtualVoltSwcanTest | Real car | None for the decoders; the sim broadcasts the captured A/C state, A/C compressor/evap, and cabin frames as REAL (#143). Cabin temp was seen once in 5 min on the car. |
+| Body | A/C compressor rpm / evaporator temp | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest | Real car | Decoder test only. Not in the sim catalog and has no mapping test (shown only in All readings and classic signals). |
+| Body | Blower % | `SwcanFrameDecoder.kt` | SwcanFrameDecoderTest | JVM logic | SUSPECT on the car, and the test pins the suspect `d[1]`. Re-derive from the capture (`d[2]` went 0x44→0x22). |
+| Body | TPMS over SW-CAN (`0x103D4040`), top-down car | `SwcanFrameDecoder.kt`, `ui/car/CarTopView.kt` | SwcanFrameDecoderTest, VirtualVoltSwcanTest, LiveCarStateTest, CarTabLogicTest | Sim | Never seen on the car; probably needs the wheels rolling. Car batch. |
+| Body | TPMS from BCM (`22C901` on 0x241) + Car › Tire test | `BcmTirePressure.kt`, `engine/TpmsDiscoveryRunner.kt` | BcmTirePressureTest, TpmsDiscoveryRunnerTest, ComposeDashboardToolsTest, VoltAppNavigationTest, VirtualVoltScorecardTest | Sim (ungated) | Unverified on the car (#121). Scale (1.373 vs 4 kPa/count) and wheel order are unknown. Car batch. |
+| Body | Doors ajar FL/FR/RL/RR, hood, trunk, windows | `SwcanFrameDecoder.kt`, `ui/live/CarBodyMapper.kt` | SwcanFrameDecoderTest, LiveCarStateTest, CarTabLogicTest, VirtualVoltSwcanTest (FL only) | Sim (FL door) | Never seen on the car. Windows aren't in the sim. Car batch: body test while opening each one. |
+| Body | Other SW-CAN: cluster EV/gas range, cycle energy/distance, PE coolant, charge-current limit, alarm, remote-start state, heater | `SwcanFrameDecoder.kt`, `SwcanReadings.kt` | SwcanFrameDecoderTest, SwcanReadingsTest, VirtualVoltSwcanTest, live-signals.test | Sim (alarm/heater decoder-only) | Every sim frame is an OVMS-derived guess; none is car-confirmed. Car batch (opportunistic). |
+| Body | Body test (60 s continuous listen) | `engine/SwcanListenRunner.kt`, `ui/car/CarScreen.kt` | SwcanListenRunnerTest, VirtualVoltSwcanTest | Sim | The Compose "Body test" row → service wiring is untested; the Tire test has an equivalent test. |
+| Body | Car tab: lock badge, 12 V/climate/tires/windows tiles, stale/missing lines | `ui/car/CarScreen.kt`, `ui/car/CarLogic.kt` | CarScreenshotTest, CarTabLogicTest, LiveCarStateTest, emulator-smoke.sh | Emulator | Opened with demo data on the emulator, but tile values are asserted only on the JVM. |
+| Controls | Gate: OBDLink only, Park, fresh data, live session, rate limit | `CarControlGate.kt` | CarControlGateTest, VirtualVoltCarControlTest | Sim | None in software. |
+| Controls | Opt-in PIN window, per-command confirmation, demo-simulated commands | `CarControlAuth.kt`, `CarControlHostDelegate.kt`, `ComposeCarControls.kt` | CarControlAuthTest, CarControlHostDelegateTest, ComposeCarControlsTest, LiveCarStateTest, car-controls.test | jsdom | The native PIN dialog is never driven in a UI test. |
+| Controls | Commands: lock, unlock, flash, locate, remote start/stop; windows up/down (classic only) | `CarControlFrames.kt`, `engine/CarControlRunner.kt` | CarControlFramesTest, CarControlRunnerTest, VirtualVoltCarControlTest | Sim | Never sent to the car (#77). Car batch: lock/unlock with readback first. |
+| Health | DTC scan (Quick/Full; modes 03/07/0A, multi-frame) from Health; auto-scan on connect | `engine/DiagnosticScanRunner.kt`, `ComposeDtcActions.kt`, `AutoScanController.kt` | DiagnosticScanRunnerTest, ObdProtocolReplayTest, ObdReplaySimulationTest, ComposeDtcActionsTest, AutoScanControllerTest, AutoDtcScanRunnerTest, LiveHealthStateTest, DiagScreenshotTest | Real car (sweep; no stored code recorded) | The Sim answers `NO DATA` to DTC modes. Add DTC replies and a scan → Health test. |
+| Health | Clear codes (mode 04) with confirmation | `engine/ClearDtcRunner.kt`, `ComposeDtcActions.kt` | ClearDtcRunnerTest, ComposeDtcActionsTest, LiveHealthStateTest, dtc-clearability.test, a11y.spec | JVM logic | Never run on the car and has no Sim path. Add one with the DTC replies above. |
+| Health | Code meanings, severity, "safe to drive", causes, earlier codes | `ui/diag/DtcCatalog.kt`, `ui/diag/SavedCodes.kt`, `dtc-lookup.ts` | DtcCatalogTest, HealthLogicTest, DiagnosticCodeReportDbTest, DiagnosticCodeReportTest, dtc-data.test, dtc-severity.test | jsdom | None. |
+| Health | Freeze frame (mode 02) + Health › Freeze frame | `FreezeFrame.kt`, `ui/diag/FreezeFrameScreen.kt` | FreezeFrameTest, FreezeFrameLogicTest, DiagnosticScanRunnerTest, HealthDetailScreenshotTest | JVM screenshot | Unverified on the car (#114). Sim: add `42 xx 00` replies. Car: Full scan with a stored code. |
+| Health | HV battery health: SOH trend, battery card, cell spread | `ui/diag/SohTrend.kt`, `ui/diag/DiagScreen.kt` | UsefulnessLogicTest, ReceiptScreensTest, ComposeDashboardToolsTest, ObdReplaySimulationTest, soh-trend.test | JVM screenshot | Depends on `2241A3`, which is unconfirmed on this car. |
+| Trips | Session recording + SQLite persistence | `service/SessionRecorder.kt`, `data/ObdStoreWriter.kt` | SessionRecorderTest, ObdPersistenceWorkerTest, ObdScenarioSimulatorTest, ObdServiceIntegrationTest | Real car | None. |
+| Trips | Trip materialization + splits (gear-aware, park stop, user split) | `materialize/TripMaterializer.kt`, `materialize/TripSplitRules.kt` | TripMaterializerTest, TripMaterializerGearTest, TripSplitRulesTest, GearAwareTripSplitDbTest, UserTripSplitDbTest, ObdReplaySimulationTest | JVM logic | No recorded car check of distance or EV/gas split against the odometer (WAITING-FIELD-GPS-ROUTE is still open). Car batch. |
+| Trips | GPS capture + filtering | `location/LocationManagerTracker.kt`, `location/LocationFilter.kt` | LocationManagerTrackerTest, LocationFilterTest, SessionRecorderTest | Real car | None. |
+| Trips | Trips tab: grouped drives, EV/gas split bar, month figures | `ui/trips/TripsScreen.kt`, `ui/trips/TripsLogic.kt` | TripsLogicTest, TripsScreenshotTest, LiveUiStateStoreTest, ComposeDashboardToolsTest, emulator-smoke.sh | Emulator | Opened on the emulator; grouping and figures are asserted only on the JVM. |
+| Trips | Route map: Stadia tiles, EV/gas colouring, viewport | `ui/trips/TripMap.kt`, `map/StadiaTileLoader.kt` | TripMapTilesTest, TripMapViewportTest, StadiaTileLoaderTest, StadiaTilesTest | JVM screenshot | Tile fetch is faked; the key/network path is never exercised. |
+| Trips | Trip receipt: cost split, share text, route export | `ui/trips/TripReceiptScreen.kt`, `ui/receipt/Receipt.kt` | UsefulnessLogicTest, ReceiptScreensTest, UsefulnessScreenshotTest, ComposeDashboardToolsTest | JVM screenshot | None. |
+| Trips | Trip edits: rename, favourite, exclude, split/merge (classic; Compose links out) | `data/ObdTripEditStore.kt`, `trip-split.ts` | VoltBridgeTripEditsTest, TripEditRemapperTest, UserTripSplitDbTest, trip-split.test, trip-labels-maintenance.test | jsdom | No Playwright spec drives rename or split end to end. |
+| Trips | Export: per-trip GPX/CSV, all-trips CSV (formula-injection guard), share card | `TripExportController.kt`, `data/TripTrackFormatter.kt`, `TripShareCardRenderer.kt` | TripExportTest, TripExportControllerTest, TripExportShareIntentTest, TripTrackFormatterTest, TripShareCardRendererTest, all-trips-export.test | JVM logic | Share-sheet hand-off is untested on a device. |
+| Charge | Charge session detection + materialization | `materialize/ChargeSessionMaterializer.kt` | ChargeSessionMaterializerTest, MaterializerIntegrationDbTest, ObdReplaySimulationTest | JVM logic | Add a Sim CHARGING run → charge row. No car check of kWh against the EVSE. |
+| Charge | Charge tab live: power, ETA to target, session curve | `ui/charge/ChargeScreen.kt`, `ui/charge/ChargeLogic.kt` | ChargeLogicTest, ChargeScreenshotTest, LiveUiStateStoreTest, LiveHistoryAndUnitsTest, DriveLogicTest | JVM screenshot | Charger PIDs are car-confirmed but never piped into the Compose tab (needs Sim → Compose). |
+| Charge | Charge history + receipt | `ui/charge/ChargeReceiptScreen.kt`, `ui/charge/ChargeReceipt.kt` | UsefulnessLogicTest, ReceiptScreensTest, ComposeDashboardToolsTest | JVM screenshot | None. |
+| Charge | Cost: home/public rate, cost trend; savings vs gas | `ui/charge/ChargeLogic.kt`, `ui/trips/TripsLogic.kt`, `cost-model.ts` | ChargeLogicTest, TripsLogicTest, cost-model.test, charge-cost-trend.test, insights-savings.test | jsdom | Kotlin re-implements `cost-model.ts`. Add shared golden vectors run by both. |
+| Insights | Period summary: electric share, weekly bars, deltas, plain-words story, speed efficiency | `ui/insights/InsightsLogic.kt`, `ui/insights/InsightsStory.kt` | InsightsLogicTest, UsefulnessLogicTest, InsightsScreenshotTest, ComposeDashboardToolsTest | JVM screenshot | None. |
+| Insights | Maintenance: due reminders + notification, log (log is classic) | `MaintenanceDueEvaluator.kt`, `MaintenanceDueNotifier.kt`, `maintenance-panel.ts` | MaintenanceDueEvaluatorTest, MaintenanceDueNotifierTest, ObdStoreMaintenanceLogDbTest, trip-labels-maintenance.test, ReceiptScreensTest | jsdom | No Playwright spec adds or edits a log entry. |
+| Data | Back up (plain), privacy disclosure, share; settings carried in the backup | `DataBackup.kt`, `BackupController.kt`, `BackupSettingsManifest.kt` | DataBackupTest, BackupRoundTripTest, BackupControllerShareTest, BackupControllerDialogTest, BackupSettingsManifestTest, ComposeDashboardToolsTest, SettingsScreenTest | JVM logic | SAF and the share sheet are never exercised on a device. |
+| Data | Encrypted backup (passphrase of 8+ characters) | `BackupCrypto.kt` | BackupCryptoTest, BackupRoundTripTest, ComposeDashboardToolsTest | JVM logic | None. |
+| Data | Restore: validate, migrate, merge, apply, progress; refused while logging | `RestoreValidator.kt`, `RestoreApplyPipeline.kt`, `data/DatabaseMerger.kt` | RestoreValidatorTest, RestoreApplyPipelineTest, DatabaseMergerTest, BackupMigratorTest, VehicleIdentityPortabilityTest, ComposeDashboardToolsTest, restore-progress.test, diagnostics.spec | Playwright (overlay only) | The Compose file-picker → apply path is covered only at JVM logic level. |
+| Data | Storage summary, cleanup, DB migrations | `StorageSummaryPublisher.kt`, `data/VoltTrackerMigrations.kt` | StorageSummaryPublisherTest, VoltTrackerDbMigrationTest, ObdStoreMaintenanceDbTest, storage-summary.test | JVM logic | None. |
+| Settings | Units everywhere, tire placard, costs, charge target | `ui/units/VoltUnits.kt`, `ui/settings/SettingsPages.kt` | VoltUnitsTest, LiveHistoryAndUnitsTest, SettingsScreenTest, CarTabLogicTest, ComposeSettingsStoreTest | JVM screenshot | None. |
+| Settings | Themes: Appearance mode, OLED Black + accent picker, Saddle Leather, Latte | `ui/theme/VoltTheme.kt`, `ui/settings/AccentSwatches.kt` | VoltThemeTest, AppearancePageTest, AppearanceModeTest, PaletteContrastTest, SettingsPagesScreenshotTest + the `*ScreenshotTest` theme matrix | JVM screenshot | Captures are never compared, so a theme regression still passes. `SystemBarsAppearance.kt` is untested. |
+| Settings | Accessibility: text size, high contrast, reduce motion | `ui/components/VoltTextScale.kt`, `ui/theme/Contrast.kt` | PaletteContrastTest, PolishScreenshotTest, SettingsScreenTest, MotionReelTest, accessibility-prefs.test, accessibility-modes.spec, a11y.spec | Playwright (classic) | Compose large-text layouts are checked only by uncompared captures. |
+| Settings | Display prefs (keep awake, quiet live data, Focus/Detailed, energy flow); one store across Compose, classic, and service | `SharedDisplayPrefs.kt`, `ComposeSettingsStore.kt`, `PrefsKeyOwnership.kt` | SharedDisplayPrefsTest, DashboardExperienceHostDelegateTest, ComposeSettingsStoreTest, PrefsKeyOwnershipTest, DriveScreenTest, SettingsScreenTest | JVM logic | None. |
+| Settings | App updates: check, download, signer check, install | `update/UpdateManager.kt`, `update/ApkSignerCheck.kt` | UpdateManagerTest, UpdateFeedTest, UpdateCoordinatorTest, ApkSignerCheckTest, UpdatePromptTest, SettingsScreenshotTest | JVM logic | No signed release has been installed over the previous one on a phone (signing re-added 2026-09-29). |
+| Demo | Native demo session (no BT/location permission; drive arc, regen, gas, park, 3.6 kW charge) | `DemoPollingLoop.kt` | DemoPollingLoopTest, ObdServiceDemoSmokeTest (inst), DashboardDemoTelemetrySmokeTest (inst), emulator-smoke.sh | Emulator | None. |
+| Demo | Compose demo: Start/Stop, "Sample data" headers, isolated from history | `ui/settings/SettingsPages.kt`, `ui/trips/TripsDemo.kt` | VoltAppNavigationTest, PolishScreenTest, LiveUiStateStoreTest, LiveHealthStateTest, emulator-smoke.sh | Emulator | The smoke starts the demo by intent (`vt.demo`) and waits for `compose_first_telemetry`; the Settings Start/Stop control is never tapped on a device. |
+| Demo | Classic scenarios: typical, empty, power-user, fault, extreme | `demo-data.ts`, `actions-demo.ts` | demo-scenarios.test, demo-stream.test, demo-native-contract.test, demo.spec, scenario-matrix.visual.spec | Emulator (native stream) | None. |
+| Support | Send diagnostics: bundle, redaction, disclosure, share | `DiagnosticsBundle.kt`, `DiagnosticsShareIntent.kt` | DiagnosticsBundleTest, DiagnosticsShareIntentTest, SettingsScreenTest, troubleshooter.test | JVM logic | None. |
+| Support | Session JSONL, rolling app log, logcat mirror, crash logger | `ObdSessionLog.kt`, `RollingAppLog.kt`, `UncaughtCrashLogger.kt` | ObdSessionLogTest, RollingAppLogTest, LogcatMirrorTest, UncaughtCrashLoggerTest, emulator-smoke.sh | Real car | None (pulled field logs). |
+| Alerts | Foreground "logging" notification opens Compose | `service/ObdNotifications.kt` | ObdNotificationsTest | JVM logic | None. |
+| Alerts | Event alerts: charge complete/interrupted/target, low SOC, pack temp, new code | `EventNotificationDecider.kt`, `EventNotifier.kt` | EventNotificationDeciderTest, EventNotificationCoordinatorTest, EventNotifierTest, EventNotificationPrefsTest, SettingsScreenTest | JVM logic | Add a Sim CHARGING run that ends at the target and assert charge-complete fires. |
+| Alerts | Saved-drive notification + deep link to receipt | `TripSummaryNotifier.kt`, `DashboardTripDeepLink.kt` | TripSummaryNotifierTest, DashboardTripDeepLinkTest, qol-destinations.spec | Playwright | Opens the classic receipt (`MainActivity`), not the Compose Trip receipt. |
+| Alerts | Home-screen widget | `widget/VoltWidgetProvider.kt`, `widget/WidgetUpdater.kt` | VoltWidgetProviderTest, WidgetUpdaterTest, WidgetSnapshotStoreTest, WidgetStateFormatterTest, WidgetTelemetryCoalescerTest | JVM logic | Never placed on a launcher; not in any emulator run. |
+| Classic | Shell: JS↔native handshake, 6-tab nav, CSP, lazy chunks, onboarding | `MainActivity.kt`, `core.ts`, `OnboardingFlow.kt` | MainActivitySmokeTest (inst), MainActivityOnboardingTest, OnboardingFlowTest, interactions.spec, nav-jump.test, csp.test, lazy-chunk-recovery.test, emulator-smoke.sh | Emulator | None. The smoke taps the 6 nav buttons in template order; EmulatorSmokeContractTest pins the count and labels to `index.template.html` (#141). |
+| Classic | Drive: live cluster, speed/power/SOC traces | `drive.ts`, `telemetry.ts` | drive.test, drive-trend.test, live-tile-derive.test, drive-live.spec, demo.spec, DashboardDemoTelemetrySmokeTest (inst) | Real car (2026-05-19, pre-Compose) | None. |
+| Classic | Diag: signals workspace (incl. SW-CAN keys), signal logs/export, DTC detail, enhanced capability scan, detail probe, cell grid | `signals-panel.ts`, `dtc-detail.ts`, `VoltBridgeSignalLogs.kt` | live-signals.test, actions-signals.test, enhanced-capabilities.test, dtc-data.test, cell-grid.test, VoltBridgeSignalLogsTest, diagnostics.spec | Real car (enhanced scan) | None. |
+| Classic | Map: drive browser, trip detail sheet, Leaflet route, layers, live route | `map.ts`, `map-session-list.ts` | trip-detail.test, all-trips-pagination.test, map-regression.test, live-route-rehydration.test, map.spec, long-list.spec | Emulator | None. |
+| Classic | Charge + Insights tabs | `charge-history.ts`, `insights-panel.ts` | charge-sessions.test, live-charge.test, insights-pack.test, charge-insights.spec | Emulator | None. |
+| Classic | Settings: preferences, connection tools, car-controls card | `prefs.ts`, `connection-tools.ts`, `car-controls.ts` | prefs.test, connection-tools.test, car-controls.test, interactions.spec, qol-destinations.spec | Emulator | None. |
+| Classic | Resilience: offline, malformed bridge JSON, tile failure, renderer-crash recovery | `DashboardRecoveryCoordinator.kt`, `payload-validators.ts` | DashboardRecoveryCoordinatorTest, MainActivityWebViewRecoveryTest, native-payload-fuzz.test, error-paths.spec, offline.spec | Playwright | Renderer-gone recovery is never forced on an emulator. |
+
+## Priority gaps
+
+### Software-closable (ranked by user impact × ease)
+
+Closed since the survey:
+- the 12 V SOC bug (#142);
+- emulator nav geometry and Compose screens opened on the emulator (#141);
+- car-confirmed readings locked into the sim as `Evidence.REAL` (#143).
+
+1. **Sim → Compose.** Run VirtualVolt (DRIVING and CHARGING), feed `wirePayloads` into `LiveUiStateStore`, render `VoltApp`, and assert Drive SOC/range, Car lock/12 V/climate, and Charge power/ETA.
+2. **DTC + freeze frame in the sim.** Answer modes 03/07/0A/02/04 in `VirtualVolt`, then test Full scan → Health codes → Freeze frame screen → Clear → earlier codes.
+3. **Compose values on a device.** The smoke proves each Compose screen opens. Add an androidTest that runs the Compose demo and asserts live values on Drive and Car, then does the Settings › Advanced → classic → back round trip.
+4. **Blower decoder.** Re-derive it from the 2026-09-29 capture (`d[2]` moved, `d[1]` didn't), then fix the decoder and its test. Confirm in the car batch.
+5. **Untested Compose wiring.** Cover Car › Body test → service action (mirror `theTireTestRunsTheTireProbeOnTheRememberedAdapter`), the Settings paired-adapter list → `PickAdapter`, and auto-connect on Compose resume.
+
+### Real car (batch for one opportunistic session; never a blocker)
+
+1. **60 s Body test.** Open and close each door, the hood, the trunk, and each window, and change the fan speed. Covers doors, hood, trunk, windows, and blower.
+2. **10+ minute drive with the app backgrounded.** Covers SW-CAN TPMS, BCM `22C901` scale and wheel order, GPS distance against the odometer, and background logging.
+3. **Full scan.** Covers freeze-frame `42 xx 00` replies (needs a stored code) and a positive `6241A3` capacity reply.
+4. **Car controls (opt-in).** Lock/unlock with readback first, then flash/locate, and remote start last.
