@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.57.3 (2026-10-03)
+
+### 🔺 Fix
+
+- **dashboard**: Stop rewriting the status pill text on every telemetry sample
+  ([#146](https://github.com/jtn0123/VoltTracker/pull/146),
+  [`f537828`](https://github.com/jtn0123/VoltTracker/commit/f537828664572763017ca1bda45dcb2e9b2c9055))
+
+### 🔷 Changed
+
+- Per-feature test coverage and gap matrix ([#144](https://github.com/jtn0123/VoltTracker/pull/144),
+  [`ea779d6`](https://github.com/jtn0123/VoltTracker/commit/ea779d650fe40b01412a9bef9dc54d1403833900))
+
+
 ## v0.57.2 (2026-10-03)
 
 ### 🔺 Fix
