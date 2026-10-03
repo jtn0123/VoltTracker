@@ -101,7 +101,7 @@ class EmulatorSmokeContractTest {
      * is the `mobile/android` module dir under Gradle but may be `app/` in some IDE runners.
      */
     private fun locate(relative: String): File {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        var dir: File? = File("").absoluteFile
         while (dir != null) {
             val candidate = File(dir, relative)
             if (candidate.isFile) {

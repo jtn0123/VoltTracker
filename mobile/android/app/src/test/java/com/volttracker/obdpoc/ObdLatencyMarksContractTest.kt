@@ -63,7 +63,7 @@ class ObdLatencyMarksContractTest {
 
     /** Resolves a repo path by walking up from the test working directory (see EmulatorSmokeContractTest). */
     private fun locate(relative: String): File {
-        var dir: File? = File(System.getProperty("user.dir")).absoluteFile
+        var dir: File? = File("").absoluteFile
         while (dir != null) {
             val candidate = File(dir, relative)
             if (candidate.isFile) {

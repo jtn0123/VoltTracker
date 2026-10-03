@@ -235,7 +235,7 @@ private fun MiniRing(state: ChargeUiState) {
                 .size(RING_DP.dp)
                 .clearAndSetSemantics {
                     contentDescription =
-                        if (known) "Battery ${soc.roundToInt()} percent$range" else "Battery $NOT_REPORTED"
+                        if (known) "Battery ${soc.toInt()} percent$range" else "Battery $NOT_REPORTED"
                 },
         contentAlignment = Alignment.Center,
     ) {

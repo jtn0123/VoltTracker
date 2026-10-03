@@ -79,12 +79,13 @@ class VirtualVoltComposeTest {
 
         // 228334 = 0x8C → 54.9 % on the cluster's scale; the range card shows whole percent.
         text("54% battery")
-        // 2241A6 answers 0 km (the car's real reply); the gas range is the SW-CAN fuelRangeKm frame.
+        // 2241A6 = 0x0DC0 / 64 = 55 km electric; the gas range is the SW-CAN fuelRangeKm frame.
+        val evMiles = milesWhole(EV_RANGE_KM)
         val gasMiles = milesWhole(last.getDouble("fuelRangeKm"))
         assertTrue("the gas range frame decoded to a real distance", gasMiles > 0)
-        text("$gasMiles mi total")
-        text("0 mi")
+        text("$evMiles mi")
         text("$gasMiles mi")
+        text("${milesWhole(EV_RANGE_KM + last.getDouble("fuelRangeKm"))} mi total")
 
         tab(VoltTab.CAR)
         assertCar(last, aux12Line = "car on · charging")
@@ -105,6 +106,8 @@ class VirtualVoltComposeTest {
         val fullBy = SimpleDateFormat("h:mm a", Locale.US).format(Date(last.getLong("updatedAt") + remainingMs))
         text("Full by $fullBy")
         text("1 hr 51 min remaining")
+        // The small ring's spoken figure truncates like every visible one: 54.9 % is 54, not 55.
+        compose.onNodeWithContentDescription("Battery 54 percent", substring = true).assertIsDisplayed()
 
         tab(VoltTab.DRIVE)
         compose
@@ -224,6 +227,9 @@ class VirtualVoltComposeTest {
 
         /** androidx.core's per-app permission for not-exported receivers before API 33. */
         const val RECEIVER_PERMISSION_SUFFIX = ".DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+
+        /** 2241A6 = 0x0DC0 at 1/64 km. */
+        const val EV_RANGE_KM = 55.0
 
         /** 228334 = 0x8C, as the decoder reports it. */
         const val DISPLAYED_SOC = 54.9
