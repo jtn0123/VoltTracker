@@ -103,4 +103,46 @@ class DtcCatalogTest {
         assertEquals(1, codes[2].seenCount)
         assertEquals(emptyList<DtcCode>(), savedCodes(JSONObject(), catalog))
     }
+
+    @Test
+    fun aCodeTakesTheStrongestStatusItsNewestSessionReported() {
+        fun row(
+            status: String,
+            last: Long,
+            session: Long,
+        ) = JSONObject()
+            .put("dtc", "P0128")
+            .put("status", status)
+            .put("firstSeenMs", 100L)
+            .put("lastSeenMs", last)
+            .put("seenCount", 1)
+            .put("lastSessionId", session)
+
+        // One scan reads Mode 03, then 0A, then the freeze frame: the newest row is the freeze frame's.
+        val oneScan =
+            JSONArray()
+                .put(row("freeze-frame", 340L, 7L))
+                .put(row("permanent", 220L, 7L))
+                .put(row("stored", 100L, 7L))
+        val code = savedCodes(JSONObject().put("latestDiagnosticCodes", oneScan), catalog).single()
+        assertEquals("stored", code.status)
+        assertEquals("still dated by its newest report", 340L, code.lastSeenMs)
+
+        // Cleared, then rescanned (session 9): only Mode 0A still reports it.
+        val afterClear =
+            JSONArray()
+                .put(row("permanent", 900L, 9L))
+                .put(row("freeze-frame", 340L, 7L))
+                .put(row("stored", 100L, 7L))
+        assertEquals(
+            "permanent",
+            savedCodes(JSONObject().put("latestDiagnosticCodes", afterClear), catalog).single().status,
+        )
+
+        // A pending code the car hasn't confirmed yet stays pending; a pending and permanent one is permanent.
+        val pending = JSONArray().put(row("pending", 500L, 3L)).put(row("freeze-frame", 520L, 3L))
+        assertEquals("pending", savedCodes(JSONObject().put("latestDiagnosticCodes", pending), catalog).single().status)
+        val both = JSONArray().put(row("pending", 500L, 3L)).put(row("permanent", 480L, 3L))
+        assertEquals("permanent", savedCodes(JSONObject().put("latestDiagnosticCodes", both), catalog).single().status)
+    }
 }

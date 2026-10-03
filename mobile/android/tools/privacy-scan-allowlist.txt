@@ -34,3 +34,7 @@ path:mobile/android/tools/privacy-scan.py
 line:<ip:port
 line:<ip:port-or-adb-serial>
 line:<adb-serial-or-ip:port>
+
+# The virtual Volt's synthetic VIN (sim/VirtualVolt.kt): GM's 1G1 maker code and model year H
+# with an all-zero serial, so the app's VIN parser accepts it. Hand-made, not from a car.
+line:1G1RC6S5XHU000000
