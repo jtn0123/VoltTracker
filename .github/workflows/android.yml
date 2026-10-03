@@ -950,6 +950,29 @@ jobs:
           elapsed=$(( $(date +%s) - JOB_STARTED_AT ))
           echo "Job wall-clock: $((elapsed / 60))m $((elapsed % 60))s" >> "$GITHUB_STEP_SUMMARY"
 
+  workflow-lint:
+    # actionlint (plus shellcheck on every `run:` block) over .github/workflows. Not
+    # path-gated: a workflow file that no longer parses fails in 0 s with no job log and no
+    # check on the PR that broke it. release.yml sat broken that way after #122 (an unquoted
+    # `:all:` read as a YAML mapping) and silently stopped releases, so every PR lints them.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: 1.7.12
+          ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+        run: |
+          curl --proto "=https" --tlsv1.2 -sSfL -o "$RUNNER_TEMP/actionlint.tar.gz" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/actionlint.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Lint workflows
+        run: |
+          "$RUNNER_TEMP/actionlint" -color
+
   ci-success:
     # Single aggregate status so branch protection only needs to require one
     # check ("ci-success") instead of enumerating every lane. Adding a new test
@@ -977,6 +1000,7 @@ jobs:
         dashboard-visual,
         gradle-dependency-audit,
         dependency-review,
+        workflow-lint,
       ]
     runs-on: ubuntu-latest
     steps:
@@ -1000,7 +1024,16 @@ jobs:
   publish-debug-release:
     # Rolling debug build of main, surfaced as a permanent download URL:
     # https://github.com/jtn0123/VoltTracker/releases/tag/latest-debug
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    #
+    # The results are checked explicitly because the implicit success() check also looks at
+    # transitive needs: dependency-review (pull_request only) is always skipped on a push, so
+    # through ci-success it skipped this job on every main push and latest-debug went without
+    # an APK from 2026-08-06 until this condition was spelled out.
+    if: >-
+      !cancelled()
+      && github.event_name == 'push' && github.ref == 'refs/heads/main'
+      && needs.emulator-smoke.result == 'success'
+      && needs.ci-success.result == 'success'
     # emulator-smoke uploads volttracker-debug-apk on main pushes (it always runs there).
     needs: [emulator-smoke, ci-success]
     runs-on: ubuntu-latest

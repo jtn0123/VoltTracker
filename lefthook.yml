@@ -48,7 +48,7 @@ pre-commit:
       glob: ".github/workflows/**/*.{yml,yaml}"
       run: |
         if command -v actionlint >/dev/null 2>&1; then
-          actionlint -config-file .github/actionlint.yaml {staged_files}
+          actionlint {staged_files}
         else
           echo "warning: skipping actionlint because it is not installed"
           echo "run 'brew install actionlint' to enable local workflow lint"
