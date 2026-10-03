@@ -145,6 +145,7 @@ object SwcanFrameDecoder {
     private const val WINDOW_BITS = 0x07
     private const val WINDOW_REAR_SHIFT = 3
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
+    private const val NOT_AVAILABLE_BYTE = 0xFF
     private const val GMLAN_RANGE_SCALE = 0.015625
     private const val PERCENT_PER_COUNT = 0.392157
     private const val TPMS_KPA_PER_COUNT = 4
@@ -299,12 +300,13 @@ object SwcanFrameDecoder {
     }
 
     // Battery_Voltage (arb 0x124), intelligent battery sensor: BatVlt 0.1 V + 3 V, BatSOC 0.392 %,
-    // BattCrntFltrd signed 0.5 A (charge-positive).
+    // BattCrntFltrd signed 0.5 A (charge-positive). A 2017 Volt sends BatSOC as 0xFF (not available)
+    // in every frame, which would otherwise read as a steady 100 %, so that byte is dropped.
     private fun battery12v(d: IntArray): List<SwcanReading> {
         if (d.size < 6) return none()
-        return listOf(
+        return listOfNotNull(
             num(SwcanField.AUX12V_VOLTAGE, d[2] * 0.1 + 3.0, 1),
-            num(SwcanField.AUX12V_SOC, d[3] * PERCENT_PER_COUNT, 0),
+            if (d[3] == NOT_AVAILABLE_BYTE) null else num(SwcanField.AUX12V_SOC, d[3] * PERCENT_PER_COUNT, 0),
             num(SwcanField.AUX12V_CURRENT, signedByte(d[5]) * 0.5, 1),
         )
     }
