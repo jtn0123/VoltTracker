@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.57.4 (2026-10-03)
+
+### 🔺 Fix
+
+- **swcan**: Read the blower from byte 2 and use real car replies in the virtual Volt
+  ([#148](https://github.com/jtn0123/VoltTracker/pull/148),
+  [`851d6db`](https://github.com/jtn0123/VoltTracker/commit/851d6dbb1bafae14bf8f928e05a06d7dfcd395de))
+
+### 🔷 Changed
+
+- Gate the car-confirmed SW-CAN and dash-SOC readings in the virtual Volt
+  ([#143](https://github.com/jtn0123/VoltTracker/pull/143),
+  [`bdc7b4c`](https://github.com/jtn0123/VoltTracker/commit/bdc7b4c31bb18a772eacda20d4e33b2e72ef7673))
+
+
 ## v0.57.3 (2026-10-03)
 
 ### 🔺 Fix
