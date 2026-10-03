@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.57.5 (2026-10-03)
+
+### 🔺 Fix
+
+- **charge**: Truncate the charge ring and session SOC like every other battery figure
+  ([#150](https://github.com/jtn0123/VoltTracker/pull/150),
+  [`ffc0324`](https://github.com/jtn0123/VoltTracker/commit/ffc03245a9e3b0886ceff3c54dc2771e7a364b5a))
+
+### 🔷 Changed
+
+- Render virtual Volt telemetry through the Compose screens
+  ([#149](https://github.com/jtn0123/VoltTracker/pull/149),
+  [`a817d40`](https://github.com/jtn0123/VoltTracker/commit/a817d40891e6e3f9d3531d0d11f33587d5695713))
+
+
 ## v0.57.4 (2026-10-03)
 
 ### 🔺 Fix
