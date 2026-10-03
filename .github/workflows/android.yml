@@ -79,7 +79,11 @@ jobs:
               # sources do, so toolchain changes must also exercise the WebView runtime
               # smoke — the handshake depends on the built bundle.
               - 'mobile/android/dashboard-tests/**'
-              - 'mobile/android/scripts/emulator-smoke.sh'
+              # Everything the emulator session runs, so a change to it exercises it.
+              - 'mobile/android/scripts/emulator-*.sh'
+              - 'mobile/android/scripts/check-instrumentation-output.sh'
+              - 'mobile/android/scripts/install-emulator-diagnostics.sh'
+              - 'mobile/android/tools/perf/check_obd_latency.py'
 
   unit-tests:
     needs: [changes]
@@ -796,13 +800,12 @@ jobs:
           fail-on-severity: moderate
 
   emulator-smoke:
-    # Informational (not part of ci-success; see the note there) WebView runtime
-    # smoke for the file:// dashboard path. It installs
-    # the debug APK on an emulator, asserts the dashboard JS reaches the native
-    # "dashboard handshake received" logcat marker, starts demo telemetry, and
-    # taps through the dashboard tabs while scanning logcat for runtime errors.
-    # PRs that only touch JVM tests, docs, or other non-runtime files skip this
-    # slow lane; pushes to main and manual runs always execute it.
+    # On-device runtime smoke (part of ci-success). On an emulator it installs the debug APK,
+    # opens every Compose launcher tab plus Health and Settings with demo telemetry, then
+    # asserts the classic WebView dashboard's JS handshake, demo telemetry and bottom-nav taps
+    # while scanning logcat for crashes and uncaught JS errors, then runs the instrumented
+    # tests. PRs that only touch JVM tests, docs, or other non-runtime files skip this slow
+    # lane; pushes to main and manual runs always execute it.
     needs: [changes]
     if: github.event_name != 'pull_request' || needs.changes.outputs.emulator_smoke == 'true'
     runs-on: ubuntu-latest
@@ -980,14 +983,12 @@ jobs:
     # from the `needs` map itself (no second hand-maintained list to forget), so a
     # newly-added job can't silently pass this gate while failing.
     #
-    # emulator-smoke is deliberately NOT in this list. The hosted Android emulator
-    # flakes on roughly 2 of every 3 runs for infrastructure reasons (boot/renderer
-    # crashes unrelated to the change under test), and because ci-success is a
-    # required check that flake was blocking merges. emulator-smoke still runs on
-    # every runtime PR and every main push as an informational check — a red
-    # emulator-smoke is still visible on the PR and still blocks
-    # publish-debug-release — it just no longer gates ci-success. Every other lane
-    # stays in the list, so their failures still fail this gate.
+    # emulator-smoke is back in this list. #139 dropped it on a "fails 2 of 3 runs" estimate,
+    # but the job's history said otherwise: after the 2026-09-06 renderer fix (-gpu swangle),
+    # 3 of ~200 runs that reached the emulator failed there — two Play services restarts that
+    # killed the app (now retried once on that exact log signature, emulator-session.sh) and
+    # one main-thread-starved instrumented poll (UiThreadPolling.kt). The other red runs were
+    # build failures that also failed unit-tests.
     if: always()
     needs:
       [
@@ -1000,6 +1001,7 @@ jobs:
         dashboard-visual,
         gradle-dependency-audit,
         dependency-review,
+        emulator-smoke,
         workflow-lint,
       ]
     runs-on: ubuntu-latest

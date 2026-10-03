@@ -1,18 +1,19 @@
 name: Android emulator smoke
 
-# STATUS: SUPPLEMENTAL scheduled/manual smoke. The per-PR WebView smoke lives in
-# `.github/workflows/android.yml` (informational; not part of `ci-success`).
+# STATUS: SUPPLEMENTAL scheduled/manual smoke. The per-PR smoke lives in
+# `.github/workflows/android.yml` (`emulator-smoke`, part of `ci-success`).
 #
-# This job intentionally does not run on PRs: dashboard/startup PRs already boot
-# an emulator through the `emulator-smoke` job in android.yml. Keeping
-# this lane scheduled/manual avoids a second slow emulator run and still leaves
-# an on-demand artifact source for investigating hosted-emulator drift.
+# This job intentionally does not run on PRs: runtime PRs already boot an emulator through
+# android.yml. It runs the SAME session (scripts/emulator-session.sh: the Compose + classic
+# shell smoke, then the instrumented tests) on a different screen profile (pixel_6), weekly
+# and on demand, so hosted-emulator drift shows up between PRs and repeat runs give a flake
+# rate. Failures on main open a `ci-failure` issue (ci-failure-alert.yml).
 #
-# TEST CONTRACT: the smoke's pass signal is the exact logcat line
-# "dashboard handshake received" (emitted by MainActivity.onDashboardReady,
-# grepped in scripts/emulator-smoke.sh). Renaming that log silently neuters this
-# job — change both sides in the same commit. See that script's header and
-# mobile/android/docs/data-model.md.
+# TEST CONTRACT: the smoke's pass signals are exact logcat strings — the classic dashboard's
+# "dashboard handshake received" (MainActivity.DASHBOARD_READY_LOG) and the Compose launcher's
+# VoltStartup marks (StartupTrace.COMPOSE_SCREEN / COMPOSE_FIRST_TELEMETRY), grepped in
+# scripts/emulator-smoke.sh. EmulatorSmokeContractTest pins both sides; see that script's header
+# and mobile/android/docs/data-model.md.
 #
 on:
   schedule:
@@ -31,6 +32,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
+      - name: Pin Android user directory
+        # Same as android.yml: keep AGP debug signing in one place across emulator setup.
+        run: echo "ANDROID_USER_HOME=$RUNNER_TEMP/volttracker-android" >> "$GITHUB_ENV"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -46,7 +50,7 @@ jobs:
           node-version: '24'
           cache: 'npm'
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
-      - name: Build debug APK
+      - name: Build debug APK and instrumented-test APK
         working-directory: mobile/android
         env:
           # Stadia Maps basemap key -> BuildConfig.STADIA_API_KEY. An unset/empty secret is
@@ -54,7 +58,7 @@ jobs:
           STADIA_API_KEY: ${{ secrets.STADIA_API_KEY }}
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon --configuration-cache :app:assembleDebug
+          ./gradlew --no-daemon --configuration-cache :app:assembleDebug :app:assembleDebugAndroidTest
       - name: Enable KVM
         # Hardware acceleration for the x86_64 emulator on ubuntu-latest.
         run: |
@@ -62,19 +66,18 @@ jobs:
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Launch app and assert the dashboard JS comes alive
+      - name: Run the emulator session (Compose + classic smoke, instrumented tests)
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
           api-level: 34
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          pre-emulator-launch-script: bash mobile/android/scripts/install-emulator-diagnostics.sh
           emulator-options: -no-window -no-audio -no-snapshot -no-boot-anim -gpu swangle
-          # The action runs `script` line-by-line, so the multi-line poll lives in a real script
-          # file (also makes it shellcheck-able and locally testable). It installs the APK, launches
-          # the app, asserts the dashboard's JS->native handshake reaches logcat, starts demo
-          # telemetry, taps through the bottom nav, and captures screenshot/logcat artifacts.
-          script: bash mobile/android/scripts/emulator-smoke.sh
+          # One line on purpose: the action runs `script:` line by line through separate dash
+          # shells. See the same step in android.yml.
+          script: bash mobile/android/scripts/emulator-session.sh
       - name: Upload emulator smoke artifacts
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -82,5 +85,8 @@ jobs:
           name: emulator-smoke-artifacts
           path: |
             mobile/android/build/emulator-smoke-logcat.txt
+            mobile/android/build/emulator-session-logcat.txt
+            mobile/android/build/emulator-instrumentation.txt
+            mobile/android/build/emulator-process/
             mobile/android/build/emulator-smoke/
           if-no-files-found: ignore

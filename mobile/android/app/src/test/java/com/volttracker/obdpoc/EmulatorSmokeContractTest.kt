@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -39,21 +40,75 @@ class EmulatorSmokeContractTest {
     }
 
     /**
-     * Resolves `scripts/emulator-smoke.sh` by walking up from the test working directory, which is
-     * the `mobile/android` module dir under Gradle but may be `app/` in some IDE runners.
+     * The Compose phase's only positive signals are the debug VoltStartup marks named by
+     * [StartupTrace.COMPOSE_SCREEN] and [StartupTrace.COMPOSE_FIRST_TELEMETRY]. Renaming either
+     * side alone would leave the smoke waiting for a mark nobody logs (red) or, worse, grepping a
+     * stale name that some other line happens to contain.
      */
-    private fun locateSmokeScript(): File {
+    @Test
+    fun smokeScriptWaitsForTheComposeMarks() {
+        val contents = locate("scripts/emulator-smoke.sh").readText()
+
+        for (
+        (name, value) in
+        listOf(
+            "StartupTrace.COMPOSE_SCREEN" to StartupTrace.COMPOSE_SCREEN,
+            "StartupTrace.COMPOSE_FIRST_TELEMETRY" to StartupTrace.COMPOSE_FIRST_TELEMETRY,
+        )
+        ) {
+            assertTrue("emulator-smoke.sh must reference $name", contents.contains(name))
+            assertTrue("emulator-smoke.sh must use the value of $name (\"$value\")", contents.contains("\"$value\""))
+        }
+    }
+
+    /**
+     * The classic phase taps the bottom nav by geometry: NAV_COUNT equal slots across the pill. The
+     * script kept 7 slots after the nav shrank to 6 buttons, so its 4th tap landed on a button
+     * boundary. Pin the count and the tapped labels to the template's data-nav buttons.
+     */
+    @Test
+    fun smokeScriptTapsEveryClassicNavButtonInOrder() {
+        val script = locate("scripts/emulator-smoke.sh").readText()
+        val template = locate("app/src/main/dashboard-src/index.template.html").readText()
+        val navButtons = Regex("""data-nav="([a-z-]+)"""").findAll(template).map { it.groupValues[1] }.toList()
+
+        val navCount =
+            Regex("""(?m)^NAV_COUNT=(\d+)$""")
+                .find(script)
+                ?.groupValues
+                ?.get(1)
+                ?.toInt()
+        assertEquals("NAV_COUNT must equal the template's data-nav button count", navButtons.size, navCount)
+        val tapped =
+            Regex("""(?m)^tap_bottom_nav (\d+) ([a-z-]+) """)
+                .findAll(script)
+                .map { it.groupValues[1].toInt() to it.groupValues[2] }
+                .toList()
+        assertEquals(
+            "the smoke must tap each data-nav button once, in order",
+            navButtons.withIndex().map {
+                it.index to
+                    it.value
+            },
+            tapped,
+        )
+    }
+
+    private fun locateSmokeScript(): File = locate("scripts/emulator-smoke.sh")
+
+    /**
+     * Resolves a path under `mobile/android` by walking up from the test working directory, which
+     * is the `mobile/android` module dir under Gradle but may be `app/` in some IDE runners.
+     */
+    private fun locate(relative: String): File {
         var dir: File? = File(System.getProperty("user.dir")).absoluteFile
         while (dir != null) {
-            val candidate = File(dir, "scripts/emulator-smoke.sh")
+            val candidate = File(dir, relative)
             if (candidate.isFile) {
                 return candidate
             }
             dir = dir.parentFile
         }
-        throw AssertionError(
-            "could not locate scripts/emulator-smoke.sh searching upward from " +
-                System.getProperty("user.dir"),
-        )
+        throw AssertionError("could not locate $relative searching upward from " + System.getProperty("user.dir"))
     }
 }

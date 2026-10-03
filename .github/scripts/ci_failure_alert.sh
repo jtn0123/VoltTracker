@@ -17,26 +17,13 @@ DRY_RUN="${DRY_RUN:-0}"
 LABEL="ci-failure"
 TITLE="CI failing on main: ${WORKFLOW}"
 
-# Informational lanes that may fail without main counting as broken. emulator-smoke in
-# "Android unit tests" is outside ci-success because the hosted emulator flakes (see the
-# ci-success comment in android.yml); drop it from here when it becomes required again.
-# The weekly "Android emulator smoke" workflow is NOT exempt.
-informational=""
-if [[ "$WORKFLOW" = "Android unit tests" ]]; then
-  informational="emulator-smoke"
-fi
-
 failed_jobs=""
 if [[ "$CONCLUSION" != "success" ]]; then
-  all_failed="$(gh api "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
+  failed_jobs="$(gh api "repos/${GH_REPO}/actions/runs/${RUN_ID}/jobs?per_page=100" \
     --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name')"
-  if [[ -z "$all_failed" ]]; then
-    # A run that never started a job (e.g. startup_failure) still means main is broken.
+  # A run that never started a job (e.g. startup_failure) still means main is broken.
+  if [[ -z "$failed_jobs" ]]; then
     failed_jobs="(no job failed; run concluded ${CONCLUSION})"
-  elif [[ -n "$informational" ]]; then
-    failed_jobs="$(printf '%s\n' "$all_failed" | grep -vxF "$informational" || true)"
-  else
-    failed_jobs="$all_failed"
   fi
 fi
 

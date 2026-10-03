@@ -248,3 +248,11 @@ If you rename or reword that log, you must update the `grep` in
 `.github/workflows/android.yml` / `.github/workflows/android-emulator-smoke.yml`)
 in the same change, or the smoke
 goes permanently green while testing nothing.
+
+The Compose launcher has the same kind of contract. The smoke's Compose phase
+waits for two debug-build `VoltStartup` marks, the values of
+`StartupTrace.COMPOSE_FIRST_TELEMETRY` (`compose_first_telemetry`: demo
+telemetry reached the Compose live store) and `StartupTrace.COMPOSE_SCREEN`
+(`compose_screen:<view>`: that screen composed). `EmulatorSmokeContractTest`
+pins both strings, plus the classic phase's bottom-nav tap list against the
+template's `data-nav` buttons.

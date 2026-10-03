@@ -47,7 +47,37 @@ cleanup_session_logcat() {
 }
 trap cleanup_session_logcat EXIT
 
-bash "$android_dir/scripts/emulator-smoke.sh" || exit $?
+# The one infra failure the session retries. Twice (runs 36391839841, 36220518426) the
+# google_apis image restarted Play services mid-run and Android killed our process with it,
+# because the WebView holds Play services' font provider:
+#   Killing 5218:com.volttracker.obdpoc.debug/u0a190 (adj 0): depends on provider
+#   com.google.android.gms/.fonts.provider.FontsProvider in dying proc com.google.android.gms.persistent
+# A phase that fails AND logged a new kill like that gets exactly one more attempt. Any other
+# failure, or a second failure, still fails the job.
+gms_kill_re='Killing [0-9]+:com\.volttracker\.obdpoc(\.debug)?/.*depends on provider .* in dying proc com\.google\.android\.gms'
+
+gms_kills() {
+  grep -cE "$gms_kill_re" "$session_logcat" 2>/dev/null || true
+}
+
+run_phase() {
+  local name="$1"
+  shift
+  local before status
+  before="$(gms_kills)"
+  "$@" && return 0
+  status=$?
+  # Give the streaming logcat a moment to flush the kill line to disk.
+  sleep 3
+  if [ "$(gms_kills)" -gt "$before" ]; then
+    echo "::warning title=Emulator smoke::$name failed after Play services restarted and took the app process with it (emulator image, not the app). Retrying once."
+    "$@"
+    return $?
+  fi
+  return "$status"
+}
+
+run_phase "Shell smoke" bash "$android_dir/scripts/emulator-smoke.sh" || exit $?
 
 # Instrumented tests, run straight through adb rather than `gradlew connectedDebugAndroidTest`.
 # The workflow's build step already produced both APKs and emulator-smoke.sh installed the app;
@@ -61,16 +91,20 @@ test_apk="$android_dir/app/build/outputs/apk/androidTest/debug/app-debug-android
 instrumentation_log="$build_dir/emulator-instrumentation.txt"
 runner="com.volttracker.obdpoc.debug.test/androidx.test.runner.AndroidJUnitRunner"
 
-adb install -r -t "$test_apk" || exit $?
-# Match Gradle's fresh start: instrumentation restarts the target process anyway, but stop the
-# demo telemetry the shell smoke left running so the tests begin from a quiet app.
-adb shell am force-stop com.volttracker.obdpoc.debug || true
-# `am instrument` exits 0 even when tests fail or the process crashes, so its exit status is not
-# the verdict — check-instrumentation-output.sh parses the transcript instead.
-adb shell am instrument -w "$runner" 2>&1 | tee "$instrumentation_log"
-adb_status=${PIPESTATUS[0]}
-if [ "$adb_status" -ne 0 ]; then
-  echo "::error title=Instrumented tests::adb shell am instrument exited $adb_status"
-  exit "$adb_status"
-fi
-bash "$android_dir/scripts/check-instrumentation-output.sh" "$instrumentation_log" || exit $?
+run_instrumented_tests() {
+  adb install -r -t "$test_apk" || return $?
+  # Match Gradle's fresh start: instrumentation restarts the target process anyway, but stop the
+  # demo telemetry the shell smoke left running so the tests begin from a quiet app.
+  adb shell am force-stop com.volttracker.obdpoc.debug || true
+  # `am instrument` exits 0 even when tests fail or the process crashes, so its exit status is
+  # not the verdict — check-instrumentation-output.sh parses the transcript instead.
+  adb shell am instrument -w "$runner" 2>&1 | tee "$instrumentation_log"
+  local adb_status=${PIPESTATUS[0]}
+  if [ "$adb_status" -ne 0 ]; then
+    echo "::error title=Instrumented tests::adb shell am instrument exited $adb_status"
+    return "$adb_status"
+  fi
+  bash "$android_dir/scripts/check-instrumentation-output.sh" "$instrumentation_log"
+}
+
+run_phase "Instrumented tests" run_instrumented_tests || exit $?

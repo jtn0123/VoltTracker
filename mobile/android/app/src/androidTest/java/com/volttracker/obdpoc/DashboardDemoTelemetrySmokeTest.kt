@@ -11,7 +11,6 @@ import org.junit.After
 import org.junit.Assert.fail
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * On-device smoke for the full native->WebView telemetry pipeline, one step past
@@ -50,53 +49,37 @@ class DashboardDemoTelemetrySmokeTest {
         }
     }
 
-    /** Polls [MainActivity.isDashboardReadyForTest] like [MainActivitySmokeTest] does. */
+    /** Waits for [MainActivity.isDashboardReadyForTest] like [MainActivitySmokeTest] does. */
     private fun awaitDashboardHandshake(scenario: ActivityScenario<MainActivity>) {
-        val deadline = System.currentTimeMillis() + HANDSHAKE_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            var ready = false
-            scenario.onActivity { activity -> ready = activity.isDashboardReadyForTest() }
-            if (ready) {
-                return
+        val ready =
+            scenario.awaitOnUiThread(HANDSHAKE_TIMEOUT_MS) { activity, done ->
+                if (activity.isDashboardReadyForTest()) done.set(true)
             }
-            Thread.sleep(POLL_INTERVAL_MS)
-        }
-        fail("dashboard JS handshake did not complete within ${HANDSHAKE_TIMEOUT_MS}ms")
+        if (!ready) fail("dashboard JS handshake did not complete within ${HANDSHAKE_TIMEOUT_MS}ms")
     }
 
     /**
      * Polls the live dashboard page for evidence that a telemetry sample arrived through the
-     * bridge. `evaluateJavascript` must run on the UI thread ([ActivityScenario.onActivity])
-     * and reports asynchronously, so the result latch is checked on the next poll pass.
+     * bridge. `evaluateJavascript` must run on the UI thread and reports asynchronously, so its
+     * callback sets the flag a later poll pass sees.
      */
     private fun awaitDashboardTelemetry(scenario: ActivityScenario<MainActivity>) {
-        val telemetrySeen = AtomicBoolean(false)
-        val deadline = System.currentTimeMillis() + TELEMETRY_TIMEOUT_MS
-        while (System.currentTimeMillis() < deadline) {
-            if (telemetrySeen.get()) {
-                return
-            }
-            scenario.onActivity { activity ->
+        val seen =
+            scenario.awaitOnUiThread(TELEMETRY_TIMEOUT_MS) { activity, done ->
                 activity.webViewForTest()?.evaluateJavascript(TELEMETRY_PROBE_JS) { result ->
-                    if (result == "\"yes\"") {
-                        telemetrySeen.set(true)
-                    }
+                    if (result == "\"yes\"") done.set(true)
                 }
             }
-            Thread.sleep(POLL_INTERVAL_MS)
-        }
-        if (!telemetrySeen.get()) {
-            fail("no demo telemetry reached the dashboard bridge within ${TELEMETRY_TIMEOUT_MS}ms")
-        }
+        if (!seen) fail("no demo telemetry reached the dashboard bridge within ${TELEMETRY_TIMEOUT_MS}ms")
     }
 
     private companion object {
         // Cold WebView + esbuild bundle parse on an emulator; generous to avoid CI flake.
         const val HANDSHAKE_TIMEOUT_MS = 45_000L
 
-        // The demo loop streams about one sample per second; generous to avoid CI flake.
-        const val TELEMETRY_TIMEOUT_MS = 30_000L
-        const val POLL_INTERVAL_MS = 250L
+        // The demo loop streams about one sample per second. 60 s, not 30: a software-rendered
+        // CI emulator can take ~20 s just to paint the first sampled frames.
+        const val TELEMETRY_TIMEOUT_MS = 60_000L
 
         // telemetry.ts's updateTelemetry sets state.lastSampleAt (wall clock, > 0) for every
         // sample that arrives via window.VoltTrackerNative — the observable "a sample made it
