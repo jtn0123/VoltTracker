@@ -125,7 +125,7 @@ object ObdProtocol {
             return false
         }
         val lines = adapterHexLines(response)
-        val cleanPids = pidHex.map { (it ?: "").uppercase(Locale.US) }
+        val cleanPids = pidHex.map { it.uppercase(Locale.US) }
         if (consumeMode01MarkersInOrder(lines, cleanPids)) {
             return true
         }

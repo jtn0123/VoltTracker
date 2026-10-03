@@ -297,6 +297,9 @@ dependencies {
     testImplementation libs.json
     // Robolectric runs the real Android SQLite layer on the JVM for ObdLocalStore tests.
     testImplementation libs.robolectric
+    // Stands in for framework-constructed types tests can't build themselves (e.g. the
+    // RenderProcessGoneDetail WebView hands to onRenderProcessGone; its constructor is deprecated).
+    testImplementation libs.mockito.core
     // Roborazzi renders Compose screens headlessly (Robolectric native graphics) and
     // writes PNG screenshots — the JVM-only "after" screenshot pipeline for the
     // Compose dashboard rewrite. No emulator needed.

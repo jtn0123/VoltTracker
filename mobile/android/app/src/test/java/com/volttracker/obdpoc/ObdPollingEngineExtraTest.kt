@@ -1,7 +1,7 @@
 package com.volttracker.obdpoc
 
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import com.volttracker.obdpoc.engine.ElmConnection
 import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
@@ -81,7 +81,7 @@ class ObdPollingEngineExtraTest {
         // Use the *real* engine (not TestObdPollingEngine, which hard-codes the override) so the
         // production isBluetoothReady() body — BluetoothAdapters.get(...) + adapter.isEnabled — runs.
         val realEngine = ObdPollingEngine(service)
-        val adapterShadow = shadowOf(BluetoothAdapter.getDefaultAdapter())
+        val adapterShadow = shadowOf(service.getSystemService(BluetoothManager::class.java).adapter)
 
         adapterShadow.setEnabled(true)
         assertTrue("an enabled adapter must report Bluetooth ready", realEngine.isBluetoothReady())

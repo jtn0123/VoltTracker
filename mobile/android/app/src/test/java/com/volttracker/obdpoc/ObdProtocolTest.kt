@@ -424,7 +424,7 @@ class ObdProtocolTest {
         assertNotNull("real max-cell frame must decode", maxCell)
         assertEquals(3.604, minCell!!.valueNumeric!!, 0.001)
         assertEquals(3.625, maxCell!!.valueNumeric!!, 0.001)
-        val imbalanceMv = (maxCell.valueNumeric!! - minCell.valueNumeric!!) * 1000.0
+        val imbalanceMv = (maxCell.valueNumeric - minCell.valueNumeric) * 1000.0
         assertTrue("cell imbalance should be a sane tens-of-mV figure: $imbalanceMv", imbalanceMv in 0.0..150.0)
     }
 

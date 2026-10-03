@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Looper
 import androidx.core.content.FileProvider
+import androidx.core.content.IntentCompat
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdDbMaintenanceStore
 import com.volttracker.obdpoc.data.ObdLocalStore
@@ -118,7 +119,7 @@ class BackupControllerShareTest {
             return started
         }
         assertEquals(Intent.ACTION_CHOOSER, started.action)
-        val inner = started.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+        val inner = IntentCompat.getParcelableExtra(started, Intent.EXTRA_INTENT, Intent::class.java)
         assertNotNull("chooser must wrap the ACTION_SEND intent", inner)
         return inner!!
     }
@@ -331,7 +332,7 @@ class BackupControllerShareTest {
 
         val share = startedShareIntent()
         assertEquals("application/octet-stream", share.type)
-        val uri = share.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+        val uri = IntentCompat.getParcelableExtra(share, Intent.EXTRA_STREAM, Uri::class.java)
         assertNotNull("share intent must carry the backup file Uri", uri)
         assertTrue(
             "FileProvider Uri should point at the project authority, got: $uri",

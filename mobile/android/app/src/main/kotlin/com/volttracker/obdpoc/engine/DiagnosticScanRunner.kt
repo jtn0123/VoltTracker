@@ -149,7 +149,7 @@ class DiagnosticScanRunner(
         try {
             store.upsertVehicleFromVin(vin)
         } catch (ex: RuntimeException) {
-            service.recorder?.logError("vin_persist_failed", ex)
+            service.recorder.logError("vin_persist_failed", ex)
         }
     }
 

@@ -456,7 +456,7 @@ class SessionRecorderTest {
         assertEquals("0105", obs.payload!!.optString("command"))
         assertTrue(
             "raw response should be captured in the observation payload",
-            obs.payload!!.optString("rawResponse").contains("41 05 7B"),
+            obs.payload.optString("rawResponse").contains("41 05 7B"),
         )
         assertTrue("observedAtMs should be set", obs.observedAtMs > 0L)
     }

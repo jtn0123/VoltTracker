@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.core.content.IntentCompat
 import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import org.json.JSONObject
@@ -62,7 +63,7 @@ class TripExportShareIntentTest {
         assertEquals(Intent.ACTION_SEND, share.action)
         assertEquals("the GPX MIME is set on the intent", "application/gpx+xml", share.type)
 
-        val uri = share.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+        val uri = IntentCompat.getParcelableExtra(share, Intent.EXTRA_STREAM, android.net.Uri::class.java)
         assertNotNull("the export rides as an EXTRA_STREAM uri", uri)
         assertEquals("the file is shared via a content:// FileProvider uri", "content", uri!!.scheme)
         assertEquals(
@@ -85,7 +86,10 @@ class TripExportShareIntentTest {
 
         assertNotNull(intent)
         assertEquals("the CSV MIME is set on the intent", "text/csv", intent!!.type)
-        assertEquals("content", intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.scheme)
+        assertEquals(
+            "content",
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)?.scheme,
+        )
     }
 
     @Test
@@ -95,7 +99,7 @@ class TripExportShareIntentTest {
         val intent = TripExportShareIntent.buildShareIntent(context, export!!)
 
         assertNotNull(intent)
-        val uri = intent!!.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)
+        val uri = IntentCompat.getParcelableExtra(intent!!, Intent.EXTRA_STREAM, android.net.Uri::class.java)
         assertEquals(context.packageName + ".fileprovider", uri?.authority)
         assertEquals("text/csv", intent.type)
         assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
@@ -151,7 +155,10 @@ class TripExportShareIntentTest {
         val intent = TripExportShareIntent.buildShareIntent(context, export)
         assertNotNull(intent)
         assertEquals("image/png", intent!!.type)
-        assertEquals("content", intent.getParcelableExtra<android.net.Uri>(Intent.EXTRA_STREAM)?.scheme)
+        assertEquals(
+            "content",
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)?.scheme,
+        )
     }
 
     @Test

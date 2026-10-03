@@ -127,7 +127,7 @@ class BluetoothStateReporter(
         }
         activeAddress = address
         val service = service ?: return
-        val recorder = service.recorder ?: return
+        val recorder = service.recorder
         val adapter = BluetoothAdapters.get(service)
         if (adapter == null) {
             recorder.logEvent("bluetooth_preflight", "address", address, "reason", "no_adapter")

@@ -159,7 +159,7 @@ class ObdServiceIntegrationTest {
         val service = controller.create().startCommand(0, 1).get()
         assertTrue("precondition: the live session is in the foreground", service.foregroundServiceActive)
 
-        controller.withIntent(intentFor(ObdService.ACTION_DEMO, null, null, null)).startCommand(0, 2)
+        deliverStartCommand(service, intentFor(ObdService.ACTION_DEMO, null, null, null), 2)
 
         assertEquals(ObdLocalStore.MODE_DEMO, service.recorder.activeMode())
         assertFalse("switching to the demo leaves the foreground", service.foregroundServiceActive)
@@ -248,10 +248,11 @@ class ObdServiceIntegrationTest {
         service.sessionStartedAtMs = RESTART_SENTINEL_MS
         val captured = captureBroadcasts()
 
-        controller
-            .withIntent(
-                intentFor(ObdService.ACTION_CONNECT, "aa:bb:cc:dd:ee:ff", "Garage ELM", null),
-            ).startCommand(0, 2)
+        deliverStartCommand(
+            service,
+            intentFor(ObdService.ACTION_CONNECT, "aa:bb:cc:dd:ee:ff", "Garage ELM", null),
+            2,
+        )
 
         assertEquals("the live session must not be restarted", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
         assertTrue("the live session keeps running", service.running.get())
@@ -269,19 +270,21 @@ class ObdServiceIntegrationTest {
 
         // Still connecting (no "connected" status yet): a new CONNECT is a deliberate retry.
         service.sessionStartedAtMs = RESTART_SENTINEL_MS
-        controller
-            .withIntent(
-                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
-            ).startCommand(0, 2)
+        deliverStartCommand(
+            service,
+            intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            2,
+        )
         assertNotEquals("a CONNECT while connecting restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
 
         // Connected, but the user picked a different adapter: switch to it.
         service.broadcastStatus("connected", "Live", false)
         service.sessionStartedAtMs = RESTART_SENTINEL_MS
-        controller
-            .withIntent(
-                intentFor(ObdService.ACTION_CONNECT, "11:22:33:44:55:66", "Other ELM", null),
-            ).startCommand(0, 3)
+        deliverStartCommand(
+            service,
+            intentFor(ObdService.ACTION_CONNECT, "11:22:33:44:55:66", "Other ELM", null),
+            3,
+        )
         assertNotEquals("a CONNECT to another adapter restarts", RESTART_SENTINEL_MS, service.sessionStartedAtMs)
         assertEquals("Other ELM", service.activeName)
     }
@@ -293,10 +296,11 @@ class ObdServiceIntegrationTest {
         controller.create().startCommand(0, 1)
         service.broadcastStatus("connected", "Scanning", false)
 
-        controller
-            .withIntent(
-                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
-            ).startCommand(0, 2)
+        deliverStartCommand(
+            service,
+            intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+            2,
+        )
 
         assertEquals(
             "CONNECT replaces a scan with a live session",
@@ -316,7 +320,7 @@ class ObdServiceIntegrationTest {
         controller.create().startCommand(0, 1)
         assertTrue("precondition: a session is running before DISCONNECT", service.running.get())
 
-        controller.withIntent(intentFor(ObdService.ACTION_DISCONNECT, null, null, null)).startCommand(0, 2)
+        deliverStartCommand(service, intentFor(ObdService.ACTION_DISCONNECT, null, null, null), 2)
 
         assertFalse("DISCONNECT stops the running session", service.running.get())
         assertFalse("DISCONNECT clears the foreground-service flag", service.foregroundServiceActive)
@@ -775,6 +779,22 @@ class ObdServiceIntegrationTest {
         val controller = newController(intentFor(action, address, name, detailStage))
         controller.create().startCommand(0, 1)
         return controller.get()
+    }
+
+    /**
+     * Delivers a follow-up start command to an already-running [service], as Android does when
+     * startService() targets a live instance. A [ServiceController] carries one intent for its
+     * lifetime (swapping it via withIntent() is deprecated), so this mirrors what
+     * [ServiceController.startCommand] does: run onStartCommand on the main thread, then drain the
+     * paused main looper.
+     */
+    private fun deliverStartCommand(
+        service: ObdService,
+        intent: Intent,
+        startId: Int,
+    ) {
+        service.onStartCommand(intent, 0, startId)
+        shadowOf(Looper.getMainLooper()).idleIfPaused()
     }
 
     private fun newController(intent: Intent?): ServiceController<TestObdService> =

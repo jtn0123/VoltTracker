@@ -127,16 +127,19 @@ internal class VoltBridgeMaintenance(
         key: String,
     ): Int? {
         if (!parsed.has(key) || parsed.isNull(key)) return null
-        val numeric =
-            when (val raw = parsed.opt(key)) {
-                is Number -> raw.toDouble()
-                is String -> raw.toDoubleOrNull()
-                else -> null
-            } ?: return null
+        val numeric = numericValue(parsed.opt(key)) ?: return null
         return numeric
             .takeIf { it.isFinite() && it > 0.0 && it <= Int.MAX_VALUE.toDouble() && it % 1.0 == 0.0 }
             ?.toInt()
     }
+
+    /** JSON numbers and numeric strings as a Double; anything else (including null) is null. */
+    private fun numericValue(raw: Any?): Double? =
+        when (raw) {
+            is Number -> raw.toDouble()
+            is String -> raw.toDoubleOrNull()
+            else -> null
+        }
 
     private companion object {
         /** Cap on maintenance rows returned to the dashboard in one read. */

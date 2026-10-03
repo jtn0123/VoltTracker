@@ -160,7 +160,13 @@ object WebViewBootstrap {
                     request: WebResourceRequest?,
                 ): Boolean = blockOffOrigin(request?.url?.toString())
 
-                @Suppress("DEPRECATION") // String overload still fires on API 23
+                // The String overload is deprecated in the platform but is still the only one
+                // WebView invokes on API 23 (minSdk), so it must keep enforcing the same rule.
+                @Deprecated(
+                    "Platform-deprecated String overload; only invoked by API 23 WebViews. " +
+                        "Use the WebResourceRequest overload.",
+                    ReplaceWith("shouldOverrideUrlLoading(view, request)"),
+                )
                 override fun shouldOverrideUrlLoading(
                     view: WebView?,
                     url: String?,

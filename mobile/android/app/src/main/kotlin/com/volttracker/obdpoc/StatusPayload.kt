@@ -43,7 +43,7 @@ class StatusPayload(
                 payload.put("failureClass", failureClass.wireName())
             }
             if (lastVoltage != null) {
-                payload.put("lastVoltage", lastVoltage.toDouble())
+                payload.put("lastVoltage", lastVoltage)
             }
             if (competingApps.isNotEmpty()) {
                 payload.put("competingApps", competingApps)

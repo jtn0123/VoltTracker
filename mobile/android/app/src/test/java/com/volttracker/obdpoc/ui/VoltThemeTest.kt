@@ -2,7 +2,7 @@ package com.volttracker.obdpoc.ui
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.volttracker.obdpoc.AppPrefs
