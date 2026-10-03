@@ -531,7 +531,7 @@ class SessionRecorder {
             if (parsed != null) {
                 payload.put("valueText", parsed.valueText)
                 if (parsed.valueNumeric != null) {
-                    payload.put("valueNumeric", parsed.valueNumeric.toDouble())
+                    payload.put("valueNumeric", parsed.valueNumeric)
                 }
                 payload.put("unit", parsed.unit)
             }

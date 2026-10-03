@@ -1,7 +1,7 @@
 package com.volttracker.obdpoc
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothManager
 import android.content.Context
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -107,7 +107,7 @@ class SystemSnapshotTest {
     @Test
     fun collectMarksBluetoothIdentityReadableWhenConnectPermissionIsGranted() {
         shadowOf(RuntimeEnvironment.getApplication()).grantPermissions(Manifest.permission.BLUETOOTH_CONNECT)
-        BluetoothAdapter.getDefaultAdapter()?.let { shadowOf(it).setEnabled(true) }
+        context.getSystemService(BluetoothManager::class.java)?.adapter?.let { shadowOf(it).setEnabled(true) }
 
         val snap = SystemSnapshot.collect(context, null)
 

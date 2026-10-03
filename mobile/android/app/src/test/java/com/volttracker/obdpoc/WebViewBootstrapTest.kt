@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.graphics.Bitmap
 import android.net.Uri
 import android.webkit.ConsoleMessage
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import org.junit.Assert.assertEquals
@@ -12,6 +13,8 @@ import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.BDDMockito.given
+import org.mockito.Mockito.mock
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
@@ -251,12 +254,9 @@ class WebViewBootstrapTest {
         }
     }
 
-    private fun renderDeath(crashed: Boolean): android.webkit.RenderProcessGoneDetail =
-        object : android.webkit.RenderProcessGoneDetail() {
-            override fun didCrash(): Boolean = crashed
-
-            override fun rendererPriorityAtExit(): Int = 0
-        }
+    private fun renderDeath(crashed: Boolean): RenderProcessGoneDetail =
+        // The platform constructor is deprecated (only WebView builds these), so mock it.
+        mock(RenderProcessGoneDetail::class.java).also { given(it.didCrash()).willReturn(crashed) }
 
     private fun error(
         code: Int,

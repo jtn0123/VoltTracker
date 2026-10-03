@@ -1,8 +1,8 @@
 package com.volttracker.obdpoc
 
 import android.Manifest
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.content.SharedPreferences
 import org.json.JSONArray
 import org.json.JSONObject
@@ -230,7 +230,7 @@ class DeviceCatalogHistoryTest {
     @Test
     fun nullBondedDevicesDuringBluetoothRestartFailsSoft() {
         grantConnectPermission()
-        val adapter = BluetoothAdapter.getDefaultAdapter()!!
+        val adapter = RuntimeEnvironment.getApplication().getSystemService(BluetoothManager::class.java).adapter
         // Android can transiently return null from this platform-typed API while the Bluetooth
         // service restarts. Robolectric's Java shadow accepts that same framework state.
         shadowOf(adapter).setBondedDevices(null)
@@ -365,7 +365,7 @@ class DeviceCatalogHistoryTest {
      * [DeviceCatalog.getBondedDevicesJson] and the candidate helpers can read them.
      */
     private fun registerBondedDevices(vararg pairs: Pair<String, String>) {
-        val adapter = BluetoothAdapter.getDefaultAdapter()!!
+        val adapter = RuntimeEnvironment.getApplication().getSystemService(BluetoothManager::class.java).adapter
         val devices = LinkedHashSet<BluetoothDevice>()
         for ((address, name) in pairs) {
             val device = adapter.getRemoteDevice(address)

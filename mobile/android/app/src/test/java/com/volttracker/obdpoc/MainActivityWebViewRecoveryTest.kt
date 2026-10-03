@@ -20,6 +20,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.BDDMockito.given
+import org.mockito.Mockito.mock
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -63,11 +65,8 @@ class MainActivityWebViewRecoveryTest {
     private fun currentClient(): WebViewClient = shadowOf(currentWebView()).webViewClient
 
     private fun renderDeath(crashed: Boolean): RenderProcessGoneDetail =
-        object : RenderProcessGoneDetail() {
-            override fun didCrash(): Boolean = crashed
-
-            override fun rendererPriorityAtExit(): Int = 0
-        }
+        // The platform constructor is deprecated (only WebView builds these), so mock it.
+        mock(RenderProcessGoneDetail::class.java).also { given(it.didCrash()).willReturn(crashed) }
 
     private fun killRenderer(crashed: Boolean = true): Boolean {
         val webView = currentWebView()

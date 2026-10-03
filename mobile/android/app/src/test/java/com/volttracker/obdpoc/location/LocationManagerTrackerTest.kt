@@ -282,9 +282,11 @@ class LocationManagerTrackerTest {
         )
     }
 
+    /** Active location-update subscriptions across the providers the tracker subscribes to. */
     private fun requestedListenerCount(): Int {
-        val manager = context.getSystemService(LocationManager::class.java)
-        return shadowOf(manager).requestLocationUpdateListeners.size
+        val shadow = shadowOf(context.getSystemService(LocationManager::class.java))
+        return listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)
+            .sumOf { shadow.getLocationRequests(it).size }
     }
 
     private companion object {

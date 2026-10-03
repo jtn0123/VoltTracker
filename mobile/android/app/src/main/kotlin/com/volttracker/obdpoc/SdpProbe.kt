@@ -93,7 +93,7 @@ open class SdpProbe {
         vararg extras: String,
     ) {
         val currentService = service ?: return
-        val recorder = currentService.recorder ?: return
+        val recorder = currentService.recorder
         val pairs = arrayOfNulls<String>(2 + extras.size)
         pairs[0] = "address"
         pairs[1] = address

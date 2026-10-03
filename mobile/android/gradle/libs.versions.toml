@@ -15,6 +15,7 @@ junit = "4.13.2"
 json = "20260814"
 # Must match the Kotlin AGP embeds (built-in Kotlin) — see kotlin-gradle-plugin in AGP's pom.
 kotlin = "2.4.20"
+mockito = "5.24.0"
 robolectric = "4.17"
 roborazzi = "1.75.0"
 spotless = "8.10.3"
@@ -46,6 +47,7 @@ androidx-test-runner = { module = "androidx.test:runner", version.ref = "android
 androidx-test-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "androidx-test-uiautomator" }
 junit = { module = "junit:junit", version.ref = "junit" }
 json = { module = "org.json:json", version.ref = "json" }
+mockito-core = { module = "org.mockito:mockito-core", version.ref = "mockito" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 [plugins]

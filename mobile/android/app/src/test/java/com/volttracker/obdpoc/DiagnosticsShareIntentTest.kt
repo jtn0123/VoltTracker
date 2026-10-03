@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.os.Parcelable
+import androidx.core.content.IntentCompat
 import com.volttracker.obdpoc.data.deleteOrLog
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -269,7 +270,7 @@ class DiagnosticsShareIntentTest {
         assertNotNull(intent)
         assertEquals(Intent.ACTION_SEND, intent!!.action)
         assertEquals("text/plain", intent.type)
-        assertNotNull(intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM))
+        assertNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Parcelable::class.java))
         assertTrue((intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION) != 0)
     }
 
@@ -311,7 +312,7 @@ class DiagnosticsShareIntentTest {
         assertEquals("application/zip", intent.type)
         assertNotNull(
             "EXTRA_STREAM URI must be attached",
-            intent.getParcelableExtra<Parcelable>(Intent.EXTRA_STREAM),
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Parcelable::class.java),
         )
         assertTrue(
             "FLAG_GRANT_READ_URI_PERMISSION must be set so the share-sheet target can read",

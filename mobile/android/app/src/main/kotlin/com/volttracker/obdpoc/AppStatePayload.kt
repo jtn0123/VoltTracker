@@ -45,7 +45,7 @@ class AppStatePayload(
     }
 
     @Throws(JSONException::class)
-    private fun appJson(): JSONObject = JSONObject().put("version", version ?: "").put("schemaVersion", 4)
+    private fun appJson(): JSONObject = JSONObject().put("version", version).put("schemaVersion", 4)
 
     @Throws(JSONException::class)
     private fun permissionsJson(): JSONObject =
