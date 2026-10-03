@@ -1,6 +1,50 @@
 # CHANGELOG
 
 
+## v0.57.2 (2026-10-03)
+
+### 🔺 Fix
+
+- Stop showing a fake 100 % 12 V state of charge
+  ([#142](https://github.com/jtn0123/VoltTracker/pull/142),
+  [`d9f78dd`](https://github.com/jtn0123/VoltTracker/commit/d9f78ddeccae723ebf92d729dd1246b7a4c1f624))
+
+### 🔷 Changed
+
+- **deps**: Bump agp from 9.4.0 to 9.4.1 in /mobile/android
+  ([#136](https://github.com/jtn0123/VoltTracker/pull/136),
+  [`8d9d626`](https://github.com/jtn0123/VoltTracker/commit/8d9d6262e4ed94d32688f7094bdc256cde9dc320))
+
+- **deps**: Bump com.github.ben-manes.versions in /mobile/android
+  ([#137](https://github.com/jtn0123/VoltTracker/pull/137),
+  [`e054efb`](https://github.com/jtn0123/VoltTracker/commit/e054efb2b3d7838b5352ff3f744b5bd9705420e8))
+
+- **deps**: Bump gradle-wrapper from 9.7.1 to 9.8.0 in /mobile/android
+  ([#134](https://github.com/jtn0123/VoltTracker/pull/134),
+  [`295b639`](https://github.com/jtn0123/VoltTracker/commit/295b6398b0c32d54bdaf354e70224329a8913028))
+
+- **deps**: Bump org.gradle.test-retry in /mobile/android
+  ([#138](https://github.com/jtn0123/VoltTracker/pull/138),
+  [`6d42c15`](https://github.com/jtn0123/VoltTracker/commit/6d42c15767812f2e3acb4e6b066d3f7ae6a74f0b))
+
+- **deps**: Bump roborazzi from 1.74.0 to 1.75.0 in /mobile/android
+  ([#135](https://github.com/jtn0123/VoltTracker/pull/135),
+  [`256cea6`](https://github.com/jtn0123/VoltTracker/commit/256cea629eea04e05c8ec18527a264dcedf25924))
+
+- **deps-dev**: Bump jsdom in /mobile/android/dashboard-tests
+  ([#132](https://github.com/jtn0123/VoltTracker/pull/132),
+  [`954b271`](https://github.com/jtn0123/VoltTracker/commit/954b271503a826c0b1881e096c89f00fdef5fbc0))
+
+- **deps-dev**: Bump typescript-eslint ([#133](https://github.com/jtn0123/VoltTracker/pull/133),
+  [`f28fc08`](https://github.com/jtn0123/VoltTracker/commit/f28fc08bc6b8024c844e6526a9178fcb7e944f27))
+
+### 🔷 Changed
+
+- Boot the Compose launcher in the emulator smoke and make it required again
+  ([#141](https://github.com/jtn0123/VoltTracker/pull/141),
+  [`1dbd2bd`](https://github.com/jtn0123/VoltTracker/commit/1dbd2bd8c322ed2e4b327794d43609c9e37f8e4a))
+
+
 ## v0.57.1 (2026-10-03)
 
 ### 🔺 Fix
