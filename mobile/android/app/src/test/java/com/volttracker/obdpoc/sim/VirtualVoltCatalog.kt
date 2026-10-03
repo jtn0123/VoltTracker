@@ -95,7 +95,8 @@ object VirtualVoltCatalog {
             entry("7E4", "224368", Evidence.GUESS, chargingOnly("62436878")), // 240 V
             entry("7E4", "224369", Evidence.GUESS, chargingOnly("62436946")), // 14 A
             entry("7E4", "2243AF", Evidence.SEEN, both("6243AF89F9")),
-            entry("7E4", "228334", Evidence.GUESS, both("6283348C")), // 54.9 %
+            // The car answered 62833400 (0 %, pack at 14 % raw) on 2026-09-29; same shape, a mid value.
+            entry("7E4", "228334", Evidence.REAL, both("6283348C")), // 54.9 %
             entry("7E4", "224329", Evidence.REAL, both("6243291687")),
             entry("7E4", "22432B", Evidence.REAL, both("62432B16A8")),
             entry("7E4", "22432A", Evidence.PLACEHOLDER, both("62432A00")),
@@ -160,14 +161,16 @@ object VirtualVoltCatalog {
                 "10 3D 40 40 00 00 41 40 42 41 00 00",
                 listOf("tirePressureFlKpa", "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa"),
             ),
-            // locked by fob
-            SwcanFrame(Evidence.GUESS, "0C 41 40 40 00 05 00 05", listOf("doorLockState", "doorLockSource")),
+            // Locked from the interior panel; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "0C 41 40 40 00 01 7A 01", listOf("doorLockState", "doorLockSource")),
             // power-electronics coolant 32 C
             SwcanFrame(Evidence.GUESS, "10 63 40 CB 00 48", listOf("peCoolantTempC")),
-            // cabin (roof surface) estimate 21.0 C
-            SwcanFrame(Evidence.GUESS, "10 44 00 99 00 00 00 00 00 7A 00 00", listOf("cabinTempEstC")),
-            // A/C on
-            SwcanFrame(Evidence.GUESS, "10 73 40 99 20 00 00 00", listOf("acState")),
+            // Cabin (roof surface) estimate 29.5 C; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "10 44 00 99 10 00 00 00 8D 8B 46", listOf("cabinTempEstC")),
+            // A/C on; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "10 73 40 99 20 00 00 A0 00 00", listOf("acState")),
+            // Evaporator 10.0 C, compressor 4132 rpm while the A/C ran; captured on the car 2026-09-29.
+            SwcanFrame(Evidence.REAL, "10 27 00 CB 00 64 10 24 00", listOf("acEvapTempC", "acCompressorRpm")),
             // cluster EV range 55 km (GMLAN PID 0x176)
             SwcanFrame(Evidence.GUESS, "10 2E C0 CB 00 1B 80 00 00 00 00 00", listOf("clusterEvRangeKm")),
             // gas range 471 km (GMLAN PID 0x224)
