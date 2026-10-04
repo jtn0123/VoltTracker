@@ -2,10 +2,12 @@ package com.volttracker.obdpoc.engine
 
 import com.volttracker.obdpoc.CarControlGate
 import com.volttracker.obdpoc.ObdProtocol
+import com.volttracker.obdpoc.SwcanFrame
 import com.volttracker.obdpoc.SwcanFrameDecoder
 import com.volttracker.obdpoc.SwcanGroup
 import com.volttracker.obdpoc.SwcanReading
 import com.volttracker.obdpoc.SwcanReadings
+import com.volttracker.obdpoc.TireFrameLearner
 import org.json.JSONException
 import org.json.JSONObject
 import java.io.IOException
@@ -121,6 +123,8 @@ class SwcanListenRunner(
     private var liveCyclesAtWindowEnd = 0L
     private var tiresHeard = false
     private var tireHuntWindows = 0
+    private val tireLearner = TireFrameLearner()
+    private var loggedTireLayouts = emptyList<String>()
 
     /** A requested body-test length, set from the service thread and taken by the poll loop. */
     @Volatile private var bodyTestRequestMs = 0L
@@ -137,6 +141,8 @@ class SwcanListenRunner(
         bodyTestRequestMs = 0L
         tiresHeard = false
         tireHuntWindows = 0
+        tireLearner.reset()
+        loggedTireLayouts = emptyList()
     }
 
     /**
@@ -248,6 +254,7 @@ class SwcanListenRunner(
             val decoded = SwcanFrameDecoder.decodeAll(frames)
             readings.record(decoded, clock())
             noteTires(decoded)
+            learnTires(frames)
             val ids = frames.filter { it.extended }.map { it.id }.toSortedSet()
             val outcome =
                 when {
@@ -293,6 +300,26 @@ class SwcanListenRunner(
         io.logEvent("swcan_tires_heard", "huntWindows", tireHuntWindows.toString())
     }
 
+    /**
+     * Until the tire frame is heard, feeds every window to [tireLearner] and logs its candidates
+     * whenever the set of layouts changes, so a drive's log says which frame carries the tires.
+     */
+    private fun learnTires(frames: List<SwcanFrame>) {
+        if (tiresHeard) return
+        tireLearner.observe(frames)
+        val candidates = tireLearner.candidates()
+        val layouts = candidates.map { "%08X@%d".format(Locale.US, it.id, it.offset) }
+        if (layouts.isEmpty() || layouts == loggedTireLayouts) return
+        loggedTireLayouts = layouts
+        io.logEvent(
+            "swcan_tire_candidates",
+            "window",
+            windowCount.toString(),
+            "candidates",
+            candidates.joinToString(" | ") { it.summary() },
+        )
+    }
+
     @Throws(IOException::class)
     private fun runBodyTest(durationMs: Long) {
         io.exclusive {
@@ -312,6 +339,7 @@ class SwcanListenRunner(
                 val decoded = SwcanFrameDecoder.decodeAll(frames)
                 readings.record(decoded, clock())
                 noteTires(decoded)
+                learnTires(frames)
                 frameCount += frames.size
                 decodedCount += decoded.size
                 frames.filter { it.extended }.mapTo(ids) { it.id }

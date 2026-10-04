@@ -361,6 +361,31 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun tireShapedFramesAreLoggedAsCandidatesUntilTheTiresAreHeard() {
+        readyStn()
+        val candidate = "10 3D 60 60 00 11 41 42 41 43 00 00\r"
+        io.monitorText = candidate.repeat(3) + "STOPPED\r\r>"
+        cycle()
+        val logged = io.event("swcan_tire_candidates")!!
+        assertEquals("1", logged["window"])
+        assertEquals("103D6060@2 260/264/260/268kPa n3", logged["candidates"])
+
+        // The same layout on the next window isn't logged again.
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertEquals(1, io.events.count { it.first == "swcan_tire_candidates" })
+
+        // Once the known tire frame is heard there is nothing left to learn.
+        io.monitorText = "10 3D 40 40 00 00 3C 3D 3E 3F 00 00\r" + "10 3D 20 BC 00 11 41 42 41 43 00 00\r".repeat(3) +
+            "STOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertEquals(1, io.events.count { it.first == "swcan_tire_candidates" })
+    }
+
+    @Test
     fun theTireHuntStopsAfterItsWindowCap() {
         val capped =
             SwcanListenRunner.Policy(
