@@ -9,6 +9,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnySibling
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -21,6 +23,7 @@ import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
 import com.volttracker.obdpoc.sim.VirtualVoltScorecardTest.VirtualVoltService
 import com.volttracker.obdpoc.ui.VoltApp
+import com.volttracker.obdpoc.ui.VoltRoute
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import org.json.JSONObject
@@ -121,6 +124,24 @@ class VirtualVoltComposeTest {
         assertCar(last, aux12Line = "plugged in · charging")
     }
 
+    @Test
+    fun drivingTelemetryReachesLiveSignals() {
+        // Oil and motor temperatures are read every 48 cycles, first at cycles 42 and 44.
+        drive(Mode.DRIVING, samples = TEMPERATURE_SAMPLES)
+        compose.setContent {
+            val state by store.state.collectAsState()
+            VoltApp(state, initialRoutes = listOf(VoltRoute.SIGNALS))
+        }
+        // 221154 = 0x74 → 76 °C oil; 2228CB = 0x61 → 57 °C motor A; 22368F = 0x60 → 56 °C motor B.
+        signal("Oil temperature", "168°F")
+        signal("Motor A temperature", "134°F")
+        signal("Motor B temperature", "132°F")
+        // The car refuses 221C26 (7F 22 31) and 22119F, and never answered 221940: no blank rows.
+        for (refused in listOf("Inverter temperature", "Oil life", "Transmission temperature", "Torque")) {
+            compose.onNodeWithText(refused).assertDoesNotExist()
+        }
+    }
+
     /** The Car tab: lock, 12 V and climate from the SW-CAN broadcasts the catalog puts on the bus. */
     private fun assertCar(
         last: JSONObject,
@@ -139,10 +160,13 @@ class VirtualVoltComposeTest {
     }
 
     /**
-     * Drives the virtual Volt in [mode] until it has produced [SAMPLES] samples, delivering every
+     * Drives the virtual Volt in [mode] until it has produced [samples] samples, delivering every
      * broadcast so far into [store] while the session is still live; returns the newest sample.
      */
-    private fun drive(mode: Mode): JSONObject {
+    private fun drive(
+        mode: Mode,
+        samples: Int = SAMPLES,
+    ): JSONObject {
         val adapter = VirtualVolt(mode, stn = true)
         VirtualVoltService.nextConnection = adapter
         VirtualVoltService.nextSwcanPolicy =
@@ -184,8 +208,8 @@ class VirtualVoltComposeTest {
         shadowOf(app).grantPermissions("${app.packageName}$RECEIVER_PERMISSION_SUFFIX")
         ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
         service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
-        VirtualVoltTestSupport.waitFor("$mode drive to collect $SAMPLES samples", WAIT_TIMEOUT_MS) {
-            service.engineSamples.size >= SAMPLES
+        VirtualVoltTestSupport.waitFor("$mode drive to collect $samples samples", WAIT_TIMEOUT_MS) {
+            service.engineSamples.size >= samples
         }
         // Deliver what the service has broadcast so far, then stop listening before the session
         // ends: the screens are read mid-session, not after the disconnect clears them.
@@ -197,7 +221,7 @@ class VirtualVoltComposeTest {
 
         assertTrue("$mode: a status reached the store", routed.contains(ObdService.BROADCAST_STATUS))
         val delivered = routed.count { it == ObdService.BROADCAST_TELEMETRY }
-        assertTrue("$mode: telemetry reached the store ($delivered)", delivered >= SAMPLES)
+        assertTrue("$mode: telemetry reached the store ($delivered)", delivered >= samples)
         assertTrue("$mode: the store is live", store.state.value.drive.connected)
         val newest = telemetry[delivered - 1]
         assertEquals(newest.getLong("updatedAt"), store.state.value.drive.sampleAtMs)
@@ -218,10 +242,20 @@ class VirtualVoltComposeTest {
     private fun text(value: String): SemanticsNodeInteraction =
         compose.onNodeWithText(value).performScrollTo().assertIsDisplayed()
 
+    /** A Live signals row: its label, with [value] on the same row. */
+    private fun signal(
+        label: String,
+        value: String,
+    ) {
+        text(label)
+        compose.onNode(hasText(value) and hasAnySibling(hasText(label))).assertIsDisplayed()
+    }
+
     private fun milesWhole(km: Double): Int = (km * MI_PER_KM).roundToInt()
 
     private companion object {
         const val SAMPLES = 40
+        const val TEMPERATURE_SAMPLES = 50
         const val WAIT_TIMEOUT_MS = 60_000L
         const val MI_PER_KM = 0.621371
 

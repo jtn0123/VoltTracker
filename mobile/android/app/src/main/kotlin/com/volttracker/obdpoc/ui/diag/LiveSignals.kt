@@ -21,13 +21,21 @@ data class SignalGroup(
 /**
  * The live readings worth reading at a glance, grouped the way a driver thinks about the car, in
  * the chosen units. Missing readings show [DASH] rather than vanishing, so the list doesn't jump
- * around as samples arrive. Only meaningful while connected; the screen shows an empty state
- * otherwise.
+ * around as samples arrive. The readings only some Volts report (oil life, inverter and
+ * transmission temperature, 12 V charge; the 2017 refuses or blanks them) stay out until the car sends
+ * one, so a car that refuses them never shows a row that is always blank. Only meaningful while
+ * connected; the screen shows an empty state otherwise.
  */
 fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
     val u = drive.units
 
     fun temp(f: Int?) = f?.let { u.tempText(it.toDouble()) } ?: DASH
+
+    fun ifReported(
+        label: String,
+        f: Int?,
+        format: (Int) -> String = { temp(it) },
+    ): SignalRow? = f?.let { SignalRow(label, format(it)) }
     return listOf(
         SignalGroup(
             "HV battery",
@@ -43,36 +51,37 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
         ),
         SignalGroup(
             "Drive unit",
-            listOf(
+            listOfNotNull(
                 SignalRow("Speed", u.speedText(drive.speedMph.toDouble())),
                 SignalRow("Power", "${oneDecimal(drive.powerKw)} kW"),
                 SignalRow("Motor A", drive.motorAKw?.let { "${oneDecimal(it)} kW" } ?: DASH),
                 SignalRow("Motor B", drive.motorBKw?.let { "${oneDecimal(it)} kW" } ?: DASH),
-                SignalRow("Torque", drive.torqueNm?.let { "$it Nm" } ?: DASH),
-                SignalRow("Motor temperature", temp(drive.motorTempF)),
-                SignalRow("Inverter temperature", temp(drive.inverterTempF)),
-                SignalRow("Transmission temperature", temp(drive.transTempF)),
+                SignalRow("Motor A temperature", temp(drive.motorTempF)),
+                SignalRow("Motor B temperature", temp(drive.motorBTempF)),
+                ifReported("Inverter temperature", drive.inverterTempF),
+                ifReported("Transmission temperature", drive.transTempF),
                 SignalRow("Gear", drive.gear.takeUnless { it == "--" } ?: DASH),
             ),
         ),
         SignalGroup(
             "Engine",
-            listOf(
+            listOfNotNull(
                 SignalRow("Running", if (drive.mode == DriveMode.GAS) "Yes" else "No"),
                 SignalRow("RPM", if (drive.mode == DriveMode.GAS) "${drive.rpm}" else "0"),
                 SignalRow("Coolant", temp(drive.coolantF)),
+                SignalRow("Oil temperature", temp(drive.oilTempF)),
                 SignalRow("Fuel", drive.fuelPercent?.let { "${it.roundToInt()}%" } ?: DASH),
-                SignalRow("Oil life", drive.oilLifePct?.let { "$it%" } ?: DASH),
+                ifReported("Oil life", drive.oilLifePct) { "$it%" },
             ),
         ),
         SignalGroup(
             "12 V & cabin",
-            listOf(
+            listOfNotNull(
                 SignalRow(
                     "12 V battery",
                     (drive.aux12Volts ?: drive.auxVolts)?.let { "%.2f V".format(Locale.US, it) } ?: DASH,
                 ),
-                SignalRow("12 V charge", drive.aux12SocPercent?.let { "$it%" } ?: DASH),
+                ifReported("12 V charge", drive.aux12SocPercent) { "$it%" },
                 SignalRow("Cabin", temp(drive.cabinTempF)),
                 SignalRow("Outside", temp(drive.ambientF)),
                 SignalRow("GPS accuracy", drive.gpsAccuracyFt?.let { gpsText(it, drive.metricUnits) } ?: DASH),

@@ -76,7 +76,8 @@ object VirtualVoltCatalog {
             // --- Mode 22 on 7E0 (engine) ---------------------------------------------------
             entry("7E0", "22119F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             entry("7E0", "22119F01", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
-            entry("7E0", "221154", Evidence.SEEN, both("62115450")),
+            // The car answered 62115474 (76 °C oil) on 2026-09-29, warm from the drive there.
+            entry("7E0", "221154", Evidence.REAL, both("62115474")),
             // --- Mode 22 on 7E1 (hybrid powertrain) -----------------------------------------
             entry("7E1", "222414", Evidence.REAL, split("622414FE87", "6224140000")),
             entry("7E1", "222429", Evidence.REAL, both("6224295806")),
