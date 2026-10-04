@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.58.0 (2026-10-04)
+
+### ✳️ New
+
+- **swcan**: Log raw frames for every listen window in debug builds
+  ([#153](https://github.com/jtn0123/VoltTracker/pull/153),
+  [`2334f74`](https://github.com/jtn0123/VoltTracker/commit/2334f749713b6549c63ec07ba8bcd6c61326da83))
+
+
 ## v0.57.6 (2026-10-03)
 
 ### 🔺 Fix
