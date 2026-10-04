@@ -101,6 +101,11 @@ class SwcanListenRunner(
         val tireHuntListenMs: Long = 4_000L,
         val tireHuntIntervalMs: Long = 30_000L,
         val tireHuntMaxWindows: Int = 20,
+        /**
+         * Also log every regular window's raw monitor text, payload bytes included, the way a body
+         * test does. Debug builds only: it is how frames heard on a drive (tires, doors) get decoded.
+         */
+        val logRawWindows: Boolean = false,
     )
 
     private enum class Identity { UNKNOWN, STN, NOT_STN }
@@ -238,6 +243,7 @@ class SwcanListenRunner(
                     null
                 }
             val restored = restoreHs()
+            if (policy.logRawWindows && result != null) logRaw("window", windowCount, result.text)
             val frames = SwcanFrameDecoder.parseMonitorOutput(result?.text)
             val decoded = SwcanFrameDecoder.decodeAll(frames)
             readings.record(decoded, clock())
@@ -309,15 +315,7 @@ class SwcanListenRunner(
                 frameCount += frames.size
                 decodedCount += decoded.size
                 frames.filter { it.extended }.mapTo(ids) { it.id }
-                io.logEvent(
-                    "swcan_raw",
-                    "mode",
-                    "body_test",
-                    "chunk",
-                    chunk.toString(),
-                    "text",
-                    result.text.take(MAX_RAW_CHARS),
-                )
+                logRaw("body_test", chunk, result.text)
                 if (!result.gotPrompt) break
             }
             val restored = restoreHs()
@@ -397,6 +395,14 @@ class SwcanListenRunner(
         io.logEvent("swcan_disabled", "reason", reason, "windows", windowCount.toString())
     }
 
+    private fun logRaw(
+        mode: String,
+        chunk: Int,
+        text: String,
+    ) {
+        io.logEvent("swcan_raw", "mode", mode, "chunk", chunk.toString(), "text", text.take(MAX_RAW_CHARS))
+    }
+
     private fun logWindow(
         outcome: String,
         startedAt: Long,
@@ -435,7 +441,7 @@ class SwcanListenRunner(
         private const val COMMAND_TIMEOUT_MS = 1_000L
         private const val MAX_LOGGED_IDS = 48
 
-        /** One body-test chunk's raw text in the session log (~5 s of frames is ~30 KB). */
+        /** One window or body-test chunk's raw text in the session log (~5 s of frames is ~30 KB). */
         private const val MAX_RAW_CHARS = 48_000
 
         /** ISO 15765-4 CAN, 11-bit, 500 kbit/s — the Volt's HS diagnostic bus. */

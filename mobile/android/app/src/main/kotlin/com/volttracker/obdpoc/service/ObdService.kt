@@ -15,6 +15,7 @@ import androidx.core.app.ServiceCompat
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.AutoScanController
 import com.volttracker.obdpoc.BluetoothStateReporter
+import com.volttracker.obdpoc.BuildConfig
 import com.volttracker.obdpoc.CarCommand
 import com.volttracker.obdpoc.CompetingAppDetector
 import com.volttracker.obdpoc.DatabaseOperationLease
@@ -43,6 +44,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdSessionRecovery
 import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
+import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.location.LocationManagerTracker
 import com.volttracker.obdpoc.location.LocationTracker
 import com.volttracker.obdpoc.widget.WidgetUpdater
@@ -312,12 +314,13 @@ open class ObdService :
     open fun recoverInterruptedSessions(): Int = ObdSessionRecovery.recover(this)
 
     /**
-     * Factory for the polling engine, created once in [onCreate]. Behavior-identical to the inline
-     * `ObdPollingEngine(this)` it replaces; it exists only so a test subclass can substitute an
-     * engine whose IO loops are neutralized (the real loops open a Bluetooth RFCOMM socket that
-     * cannot run under Robolectric), letting the action-dispatch orchestration be driven directly.
+     * Factory for the polling engine, created once in [onCreate]. It exists so a test subclass can
+     * substitute an engine whose IO loops are neutralized (the real loops open a Bluetooth RFCOMM
+     * socket that cannot run under Robolectric), letting the action-dispatch orchestration be driven
+     * directly. Debug builds also log raw SW-CAN windows.
      */
-    open fun createPollingEngine(): ObdPollingEngine = ObdPollingEngine(this)
+    open fun createPollingEngine(): ObdPollingEngine =
+        ObdPollingEngine(this, swcanPolicy = SwcanListenRunner.Policy(logRawWindows = BuildConfig.DEBUG))
 
     /**
      * Factory for the event-notification coordinator (M1 + M3). Reads the native-owned settings from

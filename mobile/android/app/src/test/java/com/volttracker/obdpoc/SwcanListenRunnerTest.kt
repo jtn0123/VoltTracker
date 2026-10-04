@@ -418,6 +418,24 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun regularWindowsLogRawFramesOnlyWhenAsked() {
+        readyStn()
+        cycle()
+        assertNull("windows carry ids only by default", io.event("swcan_raw"))
+
+        val rawPolicy = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, logRawWindows = true)
+        val raw = SwcanListenRunner(io, rawPolicy) { now }
+        raw.probeAdapter()
+        now += rawPolicy.firstWindowDelayMs
+        io.liveCycles += 1
+        raw.afterSample()
+        val logged = io.event("swcan_raw")!!
+        assertEquals("window", logged["mode"])
+        assertEquals("1", logged["chunk"])
+        assertEquals(io.monitorText, logged["text"])
+    }
+
+    @Test
     fun aBodyTestOffAnObdLinkIsLoggedNotRun() {
         io.replies["STI"] = "?\r\r>"
         runner.probeAdapter()
