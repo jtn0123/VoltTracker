@@ -483,12 +483,13 @@ class LiveUiStateStore(
             motorAKw = optDouble(t, "motorAPowerKw") ?: current.motorAKw,
             motorBKw = optDouble(t, "motorBPowerKw") ?: current.motorBKw,
             motorTempF = optDouble(t, "motorTempC")?.let { cToF(it).toInt() } ?: current.motorTempF,
+            motorBTempF = optDouble(t, "motorBTempC")?.let { cToF(it).toInt() } ?: current.motorBTempF,
             inverterTempF = optDouble(t, "inverterTempC")?.let { cToF(it).toInt() } ?: current.inverterTempF,
             cabinTempF =
                 fresh(t, "cabinTempEstC", "climateStaleMs", current.cabinTempF?.let { fToC(it.toDouble()) })
                     ?.let { cToF(it).toInt() },
             transTempF = optDouble(t, "transmissionTempC")?.let { cToF(it).toInt() } ?: current.transTempF,
-            torqueNm = optDouble(t, "engineTorqueNm")?.toInt() ?: current.torqueNm,
+            oilTempF = optDouble(t, "engineOilTempC")?.let { cToF(it).toInt() } ?: current.oilTempF,
             oilLifePct = optDouble(t, "engineOilLifePct")?.toInt() ?: current.oilLifePct,
             tires = tires(t, current.tires),
             locked = demoLockOverride ?: lockState(t, current.locked),

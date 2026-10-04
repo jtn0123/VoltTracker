@@ -18,7 +18,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Health › Freeze frame (read, and saved but not read yet) and Live signals › All readings, in
+ * Health › Freeze frame (read, and saved but not read yet), Live signals and its All readings, in
  * OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/health-detail-<state>-<theme>.png; every case also proves the screen composes.
  */
@@ -84,6 +84,7 @@ class HealthDetailScreenshotTest(
                                     ),
                             )
                     ),
+                "live-signals" to (VoltRoute.SIGNALS to base),
                 "all-readings" to (VoltRoute.ALL_READINGS to base),
             )
 

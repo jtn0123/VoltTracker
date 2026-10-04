@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.ui.diag.liveSignalGroups
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiveSignalsTest {
@@ -63,5 +64,34 @@ class LiveSignalsTest {
         assertEquals("68 km/h", value(metric, "Speed"))
         assertEquals("24°C", value(metric, "Pack temperature"))
         assertEquals("±6 m", value(metric, "GPS accuracy"))
+    }
+
+    @Test
+    fun readingsTheCarRefusesStayOutUntilOneArrives() {
+        val refused = listOf("Inverter temperature", "Transmission temperature", "Oil life", "12 V charge")
+        val empty = DriveUiState(connected = true)
+        val labels = liveSignalGroups(empty).flatMap { it.rows }.map { it.label }
+        assertTrue("no always-blank rows: $labels", labels.none { it in refused || it == "Torque" })
+        // Readings this car does report keep their place while they're still missing.
+        assertEquals(DASH, value(empty, "Oil temperature"))
+        assertEquals(DASH, value(empty, "Motor B temperature"))
+
+        val reported =
+            empty.copy(
+                oilTempF = 190,
+                motorTempF = 140,
+                motorBTempF = 131,
+                inverterTempF = 118,
+                transTempF = 141,
+                oilLifePct = 87,
+                aux12SocPercent = 86,
+            )
+        assertEquals("190°F", value(reported, "Oil temperature"))
+        assertEquals("140°F", value(reported, "Motor A temperature"))
+        assertEquals("131°F", value(reported, "Motor B temperature"))
+        assertEquals("118°F", value(reported, "Inverter temperature"))
+        assertEquals("141°F", value(reported, "Transmission temperature"))
+        assertEquals("87%", value(reported, "Oil life"))
+        assertEquals("86%", value(reported, "12 V charge"))
     }
 }
