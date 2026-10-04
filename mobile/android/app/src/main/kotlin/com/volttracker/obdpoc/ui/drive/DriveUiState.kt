@@ -63,6 +63,8 @@ data class DriveUiState(
     val evRangeMiles: Double? = null,
     /** Fuel tank level (%), or null when not reported. */
     val fuelPercent: Double? = null,
+    /** The odometer (2234B2 `odometerKm`) in miles, or null until the car reports it. */
+    val odometerMiles: Double? = null,
     /** The cluster's gas range (SW-CAN `fuelRangeKm`) in miles; null when not reported or stale. */
     val gasRangeMiles: Double? = null,
     /** Pack temperature (°F); null when not reported or not connected. */
@@ -241,6 +243,7 @@ data class DriveUiState(
                 displayedSocPercent = 63.0,
                 evRangeMiles = 26.0,
                 fuelPercent = 62.0,
+                odometerMiles = 48_213.6,
                 gasRangeMiles = 293.0,
                 packTempF = 74,
                 packVolts = 356.4,

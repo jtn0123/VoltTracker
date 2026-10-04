@@ -32,6 +32,13 @@ data class VoltUnits(
         return "$n $distanceUnit"
     }
 
+    /**
+     * An odometer reading cut down to whole, grouped units like the cluster's: "124,374 mi" /
+     * "200,161 km". The slack absorbs floating-point error in the km → mi → km round trip.
+     */
+    fun odometerText(miles: Double): String =
+        "%,d %s".format(Locale.US, (distance(miles) + ODOMETER_SLACK).toLong(), distanceUnit)
+
     // Speed
     fun speed(mph: Double): Int = (if (metric) mph * KM_PER_MI else mph).roundToInt()
 
@@ -117,6 +124,7 @@ data class VoltUnits(
         /** 235.215 = 100 × 3.785411784 L/gal ÷ 1.609344 km/mi. */
         private const val L100KM_PER_MPG = 235.214583
         private const val WHOLE_FROM = 10.0
+        private const val ODOMETER_SLACK = 0.001
 
         private fun oneDecimal(value: Double): String = String.format(Locale.US, "%.1f", value)
     }

@@ -14,6 +14,7 @@ import com.volttracker.obdpoc.ui.car.isOn
 import com.volttracker.obdpoc.ui.car.label
 import com.volttracker.obdpoc.ui.car.lastResultLine
 import com.volttracker.obdpoc.ui.car.missingLine
+import com.volttracker.obdpoc.ui.car.odometerLine
 import com.volttracker.obdpoc.ui.car.open
 import com.volttracker.obdpoc.ui.car.statusLine
 import com.volttracker.obdpoc.ui.car.tiresTile
@@ -90,6 +91,14 @@ class CarTabLogicTest {
             "No reading for 4 min",
             car.copy(seenAtMs = mapOf(BodyGroup.TIRES to now - 240_000L)).missingLine(BodyGroup.TIRES),
         )
+    }
+
+    @Test
+    fun theOdometerShowsOnceTheCarReportsIt() {
+        assertNull(odometerLine(parked))
+        val read = parked.copy(odometerMiles = 124_374.6)
+        assertEquals("Odometer 124,374 mi", odometerLine(read))
+        assertEquals("Odometer 200,161 km", odometerLine(read.copy(metricUnits = true)))
     }
 
     @Test
