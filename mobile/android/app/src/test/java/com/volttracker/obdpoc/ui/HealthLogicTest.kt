@@ -17,6 +17,7 @@ import com.volttracker.obdpoc.ui.diag.hero
 import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.diag.liveSignalsLine
 import com.volttracker.obdpoc.ui.diag.pill
+import com.volttracker.obdpoc.ui.diag.resistanceLine
 import com.volttracker.obdpoc.ui.diag.safeToDrive
 import com.volttracker.obdpoc.ui.diag.statusCounts
 import com.volttracker.obdpoc.ui.diag.statusLine
@@ -205,6 +206,18 @@ class HealthLogicTest {
         assertEquals("#47 · 3.893 V", parked.copy(weakestCell = 47, weakestVolts = 3.8931).weakestLabel())
         assertEquals("#3", parked.copy(weakestCell = 3, weakestVolts = null).weakestLabel())
         assertTrue(hvBattery(DriveUiState(), null, 40.0).reported)
+    }
+
+    @Test
+    fun theBatteryCardShowsThePacksInternalResistance() {
+        assertNull(hvBattery(DriveUiState(), null, null).resistanceLine())
+        // 2240E9 = 0x024A / 2 = 293 mΩ, what the car answered.
+        val battery = hvBattery(DriveUiState(packResistanceMohm = 293.0), null, null)
+        assertTrue("resistance alone counts as a battery read", battery.reported)
+        assertEquals("Internal resistance 293 mΩ", battery.resistanceLine())
+        assertTrue(
+            healthReport(DiagUiState(), battery, demo = false).contains("HV battery: internal resistance 293 mΩ"),
+        )
     }
 
     @Test

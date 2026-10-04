@@ -101,6 +101,8 @@ data class DriveUiState(
     val minCellVolts: Double? = null,
     val maxCellVolts: Double? = null,
     val minCellNumber: Int? = null,
+    /** HV pack internal resistance in mΩ (`2240E9`); rises as the pack ages. */
+    val packResistanceMohm: Double? = null,
     /** Per-cell voltages from the last full cell read (96 groups); empty until one runs. */
     val cellVoltages: List<Double?> = emptyList(),
     /** Charger power into the pack (kW) while plugged in. */
@@ -252,6 +254,7 @@ data class DriveUiState(
                 tires = TirePressures(37.7, 38.3, 37.1, 37.7),
                 locked = true,
                 cellSpreadMv = 19.0,
+                packResistanceMohm = 148.5,
                 minCellVolts = 3.893,
                 maxCellVolts = 3.912,
                 minCellNumber = 47,

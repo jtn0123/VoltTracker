@@ -401,6 +401,14 @@ private fun BatteryCard(
             )
             BatteryFigure(battery.spreadMv?.roundToInt()?.toString(), " mV", "cell spread")
         }
+        battery.resistanceLine()?.let {
+            Text(
+                it,
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        }
         val weakest = battery.weakestLabel()
         if (battery.cells.count { it != null } >= MIN_CELLS_FOR_HISTOGRAM) {
             CellHistogram(battery.cells, battery.weakestCell, Modifier.fillMaxWidth().height(46.dp))
