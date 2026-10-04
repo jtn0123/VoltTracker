@@ -3,8 +3,12 @@
 VoltTracker ships two APK streams:
 
 - `latest-debug`: a rolling debug APK built from every push to `main` by
-  `.github/workflows/android.yml`. It is attached to the prerelease tag
-  `latest-debug` as `volttracker-vX.Y.Z-<commit>-debug.apk`.
+  `.github/workflows/android.yml`, chore and docs merges included. It is
+  attached to the prerelease tag `latest-debug` as
+  `volttracker-vX.Y.Z-<commit>-debug.apk`, next to the two previous builds for
+  rollback. With the signing secrets set it is re-signed with the stable app
+  key, so it installs over Volt Tracker Debug from a tagged release or an
+  earlier `latest-debug` build and keeps the app's data.
 - Tagged releases: conventional-commit merges to `main` run
   `.github/workflows/release.yml`. `feat:` creates a minor bump, `fix:` and
   `perf:` create patch bumps, and `BREAKING CHANGE:` creates a major bump. When

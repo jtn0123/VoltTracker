@@ -1053,7 +1053,58 @@ jobs:
           VERSION="$(cat VERSION)"
           SHORT_SHA="${GITHUB_SHA::7}"
           cp artifact/app-debug.apk "release/volttracker-v${VERSION}-${SHORT_SHA}-debug.apk"
-      - name: Remove legacy generic debug assets
+      # apksigner (Android build-tools, preinstalled on the runner) needs a JDK on PATH.
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Re-sign with the stable app key
+        id: sign
+        # emulator-smoke signs with the runner's throwaway debug key, a fresh one every run, so no
+        # latest-debug APK could ever install over another one or over a tagged debug build.
+        # Re-signing with the release key (the key attach-release-apks.yml signs tagged debug APKs
+        # with) makes every main build an in-place update of Volt Tracker Debug. Same all-or-none
+        # secrets rule as the tagged release: none set keeps the throwaway signature.
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              missing+=("${name}")
+            fi
+          done
+          if [ "${#missing[@]}" -eq 4 ]; then
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=latest-debug not re-signed::No signing secrets; the APK keeps the runner's throwaway debug key."
+            exit 0
+          fi
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error title=Incomplete release signing secrets::${missing[*]} missing while other signing secrets are set — configure all four or none."
+            exit 1
+          fi
+          KEYSTORE="${RUNNER_TEMP}/release.keystore"
+          printf '%s' "${ANDROID_KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE}"
+          BUILD_TOOLS="$(find "${ANDROID_HOME}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          for apk in release/*.apk; do
+            "${BUILD_TOOLS}/apksigner" sign --ks "${KEYSTORE}" --ks-key-alias "${ANDROID_KEY_ALIAS}" \
+              --ks-pass env:ANDROID_KEYSTORE_PASSWORD --key-pass env:ANDROID_KEY_PASSWORD "${apk}"
+            "${BUILD_TOOLS}/apksigner" verify --print-certs "${apk}" > signers.txt
+            if grep -q "CN=Android Debug" signers.txt; then
+              echo "::error title=Re-sign failed::${apk} is still signed with the Android debug key."
+              exit 1
+            fi
+          done
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+      - name: Remove keystore from runner
+        if: always()
+        run: rm -f "${RUNNER_TEMP}/release.keystore"
+      - name: Remove legacy and superseded debug assets
+        # Keeps the two newest versioned builds next to the one about to upload, so a bad main
+        # build can be rolled back from the phone without the asset list growing forever.
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -1061,6 +1112,10 @@ jobs:
             --json assets --jq '.assets[].name' \
             | grep -E '^(app-debug\.apk|volttracker-debug-[0-9a-f]+\.apk)$' \
             > legacy-debug-assets.txt || true
+          gh release view latest-debug --repo "${{ github.repository }}" \
+            --json assets \
+            --jq '[.assets[] | select(.name | test("^volttracker-v.*-debug\\.apk$"))] | sort_by(.createdAt) | reverse | .[2:][].name' \
+            >> legacy-debug-assets.txt || true
           while read -r asset; do
             if [ -n "${asset}" ]; then
               gh release delete-asset latest-debug "${asset}" \
@@ -1079,9 +1134,10 @@ jobs:
             - APK flavor: debug
             - Filename format: `volttracker-v<version>-<commit>-debug.apk`
 
-            The APK is signed with the standard Android debug key. To install:
-            grant "Install unknown apps" to your browser or file manager, then
-            tap the `volttracker-v...-debug.apk` asset below.
+            ${{ steps.sign.outputs.signed == 'true' && 'Signed with the same stable key as tagged releases, so it installs over Volt Tracker Debug (a tagged debug APK or an earlier build from here) and keeps its data.' || 'Signed with the CI runner''s throwaway debug key (no signing secrets), so it cannot update an existing install.' }}
+            The two previous builds stay below for rollback. To install: grant
+            "Install unknown apps" to your browser or file manager, then tap the
+            newest `volttracker-v...-debug.apk` asset below.
           files: release/*.apk
           prerelease: true
           make_latest: 'false'
