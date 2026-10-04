@@ -1,6 +1,21 @@
 # CHANGELOG
 
 
+## v0.59.0 (2026-10-04)
+
+### 🔷 Changed
+
+- **coverage**: The sim answers trouble-code modes now
+  ([#155](https://github.com/jtn0123/VoltTracker/pull/155),
+  [`09c5296`](https://github.com/jtn0123/VoltTracker/commit/09c52964c5e5c7727b0305a109bbf7eb28414a7e))
+
+### ✳️ New
+
+- **health**: Show oil and motor B temperatures in Live signals, drop rows the car never reports
+  ([#156](https://github.com/jtn0123/VoltTracker/pull/156),
+  [`3218ab1`](https://github.com/jtn0123/VoltTracker/commit/3218ab1836fbaf748364e9a077154285eab492ec))
+
+
 ## v0.58.0 (2026-10-04)
 
 ### ✳️ New
