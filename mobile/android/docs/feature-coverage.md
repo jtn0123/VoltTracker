@@ -13,13 +13,13 @@ Lowest to highest. "Highest" is the strongest level that exercises *this*
 behavior. The engine tops out at Sim and the classic WebView at Emulator. Compose
 screens are opened on the emulator, but their values are asserted only on the
 JVM: from hand-built state at JVM screenshot, and for the Drive, Car, and Charge
-headline readings from a virtual-Volt session at Sim (`VirtualVoltComposeTest`).
+headline readings, Health's saved codes, and the Freeze frame screen from a virtual-Volt session at Sim (`VirtualVoltComposeTest`, `VirtualVoltDtcTest`).
 
 | Level | Source | Proves | Caveat |
 |---|---|---|---|
 | JVM logic | `app/src/test/**` (JUnit, Robolectric SQLite, raw-frame replay) | Kotlin logic, parsers, stores. | No device, no UI. |
 | JVM screenshot | `app/src/test/**/ui/*` (Robolectric Compose, Roborazzi) | The Compose screen composes; semantics/click assertions where present. | No Roborazzi baselines are committed and nothing runs compare/verify, so a capture proves composition, not appearance. |
-| Sim | `app/src/test/**/sim/VirtualVolt*` | Real `ObdService` + polling engine against a fake ELM327/STN, up to the dashboard payload. | Only `Evidence.REAL`/`SEEN` rows are gated. Answers `NO DATA` to modes 02/03/04/07/0A. `VirtualVoltComposeTest` carries the service's broadcasts into `LiveUiStateStore` → `VoltApp` and asserts Drive, Car, and Charge values; every other screen still stops at the wire payload. |
+| Sim | `app/src/test/**/sim/VirtualVolt*` | Real `ObdService` + polling engine against a fake ELM327/STN, up to the dashboard payload. | Only `Evidence.REAL`/`SEEN` rows are gated. Modes 03/07/0A/02/04 answer from a fault memory (clean, or a stored code with its freeze frame) shaped like J1979, not like this car, which has never reported a stored code. `VirtualVoltComposeTest` carries the service's broadcasts into `LiveUiStateStore` → `VoltApp` and asserts Drive, Car, and Charge values, and `VirtualVoltDtcTest` does the same for Health and Freeze frame; every other screen still stops at the wire payload. |
 | jsdom | `dashboard-tests/*.test.js` (vitest) | Classic dashboard TS behavior and native-payload contracts. | Not Android WebView. |
 | Playwright | `dashboard-e2e/*.spec.js` | Classic dashboard in desktop Chromium with the mock bridge. | Not Android WebView. |
 | Emulator | `scripts/emulator-smoke.sh` + `app/src/androidTest` (3 tests) | Debug APK installs. The Compose launcher opens Drive (with demo telemetry), Trips, Charge, Insights, Car, Health, and Settings without a fatal logcat. The classic WebView handshakes, demo telemetry flows, and all 6 classic tabs render. | Compose screens are opened by `DebugLaunch` intent and proven by `StartupTrace` marks plus a screenshot; no Compose values are asserted on the device. Gating in `ci-success` again since #141. |
