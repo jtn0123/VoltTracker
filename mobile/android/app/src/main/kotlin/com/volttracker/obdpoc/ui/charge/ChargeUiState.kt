@@ -36,7 +36,7 @@ data class ChargeUiState(
     val statusLabel: String = "No adapter",
     val charging: Boolean = false,
     /** Raw pack SOC (%) as the BECM reports it; the screen shows [shownSocPercent] everywhere. */
-    val socPercent: Double = 0.0,
+    val socPercent: Double? = null,
     /** The SOC the car's cluster shows (%), or null when the car hasn't reported it. */
     val displayedSocPercent: Double? = null,
     /** The car's own EV range estimate in miles; null (caption hidden) until it reports. */

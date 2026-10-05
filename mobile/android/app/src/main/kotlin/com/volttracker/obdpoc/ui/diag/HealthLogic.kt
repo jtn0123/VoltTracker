@@ -90,42 +90,27 @@ fun DtcCode.pill(): HealthLine =
         DtcSeverity.INFO -> HealthLine("Monitor", PillTone.NEUTRAL)
     }
 
-/**
- * Whether a code is confined to the gas engine (range extender) — fuel, air, ignition and emissions
- * — so it can't affect driving on electricity.
- */
-fun DtcCode.engineOnly(): Boolean =
-    category == ENGINE_CATEGORY ||
-        (code.length > 2 && code.startsWith("P0") && code[2] in '0'..'4')
-
-private const val ENGINE_CATEGORY = "1.4L engine"
-
-/** The worst of [codes]' severities, or null for none. */
+/** The worst code-based service priority; this does not establish vehicle driving safety. */
 fun worstSeverity(codes: List<DtcCode>): DtcSeverity? = codes.maxOfOrNull { it.severity }
 
-/**
- * Is it safe to drive? From the worst code, as the classic dashboard words it, plus whether the
- * electric drive is out of it. Null when there are no codes.
- */
-fun safeToDrive(codes: List<DtcCode>): HealthLine? {
+/** Service priority and catalog confidence, never a guarantee about driving or other systems. */
+fun serviceGuidance(codes: List<DtcCode>): HealthLine? {
     val worst = worstSeverity(codes) ?: return null
-    val verdict =
-        when (worst) {
-            DtcSeverity.ALERT -> return HealthLine(
-                "Stop safely and have the car checked before driving on.",
-                PillTone.BAD,
-            )
-            DtcSeverity.WARNING -> "Safe to drive — have it serviced soon."
-            DtcSeverity.INFO -> "Safe to drive — mention it at your next service."
-        }
-    val electric =
+    val unknown = codes.any { it.description.isNullOrBlank() }
+    val priority =
         when {
-            !codes.all { it.engineOnly() } -> null
-            codes.size == 1 -> "It doesn't affect the electric drive system."
-            codes.size == 2 -> "Neither code affects the electric drive system."
-            else -> "None of them affect the electric drive system."
+            unknown -> "Review these codes — some are not in the catalog."
+            worst == DtcSeverity.ALERT -> "Urgent service — follow the vehicle's warning messages."
+            worst == DtcSeverity.WARNING -> "Service soon — have these faults checked."
+            else -> "Monitor these codes at your next service."
         }
-    return HealthLine(listOfNotNull(verdict, electric).joinToString(" "), PillTone.EV)
+    val tone =
+        when {
+            worst == DtcSeverity.ALERT -> PillTone.BAD
+            unknown || worst == DtcSeverity.WARNING -> PillTone.WARN
+            else -> PillTone.NEUTRAL
+        }
+    return HealthLine("$priority Driving safety cannot be determined from these codes alone.", tone)
 }
 
 /** "1 stored · 1 pending" — pending codes haven't lit the check-engine lamp, so they're counted apart. */
@@ -284,7 +269,7 @@ fun healthReport(
     diag.codes.orEmpty().forEach { code ->
         lines += "- ${code.code} ${code.title} — ${code.pill().text} (${code.detailLine(diag.nowMs)})"
     }
-    safeToDrive(diag.codes.orEmpty())?.let { lines += it.text }
+    serviceGuidance(diag.codes.orEmpty())?.let { lines += it.text }
     diag.earlierLine()?.let { lines += it }
     if (battery.reported) {
         lines += ""

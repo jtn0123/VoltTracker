@@ -31,6 +31,7 @@ const NATIVE_METHODS = [
   'applyRestoredPreferences',
   'openTrip',
   'openTripReceipt',
+  'openTroubleshooter',
   'restoreView',
 ];
 

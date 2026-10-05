@@ -24,6 +24,7 @@ class ObdPersistenceWorker(
     private val localStore: ObdLocalStore?,
     private val shutdownDrainTimeoutMs: Long = TimeUnit.SECONDS.toMillis(SHUTDOWN_DRAIN_TIMEOUT_SECONDS),
     private val shutdownForceTimeoutMs: Long = SHUTDOWN_FORCE_TIMEOUT_MS,
+    private val onIssue: (String) -> Unit = {},
 ) {
     private val droppedTelemetryTasks = AtomicLong()
     private val failedTelemetryTasks = AtomicLong()
@@ -38,7 +39,7 @@ class ObdPersistenceWorker(
                 0L,
                 TimeUnit.MILLISECONDS,
                 LinkedBlockingQueue(TELEMETRY_QUEUE_CAPACITY),
-                DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks),
+                DiscardOldestUnlessShutdownPolicy(droppedTelemetryTasks, onIssue),
             )
         }
 
@@ -58,6 +59,7 @@ class ObdPersistenceWorker(
 
     private class DiscardOldestUnlessShutdownPolicy(
         private val droppedCount: AtomicLong,
+        private val onIssue: (String) -> Unit,
     ) : RejectedExecutionHandler {
         override fun rejectedExecution(
             r: Runnable,
@@ -69,6 +71,7 @@ class ObdPersistenceWorker(
             if (executor.queue.poll() != null) {
                 val dropped = droppedCount.incrementAndGet()
                 Log.w(AppPrefs.LOG_TAG, "telemetry queue full; dropped oldest telemetry task #$dropped")
+                onIssue("Some telemetry could not be saved because the recording queue filled up.")
             }
             executor.execute(r)
         }
@@ -87,11 +90,13 @@ class ObdPersistenceWorker(
                 } catch (ex: RuntimeException) {
                     val failed = failedTelemetryTasks.incrementAndGet()
                     Log.w(AppPrefs.LOG_TAG, "telemetry persistence failed #$failed", ex)
+                    onIssue("Telemetry could not be saved. Check available storage.")
                 }
             }
         } catch (ex: RejectedExecutionException) {
             val failed = failedTelemetryTasks.incrementAndGet()
             Log.w(AppPrefs.LOG_TAG, "telemetry persistence rejected #$failed", ex)
+            onIssue("Telemetry could not be queued for recording.")
         }
     }
 
@@ -108,6 +113,7 @@ class ObdPersistenceWorker(
                 } catch (ex: RuntimeException) {
                     Log.e(AppPrefs.LOG_TAG, "session lifecycle persist failed", ex)
                     recordPersistFailure(sessionId, op, ex)
+                    onIssue("The recording could not be finalized completely. Check available storage.")
                 }
             }
         } catch (ex: RejectedExecutionException) {
@@ -117,6 +123,7 @@ class ObdPersistenceWorker(
             } catch (inner: RuntimeException) {
                 Log.e(AppPrefs.LOG_TAG, "inline lifecycle fallback failed for $op", inner)
                 recordPersistFailure(sessionId, op, inner)
+                onIssue("The recording could not be finalized completely. Check available storage.")
             }
         }
     }

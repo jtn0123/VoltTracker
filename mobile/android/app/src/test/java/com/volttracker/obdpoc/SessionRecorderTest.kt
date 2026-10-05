@@ -193,12 +193,17 @@ class SessionRecorderTest {
         val store = RecordingStore()
         store.failTelemetryWrites = true
         val recorder = newOpenRecorder(store, "sr-telemetry-failure-test")
+        val warning =
+            java.util.concurrent.atomic
+                .AtomicReference<String?>(null)
+        recorder.onRecordingWarning = warning::set
 
         recorder.persistTelemetry(taggedTelemetry(0, 0))
         recorder.shutdown()
 
         assertEquals(1L, recorder.drainFailedTelemetryCount())
         assertEquals(0, store.telemetryCalls.size)
+        assertTrue(requireNotNull(warning.get()).contains("could not be saved"))
     }
 
     /**
@@ -249,6 +254,7 @@ class SessionRecorderTest {
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
         assertEquals(0L, recorder.activeSessionId())
+        assertTrue(requireNotNull(recorder.recordingWarning()).contains("database recording could not start"))
         assertEquals(ObdLocalStore.MODE_OBD, recorder.activeMode())
         recorder.shutdown()
     }
@@ -742,6 +748,7 @@ class SessionRecorderTest {
 
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "OBDLink MX+", 3_000L)
         assertFalse("precondition: the detail log must have failed to open", sessionLog.isOpen())
+        assertNotNull("log failure is surfaced independently of a working database", recorder.recordingWarning())
         recorder.closeSession("connected", "ok", "0100", 7)
         recorder.shutdown()
 
@@ -803,6 +810,19 @@ class SessionRecorderTest {
         assertEquals("error", SessionRecorder.failureClassFor("error", null))
         assertEquals("blocked", SessionRecorder.failureClassFor("blocked", null))
         assertEquals(null, SessionRecorder.failureClassFor("connected", null))
+    }
+
+    @Test
+    fun finalSessionCountsFailedWritesAfterTheTelemetryDrain() {
+        val store = RecordingStore().apply { failTelemetryWrites = true }
+        val recorder = newOpenRecorder(store, "sr-failed-final-count")
+        repeat(3) { recorder.persistTelemetry(taggedTelemetry(0, it)) }
+        recorder.closeSession("connected", "done", "0100", 3)
+        recorder.shutdown()
+        val failure = store.onlyEvent("telemetry_persist_failed")
+        assertEquals(3, failure.payload!!.optInt("failed"))
+        assertTrue(failure.arrivalOrder < store.finalizeArrivalOrder.get())
+        assertNotNull(recorder.recordingWarning())
     }
 
     // ---- helpers ------------------------------------------------------------------

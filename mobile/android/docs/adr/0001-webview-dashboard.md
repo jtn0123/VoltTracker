@@ -1,10 +1,10 @@
 # ADR 0001 — WebView + JavaScript bridge for the dashboard UI
 
-- **Status:** Accepted (recorded 2026-05-22, reflects the as-built design since
-  inception of the Android port).
+- **Status:** Partially superseded by ADR 0010. This records the original design
+  from 2026-05-22; the WebView remains the classic advanced-tools surface.
 - **Deciders:** Project author.
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [0010 — Native launcher and classic tools](0010-native-launcher-and-classic-tools.md).
 
 ## Context
 
@@ -106,5 +106,5 @@ Revisit this decision if any of these hold:
 - A feature requires native APIs that the bridge cannot reasonably surface
   (rich camera, sensor fusion, etc.).
 
-Until then: invest in the WebView path (the C-series and D5 grade items) rather
-than starting a Compose migration.
+The original recommendation to defer Compose is historical. ADR 0010 records
+the current native launcher and retained classic tools.

@@ -175,13 +175,12 @@ class RestoreApplyPipeline<A>(
 
     private fun stopLoggingForRestore(): Boolean {
         if (isCancelled()) return false
-        if (!activity.isLoggingActive()) {
-            return true
-        }
-        try {
-            activity.stopObdService()
-        } catch (ex: RuntimeException) {
-            return false
+        if (activity.isLoggingActive() || DatabaseOperationLease.hasPersistenceOwners()) {
+            try {
+                activity.stopObdService()
+            } catch (ex: RuntimeException) {
+                return false
+            }
         }
         val deadline = System.currentTimeMillis() + RESTORE_STOP_TIMEOUT_MS
         while (activity.isLoggingActive() && System.currentTimeMillis() < deadline) {
@@ -192,7 +191,8 @@ class RestoreApplyPipeline<A>(
                 return false
             }
         }
-        return !activity.isLoggingActive()
+        val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(0L)
+        return !activity.isLoggingActive() && DatabaseOperationLease.awaitPersistenceQuiescence(remaining, isCancelled)
     }
 
     private fun ensureActive() {

@@ -56,15 +56,15 @@ object ArcGeometry {
 private const val REGEN_KW = -0.3
 
 /** The SOC the driver knows: the cluster's figure when the car reports it, else the raw pack SOC. */
-val DriveUiState.shownSocPercent: Double get() = displayedSocPercent ?: socPercent
+val DriveUiState.shownSocPercent: Double? get() = displayedSocPercent ?: socPercent
 
-val DriveUiState.regenerating: Boolean get() = phase == DrivePhase.DRIVE && powerKw < REGEN_KW
+val DriveUiState.regenerating: Boolean get() = phase == DrivePhase.DRIVE && powerKw?.let { it < REGEN_KW } == true
 
 val DriveUiState.gasDriving: Boolean get() = phase == DrivePhase.DRIVE && mode == DriveMode.GAS
 
 /** The engine started because the battery is spent (vs. cold weather, Hold, or high demand). */
 val DriveUiState.atReserve: Boolean
-    get() = mode == DriveMode.GAS && ((evRangeMiles ?: 1.0) < 0.5 || shownSocPercent < 1.0)
+    get() = mode == DriveMode.GAS && ((evRangeMiles ?: 1.0) < 0.5 || shownSocPercent?.let { it < 1.0 } == true)
 
 /**
  * EV + gas range in whole [units], or null unless both are known (a half-known total would
@@ -306,12 +306,12 @@ fun gaugeDescription(
 ): String {
     val units = state.units
     if (!state.connected) return "Battery $NOT_REPORTED. Connect to see your Volt live"
-    val battery = "Battery ${state.shownSocPercent.toInt()} percent"
+    val battery = state.shownSocPercent?.let { "Battery ${it.toInt()} percent" } ?: "Battery not reported"
     return when (state.phase) {
         DrivePhase.DRIVE -> {
             val perHour = if (units.metric) "kilometres per hour" else "miles per hour"
-            val speed = "${units.speed(state.speedMph.toDouble())} $perHour"
-            val kw = oneDecimal(abs(state.powerKw))
+            val speed = state.speedMph?.let { "${units.speed(it.toDouble())} $perHour" } ?: "Speed not reported"
+            val kw = state.powerKw?.let { oneDecimal(abs(it)) } ?: "not reported"
             val power = if (state.regenerating) "$kw kilowatts regen" else "$kw kilowatts power"
             val engine = if (state.mode == DriveMode.GAS && state.rpm > 0) ", engine ${state.rpm} rpm" else ""
             "$speed, $power$engine"

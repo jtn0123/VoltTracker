@@ -79,6 +79,35 @@ class RestoreApplyPipelineTest {
     }
 
     @Test
+    fun replaceWaitsForPersistenceEvenAfterLoggingStops() {
+        val staged = stagedBackupOfOneClearedSession()
+        val liveStore = activity.localStore
+        val owner = DatabaseOperationLease.tryRegisterPersistence() ?: error("owner expected")
+        val executor =
+            java.util.concurrent.Executors
+                .newSingleThreadExecutor()
+        try {
+            val result = executor.submit<RestoreApplyPipeline.Result> { pipeline.applyReplace(staged, emitter()) }
+            val deadline = System.currentTimeMillis() + 5_000L
+            while (!DatabaseOperationLease.isHeld() && System.currentTimeMillis() < deadline) Thread.yield()
+            assertTrue(DatabaseOperationLease.isHeld())
+            assertFalse(activity.isLoggingActive())
+            assertFalse("replace must wait for the old writer", result.isDone)
+            assertTrue("live handle is not closed while a writer owns it", activity.localStore === liveStore)
+            assertTrue(staged.exists())
+            assertTrue(
+                "new persistence is refused during restore",
+                DatabaseOperationLease.tryRegisterPersistence() == null,
+            )
+            owner.close()
+            assertEquals(RestoreApplyPipeline.Result.OK, result.get(5, java.util.concurrent.TimeUnit.SECONDS))
+        } finally {
+            owner.close()
+            executor.shutdownNow()
+        }
+    }
+
+    @Test
     fun applyMergeFoldsTheStagedSessionsBackIntoTheLiveStore() {
         val staged = stagedBackupOfOneClearedSession()
 

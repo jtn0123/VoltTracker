@@ -96,7 +96,10 @@ class ObdPersistenceWorkerTest {
     @Test
     @Throws(InterruptedException::class)
     fun throwingTaskIsCountedAndWorkerKeepsRunning() {
-        val worker = ObdPersistenceWorker(newStore())
+        val warning =
+            java.util.concurrent.atomic
+                .AtomicReference<String?>(null)
+        val worker = ObdPersistenceWorker(newStore(), onIssue = warning::set)
         try {
             worker.submitTelemetry { throw RuntimeException("boom") }
 
@@ -108,6 +111,7 @@ class ObdPersistenceWorkerTest {
                 laterRan.await(AWAIT_MS, TimeUnit.MILLISECONDS),
             )
             worker.awaitTelemetryDrain()
+            assertTrue(requireNotNull(warning.get()).contains("could not be saved"))
 
             assertEquals(
                 "the throwing task must be counted exactly once",

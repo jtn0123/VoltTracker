@@ -12,6 +12,8 @@ data class VoltAppActions(
     val onOpenClassicTrip: (String) -> Unit = {},
     /** Open the classic dashboard on one of its tabs ("insights" hosts the maintenance log). */
     val onOpenClassicView: (String) -> Unit = {},
+    val onOpenTroubleshooter: () -> Unit = {},
+    val onDismissConnectionFailure: () -> Unit = {},
     /** Connect to the remembered adapter. False = none chosen yet, so the app opens the picker. */
     val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},

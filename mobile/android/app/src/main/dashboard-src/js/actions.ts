@@ -1936,6 +1936,14 @@ type SignalActions = {
     openTrip: (routeKey: unknown) => {
       if (typeof VD.openTripFromNative === "function") openTripFromNative(String(routeKey || ""));
     },
+    openTroubleshooter: () => {
+      void ensureTroubleshooterModule()
+        .then(() => {
+          const ts = VD.troubleshooter;
+          if (ts && typeof ts.open === "function") ts.open("native-health");
+        })
+        .catch((error: unknown) => reportClientError("native.troubleshooter", String(error)));
+    },
     openTripReceipt: (routeKey: unknown) => {
       if (typeof VD.openTripFromNative === "function") openTripFromNative(String(routeKey || ""), true);
     },

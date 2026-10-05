@@ -60,6 +60,10 @@ Gradle. detekt's bytecode target is pinned to 21 to match. This means you do **n
 (e.g. Temurin 21, which CI uses) and the toolchain finds it. Production bytecode is still Java 17
 (`compileOptions`), matching minSdk.
 
+JVM tests preload Mockito's agent through Gradle's argument provider. This avoids external
+self-attachment failures on Java 21+; contributors do not need extra JVM flags. The setup
+follows [Mockito's explicit instrumentation guidance](https://github.com/mockito/mockito/blob/main/mockito-core/src/main/java/org/mockito/Mockito.java#L190-L261).
+
 ## Editing the dashboard
 
 Under `app/src/main/assets/dashboard/`, both `index.html` **and** `js/` are
@@ -105,12 +109,13 @@ brew install lefthook && lefthook install
 ```
 
 The **pre-commit** hook runs Spotless and ESLint on staged dashboard TypeScript. Install
-dashboard Node dependencies once with `npm --prefix dashboard-tests ci`;
-otherwise the local ESLint hook prints a warning and CI becomes the first strict
-check.
+dashboard Node dependencies once with `npm --prefix dashboard-tests ci`, or let
+the ESLint hook install them on first use. Use Node 24.
 
-The **pre-push** hook runs the Android unit tests and the dashboard Vitest suite so
-a broken push is caught in ~30-60s instead of ~8min later in CI.
+The **pre-push** hook invokes `./gradlew --no-daemon verifyFast` once. Its task
+graph installs dashboard dependencies once before lint, type checking and Vitest,
+and also runs Android unit tests, Spotless, Detekt and the fast repository guards.
+Duration depends on caches and machine speed.
 
 To bypass in an emergency: `git commit --no-verify` / `git push --no-verify`
 (use sparingly; CI will catch it).
@@ -202,7 +207,7 @@ language lives in [`docs/glossary.md`](docs/glossary.md).
 JaCoCo enforces ratcheting baselines (see `app/jacoco.gradle` for the
 authoritative numbers — the per-CLASS floors and history notes live there too):
 
-- Project: 80% LINE
+- Project: 91% LINE and 77% BRANCH
 - `com.volttracker.obdpoc.data` package: 90% LINE
 - Focused per-package LINE floors guard the pure-logic packages so a regression
   can't hide behind the aggregate project floor: `materialize` 85%, `classify`

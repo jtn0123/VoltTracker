@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import android.util.Log
 import androidx.annotation.VisibleForTesting
@@ -186,12 +187,15 @@ open class ObdService :
     // runner, B1) — an AtomicReference so the two release paths can't double-release or leak.
     private val sessionWakeLock = AtomicReference<PowerManager.WakeLock?>()
 
-    // B4: onDestroy hands the (potentially ~60s) persistence drain to this background thread so
-    // the main thread is never blocked. The flag guards against a double-teardown.
-    private val persistenceTeardownStarted = AtomicBoolean(false)
+    private val persistenceTeardown = ServicePersistenceTeardown()
+    private var persistenceOwner: DatabaseOperationLease.PersistenceOwner? = null
+    private var recoveredSessions = false
 
-    @Volatile
-    private var persistenceTeardownThread: Thread? = null
+    @Volatile private var sessionInitialization = java.util.concurrent.CountDownLatch(0)
+
+    @VisibleForTesting
+    fun awaitSessionInitializationForTest(timeoutMs: Long): Boolean =
+        sessionInitialization.await(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
 
     private class SessionStartRequest(
         val mode: String,
@@ -260,10 +264,9 @@ open class ObdService :
         // A service instance owns one live session stream. Clear any process-local snapshot left by
         // a previous stopped instance before this one starts publishing authoritative values.
         LiveDashboardSnapshot.reset()
-        val openedStore = ObdLocalStore(this)
-        // Before any new session can open, so recovery can never mark the new one interrupted.
-        ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
-        localStore = openedStore
+        persistenceOwner = DatabaseOperationLease.tryRegisterPersistence()
+        // The wrapper is lazy; recovery and the first SQLite/file opens happen on the runner.
+        localStore = if (persistenceOwner != null) ObdLocalStore(this) else null
         locationTracker = LocationManagerTracker(this)
         notifications = ObdNotifications(this)
         notifications.createChannel()
@@ -284,6 +287,7 @@ open class ObdService :
                 { SystemSnapshot.collect(this, summaryStore) },
                 { store, sessionId -> tripSummaryNotifier?.notifyMaterializedTrip(store, sessionId) },
             )
+        recorder.onRecordingWarning = { warning -> publishRecordingWarning(warning) }
         engine = createPollingEngine()
         // Start from the current screen state (a session can start while the app is backgrounded),
         // then follow every later resume/pause. Registered after the recorder exists because the
@@ -427,7 +431,7 @@ open class ObdService :
             }
         }
         // Null intent (START_STICKY restart after process death) or an unrecognized action:
-        // there is nothing to do, but onCreate already opened the SQLite store, registered
+        // there is nothing to do, but onCreate already created the store wrapper, registered
         // receivers, and started executors. Without a session, stop instead of lingering as
         // an invisible orphaned service.
         if (!running.get()) {
@@ -446,10 +450,15 @@ open class ObdService :
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         foregroundServiceActive = false
         bluetoothObservability?.unregister(this)
-        executor.shutdownNow()
+        executor.shutdown()
         competingAppExecutor.shutdownNow()
         telemetrySideEffectExecutor.shutdownNow()
-        startPersistenceTeardown()
+        persistenceTeardown.start(
+            recorder,
+            localStore,
+            persistenceOwner,
+            listOf(executor, telemetrySideEffectExecutor, competingAppExecutor),
+        )
         localStore = null
         // Detach the app-log mirror before releasing its handle so any late OBDLog call becomes a
         // no-op rather than lazily reopening the writer we're about to close.
@@ -459,42 +468,9 @@ open class ObdService :
         super.onDestroy()
     }
 
-    /**
-     * Drains and closes the persistence stack off the main thread (B4): [SessionRecorder.shutdown]
-     * can block for tens of seconds waiting out the telemetry/lifecycle executor drains, which is
-     * an ANR when run inline in [onDestroy]. Process death mid-drain is safe — ObdSessionRecovery
-     * finalizes any session whose finalization was cut short on the next [onCreate]. The captured
-     * references belong to THIS instance, so a quickly-recreated service (fresh recorder + store)
-     * never races this teardown; the flag additionally guards a double [onDestroy].
-     */
-    private fun startPersistenceTeardown() {
-        if (!persistenceTeardownStarted.compareAndSet(false, true)) {
-            return
-        }
-        val recorderToDrain = recorder
-        val storeToClose = localStore
-        val teardown =
-            Thread({
-                val persistenceShutdown = recorderToDrain.shutdown()
-                if (persistenceShutdown.fullyTerminated) {
-                    storeToClose?.close()
-                } else {
-                    // A worker that ignored interruption may still be inside a SQLite call. Leaking
-                    // the handle until process teardown is safer than closing it under a late write.
-                    Log.e(AppPrefs.LOG_TAG, "persistence workers survived service teardown; leaving SQLite open")
-                }
-            }, "obd-persistence-teardown")
-        persistenceTeardownThread = teardown
-        teardown.start()
-    }
-
-    /** Test-only: blocks until the [startPersistenceTeardown] thread finishes (or [timeoutMs]). */
+    /** Test-only: waits for this service's background drain without releasing a failed restore guard. */
     @VisibleForTesting
-    fun awaitPersistenceTeardownForTest(timeoutMs: Long): Boolean {
-        val teardown = persistenceTeardownThread ?: return true
-        teardown.join(timeoutMs)
-        return !teardown.isAlive
-    }
+    fun awaitPersistenceTeardownForTest(timeoutMs: Long): Boolean = persistenceTeardown.await(timeoutMs)
 
     override fun maybeRunVoltageProbe(engineRef: ObdPollingEngine?) {
         if (voltageProbe == null || engineRef == null) {
@@ -661,15 +637,32 @@ open class ObdService :
             // A notification session-start hook failure must never abort session startup.
             Log.w(AppPrefs.LOG_TAG, "event notification session-start hook failed", ex)
         }
-        openSessionLog(request.mode, request.address)
         if (request.startLocationTracking) {
             startLocationTracking()
         }
         running.set(true)
         SESSION_ACTIVE.set(true)
+        val initialized = java.util.concurrent.CountDownLatch(1)
+        sessionInitialization = initialized
         try {
-            activeTask = executor.submit { runSessionTask(token, request.runner) }
+            activeTask =
+                executor.submit {
+                    runSessionTask(token) {
+                        try {
+                            if (!recoveredSessions) {
+                                ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
+                                recoveredSessions = true
+                            }
+                            if (!isSessionRunnerActive()) return@runSessionTask
+                            openSessionLog(request.mode, request.address)
+                        } finally {
+                            initialized.countDown()
+                        }
+                        if (isSessionRunnerActive()) request.runner.run()
+                    }
+                }
         } catch (ex: RuntimeException) {
+            initialized.countDown()
             Log.w(AppPrefs.LOG_TAG, "session task submit failed", ex)
             broadcastStatus("error", getString(R.string.status_worker_start_failed), true)
             stopCurrentSession(null)
@@ -702,10 +695,10 @@ open class ObdService :
         // grant can be resumed via resumeLocationTrackingIfPermitted() on the next foreground.
         tracker.start(recorder::persistLocation)
         if (!hasLocationPermission()) {
-            recorder.logEvent("gps_skipped", "reason", "missing_location_permission")
+            recorder.runAsync { recorder.logEvent("gps_skipped", "reason", "missing_location_permission") }
             return
         }
-        recorder.logEvent("gps_started")
+        recorder.runAsync { recorder.logEvent("gps_started") }
     }
 
     /**
@@ -727,7 +720,7 @@ open class ObdService :
 
     private fun stopLocationTracking() {
         locationTracker?.stop()
-        recorder.logEvent("gps_stopped")
+        recorder.runAsync { recorder.logEvent("gps_stopped") }
     }
 
     /**
@@ -749,7 +742,7 @@ open class ObdService :
             // missed release.
             lock.acquire(SESSION_WAKE_LOCK_TIMEOUT_MS)
             sessionWakeLock.set(lock)
-            recorder.logEvent("wake_lock_acquired", "mode", mode)
+            recorder.runAsync { recorder.logEvent("wake_lock_acquired", "mode", mode) }
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "session wake lock acquire failed", ex)
         }
@@ -780,7 +773,17 @@ open class ObdService :
         if (statusMessage != null) {
             broadcastStatus("idle", statusMessage, false)
         }
-        closeSessionLog()
+        // Queue behind any runner still leaving its SQLite/file call; teardown drains this queue.
+        val outcome = sessionOutcome.get()
+        val sampleCount = if (::engine.isInitialized) engine.sampleCount() else 0
+        val supportedPids = if (::engine.isInitialized) engine.supportedPidsSummary() else ""
+        try {
+            executor.execute {
+                recorder.closeSession(outcome.state, outcome.detail, supportedPids, sampleCount, outcome.failureClass)
+            }
+        } catch (ex: java.util.concurrent.RejectedExecutionException) {
+            Log.w(AppPrefs.LOG_TAG, "session close already handed to persistence teardown", ex)
+        }
     }
 
     override fun hasBluetoothConnectPermission(): Boolean =
@@ -892,9 +895,17 @@ open class ObdService :
                 extras,
             )
         val payload = status.toJson()
+        payload.put("recordingWarning", recorder.recordingWarning() ?: "")
         sessionStateMachine.observeStatus(state, detail, blocked)
-        recorder.logJson("status", payload)
-        recorder.persistStatus(state, detail, blocked, payload)
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            recorder.runAsync {
+                recorder.logJson("status", payload)
+                recorder.persistStatus(state, detail, blocked, payload)
+            }
+        } else {
+            recorder.logJson("status", payload)
+            recorder.persistStatus(state, detail, blocked, payload)
+        }
         maybeUpdateWidgetStatus(state)
         LiveDashboardSnapshot.recordStatus(payload)
         broadcast(BROADCAST_STATUS, payload)
@@ -908,6 +919,22 @@ open class ObdService :
         intent.setPackage(packageName)
         intent.putExtra(EXTRA_JSON, payload.toString())
         sendBroadcast(intent)
+    }
+
+    /** Never persist this status: reporting a storage failure must not recurse into that failure. */
+    private fun publishRecordingWarning(warning: String?) {
+        val outcome = sessionOutcome.get()
+        val payload =
+            LiveDashboardSnapshot.latestStatus().takeIf { it.length() > 0 }
+                ?: JSONObject().put("state", outcome.state).put("detail", outcome.detail).put("adapter", activeName)
+        payload.put("recordingWarning", warning ?: "")
+        LiveDashboardSnapshot.recordStatus(payload)
+        broadcast(BROADCAST_STATUS, payload)
+        if (foregroundServiceActive) {
+            notifications.post(
+                notifications.loggingText(appInForeground, recorder.recordingWarning()),
+            )
+        }
     }
 
     /**
@@ -997,7 +1024,7 @@ open class ObdService :
             return
         }
         val notification: Notification =
-            notifications.build(foregroundNotificationText())
+            notifications.build(notifications.loggingText(appInForeground, recorder.recordingWarning()))
         try {
             startForeground(ObdNotifications.NOTIFICATION_ID, notification, desired)
             activeForegroundServiceType = desired
@@ -1017,14 +1044,9 @@ open class ObdService :
         }
     }
 
-    private fun foregroundNotificationText(): String =
-        getString(
-            if (appInForeground) R.string.notification_logging_foreground else R.string.notification_logging_background,
-        )
-
     override fun updateNotification(text: String?) {
-        recorder.logEvent("notification", "text", text)
-        notifications.post(text ?: "")
+        recorder.runAsync { recorder.logEvent("notification", "text", text) }
+        notifications.post(recorder.recordingWarning()?.let { "Recording incomplete · $it" } ?: text ?: "")
     }
 
     override fun setLastFailureClass(fc: FailureClass?) {
@@ -1067,7 +1089,7 @@ open class ObdService :
             )
             // A background (demo) session owns no notification, so there is nothing to refresh.
             if (running.get() && foregroundServiceActive) {
-                updateNotification(foregroundNotificationText())
+                updateNotification(notifications.loggingText(appInForeground, recorder.recordingWarning()))
                 reevaluateForegroundServiceType()
             }
         }

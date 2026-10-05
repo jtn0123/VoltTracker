@@ -1,4 +1,4 @@
-// M10b — DTC severity / "safe to drive" line. updateDiagnosticCodeUi /
+// DTC severity and qualified service guidance. updateDiagnosticCodeUi /
 // buildDtcItem (storage-status.ts) renders, for each scanned code, a severity
 // pill and a plain-language drivability line. Severity comes from the
 // dtc-causes metadata when present, otherwise from a conservative code-family
@@ -29,7 +29,7 @@ describe('DTC severity badge + drivability line', () => {
     VD = await loadWithDtcData();
   });
 
-  it('uses dtc-causes metadata: a critical code reads "Stop safely"', () => {
+  it('uses dtc-causes metadata: a critical code reads "Urgent service"', () => {
     VD.setStorage({
       diagnosticCodeCount: 1,
       latestDiagnosticCodes: [{ dtc: 'P0AA6', status: 'stored', firstSeenMs: Date.now(), lastSeenMs: Date.now() }],
@@ -47,7 +47,7 @@ describe('DTC severity badge + drivability line', () => {
     const drive = item.querySelector('.dtc-drivability');
     expect(drive).not.toBeNull();
     expect(drive.dataset.severity).toBe('critical');
-    expect(drive.textContent).toContain('Stop safely');
+    expect(drive.textContent).toContain('Urgent service');
   });
 
   it('a warning-severity code reads "Service soon"', () => {
@@ -61,7 +61,7 @@ describe('DTC severity badge + drivability line', () => {
     expect(item.querySelector('.dtc-drivability').textContent).toContain('Service soon');
   });
 
-  it('an info-severity code reads "Safe to drive"', () => {
+  it('an info-severity code reports monitoring without declaring driving safety', () => {
     // C07B0 is a TPMS code tagged "info" in the database — its severity must win
     // over the chassis-family heuristic that would otherwise call it critical.
     VD.setStorage({
@@ -71,7 +71,7 @@ describe('DTC severity badge + drivability line', () => {
     const item = dtcItems()[0];
     expect(item.dataset.severity).toBe('info');
     expect(item.querySelector('.dtc-sev').textContent).toBe('Info');
-    expect(item.querySelector('.dtc-drivability').textContent).toContain('Safe to drive');
+    expect(item.querySelector('.dtc-drivability').textContent).toContain('Monitor at your next service');
   });
 
   it('falls back to a family heuristic when a code is not in the database', () => {
@@ -87,12 +87,13 @@ describe('DTC severity badge + drivability line', () => {
     });
     const items = dtcItems();
     expect(items).toHaveLength(2);
-    // C-family (chassis) with no DB entry → critical / stop safely.
+    // C-family (chassis) with no DB entry → urgent severity, qualified unknown-code guidance.
     expect(items[0].dataset.severity).toBe('critical');
-    expect(items[0].querySelector('.dtc-drivability').textContent).toContain('Stop safely');
+    expect(items[0].querySelector('.dtc-drivability').textContent).toContain('Unrecognized code');
     // P-family with no DB entry → warning / service soon (powertrain default).
     expect(items[1].dataset.severity).toBe('warning');
-    expect(items[1].querySelector('.dtc-drivability').textContent).toContain('Service soon');
+    expect(items[1].querySelector('.dtc-drivability').textContent).toContain('Unrecognized code');
+    expect(items[1].querySelector('.dtc-drivability').textContent).not.toContain('safe to drive');
   });
 
   it('renders the drivability line with textContent (no markup injection)', () => {

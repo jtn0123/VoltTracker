@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui.live
 
 import com.volttracker.obdpoc.VoltGear
+import com.volttracker.obdpoc.ui.ConnectionFailure
 import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.car.CarControl
@@ -54,6 +55,14 @@ class LiveUiStateStore(
         )
     val state: StateFlow<VoltAppUiState> = _state
 
+    fun onHistoryRefreshing(refreshing: Boolean) {
+        _state.value = _state.value.copy(historyRefreshing = refreshing)
+    }
+
+    fun dismissConnectionFailure() {
+        _state.value = _state.value.copy(connectionFailure = null)
+    }
+
     private val speedTrace = ArrayDeque<Float>()
     private val powerTrace = ArrayDeque<Float>()
     private val gasTrace = ArrayDeque<Boolean>()
@@ -61,6 +70,52 @@ class LiveUiStateStore(
     private var trackedPhase = DrivePhase.PARKED
     private val socTrace = ArrayDeque<Float>()
     private var socTraceLastSampleAt = 0L
+    private val coreSeenAt = mutableMapOf<String, Long>()
+    private var lastTelemetryReceivedAt = 0L
+
+    /** Core PIDs retain their last reading briefly; null and expired readings stay unknown. */
+    private fun core(
+        t: JSONObject,
+        key: String,
+        previous: Double?,
+    ): Double? {
+        if (t.has(key)) {
+            val age = optDouble(t, "${key}StaleMs")?.toLong() ?: 0L
+            val value = optDouble(t, key).takeIf { age in 0..CORE_READING_FRESH_MS }
+            if (value == null) coreSeenAt.remove(key) else coreSeenAt[key] = nowMs() - age
+            return value
+        }
+        return previous.takeIf { coreIsFresh(key) }
+    }
+
+    private fun coreIsFresh(key: String): Boolean =
+        coreSeenAt[key]?.let { nowMs() - it in 0..CORE_READING_FRESH_MS } == true
+
+    /** Called while the native host is visible, so a silent stream cannot freeze live values. */
+    fun expireCoreReadings() {
+        val s = _state.value
+        if (!s.drive.connected) return
+        val drive =
+            s.drive.copy(
+                speedMph = s.drive.speedMph.takeIf { coreIsFresh("speedKph") },
+                powerKw = s.drive.powerKw.takeIf { coreIsFresh("powerKw") },
+                socPercent = s.drive.socPercent.takeIf { coreIsFresh("soc") },
+                displayedSocPercent =
+                    s.drive.displayedSocPercent.takeIf {
+                        nowMs() - lastTelemetryReceivedAt in 0..CORE_READING_FRESH_MS
+                    },
+            )
+        _state.value =
+            s.copy(
+                drive = drive,
+                charge =
+                    s.charge.copy(
+                        socPercent = drive.socPercent,
+                        displayedSocPercent = drive.displayedSocPercent,
+                    ),
+            )
+    }
+
     private var loggedCharges: List<ChargeSession> = emptyList()
 
     /** A simulated lock/unlock sticks for the rest of the demo; the demo stream would re-lock it each tick. */
@@ -76,6 +131,13 @@ class LiveUiStateStore(
         val stateName = payload.optString("state", "").lowercase(Locale.US)
         val connected = stateName == "connected" || stateName == "demo"
         val transitioning = stateName in TRANSITION_STATES
+        val failureClass = payload.optString("failureClass", "").takeIf { it.isNotBlank() }
+        val failureDetail = payload.optString("detail", "").ifBlank { "The adapter connection could not start." }
+        val competingApps = payload.optString("competingApps", "").takeIf { it.isNotBlank() }
+        val failed =
+            payload.optBoolean("blocked") ||
+                stateName in setOf("failed", "blocked", "error") ||
+                failureClass != null
         // Once the demo ends its "Demo stream" name is no adapter at all: the header must not
         // keep saying "Idle · Demo stream" after Stop demo.
         val adapter =
@@ -87,13 +149,46 @@ class LiveUiStateStore(
         // The last-known battery level survives a real disconnect, but not the demo's made-up one.
         val demoEnded = !connected && stateName != "demo" && _state.value.settings.demoActive
         // A fresh link starts a fresh session: the trip and charge figures restart with it.
-        if (connected && !_state.value.drive.connected) session.reset()
-        if (!connected) clearTraces()
+        if (connected && !_state.value.drive.connected) {
+            session.reset()
+            coreSeenAt.clear()
+        }
+        if (!connected) {
+            clearTraces()
+            coreSeenAt.clear()
+        }
         if (stateName != "demo") demoLockOverride = null
         _state.value =
             _state.value
                 .let { s ->
+                    val charge =
+                        when {
+                            connected && !s.drive.connected ->
+                                s.charge.copy(
+                                    socPercent = null,
+                                    displayedSocPercent = null,
+                                )
+                            connected -> s.charge
+                            else -> s.charge.withoutLiveCharge(demoEnded)
+                        }
                     s.copy(
+                        connectionFailure =
+                            when {
+                                connected -> null
+                                failed ->
+                                    ConnectionFailure(
+                                        detail = failureDetail,
+                                        failureClass = failureClass,
+                                        competingApps = competingApps,
+                                    )
+                                else -> s.connectionFailure
+                            },
+                        recordingWarning =
+                            if (payload.has("recordingWarning")) {
+                                payload.optString("recordingWarning", "").takeIf { it.isNotBlank() }
+                            } else {
+                                s.recordingWarning
+                            },
                         drive =
                             (if (connected) s.drive else s.drive.withoutLiveReadings()).copy(
                                 connected = connected,
@@ -102,7 +197,7 @@ class LiveUiStateStore(
                                 adapterLabel = adapter,
                             ),
                         charge =
-                            (if (connected) s.charge else s.charge.withoutLiveCharge(demoEnded)).copy(
+                            charge.copy(
                                 connected = connected,
                                 connecting = transitioning,
                                 statusLabel = label,
@@ -152,7 +247,7 @@ class LiveUiStateStore(
     /** The same for the Charge tab: no charger, current or range survives the link. */
     private fun ChargeUiState.withoutLiveCharge(demoEnded: Boolean): ChargeUiState =
         copy(
-            socPercent = if (demoEnded) 0.0 else socPercent,
+            socPercent = if (demoEnded) null else socPercent,
             displayedSocPercent = if (demoEnded) null else displayedSocPercent,
             charging = false,
             evRangeMiles = null,
@@ -186,6 +281,7 @@ class LiveUiStateStore(
 
     /** One `updateTelemetry` sample: advances the Drive screen and its traces. */
     fun onTelemetry(payload: JSONObject) {
+        lastTelemetryReceivedAt = nowMs()
         appendTraces(payload)
         val next = withSample(_state.value, payload)
         val demo = payload.optString("source", "") == DEMO_SOURCE
@@ -345,7 +441,11 @@ class LiveUiStateStore(
         socTrace.clear()
         socTraceLastSampleAt = 0L
         samples.forEach(::appendTraces)
-        samples.lastOrNull()?.let { last -> _state.value = withSample(_state.value, last) }
+        samples.lastOrNull()?.let { last ->
+            _state.value = withSample(_state.value, last)
+            lastTelemetryReceivedAt = last.optLong("updatedAt", 0L)
+            coreSeenAt.keys.toList().forEach { key -> coreSeenAt[key] = lastTelemetryReceivedAt }
+        }
     }
 
     /**
@@ -436,9 +536,10 @@ class LiveUiStateStore(
     ): DriveUiState {
         val rpm = optDouble(t, "rpm")?.toInt() ?: current.rpm
         val mode = if (engineRunning(t, current.mode)) DriveMode.GAS else DriveMode.EV
-        val speedMph = optDouble(t, "speedKph")?.let { kmToMi(it).toInt() } ?: current.speedMph
+        val previousSpeedKph = current.speedMph?.toDouble()?.let { it / MI_PER_KM }
+        val speedMph = core(t, "speedKph", previousSpeedKph)?.let { kmToMi(it).toInt() }
         val phase = trackedPhase
-        val soc = optDouble(t, "soc") ?: current.socPercent
+        val soc = core(t, "soc", current.socPercent)
         val at = t.optLong("updatedAt", 0L)
         val chargerKw = optDouble(t, "chargerPowerKw")
         val charging = phase == DrivePhase.CHARGING
@@ -448,7 +549,7 @@ class LiveUiStateStore(
         val shownSoc = displayedSoc ?: optDouble(t, "soc")
         return current.copy(
             phase = phase,
-            powerKw = optDouble(t, "powerKw") ?: current.powerKw,
+            powerKw = core(t, "powerKw", current.powerKw),
             speedMph = speedMph,
             speedTrace = speedTrace.toList(),
             powerTrace = powerTrace.toList(),
@@ -909,5 +1010,6 @@ class LiveUiStateStore(
         const val NO_GEAR = "--"
         const val MI_PER_KM = 0.621371
         const val FT_PER_M = 3.28084
+        const val CORE_READING_FRESH_MS = 10_000L
     }
 }

@@ -12,7 +12,7 @@ import java.util.TimeZone
 import kotlin.math.pow
 
 /** The SOC the driver knows: the cluster's figure when the car reports it, else the raw pack SOC. */
-val ChargeUiState.shownSocPercent: Double get() = displayedSocPercent ?: socPercent
+val ChargeUiState.shownSocPercent: Double? get() = displayedSocPercent ?: socPercent
 
 /** Time to the charge limit at the current charger power; null while not charging or already there. */
 val ChargeUiState.eta: ChargeEta?
@@ -73,9 +73,9 @@ fun ChargeUiState.sessionRows(
                     live = true,
                     // Whole percent truncated, like the ring and the car's own gauge, so a live
                     // 54.9 % reads 54 here too, not 55.
-                    detail = sessionDetail(level, fromSoc?.toInt(), shownSocPercent.toInt()),
+                    detail = sessionDetail(level, fromSoc?.toInt(), shownSocPercent?.toInt()),
                     fromSoc = fromSoc?.toInt(),
-                    toSoc = shownSocPercent.toInt(),
+                    toSoc = shownSocPercent?.toInt(),
                     energyKwh = addedKwh,
                     cost = costText(addedKwh, homeRate),
                 ),
@@ -195,7 +195,7 @@ fun ChargeUiState.measuredPoints(): List<SocPoint> {
     val span = chartSpan() ?: return emptyList()
     val head = listOfNotNull(fromSoc?.let { SocPoint(span.startMs, it.toFloat()) })
     val recorded = socPoints.filter { it.atMs in (span.startMs + 1) until span.nowMs }
-    return head + recorded + SocPoint(span.nowMs, shownSocPercent.toFloat())
+    return head + recorded + listOfNotNull(shownSocPercent?.let { SocPoint(span.nowMs, it.toFloat()) })
 }
 
 /**
@@ -205,7 +205,7 @@ fun ChargeUiState.measuredPoints(): List<SocPoint> {
 fun ChargeUiState.projectedPoints(steps: Int = PROJECTION_STEPS): List<SocPoint> {
     val span = chartSpan() ?: return emptyList()
     val finish = span.finishMs ?: return emptyList()
-    val from = shownSocPercent
+    val from = shownSocPercent ?: return emptyList()
     val to = targetSoc.toDouble()
     return (0..steps).map { i ->
         val u = i.toDouble() / steps

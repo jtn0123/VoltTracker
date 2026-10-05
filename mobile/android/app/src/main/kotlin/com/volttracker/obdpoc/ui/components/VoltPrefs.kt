@@ -3,13 +3,20 @@ package com.volttracker.obdpoc.ui.components
 import android.provider.Settings
 import android.text.format.DateFormat
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 /**
  * App-wide display preferences every screen honours without threading them through each UI
@@ -29,18 +36,30 @@ data class VoltPrefs(
 
 val LocalVoltPrefs = compositionLocalOf { VoltPrefs() }
 
-/** Reads the phone's own motion and clock settings once per composition host. */
+/** Re-reads the phone's motion and clock settings when this host resumes. */
 @Composable
 fun rememberSystemPrefs(
     quietLiveData: Boolean,
     demo: Boolean,
 ): VoltPrefs {
     val context = LocalContext.current
-    val system =
+    val owner = LocalLifecycleOwner.current
+    val read = {
+        val scale = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
+        VoltPrefs(reduceMotion = scale == 0f, clock24h = DateFormat.is24HourFormat(context))
+    }
+    var system by
         remember(context) {
-            val scale = Settings.Global.getFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 1f)
-            VoltPrefs(reduceMotion = scale == 0f, clock24h = DateFormat.is24HourFormat(context))
+            mutableStateOf(read())
         }
+    DisposableEffect(owner, context) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) system = read()
+            }
+        owner.lifecycle.addObserver(observer)
+        onDispose { owner.lifecycle.removeObserver(observer) }
+    }
     return remember(system, quietLiveData, demo) { system.copy(quietLiveData = quietLiveData, demo = demo) }
 }
 

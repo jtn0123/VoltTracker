@@ -13,6 +13,21 @@ apply plugin: "com.diffplug.spotless"
 apply plugin: "org.gradle.test-retry"
 apply plugin: "io.gitlab.arturbosch.detekt"
 
+// Explicit instrumentation avoids Mockito's external self-attach failures on Java 21+.
+abstract class MockitoAgentProvider implements org.gradle.process.CommandLineArgumentProvider {
+    @org.gradle.api.tasks.Classpath
+    abstract org.gradle.api.file.ConfigurableFileCollection getAgentJar()
+
+    @Override
+    Iterable<String> asArguments() {
+        ["-javaagent:${agentJar.singleFile.absolutePath}"]
+    }
+}
+
+configurations {
+    mockitoAgent
+}
+
 // Static analysis (complexity, smells, bug patterns) — complements ktlint, which is
 // formatting-only. Thresholds/exclusions live in app/detekt.yml; CI gates on :app:detekt.
 detekt {
@@ -211,10 +226,25 @@ android {
             jacoco.includeNoLocationClasses = true
             jacoco.excludes = ["jdk.*", "jdk.internal.*", "sun.*"]
             jvmArgs += ["--enable-native-access=ALL-UNNAMED"]
+            def mockingAgent = project.objects.newInstance(MockitoAgentProvider)
+            mockingAgent.agentJar.from(project.configurations.mockitoAgent)
+            jvmArgumentProviders.add(mockingAgent)
             // Roborazzi (Compose screenshot tests): `-ProborazziRecord` writes/updates the
             // PNGs under build/outputs/roborazzi instead of comparing against them.
             if (rootProject.hasProperty("roborazziRecord")) {
                 systemProperty "roborazzi.test.record", "true"
+            }
+            // A bounded, reviewed native matrix. Regular unit runs only compose it;
+            // the dedicated lane verifies committed PNGs and never updates them.
+            def nativeVisualVerify = rootProject.hasProperty("nativeVisualVerify") ||
+                    gradle.startParameter.taskNames.any { it.tokenize(':').last() == 'verifyNativeVisual' }
+            def nativeVisualRecord = rootProject.hasProperty("nativeVisualRecord")
+            if (nativeVisualVerify && (nativeVisualRecord || rootProject.hasProperty("roborazziRecord"))) {
+                throw new GradleException("Choose native visual record OR verify; verification must not rewrite baselines.")
+            }
+            if (nativeVisualVerify || nativeVisualRecord) {
+                filter.includeTestsMatching("com.volttracker.obdpoc.ui.GradeVisualRegressionTest")
+                systemProperty "roborazzi.test.${nativeVisualVerify ? 'verify' : 'record'}", "true"
             }
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {
                 systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
@@ -227,7 +257,7 @@ android {
                 // step in .github/workflows/android.yml lists every test that passed only on
                 // retry and emits a ::warning per flake. Investigate those instead of letting
                 // them accumulate.
-                maxRetries = 1
+                maxRetries = nativeVisualVerify ? 0 : 1
                 failOnPassedAfterRetry = false
             }
         }
@@ -300,6 +330,7 @@ dependencies {
     // Stands in for framework-constructed types tests can't build themselves (e.g. the
     // RenderProcessGoneDetail WebView hands to onRenderProcessGone; its constructor is deprecated).
     testImplementation libs.mockito.core
+    mockitoAgent(libs.mockito.core) { transitive = false }
     // Roborazzi renders Compose screens headlessly (Robolectric native graphics) and
     // writes PNG screenshots — the JVM-only "after" screenshot pipeline for the
     // Compose dashboard rewrite. No emulator needed.

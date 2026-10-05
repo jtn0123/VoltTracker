@@ -161,7 +161,7 @@ private fun ChargingSide(state: ChargeUiState) {
         ChargeEta.NearlyFull -> SideLine(NEARLY_FULL_TEXT)
         ChargeEta.Estimating -> SideLine(estimatingText(state.targetSoc))
         null -> {
-            val atLimit = state.shownSocPercent >= state.targetSoc
+            val atLimit = state.shownSocPercent?.let { it >= state.targetSoc } == true
             SideLine(if (atLimit) "At your ${state.targetSoc}% limit" else estimatingText(state.targetSoc))
         }
     }
@@ -226,8 +226,8 @@ private fun SideLine(text: String) {
 @Composable
 private fun MiniRing(state: ChargeUiState) {
     val pal = LocalVoltPalette.current
-    val soc = state.shownSocPercent
-    val known = state.connected || state.socPercent > 0
+    val soc = state.shownSocPercent ?: 0.0
+    val known = state.shownSocPercent != null
     val range = state.evRangeMiles?.let { ", ${state.units.distanceText(it)} electric range" }.orEmpty()
     Box(
         modifier =

@@ -78,13 +78,14 @@ fun VoltApp(
     val latest by rememberUpdatedState(actions)
     val connect: () -> Unit = { if (!latest.onConnect()) push(VoltRoute.ADAPTER) }
     val nav =
-        remember {
+        remember(state.historyRefreshing) {
             VoltNavActions(
                 openSettings = { push(VoltRoute.SETTINGS) },
                 openHealth = { push(VoltRoute.HEALTH) },
                 connect = connect,
                 startDemo = { latest.onStartDemo() },
                 refresh = { latest.onRefresh() },
+                refreshing = state.historyRefreshing,
             )
         }
     val screen = screenViewName(tab, routes.lastOrNull())
@@ -104,35 +105,42 @@ fun VoltApp(
                 routes = emptyList()
             }
             val page: @Composable (Modifier) -> Unit = { modifier ->
-                VoltPages(
-                    target = VoltPage(tab, routes.lastOrNull(), routes.size),
-                    below = VoltPage(tab, routes.dropLast(1).lastOrNull(), routes.size - 1),
-                    onBack = pop,
-                    modifier = modifier,
-                ) { shown ->
-                    CompositionLocalProvider(LocalVoltNav provides nav) {
-                        when (val route = shown.route) {
-                            null ->
-                                VoltTabContent(
-                                    tab = shown.tab,
-                                    state = state,
-                                    actions = actions,
-                                    onConnect = connect,
-                                    onOpenTrip = { push(VoltRoute.TRIP) },
-                                    onOpenCharge = {
-                                        chargeAt = it
-                                        push(VoltRoute.CHARGE)
-                                    },
-                                )
-                            else ->
-                                VoltRouteContent(
-                                    route = route,
-                                    state = state,
-                                    actions = actions,
-                                    onBack = pop,
-                                    open = push,
-                                    chargeAt = chargeAt,
-                                )
+                Column(modifier) {
+                    com.volttracker.obdpoc.ui.components.DashboardNotices(
+                        state,
+                        actions,
+                        connect,
+                    ) { push(VoltRoute.ADAPTER) }
+                    VoltPages(
+                        target = VoltPage(tab, routes.lastOrNull(), routes.size),
+                        below = VoltPage(tab, routes.dropLast(1).lastOrNull(), routes.size - 1),
+                        onBack = pop,
+                        modifier = Modifier.weight(1f),
+                    ) { shown ->
+                        CompositionLocalProvider(LocalVoltNav provides nav) {
+                            when (val route = shown.route) {
+                                null ->
+                                    VoltTabContent(
+                                        tab = shown.tab,
+                                        state = state,
+                                        actions = actions,
+                                        onConnect = connect,
+                                        onOpenTrip = { push(VoltRoute.TRIP) },
+                                        onOpenCharge = {
+                                            chargeAt = it
+                                            push(VoltRoute.CHARGE)
+                                        },
+                                    )
+                                else ->
+                                    VoltRouteContent(
+                                        route = route,
+                                        state = state,
+                                        actions = actions,
+                                        onBack = pop,
+                                        open = push,
+                                        chargeAt = chargeAt,
+                                    )
+                            }
                         }
                     }
                 }
@@ -285,6 +293,7 @@ private fun VoltRouteContent(
                         onShare = actions.onShareHealthReport,
                         onOpenFreezeFrame = { open(VoltRoute.FREEZE_FRAME) },
                         onOpenAdapter = { open(VoltRoute.ADAPTER) },
+                        onOpenTroubleshooter = actions.onOpenTroubleshooter,
                         onOpenSignals = { open(VoltRoute.SIGNALS) },
                     ),
             )

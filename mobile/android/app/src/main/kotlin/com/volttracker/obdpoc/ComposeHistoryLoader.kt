@@ -78,6 +78,19 @@ internal class ComposeHistoryLoader(
     private val tripsInFlight = AtomicBoolean(false)
     private val routeInFlight = AtomicBoolean(false)
 
+    // Requests and completion posts run on the host's main thread, including follow-up reads.
+    private var activeReads = 0
+
+    private fun readStarted() {
+        activeReads += 1
+        store.onHistoryRefreshing(true)
+    }
+
+    private fun readFinished() {
+        activeReads -= 1
+        store.onHistoryRefreshing(activeReads > 0)
+    }
+
     fun loadCharges() {
         read(chargesInFlight, "charge history", chargeReader, store::onChargeHistoryFailed) {
             store.onChargeHistory(ChargeHistory.parse(it))
@@ -167,6 +180,7 @@ internal class ComposeHistoryLoader(
         // what it showed) and runs again on the next visit. One already running just finishes.
         if (DatabaseOperationLease.isHeld()) return onFailure()
         if (!inFlight.compareAndSet(false, true)) return
+        readStarted()
         try {
             executor.execute {
                 val result =
@@ -175,15 +189,26 @@ internal class ComposeHistoryLoader(
                     } catch (ex: RuntimeException) {
                         Log.w(AppPrefs.LOG_TAG, "$what read failed", ex)
                         null
-                    } finally {
-                        inFlight.set(false)
                     }
-                post(Runnable { if (result != null) onRead(result) else onFailure() })
+                post(
+                    Runnable {
+                        inFlight.set(false)
+                        try {
+                            if (result != null) onRead(result) else onFailure()
+                        } finally {
+                            readFinished()
+                        }
+                    },
+                )
             }
         } catch (ex: RejectedExecutionException) {
             Log.w(AppPrefs.LOG_TAG, "$what read not started", ex)
             inFlight.set(false)
-            onFailure()
+            try {
+                onFailure()
+            } finally {
+                readFinished()
+            }
         }
     }
 }

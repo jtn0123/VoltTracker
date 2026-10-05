@@ -127,6 +127,7 @@ class HealthActions(
     val onOpenFreezeFrame: () -> Unit = {},
     /** Settings → Adapter (also the troubleshooter: test connection, send diagnostics). */
     val onOpenAdapter: () -> Unit = {},
+    val onOpenTroubleshooter: () -> Unit = {},
     /** Health › Live signals. */
     val onOpenSignals: () -> Unit = {},
 )

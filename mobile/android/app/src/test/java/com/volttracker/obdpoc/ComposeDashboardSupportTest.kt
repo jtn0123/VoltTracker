@@ -115,7 +115,7 @@ class ComposeDashboardSupportTest {
                 store,
             ),
         )
-        assertEquals(0, store.state.value.drive.speedMph)
+        assertNull(store.state.value.drive.speedMph)
     }
 
     // --- updateBanner --------------------------------------------------------
@@ -195,13 +195,24 @@ class ComposeDashboardSupportTest {
             JSONObject().put("updatedAt", 2_000L).put("speedKph", 64).put("soc", 69),
         )
 
-        val store = LiveUiStateStore()
+        val store = LiveUiStateStore { 2_000L }
         ComposeDashboardSupport.replayServiceSnapshot(store)
         val drive = store.state.value.drive
 
         assertTrue(drive.connected)
         assertEquals(2, drive.speedTrace.size)
         assertEquals(39, drive.speedMph)
+    }
+
+    @Test
+    fun oldServiceSnapshotRestoresHistoryWithoutClaimingFreshValues() {
+        LiveDashboardSnapshot.recordStatus(JSONObject().put("state", "connected"))
+        LiveDashboardSnapshot.recordTelemetry(JSONObject().put("updatedAt", 1_000L).put("speedKph", 32).put("soc", 70))
+        val store = LiveUiStateStore { 50_000L }
+        ComposeDashboardSupport.replayServiceSnapshot(store)
+        assertEquals(1, store.state.value.drive.speedTrace.size)
+        assertNull(store.state.value.drive.speedMph)
+        assertNull(store.state.value.charge.socPercent)
     }
 
     @Test

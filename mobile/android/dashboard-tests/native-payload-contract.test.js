@@ -77,11 +77,12 @@ function interfaceFields(name) {
 const CONTRACTS = [
   {
     name: 'VoltStatus',
-    // Two native contributors: StatusPayload for live service status, DashboardPayloadJson
-    // for the fields the Activity attaches (bluetooth readiness, remembered adapter).
+    // StatusPayload builds live status; the Activity adds readiness/remembered adapter
+    // fields and ObdService attaches independent recording health, including failure-only broadcasts.
     sources: [
       ['StatusPayload.kt', ['fun toJson()']],
       ['DashboardPayloadJson.kt', ['fun status(']],
+      ['service/ObdService.kt', ['override fun broadcastStatus(', 'private fun publishRecordingWarning(']],
     ],
     dashboardOnly: [],
   },

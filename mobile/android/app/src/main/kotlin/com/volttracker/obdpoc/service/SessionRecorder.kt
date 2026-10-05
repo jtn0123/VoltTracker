@@ -25,6 +25,17 @@ class SessionRecorder {
     private val snapshotSource: SystemSnapshotSource?
     private val worker: ObdPersistenceWorker
     private val completionListener: SessionCompletionListener?
+    private val recordingWarning =
+        java.util.concurrent.atomic
+            .AtomicReference<String?>(null)
+
+    @Volatile var onRecordingWarning: (String?) -> Unit = {}
+
+    fun recordingWarning(): String? = recordingWarning.get()
+
+    private fun noteRecordingIssue(detail: String) {
+        if (recordingWarning.compareAndSet(null, detail)) onRecordingWarning(detail)
+    }
 
     // Read off-lock from the persist* hot path (persistStatus is reachable on the MAIN thread via
     // ObdService's ACTION_CANCEL_RETRY broadcast) while written under `lock` on the poll thread.
@@ -82,7 +93,7 @@ class SessionRecorder {
         this.summaryStore = summaryStore
         this.snapshotSource = snapshotSource
         this.completionListener = completionListener
-        worker = ObdPersistenceWorker(localStore)
+        worker = ObdPersistenceWorker(localStore, onIssue = ::noteRecordingIssue)
     }
 
     /** Snapshot supplier so [ObdService] can hand the Android context in. */
@@ -101,7 +112,9 @@ class SessionRecorder {
 
     fun activeMode(): String = activeMode
 
-    fun logFileName(): String = sessionLog.fileName() ?: ""
+    @Volatile private var currentLogFileName = ""
+
+    fun logFileName(): String = currentLogFileName
 
     /** Opens a fresh `.jsonl` log and starts a database session row. */
     fun openSession(
@@ -112,6 +125,8 @@ class SessionRecorder {
     ) {
         synchronized(lock) {
             closeSession("", "", "", 0)
+            recordingWarning.set(null)
+            onRecordingWarning(null)
             lastPersistedStatusKey = ""
             lastPersistedStatusAtMs = 0L
             recentStatusWriteCount = 0
@@ -124,8 +139,15 @@ class SessionRecorder {
                 pendingPidObservations.clear()
                 activeSessionId =
                     localStore?.startSession(activeMode, activeAddress, activeAdapterName, startedAtMs) ?: 0L
+                if (activeSessionId <=
+                    0L
+                ) {
+                    noteRecordingIssue("The database recording could not start. Check available storage.")
+                }
                 sessionLog.open(mode ?: "")
+                currentLogFileName = sessionLog.fileName() ?: ""
                 if (!sessionLog.isOpen()) {
+                    noteRecordingIssue("The diagnostic log could not be opened. Check available storage.")
                     logEvent("session_log_unavailable", "mode", activeMode)
                 }
                 logEvent("session_start", "mode", mode, "adapter", adapterName, "address", activeAddress)
@@ -149,6 +171,7 @@ class SessionRecorder {
                 }
             } catch (ex: RuntimeException) {
                 activeSessionId = 0L
+                noteRecordingIssue("The database recording could not start. Check available storage.")
                 Log.w(AppPrefs.LOG_TAG, "SessionRecorder.startSession failed", ex)
                 logEvent(
                     "session_start_error",
@@ -204,6 +227,7 @@ class SessionRecorder {
             }
             summaryStartRecorded = false
             sessionLog.close()
+            currentLogFileName = ""
             val store = localStore
             if (closingSessionId > 0 && store != null) {
                 flushPendingPidObservationsLocked()
@@ -216,6 +240,17 @@ class SessionRecorder {
                         // the drain completing (back-pressure during shutdown) is included — a snapshot
                         // taken before submitting this task would under-report those late drops.
                         val droppedBeforeClose = worker.drainDroppedTelemetryCount()
+                        val failedBeforeClose = worker.drainFailedTelemetryCount()
+                        if (failedBeforeClose > 0) {
+                            store.recordEvent(
+                                closingSessionId,
+                                "telemetry_persist_failed",
+                                "persist",
+                                "$failedBeforeClose telemetry writes failed before finalize.",
+                                true,
+                                JSONObject().put("failed", failedBeforeClose),
+                            )
+                        }
                         if (droppedBeforeClose > 0) {
                             val droppedPayload = JSONObject()
                             try {
@@ -361,6 +396,9 @@ class SessionRecorder {
                 sessionLog.writeDurable(safeType, payload ?: JSONObject())
             } else {
                 sessionLog.write(safeType, payload ?: JSONObject())
+            }
+            if (sessionLog.lastWriteFailure() != null) {
+                noteRecordingIssue("The diagnostic log could not be written completely. Check available storage.")
             }
             if ("telemetry" == type || "status" == type) {
                 return

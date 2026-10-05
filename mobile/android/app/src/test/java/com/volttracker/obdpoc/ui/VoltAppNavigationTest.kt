@@ -176,11 +176,48 @@ class VoltAppNavigationTest {
     }
 
     @Test
-    fun healthTroubleshooterOpensTheAdapterPage() {
-        compose.setContent { VoltApp(demoState, initialRoutes = listOf(VoltRoute.HEALTH)) }
-
+    fun healthTroubleshooterInvokesItsDedicatedDestination() {
+        var opened = 0
+        compose.setContent {
+            VoltApp(
+                demoState,
+                initialRoutes = listOf(VoltRoute.HEALTH),
+                actions = VoltAppActions(onOpenTroubleshooter = { opened += 1 }),
+            )
+        }
         compose.onNodeWithText("Troubleshooter").performScrollTo().performClick()
+        assertEquals(1, opened)
+        compose.onNodeWithText("Test connection").assertDoesNotExist()
+    }
+
+    @Test
+    fun connectionNoticeRecoveryControlsDispatchAndDismiss() {
+        var retries = 0
+        var troubleshooting = 0
+        var state by mutableStateOf(demoState.copy(connectionFailure = ConnectionFailure("Permission missing.")))
+        compose.setContent {
+            VoltApp(
+                state,
+                actions =
+                    VoltAppActions(
+                        onConnect = {
+                            retries += 1
+                            true
+                        },
+                        onOpenTroubleshooter = { troubleshooting += 1 },
+                        onDismissConnectionFailure = { state = state.copy(connectionFailure = null) },
+                    ),
+            )
+        }
+        compose.onNodeWithText("Permission missing.").assertIsDisplayed()
+        compose.onNodeWithText("Retry").performClick()
+        compose.onNodeWithText("Troubleshooter").performClick()
+        assertEquals(1, retries)
+        assertEquals(1, troubleshooting)
+        compose.onNodeWithText("Adapter").performClick()
         compose.onNodeWithText("Test connection").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Dismiss").performClick()
+        compose.onNodeWithText("Permission missing.").assertDoesNotExist()
     }
 
     @Test

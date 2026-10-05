@@ -319,6 +319,7 @@ open class MainActivity :
                 callDashboard(if (receipt) "openTripReceipt" else "openTrip", routeKey)
             },
             publishView = { view -> callDashboard("restoreView", view) },
+            publishTroubleshooter = { callDashboard("openTroubleshooter", null) },
         )
     private val backgroundExecutor: ExecutorService = Executors.newSingleThreadExecutor()
     private val storageReader = DashboardStorageReader { localStore }
@@ -1123,6 +1124,7 @@ open class MainActivity :
 
         /** Opens the classic dashboard on one of its tabs (see [DashboardTripDeepLink.OPENABLE_VIEWS]). */
         const val EXTRA_OPEN_VIEW = "com.volttracker.obdpoc.extra.OPEN_VIEW"
+        const val EXTRA_OPEN_TROUBLESHOOTER = "com.volttracker.obdpoc.extra.OPEN_TROUBLESHOOTER"
 
         /** Shared logcat tag. Canonical home is [AppPrefs.LOG_TAG]; kept here as a compatibility alias. */
         const val TAG = AppPrefs.LOG_TAG

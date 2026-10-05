@@ -77,7 +77,7 @@ import kotlin.math.roundToInt
 
 /**
  * Car › Health (mockups `S.health` / `S.health?fault=1`): the trouble codes in plain words with
- * whether it's safe to drive, scanning and sharing, the HV battery's health, and the ways into
+ * code-based service priority, scanning and sharing, the HV battery's health, and the ways into
  * live signals, freeze frames, the adapter and the troubleshooter.
  */
 @Composable
@@ -130,7 +130,7 @@ fun DiagScreen(
                 VoltIcons.Wrench,
                 "Troubleshooter",
                 subtitle = "Connection & data checks",
-                onClick = actions.onOpenAdapter,
+                onClick = actions.onOpenTroubleshooter,
             )
         }
     }
@@ -177,7 +177,7 @@ private fun Hero(
             HorizontalDivider(color = VoltColors.hairline, thickness = 1.dp, modifier = Modifier.padding(top = 12.dp))
             DtcRow(code, state.nowMs)
         }
-        safeToDrive(codes)?.let { Verdict(it) }
+        serviceGuidance(codes)?.let { Verdict(it) }
         state.earlierLine()?.let {
             Text(
                 it,
@@ -280,7 +280,6 @@ private fun DtcRow(
 
 @Composable
 private fun Verdict(line: HealthLine) {
-    val safe = line.tone == PillTone.EV
     Row(
         modifier =
             Modifier
@@ -293,7 +292,7 @@ private fun Verdict(line: HealthLine) {
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Icon(
-            if (safe) VoltIcons.Check else VoltIcons.Alert,
+            if (line.tone == PillTone.BAD) VoltIcons.Alert else VoltIcons.Wrench,
             contentDescription = null,
             tint = pillColor(line.tone),
             modifier = Modifier.size(16.dp),
@@ -301,7 +300,7 @@ private fun Verdict(line: HealthLine) {
         Text(
             line.text,
             style = VoltType.caption.copy(fontSize = 12.5.sp),
-            color = if (safe) VoltColors.textSecondary else VoltColors.alert,
+            color = if (line.tone == PillTone.BAD) VoltColors.alert else VoltColors.textSecondary,
         )
     }
 }
