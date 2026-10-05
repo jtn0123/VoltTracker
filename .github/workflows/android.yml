@@ -110,6 +110,10 @@ jobs:
           cache: npm
           cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # The legacy "tools" package is unavailable on this host. AGP installs
+          # its platform/build-tools after setup accepts the SDK licenses.
+          packages: 'platform-tools'
       - name: Verify committed native screenshots
         run: ./gradlew --no-daemon --no-configuration-cache verifyNativeVisual -Dorg.gradle.java.installations.auto-detect=false -Dorg.gradle.java.installations.paths="$JAVA_HOME"
       - name: Upload native visual results and diffs
