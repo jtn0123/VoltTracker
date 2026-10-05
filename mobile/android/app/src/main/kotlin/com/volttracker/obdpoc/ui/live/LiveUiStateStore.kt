@@ -676,12 +676,15 @@ class LiveUiStateStore(
         return optDouble(t, key) ?: current
     }
 
+    /**
+     * The four pressures, held for the drive: unlike the other broadcasts the car sends them about
+     * once a drive (see [com.volttracker.obdpoc.SwcanReadings]), so their age doesn't clear them.
+     * The Car tab says how old they are.
+     */
     private fun tires(
         t: JSONObject,
         current: TirePressures?,
     ): TirePressures? {
-        val ageMs = optDouble(t, "tirePressureStaleMs")
-        if (ageMs != null && ageMs > BROADCAST_STALE_MS) return null
         val psi =
             listOf("Fl", "Fr", "Rl", "Rr").map { corner ->
                 optDouble(t, "tirePressure${corner}Kpa")?.times(PSI_PER_KPA) ?: return current

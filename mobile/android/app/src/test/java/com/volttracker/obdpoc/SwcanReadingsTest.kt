@@ -52,6 +52,19 @@ class SwcanReadingsTest {
     }
 
     @Test
+    fun tirePressuresHoldForTheSessionWithTheirAge() {
+        // The car's own frame from the 2026-10-04 drive, heard once at the start.
+        val readings = SwcanReadings(maxAgeMs = 5_000L)
+        readings.record(readingsFrom("10 3D 40 40 24 24 3D 3E 37 38", "10 63 40 CB 00 48"), 0L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 18 * 60_000L)
+        assertEquals(244.0, sample.getDouble("tirePressureFlKpa"), 1e-9)
+        assertEquals(224.0, sample.getDouble("tirePressureRrKpa"), 1e-9)
+        assertEquals(18 * 60_000L, sample.getLong("tirePressureStaleMs"))
+        assertFalse("other broadcasts still age out", sample.has("peCoolantTempC"))
+    }
+
+    @Test
     fun emptyAndClearedStateAddsNothing() {
         val readings = SwcanReadings()
         val sample = JSONObject()
