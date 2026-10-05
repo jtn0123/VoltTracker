@@ -83,7 +83,11 @@ def dashboardStartupBudgetBytes = 412_000L
 // 24 B under its ceiling; funds the Demo / Testing stream's SW-CAN body fields
 // (doors, hood, hatch, alarm, windows, blower, remote start: ~0.26 KB in
 // actions-demo.js) so demo previews every Body & comfort row.
-def dashboardLazySupportBudgetBytes = 91_000L
+// 91k → 91.5k (GM-layout SW-CAN signals, 2026-10-04): the bucket sat 37 B under
+// its ceiling; funds the demo stream's wheel speeds, A/C compressor power,
+// drive-unit oil, energy screen and trip A/B fields (~0.28 KB in actions-demo.js)
+// so demo previews every new Live signals row.
+def dashboardLazySupportBudgetBytes = 91_500L
 def dashboardLazyPanelBudgetBytes = 45_000L
 def dashboardLazyExpertBudgetBytes = 40_000L
 // Detail-panel chunks split OUT of the eager app.js in the G2 startup-headroom
