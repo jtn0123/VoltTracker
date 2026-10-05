@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.60.0 (2026-10-05)
+
+### ✳️ New
+
+- **health**: Show the pack's internal resistance on the battery card
+  ([#158](https://github.com/jtn0123/VoltTracker/pull/158),
+  [`7da1425`](https://github.com/jtn0123/VoltTracker/commit/7da1425edf00fb7e8872ca3ce680495dda7c4291))
+
+
 ## v0.59.0 (2026-10-04)
 
 ### 🔷 Changed
