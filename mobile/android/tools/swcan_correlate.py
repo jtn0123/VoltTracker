@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Match SW-CAN (GMLAN low-speed) frame fields against the app's own telemetry.
 
-Feed it on-device session logs (files/obd-logs/session-*.jsonl from a debug build, which logs
-every listen window as a `swcan_raw` event) and it prints, per 29-bit frame id:
+Copy on-device session logs (files/obd-logs/session-*.jsonl from a debug build, which logs every
+listen window as a `swcan_raw` event) into ~/volttracker-logs and it prints, per 29-bit frame id:
 
 - how often it was heard and how many distinct payloads it carried,
 - what each byte looks like (constant, rolling counter, flag, enum or analog),
@@ -13,9 +13,11 @@ the ids the map marks `sensitive` (VIN, OnStar hotspot text, GPS), and of unmapp
 payload is printable text, are never printed, and location telemetry is never fitted, so the output
 is safe to paste into the map or a PR.
 
-    python3 tools/swcan_correlate.py ~/car-logs/session-*.jsonl
-    python3 tools/swcan_correlate.py --id 106B8040 --changes ~/car-logs/session-*.jsonl
+    python3 tools/swcan_correlate.py                      # every log in ~/volttracker-logs
+    python3 tools/swcan_correlate.py --id 106B8040 --changes 'session-1791*'
     python3 tools/swcan_correlate.py --self-test
+
+It reads logs only from that folder, picked by name, so an argument can't make it open anything else.
 
 Each listen window is one data point: its frames are reduced to a median and paired with the
 nearest telemetry sample (within --max-gap-ms). Windows more than 20 minutes apart start a new
@@ -30,15 +32,17 @@ from __future__ import annotations
 import argparse
 import csv
 import json
-import os
 import statistics
 import sys
+import tempfile
 from collections import Counter, defaultdict
+from fnmatch import fnmatch
 from dataclasses import dataclass, field
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MAP = REPO_ROOT / "mobile" / "android" / "docs" / "swcan-signal-map.csv"
+LOG_DIR = Path.home() / "volttracker-logs"
 
 # Telemetry that must never be fitted (a fit's intercept would leak a position) or that only
 # counts samples and so tracks every rising counter on the bus.
@@ -406,19 +410,23 @@ def changes(capture: Capture, frame_id: int, signal_map: SignalMap) -> list[str]
     return lines
 
 
-def checked_path(raw: str) -> Path:
-    """Resolves a path given on the command line. Only files under your home directory are read,
-    so a stray argument can't point the tool anywhere else."""
-    home = os.path.realpath(Path.home())
-    path = os.path.realpath(raw)
-    if os.path.commonpath([home, path]) != home:
-        raise SystemExit(f"{raw}: only files under your home directory are read")
-    return Path(path)
+def log_files(log_dir: Path, patterns: list[str]) -> list[Path]:
+    """The `.jsonl` logs in [log_dir] (and below) whose name or path matches any of [patterns];
+    all of them when none are given. Files come from listing the folder, never from a path typed on
+    the command line, so a stray argument can't point the tool anywhere else."""
+    logs = sorted(log_dir.rglob("*.jsonl")) if log_dir.is_dir() else []
+    if not patterns:
+        return logs
+    return [log for log in logs if any(fnmatch(log.name, pat) or fnmatch(str(log), pat) for pat in patterns)]
 
 
 def run(args: argparse.Namespace) -> int:
-    signal_map = load_map(DEFAULT_MAP if args.map is None else checked_path(args.map))
-    capture = load_logs([checked_path(p) for p in args.logs])
+    signal_map = load_map(DEFAULT_MAP)
+    paths = log_files(LOG_DIR, args.logs)
+    if not paths:
+        print(f"No matching session logs in {LOG_DIR}. Copy them there first (see docs/swcan-signal-map.md).")
+        return 1
+    capture = load_logs(paths)
     if not capture.windows:
         print("No swcan_raw windows in these logs. Raw windows are only logged by debug builds.")
         return 1
@@ -477,6 +485,14 @@ def self_test() -> int:
         "an unmapped text-like frame is hidden": "(sensitive, not shown)" in text and "56 6F" not in text,
     }
     checks.update(map_checks(load_map(DEFAULT_MAP)))
+    with tempfile.TemporaryDirectory() as folder:
+        log_dir = Path(folder)
+        for name in ("session-1.jsonl", "session-2.jsonl", "notes.txt"):
+            (log_dir / name).write_text("")
+        checks["logs are picked from the folder by name"] = [
+            p.name for p in log_files(log_dir, ["session-2*"])
+        ] == ["session-2.jsonl"] and len(log_files(log_dir, [])) == 2
+        checks["a path outside the log folder reads nothing"] = log_files(log_dir, ["/etc/hosts"]) == []
     for name, ok in checks.items():
         print(("ok   " if ok else "FAIL ") + name)
     if not all(checks.values()):
@@ -498,8 +514,9 @@ def map_checks(signal_map: SignalMap) -> dict[str, bool]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("logs", nargs="*", help="session-*.jsonl logs pulled from the phone")
-    parser.add_argument("--map", help="signal map CSV (default: docs/swcan-signal-map.csv)")
+    parser.add_argument(
+        "logs", nargs="*", help=f"log names or patterns in {LOG_DIR} (default: every .jsonl there)"
+    )
     parser.add_argument("--id", action="append", help="only these 29-bit ids (hex); repeatable")
     parser.add_argument("--all", action="store_true", help="also analyse ids the map already names")
     parser.add_argument("--changes", action="store_true", help="print each payload change instead of fits")
@@ -510,8 +527,6 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.self_test:
         return self_test()
-    if not args.logs:
-        parser.error("give at least one session log, or --self-test")
     return run(args)
 
 

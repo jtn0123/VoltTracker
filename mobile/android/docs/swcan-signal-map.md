@@ -37,14 +37,14 @@ column gives the GM message and signal name for each row (`Message.Signal`).
    ```
 
    These logs are **not redacted**: they hold VIN, GPS and the OnStar Wi-Fi details. Keep them out of
-   the repo. The tool only reads files under your home directory.
+   the repo. The tool reads logs only from `~/volttracker-logs` (subfolders too), picked by name.
 3. **Match frames to telemetry:**
 
    ```bash
    cd mobile/android
-   python3 tools/swcan_correlate.py ~/volttracker-logs/session-*.jsonl              # ids the map doesn't name yet
-   python3 tools/swcan_correlate.py --id 106B8040 ~/volttracker-logs/session-*.jsonl  # one id, even if mapped
-   python3 tools/swcan_correlate.py --id 1062C040 --changes ~/volttracker-logs/session-*.jsonl  # payload timeline
+   python3 tools/swcan_correlate.py                                      # ids the map doesn't name yet, every log
+   python3 tools/swcan_correlate.py --id 106B8040                        # one id, even if mapped
+   python3 tools/swcan_correlate.py --id 1062C040 --changes 'session-1791*'  # payload timeline, some logs
    python3 tools/swcan_correlate.py --self-test
    ```
 
