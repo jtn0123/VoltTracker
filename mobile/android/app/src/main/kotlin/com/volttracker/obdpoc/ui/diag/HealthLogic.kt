@@ -235,8 +235,9 @@ data class HvBattery(
     val groups: Int,
     val weakestCell: Int?,
     val weakestVolts: Double?,
+    val resistanceMohm: Double? = null,
 ) {
-    val reported: Boolean get() = sohPct != null || capacityAh != null || spreadMv != null
+    val reported: Boolean get() = sohPct != null || capacityAh != null || spreadMv != null || resistanceMohm != null
 }
 
 /** The Gen 2 Volt pack's rated capacity: the "of 52 Ah new" the Ah figure is read against. */
@@ -258,7 +259,11 @@ fun hvBattery(
         groups = drive.cellVoltages.size.takeIf { it > 0 } ?: PACK_CELL_GROUPS,
         weakestCell = drive.minCellNumber,
         weakestVolts = drive.minCellVolts,
+        resistanceMohm = drive.packResistanceMohm,
     )
+
+/** "Internal resistance 293 mΩ", or null until the pack reports it. */
+fun HvBattery.resistanceLine(): String? = resistanceMohm?.let { "Internal resistance ${it.roundToInt()} mΩ" }
 
 /** "#47 · 3.893 V" for the weakest cell group. */
 fun HvBattery.weakestLabel(): String? {
@@ -289,6 +294,7 @@ fun healthReport(
                 battery.sohPct?.let { "${it.roundToInt()}% capacity health" },
                 battery.capacityAh?.let { String.format(Locale.US, "%.1f Ah of %.0f Ah new", it, PACK_NEW_AH) },
                 battery.spreadMv?.let { "cell spread ${it.roundToInt()} mV" },
+                battery.resistanceMohm?.let { "internal resistance ${it.roundToInt()} mΩ" },
                 battery.weakestLabel()?.let { "weakest cell $it" },
             ).joinToString(", ")
     }

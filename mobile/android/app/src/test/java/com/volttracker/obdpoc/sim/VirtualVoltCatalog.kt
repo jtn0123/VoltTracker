@@ -124,8 +124,9 @@ object VirtualVoltCatalog {
             entry("7E4", "22801F", Evidence.REAL, both("62801F86")),
             entry("7E4", "2243A5", Evidence.SEEN, both("6243A50456")),
             entry("7E4", "22437D", Evidence.SEEN, both("62437D0339")),
-            entry("7E4", "2241A3", Evidence.GUESS, both("6241A30205")),
-            entry("7E4", "2240E9", Evidence.GUESS, both("6240E9012C")), // 150 mOhm
+            // The car answered 6241A301C4…01C6 (45.2-45.4 Ah) 442 times, 2026-06-11 to 07-23 (phone DB).
+            entry("7E4", "2241A3", Evidence.REAL, both("6241A301C4")),
+            entry("7E4", "2240E9", Evidence.REAL, both("6240E9024A")), // 293 mOhm, as the car answered
             entry("7E4", "2243A6", Evidence.GUESS, both("6243A650")), // 2000 kOhm
             // OVMS Volt/Ampera poll list (MY2017). 41A6 and 4389 are REAL: their replies turned up
             // in the 2026 phone logs when another app on the bus asked for them (41A6 = 0 km at a

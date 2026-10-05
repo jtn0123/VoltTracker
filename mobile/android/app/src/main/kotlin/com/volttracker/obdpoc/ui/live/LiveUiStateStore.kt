@@ -496,6 +496,7 @@ class LiveUiStateStore(
             cellSpreadMv = optDouble(t, "cellBalanceMv") ?: current.cellSpreadMv,
             minCellVolts = optDouble(t, "minCellVoltage") ?: current.minCellVolts,
             maxCellVolts = optDouble(t, "maxCellVoltage") ?: current.maxCellVolts,
+            packResistanceMohm = optDouble(t, "packResistanceMohm") ?: current.packResistanceMohm,
             minCellNumber = optDouble(t, "minCellNumber")?.toInt() ?: current.minCellNumber,
             cellVoltages = cellVoltages(t) ?: current.cellVoltages,
             chargeKw = if (charging) chargerKw ?: 0.0 else 0.0,

@@ -40,6 +40,7 @@ class LiveUiStateStoreTest {
             .put("engineOilLifePct", 87)
             .put("motorTempC", 60)
             .put("motorBTempC", 55)
+            .put("packResistanceMohm", 293.0)
             .put("prndlState", "D")
             .put("motorAPowerKw", 14.2)
             .put("motorBPowerKw", 3.1)
@@ -76,6 +77,7 @@ class LiveUiStateStoreTest {
         assertEquals(87, drive.oilLifePct)
         assertEquals(140, drive.motorTempF) // 60 C
         assertEquals(131, drive.motorBTempF) // 55 C
+        assertEquals(293.0, drive.packResistanceMohm ?: -1.0, 1e-9)
         assertEquals(13, drive.gpsAccuracyFt ?: -1) // 4 m ≈ 13.1 ft
         assertEquals(DriveMode.EV, drive.mode)
     }
