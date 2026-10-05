@@ -647,7 +647,7 @@ open class ObdService :
         try {
             activeTask =
                 executor.submit {
-                    runSessionTask(token) { initializeAndRunSession(request, initialized) }
+                    runSessionTask(token, request, initialized)
                 }
         } catch (ex: RuntimeException) {
             initialized.countDown()
@@ -660,30 +660,24 @@ open class ObdService :
         }
     }
 
-    private fun initializeAndRunSession(
+    private fun runSessionTask(
+        token: Long,
         request: SessionStartRequest,
         initialized: java.util.concurrent.CountDownLatch,
     ) {
-        try {
-            if (!recoveredSessions) {
-                ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
-                recoveredSessions = true
-            }
-            if (!isSessionRunnerActive()) return
-            openSessionLog(request.mode, request.address)
-        } finally {
-            initialized.countDown()
-        }
-        if (isSessionRunnerActive()) request.runner.run()
-    }
-
-    private fun runSessionTask(
-        token: Long,
-        runner: Runnable,
-    ) {
         runnerSessionToken.set(token)
         try {
-            runner.run()
+            try {
+                if (!recoveredSessions) {
+                    ObdSessionRecovery.recoverSafely(::recoverInterruptedSessions)
+                    recoveredSessions = true
+                }
+                if (!isSessionRunnerActive()) return
+                openSessionLog(request.mode, request.address)
+            } finally {
+                initialized.countDown()
+            }
+            if (isSessionRunnerActive()) request.runner.run()
         } finally {
             runnerSessionToken.remove()
         }

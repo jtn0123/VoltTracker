@@ -126,34 +126,6 @@ class LiveUiStateStore(
     private val insightsHistory = InsightsHistoryHolder()
     private val healthHistory = HealthHistoryHolder()
 
-    private fun nextConnectionFailure(
-        payload: JSONObject,
-        stateName: String,
-        connected: Boolean,
-        previous: ConnectionFailure?,
-    ): ConnectionFailure? {
-        if (connected) return null
-        val failureClass = payload.optString("failureClass", "").takeIf { it.isNotBlank() }
-        val failed =
-            payload.optBoolean("blocked") ||
-                stateName in setOf("failed", "blocked", "error") ||
-                failureClass != null
-        if (!failed) return previous
-        return ConnectionFailure(
-            detail = payload.optString("detail", "").ifBlank { "The adapter connection could not start." },
-            failureClass = failureClass,
-            competingApps = payload.optString("competingApps", "").takeIf { it.isNotBlank() },
-        )
-    }
-
-    private fun updatedRecordingWarning(
-        payload: JSONObject,
-        previous: String?,
-    ): String? {
-        if (!payload.has("recordingWarning")) return previous
-        return payload.optString("recordingWarning", "").takeIf { it.isNotBlank() }
-    }
-
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
         val stateName = payload.optString("state", "").lowercase(Locale.US)
@@ -1018,4 +990,32 @@ class LiveUiStateStore(
         const val FT_PER_M = 3.28084
         const val CORE_READING_FRESH_MS = 10_000L
     }
+}
+
+private fun nextConnectionFailure(
+    payload: JSONObject,
+    stateName: String,
+    connected: Boolean,
+    previous: ConnectionFailure?,
+): ConnectionFailure? {
+    if (connected) return null
+    val failureClass = payload.optString("failureClass", "").takeIf { it.isNotBlank() }
+    val failed =
+        payload.optBoolean("blocked") ||
+            stateName in setOf("failed", "blocked", "error") ||
+            failureClass != null
+    if (!failed) return previous
+    return ConnectionFailure(
+        detail = payload.optString("detail", "").ifBlank { "The adapter connection could not start." },
+        failureClass = failureClass,
+        competingApps = payload.optString("competingApps", "").takeIf { it.isNotBlank() },
+    )
+}
+
+private fun updatedRecordingWarning(
+    payload: JSONObject,
+    previous: String?,
+): String? {
+    if (!payload.has("recordingWarning")) return previous
+    return payload.optString("recordingWarning", "").takeIf { it.isNotBlank() }
 }
