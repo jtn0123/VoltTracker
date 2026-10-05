@@ -185,12 +185,31 @@ object VirtualVoltCatalog {
             SwcanFrame(Evidence.REAL, "0C 41 40 40 00 01 7A 01", listOf("doorLockState", "doorLockSource")),
             // power-electronics coolant 32 C
             SwcanFrame(Evidence.GUESS, "10 63 40 CB 00 48", listOf("peCoolantTempC")),
-            // Cabin (roof surface) estimate 29.5 C; captured on the car 2026-09-29.
+            // Cabin air estimate (byte 4) 30.5 C; the roof surface read 29.5 C. Captured on the car 2026-09-29.
             SwcanFrame(Evidence.REAL, "10 44 00 99 10 00 00 00 8D 8B 46", listOf("cabinTempEstC")),
             // A/C on; captured on the car 2026-09-29.
             SwcanFrame(Evidence.REAL, "10 73 40 99 20 00 00 A0 00 00", listOf("acState")),
-            // Blower 13 % (byte 2) while the climate ran; captured on the car 2026-09-29.
-            SwcanFrame(Evidence.REAL, "10 81 40 99 20 00 22 00", listOf("blowerPct")),
+            // Blower 32 % (byte 1) with the A/C on; captured on the car 2026-10-04.
+            SwcanFrame(Evidence.REAL, "10 81 40 99 20 51 24 00", listOf("blowerPct")),
+            // A/C compressor drawing 1.16 kW; captured on the car 2026-10-04.
+            SwcanFrame(Evidence.REAL, "10 27 40 CB 00 00 00 00 1D", listOf("acCompressorKw")),
+            // Wheel speeds at about 19 km/h; captured on the car 2026-10-04.
+            SwcanFrame(
+                Evidence.REAL,
+                "10 6B 80 40 02 53 02 4C 02 4E 02 4C",
+                listOf("wheelSpeedFlKph", "wheelSpeedFrKph", "wheelSpeedRlKph", "wheelSpeedRrKph"),
+            ),
+            // Transmission oil 83 C late in a highway drive; captured on the car 2026-10-04.
+            SwcanFrame(Evidence.REAL, "10 2E 00 40 10 00 C7 7B 9F 00 56 4F", listOf("transOilTempC")),
+            // Energy screen: 4.0 kWh driving, 0.2 climate, 0 conditioning, 8.5 left; captured on the
+            // car 2026-10-04.
+            SwcanFrame(
+                Evidence.REAL,
+                "10 42 C0 CB 00 28 00 02 00 00 00 55",
+                listOf("cycleDrivingKwh", "cycleClimateKwh", "cycleConditioningKwh", "batteryEnergyLeftKwh"),
+            ),
+            // Trip A 32.41 km, trip B 1287.59 km (the car's own trips are not kept here).
+            SwcanFrame(Evidence.GUESS, "10 3D 60 60 00 00 08 1A 01 41 E6", listOf("tripAKm", "tripBKm")),
             // Evaporator 10.0 C, compressor 4132 rpm while the A/C ran; captured on the car 2026-09-29.
             SwcanFrame(Evidence.REAL, "10 27 00 CB 00 64 10 24 00", listOf("acEvapTempC", "acCompressorRpm")),
             // cluster EV range 55 km (GMLAN PID 0x176)

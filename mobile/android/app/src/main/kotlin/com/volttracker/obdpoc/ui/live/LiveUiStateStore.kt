@@ -567,7 +567,10 @@ class LiveUiStateStore(
             cabinTempF =
                 fresh(t, "cabinTempEstC", "climateStaleMs", current.cabinTempF?.let { fToC(it.toDouble()) })
                     ?.let { cToF(it).toInt() },
-            transTempF = optDouble(t, "transmissionTempC")?.let { cToF(it).toInt() } ?: current.transTempF,
+            // The polled 221940 when the car answers it (a 2017 doesn't), else the SW-CAN broadcast.
+            transTempF =
+                (optDouble(t, "transmissionTempC") ?: optDouble(t, "transOilTempC"))?.let { cToF(it).toInt() }
+                    ?: current.transTempF,
             oilTempF = optDouble(t, "engineOilTempC")?.let { cToF(it).toInt() } ?: current.oilTempF,
             oilLifePct = optDouble(t, "engineOilLifePct")?.toInt() ?: current.oilLifePct,
             tires = tires(t, current.tires),
@@ -614,6 +617,13 @@ class LiveUiStateStore(
             tripKwh = session.energyKwh.takeIf { it >= MIN_TRIP_KWH },
             cycleEvPercent = cycleEvPercent(t) ?: current.cycleEvPercent,
             cycleMpg = cycleMpg(t) ?: current.cycleMpg,
+            // Held for the drive like the tires: the car sends the energy split every few minutes.
+            cycleDrivingKwh = optDouble(t, "cycleDrivingKwh") ?: current.cycleDrivingKwh,
+            cycleClimateKwh = optDouble(t, "cycleClimateKwh") ?: current.cycleClimateKwh,
+            cycleConditioningKwh = optDouble(t, "cycleConditioningKwh") ?: current.cycleConditioningKwh,
+            energyLeftKwh = optDouble(t, "batteryEnergyLeftKwh") ?: current.energyLeftKwh,
+            carTripAMiles = tripMiles(t, "tripAKm", current.carTripAMiles),
+            carTripBMiles = tripMiles(t, "tripBKm", current.carTripBMiles),
             lastDrive = session.lastDrive,
         )
     }
@@ -728,6 +738,13 @@ class LiveUiStateStore(
         val litres = optDouble(t, "cycleFuelUsedL")?.takeIf { it >= MIN_CYCLE_FUEL_L } ?: return null
         return kmToMi(ev + gas) / (litres / LITRES_PER_GALLON)
     }
+
+    /** A cluster trip odometer in miles, cleared once its broadcast goes stale. */
+    private fun tripMiles(
+        t: JSONObject,
+        key: String,
+        current: Double?,
+    ): Double? = fresh(t, key, "tripOdometerStaleMs", current?.let { it / MI_PER_KM })?.let(::kmToMi)
 
     /** Live readings in this sample (keys with a value, minus bookkeeping and staleness ages). */
     private fun signalCount(t: JSONObject): Int =

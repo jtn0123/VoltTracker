@@ -62,6 +62,7 @@ enum class SwcanField(
     AC_STATE(SwcanGroup.CLIMATE),
     AC_COMPRESSOR_RPM(SwcanGroup.CLIMATE),
     AC_EVAP_TEMP(SwcanGroup.CLIMATE),
+    AC_COMPRESSOR_KW(SwcanGroup.CLIMATE),
     HEATER_CORE_TEMP(SwcanGroup.CLIMATE),
     COOLANT_HEATER_KW(SwcanGroup.CLIMATE),
     REMOTE_START(SwcanGroup.CLIMATE),
@@ -73,6 +74,17 @@ enum class SwcanField(
     CYCLE_EV_DISTANCE(SwcanGroup.DRIVE_CYCLE),
     CYCLE_FUEL_DISTANCE(SwcanGroup.DRIVE_CYCLE),
     CYCLE_FUEL_USED(SwcanGroup.DRIVE_CYCLE),
+    CYCLE_DRIVING_ENERGY(SwcanGroup.ENERGY),
+    CYCLE_CLIMATE_ENERGY(SwcanGroup.ENERGY),
+    CYCLE_CONDITIONING_ENERGY(SwcanGroup.ENERGY),
+    BATTERY_ENERGY_LEFT(SwcanGroup.ENERGY),
+    WHEEL_FL(SwcanGroup.WHEELS),
+    WHEEL_FR(SwcanGroup.WHEELS),
+    WHEEL_RL(SwcanGroup.WHEELS),
+    WHEEL_RR(SwcanGroup.WHEELS),
+    TRIP_A(SwcanGroup.TRIPS),
+    TRIP_B(SwcanGroup.TRIPS),
+    TRANS_OIL_TEMP(SwcanGroup.DRIVETRAIN),
 }
 
 enum class SwcanGroup {
@@ -87,17 +99,22 @@ enum class SwcanGroup {
     CHARGE_LIMIT,
     RANGE,
     DRIVE_CYCLE,
+    ENERGY,
+    WHEELS,
+    TRIPS,
+    DRIVETRAIN,
 }
 
 /**
  * Pure parser + decoder for the gen-2 Volt's single-wire CAN broadcast traffic, as captured by an
  * OBDLink adapter in listen-only monitor mode (`STP 61`, `STCMM 0`, `STM`).
  *
- * Frame layouts and scalings are ported from the OVMS `vehicle_voltampera` module
- * (`IncomingFrameCan4`, `IncomingDriveCycleSWCAN`, `ClimateControlIncomingSWCAN`), which its authors
- * tested on a MY2017 Volt. NONE of these decodes has been confirmed by VoltTracker on the target car
- * yet: every value here is UNCONFIRMED-ON-CAR until a real SW-CAN capture has been compared against
- * the car's own displays. Everything is read-only; nothing in this file builds a frame to send.
+ * Frame layouts and scalings come from GM's own low-speed GMLAN signal list (opendbc
+ * `gm_global_a_lowspeed_1818125.dbc`, MIT) where it covers a frame, else from the OVMS
+ * `vehicle_voltampera` module (`IncomingFrameCan4`, `IncomingDriveCycleSWCAN`,
+ * `ClimateControlIncomingSWCAN`). `docs/swcan-signal-map.csv` says which ones a real capture has
+ * matched to the car; the rest are UNCONFIRMED-ON-CAR. Everything is read-only; nothing in this file
+ * builds a frame to send.
  */
 object SwcanFrameDecoder {
     // ---- Exact 29-bit identifiers (priority + arbitration id + source, as OVMS matches them) ----
@@ -120,6 +137,11 @@ object SwcanFrameDecoder {
     const val ID_CLIMATE_BASIC = 0x10814099
     const val ID_CABIN_TEMP = 0x10440099
     const val ID_REMOTE_START = 0x10390040
+    const val ID_WHEEL_SPEED = 0x106B8040
+    const val ID_TRIP_ODOMETER = 0x103D6060
+    const val ID_ANALOG_SLOW = 0x102E0040
+    const val ID_CLIMATE_POWER = 0x102740CB
+    const val ID_ENERGY_SPLIT = 0x1042C0CB
 
     // ---- 13-bit GMLAN parameter ids, matched regardless of priority/source bits ----
     const val PID_ENERGY_STORAGE = 0x0141
@@ -150,6 +172,12 @@ object SwcanFrameDecoder {
     private const val PERCENT_PER_COUNT = 0.392157
     private const val TPMS_KPA_PER_COUNT = 4
     private const val TPMS_INVALID_RAW = 0xFE
+    private const val KPH_PER_WHEEL_COUNT = 0.03125
+    private const val KWH_PER_ENERGY_COUNT = 0.1
+    private const val ENERGY_NOT_AVAILABLE = 0x3FFF
+    private const val WHEEL_SPEED_BITS = 14
+    private const val TRIP_BITS = 23
+    private const val ENERGY_BITS = 14
 
     /**
      * Splits raw `STM` output (lines separated by CR/LF, possibly still carrying the `STOPPED`
@@ -245,8 +273,13 @@ object SwcanFrameDecoder {
             ID_CHARGE_LIMIT -> chargeLimit(d)
             ID_CLIMATE_GENERAL -> acState(d)
             ID_CLIMATE_BASIC -> blower(d)
-            ID_CABIN_TEMP -> if (d.size >= 6) listOf(num(SwcanField.CABIN_TEMP, d[5] / 2.0 - 40.0, 1)) else none()
+            ID_CABIN_TEMP -> cabinTemp(d)
             ID_REMOTE_START -> remoteStart(d)
+            ID_WHEEL_SPEED -> wheelSpeeds(d)
+            ID_TRIP_ODOMETER -> tripOdometers(d)
+            ID_ANALOG_SLOW -> transOilTemp(d)
+            ID_CLIMATE_POWER -> if (d.size >= 5) listOf(num(SwcanField.AC_COMPRESSOR_KW, d[4] * 0.04, 2)) else none()
+            ID_ENERGY_SPLIT -> energySplit(d)
             else -> null
         }
     }
@@ -293,6 +326,13 @@ object SwcanFrameDecoder {
         val set = (d[byteIndex] shr bitIndex) and 1 == 1
         return listOf(text(field, if (set) whenSet else whenClear))
     }
+
+    /** GM validity bits read 1 when the signal next to them is NOT valid. */
+    private fun invalid(
+        d: IntArray,
+        byteIndex: Int,
+        bitIndex: Int,
+    ): Boolean = (d[byteIndex] shr bitIndex) and 1 == 1
 
     private fun signedByte(value: Int): Int {
         val b = value and BYTE_MASK
@@ -383,13 +423,72 @@ object SwcanFrameDecoder {
         }
     }
 
-    // Climate control basic status: byte 2 is the blower, 0.392 % per count. On a 2017 Volt
-    // (2026-09-29 capture) byte 2 read 0x44 then 0x22 while the climate ran and 0x00 when it stopped,
-    // and byte 1 stayed 0 the whole time it ran, then read 0x45 for a frame after it stopped. So the
-    // blower is byte 2, not byte 1 as the community decoder has it.
+    // Climate_Control_Basic_Status_LS (arb 0x40A): byte 1 is the front blower (ClmCntFrBlwFnSp),
+    // 0.392 % per count. Byte 2 is the A/C compressor load estimate, which an earlier decoder read as
+    // the blower: it is non-zero whenever the A/C runs, even before the fan spins up. On the car the
+    // fan read 30-51 % on a 2026-10-04 A/C drive and ramped 0 -> 27 % -> 0 in the 2026-09-29 capture.
     private fun blower(d: IntArray): List<SwcanReading> {
-        if (d.size < 3) return none()
-        return listOf(num(SwcanField.BLOWER, d[2] * PERCENT_PER_COUNT, 0))
+        if (d.size < 2) return none()
+        return listOf(num(SwcanField.BLOWER, d[1] * PERCENT_PER_COUNT, 0))
+    }
+
+    // Alarm_2_Request_LS (arb 0x220): byte 4 is the cabin air estimate (EstBulkIntAirTmp, 0.5 °C - 40),
+    // valid unless byte 0 bit 2 is set. Byte 5 is the roof surface and byte 6 the dash surface.
+    private fun cabinTemp(d: IntArray): List<SwcanReading> {
+        if (d.size < 5 || invalid(d, 0, 2)) return none()
+        return listOf(num(SwcanField.CABIN_TEMP, d[4] / 2.0 - 40.0, 1))
+    }
+
+    // Wheel_Grnd_Velocity_LS (arb 0x35C): four 14-bit speeds, 1/32 km/h, left driven (front), left
+    // non-driven, right driven, right non-driven, each with a validity bit just above it.
+    private fun wheelSpeeds(d: IntArray): List<SwcanReading> {
+        if (d.size < MAX_DATA_BYTES) return none()
+        val wheels = listOf(SwcanField.WHEEL_FL, SwcanField.WHEEL_RL, SwcanField.WHEEL_FR, SwcanField.WHEEL_RR)
+        return wheels.mapIndexedNotNull { index, field ->
+            val byteIndex = index * 2
+            if (invalid(d, byteIndex, 6)) return@mapIndexedNotNull null
+            val raw = dbcBigEndian(d, byteIndex * 8 + 5, WHEEL_SPEED_BITS) ?: return@mapIndexedNotNull null
+            num(field, raw * KPH_PER_WHEEL_COUNT, 2)
+        }
+    }
+
+    // VehInfoTripComputer_LS (arb 0x1EB, from the cluster): the two trip odometers, 23 bits at
+    // 1/64 km. Trip A is valid unless byte 0 bit 7 is set, trip B unless bit 6 is.
+    private fun tripOdometers(d: IntArray): List<SwcanReading> {
+        if (d.size < 7) return none()
+        return listOfNotNull(
+            dbcBigEndian(d, 14, TRIP_BITS)
+                ?.takeUnless { invalid(d, 0, 7) }
+                ?.let { num(SwcanField.TRIP_A, it * GMLAN_RANGE_SCALE, 2) },
+            dbcBigEndian(d, 38, TRIP_BITS)
+                ?.takeUnless { invalid(d, 0, 6) }
+                ?.let { num(SwcanField.TRIP_B, it * GMLAN_RANGE_SCALE, 2) },
+        )
+    }
+
+    // Analog_Values_Slow_LS (arb 0x170): byte 3 is the transmission (drive unit) oil temperature,
+    // 1 °C - 40, valid unless byte 0 bit 5 is set. It climbed 29 -> 84 °C over a 2026-10-04 highway drive.
+    private fun transOilTemp(d: IntArray): List<SwcanReading> {
+        if (d.size < 4 || invalid(d, 0, 5)) return none()
+        return listOf(num(SwcanField.TRANS_OIL_TEMP, d[3] - 40.0, 0))
+    }
+
+    // Drv_Cycl_Elec_Enrgy_States_LS (arb 0x216): the car's energy screen. Four 14-bit counts at
+    // 0.36 MJ (0.1 kWh): used driving, used by climate, used conditioning the battery, and usable
+    // energy left. On 2026-10-04 "left" fell 12.2 -> 8.5 kWh while driving + climate rose by 3.8.
+    private fun energySplit(d: IntArray): List<SwcanReading> {
+        if (d.size < MAX_DATA_BYTES) return none()
+        val fields =
+            listOf(
+                SwcanField.CYCLE_DRIVING_ENERGY,
+                SwcanField.CYCLE_CLIMATE_ENERGY,
+                SwcanField.CYCLE_CONDITIONING_ENERGY,
+                SwcanField.BATTERY_ENERGY_LEFT,
+            )
+        return fields.mapIndexedNotNull { index, field ->
+            val raw = dbcBigEndian(d, index * 16 + 5, ENERGY_BITS) ?: return@mapIndexedNotNull null
+            if (raw == ENERGY_NOT_AVAILABLE.toLong()) null else num(field, raw * KWH_PER_ENERGY_COUNT, 1)
+        }
     }
 
     // High Volt Time Based Charge: up to four selectable charge-current levels plus the index of

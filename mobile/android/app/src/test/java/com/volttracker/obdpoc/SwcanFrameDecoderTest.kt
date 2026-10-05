@@ -7,9 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Pins the SW-CAN decoders to the OVMS vehicle_voltampera math with synthetic frames. The frames
- * are built by hand from each decoder's bit layout, so these tests prove the port matches OVMS —
- * NOT that the values are right on the car (that needs a real capture).
+ * Pins the SW-CAN decoders to their layouts (GM's low-speed DBC where it covers a frame, else the
+ * OVMS vehicle_voltampera math). Frames built by hand from a decoder's bit layout prove only the
+ * port; the ones marked with a date are the car's own bytes from that capture.
  */
 class SwcanFrameDecoderTest {
     private fun frame(
@@ -164,21 +164,90 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
-    fun blowerReadsByteTwoAsCapturedOnTheCar() {
-        // 2026-09-29 capture, in order: climate on (fan high, then lower), still running, then off.
-        // The frame right after it stops carries 0x45 in byte 1; reading that as the blower showed
-        // a running fan (and would confirm a remote start) with the fan off.
+    fun blowerReadsByteOneAsGmDefinesIt() {
+        // 2026-09-29 capture, in order: A/C on with the fan still at rest, fan up, A/C off while the
+        // fan coasts, then all off. Byte 2 (the compressor load estimate) moves with the A/C, not the fan.
         val sequence =
             listOf(
-                intArrayOf(0x20, 0x00, 0x44, 0x00) to 27.0,
-                intArrayOf(0x20, 0x00, 0x22, 0x00) to 13.0,
-                intArrayOf(0x20, 0x45, 0x22, 0x00) to 13.0,
-                intArrayOf(0x00, 0x45, 0x00, 0x00) to 0.0,
+                intArrayOf(0x20, 0x00, 0x44, 0x00) to 0.0,
+                intArrayOf(0x20, 0x45, 0x22, 0x00) to 27.0,
+                intArrayOf(0x00, 0x45, 0x00, 0x00) to 27.0,
                 intArrayOf(0x00, 0x00, 0x00, 0x00) to 0.0,
+                // 2026-10-04 drive with the A/C on.
+                intArrayOf(0x20, 0x73, 0x44, 0x00) to 45.0,
             )
         for ((bytes, expected) in sequence) {
             assertEquals(expected, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, *bytes)[SwcanField.BLOWER])
         }
+        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0x20).isEmpty())
+    }
+
+    @Test
+    fun cabinTempIsTheAirEstimateNotTheRoof() {
+        // 2026-10-04, A/C running: cabin air 18 C (byte 4); the roof surface read 23 C (byte 5).
+        assertEquals(
+            18.0,
+            decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0x10, 0, 0, 0, 0x74, 0x7E, 0x43)[SwcanField.CABIN_TEMP],
+        )
+        // Byte 0 bit 2 set: the estimate is flagged invalid.
+        assertTrue(decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0x14, 0, 0, 0, 0x74, 0x7E, 0x43).isEmpty())
+        assertTrue(decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0x10, 0, 0, 0).isEmpty())
+    }
+
+    @Test
+    fun wheelSpeedsFromTheCar() {
+        // 2026-10-04 at about 19 km/h: left driven (front), left rear, right front, right rear.
+        val wheels = decode(SwcanFrameDecoder.ID_WHEEL_SPEED, 0x02, 0x53, 0x02, 0x4C, 0x02, 0x4E, 0x02, 0x4C)
+        assertEquals(18.59, wheels[SwcanField.WHEEL_FL])
+        assertEquals(18.38, wheels[SwcanField.WHEEL_RL])
+        assertEquals(18.44, wheels[SwcanField.WHEEL_FR])
+        assertEquals(18.38, wheels[SwcanField.WHEEL_RR])
+        // A set validity bit (bit 6 of the wheel's first byte) drops only that wheel.
+        val oneInvalid = decode(SwcanFrameDecoder.ID_WHEEL_SPEED, 0x42, 0x53, 0x02, 0x4C, 0x02, 0x4E, 0x02, 0x4C)
+        assertFalse(oneInvalid.containsKey(SwcanField.WHEEL_FL))
+        assertEquals(3, oneInvalid.size)
+        assertTrue(decode(SwcanFrameDecoder.ID_WHEEL_SPEED, 0x02, 0x53, 0x02, 0x4C).isEmpty())
+    }
+
+    @Test
+    fun tripOdometers() {
+        // Trip A 2074/64 km, trip B 82406/64 km.
+        val trips = decode(SwcanFrameDecoder.ID_TRIP_ODOMETER, 0, 0, 0x08, 0x1A, 0x01, 0x41, 0xE6)
+        assertEquals(32.41, trips[SwcanField.TRIP_A])
+        assertEquals(1287.59, trips[SwcanField.TRIP_B])
+        val tripAInvalid = decode(SwcanFrameDecoder.ID_TRIP_ODOMETER, 0x80, 0, 0x08, 0x1A, 0x01, 0x41, 0xE6)
+        assertEquals(setOf(SwcanField.TRIP_B), tripAInvalid.keys)
+        val tripBInvalid = decode(SwcanFrameDecoder.ID_TRIP_ODOMETER, 0x40, 0, 0x08, 0x1A, 0x01, 0x41, 0xE6)
+        assertEquals(setOf(SwcanField.TRIP_A), tripBInvalid.keys)
+        assertTrue(decode(SwcanFrameDecoder.ID_TRIP_ODOMETER, 0, 0, 0x08, 0x1A).isEmpty())
+    }
+
+    @Test
+    fun transmissionOilTemperature() {
+        // 2026-10-04, late in a highway drive: 0x7B = 83 C.
+        val frame = intArrayOf(0x10, 0x00, 0xC7, 0x7B, 0x9F, 0x00, 0x56, 0x4F)
+        assertEquals(83.0, decode(SwcanFrameDecoder.ID_ANALOG_SLOW, *frame)[SwcanField.TRANS_OIL_TEMP])
+        frame[0] = frame[0] or 0x20
+        assertTrue("validity bit set", decode(SwcanFrameDecoder.ID_ANALOG_SLOW, *frame).isEmpty())
+        assertTrue(decode(SwcanFrameDecoder.ID_ANALOG_SLOW, 0x10, 0, 0xC7).isEmpty())
+    }
+
+    @Test
+    fun compressorPowerAndEnergySplit() {
+        // 2026-10-04: 0x1D = 1.16 kW of A/C compressor power.
+        assertEquals(1.16, decode(SwcanFrameDecoder.ID_CLIMATE_POWER, 0, 0, 0, 0, 0x1D)[SwcanField.AC_COMPRESSOR_KW])
+        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_POWER, 0, 0, 0, 0).isEmpty())
+        // 2026-10-04, 11 minutes in: 4.0 kWh driving, 0.2 climate, none conditioning, 8.5 left.
+        val split = decode(SwcanFrameDecoder.ID_ENERGY_SPLIT, 0x00, 0x28, 0x00, 0x02, 0x00, 0x00, 0x00, 0x55)
+        assertEquals(4.0, split[SwcanField.CYCLE_DRIVING_ENERGY])
+        assertEquals(0.2, split[SwcanField.CYCLE_CLIMATE_ENERGY])
+        assertEquals(0.0, split[SwcanField.CYCLE_CONDITIONING_ENERGY])
+        assertEquals(8.5, split[SwcanField.BATTERY_ENERGY_LEFT])
+        // The top two bits of each pair aren't part of the count; all-ones means not available.
+        val partial = decode(SwcanFrameDecoder.ID_ENERGY_SPLIT, 0xC0, 0x28, 0x3F, 0xFF, 0x00, 0x00, 0x00, 0x55)
+        assertEquals(4.0, partial[SwcanField.CYCLE_DRIVING_ENERGY])
+        assertFalse(partial.containsKey(SwcanField.CYCLE_CLIMATE_ENERGY))
+        assertTrue(decode(SwcanFrameDecoder.ID_ENERGY_SPLIT, 0, 0x28, 0, 2).isEmpty())
     }
 
     @Test
@@ -193,9 +262,9 @@ class SwcanFrameDecoderTest {
         assertTrue(decode(SwcanFrameDecoder.ID_PE_COOLANT, 0).isEmpty())
         assertEquals(45.0, decode(SwcanFrameDecoder.ID_HEATER_CORE, 0, 0, 85)[SwcanField.HEATER_CORE_TEMP])
         assertTrue(decode(SwcanFrameDecoder.ID_HEATER_CORE, 0, 0, 0).isEmpty())
-        assertEquals(13.0, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0x20, 0, 0x22, 0)[SwcanField.BLOWER])
-        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0, 0).isEmpty())
-        assertEquals(21.0, decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0, 0, 0, 0, 0, 0x7A)[SwcanField.CABIN_TEMP])
+        assertEquals(32.0, decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0x20, 0x51, 0x24, 0)[SwcanField.BLOWER])
+        assertTrue(decode(SwcanFrameDecoder.ID_CLIMATE_BASIC, 0).isEmpty())
+        assertEquals(21.0, decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0, 0, 0, 0, 0x7A)[SwcanField.CABIN_TEMP])
         assertTrue(decode(SwcanFrameDecoder.ID_CABIN_TEMP, 0, 0, 0).isEmpty())
         assertEquals("on", decode(SwcanFrameDecoder.ID_CLIMATE_GENERAL, 0x20)[SwcanField.AC_STATE])
         assertEquals("off", decode(SwcanFrameDecoder.ID_CLIMATE_GENERAL, 0x10)[SwcanField.AC_STATE])

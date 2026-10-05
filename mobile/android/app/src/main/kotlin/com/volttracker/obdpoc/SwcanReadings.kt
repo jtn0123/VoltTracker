@@ -12,9 +12,10 @@ import java.util.EnumMap
  * rather than shown as current — event-driven frames (locks, doors, windows) in particular only
  * appear when something changes, so an old "closed" must age out instead of looking live.
  *
- * Tire pressures are the exception and hold for the session. The car sends them rarely (once, at the
- * start of a 21-minute drive on 2026-10-04, and never again in 21 later windows), and a pressure
- * barely moves within a drive. Their `tirePressureStaleMs` age still goes out, so the screen can
+ * Tire pressures and the energy split are the exception and hold for the session ([HELD_GROUPS]).
+ * The car sends them rarely: tires once, at the start of a 21-minute drive on 2026-10-04, and never
+ * again in 21 later windows; the energy split in 3 of 22 windows. A pressure barely moves within a
+ * drive, and the energy counts only creep. Their `...StaleMs` age still goes out, so the screen can
  * say how old the reading is.
  *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
@@ -51,7 +52,7 @@ class SwcanReadings(
         sample: JSONObject,
         now: Long,
     ) {
-        held.entries.removeAll { it.key.group != SwcanGroup.TIRES && now - it.value.atMs > maxAgeMs }
+        held.entries.removeAll { it.key.group !in HELD_GROUPS && now - it.value.atMs > maxAgeMs }
         if (held.isEmpty()) return
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)
@@ -78,6 +79,7 @@ class SwcanReadings(
         putReading(sample, "acState", SwcanField.AC_STATE)
         putReading(sample, "acCompressorRpm", SwcanField.AC_COMPRESSOR_RPM)
         putReading(sample, "acEvapTempC", SwcanField.AC_EVAP_TEMP)
+        putReading(sample, "acCompressorKw", SwcanField.AC_COMPRESSOR_KW)
         putReading(sample, "heaterCoreTempC", SwcanField.HEATER_CORE_TEMP)
         putReading(sample, "coolantHeaterKw", SwcanField.COOLANT_HEATER_KW)
         putReading(sample, "remoteStartState", SwcanField.REMOTE_START)
@@ -89,6 +91,17 @@ class SwcanReadings(
         putReading(sample, "cycleEvDistanceKm", SwcanField.CYCLE_EV_DISTANCE)
         putReading(sample, "cycleFuelDistanceKm", SwcanField.CYCLE_FUEL_DISTANCE)
         putReading(sample, "cycleFuelUsedL", SwcanField.CYCLE_FUEL_USED)
+        putReading(sample, "cycleDrivingKwh", SwcanField.CYCLE_DRIVING_ENERGY)
+        putReading(sample, "cycleClimateKwh", SwcanField.CYCLE_CLIMATE_ENERGY)
+        putReading(sample, "cycleConditioningKwh", SwcanField.CYCLE_CONDITIONING_ENERGY)
+        putReading(sample, "batteryEnergyLeftKwh", SwcanField.BATTERY_ENERGY_LEFT)
+        putReading(sample, "wheelSpeedFlKph", SwcanField.WHEEL_FL)
+        putReading(sample, "wheelSpeedFrKph", SwcanField.WHEEL_FR)
+        putReading(sample, "wheelSpeedRlKph", SwcanField.WHEEL_RL)
+        putReading(sample, "wheelSpeedRrKph", SwcanField.WHEEL_RR)
+        putReading(sample, "tripAKm", SwcanField.TRIP_A)
+        putReading(sample, "tripBKm", SwcanField.TRIP_B)
+        putReading(sample, "transOilTempC", SwcanField.TRANS_OIL_TEMP)
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
         putGroupStaleMs(sample, "tirePressureStaleMs", SwcanGroup.TIRES, now)
         putGroupStaleMs(sample, "doorLockStaleMs", SwcanGroup.LOCKS, now)
@@ -100,6 +113,10 @@ class SwcanReadings(
         putGroupStaleMs(sample, "chargeLimitStaleMs", SwcanGroup.CHARGE_LIMIT, now)
         putGroupStaleMs(sample, "rangeStaleMs", SwcanGroup.RANGE, now)
         putGroupStaleMs(sample, "driveCycleStaleMs", SwcanGroup.DRIVE_CYCLE, now)
+        putGroupStaleMs(sample, "energySplitStaleMs", SwcanGroup.ENERGY, now)
+        putGroupStaleMs(sample, "wheelSpeedStaleMs", SwcanGroup.WHEELS, now)
+        putGroupStaleMs(sample, "tripOdometerStaleMs", SwcanGroup.TRIPS, now)
+        putGroupStaleMs(sample, "transOilStaleMs", SwcanGroup.DRIVETRAIN, now)
     }
 
     private fun putReading(
@@ -125,5 +142,8 @@ class SwcanReadings(
     companion object {
         /** Four listen intervals: survives one or two empty windows, then blanks. */
         const val DEFAULT_MAX_AGE_MS = 180_000L
+
+        /** Groups the car sends too rarely to age out; they hold until the session's [clear]. */
+        private val HELD_GROUPS = setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY)
     }
 }

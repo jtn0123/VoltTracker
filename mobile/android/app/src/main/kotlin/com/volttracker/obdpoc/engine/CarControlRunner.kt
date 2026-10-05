@@ -513,7 +513,7 @@ class CarControlRunner(
                 ControlReadback.REMOTE_START_ON ->
                     when {
                         last(SwcanField.REMOTE_START) == "on" -> "remote start on"
-                        ((last(SwcanField.BLOWER) as? Double) ?: 0.0) > 0.0 -> "cabin blower running"
+                        blowerRunning(readings) -> "cabin blower running"
                         else -> null
                     }
                 ControlReadback.REMOTE_START_OFF ->
@@ -536,6 +536,20 @@ class CarControlRunner(
                 ControlReadback.WINDOWS_CLOSING -> if (windowsClosing(readings)) "windows closing" else null
                 ControlReadback.NONE -> null
             }
+        }
+
+        /**
+         * The fan reads above zero in the last two blower frames. One frame isn't enough: the fan
+         * coasts for a frame or two after the climate shuts off (2026-09-29 capture).
+         */
+        private fun blowerRunning(readings: List<SwcanReading>): Boolean {
+            val recent =
+                readings
+                    .filter { it.field == SwcanField.BLOWER }
+                    .takeLast(
+                        2,
+                    ).map { it.value as? Double ?: 0.0 }
+            return recent.size == 2 && recent.all { it > 0.0 }
         }
 
         private val WINDOW_FIELDS =
