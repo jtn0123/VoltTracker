@@ -503,9 +503,11 @@ import { kph } from "./unit-types";
 
   // Service priority and catalog confidence, without declaring the vehicle safe.
   function drivabilityLine(severity: "critical" | "warning" | "info", known: boolean): string {
-    const priority = !known ? "Unrecognized code — review with a qualified technician" :
-      severity === "critical" ? "Urgent service — follow the vehicle's warning messages" :
-      severity === "warning" ? "Service soon — have this fault checked" : "Monitor at your next service";
+    let priority: string;
+    if (!known) priority = "Unrecognized code — review with a qualified technician";
+    else if (severity === "critical") priority = "Urgent service — follow the vehicle's warning messages";
+    else if (severity === "warning") priority = "Service soon — have this fault checked";
+    else priority = "Monitor at your next service";
     return `${priority}. Driving safety cannot be determined from these codes alone.`;
   }
 
@@ -584,7 +586,7 @@ import { kph } from "./unit-types";
     const drive = document.createElement("span");
     drive.className = "dtc-drivability";
     drive.dataset.severity = severity;
-    drive.textContent = drivabilityLine(severity, !!(info && info.description));
+    drive.textContent = drivabilityLine(severity, !!info?.description);
     moduleBlock.append(drive);
 
     const small = document.createElement("small");

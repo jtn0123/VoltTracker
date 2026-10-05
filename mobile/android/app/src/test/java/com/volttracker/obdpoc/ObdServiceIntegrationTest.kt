@@ -987,7 +987,7 @@ class ObdServiceIntegrationTest {
         override fun recoverInterruptedSessions(): Int {
             recoveryThread = Thread.currentThread()
             entered.countDown()
-            release.await(5, TimeUnit.SECONDS)
+            assertTrue("recovery worker was released", release.await(5, TimeUnit.SECONDS))
             return 0
         }
     }

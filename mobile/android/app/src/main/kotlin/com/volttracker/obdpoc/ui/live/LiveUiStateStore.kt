@@ -126,18 +126,39 @@ class LiveUiStateStore(
     private val insightsHistory = InsightsHistoryHolder()
     private val healthHistory = HealthHistoryHolder()
 
+    private fun nextConnectionFailure(
+        payload: JSONObject,
+        stateName: String,
+        connected: Boolean,
+        previous: ConnectionFailure?,
+    ): ConnectionFailure? {
+        if (connected) return null
+        val failureClass = payload.optString("failureClass", "").takeIf { it.isNotBlank() }
+        val failed =
+            payload.optBoolean("blocked") ||
+                stateName in setOf("failed", "blocked", "error") ||
+                failureClass != null
+        if (!failed) return previous
+        return ConnectionFailure(
+            detail = payload.optString("detail", "").ifBlank { "The adapter connection could not start." },
+            failureClass = failureClass,
+            competingApps = payload.optString("competingApps", "").takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun updatedRecordingWarning(
+        payload: JSONObject,
+        previous: String?,
+    ): String? {
+        if (!payload.has("recordingWarning")) return previous
+        return payload.optString("recordingWarning", "").takeIf { it.isNotBlank() }
+    }
+
     /** `setStatus` payload: connection state, adapter, detail. */
     fun onStatus(payload: JSONObject) {
         val stateName = payload.optString("state", "").lowercase(Locale.US)
         val connected = stateName == "connected" || stateName == "demo"
         val transitioning = stateName in TRANSITION_STATES
-        val failureClass = payload.optString("failureClass", "").takeIf { it.isNotBlank() }
-        val failureDetail = payload.optString("detail", "").ifBlank { "The adapter connection could not start." }
-        val competingApps = payload.optString("competingApps", "").takeIf { it.isNotBlank() }
-        val failed =
-            payload.optBoolean("blocked") ||
-                stateName in setOf("failed", "blocked", "error") ||
-                failureClass != null
         // Once the demo ends its "Demo stream" name is no adapter at all: the header must not
         // keep saying "Idle · Demo stream" after Stop demo.
         val adapter =
@@ -172,23 +193,8 @@ class LiveUiStateStore(
                             else -> s.charge.withoutLiveCharge(demoEnded)
                         }
                     s.copy(
-                        connectionFailure =
-                            when {
-                                connected -> null
-                                failed ->
-                                    ConnectionFailure(
-                                        detail = failureDetail,
-                                        failureClass = failureClass,
-                                        competingApps = competingApps,
-                                    )
-                                else -> s.connectionFailure
-                            },
-                        recordingWarning =
-                            if (payload.has("recordingWarning")) {
-                                payload.optString("recordingWarning", "").takeIf { it.isNotBlank() }
-                            } else {
-                                s.recordingWarning
-                            },
+                        connectionFailure = nextConnectionFailure(payload, stateName, connected, s.connectionFailure),
+                        recordingWarning = updatedRecordingWarning(payload, s.recordingWarning),
                         drive =
                             (if (connected) s.drive else s.drive.withoutLiveReadings()).copy(
                                 connected = connected,

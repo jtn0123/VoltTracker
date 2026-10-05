@@ -140,7 +140,7 @@ class ComposeDashboardToolsTest {
         val release = java.util.concurrent.CountDownLatch(1)
         activity.history.chargeReader = {
             entered.countDown()
-            release.await(5, java.util.concurrent.TimeUnit.SECONDS)
+            assertTrue("history reader was released", release.await(5, java.util.concurrent.TimeUnit.SECONDS))
             throw IllegalStateException("database locked")
         }
         activity.history.loadCharges()

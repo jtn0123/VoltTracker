@@ -76,7 +76,7 @@ fun VoltApp(
     val push: (VoltRoute) -> Unit = { route -> routes = routes.filterNot { it == route } + route }
     val pop: () -> Unit = { routes = routes.dropLast(1) }
     val latest by rememberUpdatedState(actions)
-    val connect: () -> Unit = { if (!latest.onConnect()) push(VoltRoute.ADAPTER) }
+    val connect: () -> Unit = { connectOrOpenAdapter(latest, push) }
     val nav =
         remember(state.historyRefreshing) {
             VoltNavActions(
@@ -176,6 +176,13 @@ fun VoltApp(
  * Settings → Text size. Scales every sp on top of the phone's own font scale, like the classic
  * dashboard's --font-scale token.
  */
+private fun connectOrOpenAdapter(
+    actions: VoltAppActions,
+    open: (VoltRoute) -> Unit,
+) {
+    if (!actions.onConnect()) open(VoltRoute.ADAPTER)
+}
+
 @Composable
 private fun ScaledText(
     scale: Double,
