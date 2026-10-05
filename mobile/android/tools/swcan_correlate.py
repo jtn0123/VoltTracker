@@ -30,13 +30,16 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import statistics
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 
-DEFAULT_MAP = Path(__file__).resolve().parent.parent / "docs" / "swcan-signal-map.csv"
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DEFAULT_MAP = REPO_ROOT / "mobile" / "android" / "docs" / "swcan-signal-map.csv"
 
 # Telemetry that must never be fitted (a fit's intercept would leak a position) or that only
 # counts samples and so tracks every rising counter on the bus.
@@ -169,38 +172,47 @@ def parse_frame(line: str) -> tuple[int, tuple[int, ...]] | None:
     return int(head, 16), tuple(int(t, 16) for t in rest)
 
 
+def read_records(path: Path):
+    """Each JSON object in a JSONL log that carries an integer `ts`; torn lines are skipped."""
+    with path.open() as handle:
+        for line in handle:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(record, dict) and isinstance(record.get("ts"), int):
+                yield record
+
+
+def numeric_fields(payload: dict) -> dict[str, float]:
+    return {k: float(v) for k, v in payload.items() if isinstance(v, (int, float)) and not isinstance(v, bool)}
+
+
+def add_window(capture: Capture, ts: int, text: str) -> None:
+    window = capture.windows[ts]
+    for raw_line in text.replace("\n", "\r").split("\r"):
+        frame = parse_frame(raw_line)
+        if frame:
+            window.setdefault(frame[0], []).append(frame[1])
+
+
 def load_logs(paths: list[Path]) -> Capture:
     capture = Capture()
-    seen_windows: set[tuple[int, int]] = set()
+    seen_windows: set[tuple[int, str]] = set()
     seen_samples: set[int] = set()
     for path in paths:
-        with path.open() as handle:
-            for line in handle:
-                try:
-                    record = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                payload = record.get("payload") or {}
-                ts = record.get("ts")
-                if not isinstance(ts, int):
-                    continue
-                if record.get("type") == "telemetry" and ts not in seen_samples:
+        for record in read_records(path):
+            ts = record["ts"]
+            payload = record.get("payload") or {}
+            if record.get("type") == "telemetry":
+                if ts not in seen_samples:
                     seen_samples.add(ts)
-                    numeric = {
-                        k: float(v) for k, v in payload.items() if isinstance(v, (int, float)) and not isinstance(v, bool)
-                    }
-                    capture.telemetry.append((ts, numeric))
-                elif payload.get("event") == "swcan_raw":
-                    text = payload.get("text") or ""
-                    key = (ts, hash(text))
-                    if key in seen_windows:  # overlapping capture files repeat windows
-                        continue
-                    seen_windows.add(key)
-                    window = capture.windows[ts]
-                    for raw_line in text.replace("\n", "\r").split("\r"):
-                        frame = parse_frame(raw_line)
-                        if frame:
-                            window.setdefault(frame[0], []).append(frame[1])
+                    capture.telemetry.append((ts, numeric_fields(payload)))
+            elif payload.get("event") == "swcan_raw":
+                text = payload.get("text") or ""
+                if (ts, text) not in seen_windows:  # overlapping capture files repeat windows
+                    seen_windows.add((ts, text))
+                    add_window(capture, ts, text)
     capture.telemetry.sort()
     return capture
 
@@ -299,52 +311,66 @@ def field_series(capture: Capture, frame_id: int, start: int, width: int) -> lis
     return series
 
 
-def analyse(capture: Capture, frame_id: int, signal_map: SignalMap, args: argparse.Namespace) -> list[str]:
-    heard = {ts: window[frame_id] for ts, window in capture.windows.items() if frame_id in window}
-    payloads = [p for ts in sorted(heard) for p in heard[ts]]
-    sensitive = signal_map.sensitive(frame_id, payloads)
-    length = max(len(p) for p in payloads)
-    distinct = len(set(payloads))
-    lines = [
-        f"## {frame_id:08X}  arb {arb_of(frame_id):03X}  src {frame_id & 0xFF:02X}  "
-        f"frames {len(payloads)}  windows {len(heard)}  distinct {distinct}  len {length}"
-    ]
-    for row in signal_map.rows_for(frame_id):
-        lines.append(f"  map: {row.name} [{row.status}] bytes {row.byte_spec}")
-    if sensitive:
-        # Not even the byte summary: a constant byte's kind names its value.
-        return lines + ["  payload: (sensitive, not shown)"]
-    lines.append("  e.g. " + " ".join(f"{b:02X}" for b in payloads[-1]))
-    kinds = []
-    moving = []
+def byte_kinds(heard: dict[int, list[tuple[int, ...]]], length: int) -> tuple[list[str], list[int]]:
+    """Each byte's kind, and the indexes of the bytes that move (not constant, not a counter)."""
+    kinds, moving = [], []
     for i in range(length):
         per_window = [[p[i] for p in heard[ts] if len(p) > i] for ts in sorted(heard)]
         kind = classify([w for w in per_window if w])
         kinds.append(f"b{i} {kind}")
         if not kind.startswith(("const", "counter")):
             moving.append(i)
-    lines.append("  bytes: " + ", ".join(kinds))
+    return kinds, moving
+
+
+def best_field_fit(
+    capture: Capture,
+    frame_id: int,
+    start: int,
+    length: int,
+    args: argparse.Namespace,
+) -> tuple[str, list[Fit]] | None:
+    """The 1-3 byte field starting at [start] whose best fit is strongest. A wider field only wins when
+    it fits strictly better, so a noisy neighbour byte doesn't widen it."""
     sessions = capture.session_of()
+    best: tuple[str, list[Fit]] | None = None
+    for width in range(1, min(3, length - start) + 1):
+        label = f"b{start}" if width == 1 else f"b{start}-{start + width - 1}"
+        fits = fits_for(field_series(capture, frame_id, start, width), capture, sessions, args.max_gap_ms, args.min_r)
+        if fits and (best is None or abs(fits[0].r) > abs(best[1][0].r) + WIDER_MARGIN):
+            best = (label, fits)
+    return best
+
+
+def fit_line(label: str, fit: Fit, signal_map: SignalMap) -> str:
+    derived = "  [app reads this from SW-CAN]" if fit.signal in signal_map.swcan_keys else ""
+    return (
+        f"  {label:7} ~ {fit.signal} r={fit.r:+.3f}  {fit.signal} ≈ {fit.slope:.6g}·raw "
+        f"{'+' if fit.intercept >= 0 else '-'} {abs(fit.intercept):.4g}  "
+        f"(n={fit.points}, sessions={fit.sessions}){derived}"
+    )
+
+
+def analyse(capture: Capture, frame_id: int, signal_map: SignalMap, args: argparse.Namespace) -> list[str]:
+    heard = {ts: window[frame_id] for ts, window in capture.windows.items() if frame_id in window}
+    payloads = [p for ts in sorted(heard) for p in heard[ts]]
+    length = max(len(p) for p in payloads)
+    lines = [
+        f"## {frame_id:08X}  arb {arb_of(frame_id):03X}  src {frame_id & 0xFF:02X}  "
+        f"frames {len(payloads)}  windows {len(heard)}  distinct {len(set(payloads))}  len {length}"
+    ]
+    lines += [f"  map: {row.name} [{row.status}] bytes {row.byte_spec}" for row in signal_map.rows_for(frame_id)]
+    if signal_map.sensitive(frame_id, payloads):
+        # Not even the byte summary: a constant byte's kind names its value.
+        return lines + ["  payload: (sensitive, not shown)"]
+    lines.append("  e.g. " + " ".join(f"{b:02X}" for b in payloads[-1]))
+    kinds, moving = byte_kinds(heard, length)
+    lines.append("  bytes: " + ", ".join(kinds))
     for start in moving:
-        # One line set per starting byte: the width (1-3 bytes) whose best fit is strongest. A wider
-        # field only wins when it fits strictly better, so a noisy neighbour byte doesn't widen it.
-        best: tuple[str, list[Fit]] | None = None
-        for width in (1, 2, 3):
-            if start + width > length:
-                break
-            label = f"b{start}" if width == 1 else f"b{start}-{start + width - 1}"
-            fits = fits_for(field_series(capture, frame_id, start, width), capture, sessions, args.max_gap_ms, args.min_r)
-            if fits and (best is None or abs(fits[0].r) > abs(best[1][0].r) + WIDER_MARGIN):
-                best = (label, fits)
+        best = best_field_fit(capture, frame_id, start, length, args)
         if best:
             label, fits = best
-            for fit in fits[: args.top]:
-                derived = "  [app reads this from SW-CAN]" if fit.signal in signal_map.swcan_keys else ""
-                lines.append(
-                    f"  {label:7} ~ {fit.signal} r={fit.r:+.3f}  {fit.signal} ≈ {fit.slope:.6g}·raw "
-                    f"{'+' if fit.intercept >= 0 else '-'} {abs(fit.intercept):.4g}  "
-                    f"(n={fit.points}, sessions={fit.sessions}){derived}"
-                )
+            lines += [fit_line(label, fit, signal_map) for fit in fits[: args.top]]
     return lines
 
 
@@ -363,9 +389,20 @@ def changes(capture: Capture, frame_id: int, signal_map: SignalMap) -> list[str]
     return lines
 
 
+def checked_path(raw: str) -> Path:
+    """Resolves a path given on the command line. Only files under the home directory, the temp
+    directory or this repo are read, so a stray argument can't point the tool anywhere else."""
+    path = os.path.realpath(raw)
+    roots = {os.path.realpath(root) for root in (Path.home(), tempfile.gettempdir(), "/tmp", REPO_ROOT)}
+    for root in roots:
+        if os.path.commonpath([root, path]) == root:
+            return Path(path)
+    raise SystemExit(f"{raw}: only files under your home directory, the temp directory or the repo are read")
+
+
 def run(args: argparse.Namespace) -> int:
-    signal_map = load_map(Path(args.map))
-    capture = load_logs([Path(p) for p in args.logs])
+    signal_map = load_map(checked_path(args.map))
+    capture = load_logs([checked_path(p) for p in args.logs])
     if not capture.windows:
         print("No swcan_raw windows in these logs. Raw windows are only logged by debug builds.")
         return 1
