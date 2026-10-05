@@ -7,6 +7,22 @@ field. This page explains how to read it and how to grow it.
 **Rule:** whenever you learn what a frame or byte means, add or update its row in the CSV in the same
 PR. Don't leave it only in a PR description or a chat. The next agent starts from the CSV.
 
+## GM's signal list
+
+GM's own definitions for the low-speed GMLAN bus are published in opendbc (MIT license) as
+[`gm_global_a_lowspeed_1818125.dbc`](https://github.com/commaai/opendbc/blob/master/opendbc/dbc/gm_global_a_lowspeed_1818125.dbc).
+It names almost every frame our car sends, with exact bit positions and scales. The `gm_signal`
+column gives the GM message and signal name for each row (`Message.Signal`).
+
+- Message ids in the DBC are the GMLAN parameter id shifted left 13 bits, with source 0: arb `35C`
+  is DBC id `0x6B8000`.
+- Signals are Motorola (`@0`): the start bit is the most significant bit (byte = n / 8,
+  bit = n % 8), walking down within a byte and on to bit 7 of the next byte.
+  `SwcanFrameDecoder.dbcBigEndian(d, start, length)` reads them the same way.
+- A signal ending in `V` is its validity bit: **1 means invalid**. One ending in `M` is a mask bit.
+- The DBC tells you the layout, not that our car fills it in. Check the value against a capture
+  before a row moves past `dbc`.
+
 ## Quick start
 
 1. **Capture.** Debug builds log every SW-CAN listen window as a `swcan_raw` event in the session log
@@ -16,18 +32,19 @@ PR. Don't leave it only in a PR description or a chat. The next agent starts fro
 
    ```bash
    adb exec-out run-as com.volttracker.obdpoc.debug ls files/obd-logs/
-   adb exec-out run-as com.volttracker.obdpoc.debug cat files/obd-logs/session-<epochMs>-obd.jsonl > /tmp/session.jsonl
+   mkdir -p ~/volttracker-logs
+   adb exec-out run-as com.volttracker.obdpoc.debug cat files/obd-logs/session-<epochMs>-obd.jsonl > ~/volttracker-logs/session-<epochMs>.jsonl
    ```
 
    These logs are **not redacted**: they hold VIN, GPS and the OnStar Wi-Fi details. Keep them out of
-   the repo.
+   the repo. The tool only reads files under your home directory.
 3. **Match frames to telemetry:**
 
    ```bash
    cd mobile/android
-   python3 tools/swcan_correlate.py /tmp/session-*.jsonl              # ids the map doesn't name yet
-   python3 tools/swcan_correlate.py --id 106B8040 /tmp/session-*.jsonl  # one id, even if mapped
-   python3 tools/swcan_correlate.py --id 1062C040 --changes /tmp/session-*.jsonl  # payload timeline
+   python3 tools/swcan_correlate.py ~/volttracker-logs/session-*.jsonl              # ids the map doesn't name yet
+   python3 tools/swcan_correlate.py --id 106B8040 ~/volttracker-logs/session-*.jsonl  # one id, even if mapped
+   python3 tools/swcan_correlate.py --id 1062C040 --changes ~/volttracker-logs/session-*.jsonl  # payload timeline
    python3 tools/swcan_correlate.py --self-test
    ```
 
@@ -68,6 +85,7 @@ PR. Don't leave it only in a PR description or a chat. The next agent starts fro
 | `src` | Sending module: `id & 0xFF` (see the table below) |
 | `bytes` | 0-based byte indexes, ranges inclusive, big-endian; `*` = whole frame. Bit fields say so. |
 | `name` | What the field is |
+| `gm_signal` | GM's name for it in the DBC above (`Message.Signal`, or just the message) |
 | `scale`, `unit` | value = scale applied to raw, in that unit |
 | `status` | See below |
 | `app_key` | Telemetry key(s) the app fills from this field, `;`-separated. Empty = the app doesn't read it |
@@ -82,6 +100,7 @@ Lines starting with `#` are comments.
 | `decoded` | The app reads it, and a real-car capture agreed with the car or a polled value |
 | `decoded-unchecked` | The app reads it (mostly OVMS layouts), but it's not matched on our car yet |
 | `strong` | Fits the car's own readings across sessions, or reads plainly by eye. The app doesn't use it yet |
+| `dbc` | GM's DBC defines it and the bytes move plausibly on our car, but nothing has confirmed the value yet |
 | `candidate` | A lead: a weaker or single-session fit. Needs more drives |
 | `counter` | Rolling or free-running counter |
 | `constant` | Same payload in every frame on every drive so far |
@@ -100,6 +119,7 @@ Some frames carry personal data. The CSV marks them `sensitive`, and the tool hi
 - `arb:160`, `arb:182`–`arb:184`: immobilizer id and its learned environment id (anti-theft pairing).
 - `arb:474`, `arb:478`–`arb:482` from OnStar (`0x97`): the car's Wi-Fi settings, hotspot name and
   password, in plain text.
+- `arb:382`: compass heading. `arb:13D`: whether the car is at a saved charging location.
 
 If you find another one, add a `sensitive` row **before** pasting any tool output anywhere.
 
@@ -120,12 +140,18 @@ Every module also sends an empty heartbeat on `13FFE0xx`, where `xx` is its sour
 ## What we know (as of 2026-10-04)
 
 From two sessions: a 5-minute parked capture on 2026-09-29 and a 21-minute drive on 2026-10-04.
-That's 56 windows, 40,710 frames and 105 frame ids.
+That's 56 windows, 40,710 frames and 105 frame ids. Every id heard so far has a row.
 
-- **In the app and confirmed:** door lock, 12 V voltage, tire pressures, A/C state, A/C evaporator
-  and compressor, blower, cabin temperature, PE coolant and drive-cycle EV distance.
-- **Ready to use (strong):** four wheel speeds (`106B8040`), vehicle speed (three frames), live
-  odometer (`106C0040`), displayed SOC (`107840CB`), engine coolant and intake air (`102E0040`), UTC
-  and local date/time, and a free-running minute counter (`1062C040`).
-- **Open:** tire corner order (check against the cluster tire page), doors, hood, trunk, windows and
-  alarm (event-only; use the Body test), and about 30 unknown movers.
+- **In the app and confirmed:** door lock, 12 V voltage, tire pressures (GM confirms the corner
+  order), A/C state, evaporator, compressor speed and power, blower (byte 1), cabin air (byte 4),
+  PE coolant, drive-cycle EV distance, wheel speeds, transmission oil temperature, and the energy
+  screen (used driving, by climate, conditioning the battery, and energy left).
+- **Ready to use (strong):** vehicle speed, drive motor speed, odometer, displayed SOC, engine
+  coolant and intake air, roof temperature, UTC and local date/time, an elapsed-time counter.
+- **Named by GM, value not checked (dbc):** oil life remaining (the car refuses the polled PID),
+  accelerator and brake pedal, steering angle, yaw rate, acceleration, fuel level, HV pack current
+  and voltage, the power display, outside air, sunlight, lights, chimes and trouble-code events.
+- **Not possible:** spotting a soft tire from wheel speeds. A tire 6 psi low changes its speed by
+  about 0.05 %, and the four wheels already wander about 0.25 % apart.
+- **Open:** trip A/B against the cluster, oil life against the cluster, doors, hood, trunk, windows
+  and alarm (event-only; use the Body test).

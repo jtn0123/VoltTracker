@@ -33,7 +33,6 @@ import json
 import os
 import statistics
 import sys
-import tempfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -65,6 +64,7 @@ STATUSES = {
     "decoded",
     "decoded-unchecked",
     "strong",
+    "dbc",
     "candidate",
     "counter",
     "constant",
@@ -73,12 +73,13 @@ STATUSES = {
     "sensitive",
     "unknown",
 }
-# GMLAN parameter ids that carry the VIN, GPS, immobilizer ids and the OnStar Wi-Fi settings.
+# GMLAN parameter ids that carry the VIN, location, immobilizer ids and the OnStar Wi-Fi settings.
 MUST_BE_SENSITIVE = {
     0x762, 0x764,  # VIN
     0x155, 0x156,  # GPS
     0x160, 0x182, 0x183, 0x184,  # immobilizer id and environment id
     0x474, 0x478, 0x479, 0x47A, 0x480, 0x481, 0x482,  # Wi-Fi settings, name, password
+    0x382, 0x13D,  # compass heading, location-based charging state
 }
 TEXT_MAX_DISTINCT = 3
 
@@ -89,6 +90,7 @@ class MapRow:
     name: str
     status: str
     byte_spec: str
+    gm_signal: str = ""
 
 
 @dataclass
@@ -129,7 +131,13 @@ def load_map(path: Path) -> SignalMap:
     with path.open(newline="") as handle:
         for raw in csv.DictReader(row for row in handle if not row.startswith("#")):
             key = (raw.get("id") or "").strip()
-            row = MapRow(key, raw.get("name", "").strip(), raw.get("status", "").strip(), raw.get("bytes", "").strip())
+            row = MapRow(
+                key,
+                (raw.get("name") or "").strip(),
+                (raw.get("status") or "").strip(),
+                (raw.get("bytes") or "").strip(),
+                (raw.get("gm_signal") or "").strip(),
+            )
             signal_map.swcan_keys.update(k.strip() for k in (raw.get("app_key") or "").split(";") if k.strip())
             if key.lower().startswith("arb:"):
                 signal_map.by_arb.setdefault(int(key[4:], 16), []).append(row)
@@ -196,23 +204,29 @@ def add_window(capture: Capture, ts: int, text: str) -> None:
             window.setdefault(frame[0], []).append(frame[1])
 
 
+def add_record(capture: Capture, record: dict, seen: set[tuple[int, str]]) -> None:
+    """Adds one telemetry sample or listen window. Overlapping capture files repeat both, so each
+    (ts, kind) is kept once."""
+    ts = record["ts"]
+    payload = record.get("payload") or {}
+    if record.get("type") == "telemetry":
+        key = (ts, "telemetry")
+        if key not in seen:
+            seen.add(key)
+            capture.telemetry.append((ts, numeric_fields(payload)))
+        return
+    text = payload.get("text") or ""
+    if payload.get("event") == "swcan_raw" and (ts, text) not in seen:
+        seen.add((ts, text))
+        add_window(capture, ts, text)
+
+
 def load_logs(paths: list[Path]) -> Capture:
     capture = Capture()
-    seen_windows: set[tuple[int, str]] = set()
-    seen_samples: set[int] = set()
+    seen: set[tuple[int, str]] = set()
     for path in paths:
         for record in read_records(path):
-            ts = record["ts"]
-            payload = record.get("payload") or {}
-            if record.get("type") == "telemetry":
-                if ts not in seen_samples:
-                    seen_samples.add(ts)
-                    capture.telemetry.append((ts, numeric_fields(payload)))
-            elif payload.get("event") == "swcan_raw":
-                text = payload.get("text") or ""
-                if (ts, text) not in seen_windows:  # overlapping capture files repeat windows
-                    seen_windows.add((ts, text))
-                    add_window(capture, ts, text)
+            add_record(capture, record, seen)
     capture.telemetry.sort()
     return capture
 
@@ -359,7 +373,10 @@ def analyse(capture: Capture, frame_id: int, signal_map: SignalMap, args: argpar
         f"## {frame_id:08X}  arb {arb_of(frame_id):03X}  src {frame_id & 0xFF:02X}  "
         f"frames {len(payloads)}  windows {len(heard)}  distinct {len(set(payloads))}  len {length}"
     ]
-    lines += [f"  map: {row.name} [{row.status}] bytes {row.byte_spec}" for row in signal_map.rows_for(frame_id)]
+    lines += [
+        f"  map: {row.name} [{row.status}] bytes {row.byte_spec}" + (f"  (GM {row.gm_signal})" if row.gm_signal else "")
+        for row in signal_map.rows_for(frame_id)
+    ]
     if signal_map.sensitive(frame_id, payloads):
         # Not even the byte summary: a constant byte's kind names its value.
         return lines + ["  payload: (sensitive, not shown)"]
@@ -390,18 +407,17 @@ def changes(capture: Capture, frame_id: int, signal_map: SignalMap) -> list[str]
 
 
 def checked_path(raw: str) -> Path:
-    """Resolves a path given on the command line. Only files under the home directory, the temp
-    directory or this repo are read, so a stray argument can't point the tool anywhere else."""
+    """Resolves a path given on the command line. Only files under your home directory are read,
+    so a stray argument can't point the tool anywhere else."""
+    home = os.path.realpath(Path.home())
     path = os.path.realpath(raw)
-    roots = {os.path.realpath(root) for root in (Path.home(), tempfile.gettempdir(), "/tmp", REPO_ROOT)}
-    for root in roots:
-        if os.path.commonpath([root, path]) == root:
-            return Path(path)
-    raise SystemExit(f"{raw}: only files under your home directory, the temp directory or the repo are read")
+    if os.path.commonpath([home, path]) != home:
+        raise SystemExit(f"{raw}: only files under your home directory are read")
+    return Path(path)
 
 
 def run(args: argparse.Namespace) -> int:
-    signal_map = load_map(checked_path(args.map))
+    signal_map = load_map(DEFAULT_MAP if args.map is None else checked_path(args.map))
     capture = load_logs([checked_path(p) for p in args.logs])
     if not capture.windows:
         print("No swcan_raw windows in these logs. Raw windows are only logged by debug builds.")
@@ -474,7 +490,7 @@ def map_checks(signal_map: SignalMap) -> dict[str, bool]:
     return {
         "the map has rows": bool(rows),
         "every map status is known": all(row.status in STATUSES for row in rows),
-        "VIN, GPS, immobilizer and Wi-Fi frames are sensitive": all(
+        "VIN, location, immobilizer and Wi-Fi frames are sensitive": all(
             any(row.status == "sensitive" for row in signal_map.by_arb.get(arb, [])) for arb in MUST_BE_SENSITIVE
         ),
     }
@@ -483,7 +499,7 @@ def map_checks(signal_map: SignalMap) -> dict[str, bool]:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("logs", nargs="*", help="session-*.jsonl logs pulled from the phone")
-    parser.add_argument("--map", default=str(DEFAULT_MAP), help="signal map CSV (default: docs/swcan-signal-map.csv)")
+    parser.add_argument("--map", help="signal map CSV (default: docs/swcan-signal-map.csv)")
     parser.add_argument("--id", action="append", help="only these 29-bit ids (hex); repeatable")
     parser.add_argument("--all", action="store_true", help="also analyse ids the map already names")
     parser.add_argument("--changes", action="store_true", help="print each payload change instead of fits")
