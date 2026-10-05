@@ -22,3 +22,5 @@ jobs:
         run: python3 mobile/android/tools/privacy-scan.py
       - name: Self-test privacy scanner
         run: python3 mobile/android/tools/privacy-scan.py --self-test
+      - name: Self-test SW-CAN correlator redaction and signal map
+        run: python3 mobile/android/tools/swcan_correlate.py --self-test

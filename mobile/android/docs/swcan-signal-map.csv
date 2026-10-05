@@ -1,0 +1,120 @@
+id,arb,src,bytes,name,scale,unit,status,app_key,evidence
+0C414040,20A,40,1 bit0,door lock state (1 = locked),,,decoded,doorLockState,"09-29: locked from inside, matched"
+0C414040,20A,40,3,"lock source: 01 panel, 05 fob, 06 keyless, 07 OnStar, 0A auto",enum,,decoded,doorLockSource,09-29: 01 when locked from the inside panel
+10248040,124,40,2,12 V battery voltage,0.1*raw + 3,V,decoded,aux12vVoltage,"r .985 vs polled 12 V (fit 0.092*raw + 3.5, 2 sessions); 0x61 = 12.7 V in regulated-voltage mode"
+10248040,124,40,3,12 V battery state of charge,0.392,%,decoded,aux12vSocPct,always FF (not available) on this car; the app drops it
+10248040,124,40,5,"12 V battery current, charge positive",signed 0.5,A,decoded-unchecked,aux12vCurrentA,not compared against anything yet
+103D4040,1EA,40,2;3;4;5,"tire pressures, OVMS order FL RL FR RR (0, FE, FF = no reading)",4,kPa,decoded,tirePressureFlKpa;tirePressureRlKpa;tirePressureFrKpa;tirePressureRrKpa,"10-04: sent once per drive, in the first seconds after start; corner order still unchecked against the cluster tire page"
+102700CB,138,CB,1,A/C evaporator outlet air temperature,0.5*raw - 40,C,decoded,acEvapTempC,09-29: rose after A/C off
+102700CB,138,CB,2-3 (14 bits),A/C compressor speed,1,rpm,decoded,acCompressorRpm,0 with A/C off; tracks 0x102740CB b4 (r .998)
+10734099,39A,99,0 bits4-5,"A/C state: 1 off, 2 on",enum,,decoded,acState,09-29: matched the A/C button
+10814099,40A,99,2,blower speed,0.392,%,decoded,blowerPct,"09-29: 44 then 22 while running, 00 off. Byte 1 (the OVMS fan byte) read a stray 45 after shut-off"
+10440099,220,99,5,cabin air temperature,0.5*raw - 40,C,decoded,cabinTempEstC,"09-29: about 29.5 C, plausible; sent about once in 5 min"
+106340CB,31A,CB,1,power electronics coolant temperature,raw - 40,C,decoded,peCoolantTempC,"10-04: r .98 vs polled pemCoolantTempC (1.03*raw - 43, 1 session)"
+arb:225,225,CB (heard),0-2 (17 bits from bit 7),drive-cycle distance on battery,1/64,km,decoded,cycleEvDistanceKm,heard as 1044A0CB; b0-1 r .996 vs polled evDistanceThisCycleKm (slope 1/32 = 17-bit 1/64)
+arb:225,225,CB (heard),2-4 (17 bits from bit 22),drive-cycle distance on fuel,1/64,km,decoded-unchecked,cycleFuelDistanceKm,"EV-only drives so far, so always 0"
+arb:224,224,60 (heard),1-3 (17 bits from bit 8),gasoline range (0 = car not on),1/64,km,decoded-unchecked,fuelRangeKm,"heard from source 60 (10448060), not CB as OVMS has it; 378 km on 09-29 looked right; compare with the cluster"
+arb:223,223,CB (heard),6-7 (12 bits from bit 51),drive-cycle fuel used (FFF = n/a),0.125,L,decoded-unchecked,cycleFuelUsedL,heard as 104460CB on 10-04 (EV-only drive)
+arb:141,141,,2-4 (14 bits from bit 21),drive-cycle energy used,0.1,kWh,decoded-unchecked,cycleEnergyUsedKwh,never heard in 56 windows
+arb:176,176,,0-1,EV range shown by the cluster,1/64,km,decoded-unchecked,clusterEvRangeKm,never heard in 56 windows
+arb:325,325,40 (heard),0-1 (3-bit fields),"window positions FL RL / FR RR, 0 shut .. 6 down, 5 = filler",100/6,%,decoded-unchecked,windowFlPct;windowRlPct;windowFrPct;windowRrPct,"heard as 1064A040 on 09-29 (33 35, 36 2D); does not match the OVMS idle pattern; needs the Car > Body test"
+10260040,130,40,2 bits0-2,"theft alarm: 1 armed, 2 disarmed, 3 sounding, 4 arming",enum,,decoded-unchecked,alarmState,never heard
+0C630040,318,40,0 bit0,door FL open,,,decoded-unchecked,doorFlState,event-only; never caught in a window
+0C2F6040,17B,40,0 bit0,door FR open,,,decoded-unchecked,doorFrState,event-only; never caught in a window
+0C2F8040,17C,40,0 bit0,door RL open,,,decoded-unchecked,doorRlState,event-only; never caught in a window
+0C2FA040,17D,40,0 bit0,door RR open,,,decoded-unchecked,doorRrState,event-only; never caught in a window
+10728040,394,40,0 bit1,hood open,,,decoded-unchecked,hoodState,never heard
+0C6AA040,355,40,0 bit0,trunk open,,,decoded-unchecked,trunkState,never heard
+10624099,312,99,1,coolant heater power,0.04,kW,decoded-unchecked,coolantHeaterKw,never heard
+106D4099,36A,99,2,heater core temperature (0 = n/a),raw - 40,C,decoded-unchecked,heaterCoreTempC,never heard
+1086C0CB,436,CB,3-5,charge current limit levels + selected level,1,A,decoded-unchecked,chargeCurrentLimitA,never heard
+10390040,1C8,40,0,"remote start: 0 off, bit1 on",,,decoded-unchecked,remoteStartState,never heard
+106B8040,35C,40,0-1,wheel speed 1 (corner unknown),1/32,km/h,strong,,"r .995-.999 vs speedKph, 2 sessions, 56 windows; the four drift apart slightly, as wheels do"
+106B8040,35C,40,2-3,wheel speed 2 (corner unknown),1/32,km/h,strong,,"r .995-.999 vs speedKph, 2 sessions, 56 windows; the four drift apart slightly, as wheels do"
+106B8040,35C,40,4-5,wheel speed 3 (corner unknown),1/32,km/h,strong,,"r .995-.999 vs speedKph, 2 sessions, 56 windows; the four drift apart slightly, as wheels do"
+106B8040,35C,40,6-7,wheel speed 4 (corner unknown),1/32,km/h,strong,,"r .995-.999 vs speedKph, 2 sessions, 56 windows; the four drift apart slightly, as wheels do"
+10210040,108,40,0-1,vehicle speed,1/64,km/h,strong,,"r .996 vs speedKph, 2 sessions"
+10210040,108,40,4-5,vehicle speed (second copy),1/64,km/h,strong,,"r .995 vs speedKph, 2 sessions"
+1026C0CB,136,CB,3-4 (13 bits),"vehicle speed, saturates at 8191 (128 km/h)",1/64,km/h,strong,,"r .990 vs speedKph, 2 sessions"
+106C0040,360,40,1-3,odometer,1/64,km,strong,,r .998 vs trip distance; reads about 3.5 km off polled 2234B2
+103D6060,1EB,60,2-3,"distance counter, wraps every 1024 km",1/64,km,strong,,"r .997 vs evDistanceThisCycleKm, 2 sessions"
+103D6060,1EB,60,5-6,distance counter (second copy),1/64,km,strong,,same as b2-3
+107840CB,3C2,CB,1,displayed battery SOC,100/254,%,strong,,"r 1.000 vs displayedSocPct (0.394*raw), 2 sessions"
+102E0040,170,40,7,engine coolant temperature,raw - 40,C,strong,,"r .996, slope 1.00 vs polled coolant"
+102E0040,170,40,6,intake air temperature,raw - 40,C,strong,,r .99 vs polled intakeAirTempC
+102A8097,154,97,0-5,UTC date and time: YY MM DD hh mm ss,,,strong,,read by eye on both days; matches log timestamps
+108E4097,472,97,0-5,local date and time: DD MM YY hh mm ss,,,strong,,"read by eye, 09-29 only"
+1062C040,316,40,1-3,free-running minute counter,1,min,strong,,"rose 6943 between captures 6950 min apart, and ticked once a minute on 09-29"
+102E0040,170,40,4,outside air temperature,0.5*raw - 40,C,candidate,,r .96 vs outsideTempC
+102E0040,170,40,3,motor or drive-unit temperature,about 1.48*raw - 82,C,candidate,,r .995 vs motorBTempC but the slope is odd
+102D0040,168,40,1,intake air temperature,raw - 40,C,candidate,,"r .99 vs intakeAirTempC, but r .986 vs engine run time too; a cold start would separate them"
+102740CB,13A,CB,4,A/C compressor speed,72,rpm,candidate,,"r .998 vs acCompressorRpm (itself from 0x138), 1 session"
+108E0080,470,80,0-2,date YY MM DD (radio),,,candidate,,read by eye
+108E0080,470,80,3-5,"counter, about 1.07 per second",,,candidate,,rises steadily; not seconds
+10324058,192,58,2-3,"slow counter, maybe ignition cycles",,,candidate,,rose 22 between 09-29 and 10-04
+104460CB,223,CB,0,tracks motor power,,,candidate,,"r .92 vs motorAPowerKw, 10 points; arb 223 is drive-cycle energy so likely part of that"
+10250040,128,40,1,tracks motor power,,,candidate,,r .79; weak
+102CA040,165,40,5,tracks power,,,candidate,,r .77; weak
+102C6060,163,60,3-5,counter,,,counter,,09-29 only
+1022E040,117,40,*,every frame differs (MAC or encrypted?),,,opaque,,301 distinct in 301 frames
+10230040,118,40,*,every frame differs (MAC or encrypted?),,,opaque,,301 distinct in 301 frames
+108680CB,434,CB,*,one high-entropy frame,,,opaque,,heard once on 10-04
+10264040,132,40,*,constant 04 0E 00 00 00 00 00 00,,,constant,,same payload every frame on both days
+10780040,3C0,40,*,constant 00 00 01 00 08 00 00 22,,,constant,,same payload every frame on both days
+10806040,403,40,*,constant 00 00 00 00 19,,,constant,,same payload every frame on both days
+10788040,3C4,40,*,constant 08 00 00 00 00 00,,,constant,,same payload every frame on both days
+1077C040,3BE,40,*,constant 30 30 01 F4,,,constant,,same payload every frame on both days
+106E0097,370,97,*,constant 0E 00,,,constant,,same payload every frame on both days
+106D0080,368,80,*,constant 00 00,,,constant,,same payload every frame on both days
+10466040,233,40,*,constant 00 00 00 00 00,,,constant,,same payload every frame on both days
+10242040,121,40,*,constant 02,,,constant,,same payload every frame on both days
+10244060,122,60,*,constant 02,,,constant,,same payload every frame on both days
+103D20BC,1E9,BC,*,constant 00,,,constant,,same payload every frame on both days
+arb:1FFF,1FFF,any,*,"module heartbeat, empty payload; the source byte names the module",,,heartbeat,,16 modules: 40 58 59 5B 60 66 68 80 81 97 99 AF B9 BB BC CB
+arb:160,160,40,*,immobilizer id and learned environment id,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:182,182,58,*,immobilizer environment id response,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:183,183,99,*,immobilizer environment id response,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:184,184,60,*,immobilizer environment id response,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:474,474,97,*,OnStar Wi-Fi access point settings,,,sensitive,,"sent with the hotspot name and password; payload must never be printed, logged or committed"
+arb:762,762,,*,VIN part 1,,,sensitive,,"payload must never be printed, logged or committed"
+arb:764,764,,*,VIN part 2,,,sensitive,,"payload must never be printed, logged or committed"
+arb:155,155,,*,GPS position,,,sensitive,,"payload must never be printed, logged or committed"
+arb:156,156,,*,sent with GPS (treat as location),,,sensitive,,"payload must never be printed, logged or committed"
+arb:478,478,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+arb:479,479,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+arb:47A,47A,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+arb:480,480,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+arb:481,481,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+arb:482,482,,*,OnStar Wi-Fi hotspot text,,,sensitive,,"payload must never be printed, logged or committed"
+10240040,120,40,*,unknown,,,unknown,,"8 bytes, 332 distinct"
+10220040,110,40,*,unknown,,,unknown,,"8 bytes, 99 distinct"
+1022C040,116,40,*,unknown,,,unknown,,b2 moves
+1022A040,115,40,*,unknown,,,unknown,,b2 flag 00/01
+102C40CB,162,CB,*,unknown,,,unknown,,moves while driving
+102F40CB,17A,CB,*,unknown,,,unknown,,moves while driving
+107840CB,3C2,CB,*,unknown,,,unknown,,b3 moves (b1 is SOC)
+1038C040,1C6,40,*,unknown,,,unknown,,10-04 only
+102CC040,166,40,*,unknown,,,unknown,,b7 rises
+102CE040,167,40,*,unknown,,,unknown,,b7 rises
+0C800040,400,40,*,unknown,,,unknown,,b1 moves
+10424040,212,40,*,unknown,,,unknown,,11 distinct
+1020C040,106,40,*,unknown,,,unknown,,10-04 only
+1058E0CB,2C7,CB,*,unknown,,,unknown,,50 distinct
+10704097,382,97,*,unknown,,,unknown,,"arb 382, 32 distinct"
+1027A0CB,13D,CB,*,unknown,,,unknown,,10-04 only
+104200CB,210,CB,*,unknown,,,unknown,,"b1-2 rise, b5 falls; 3 frames"
+1042C0CB,216,CB,*,unknown,,,unknown,,"b1 rises, b7 falls; 4 frames"
+108700CB,438,CB,*,unknown,,,unknown,,8 distinct
+10400060,200,60,*,unknown,,,unknown,,b0 and b4 change together
+1040A081,205,81,*,unknown,,,unknown,,flag 00/01
+104C00BC,260,BC,*,unknown,,,unknown,,b2 flag 00/18
+10ACE060,567,60,*,unknown,,,unknown,,bit flags in b1 and b3
+10AD6080,56B,80,*,unknown,,,unknown,,09-29 only
+10AC0099,560,99,*,unknown,,,unknown,,09-29 only
+10B02099,581,99,*,unknown,,,unknown,,"09-29 only, 6 distinct"
+10720099,390,99,*,unknown,,,unknown,,"09-29 only, b2 00/07"
+10600081,300,81,*,unknown,,,unknown,,heard once
+1023C0BC,11E,BC,*,unknown,,,unknown,,3 distinct
+102340BC,11A,BC,*,unknown,,,unknown,,15 distinct
+103A00BB,1D0,BB,*,unknown,,,unknown,,heard once
+103A40BB,1D2,BB,*,unknown,,,unknown,,heard once

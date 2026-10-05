@@ -28,7 +28,9 @@ headline readings, Health's saved codes, and the Freeze frame screen from a virt
 ## Real-car status (2026-09-29 session)
 
 Raw SW-CAN capture, parked about 5 minutes. Captures are kept off-repo because they
-contain VIN frames.
+contain VIN frames. Everything learned about individual SW-CAN frames, from this session and the
+2026-10-04 drive, is in [`swcan-signal-map.csv`](swcan-signal-map.csv)
+([how to extend it](swcan-signal-map.md)).
 
 - **Confirmed:** door lock, 12 V voltage (SOC byte `0xFF` = not available),
   A/C state, A/C compressor/evap, cabin temp, dash SOC `228334`, fuel level `012F`
