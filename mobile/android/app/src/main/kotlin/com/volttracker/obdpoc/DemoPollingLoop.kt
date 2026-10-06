@@ -291,7 +291,7 @@ class DemoPollingLoop(
         sample.put("evRangeKm", Math.round(soc / 100.0 * 66.0))
         sample.put("batteryHeaterPct", 0)
         sample.put("pemCoolantTempC", ObdElmDecode.round1(38.0 + 2.0 * Math.sin(t / 11.0)))
-        sample.put("lifetimeChargeEnergyKwh", 2198.1)
+        sample.put("lifetimeChargeEnergyKwh", 15_480.0)
         for (section in 1..6) {
             sample.put("packSection${section}TempC", 22 + section % 3)
         }

@@ -105,6 +105,18 @@ data class DriveUiState(
     val minCellNumber: Int? = null,
     /** HV pack internal resistance in mΩ (`2240E9`); rises as the pack ages. */
     val packResistanceMohm: Double? = null,
+    /** How many times the pack has been charged (`2243A5`); null until reported. */
+    val packChargeCount: Int? = null,
+    /** Energy charged into the pack over its life, in kWh (`224389`); null until reported. */
+    val lifetimeChargedKwh: Double? = null,
+    /** The six pack-section temperatures (°F, `2240D7`…`2240E1`); null where a section hasn't reported. */
+    val packSectionTempsF: List<Int?> = emptyList(),
+    /** Battery coolant pump speed (rpm, `2241B2`); null until reported. */
+    val batteryCoolantPumpRpm: Int? = null,
+    /** Battery heater power (W, `2241B6`); 0 while it is off, null until reported. */
+    val batteryHeaterW: Int? = null,
+    /** The power electronics / charger coolant loop (°F, `221C43`); null until reported. */
+    val pemCoolantF: Int? = null,
     /** Per-cell voltages from the last full cell read (96 groups); empty until one runs. */
     val cellVoltages: List<Double?> = emptyList(),
     /** Charger power into the pack (kW) while plugged in. */
@@ -267,6 +279,12 @@ data class DriveUiState(
                 locked = true,
                 cellSpreadMv = 19.0,
                 packResistanceMohm = 148.5,
+                packChargeCount = 1412,
+                lifetimeChargedKwh = 15_480.0,
+                packSectionTempsF = listOf(73, 74, 74, 75, 74, 76),
+                batteryCoolantPumpRpm = 1180,
+                batteryHeaterW = 0,
+                pemCoolantF = 102,
                 minCellVolts = 3.893,
                 maxCellVolts = 3.912,
                 minCellNumber = 47,

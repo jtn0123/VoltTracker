@@ -225,7 +225,7 @@ export function runBrowserDemoStream(
       evRangeKm: Math.round((soc / 100) * 66),
       batteryHeaterPct: 0,
       pemCoolantTempC: Number((38 + 2 * Math.sin(t / 11)).toFixed(1)),
-      lifetimeChargeEnergyKwh: 2198.1,
+      lifetimeChargeEnergyKwh: 15480,
       packSection1TempC: 23, packSection2TempC: 24, packSection3TempC: 22,
       packSection4TempC: 23, packSection5TempC: 24, packSection6TempC: 22,
       ...(charging ? { chargerAcVoltage: 240, chargerAcCurrentA: 14, chargerAcPowerKw: 3.4 } : {}),

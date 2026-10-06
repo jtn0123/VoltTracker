@@ -1,10 +1,13 @@
 package com.volttracker.obdpoc.ui.diag
 
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.driveSubtitle
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import java.util.Locale
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** A line of Health copy with the tone it's drawn in. */
 data class HealthLine(
@@ -221,8 +224,17 @@ data class HvBattery(
     val weakestCell: Int?,
     val weakestVolts: Double?,
     val resistanceMohm: Double? = null,
+    val chargeCount: Int? = null,
+    val chargedKwh: Double? = null,
 ) {
-    val reported: Boolean get() = sohPct != null || capacityAh != null || spreadMv != null || resistanceMohm != null
+    val reported: Boolean
+        get() =
+            sohPct != null ||
+                capacityAh != null ||
+                spreadMv != null ||
+                resistanceMohm != null ||
+                chargeCount != null ||
+                chargedKwh != null
 }
 
 /** The Gen 2 Volt pack's rated capacity: the "of 52 Ah new" the Ah figure is read against. */
@@ -245,10 +257,74 @@ fun hvBattery(
         weakestCell = drive.minCellNumber,
         weakestVolts = drive.minCellVolts,
         resistanceMohm = drive.packResistanceMohm,
+        chargeCount = drive.packChargeCount,
+        chargedKwh = drive.lifetimeChargedKwh,
     )
 
-/** "Internal resistance 293 mΩ", or null until the pack reports it. */
-fun HvBattery.resistanceLine(): String? = resistanceMohm?.let { "Internal resistance ${it.roundToInt()} mΩ" }
+/** "Internal resistance 293 mΩ · charged 1,234 times (12,346 kWh)", whichever the pack has reported; null before any. */
+fun HvBattery.agingLine(): String? =
+    listOfNotNull(
+        resistanceMohm?.let { "Internal resistance ${it.roundToInt()} mΩ" },
+        chargedText(),
+    ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
+
+/** "charged 1,234 times (12,346 kWh)", with whichever of the count and lifetime energy the pack has reported. */
+private fun HvBattery.chargedText(): String? {
+    val times = chargeCount?.let { "charged ${"%,d".format(Locale.US, it)} times" }
+    val energy = chargedKwh?.let { "%,d kWh".format(Locale.US, it.roundToLong()) }
+    return when {
+        times != null && energy != null -> "$times ($energy)"
+        times != null -> times
+        energy != null -> "$energy charged"
+        else -> null
+    }
+}
+
+/** Everything the battery thermal card shows: the pack's six sections and what heats and cools it. */
+data class BatteryThermal(
+    val sectionsF: List<Int?>,
+    val pumpRpm: Int?,
+    val heaterW: Int?,
+    val electronicsF: Int?,
+    val units: VoltUnits,
+) {
+    val reported: Boolean get() =
+        sectionsF.any { it != null } ||
+            pumpRpm != null ||
+            heaterW != null ||
+            electronicsF != null
+
+    /** Each section in the chosen units ("74°F"), [DASH] where one hasn't reported. */
+    val sectionTexts: List<String> get() = sectionsF.map { f -> f?.let { units.tempText(it.toDouble()) } ?: DASH }
+
+    /** "73–76°F" across the sections that reported, "74°F" when they agree, or null before any did. */
+    val sectionRange: String?
+        get() {
+            val read = sectionsF.filterNotNull().map { units.temp(it.toDouble()) }
+            val low = read.minOrNull() ?: return null
+            val high = read.max()
+            return if (low == high) "$low${units.tempUnit}" else "$low–$high${units.tempUnit}"
+        }
+
+    /** "1,180" rpm, "Off" when stopped. */
+    val pumpText: String? get() = pumpRpm?.let { if (it == 0) "Off" else "%,d".format(Locale.US, it) }
+
+    /** "Off", or the heater's draw in kW ("2.1"). */
+    val heaterText: String? get() = heaterW?.let { if (it == 0) "Off" else "%.1f".format(Locale.US, it / WATTS_PER_KW) }
+
+    val electronicsText: String? get() = electronicsF?.let { units.temp(it.toDouble()).toString() }
+}
+
+fun batteryThermal(drive: DriveUiState): BatteryThermal =
+    BatteryThermal(
+        sectionsF = drive.packSectionTempsF,
+        pumpRpm = drive.batteryCoolantPumpRpm,
+        heaterW = drive.batteryHeaterW,
+        electronicsF = drive.pemCoolantF,
+        units = drive.units,
+    )
+
+private const val WATTS_PER_KW = 1000.0
 
 /** "#47 · 3.893 V" for the weakest cell group. */
 fun HvBattery.weakestLabel(): String? {
@@ -261,6 +337,7 @@ fun healthReport(
     diag: DiagUiState,
     battery: HvBattery,
     demo: Boolean,
+    thermal: BatteryThermal? = null,
 ): String {
     val hero = diag.hero()
     val lines = mutableListOf("Volt Tracker health report", "")
@@ -280,7 +357,18 @@ fun healthReport(
                 battery.capacityAh?.let { String.format(Locale.US, "%.1f Ah of %.0f Ah new", it, PACK_NEW_AH) },
                 battery.spreadMv?.let { "cell spread ${it.roundToInt()} mV" },
                 battery.resistanceMohm?.let { "internal resistance ${it.roundToInt()} mΩ" },
+                battery.chargedText(),
                 battery.weakestLabel()?.let { "weakest cell $it" },
+            ).joinToString(", ")
+    }
+    if (thermal?.reported == true) {
+        lines +=
+            "Battery thermal: " +
+            listOfNotNull(
+                thermal.sectionRange?.let { "sections $it" },
+                thermal.pumpText?.let { if (it == "Off") "coolant pump off" else "coolant pump $it rpm" },
+                thermal.heaterText?.let { if (it == "Off") "heater off" else "heater $it kW" },
+                thermal.electronicsText?.let { "electronics coolant $it${thermal.units.tempUnit}" },
             ).joinToString(", ")
     }
     if (diag.sohHistory.isNotEmpty()) lines += "Battery health trend: ${sohTrend(diag.sohHistory).sentence}"

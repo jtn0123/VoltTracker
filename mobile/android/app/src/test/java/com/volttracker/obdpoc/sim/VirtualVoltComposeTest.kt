@@ -154,6 +154,24 @@ class VirtualVoltComposeTest {
         text("Odometer 59,448 mi")
     }
 
+    @Test
+    fun drivingTelemetryReachesTheBatteryCards() {
+        // The slowest of these, 2240E9, is read every 240 cycles, first at cycle 210.
+        drive(Mode.DRIVING, samples = BATTERY_SAMPLES)
+        compose.setContent {
+            val state by store.state.collectAsState()
+            VoltApp(state, initialTab = VoltTab.CAR, initialRoutes = listOf(VoltRoute.HEALTH))
+        }
+        // 2240E9 = 0x024A / 2 = 293 mΩ; 2243A5 = 0x04D2 = 1,234 charges; 224389 = 0x0012D687 x 10 Wh.
+        text("Internal resistance 293 mΩ · charged 1,234 times (12,346 kWh)")
+        // Sections 2240D7..2240E1 = 0x44..0x46 → 28..30 °C = 82..86 °F.
+        text("82–86°F")
+        // 2241B2 = 0x04C4 rpm; 2241B6 = 0 W; 221C43 = 0x50 → 40 °C = 104 °F.
+        signal("coolant pump", "1,220 rpm")
+        signal("pack heater", "Off")
+        signal("electronics coolant", "104°F")
+    }
+
     /** The Car tab: lock, 12 V and climate from the SW-CAN broadcasts the catalog puts on the bus. */
     private fun assertCar(
         last: JSONObject,
@@ -269,6 +287,7 @@ class VirtualVoltComposeTest {
         const val SAMPLES = 40
         const val TEMPERATURE_SAMPLES = 50
         const val ODOMETER_SAMPLES = 160
+        const val BATTERY_SAMPLES = 220
         const val WAIT_TIMEOUT_MS = 60_000L
         const val MI_PER_KM = 0.621371
 

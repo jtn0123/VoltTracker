@@ -582,6 +582,12 @@ class LiveUiStateStore(
             minCellVolts = optDouble(t, "minCellVoltage") ?: current.minCellVolts,
             maxCellVolts = optDouble(t, "maxCellVoltage") ?: current.maxCellVolts,
             packResistanceMohm = optDouble(t, "packResistanceMohm") ?: current.packResistanceMohm,
+            packChargeCount = optDouble(t, "hvBatteryChargeCount")?.toInt() ?: current.packChargeCount,
+            lifetimeChargedKwh = optDouble(t, "lifetimeChargeEnergyKwh") ?: current.lifetimeChargedKwh,
+            packSectionTempsF = packSectionTempsF(t, current.packSectionTempsF),
+            batteryCoolantPumpRpm = optDouble(t, "batteryCoolantPumpRpm")?.toInt() ?: current.batteryCoolantPumpRpm,
+            batteryHeaterW = optDouble(t, "batteryHeaterPowerW")?.toInt() ?: current.batteryHeaterW,
+            pemCoolantF = optDouble(t, "pemCoolantTempC")?.let { cToF(it).toInt() } ?: current.pemCoolantF,
             minCellNumber = optDouble(t, "minCellNumber")?.toInt() ?: current.minCellNumber,
             cellVoltages = cellVoltages(t) ?: current.cellVoltages,
             chargeKw = if (charging) chargerKw ?: 0.0 else 0.0,
@@ -945,6 +951,16 @@ class LiveUiStateStore(
 
     private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
 
+    /** The six section temperatures, each kept from [current] until its own read arrives. */
+    private fun packSectionTempsF(
+        t: JSONObject,
+        current: List<Int?>,
+    ): List<Int?> {
+        val read = (1..PACK_SECTIONS).map { optDouble(t, "packSection${it}TempC")?.let { c -> cToF(c).toInt() } }
+        if (read.all { it == null }) return current
+        return read.mapIndexed { i, f -> f ?: current.getOrNull(i) }
+    }
+
     private fun fToC(f: Double): Double = (f - 32.0) * 5.0 / 9.0
 
     private companion object {
@@ -1009,6 +1025,9 @@ class LiveUiStateStore(
 
         /** Matches [DriveUiState.gear]'s empty default. */
         const val NO_GEAR = "--"
+
+        /** The pack-section temperatures `2240D7`…`2240E1` report. */
+        const val PACK_SECTIONS = 6
         const val MI_PER_KM = 0.621371
         const val FT_PER_M = 3.28084
         const val CORE_READING_FRESH_MS = 10_000L
