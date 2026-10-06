@@ -1042,7 +1042,14 @@ open class ObdService :
     }
 
     override fun updateNotification(text: String?) {
-        recorder.runAsync { recorder.logEvent("notification", "text", text) }
+        // Like broadcastStatus: only the main thread hands the log write to the recorder queue.
+        // The poll thread writes in place, so its notification lands in the session log before
+        // the session closes (a queued write would find the log already closed).
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            recorder.runAsync { recorder.logEvent("notification", "text", text) }
+        } else {
+            recorder.logEvent("notification", "text", text)
+        }
         notifications.post(recorder.recordingWarning()?.let { "Recording incomplete · $it" } ?: text ?: "")
     }
 
