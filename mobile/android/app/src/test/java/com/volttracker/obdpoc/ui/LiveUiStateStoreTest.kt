@@ -41,6 +41,8 @@ class LiveUiStateStoreTest {
             .put("motorTempC", 60)
             .put("motorBTempC", 55)
             .put("packResistanceMohm", 293.0)
+            .put("hvBatteryChargeCount", 1234)
+            .put("lifetimeChargeEnergyKwh", 12_345.67)
             .put("prndlState", "D")
             .put("motorAPowerKw", 14.2)
             .put("motorBPowerKw", 3.1)
@@ -78,6 +80,8 @@ class LiveUiStateStoreTest {
         assertEquals(140, drive.motorTempF) // 60 C
         assertEquals(131, drive.motorBTempF) // 55 C
         assertEquals(293.0, drive.packResistanceMohm ?: -1.0, 1e-9)
+        assertEquals(1234, drive.packChargeCount)
+        assertEquals(12_345.67, drive.lifetimeChargedKwh ?: -1.0, 1e-9)
         assertEquals(13, drive.gpsAccuracyFt ?: -1) // 4 m ≈ 13.1 ft
         assertEquals(DriveMode.EV, drive.mode)
     }
@@ -90,6 +94,30 @@ class LiveUiStateStoreTest {
         assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
         store.onTelemetry(sample(updatedAt = 2_000L))
         assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
+    }
+
+    @Test
+    fun packSectionTemperaturesKeepEachSectionUntilItsNextRead() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(
+            sample {
+                put("packSection1TempC", 26).put("packSection2TempC", 27).put("packSection6TempC", 29)
+                put("batteryCoolantPumpRpm", 1183).put("batteryHeaterPowerW", 0).put("pemCoolantTempC", 40)
+            },
+        )
+        var drive = store.state.value.drive
+        assertEquals(listOf(78, 80, null, null, null, 84), drive.packSectionTempsF)
+        assertEquals(1183, drive.batteryCoolantPumpRpm)
+        assertEquals(0, drive.batteryHeaterW)
+        assertEquals(104, drive.pemCoolantF)
+
+        // A sample without sections keeps them; one with a single section updates only that one.
+        store.onTelemetry(sample(updatedAt = 2_000L))
+        assertEquals(listOf(78, 80, null, null, null, 84), store.state.value.drive.packSectionTempsF)
+        store.onTelemetry(sample(updatedAt = 3_000L) { put("packSection3TempC", 28) })
+        drive = store.state.value.drive
+        assertEquals(listOf(78, 80, 82, null, null, 84), drive.packSectionTempsF)
+        assertEquals(1183, drive.batteryCoolantPumpRpm)
     }
 
     @Test

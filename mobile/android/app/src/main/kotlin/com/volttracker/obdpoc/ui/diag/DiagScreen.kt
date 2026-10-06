@@ -99,10 +99,15 @@ fun DiagScreen(
         statusSubtitle = true,
         onRefresh = LocalVoltNav.current.refresh,
     ) {
-        Hero(state, demo, actions) { actions.onShare(healthReport(state, battery, demo)) }
+        val thermal = batteryThermal(drive)
+        Hero(state, demo, actions) { actions.onShare(healthReport(state, battery, demo, thermal)) }
         Spacer(Modifier.height(12.dp))
         BatteryCard(battery, state.sohHistory.takeIf { it.isNotEmpty() }?.let { sohTrend(it) })
         Spacer(Modifier.height(12.dp))
+        if (thermal.reported) {
+            ThermalCard(thermal)
+            Spacer(Modifier.height(12.dp))
+        }
         VoltListCard {
             VoltListRow(
                 VoltIcons.Pulse,
@@ -400,7 +405,7 @@ private fun BatteryCard(
             )
             BatteryFigure(battery.spreadMv?.roundToInt()?.toString(), " mV", "cell spread")
         }
-        battery.resistanceLine()?.let {
+        battery.agingLine()?.let {
             Text(
                 it,
                 style = VoltType.caption,
@@ -429,6 +434,57 @@ private fun BatteryCard(
             Text(note, style = VoltType.caption, color = VoltColors.textTertiary)
         }
         trend?.let { SohTrendView(it, Modifier.padding(top = 14.dp)) }
+    }
+}
+
+/** The pack's six section temperatures, and the pump, heater and electronics loop around them. */
+@Composable
+private fun ThermalCard(thermal: BatteryThermal) {
+    Column(Modifier.fillMaxWidth().voltCard().padding(horizontal = 16.dp, vertical = 14.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            VoltLabel("Battery thermal")
+            thermal.sectionRange?.let { Text(it, style = VoltType.caption, color = VoltColors.textSecondary) }
+        }
+        if (thermal.sectionsF.isNotEmpty()) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                thermal.sectionTexts.forEachIndexed { i, text ->
+                    Column(
+                        modifier =
+                            Modifier
+                                .weight(1f)
+                                .background(VoltColors.surfaceElevated, VoltShapes.inner)
+                                .padding(vertical = 8.dp)
+                                .semantics(mergeDescendants = true) {},
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            text,
+                            style = VoltType.bodyStrong,
+                            color = VoltColors.textPrimary,
+                            maxLines = 1,
+                            softWrap = false,
+                        )
+                        Text("S${i + 1}", style = VoltType.caption, color = VoltColors.textTertiary)
+                    }
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            BatteryFigure(thermal.pumpText, if (thermal.pumpText == "Off") "" else " rpm", "coolant pump")
+            BatteryFigure(thermal.heaterText, if (thermal.heaterText == "Off") "" else " kW", "pack heater")
+            BatteryFigure(thermal.electronicsText, thermal.units.tempUnit, "electronics coolant")
+        }
     }
 }
 

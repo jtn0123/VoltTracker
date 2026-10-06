@@ -329,13 +329,14 @@ internal object ObdVoltMode22ParserRegistry {
     ): Double? = mode22Long(response, command)?.let { bounded(it / 64.0, ODOMETER_KM_RANGE) }
 
     /**
-     * Lifetime charge energy DID 4389: 4-byte big-endian Wh on 2011-2018 cars (the OVMS module
-     * reads a MY2019 as kWh; that model year is not handled here).
+     * Lifetime charge energy DID 4389: 4-byte big-endian count of 10 Wh. The target car proved the
+     * scale on 2026-10-04: one full charge (0 % to 99 % displayed SOC, the charge count up by one)
+     * moved it 1,471 counts = 14.7 kWh.
      */
     private fun lifetimeChargeKwhValue(
         response: String?,
         command: String?,
-    ): Double? = mode22Long(response, command)?.let { bounded(it / 1000.0, LIFETIME_CHARGE_KWH_RANGE) }
+    ): Double? = mode22Long(response, command)?.let { bounded(it / 100.0, LIFETIME_CHARGE_KWH_RANGE) }
 
     private fun mode22Long(
         response: String?,

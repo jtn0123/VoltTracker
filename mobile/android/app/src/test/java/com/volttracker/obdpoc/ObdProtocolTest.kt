@@ -568,12 +568,12 @@ class ObdProtocolTest {
         assertEquals(100.0, ObdProtocol.parseKnownValue("22439E", "62439EFF")!!.valueNumeric!!, 0.01)
         assertEquals(50.2, ObdProtocol.parseKnownValue("22439E", "62439E80")!!.valueNumeric!!, 0.1)
 
-        // Real reply seen on the target car: 0x00218A49 Wh = 2198.089 kWh lifetime.
-        val lifetime = ObdProtocol.parseKnownValue("224389", "62438900218A49")
+        // The car's layout with a made-up value: 0x0012D687 x 10 Wh = 12,345.67 kWh lifetime.
+        val lifetime = ObdProtocol.parseKnownValue("224389", "6243890012D687")
         assertEquals("lifetime charge energy", lifetime!!.name)
         assertEquals("kWh", lifetime.unit)
-        assertEquals(2198.089, lifetime.valueNumeric!!, 0.001)
-        assertNull("a 4-byte DID needs all four bytes", ObdProtocol.parseKnownValue("224389", "624389218A"))
+        assertEquals(12345.67, lifetime.valueNumeric!!, 0.001)
+        assertNull("a 4-byte DID needs all four bytes", ObdProtocol.parseKnownValue("224389", "62438912D6"))
 
         val pem = ObdProtocol.parseKnownValue("221C43", "621C4350")
         assertEquals(40.0, pem!!.valueNumeric!!, 0.01)

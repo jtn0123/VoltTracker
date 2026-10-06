@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.PillTone
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcCode
@@ -7,7 +8,9 @@ import com.volttracker.obdpoc.ui.diag.DtcSeverity
 import com.volttracker.obdpoc.ui.diag.HealthHero
 import com.volttracker.obdpoc.ui.diag.HealthLine
 import com.volttracker.obdpoc.ui.diag.adapterLine
+import com.volttracker.obdpoc.ui.diag.agingLine
 import com.volttracker.obdpoc.ui.diag.agoText
+import com.volttracker.obdpoc.ui.diag.batteryThermal
 import com.volttracker.obdpoc.ui.diag.detailLine
 import com.volttracker.obdpoc.ui.diag.earlierLine
 import com.volttracker.obdpoc.ui.diag.freezeFrameLine
@@ -17,7 +20,6 @@ import com.volttracker.obdpoc.ui.diag.hero
 import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.diag.liveSignalsLine
 import com.volttracker.obdpoc.ui.diag.pill
-import com.volttracker.obdpoc.ui.diag.resistanceLine
 import com.volttracker.obdpoc.ui.diag.serviceGuidance
 import com.volttracker.obdpoc.ui.diag.statusCounts
 import com.volttracker.obdpoc.ui.diag.statusLine
@@ -204,14 +206,78 @@ class HealthLogicTest {
 
     @Test
     fun theBatteryCardShowsThePacksInternalResistance() {
-        assertNull(hvBattery(DriveUiState(), null, null).resistanceLine())
+        assertNull(hvBattery(DriveUiState(), null, null).agingLine())
         // 2240E9 = 0x024A / 2 = 293 mΩ, what the car answered.
         val battery = hvBattery(DriveUiState(packResistanceMohm = 293.0), null, null)
         assertTrue("resistance alone counts as a battery read", battery.reported)
-        assertEquals("Internal resistance 293 mΩ", battery.resistanceLine())
+        assertEquals("Internal resistance 293 mΩ", battery.agingLine())
         assertTrue(
             healthReport(DiagUiState(), battery, demo = false).contains("HV battery: internal resistance 293 mΩ"),
         )
+        // 2243A5 = 0x04D2: a made-up count in the car's layout.
+        val counted = hvBattery(DriveUiState(packResistanceMohm = 293.0, packChargeCount = 1234), null, null)
+        assertEquals("Internal resistance 293 mΩ · charged 1,234 times", counted.agingLine())
+        assertEquals("Charged 1,234 times", hvBattery(DriveUiState(packChargeCount = 1234), null, null).agingLine())
+        assertTrue(
+            healthReport(DiagUiState(), counted, demo = false)
+                .contains("HV battery: internal resistance 293 mΩ, charged 1,234 times"),
+        )
+        // 224389 = 0x0012D687 x 10 Wh (made up, like the count).
+        val lifetime = hvBattery(DriveUiState(packChargeCount = 1234, lifetimeChargedKwh = 12_345.67), null, null)
+        assertEquals("Charged 1,234 times (12,346 kWh)", lifetime.agingLine())
+        assertTrue(
+            healthReport(
+                DiagUiState(),
+                lifetime,
+                demo = false,
+            ).contains("HV battery: charged 1,234 times (12,346 kWh)"),
+        )
+        val energyOnly = hvBattery(DriveUiState(lifetimeChargedKwh = 12_345.67), null, null)
+        assertTrue("lifetime energy alone counts as a battery read", energyOnly.reported)
+        assertEquals("12,346 kWh charged", energyOnly.agingLine())
+    }
+
+    @Test
+    fun theThermalCardReadsTheSectionsPumpHeaterAndElectronicsLoop() {
+        assertFalse(batteryThermal(DriveUiState()).reported)
+        // What the car answered on 2026-10-03: sections 0x42..0x45 (26-29 °C), pump 0x049F,
+        // heater 0000, electronics loop 0x50 (40 °C).
+        val drive =
+            DriveUiState(
+                packSectionTempsF = listOf(78, 80, null, 82, 84, 80),
+                batteryCoolantPumpRpm = 1183,
+                batteryHeaterW = 0,
+                pemCoolantF = 104,
+            )
+        val thermal = batteryThermal(drive)
+        assertTrue(thermal.reported)
+        assertEquals(listOf("78°F", "80°F", DASH, "82°F", "84°F", "80°F"), thermal.sectionTexts)
+        assertEquals("78–84°F", thermal.sectionRange)
+        assertEquals("1,183", thermal.pumpText)
+        assertEquals("Off", thermal.heaterText)
+        assertEquals("104", thermal.electronicsText)
+
+        val metric = batteryThermal(drive.copy(metricUnits = true))
+        assertEquals("26–29°C", metric.sectionRange)
+        assertEquals("40", metric.electronicsText)
+
+        val even =
+            batteryThermal(
+                DriveUiState(packSectionTempsF = listOf(80, 80), batteryHeaterW = 2140, batteryCoolantPumpRpm = 0),
+            )
+        assertEquals("80°F", even.sectionRange)
+        assertEquals("2.1", even.heaterText)
+        assertEquals("Off", even.pumpText)
+
+        val report = healthReport(DiagUiState(), hvBattery(DriveUiState(), null, null), demo = false, thermal = thermal)
+        assertTrue(
+            report.contains(
+                "Battery thermal: sections 78–84°F, coolant pump 1,183 rpm, heater off, electronics coolant 104°F",
+            ),
+        )
+        val pumpOnly = batteryThermal(DriveUiState(batteryCoolantPumpRpm = 900))
+        assertNull(pumpOnly.sectionRange)
+        assertTrue(pumpOnly.reported)
     }
 
     @Test
