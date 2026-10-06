@@ -33,8 +33,8 @@ data class VoltUnits(
     }
 
     /**
-     * An odometer reading cut down to whole, grouped units like the cluster's: "124,374 mi" /
-     * "200,161 km". The slack absorbs floating-point error in the km → mi → km round trip.
+     * An odometer reading cut down to whole, grouped units like the cluster's: "59,448 mi" /
+     * "95,673 km". The slack absorbs floating-point error in the km → mi → km round trip.
      */
     fun odometerText(miles: Double): String =
         "%,d %s".format(Locale.US, (distance(miles) + ODOMETER_SLACK).toLong(), distanceUnit)

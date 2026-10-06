@@ -86,11 +86,10 @@ class LiveUiStateStoreTest {
     fun theOdometerHoldsBetweenItsSlowReads() {
         val store = LiveUiStateStore()
         assertNull(store.state.value.drive.odometerMiles)
-        // 2234B2 = 0x00C37860 on 2026-10-03: 200,161.5 km.
-        store.onTelemetry(sample { put("odometerKm", 200_161.5) })
-        assertEquals(124_374.6, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
+        store.onTelemetry(sample { put("odometerKm", 95_673.5) })
+        assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
         store.onTelemetry(sample(updatedAt = 2_000L))
-        assertEquals(124_374.6, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
+        assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
     }
 
     @Test

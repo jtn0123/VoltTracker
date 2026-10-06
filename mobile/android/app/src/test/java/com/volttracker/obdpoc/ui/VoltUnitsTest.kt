@@ -30,10 +30,10 @@ class VoltUnitsTest {
 
     @Test
     fun theOdometerCutsDownToWholeGroupedUnitsLikeTheCluster() {
-        assertEquals("124,374 mi", imperial.odometerText(124_374.9))
+        assertEquals("59,448 mi", imperial.odometerText(59_448.9))
         assertEquals("812 mi", imperial.odometerText(812.0))
         // Whole kilometres survive the trip through miles instead of reading one short.
-        for (km in listOf(1L, 61_740L, 200_161L, 999_999L)) {
+        for (km in listOf(1L, 61_740L, 95_673L, 999_999L)) {
             assertEquals("%,d km".format(Locale.US, km), metric.odometerText(km / VoltUnits.KM_PER_MI))
         }
     }

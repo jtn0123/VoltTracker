@@ -150,8 +150,8 @@ class VirtualVoltComposeTest {
         // 2234B2 is read every 240 cycles, first at cycle 150.
         drive(Mode.DRIVING, samples = ODOMETER_SAMPLES)
         show(VoltTab.CAR)
-        // 0x00C37860 / 64 = 200,161.5 km = 124,374.6 mi, cut down like the cluster.
-        text("Odometer 124,374 mi")
+        // 0x005D6E60 / 64 = 95,673.5 km = 59,448.8 mi, cut down like the cluster.
+        text("Odometer 59,448 mi")
     }
 
     /** The Car tab: lock, 12 V and climate from the SW-CAN broadcasts the catalog puts on the bus. */

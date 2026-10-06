@@ -96,9 +96,9 @@ class CarTabLogicTest {
     @Test
     fun theOdometerShowsOnceTheCarReportsIt() {
         assertNull(odometerLine(parked))
-        val read = parked.copy(odometerMiles = 124_374.6)
-        assertEquals("Odometer 124,374 mi", odometerLine(read))
-        assertEquals("Odometer 200,161 km", odometerLine(read.copy(metricUnits = true)))
+        val read = parked.copy(odometerMiles = 59_448.8)
+        assertEquals("Odometer 59,448 mi", odometerLine(read))
+        assertEquals("Odometer 95,673 km", odometerLine(read.copy(metricUnits = true)))
     }
 
     @Test

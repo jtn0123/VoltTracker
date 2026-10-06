@@ -71,9 +71,9 @@ object VirtualVoltCatalog {
             // ATRV is answered by the adapter itself (battery voltage at the OBD port), not the car.
             entry("7DF", "ATRV", Evidence.REAL, both("14.9V")),
             entry("7DF", "01A6", Evidence.DEAD, both(null)),
-            // GM odometer, km × 64: the car sent 00C37640..00C37860 on the 2026-10-03 drive;
-            // 0x00C37860 / 64 = 200,161.5 km.
-            entry("7DF", "2234B2", Evidence.REAL, both("6234B200C37860")),
+            // GM odometer, km × 64, in the layout the car answered on the 2026-10-03 drive. The
+            // value is made up so the car's mileage stays out of the repo: 0x005D6E60 / 64 = 95,673.5 km.
+            entry("7DF", "2234B2", Evidence.REAL, both("6234B2005D6E60")),
             // --- Mode 22 on 7E0 (engine) ---------------------------------------------------
             entry("7E0", "22119F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             entry("7E0", "22119F01", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
