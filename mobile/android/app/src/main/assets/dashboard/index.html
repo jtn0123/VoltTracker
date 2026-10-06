@@ -56,6 +56,16 @@
   slots from JS based on the live `failureClass` value (one of
   FailureClass.name() — see FailureClass.kt).
 -->
+<output id="recordingBanner" class="error-banner" hidden>
+  <span>
+    <strong>Recording incomplete</strong>
+    <span id="recordingBannerDetail" class="error-detail"></span>
+    <span class="error-copy-hint"
+      >Live readings can continue. Free storage, then stop and reconnect to
+      start a new recording.</span
+    >
+  </span>
+</output>
 <div id="errorBanner" class="error-banner" role="alert" hidden>
   <span>
     <strong id="errorBannerTitle">Dashboard error</strong>

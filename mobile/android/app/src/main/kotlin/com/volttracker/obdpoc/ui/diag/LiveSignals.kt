@@ -52,8 +52,8 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
         SignalGroup(
             "Drive unit",
             listOfNotNull(
-                SignalRow("Speed", u.speedText(drive.speedMph.toDouble())),
-                SignalRow("Power", "${oneDecimal(drive.powerKw)} kW"),
+                SignalRow("Speed", drive.speedMph?.let { u.speedText(it.toDouble()) } ?: DASH),
+                SignalRow("Power", drive.powerKw?.let { "${oneDecimal(it)} kW" } ?: DASH),
                 SignalRow("Motor A", drive.motorAKw?.let { "${oneDecimal(it)} kW" } ?: DASH),
                 SignalRow("Motor B", drive.motorBKw?.let { "${oneDecimal(it)} kW" } ?: DASH),
                 SignalRow("Motor A temperature", temp(drive.motorTempF)),

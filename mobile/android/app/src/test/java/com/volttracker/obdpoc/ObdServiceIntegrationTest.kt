@@ -15,6 +15,7 @@ import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.location.LocationTracker
 import com.volttracker.obdpoc.service.AppVisibility
+import com.volttracker.obdpoc.service.ObdNotifications
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.SessionRecorder
 import org.json.JSONObject
@@ -87,6 +88,7 @@ class ObdServiceIntegrationTest {
             try {
                 controller.get().running.set(false)
                 controller.destroy()
+                controller.get().awaitPersistenceTeardownForTest(10_000L)
             } catch (ignored: RuntimeException) {
                 // destroy() stops a foreground service that may never have started; safe.
             }
@@ -157,6 +159,7 @@ class ObdServiceIntegrationTest {
     fun demoAfterALiveSessionDropsTheForegroundState() {
         val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
         val service = controller.create().startCommand(0, 1).get()
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
         assertTrue("precondition: the live session is in the foreground", service.foregroundServiceActive)
 
         deliverStartCommand(service, intentFor(ObdService.ACTION_DEMO, null, null, null), 2)
@@ -244,6 +247,7 @@ class ObdServiceIntegrationTest {
         val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
         val service = controller.get()
         controller.create().startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
         service.broadcastStatus("connected", "Live", false)
         service.sessionStartedAtMs = RESTART_SENTINEL_MS
         val captured = captureBroadcasts()
@@ -267,6 +271,7 @@ class ObdServiceIntegrationTest {
         val controller = newController(intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null))
         val service = controller.get()
         controller.create().startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
 
         // Still connecting (no "connected" status yet): a new CONNECT is a deliberate retry.
         service.sessionStartedAtMs = RESTART_SENTINEL_MS
@@ -294,6 +299,7 @@ class ObdServiceIntegrationTest {
         val controller = newController(intentFor(ObdService.ACTION_SCAN, "AA:BB:CC:DD:EE:FF", "Scanner", null))
         val service = controller.get()
         controller.create().startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
         service.broadcastStatus("connected", "Scanning", false)
 
         deliverStartCommand(
@@ -318,6 +324,7 @@ class ObdServiceIntegrationTest {
         val service = controller.get()
         val captured = captureBroadcasts()
         controller.create().startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
         assertTrue("precondition: a session is running before DISCONNECT", service.running.get())
 
         deliverStartCommand(service, intentFor(ObdService.ACTION_DISCONNECT, null, null, null), 2)
@@ -339,6 +346,7 @@ class ObdServiceIntegrationTest {
         val captured = captureBroadcasts()
 
         controller.create().startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
 
         assertTrue("CANCEL_RETRY flips the cancel-retry request flag", service.cancelRetryRequested)
         val status = captured.lastStatus()
@@ -644,9 +652,80 @@ class ObdServiceIntegrationTest {
         val service = controller.create().get()
 
         controller.startCommand(0, 1)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
 
         assertTrue("recovery was attempted", (service as RecoveryFailsObdService).attempted)
         assertTrue("the service still starts a session after recovery fails", service.running.get())
+    }
+
+    @Test
+    fun slowStorageRecoveryLeavesMainThreadFreeAndPrecedesSessionCreation() {
+        val controller =
+            newController(SlowRecoveryObdService::class.java, intentFor(ObdService.ACTION_DEMO, null, null, null))
+        val service = controller.create().get()
+        assertEquals("onCreate does not run recovery", 1L, service.entered.count)
+        controller.startCommand(0, 1)
+        try {
+            assertTrue(service.entered.await(5, TimeUnit.SECONDS))
+            assertNotEquals(Thread.currentThread(), service.recoveryThread)
+            assertEquals("no session opens ahead of recovery", 0L, service.recorder.activeSessionId())
+            assertTrue("session remains active while storage initializes", service.running.get())
+        } finally {
+            service.release.countDown()
+        }
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
+        assertTrue(service.recorder.activeSessionId() > 0L)
+    }
+
+    @Test
+    fun statusAndNotificationDoNotWaitForAStorageLockOnTheMainThread() {
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        service.recorder.runAsync {
+            synchronized(service.ioLock) {
+                entered.countDown()
+                assertTrue(release.await(5, TimeUnit.SECONDS))
+            }
+        }
+        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        try {
+            val started = System.nanoTime()
+            service.broadcastStatus("connected", "Live", false)
+            service.updateNotification("Live")
+            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 500L)
+            assertEquals(1L, release.count)
+        } finally {
+            release.countDown()
+        }
+    }
+
+    @Test
+    fun failedRecordingKeepsTheConnectionAndWarnsBothDashboardAndNotification() {
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val captured = captureBroadcasts()
+        service.broadcastStatus("connected", "Live", false)
+        service.recorder.runAsync { throw IllegalStateException("database full") }
+        val deadline = System.currentTimeMillis() + 5_000L
+        while (captured.status.none { it.optString("recordingWarning").isNotBlank() } &&
+            System.currentTimeMillis() < deadline
+        ) {
+            Thread.sleep(10L)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+        val warning = captured.status.last { it.optString("recordingWarning").isNotBlank() }
+        assertEquals("connected", warning.optString("state"))
+        assertTrue(service.running.get())
+        assertNotNull(service.recorder.recordingWarning())
+        val manager = service.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+        val notification = shadowOf(manager).getNotification(ObdNotifications.NOTIFICATION_ID)
+        assertTrue(
+            notification.extras
+                .getCharSequence(
+                    android.app.Notification.EXTRA_TEXT,
+                ).toString()
+                .contains("Recording incomplete"),
+        )
     }
 
     @Test
@@ -703,6 +782,8 @@ class ObdServiceIntegrationTest {
             "onDestroy must return while the persistence worker is still draining (B4)",
             workerFinished.get(),
         )
+        assertTrue("restore must still see the draining writer", DatabaseOperationLease.hasPersistenceOwners())
+        assertFalse(DatabaseOperationLease.awaitPersistenceQuiescence(10L))
         assertTrue(
             "onDestroy must not block the main thread on the drain (took ${destroyMs}ms; the " +
                 "pre-B4 inline shutdown would have waited out the blocked worker)",
@@ -713,6 +794,7 @@ class ObdServiceIntegrationTest {
             "the persistence teardown must still run to completion off the main thread",
             service.awaitPersistenceTeardownForTest(10_000L),
         )
+        assertTrue(DatabaseOperationLease.awaitPersistenceQuiescence(10L))
     }
 
     // ---- B3: a stale runner must not poison or stop the superseding session ---------
@@ -778,6 +860,7 @@ class ObdServiceIntegrationTest {
     ): TestObdService {
         val controller = newController(intentFor(action, address, name, detailStage))
         controller.create().startCommand(0, 1)
+        assertTrue(controller.get().awaitSessionInitializationForTest(5_000L))
         return controller.get()
     }
 
@@ -794,6 +877,7 @@ class ObdServiceIntegrationTest {
         startId: Int,
     ) {
         service.onStartCommand(intent, 0, startId)
+        assertTrue(service.awaitSessionInitializationForTest(5_000L))
         shadowOf(Looper.getMainLooper()).idleIfPaused()
     }
 
@@ -892,6 +976,19 @@ class ObdServiceIntegrationTest {
         override fun recoverInterruptedSessions(): Int {
             attempted = true
             throw SQLiteDatabaseCorruptException("simulated corrupt database")
+        }
+    }
+
+    class SlowRecoveryObdService : TestObdService() {
+        val entered = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        var recoveryThread: Thread? = null
+
+        override fun recoverInterruptedSessions(): Int {
+            recoveryThread = Thread.currentThread()
+            entered.countDown()
+            assertTrue("recovery worker was released", release.await(5, TimeUnit.SECONDS))
+            return 0
         }
     }
 

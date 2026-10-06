@@ -92,6 +92,7 @@ class DashboardPublisher(
                 "openTrip",
                 "openTripReceipt",
                 "restoreView",
+                "openTroubleshooter",
                 "setBackupReceipt",
             )
     }

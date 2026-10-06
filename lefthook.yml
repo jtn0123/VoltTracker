@@ -30,8 +30,7 @@ pre-commit:
       stage_fixed: true
     # I1: catch undefined globals, redeclared names, and unreachable code locally before
     # they ride to CI. Spotless handles formatting; this catches semantic issues Spotless
-    # can't see. Skipped if dashboard-tests/node_modules is missing so first-time clones
-    # bootstrap themselves before the lint run.
+    # can't see. First-time clones bootstrap dependencies before the lint run.
     lint-dashboard-js:
       # The editable source ESLint lints is the TypeScript under dashboard-src/js; the old glob
       # pointed at the gitignored esbuild bundle (assets/dashboard/js), so no staged file ever
@@ -55,27 +54,11 @@ pre-commit:
         fi
       stage_fixed: false
 
-# Pre-push gate: run the fast test suites locally so a broken push is caught in
-# ~30-60s instead of ~8min later in CI. Opt-in (only fires after `lefthook
+# Pre-push gate: one Gradle graph bootstraps npm dependencies once before all
+# dependent checks, including on a fresh clone. Opt-in (only fires after `lefthook
 # install`). Escape hatch for emergencies: `git push --no-verify`.
 pre-push:
-  parallel: true
+  parallel: false
   commands:
-    unit-tests:
-      run: cd mobile/android && ./gradlew --no-daemon :app:testDebugUnitTest
-    # I2 (2026-07-12): detekt ratchets and tsc are zero-tolerance CI gates; running them here
-    # (~30-60s combined) keeps a ratchet trip or type error from riding ~8 min to CI.
-    detekt:
-      run: cd mobile/android && ./gradlew --no-daemon :app:detekt
-    dashboard-typecheck:
-      run: |
-        if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
-          npm --prefix mobile/android/dashboard-tests ci
-        fi
-        npm --prefix mobile/android/dashboard-tests run typecheck
-    dashboard-tests:
-      run: |
-        if [ ! -d mobile/android/dashboard-tests/node_modules ]; then
-          npm --prefix mobile/android/dashboard-tests ci
-        fi
-        npm --prefix mobile/android/dashboard-tests test
+    verify-fast:
+      run: cd mobile/android && ./gradlew --no-daemon verifyFast

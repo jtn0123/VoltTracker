@@ -21,6 +21,14 @@ class ObdNotifications(
         ensureChannel(context)
     }
 
+    fun loggingText(
+        appInForeground: Boolean,
+        recordingWarning: String?,
+    ): String =
+        recordingWarning?.let { "Recording incomplete · $it" } ?: context.getString(
+            if (appInForeground) R.string.notification_logging_foreground else R.string.notification_logging_background,
+        )
+
     fun build(text: String): Notification {
         val open =
             Intent()

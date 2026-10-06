@@ -57,6 +57,7 @@ class VoltNavActions(
     val startDemo: () -> Unit = {},
     /** Re-read the saved history behind the screen that is showing. */
     val refresh: () -> Unit = {},
+    val refreshing: Boolean = false,
 )
 
 val LocalVoltNav = staticCompositionLocalOf { VoltNavActions() }
@@ -244,7 +245,13 @@ fun VoltScreen(
             Column(modifier = Modifier.fillMaxWidth().padding(horizontal = contentPadding), content = content)
         }
     }
-    if (onRefresh == null) page(modifier) else VoltRefreshBox(onRefresh, modifier) { page(Modifier) }
+    if (onRefresh ==
+        null
+    ) {
+        page(modifier)
+    } else {
+        VoltRefreshBox(onRefresh, LocalVoltNav.current.refreshing, modifier) { page(Modifier) }
+    }
 }
 
 /**

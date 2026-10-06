@@ -18,8 +18,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * Car › Health (the mockups' `S-health` / `S-healthFault`): all clear, two engine codes that are
- * safe to drive on, a critical HV code, not scanned yet with nothing reported, and a scan running —
+ * Car › Health (the mockups' `S-health` / `S-healthFault`): all clear, two engine codes needing service, a critical HV code, not scanned yet with nothing reported, and a scan running —
  * in OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/health-<state>-<theme>.png; every case also proves the screen composes.
  */

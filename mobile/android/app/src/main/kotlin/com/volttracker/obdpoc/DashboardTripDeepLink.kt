@@ -11,10 +11,12 @@ internal class DashboardTripDeepLink(
     private val isDashboardReady: () -> Boolean,
     private val publishTrip: (String, Boolean) -> Unit,
     private val publishView: (String) -> Unit = {},
+    private val publishTroubleshooter: () -> Unit = {},
 ) {
     private var pendingRouteKey: String? = null
     private var pendingReceipt = false
     private var pendingView: String? = null
+    private var pendingTroubleshooter = false
 
     fun capture(intent: Intent?) {
         pendingRouteKey = intent?.getStringExtra(MainActivity.EXTRA_OPEN_TRIP)?.takeIf { it.isNotBlank() }
@@ -23,10 +25,15 @@ internal class DashboardTripDeepLink(
             intent?.getBooleanExtra(MainActivity.EXTRA_OPEN_TRIP_RECEIPT, false) == true
         // Only the classic dashboard's own tabs; anything else is ignored rather than handed to JS.
         pendingView = intent?.getStringExtra(MainActivity.EXTRA_OPEN_VIEW)?.takeIf { it in OPENABLE_VIEWS }
+        pendingTroubleshooter = intent?.getBooleanExtra(MainActivity.EXTRA_OPEN_TROUBLESHOOTER, false) == true
     }
 
     fun publishPending() {
         if (!isDashboardReady()) return
+        if (pendingTroubleshooter) {
+            pendingTroubleshooter = false
+            publishTroubleshooter()
+        }
         pendingView?.let { view ->
             pendingView = null
             publishView(view)

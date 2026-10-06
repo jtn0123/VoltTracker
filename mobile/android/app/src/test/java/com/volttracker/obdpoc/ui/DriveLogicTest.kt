@@ -71,8 +71,8 @@ class DriveLogicTest {
 
     @Test
     fun shownSocPrefersTheClusterFigure() {
-        assertEquals(0.0, DriveUiState.demoGas.shownSocPercent, 0.0)
-        assertEquals(16.0, DriveUiState.demoGas.copy(displayedSocPercent = null).shownSocPercent, 0.0)
+        assertEquals(0.0, requireNotNull(DriveUiState.demoGas.shownSocPercent), 0.0)
+        assertEquals(16.0, requireNotNull(DriveUiState.demoGas.copy(displayedSocPercent = null).shownSocPercent), 0.0)
     }
 
     @Test

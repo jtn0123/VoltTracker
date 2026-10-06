@@ -47,6 +47,20 @@ describe('telemetry.ts — stale live data and session reset regressions', () =>
     expect(VD.state.telemetry).toEqual(expect.any(Object));
   });
 
+  it('shows recording health independently of an active connection', () => {
+    const banner = document.getElementById('recordingBanner');
+    const detail = document.getElementById('recordingBannerDetail');
+    const VD = window.VoltDashboard;
+    VD.setStatus({ state: 'connected', recordingWarning: 'Telemetry could not be saved.' });
+    expect(banner.hidden).toBe(false);
+    expect(detail.textContent).toBe('Telemetry could not be saved.');
+    expect(VD.state.status.state).toBe('connected');
+    VD.setStatus({ state: 'connected' });
+    expect(banner.hidden).toBe(false);
+    VD.setStatus({ state: 'connected', recordingWarning: '' });
+    expect(banner.hidden).toBe(true);
+  });
+
   it('resets live counters when a new real session restarts sample numbering', () => {
     const VD = window.VoltDashboard;
     VD.updateTelemetry({

@@ -85,6 +85,49 @@ jobs:
               - 'mobile/android/scripts/install-emulator-diagnostics.sh'
               - 'mobile/android/tools/perf/check_obd_latency.py'
 
+  native-visual:
+    needs: [changes]
+    if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
+    # Android native graphics/font fixtures plus a pinned Apple Silicon host.
+    runs-on: macos-15
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: mobile/android
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: gradle/actions/wrapper-validation@9c971963bec38e04b3d30dcc455b5382be2fdbfb # v6.3.0
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: mobile/android/dashboard-tests/package-lock.json
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          # The legacy "tools" package is unavailable on this host. AGP installs
+          # its platform/build-tools after setup accepts the SDK licenses.
+          packages: 'platform-tools'
+      - name: Verify committed native screenshots
+        run: ./gradlew --no-daemon --no-configuration-cache verifyNativeVisual -Dorg.gradle.java.installations.auto-detect=false -Dorg.gradle.java.installations.paths="$JAVA_HOME"
+      - name: Upload native visual results and diffs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: native-visual-results
+          path: |
+            mobile/android/app/build/reports/tests/testDebugUnitTest/
+            mobile/android/app/build/outputs/roborazzi/
+            mobile/android/app/build/test-results/
+            mobile/android/app/src/test/java/com/volttracker/obdpoc/ui/baselines/*_actual.png
+            mobile/android/app/src/test/java/com/volttracker/obdpoc/ui/baselines/*_compare.png
+
   unit-tests:
     needs: [changes]
     if: github.event_name != 'pull_request' || needs.changes.outputs.android == 'true'
@@ -994,6 +1037,7 @@ jobs:
       [
         changes,
         unit-tests,
+        native-visual,
         static-analysis,
         build-dashboard,
         dashboard-tests,

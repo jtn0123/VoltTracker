@@ -124,8 +124,8 @@ fun ArcGauge(
         )
     // The ring eases to each new reading instead of jumping a poll at a time. Read while drawing,
     // so a glide repaints the canvas without recomposing the screen.
-    val power = glideState(state.powerKw.toFloat(), "gauge-power")
-    val soc = glideState(state.shownSocPercent.toFloat(), "gauge-soc")
+    val power = glideState((state.powerKw ?: 0.0).toFloat(), "gauge-power")
+    val soc = glideState((state.shownSocPercent ?: 0.0).toFloat(), "gauge-soc")
     val rpm = glideState(state.rpm.toFloat(), "gauge-rpm")
     // The mockups' 380 × 350 box, scaled down to fit a narrower phone: every offset below follows
     // the ring, so the centre text and the gear row stay where they belong on a 360dp screen.
@@ -514,8 +514,8 @@ private fun DriveCenter(
 ) {
     val color = powerColor(pal, state.powerRole)
     val units = state.units
-    val speed = glideWhole(units.speed(state.speedMph.toDouble()), "gauge-speed")
-    val shownKw = glideTenths(state.powerKw, "gauge-power-text")
+    val speed = state.speedMph?.let { "${glideWhole(units.speed(it.toDouble()), "gauge-speed")}" } ?: DASH
+    val shownKw = glideTenths(state.powerKw ?: 0.0, "gauge-power-text")
     val regen = state.regenerating && shownKw < 0
     Spacer(Modifier.height(10.dp))
     HeroNumber(
@@ -533,7 +533,7 @@ private fun DriveCenter(
     Text(
         text =
             buildAnnotatedString {
-                append((if (regen) "−" else "") + oneDecimal(abs(shownKw)))
+                append(if (state.powerKw == null) DASH else (if (regen) "−" else "") + oneDecimal(abs(shownKw)))
                 withStyle(SpanStyle(fontFamily = VoltFonts.hanken, fontSize = 13.sp, color = pal.muted)) {
                     append(if (regen) " kW regen" else " kW power")
                 }
@@ -597,7 +597,7 @@ private fun ParkedCenter(
         )
         return
     }
-    SocNumber("${glideWhole(state.shownSocPercent.toInt(), "gauge-soc-text")}", k)
+    SocNumber(state.shownSocPercent?.let { "${glideWhole(it.toInt(), "gauge-soc-text")}" } ?: DASH, k)
     Text(
         text =
             state.evRangeMiles?.let { "${state.units.distanceWhole(it)} ${state.units.distanceUnit} electric range" }
@@ -614,7 +614,7 @@ private fun ChargeCenter(
     k: Float,
     h24: Boolean,
 ) {
-    SocNumber("${glideWhole(state.shownSocPercent.toInt(), "gauge-soc-text")}", k)
+    SocNumber(state.shownSocPercent?.let { "${glideWhole(it.toInt(), "gauge-soc-text")}" } ?: DASH, k)
     val text = VoltColors.textPrimary
     Text(
         text =

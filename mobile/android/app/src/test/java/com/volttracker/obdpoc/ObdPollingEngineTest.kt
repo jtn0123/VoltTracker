@@ -84,6 +84,7 @@ class ObdPollingEngineTest {
         // Drain the recorder so background lifecycle writes do not leak across tests.
         try {
             service.onDestroy()
+            assertTrue(service.awaitPersistenceTeardownForTest(10_000L))
         } catch (ignored: RuntimeException) {
             // onDestroy stops the foreground service which was never started here; safe.
         }
@@ -282,7 +283,7 @@ class ObdPollingEngineTest {
     fun blankAddressAbortsBeforeOpeningSocket() {
         openSession()
 
-        engine.runBluetoothLoop("   ", false)
+        runEngineUntilFinished { engine.runBluetoothLoop("   ", false) }
 
         assertEquals("blank adapter address must not open a socket", 0, engine.openCount.get())
         assertTrue("blank address must not transact commands", fake.commandLog.isEmpty())
@@ -300,7 +301,7 @@ class ObdPollingEngineTest {
         openSession()
         service.cancelRetryRequested = true
 
-        engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false)
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertEquals("user cancel before connect must not open a socket", 0, engine.openCount.get())
         assertFalse("cancel request should be consumed", service.cancelRetryRequested)
@@ -315,7 +316,7 @@ class ObdPollingEngineTest {
         engine.bluetoothReady = false
         openSession()
 
-        engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false)
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertEquals("Bluetooth-off preflight must not open a socket", 0, engine.openCount.get())
         assertTrue("Bluetooth-off preflight must not transact commands", fake.commandLog.isEmpty())

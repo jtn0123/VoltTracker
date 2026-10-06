@@ -81,8 +81,19 @@ fun energyFlow(state: DriveUiState): EnergyFlow {
         engineActive = gasOn,
         regen = regen,
         gridValue = if (plugged) "${oneDecimal(state.chargeKw)} kW" else "Unplugged",
-        batteryValue = if (state.connected) "${state.shownSocPercent.toInt()}%" else DASH,
-        driveValue = if (driving) "${String.format(Locale.US, "%.0f", state.powerKw)} kW" else "Idle",
+        batteryValue = if (state.connected) state.shownSocPercent?.let { "${it.toInt()}%" } ?: DASH else DASH,
+        driveValue =
+            if (driving) {
+                state.powerKw?.let {
+                    "${String.format(
+                        Locale.US,
+                        "%.0f",
+                        it,
+                    )} kW"
+                } ?: DASH
+            } else {
+                "Idle"
+            },
         engineValue = if (gasOn) "${String.format(Locale.US, "%,d", state.rpm)} rpm" else "Off",
     )
 }

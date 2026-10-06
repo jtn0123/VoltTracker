@@ -159,7 +159,7 @@ class LiveHistoryAndUnitsTest {
 
         store.onStatus(JSONObject().put("state", "disconnected"))
         val d = store.state.value.drive
-        assertEquals(0.0, d.powerKw, 0.0)
+        assertNull(d.powerKw)
         assertNull(d.packVolts)
         assertNull(d.packAmps)
         assertNull(d.packTempF)

@@ -614,6 +614,8 @@ interface VoltDtcInfo {
  *  optional here; the rest are the fields the telemetry / troubleshooter /
  *  connection-status readers touch. */
 interface VoltStatus {
+  /** Independent of Bluetooth connection state; empty when a fresh recording has no known failure. */
+  recordingWarning?: string;
   state?: string;
   detail?: string;
   adapter?: string;

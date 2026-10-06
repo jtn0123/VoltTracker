@@ -138,8 +138,8 @@ internal fun RangeCard(state: DriveUiState) {
         }
         val evSub =
             when {
-                !state.connected -> "Battery not reported"
-                gasMode && state.atReserve -> "Battery at reserve · holding ${state.socPercent.toInt()}%"
+                !state.connected || soc == null -> "Battery not reported"
+                gasMode && state.atReserve -> "Battery at reserve · holding ${soc.toInt()}%"
                 else -> "${soc.toInt()}% battery"
             }
         RangeRow(
@@ -148,7 +148,7 @@ internal fun RangeCard(state: DriveUiState) {
             title = "Electric",
             distance = state.evRangeMiles?.let(state.units::distanceWhole),
             unit = state.units.distanceUnit,
-            fraction = if (state.connected) (soc / 100).toFloat() else 0f,
+            fraction = soc?.let { (it / 100).toFloat() }?.takeIf { state.connected },
             sub = evSub,
             dim = gasMode,
         )

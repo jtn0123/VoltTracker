@@ -13,6 +13,9 @@ import com.volttracker.obdpoc.ui.trips.TripsUiState
  * The live store mutates this atomically; screens stay pure functions of it.
  */
 data class VoltAppUiState(
+    val historyRefreshing: Boolean = false,
+    val connectionFailure: ConnectionFailure? = null,
+    val recordingWarning: String? = null,
     val drive: DriveUiState = DriveUiState(),
     val charge: ChargeUiState = ChargeUiState(),
     val trips: TripsUiState = TripsUiState(),
@@ -20,4 +23,10 @@ data class VoltAppUiState(
     val car: CarUiState = CarUiState(),
     val diag: DiagUiState = DiagUiState(),
     val settings: SettingsUiState = SettingsUiState(),
+)
+
+data class ConnectionFailure(
+    val detail: String,
+    val failureClass: String? = null,
+    val competingApps: String? = null,
 )

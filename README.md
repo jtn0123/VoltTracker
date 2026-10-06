@@ -2,7 +2,8 @@
 
 An Android app for the 2017 Chevy Volt (Gen 2). It connects directly to a
 Bluetooth OBD-II adapter, logs telemetry and GPS routes to an on-device SQLite
-database, and shows a mobile dashboard in a WebView. It is designed to replace
+database, and opens a native Jetpack Compose dashboard. Settings also opens the
+classic WebView dashboard for advanced tools. It is designed to replace
 Torque as the day-to-day OBD bridge — fully standalone, with all data kept on
 the phone.
 
@@ -16,7 +17,8 @@ diagram and dashboard screenshots.
 
 - Connects to a paired ELM327-style OBD-II adapter over Bluetooth Classic.
 - Logs live OBD telemetry + GPS to a local SQLite database; works offline.
-- Dashboard screens: Drive, Trips, Map (Leaflet), Charge, Insights, Diagnostics.
+- Native tabs: Drive, Charge, Trips, Insights, Health, and Settings. Advanced
+  tools remain available through the classic dashboard, including its Leaflet map.
 - All data stays on-device. **Back up data** exports the full database to a file
   via the Android share sheet, so you can keep a copy anywhere (cloud, PC).
 
@@ -24,7 +26,7 @@ diagram and dashboard screenshots.
 
 | Part        | Location                                       | What                                            |
 |-------------|------------------------------------------------|-------------------------------------------------|
-| Android app | `mobile/android/`                              | Kotlin source, Gradle build, WebView, SQLite    |
+| Android app | `mobile/android/`                              | Kotlin, Compose launcher, classic WebView, SQLite |
 | Dashboard   | `mobile/android/app/src/main/dashboard-src/`   | TypeScript + HTML partials (built by Gradle)    |
 | Docs        | `mobile/android/docs/`                         | Architecture roadmap, ADRs, field guides        |
 | CI          | `.github/workflows/`                           | Tests, lint, coverage, CodeQL, release pipeline |

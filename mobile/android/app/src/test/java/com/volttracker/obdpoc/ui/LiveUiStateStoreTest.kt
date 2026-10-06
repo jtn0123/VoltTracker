@@ -62,8 +62,8 @@ class LiveUiStateStoreTest {
         val drive = store.state.value.drive
 
         assertEquals(39, drive.speedMph) // 64 kph ≈ 39.8 mph, truncated
-        assertEquals(21.4, drive.powerKw, 1e-9)
-        assertEquals(62.0, drive.socPercent, 1e-9)
+        assertEquals(21.4, requireNotNull(drive.powerKw), 1e-9)
+        assertEquals(62.0, requireNotNull(drive.socPercent), 1e-9)
         assertEquals(364.0, drive.packVolts ?: -1.0, 1e-9)
         assertEquals(58.8, drive.packAmps ?: -1.0, 1e-9)
         assertEquals(73, drive.packTempF) // 23 C
@@ -107,14 +107,14 @@ class LiveUiStateStoreTest {
         assertNull(store.state.value.charge.evRangeMiles)
 
         store.onTelemetry(sample { put("evRangeKm", 42).put("evRangeStaleMs", 1_000) })
-        assertEquals(62.0, store.state.value.charge.socPercent, 1e-9)
+        assertEquals(62.0, requireNotNull(store.state.value.charge.socPercent), 1e-9)
         assertEquals(26.1, store.state.value.charge.evRangeMiles ?: Double.NaN, 0.05) // 42 km
 
         store.onTelemetry(sample { put("evRangeKm", 42).put("evRangeStaleMs", 180_000) })
         assertNull(store.state.value.charge.evRangeMiles)
 
         store.onTelemetryBackfill(listOf(sample { put("soc", 55).put("evRangeKm", 30) }))
-        assertEquals(55.0, store.state.value.charge.socPercent, 1e-9)
+        assertEquals(55.0, requireNotNull(store.state.value.charge.socPercent), 1e-9)
         assertEquals(18.6, store.state.value.charge.evRangeMiles ?: Double.NaN, 0.05) // 30 km
     }
 
@@ -365,7 +365,7 @@ class LiveUiStateStoreTest {
         )
         val drive = store.state.value.drive
 
-        assertEquals(62.0, drive.socPercent, 1e-9) // JSON null → retained
+        assertNull(drive.socPercent) // An explicit missing reading is unknown, never a retained zero.
         assertEquals(364.0, drive.packVolts ?: -1.0, 1e-9) // NaN → retained
         assertEquals(12.6, drive.auxVolts ?: -1.0, 1e-9) // fallback key used
     }
@@ -620,8 +620,8 @@ class LiveUiStateStoreTest {
         assertNull(drive.locked)
         assertNull(drive.tripMiPerKwh)
         assertNull(drive.transTempF)
-        assertEquals(0, drive.speedMph)
-        assertEquals(0.0, drive.powerKw, 0.0)
+        assertNull(drive.speedMph)
+        assertNull(drive.powerKw)
         assertEquals("--", drive.gear)
         assertTrue(drive.powerTrace.isEmpty())
         assertTrue(drive.speedTrace.isEmpty())
@@ -675,13 +675,13 @@ class LiveUiStateStoreTest {
         store.onStatus(JSONObject().put("state", "demo"))
         store.onStatus(JSONObject().put("state", "connected").put("adapter", "Demo stream"))
         store.onTelemetry(sample { put("source", "demo") })
-        assertTrue(store.state.value.charge.socPercent > 0.0)
+        assertTrue(requireNotNull(store.state.value.charge.socPercent) > 0.0)
 
         store.onStatus(JSONObject().put("state", "idle").put("adapter", "Demo stream"))
         val s = store.state.value
         assertEquals("No adapter", s.drive.statusLabel)
         assertEquals("No adapter", s.charge.statusLabel)
-        assertEquals(0.0, s.charge.socPercent, 0.0)
+        assertNull(s.charge.socPercent)
         assertNull(s.charge.displayedSocPercent)
     }
 
@@ -690,12 +690,12 @@ class LiveUiStateStoreTest {
         val store = LiveUiStateStore()
         store.onStatus(JSONObject().put("state", "connected").put("adapter", "OBDLink MX+"))
         store.onTelemetry(sample())
-        val soc = store.state.value.charge.socPercent
+        val soc = requireNotNull(store.state.value.charge.socPercent)
         assertTrue(soc > 0.0)
 
         store.onStatus(JSONObject().put("state", "idle").put("adapter", "OBDLink MX+"))
         val s = store.state.value
         assertEquals("Not connected", s.drive.statusLabel)
-        assertEquals(soc, s.charge.socPercent, 0.0)
+        assertEquals(soc, requireNotNull(s.charge.socPercent), 0.0)
     }
 }

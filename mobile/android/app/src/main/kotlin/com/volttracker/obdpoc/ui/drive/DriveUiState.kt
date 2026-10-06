@@ -40,10 +40,10 @@ data class DriveUiState(
     val adapterLabel: String = "--",
     val phase: DrivePhase = DrivePhase.PARKED,
     /** Signed pack power in kW: positive = drive (discharge), negative = regen. */
-    val powerKw: Double = 0.0,
+    val powerKw: Double? = null,
     val maxDriveKw: Double = 40.0,
     val maxRegenKw: Double = 40.0,
-    val speedMph: Int = 0,
+    val speedMph: Int? = null,
     /** Recent speed samples (mph), oldest first — the hero sparkline. */
     val speedTrace: List<Float> = emptyList(),
     /** Signed pack power samples (kW) over the last minute, oldest first. */
@@ -53,7 +53,7 @@ data class DriveUiState(
     /** SOC samples (%) across the session, oldest first. */
     val socTrace: List<Float> = emptyList(),
     /** Raw pack state of charge (%), as the BECM reports it. */
-    val socPercent: Double = 0.0,
+    val socPercent: Double? = null,
     /** The SOC the car's cluster shows (%), or null when the car hasn't reported it. */
     val displayedSocPercent: Double? = null,
     /**

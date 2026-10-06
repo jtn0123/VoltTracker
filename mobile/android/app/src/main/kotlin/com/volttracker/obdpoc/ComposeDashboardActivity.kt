@@ -17,6 +17,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -206,6 +207,12 @@ class ComposeDashboardActivity :
         if (launch.startDemo && savedInstanceState == null) startObdService(ObdService.ACTION_DEMO, null, null)
         setContent {
             val state by store.state.collectAsState()
+            LaunchedEffect(Unit) {
+                while (true) {
+                    kotlinx.coroutines.delay(1_000L)
+                    store.expireCoreReadings()
+                }
+            }
             val dark = state.settings.appearance.resolvesDark(isSystemInDarkTheme())
             val palette =
                 voltPalette(dark, state.settings.darkStyle, state.settings.accent, state.settings.highContrast)
@@ -223,6 +230,8 @@ class ComposeDashboardActivity :
                             onOpenClassicDashboard = ::openClassicDashboard,
                             onOpenClassicTrip = ::openClassicTrip,
                             onOpenClassicView = ::openClassicView,
+                            onOpenTroubleshooter = ::openTroubleshooter,
+                            onDismissConnectionFailure = store::dismissConnectionFailure,
                             onConnect = ::connectLastAdapter,
                             onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
                             onStopDemo = ::stopObdService,
@@ -372,12 +381,16 @@ class ComposeDashboardActivity :
         startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_VIEW, view))
     }
 
+    internal fun openTroubleshooter() {
+        startActivity(Intent(this, MainActivity::class.java).putExtra(MainActivity.EXTRA_OPEN_TROUBLESHOOTER, true))
+    }
+
     private fun maybeAutoConnect() {
         autoConnect.maybeConnect(
             trigger = AutoConnectController.TRIGGER_APP_RESUME,
             observedAddress = null,
             bluetoothReady = hasConnectPermission() && BluetoothAdapters.get(this)?.isEnabled == true,
-            loggingActive = ObdService.hasActiveSession(),
+            loggingActive = isLoggingActive(),
             startConnect = { address, name -> startObdService(ObdService.ACTION_CONNECT, address, name) },
             publishStatus = { state, detail, _ ->
                 store.onStatus(
@@ -414,7 +427,7 @@ class ComposeDashboardActivity :
     }
 
     /** Asks the live session for a one-minute body-bus listen (see SwcanListenRunner). */
-    private fun startBodyTest() {
+    internal fun startBodyTest() {
         try {
             startService(Intent(this, ObdService::class.java).setAction(ObdService.ACTION_BODY_TEST))
             showMessage("Listening for 1 minute. Open and close doors, lock and unlock, move a window.")

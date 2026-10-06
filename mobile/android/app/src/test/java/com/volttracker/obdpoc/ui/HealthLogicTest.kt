@@ -18,7 +18,7 @@ import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.diag.liveSignalsLine
 import com.volttracker.obdpoc.ui.diag.pill
 import com.volttracker.obdpoc.ui.diag.resistanceLine
-import com.volttracker.obdpoc.ui.diag.safeToDrive
+import com.volttracker.obdpoc.ui.diag.serviceGuidance
 import com.volttracker.obdpoc.ui.diag.statusCounts
 import com.volttracker.obdpoc.ui.diag.statusLine
 import com.volttracker.obdpoc.ui.diag.summary
@@ -32,7 +32,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Health's copy: code names, pills, the safe-to-drive verdict, the hero and the shared report. */
+/** Health's copy: code names, pills, qualified service guidance, the hero and the shared report. */
 class HealthLogicTest {
     private val now = DiagUiState.DEMO_NOW_MS
     private val demo = DiagUiState.demo
@@ -83,28 +83,22 @@ class HealthLogicTest {
     }
 
     @Test
-    fun safeToDriveFollowsTheWorstCode() {
-        assertNull(safeToDrive(emptyList()))
-        assertEquals(
-            HealthLine(
-                "Safe to drive — have it serviced soon. Neither code affects the electric drive system.",
-                PillTone.EV,
-            ),
-            safeToDrive(listOf(catalyst, cam)),
-        )
-        assertEquals(
-            "Safe to drive — have it serviced soon. It doesn't affect the electric drive system.",
-            safeToDrive(listOf(catalyst))?.text,
-        )
-        assertEquals(
-            "Safe to drive — mention it at your next service. None of them affect the electric drive system.",
-            safeToDrive(List(3) { DtcCode("P030$it", severity = DtcSeverity.INFO) })?.text,
-        )
-        assertEquals(
-            "Safe to drive — have it serviced soon.",
-            safeToDrive(listOf(DtcCode("B1000")))?.text,
-        )
-        assertEquals(PillTone.BAD, safeToDrive(listOf(catalyst, isolation))?.tone)
+    fun serviceGuidanceReportsPriorityWithoutDrivingAssurances() {
+        assertNull(serviceGuidance(emptyList()))
+        val warning = serviceGuidance(listOf(catalyst, cam))!!
+        assertEquals(PillTone.WARN, warning.tone)
+        assertTrue(warning.text.startsWith("Service soon"))
+        assertTrue(warning.text.contains("Driving safety cannot be determined"))
+        val informational =
+            serviceGuidance(
+                listOf(DtcCode("C07B0", description = "TPMS sensor", severity = DtcSeverity.INFO)),
+            )!!
+        assertEquals(PillTone.NEUTRAL, informational.tone)
+        assertTrue(informational.text.startsWith("Monitor"))
+        val unknown = serviceGuidance(listOf(DtcCode("B1000")))!!
+        assertTrue(unknown.text.contains("not in the catalog"))
+        assertFalse(unknown.text.contains("Safe to drive", ignoreCase = true))
+        assertEquals(PillTone.BAD, serviceGuidance(listOf(catalyst, isolation))?.tone)
     }
 
     @Test
@@ -232,7 +226,7 @@ class HealthLogicTest {
                     "(Bank 1 · seen 4× · first 3 days ago)",
             ),
         )
-        assertTrue(report.contains("Neither code affects the electric drive system."))
+        assertTrue(report.contains("Driving safety cannot be determined from these codes alone."))
         assertTrue(report.contains("HV battery: 91% capacity health, 47.3 Ah of 52 Ah new, cell spread 19 mV"))
         val plain = healthReport(DiagUiState(), hvBattery(DriveUiState(), null, null), demo = false)
         assertEquals("Volt Tracker health report\n\nNot scanned yet (Scan to read the car's trouble codes.)", plain)

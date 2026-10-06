@@ -73,6 +73,90 @@ class ComposeDashboardToolsTest {
     }
 
     @Test
+    fun theBodyTestDispatchesTheOneMinuteListenAction() {
+        activity.startBodyTest()
+        assertEquals(ObdService.ACTION_BODY_TEST, shadowOf(activity).nextStartedService.action)
+        assertTrue(ShadowToast.getTextOfLatestToast().toString().contains("Listening for 1 minute"))
+    }
+
+    @Test
+    fun healthTroubleshootingOpensTheClassicTroubleshooter() {
+        activity.openTroubleshooter()
+        val intent = shadowOf(activity).nextStartedActivity
+        assertEquals(MainActivity::class.java.name, intent.component?.className)
+        assertTrue(intent.getBooleanExtra(MainActivity.EXTRA_OPEN_TROUBLESHOOTER, false))
+    }
+
+    private fun readyBluetooth() {
+        org.robolectric.Shadows
+            .shadowOf(org.robolectric.RuntimeEnvironment.getApplication())
+            .grantPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        @Suppress("DEPRECATION")
+        val radio = android.bluetooth.BluetoothAdapter.getDefaultAdapter()
+        shadowOf(radio).setEnabled(true)
+    }
+
+    @Test
+    fun pickingAnAdapterRemembersItAndStartsItsConnection() {
+        readyBluetooth()
+        activity.runCommand(SettingsCommand.PickAdapter("AA:BB:CC:DD:EE:FF", "OBDLink MX+"))
+        val prefs = activity.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        assertEquals("AA:BB:CC:DD:EE:FF", prefs.getString(DeviceCatalog.PREF_LAST_ADDRESS, ""))
+        assertEquals("OBDLink MX+", prefs.getString(DeviceCatalog.PREF_LAST_NAME, ""))
+        val intent = shadowOf(activity).nextStartedService
+        assertEquals(ObdService.ACTION_CONNECT, intent.action)
+        assertEquals("AA:BB:CC:DD:EE:FF", intent.getStringExtra(ObdService.EXTRA_ADDRESS))
+    }
+
+    @Test
+    fun resumeAutoConnectHonorsLoggingPermissionAndCooldownGuards() {
+        val prefs = activity.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE)
+        DeviceCatalog(activity, prefs).remember("AA:BB:CC:DD:EE:FF", "OBDLink MX+")
+        prefs.edit { putBoolean(AutoConnectController.PREF_AUTO_CONNECT_ENABLED, true) }
+        activity.loggingProbe = { true }
+        readyBluetooth()
+        controller.start().resume()
+        assertNull(shadowOf(activity).nextStartedService)
+        controller.pause()
+        activity.loggingProbe = { false }
+        shadowOf(
+            org.robolectric.RuntimeEnvironment.getApplication(),
+        ).denyPermissions(android.Manifest.permission.BLUETOOTH_CONNECT)
+        controller.resume()
+        assertNull(shadowOf(activity).nextStartedService)
+        controller.pause()
+        readyBluetooth()
+        controller.resume()
+        val started = shadowOf(activity).nextStartedService
+        assertEquals(ObdService.ACTION_CONNECT, started.action)
+        assertEquals("AA:BB:CC:DD:EE:FF", started.getStringExtra(ObdService.EXTRA_ADDRESS))
+        controller.pause().resume()
+        assertNull("repeat resume stays in cooldown", shadowOf(activity).nextStartedService)
+    }
+
+    @Test
+    fun refreshStaysActiveUntilASlowReadCompletesAndStopsOnFailure() {
+        val entered = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        activity.history.chargeReader = {
+            entered.countDown()
+            assertTrue("history reader was released", release.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            throw IllegalStateException("database locked")
+        }
+        activity.history.loadCharges()
+        try {
+            assertTrue(entered.await(5, java.util.concurrent.TimeUnit.SECONDS))
+            Thread.sleep(750L)
+            shadowOf(Looper.getMainLooper()).idle()
+            assertTrue("read still running after the old 700ms timer", activity.uiState().historyRefreshing)
+        } finally {
+            release.countDown()
+        }
+        waitFor { !activity.uiState().historyRefreshing }
+        assertTrue(!activity.uiState().historyRefreshing)
+    }
+
+    @Test
     fun theTireTestRunsTheTireProbeOnTheRememberedAdapter() {
         activity.getSharedPreferences(AppPrefs.FILE, Context.MODE_PRIVATE).edit {
             putString(DeviceCatalog.PREF_LAST_ADDRESS, "AA:BB:CC:DD:EE:FF")

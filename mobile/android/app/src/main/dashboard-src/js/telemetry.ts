@@ -280,8 +280,17 @@ import { driveGear, gearDisplayText } from "./gear";
     const wasActive = isActiveStatus();
     const parsed = parsePayload<unknown>(payload, {});
     validatePayload("setStatus", parsed);
-    const status = asPayloadRecord(parsed) as VoltStatus;
+    const received = asPayloadRecord(parsed) as VoltStatus;
+    const status = !("recordingWarning" in received) && state.status?.recordingWarning
+      ? { ...received, recordingWarning: state.status.recordingWarning }
+      : received;
     setState({ status });
+    const recordingBanner = el("recordingBanner");
+    if (recordingBanner) {
+      const recordingWarning = typeof status.recordingWarning === "string" ? status.recordingWarning : "";
+      recordingBanner.hidden = !recordingWarning;
+      setText("recordingBannerDetail", recordingWarning);
+    }
     const badge = el("stateBadge");
     const next = status.state || "idle";
     setDataState(badge, asDataState(next));

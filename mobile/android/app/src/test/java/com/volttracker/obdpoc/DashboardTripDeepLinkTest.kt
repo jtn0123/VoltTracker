@@ -38,6 +38,20 @@ class DashboardTripDeepLinkTest {
     }
 
     @Test
+    fun troubleshootingHasItsOwnDestinationAndWaitsForPageReadiness() {
+        var opened = 0
+        val help = DashboardTripDeepLink({ ready }, { _, _ -> }, { views += it }, { opened++ })
+        help.capture(Intent().putExtra(MainActivity.EXTRA_OPEN_TROUBLESHOOTER, true))
+        help.publishPending()
+        assertEquals(0, opened)
+        ready = true
+        help.publishPending()
+        help.publishPending()
+        assertEquals(1, opened)
+        assertTrue(views.isEmpty())
+    }
+
+    @Test
     fun aDriveLinkOpensItsReceipt() {
         ready = true
         link.capture(

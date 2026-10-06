@@ -393,7 +393,7 @@ import { kph } from "./unit-types";
       // genuinely urgent — a currently-active fault, or a code whose card-level
       // severity actually resolves to "critical". A permanent-but-warning code
       // (e.g. an unknown P-code) must NOT paint the badge red while its card
-      // reads "generally safe to drive".
+      // describes service priority rather than a driving-safety assurance.
       const hasCurrent = Number(statusCounts.current || 0) > 0;
       const hasCritical = codes.some((code) => {
         const info = typeof VD.dtcInfo === "function" ? VD.dtcInfo(String(code.dtc || "")) : null;
@@ -482,12 +482,8 @@ import { kph } from "./unit-types";
   //   C (chassis: ABS / brakes / steering) → critical  (affects vehicle control)
   //   P (powertrain), B (body), U (network) → warning   (service soon)
   //   anything else → info
-  // The P-family default is deliberately "warning", NOT "critical": without DB
-  // metadata we can't tell a safety-critical powertrain fault from a routine
-  // emissions code, and over-calling every unknown P-code "Stop safely" would
-  // cry wolf on the most common scan result. Erring toward "warning" (service
-  // soon — generally safe to drive) is the conservative, honest call for an
-  // unknown powertrain code; the DB promotes the truly critical ones above.
+  // A family fallback is only a display priority. An unlisted code is not enough
+  // evidence to determine driving safety; its guidance keeps that uncertainty visible.
   function dtcSeverity(rawCode: unknown, metaSeverity: string | null): "critical" | "warning" | "info" {
     const meta = String(metaSeverity || "").toLowerCase();
     if (meta === "critical" || meta === "warning" || meta === "info") return meta;
@@ -505,11 +501,14 @@ import { kph } from "./unit-types";
     return "Info";
   }
 
-  // Plain-language "is it safe to drive?" line per severity bucket.
-  function drivabilityLine(severity: "critical" | "warning" | "info"): string {
-    if (severity === "critical") return "Stop safely — have it checked before driving on";
-    if (severity === "warning") return "Service soon — generally safe to drive in the meantime";
-    return "Safe to drive — monitor at your next service";
+  // Service priority and catalog confidence, without declaring the vehicle safe.
+  function drivabilityLine(severity: "critical" | "warning" | "info", known: boolean): string {
+    let priority: string;
+    if (!known) priority = "Unrecognized code — review with a qualified technician";
+    else if (severity === "critical") priority = "Urgent service — follow the vehicle's warning messages";
+    else if (severity === "warning") priority = "Service soon — have this fault checked";
+    else priority = "Monitor at your next service";
+    return `${priority}. Driving safety cannot be determined from these codes alone.`;
   }
 
   // Whether a stored DTC can be erased by the OBD-II Mode 04 clear command. Permanent
@@ -546,7 +545,7 @@ import { kph } from "./unit-types";
     codeB.textContent = code.dtc || "--";
     // Severity pill + plain-language drivability line. Both are derived from the
     // dtc-causes metadata when present, otherwise from the code family (see
-    // dtcSeverity), so every scanned code carries a "safe to drive" read.
+    // dtcSeverity), without certifying driving safety.
     const sevBadge = document.createElement("span");
     sevBadge.className = "dtc-sev";
     sevBadge.dataset.severity = severity;
@@ -587,7 +586,7 @@ import { kph } from "./unit-types";
     const drive = document.createElement("span");
     drive.className = "dtc-drivability";
     drive.dataset.severity = severity;
-    drive.textContent = drivabilityLine(severity);
+    drive.textContent = drivabilityLine(severity, !!info?.description);
     moduleBlock.append(drive);
 
     const small = document.createElement("small");
