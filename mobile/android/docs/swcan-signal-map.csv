@@ -1,0 +1,136 @@
+id,arb,src,bytes,name,gm_signal,scale,unit,status,app_key,evidence
+0C414040,20A,40,1 bit0,door lock state (1 = locked),Door_Lock_Command,,,decoded,doorLockState,"09-29: locked from inside, matched"
+0C414040,20A,40,3,"lock source: 01 panel, 05 fob, 06 keyless, 07 OnStar, 0A auto",Door_Lock_Command,enum,,decoded,doorLockSource,09-29: 01 when locked from the inside panel
+10248040,124,40,2,12 V battery voltage,Battery_Voltage.BatVlt,0.1*raw + 3,V,decoded,aux12vVoltage,"r .985 vs polled 12 V (fit 0.092*raw + 3.5, 2 sessions); 0x61 = 12.7 V in regulated-voltage mode"
+10248040,124,40,3,12 V battery state of charge,Battery_Voltage.BatSOC,0.392,%,decoded,aux12vSocPct,always FF (not available) on this car; the app drops it
+10248040,124,40,5,"12 V battery current, charge positive",Battery_Voltage.BattCrntFltrd,signed 0.5,A,decoded-unchecked,aux12vCurrentA,not compared against anything yet
+103D4040,1EA,40,2;3;4;5,"tire pressures FL RL FR RR (0, FE, FF = no reading)",Tire_Pressure_Sensors_LS.TireLFPrs/TireLRPrs/TireRFPrs/TireRRPrs,4,kPa,decoded,tirePressureFlKpa;tirePressureRlKpa;tirePressureFrKpa;tirePressureRrKpa,"10-04: sent once per drive, in the first seconds after start. GM's layout confirms the corner order (b2 LF, b3 LR, b4 RF, b5 RR)"
+102700CB,138,CB,1,A/C evaporator outlet air temperature,Thrml_Ref_Compressor_Status_LS.EvpCorOtltAirTmpCalcd,0.5*raw - 40,C,decoded,acEvapTempC,09-29: rose after A/C off
+102700CB,138,CB,2-3 (14 bits),A/C compressor speed,Thrml_Ref_Compressor_Status_LS.ThrmlRefCompSpd,1,rpm,decoded,acCompressorRpm,0 with A/C off; tracks 0x102740CB b4 (r .998)
+102740CB,13A,CB,4,A/C compressor power,Climate_Control_Status_LS.ClmCntCmpPwrUsdClc,0.04,kW,decoded,acCompressorKw,"10-04: about 1.1 kW with the A/C on, 3.6 kW at 6900 rpm; r .998 vs acCompressorRpm. App reads it from #165"
+10734099,39A,99,0 bits4-5,"A/C state: 1 off, 2 on",Climate_Control_General_Status.ACCompModReq,enum,,decoded,acState,09-29: matched the A/C button
+10814099,40A,99,1,front blower speed,Climate_Control_Basic_Status_LS.ClmCntFrBlwFnSp,0.392,%,decoded,blowerPct,"09-29: ramped 0, 27, 27 (A/C off), 0; 10-04: 30-51 % on an A/C drive. App reads byte 1 from #165 (byte 2 before)"
+10814099,40A,99,2,A/C compressor load estimate,Climate_Control_Basic_Status_LS.AirCndCmptLdEst,0.392,%,strong,,"non-zero whenever the A/C runs, even with the fan at rest; the app read this as the blower before #165"
+10814099,40A,99,0 bit5,A/C active,Climate_Control_Basic_Status_LS.AirCndActIO,,,strong,,"set with the A/C on, clear when off, on both days"
+10440099,220,99,4,cabin air temperature estimate (byte 0 bit2 = invalid),Alarm_2_Request_LS.EstBulkIntAirTmp,0.5*raw - 40,C,decoded,cabinTempEstC,10-04: 18 C with the A/C running. App reads byte 4 from #165 (byte 5 before); sent about once in 20 min
+10440099,220,99,5,roof inner surface temperature,Alarm_2_Request_LS.EstIntRfSrfcTmp,0.5*raw - 40,C,strong,,the app showed this as cabin temperature before #165
+10440099,220,99,6,dashboard surface temperature,Alarm_2_Request_LS.EstIntHorzDshSrfTmp,raw - 40,C,dbc,,layout from GM; not compared
+106340CB,31A,CB,1,power electronics coolant temperature,Power_Elec_Info_LS.PwrElecCoolLpTemp,raw - 40,C,decoded,peCoolantTempC,"10-04: r .98 vs polled pemCoolantTempC (1.03*raw - 43, 1 session)"
+106B8040,35C,40,0-1 (14 bits from bit 5),wheel speed front left (driven); byte 0 bit6 = invalid,Wheel_Grnd_Velocity_LS.WhlGrndVlctyLftDrvn,1/32,km/h,decoded,wheelSpeedFlKph,"r .995-.999 vs speedKph, 2 sessions. App reads it from #165"
+106B8040,35C,40,2-3 (14 bits from bit 21),wheel speed rear left; byte 2 bit6 = invalid,Wheel_Grnd_Velocity_LS.WhlGrndVlctyLftNnDrvn,1/32,km/h,decoded,wheelSpeedRlKph,"r .995-.999 vs speedKph, 2 sessions. App reads it from #165"
+106B8040,35C,40,4-5 (14 bits from bit 37),wheel speed front right (driven); byte 4 bit6 = invalid,Wheel_Grnd_Velocity_LS.WhlGrndVlctyRtDrvn,1/32,km/h,decoded,wheelSpeedFrKph,"r .995-.999 vs speedKph, 2 sessions. App reads it from #165"
+106B8040,35C,40,6-7 (14 bits from bit 53),wheel speed rear right; byte 6 bit6 = invalid,Wheel_Grnd_Velocity_LS.WhlGrndVlctyRtNnDrvn,1/32,km/h,decoded,wheelSpeedRrKph,"r .995-.999 vs speedKph, 2 sessions. App reads it from #165. Too noisy (about 0.25 %) to spot a soft tire"
+102E0040,170,40,3,transmission (drive unit) oil temperature; byte 0 bit5 = invalid,Analog_Values_Slow_LS.TrnOilTmp,raw - 40,C,decoded,transOilTempC,10-04: rose 29 to 84 C over a highway drive; the car refuses polled 221940. App reads it from #165
+1042C0CB,216,CB,0-1 (14 bits from bit 5),energy used driving since full charge,Drv_Cycl_Elec_Enrgy_States_LS.DrvCycElecEngySt1,0.36 MJ = 0.1,kWh,decoded,cycleDrivingKwh,"10-04: 0.4, 2.4, 4.0 over the drive. App reads it from #165"
+1042C0CB,216,CB,2-3 (14 bits from bit 21),energy used by climate since full charge,Drv_Cycl_Elec_Enrgy_States_LS.DrvCycElecEngySt2,0.1,kWh,decoded,cycleClimateKwh,"10-04: 0.0, 0.1, 0.2 with the A/C on. App reads it from #165"
+1042C0CB,216,CB,4-5 (14 bits from bit 37),energy used conditioning the battery since full charge,Drv_Cycl_Elec_Enrgy_States_LS.DrvCycElecEngySt3,0.1,kWh,decoded,cycleConditioningKwh,10-04: 0 throughout. App reads it from #165
+1042C0CB,216,CB,6-7 (14 bits from bit 53),usable battery energy left,Drv_Cycl_Elec_Enrgy_States_LS.DrvCycElecEngySt4,0.1,kWh,decoded,batteryEnergyLeftKwh,"10-04: 12.2, 10.2, 8.5 at displayed SOC 96.9, 80.4, 67.1 %; the drop matches driving + climate. Sent in about 1 of 7 windows. App reads it from #165"
+103D6060,1EB,60,1-3 (23 bits from bit 14),trip A odometer; byte 0 bit7 = invalid,VehInfoTripComputer_LS.Trp1Odomtr,1/64,km,decoded-unchecked,tripAKm,"layout from GM; tracks distance driven (r .997, 2 sessions); not yet compared with the cluster's trip A. App reads it from #165"
+103D6060,1EB,60,4-6 (23 bits from bit 38),trip B odometer; byte 0 bit6 = invalid,VehInfoTripComputer_LS.Trp2Odomtr,1/64,km,decoded-unchecked,tripBKm,same as trip A
+arb:225,225,CB (heard),0-2 (17 bits from bit 7),drive-cycle distance on battery,Drive_Cycle_Efficiency_LS.DTD_BattPrpDstTrvld,1/64,km,decoded,cycleEvDistanceKm,heard as 1044A0CB; b0-1 r .996 vs polled evDistanceThisCycleKm (slope 1/32 = 17-bit 1/64)
+arb:225,225,CB (heard),2-4 (17 bits from bit 22),drive-cycle distance on fuel,Drive_Cycle_Efficiency_LS.DTD_FuelPrpDstTrvld,1/64,km,decoded-unchecked,cycleFuelDistanceKm,"EV-only drives so far, so always 0"
+arb:224,224,60 (heard),1-3 (17 bits from bit 8),gasoline range (0 = car not on),Fuel_Level_Status_LS.VehFuelRngCalc,1/64,km,decoded-unchecked,fuelRangeKm,"heard from source 60 (10448060), not CB as OVMS has it; 378 km on 09-29 looked right; compare with the cluster"
+arb:223,223,CB (heard),6-7 (12 bits from bit 51),drive-cycle fuel used (FFF = n/a),Drive_Cycle_Energy_Efficiency_LS.DrvCyclFuelUsd,0.125,L,decoded-unchecked,cycleFuelUsedL,heard as 104460CB on 10-04 (EV-only drive)
+arb:141,141,,2-4 (14 bits from bit 21),drive-cycle energy used,Energy_Storage_System_LS.DrvCycElEnrgUsd,0.1,kWh,decoded-unchecked,cycleEnergyUsedKwh,never heard in 56 windows
+arb:176,176,,0-1,EV range shown by the cluster,HMI_Hybrid_Vehicle_Status_LS.HVDpltnMdRng,1/64,km,decoded-unchecked,clusterEvRangeKm,never heard in 56 windows
+arb:325,325,40 (heard),0-1 (3-bit fields),"window positions FL RL / FR RR, 0 shut .. 6 down, 5 = filler",Window_Position_Status_LS,100/6,%,decoded-unchecked,windowFlPct;windowRlPct;windowFrPct;windowRrPct,"heard as 1064A040 on 09-29 (33 35, 36 2D); does not match the OVMS idle pattern; needs the Car > Body test"
+10260040,130,40,2 bits0-2,"theft alarm: 1 armed, 2 disarmed, 3 sounding, 4 arming",Content_Theft_Sensor_Status.AlrmStat,enum,,decoded-unchecked,alarmState,never heard
+0C630040,318,40,0 bit0,door FL open,Driver_Door_Status.DDAjrSwAtv,,,decoded-unchecked,doorFlState,event-only; never caught in a window
+0C2F6040,17B,40,0 bit0,door FR open,Passenger_Door_Status_LS.PDAjrSwAtv,,,decoded-unchecked,doorFrState,event-only; never caught in a window
+0C2F8040,17C,40,0 bit0,door RL open,Left_Rear_Door_Status.RLDoorAjarSwAct,,,decoded-unchecked,doorRlState,event-only; never caught in a window
+0C2FA040,17D,40,0 bit0,door RR open,Right_Rear_Door_Status.RRDoorAjarSwAct,,,decoded-unchecked,doorRrState,event-only; never caught in a window
+10728040,394,40,0 bit1,hood open,Hood_Status_LS.HdSt,,,decoded-unchecked,hoodState,never heard
+0C6AA040,355,40,0 bit0,trunk open,Rear_Closure_Ajar_Switch_Status.RrClosAjarSwAct,,,decoded-unchecked,trunkState,never heard
+10624099,312,99,1,coolant heater power,Climate_Control_Voltage_LS.ClntHtrElecPwrRat,0.04,kW,decoded-unchecked,coolantHeaterKw,never heard
+106D4099,36A,99,2,heater core temperature (0 = n/a),Auxiliary_Heater_Status_LS.HtrCoreInltClntTmpCalc,raw - 40,C,decoded-unchecked,heaterCoreTempC,never heard
+1086C0CB,436,CB,3-5,charge current limit levels + selected level,High_Volt_Time_Based_Chrg_LS,1,A,decoded-unchecked,chargeCurrentLimitA,never heard
+10390040,1C8,40,0,"remote start: 0 off, bit1 on",Remote_Start_Status.RmVehStrRq,,,decoded-unchecked,remoteStartState,never heard
+10210040,108,40,0-1 (15 bits from bit 6),"vehicle speed, average of the driven wheels",Vehicle_Speed_Information.VehSpdAvgDrvn,1/64,km/h,strong,,"r .996 vs speedKph, 2 sessions"
+10210040,108,40,4-5 (15 bits from bit 38),"vehicle speed, average of the non-driven wheels",Vehicle_Speed_Information.VehSpdAvgNDrvn,1/64,km/h,strong,,"r .995 vs speedKph, 2 sessions"
+1026C0CB,136,CB,3-4 (13 bits from bit 28),drive motor speed,Hybrid_Information_LS.ElecPrplsnMtrTach,1,rpm,strong,,"r .990 vs speedKph, 2 sessions; saturates at 8191. GM names it motor rpm, not road speed"
+106C0040,360,40,0-3 (32 bits from bit 7),odometer,Vehicle_Odo_LS.VehOdo,1/64,km,strong,,r .998 vs trip distance; agrees with polled 2234B2 within a few km
+107840CB,3C2,CB,1,displayed battery SOC,Hybrid_Information_SuperSlow_LS.CstmrUsblSOC,100/255,%,strong,,"r 1.000 vs displayedSocPct, 2 sessions"
+102E0040,170,40,7,engine coolant temperature,Analog_Values_Slow_LS.EngCltTmp,raw - 40,C,strong,,"r .996, slope 1.00 vs polled coolant"
+102E0040,170,40,6,engine intake air temperature,Analog_Values_Slow_LS.EngIntAirTmp,raw - 40,C,strong,,r .99 vs polled intakeAirTempC
+102E0040,170,40,5,engine oil temperature,Analog_Values_Slow_LS.EngOilTmp,raw - 40,C,dbc,,layout from GM; engine off on every capture so far
+102E0040,170,40,4,outside air temperature (powertrain estimate),Analog_Values_Slow_LS.OAT_PT_Est,0.5*raw - 40,C,candidate,,r .96 vs outsideTempC
+102A8097,154,97,0-5,UTC date and time,GPS_Date_and_Time_LS,,,strong,,read by eye on both days; matches log timestamps
+108E4097,472,97,0-5,local date and time,Cellular_Network_Date_and_Time,,,strong,,"read by eye, 09-29 only"
+1062C040,316,40,1-3 (24 bits from bit 15),elapsed-time counter,Infrastructure_Timer_Status_LS.ElpsdTimeCnt,1,min,strong,,ticks once a minute and kept counting between captures
+1062C040,316,40,4,"engine-off time, extended range",Infrastructure_Timer_Status_LS.EngOffTmExtRng,4,min,dbc,,layout from GM
+102D0040,168,40,4,engine oil life remaining,Engine_Information_4_LS.EngOilRmnLf,0.392,%,dbc,,"10-04: about 70 %; the car refuses the polled oil-life PID, so compare with the cluster's oil life"
+102D0040,168,40,1,engine manifold air temperature,Engine_Information_4_LS.EngManfldAirTempCrtd,raw - 40,C,candidate,,"r .99 vs intakeAirTempC, but r .986 vs engine run time too"
+102D0040,168,40,2-3 (12 bits from bit 19),fuel tank capacity,Engine_Information_4_LS.FuelTotCap,0.125,L,dbc,,"reads 33.6 L, the Volt's 8.9 gal tank"
+102CA040,165,40,5,accelerator pedal position,Engine_Information_1_LS.AccActPos,0.392,%,dbc,,"10-04: 0-65 %, moves with power"
+102CA040,165,40,4,throttle position,Engine_Information_1_LS.ThrPos,0.392,%,dbc,,about 30 % with the engine off
+10250040,128,40,1,brake pedal position,Brake_Pedal_Status_LS.BrkPdlPos,0.392,%,dbc,,10-04: 0-31 %
+10240040,120,40,4-5 (16 bits from bit 39),steering wheel angle,Vehicle_Stability_LS.StrWhAng,signed 1/16,deg,dbc,,10-04: moves through turns
+10240040,120,40,6-7 (12 bits from bit 51),lateral acceleration,Vehicle_Stability_LS.VSELatAcc,signed 1/64,m/s2,dbc,,10-04: within plus or minus 2.6 m/s2
+10240040,120,40,0-1 (10 bits from bit 1),longitudinal acceleration,Vehicle_Stability_LS.IMUProtLonAcc,signed 0.03,m/s2,dbc,,10-04: within plus or minus 2 m/s2
+10220040,110,40,4-5 (12 bits from bit 35),yaw rate,ACC_YawRate_Information_LS.VehDynYawRate,signed 1/16,deg/s,dbc,,10-04: moves through turns
+1022C040,116,40,1-2 (12 bits from bit 11),vehicle acceleration,Chassis_Information_2_LS.ActVehAccel,signed 0.01,m/s2,dbc,,10-04: within plus or minus 2 m/s2
+1022A040,115,40,2 bits0-2,spare tire status,Chassis_Information_LS.SprTireSt,enum,,dbc,,00/01
+0C800040,400,40,1,fuel level,Fuel_Information.FlLvlPct,0.392,%,dbc,,"10-04: 60-87 %, noisier than polled fuelLevelPct"
+1058E0CB,2C7,CB,0-1 (13 bits from bit 4),HV pack current,Hyb_Redundant_Batt_Data2_LS.RdHVltBatPckCrnt,signed 0.15,A,dbc,,10-04: -298 to 108 A
+1058E0CB,2C7,CB,2-3 (12 bits from bit 19),HV pack voltage,Hyb_Redundant_Batt_Data2_LS.RdHVltBatPckVlt,0.125,V,dbc,,10-04: 336-392 V
+102C40CB,162,CB,5-6 (13 bits from bit 45),propulsion power shown on the power display,Engine_Maintenance_Mode_Req_LS.PrpDspTtlPwr,0.5*raw - 326.6,kW,dbc,,10-04: -38 to 79 kW
+102C40CB,162,CB,0 bit4,engine maintenance mode active,Engine_Maintenance_Mode_Req_LS.EngMntnceMdAct,,,dbc,,0 on every capture
+102F40CB,17A,CB,3-4 (9 bits from bit 24),power gauge position,HMI_UtlChrgIntrfr_Indication_LS.PrpDspTtlPwrLvlPct,signed 0.392,%,dbc,,10-04: -64 to 72 %
+104200CB,210,CB,0-1 (14 bits from bit 5),total energy used since full charge,Drv_Cycl_Elec_Enrgy_Consumd_LS.DrvCycElecEngySt5,0.1,kWh,dbc,,"10-04: 0.5, 2.5, 4.2 kWh; matches driving + climate + conditioning from 1042C0CB"
+104200CB,210,CB,2;3;4;5,"energy shares: driving, climate, conditioning, left",Drv_Cycl_Elec_Enrgy_Consumd_LS.DCEEC_EngyPct1-4,0.392,%,dbc,,the four shares sum to 100 %
+108700CB,438,CB,1-2 (12 bits from bit 11),"EV range, max-confidence estimate",High_Voltage_EnergyMgmt_Ctrl_LS.HVDpltnMdMxCnfdcRg,0.1,km,candidate,,r 1.000 vs evRangeKm but reads about 1.5 times it; meaning or scale unclear
+108700CB,438,CB,3-4 (12 bits from bit 27),"EV range, min-confidence estimate",High_Voltage_EnergyMgmt_Ctrl_LS.HVDpltnMdMiCnfdcRg,0.1,km,candidate,,r 1.000 vs evRangeKm but reads about 2 times it; meaning or scale unclear
+10424040,212,40,2,outside air temperature,Outside_Air_Temperature_LS.OtsAirTmp,0.5*raw - 40,C,dbc,,10-04: 27-40 C on a hot drive; compare with outsideTempC
+1038C040,1C6,40,1,sunlight on the dash sensor,Rear_Window_Defog_Inhibit.IPSnsrRwSolrInt,3,W/m2,dbc,,10-04 only: 12-120 W/m2
+1020C040,106,40,* (bit flags),"lights: turn signals, brake lights, DRL, high beam",Lighting_Status_LS,,,dbc,,10-04: turn-signal and brake-light bits toggle
+10720099,390,99,2,A/C power needed to reach cabin comfort,High_Volt_Climate_Pwr_Status_LS.EstACCompPwrRchCbnCmf,0.04,kW,dbc,,09-29 only
+10324058,192,58,2-3,airbag event sync counter,Airbag_Status.SIREvntSychCntr,,,counter,,rose 22 between 09-29 and 10-04
+102C6060,163,60,0-5,engine idle and run hour meters,HMI_Hourmeter_Data_LS,1,min,counter,,09-29 only
+108E0080,470,80,0-5,time of day (radio),Time_of_Day_LS,,,strong,,date by eye; time-of-day bits count up
+102CC040,166,40,*,"engine information 2 (run state, gear estimate, fan speed)",Engine_Information_2_LS,,,dbc,,b7 rises; engine off on every capture
+102CE040,167,40,*,"engine information 3 (A/C refrigerant pressure, engaged state)",Engine_Information_3_LS,,,dbc,,b7 rises
+104460CB,223,CB,0-4,"drive-cycle energy efficiencies (battery conditioning, cabin, driving, total)",Drive_Cycle_Energy_Efficiency_LS,,,dbc,,"b0 r .92 vs motorAPowerKw, 10 points"
+1022E040,117,40,*,driven-wheel rotation counters and timestamps,Driven_Whl_Rotational_Stat_LS,,,opaque,,301 distinct in 301 frames: free-running pulse counters
+10230040,118,40,*,non-driven-wheel rotation counters and timestamps,Non_Drvn_Whl_Rot_Status_LS,,,opaque,,301 distinct in 301 frames: free-running pulse counters
+108680CB,434,CB,*,HV battery charge start and finish times,High_Volt_Batt_Time_Pwr_Chrg_LS,,,dbc,,heard once on 10-04
+10264040,132,40,*,"fast warning indicators (ABS, trailer, ...)",HS_Indications_Fast_LS,,,constant,,same payload every frame on both days
+10780040,3C0,40,*,"slow warning indicators (tire low, brake fluid, ...)",HS_Indications_Slow_LS,,,constant,,same payload every frame on both days
+10806040,403,40,*,alternative fuel information,Alternative_Fuel_Information_LS,,,constant,,same payload every frame on both days
+10788040,3C4,40,*,"super-slow warning indicators (oil change, oil pressure, ...)",HS_Indications_SuperSlow_LS,,,constant,,same payload every frame on both days
+1077C040,3BE,40,*,wheel pulses per revolution,Wheel_Pulses_LS,,,constant,,same payload every frame on both days
+106E0097,370,97,*,audio source status,Audio_Source_Status_LS,,,constant,,same payload every frame on both days
+106D0080,368,80,*,audio master arbitration,Audio_Master_Arbitration_Command,,,constant,,same payload every frame on both days
+10466040,233,40,*,drive-mode customization availability,HSGMLAN_Customization_Setings_LS,,,constant,,same payload every frame on both days
+10242040,121,40,*,system power mode (02 = run),System_Power_Mode_LS.SysPwrMd,,,constant,,same payload every frame on both days
+10244060,122,60,*,system power mode backup,System_Power_Mode_Backup_LS,,,constant,,same payload every frame on both days
+103D20BC,1E9,BC,*,rear vision / auto-brake indications,CSV_EOCM_R_Indications_LS,,,constant,,same payload every frame on both days
+arb:1FFF,1FFF,any,*,"module heartbeat, empty payload; the source byte names the module",,,,heartbeat,,16 modules: 40 58 59 5B 60 66 68 80 81 97 99 AF B9 BB BC CB
+arb:160,160,40,*,immobilizer id and learned environment id,Immobilizer_Identifier_LS,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:182,182,58,*,immobilizer environment id response,Environment_Id_Resp,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:183,183,99,*,immobilizer environment id response,Environment_Id_Resp,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:184,184,60,*,immobilizer environment id response,Environment_Id_Resp,,,sensitive,,"anti-theft pairing data; payload must never be printed, logged or committed"
+arb:474,474,97,*,OnStar Wi-Fi access point settings,WiFi_AP_Data,,,sensitive,,"sent with the hotspot name and password; payload must never be printed, logged or committed"
+arb:762,762,,*,VIN part 1,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:764,764,,*,VIN part 2,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:155,155,,*,GPS position,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:156,156,,*,sent with GPS (treat as location),,,,sensitive,,"payload must never be printed, logged or committed"
+arb:382,382,97,*,compass heading,Compass_Status_LS,,,sensitive,,"direction of travel; with time it tracks a route. payload must never be printed, logged or committed"
+arb:13D,13D,CB,*,location-based charging: saved-location state,Aux_Coolant_Heater_Status_LS,,,sensitive,,"says when the car is at a saved charging location. payload must never be printed, logged or committed"
+arb:478,478,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:479,479,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:47A,47A,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:480,480,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:481,481,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:482,482,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+1040A081,205,81,*,chime active,Chime_Active.ChmAct,,,dbc,,flag 00/01
+10400060,200,60,*,"chime command (tone, cadence, repeats)",Chime_Command,,,dbc,,b0 and b4 change together
+104C00BC,260,BC,*,lane departure warning status,Lane_Departure_Warning_LS,,,dbc,,b2 flag 00/18
+10600081,300,81,*,a module reporting a trouble code,DTC_Triggered,,,dbc,,"heard once; the payload carries the DTC source, number and fail type"
+10ACE060,567,60,*,cluster display indications,ODIIndication_IPC_LS,,,dbc,,bit flags in b1 and b3
+10AD6080,56B,80,*,center stack display action,ODIAction_CntrStack_LS,,,dbc,,09-29 only
+10AC0099,560,99,*,display event,ODIEvent_LS,,,dbc,,09-29 only
+10B02099,581,99,*,display dynamic data,ODIDynamicData_LS,,,dbc,,"09-29 only, 6 distinct"
+1023C0BC,11E,BC,*,forward collision alert info 2,FCA_VisionBased_Info_2_LS,,,dbc,,3 distinct
+102340BC,11A,BC,*,"forward collision alert, following distance",FCA_VisionBased_Info_LS,,,dbc,,15 distinct
+103A00BB,1D0,BB,*,park assist status,Park_Assistant_General_Status,,,dbc,,heard once
+103A40BB,1D2,BB,*,park assist front sensors,Park_Assistant_Front_Status,,,dbc,,heard once

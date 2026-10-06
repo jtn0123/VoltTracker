@@ -14,6 +14,14 @@ on that web stack unless explicitly asked.
 - Test location: `mobile/android/app/src/test/java/com/volttracker/obdpoc/`
   (pure JVM + Robolectric for the SQLite layer — no instrumented tests)
 
+### SW-CAN (car body bus) signals
+
+`mobile/android/docs/swcan-signal-map.csv` lists what each SW-CAN frame carries on our 2017 Volt
+(decoded, strong lead, unknown, sensitive). Check it before decoding a frame. When you learn
+something new, add or update its row in the same PR. `tools/swcan_correlate.py` matches frames from
+a debug build's session logs against telemetry; see `docs/swcan-signal-map.md`. Never print or
+commit payloads of `sensitive` frames (VIN, GPS, OnStar Wi-Fi name and password).
+
 ### Language: Kotlin for Android code
 
 - **Write new Android code in Kotlin** (`.kt`), not Java. Production Android source is
