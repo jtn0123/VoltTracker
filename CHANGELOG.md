@@ -1,6 +1,38 @@
 # CHANGELOG
 
 
+## v0.60.1 (2026-10-06)
+
+### 🔺 Fix
+
+- Address Android app quality audit findings
+  ([`3724ee9`](https://github.com/jtn0123/VoltTracker/commit/3724ee9333abcb491fdf94132e0c3a074be79fbb))
+
+### 🔷 Changed
+
+- **deps**: Bump source-map-js to 1.2.2 for GHSA-68fv-2mgg-jv7q
+  ([#166](https://github.com/jtn0123/VoltTracker/pull/166),
+  [`d893d93`](https://github.com/jtn0123/VoltTracker/commit/d893d9301455f386003bf533895b5001587c8888))
+
+### 🔷 Changed
+
+- Request supported SDK packages for native visual checks
+  ([`f177528`](https://github.com/jtn0123/VoltTracker/commit/f1775287e9a17c97ab21567836a47ae0495402e0))
+
+### 🔷 Changed
+
+- Address audit quality gate feedback
+  ([`34fd0f3`](https://github.com/jtn0123/VoltTracker/commit/34fd0f3c04171dc88769c45dd44f4d6119f380d9))
+
+- Keep status and session helpers within static limits
+  ([`8a5887c`](https://github.com/jtn0123/VoltTracker/commit/8a5887c76185d1090ce0ee18822fc6ec9f5fc07e))
+
+### 🔷 Changed
+
+- Align reviewed visual baselines with audit fixes
+  ([`1d86247`](https://github.com/jtn0123/VoltTracker/commit/1d862478cdbb2461162c3a82be0fdc0aed58846c))
+
+
 ## v0.60.0 (2026-10-05)
 
 ### ✳️ New
