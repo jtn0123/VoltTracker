@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v0.61.0 (2026-10-06)
+
+### 🔺 Fix
+
+- **service**: Keep the poll thread's notification text in the session log
+  ([#171](https://github.com/jtn0123/VoltTracker/pull/171),
+  [`feec24d`](https://github.com/jtn0123/VoltTracker/commit/feec24deb46c9afdcba9a703ab7fc95eef1a9e71))
+
+- **swcan-tool**: Read logs only from ~/volttracker-logs, picked by name
+  ([`c78dd48`](https://github.com/jtn0123/VoltTracker/commit/c78dd48093b9126af9cfe7fa8fbd0f6ca80df1c1))
+
+### 🔷 Changed
+
+- **dashboard**: Fund the demo stream's new SW-CAN fields in the lazy budget
+  ([`d2761d5`](https://github.com/jtn0123/VoltTracker/commit/d2761d52f2652f64cd3679bd4193b61203e86c20))
+
+### 🔷 Changed
+
+- **swcan**: Add SW-CAN signal map and frame correlator
+  ([`59ffdb2`](https://github.com/jtn0123/VoltTracker/commit/59ffdb2f53cf53e6fa972f0629a39fe280e1404f))
+
+- **swcan**: Name frames from GM's signal list and satisfy Sonar's path checks
+  ([`cf6f17d`](https://github.com/jtn0123/VoltTracker/commit/cf6f17d48df9b579f1cc88e1457973097b34181e))
+
+### ✳️ New
+
+- **swcan**: Read wheel speeds, trips, drive-unit oil and the car's energy screen
+  ([`0c78cfe`](https://github.com/jtn0123/VoltTracker/commit/0c78cfed190a2d5b6a2ebcc93e5a278f21ce9475))
+
+### 🔷 Changed
+
+- **swcan**: Split the correlator's long functions and bound its file paths
+  ([`653a035`](https://github.com/jtn0123/VoltTracker/commit/653a035d86402c01f2e9c5b2d8b1fc149588f406))
+
+
 ## v0.60.2 (2026-10-06)
 
 ### 🔺 Fix
