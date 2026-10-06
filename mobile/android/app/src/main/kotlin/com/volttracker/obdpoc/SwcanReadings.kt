@@ -12,6 +12,11 @@ import java.util.EnumMap
  * rather than shown as current — event-driven frames (locks, doors, windows) in particular only
  * appear when something changes, so an old "closed" must age out instead of looking live.
  *
+ * Tire pressures are the exception and hold for the session. The car sends them rarely (once, at the
+ * start of a 21-minute drive on 2026-10-04, and never again in 21 later windows), and a pressure
+ * barely moves within a drive. Their `tirePressureStaleMs` age still goes out, so the screen can
+ * say how old the reading is.
+ *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
  * polling thread.
  */
@@ -46,7 +51,7 @@ class SwcanReadings(
         sample: JSONObject,
         now: Long,
     ) {
-        held.entries.removeAll { now - it.value.atMs > maxAgeMs }
+        held.entries.removeAll { it.key.group != SwcanGroup.TIRES && now - it.value.atMs > maxAgeMs }
         if (held.isEmpty()) return
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)

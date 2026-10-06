@@ -174,11 +174,12 @@ fun tiresTile(
     val placard = "${pressureValue(car.placardPsi, metric)} $unit"
     val tires = drive.tires ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES, drive.connected)))
     val low = tires.all.indices.filter { tireLow(tires.all[it], car.placardPsi) }
+    val readAt = car.tiresReadLine()
     if (low.isEmpty()) {
         return CarTile(
             value = pressureValue(tires.all.average(), metric),
             unit = " $unit avg",
-            lines = listOf("Placard $placard · all normal"),
+            lines = listOfNotNull("Placard $placard · all normal", readAt),
             tone = PillTone.EV,
         )
     }
@@ -188,11 +189,23 @@ fun tiresTile(
     return CarTile(
         value = pressureValue(tires.all[worst], metric),
         unit = " $unit ${TIRE_NAMES[worst]}",
-        lines = listOf("$under $unit below placard (${pressureValue(car.placardPsi, metric)})$more"),
+        lines = listOfNotNull("$under $unit below placard (${pressureValue(car.placardPsi, metric)})$more", readAt),
         tone = PillTone.WARN,
         warnValue = true,
     )
 }
+
+/**
+ * "Read 18 min ago" once the pressures are older than a broadcast stays fresh. The car sends them
+ * about once a drive, so they hold until the next session instead of clearing.
+ */
+private fun CarUiState.tiresReadLine(): String? {
+    val age = nowMs - (seenAtMs[BodyGroup.TIRES] ?: return null)
+    return if (age > TIRES_FRESH_MS) "Read ${ago(age)}" else null
+}
+
+/** Matches the Live store's broadcast staleness: younger pressures read as current. */
+private const val TIRES_FRESH_MS = 120_000L
 
 /** The windows tile, with the doors, hood and hatch under it. */
 fun windowsTile(

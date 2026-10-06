@@ -126,7 +126,7 @@ class LiveDriveMappingTest {
         assertNull(d.aux12Volts)
         assertNull(d.gasRangeMiles)
         assertNull(d.locked)
-        assertNull(d.tires)
+        assertTrue("the car sends tires about once a drive, so they hold", d.tires != null)
     }
 
     @Test

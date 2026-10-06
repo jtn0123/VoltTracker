@@ -162,6 +162,15 @@ class CarTabLogicTest {
     }
 
     @Test
+    fun oldTirePressuresStayAndSayHowOldTheyAre() {
+        // The car sends them about once a drive, so an 18-minute-old reading still shows.
+        val earlier = car.copy(seenAtMs = mapOf(BodyGroup.TIRES to now - 18 * 60_000L))
+        assertEquals(listOf("Placard 38 psi · all normal", "Read 18 min ago"), tiresTile(parked, earlier).lines)
+        val low = tiresTile(parked.copy(tires = TirePressures(38.0, 38.0, 37.0, 31.0)), earlier)
+        assertEquals(listOf("7 psi below placard (38)", "Read 18 min ago"), low.lines)
+    }
+
+    @Test
     fun windowsCountTheOpenOnesWithTheDoorsUnder() {
         assertEquals("Closed", windowsTile(car).value)
         assertEquals(listOf("Doors, hood, hatch closed"), windowsTile(car).lines)
