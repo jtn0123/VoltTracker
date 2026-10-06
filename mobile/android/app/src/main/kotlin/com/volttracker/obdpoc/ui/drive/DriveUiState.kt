@@ -138,6 +138,15 @@ data class DriveUiState(
     /** The car's since-charge cycle split: share of miles on electricity, and gas mpg. */
     val cycleEvPercent: Int? = null,
     val cycleMpg: Double? = null,
+    /** The car's energy screen since the last full charge (kWh): driving, climate, battery conditioning. */
+    val cycleDrivingKwh: Double? = null,
+    val cycleClimateKwh: Double? = null,
+    val cycleConditioningKwh: Double? = null,
+    /** Usable energy the car says is left in the pack (kWh). */
+    val energyLeftKwh: Double? = null,
+    /** The cluster's Trip A and Trip B odometers (miles); null until heard. */
+    val carTripAMiles: Double? = null,
+    val carTripBMiles: Double? = null,
     val lastDrive: LastDrive? = null,
 ) {
     /** Settings → Units, for formatting the readings. */

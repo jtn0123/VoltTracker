@@ -136,8 +136,11 @@ class VirtualVoltComposeTest {
         signal("Oil temperature", "168°F")
         signal("Motor A temperature", "134°F")
         signal("Motor B temperature", "132°F")
-        // The car refuses 221C26 (7F 22 31) and 22119F, and never answered 221940: no blank rows.
-        for (refused in listOf("Inverter temperature", "Oil life", "Transmission temperature", "Torque")) {
+        // The car never answers 221940, but its SW-CAN broadcast carries the drive-unit oil:
+        // 0x102E0040 byte 3 = 0x7B → 83 °C.
+        signal("Transmission temperature", "181°F")
+        // The car refuses 221C26 (7F 22 31) and 22119F: no blank rows.
+        for (refused in listOf("Inverter temperature", "Oil life", "Torque")) {
             compose.onNodeWithText(refused).assertDoesNotExist()
         }
     }
@@ -153,8 +156,8 @@ class VirtualVoltComposeTest {
         // 0x10248040 data 00 00 61 …: 0x61 × 0.1 + 3 = 12.7 V; a moving or plugged-in car is charging it.
         text("12.7 V")
         text(aux12Line)
-        // 0x10440099 cabin estimate 29.5 °C = 85 °F; 0x10734099 A/C on; outside from 22801F.
-        text("85°F cabin")
+        // 0x10440099 cabin air estimate 30.5 °C = 86 °F; 0x10734099 A/C on; outside from 22801F.
+        text("86°F cabin")
         val outsideF = (last.getDouble("outsideTempC") * 9 / 5 + 32).roundToInt()
         text("Outside $outsideF°F · A/C on")
     }

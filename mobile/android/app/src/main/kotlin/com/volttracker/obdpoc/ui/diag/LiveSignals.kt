@@ -21,10 +21,11 @@ data class SignalGroup(
 /**
  * The live readings worth reading at a glance, grouped the way a driver thinks about the car, in
  * the chosen units. Missing readings show [DASH] rather than vanishing, so the list doesn't jump
- * around as samples arrive. The readings only some Volts report (oil life, inverter and
- * transmission temperature, 12 V charge; the 2017 refuses or blanks them) stay out until the car sends
- * one, so a car that refuses them never shows a row that is always blank. Only meaningful while
- * connected; the screen shows an empty state otherwise.
+ * around as samples arrive. The readings only some Volts report (oil life, inverter temperature,
+ * 12 V charge; the 2017 refuses or blanks them) and the SW-CAN broadcasts only an OBDLink hears
+ * (transmission temperature on a 2017, energy left, the energy & trips group) stay out until the car
+ * sends one, so a car or adapter that never has them never shows a row that is always blank. Only
+ * meaningful while connected; the screen shows an empty state otherwise.
  */
 fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
     val u = drive.units
@@ -39,7 +40,7 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
     return listOf(
         SignalGroup(
             "HV battery",
-            listOf(
+            listOfNotNull(
                 SignalRow("Charge", drive.displayedSocPercent?.let { "${it.roundToInt()}%" } ?: DASH),
                 SignalRow("Pack voltage", drive.packVolts?.let { "${it.roundToInt()} V" } ?: DASH),
                 SignalRow("Pack current", drive.packAmps?.let { "${oneDecimal(it)} A" } ?: DASH),
@@ -47,6 +48,7 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                 SignalRow("Lowest cell", drive.minCellVolts?.let { "%.3f V".format(Locale.US, it) } ?: DASH),
                 SignalRow("Highest cell", drive.maxCellVolts?.let { "%.3f V".format(Locale.US, it) } ?: DASH),
                 SignalRow("Cell spread", drive.cellSpreadMv?.let { "${it.roundToInt()} mV" } ?: DASH),
+                drive.energyLeftKwh?.let { SignalRow("Energy left", kwh(it)) },
             ),
         ),
         SignalGroup(
@@ -87,8 +89,29 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                 SignalRow("GPS accuracy", drive.gpsAccuracyFt?.let { gpsText(it, drive.metricUnits) } ?: DASH),
             ),
         ),
+        energyAndTrips(drive),
+    ).filter { it.rows.isNotEmpty() }
+}
+
+/**
+ * The car's own energy screen (since the last full charge) and the cluster's trip odometers. Only
+ * an OBDLink hears these broadcasts, so each row shows only once the car has sent it.
+ */
+private fun energyAndTrips(drive: DriveUiState): SignalGroup {
+    val u = drive.units
+    return SignalGroup(
+        "Energy & trips",
+        listOfNotNull(
+            drive.cycleDrivingKwh?.let { SignalRow("Used driving", kwh(it)) },
+            drive.cycleClimateKwh?.let { SignalRow("Used by climate", kwh(it)) },
+            drive.cycleConditioningKwh?.let { SignalRow("Used conditioning battery", kwh(it)) },
+            drive.carTripAMiles?.let { SignalRow("Trip A", "${u.distanceOneDecimal(it)} ${u.distanceUnit}") },
+            drive.carTripBMiles?.let { SignalRow("Trip B", "${u.distanceOneDecimal(it)} ${u.distanceUnit}") },
+        ),
     )
 }
+
+private fun kwh(v: Double): String = "${oneDecimal(v)} kWh"
 
 private fun oneDecimal(v: Double): String = "%.1f".format(Locale.US, v)
 

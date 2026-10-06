@@ -54,6 +54,9 @@ class DemoPollingLoop(
         private const val DEMO_DRIVE_GEAR_RAW = 3
         private const val DEMO_CLOSED = "closed"
 
+        /** A 2017's usable pack energy when full (kWh), for the demo's "energy left". */
+        private const val DEMO_USABLE_KWH = 14.0
+
         // The drive phase is one short trip (mirrors actions-demo.ts's DEMO_*_AT_S):
         // EV with regen dips until 36 s, the engine runs 36-48 s, regen braking to a
         // stop 48-54 s, then parked in P until the charger is plugged in at 60 s.
@@ -331,12 +334,36 @@ class DemoPollingLoop(
         sample.put("fuelRangeKm", 471.0)
         // ~7.3 of the Volt's 8.9 gal: the tank that 471 km of gas range implies at ~40 mpg.
         sample.put("fuelLevelPct", 82.0)
+        putEnergyScreen(sample, t)
         if (charging) {
             sample.put("chargeCurrentLimitA", 12.0)
             sample.put("chargerAcVoltage", 240)
             sample.put("chargerAcCurrentA", 14.0)
             sample.put("chargerAcPowerKw", 3.4)
         }
+    }
+
+    /**
+     * The car's energy screen, the cluster's trip odometers, wheel speeds, drive-unit oil and A/C
+     * power: the GM-layout SW-CAN broadcasts (mirrors actions-demo.ts; SwcanReadings).
+     */
+    private fun putEnergyScreen(
+        sample: JSONObject,
+        t: Double,
+    ) {
+        val wheelKph = demoSpeedKph(t).toDouble()
+        sample.put("wheelSpeedFlKph", wheelKph)
+        sample.put("wheelSpeedFrKph", wheelKph)
+        sample.put("wheelSpeedRlKph", wheelKph)
+        sample.put("wheelSpeedRrKph", wheelKph)
+        sample.put("acCompressorKw", 1.1)
+        sample.put("transOilTempC", ObdElmDecode.round1(55.0 + 3.0 * Math.sin(t / 12.0)))
+        sample.put("cycleDrivingKwh", 4.0)
+        sample.put("cycleClimateKwh", 0.2)
+        sample.put("cycleConditioningKwh", 0.0)
+        sample.put("batteryEnergyLeftKwh", ObdElmDecode.round1(demoSoc(t) / 100.0 * DEMO_USABLE_KWH))
+        sample.put("tripAKm", 32.4)
+        sample.put("tripBKm", 1287.6)
     }
 
     private fun putDemoPosition(

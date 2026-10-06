@@ -130,6 +130,46 @@ class LiveDriveMappingTest {
     }
 
     @Test
+    fun energyScreenTripsAndTransmissionOilFromTheBroadcasts() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(
+            sample(1_000L) {
+                put("cycleDrivingKwh", 4.0)
+                put("cycleClimateKwh", 0.2)
+                put("cycleConditioningKwh", 0.0)
+                put("batteryEnergyLeftKwh", 8.5)
+                put("tripAKm", 32.41)
+                put("tripBKm", 1287.59)
+                put("transOilTempC", 83.0)
+            },
+        )
+        var d = store.drive()
+        assertEquals(4.0, d.cycleDrivingKwh ?: 0.0, 0.0)
+        assertEquals(0.2, d.cycleClimateKwh ?: 0.0, 0.0)
+        assertEquals(0.0, d.cycleConditioningKwh ?: -1.0, 0.0)
+        assertEquals(8.5, d.energyLeftKwh ?: 0.0, 0.0)
+        assertEquals(20.14, d.carTripAMiles ?: 0.0, 0.01)
+        assertEquals(800.07, d.carTripBMiles ?: 0.0, 0.01)
+        assertEquals("the SW-CAN oil temperature fills the transmission row", 181, d.transTempF)
+
+        // The polled reading wins when the car answers it.
+        store.onTelemetry(sample(2_000L) { put("transmissionTempC", 60.0).put("transOilTempC", 83.0) })
+        assertEquals(140, store.drive().transTempF)
+
+        // Stale trips clear; the energy split holds for the drive like the tires.
+        store.onTelemetry(
+            sample(3_000L) {
+                put("tripOdometerStaleMs", 200_000)
+                put("energySplitStaleMs", 200_000)
+            },
+        )
+        d = store.drive()
+        assertNull(d.carTripAMiles)
+        assertNull(d.carTripBMiles)
+        assertEquals(8.5, d.energyLeftKwh ?: 0.0, 0.0)
+    }
+
+    @Test
     fun partialTyresAndUnknownLockValuesNeverGuess() {
         val store = LiveUiStateStore()
         store.onTelemetry(sample(1_000L) { put("tirePressureFlKpa", 260.0).put("doorLockState", "ajar") })

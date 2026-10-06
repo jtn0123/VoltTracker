@@ -65,6 +65,21 @@ class SwcanReadingsTest {
     }
 
     @Test
+    fun energySplitHoldsForTheSessionWithItsAge() {
+        // The car's own frame from the 2026-10-04 drive; it came in 3 of 22 listen windows.
+        val readings = SwcanReadings(maxAgeMs = 5_000L)
+        readings.record(readingsFrom("10 42 C0 CB 00 28 00 02 00 00 00 55", "10 6B 80 40 02 53 02 4C 02 4E 02 4C"), 0L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 4 * 60_000L)
+        assertEquals(4.0, sample.getDouble("cycleDrivingKwh"), 1e-9)
+        assertEquals(0.2, sample.getDouble("cycleClimateKwh"), 1e-9)
+        assertEquals(0.0, sample.getDouble("cycleConditioningKwh"), 1e-9)
+        assertEquals(8.5, sample.getDouble("batteryEnergyLeftKwh"), 1e-9)
+        assertEquals(4 * 60_000L, sample.getLong("energySplitStaleMs"))
+        assertFalse("wheel speeds still age out", sample.has("wheelSpeedFlKph"))
+    }
+
+    @Test
     fun emptyAndClearedStateAddsNothing() {
         val readings = SwcanReadings()
         val sample = JSONObject()
@@ -93,8 +108,8 @@ class SwcanReadingsTest {
                 "0C 6A A0 40 00",
                 "10 26 00 40 00 00 01",
                 "10 64 A0 40 06 06",
-                "10 44 00 99 00 00 00 00 00 7A",
-                "10 81 40 99 20 00 64 00",
+                "10 44 00 99 10 00 00 00 74 7E 43",
+                "10 81 40 99 20 51 24 00",
                 "10 73 40 99 20",
                 "10 27 00 CB 00 60 D1 94",
                 "10 6D 40 99 00 00 55",
@@ -107,6 +122,11 @@ class SwcanReadingsTest {
                 "10 44 A0 CB 06 80 00 20 00 00 00 00",
                 "10 44 60 CB 00 00 00 00 00 00 00 28",
                 "10 39 00 40 02",
+                "10 6B 80 40 02 53 02 4C 02 4E 02 4C",
+                "10 3D 60 60 00 00 08 1A 01 41 E6",
+                "10 2E 00 40 10 00 C7 7B 9F 00 56 4F",
+                "10 27 40 CB 00 00 00 00 1D",
+                "10 42 C0 CB 00 28 00 02 00 00 00 55",
             ),
             0L,
         )

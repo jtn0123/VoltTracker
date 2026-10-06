@@ -94,4 +94,32 @@ class LiveSignalsTest {
         assertEquals("87%", value(reported, "Oil life"))
         assertEquals("86%", value(reported, "12 V charge"))
     }
+
+    @Test
+    fun energyAndTripsShowOnlyOnceTheCarSendsThem() {
+        val empty = DriveUiState(connected = true)
+        val labels = liveSignalGroups(empty).flatMap { it.rows }.map { it.label }
+        assertTrue("no energy rows before the broadcast: $labels", labels.none { it == "Energy left" })
+        assertTrue(liveSignalGroups(empty).none { it.title == "Energy & trips" })
+
+        val heard =
+            empty.copy(
+                energyLeftKwh = 8.5,
+                cycleDrivingKwh = 4.0,
+                cycleClimateKwh = 0.2,
+                cycleConditioningKwh = 0.0,
+                carTripAMiles = 20.14,
+            )
+        assertEquals("8.5 kWh", value(heard, "Energy left"))
+        val group = liveSignalGroups(heard).single { it.title == "Energy & trips" }
+        assertEquals(
+            listOf("Used driving", "Used by climate", "Used conditioning battery", "Trip A"),
+            group.rows.map { it.label },
+        )
+        assertEquals("4.0 kWh", value(heard, "Used driving"))
+        assertEquals("0.0 kWh", value(heard, "Used conditioning battery"))
+        assertEquals("20.1 mi", value(heard, "Trip A"))
+        assertEquals("32.4 km", value(heard.copy(metricUnits = true), "Trip A"))
+        assertEquals("Energy & trips", liveSignalGroups(heard).last().title)
+    }
 }

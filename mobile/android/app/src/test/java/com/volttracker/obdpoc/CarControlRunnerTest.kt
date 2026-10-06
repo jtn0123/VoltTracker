@@ -255,13 +255,20 @@ class CarControlRunnerTest {
         assertNull(confirmation("10 64 A0 CB 36 36\rSTOPPED\r\r>"))
         assertNull(CarControlRunner.readbackConfirmation(ControlReadback.WINDOWS_OPENING, emptyList()))
         assertNull(CarControlRunner.readbackConfirmation(ControlReadback.NONE, emptyList()))
-        assertEquals(
-            "cabin blower running",
+    }
+
+    @Test
+    fun blowerConfirmsRemoteStartOnlyWhenItKeepsRunning() {
+        fun confirmation(vararg blower: Double) =
             CarControlRunner.readbackConfirmation(
                 ControlReadback.REMOTE_START_ON,
-                listOf(SwcanReading(SwcanField.BLOWER, 40.0)),
-            ),
-        )
+                blower.map { SwcanReading(SwcanField.BLOWER, it) },
+            )
+        assertEquals("cabin blower running", confirmation(0.0, 40.0, 42.0))
+        // One frame isn't proof: the fan coasts for a frame after the climate shuts off.
+        assertNull(confirmation(40.0))
+        assertNull(confirmation(27.0, 0.0))
+        assertNull(confirmation())
     }
 
     @Test
