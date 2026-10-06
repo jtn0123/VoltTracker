@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.60.2 (2026-10-06)
+
+### 🔺 Fix
+
+- **tires**: Keep the tire pressures for the drive and say how old they are
+  ([#163](https://github.com/jtn0123/VoltTracker/pull/163),
+  [`7115a9a`](https://github.com/jtn0123/VoltTracker/commit/7115a9a9c9afb585a80571a0bb02e8a2cc6ac0ae))
+
+
 ## v0.60.1 (2026-10-06)
 
 ### 🔺 Fix
