@@ -949,8 +949,6 @@ class LiveUiStateStore(
 
     private fun kmToMi(km: Double): Double = km * MI_PER_KM
 
-    private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
-
     /** The six section temperatures, each kept from [current] until its own read arrives. */
     private fun packSectionTempsF(
         t: JSONObject,
@@ -960,8 +958,6 @@ class LiveUiStateStore(
         if (read.all { it == null }) return current
         return read.mapIndexed { i, f -> f ?: current.getOrNull(i) }
     }
-
-    private fun fToC(f: Double): Double = (f - 32.0) * 5.0 / 9.0
 
     private companion object {
         const val DEMO_SOURCE = "demo"
@@ -1033,6 +1029,10 @@ class LiveUiStateStore(
         const val CORE_READING_FRESH_MS = 10_000L
     }
 }
+
+private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
+
+private fun fToC(f: Double): Double = (f - 32.0) * 5.0 / 9.0
 
 private fun nextConnectionFailure(
     payload: JSONObject,
