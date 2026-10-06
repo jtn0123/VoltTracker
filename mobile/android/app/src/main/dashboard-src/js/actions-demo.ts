@@ -254,6 +254,8 @@ export function runBrowserDemoStream(
       remoteStartState: "off",
       cabinTempEstC: Number((21 + Math.sin(t / 15)).toFixed(1)),
       acState: "on",
+      oilLifeRemainingPct: 72,
+      dashWarnings: "",
       peCoolantTempC: Number((32 + 2 * Math.sin(t / 10)).toFixed(1)),
       clusterEvRangeKm: Number(((soc / 100) * 66).toFixed(1)),
       fuelRangeKm: 471,

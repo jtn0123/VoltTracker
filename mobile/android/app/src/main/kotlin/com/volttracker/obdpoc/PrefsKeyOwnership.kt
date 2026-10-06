@@ -32,6 +32,8 @@ object PrefsKeyOwnership {
             Owner("shared-display", listOf(SharedDisplayPrefs.PREFIX)),
             // Compose UI preferences (Settings → Appearance).
             Owner("compose-ui", listOf(com.volttracker.obdpoc.ui.theme.AppearancePrefs.PREFIX)),
+            // The Car tab's last tyre pressures and oil life, shown between drives.
+            Owner("car-memory", listOf(com.volttracker.obdpoc.ui.car.CarMemoryPrefs.PREFIX)),
             // Bare activity-owned keys with no shared prefix (kept explicit so the test catches a
             // future bare key that accidentally collides with one of the prefixed namespaces).
             Owner("activity-misc", listOf("raw_retention_days")),

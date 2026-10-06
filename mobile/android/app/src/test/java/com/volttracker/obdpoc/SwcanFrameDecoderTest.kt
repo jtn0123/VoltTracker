@@ -147,8 +147,11 @@ class SwcanFrameDecoderTest {
         assertEquals("closed", decode(SwcanFrameDecoder.ID_DOOR_FR, 0x02)[SwcanField.DOOR_FR])
         assertEquals("open", decode(SwcanFrameDecoder.ID_DOOR_RL, 0x01)[SwcanField.DOOR_RL])
         assertEquals("closed", decode(SwcanFrameDecoder.ID_DOOR_RR, 0x00)[SwcanField.DOOR_RR])
+        // 10-06: 08 with the hood shut (state 0, validity bit 2 clear)
+        assertEquals("closed", decode(SwcanFrameDecoder.ID_HOOD, 0x08)[SwcanField.HOOD])
+        assertEquals("open", decode(SwcanFrameDecoder.ID_HOOD, 0x01)[SwcanField.HOOD])
         assertEquals("open", decode(SwcanFrameDecoder.ID_HOOD, 0x02)[SwcanField.HOOD])
-        assertEquals("closed", decode(SwcanFrameDecoder.ID_HOOD, 0x01)[SwcanField.HOOD])
+        assertTrue(decode(SwcanFrameDecoder.ID_HOOD, 0x04).isEmpty(), "validity bit set")
         assertEquals("open", decode(SwcanFrameDecoder.ID_TRUNK, 0x01)[SwcanField.TRUNK])
         assertTrue(decode(SwcanFrameDecoder.ID_DOOR_FL).isEmpty())
     }
@@ -318,18 +321,18 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
-    fun windowsSkipIdleFiller() {
-        val windowId = 0x10000000 or (SwcanFrameDecoder.PID_WINDOWS shl 13) or 0x40
-        // the BCM's resting pattern 28 2d: driver 0, others 5 → nothing
-        assertTrue(decode(windowId, 0x28, 0x2D).isEmpty())
-        // driver 3, left rear 0 while the right side carries filler 5
+    fun windowsReadEachWindowOnItsOwn() {
+        val windowId = gmlan(SwcanFrameDecoder.PID_WINDOWS)
+        // 10-06, parked with the windows up: 28 2D is driver 0, the other three 5 (no reading)
+        val parked = decode(windowId, 0x28, 0x2D)
+        assertEquals(mapOf(SwcanField.WINDOW_FL to 0.0), parked)
+        // the driver window moving while the others still send 5
+        assertEquals(mapOf(SwcanField.WINDOW_FL to 50.0), decode(windowId, 0x2B, 0x2D))
+        // driver 3, left rear 0 while the right side carries 5
         val moving = decode(windowId, 0x03, 0x2D)
         assertEquals(50.0, moving[SwcanField.WINDOW_FL])
         assertEquals(0.0, moving[SwcanField.WINDOW_RL])
         assertEquals(2, moving.size)
-        // the driver alone moving while all three others are filler is indistinguishable from idle
-        // (OVMS drops it too)
-        assertTrue(decode(windowId, 0x2B, 0x2D).isEmpty())
         // all four real: drv 6, LR 0, pass 6, RR 0
         val all = decode(windowId, 0x06, 0x06)
         assertEquals(100.0, all[SwcanField.WINDOW_FL])
@@ -340,6 +343,78 @@ class SwcanFrameDecoderTest {
         assertEquals(100.0, decode(windowId, 0x07, 0x00)[SwcanField.WINDOW_FL])
         assertTrue(decode(windowId, 0x06).isEmpty())
     }
+
+    @Test
+    fun oilLifeFromTheEngineBroadcast() {
+        // 10-06: 01 5D 01 0D B1 00 00 FF while the cluster showed about 70 %
+        val oil = decode(gmlan(SwcanFrameDecoder.PID_ENGINE_INFO_4), 0x01, 0x5D, 0x01, 0x0D, 0xB1, 0x00, 0x00, 0xFF)
+        assertEquals(69.0, oil[SwcanField.OIL_LIFE])
+        assertEquals(100.0, decode(gmlan(SwcanFrameDecoder.PID_ENGINE_INFO_4), 0, 0, 0, 0, 0xFF)[SwcanField.OIL_LIFE])
+        assertTrue(decode(gmlan(SwcanFrameDecoder.PID_ENGINE_INFO_4), 0x01, 0x5D, 0x01, 0x0D).isEmpty())
+    }
+
+    @Test
+    fun theCarsOwnWarningFramesLightNothing() {
+        // Every capture so far, with no light on the dash: none of these may read as a warning.
+        assertEquals(
+            "",
+            decode(gmlan(SwcanFrameDecoder.PID_WARNINGS_FAST), 0x04, 0x0E, 0, 0, 0, 0, 0, 0)[SwcanField.WARNINGS_FAST],
+        )
+        assertEquals(
+            "",
+            decode(
+                gmlan(SwcanFrameDecoder.PID_WARNINGS_SLOW),
+                0x00,
+                0x00,
+                0x01,
+                0x00,
+                0x08,
+                0x00,
+                0x00,
+                0x22,
+            )[SwcanField.WARNINGS_SLOW],
+        )
+        assertEquals(
+            "",
+            decode(
+                gmlan(SwcanFrameDecoder.PID_WARNINGS_SUPER_SLOW),
+                0x08,
+                0,
+                0,
+                0,
+                0,
+                0,
+            )[SwcanField.WARNINGS_SUPER_SLOW],
+        )
+        assertEquals("", decode(gmlan(SwcanFrameDecoder.PID_WASHER_LEVEL), 0x00)[SwcanField.WARNING_WASHER])
+        assertEquals("", decode(gmlan(SwcanFrameDecoder.PID_BULB_OUTAGE), 0x00, 0x00)[SwcanField.WARNING_BULBS])
+    }
+
+    @Test
+    fun warningBitsNameTheirLights() {
+        assertEquals("abs", decode(gmlan(SwcanFrameDecoder.PID_WARNINGS_FAST), 0x01)[SwcanField.WARNINGS_FAST])
+        val slow = gmlan(SwcanFrameDecoder.PID_WARNINGS_SLOW)
+        assertEquals("tire_pressure_low", decode(slow, 0x04, 0x00)[SwcanField.WARNINGS_SLOW])
+        assertEquals("brake_pads,brake_system", decode(slow, 0x00, 0xA0)[SwcanField.WARNINGS_SLOW])
+        assertEquals("brake_fluid_low", decode(slow, 0x80, 0x00)[SwcanField.WARNINGS_SLOW])
+        assertEquals("brake fluid flagged invalid", "", decode(slow, 0x90, 0x00)[SwcanField.WARNINGS_SLOW])
+        val superSlow = gmlan(SwcanFrameDecoder.PID_WARNINGS_SUPER_SLOW)
+        assertEquals("oil_hot", decode(superSlow, 0x20, 0x00, 0x00)[SwcanField.WARNINGS_SUPER_SLOW])
+        assertEquals(
+            "oil_change,oil_pressure_low,engine_hot,steering_assist_reduced",
+            decode(superSlow, 0x00, 0x8A, 0x40)[SwcanField.WARNINGS_SUPER_SLOW],
+        )
+        assertTrue(decode(superSlow, 0x00, 0x8A).isEmpty(), "too short for byte 2")
+        assertEquals(
+            "washer_fluid_low",
+            decode(gmlan(SwcanFrameDecoder.PID_WASHER_LEVEL), 0x01)[SwcanField.WARNING_WASHER],
+        )
+        val bulbs = gmlan(SwcanFrameDecoder.PID_BULB_OUTAGE)
+        assertEquals("bulb_center_brake", decode(bulbs, 0x01, 0x00)[SwcanField.WARNING_BULBS])
+        assertEquals("bulb_reverse,bulb_right_daytime", decode(bulbs, 0x00, 0xA0)[SwcanField.WARNING_BULBS])
+    }
+
+    private fun gmlan(pid: Int) = 0x10000000 or (pid shl 13) or 0x40
 
     @Test
     fun ignoresUnknownAndElevenBitFrames() {

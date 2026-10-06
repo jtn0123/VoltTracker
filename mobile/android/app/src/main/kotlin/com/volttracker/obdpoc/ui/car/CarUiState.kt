@@ -1,19 +1,54 @@
 package com.volttracker.obdpoc.ui.car
 
 import com.volttracker.obdpoc.ui.drive.TIRE_PLACARD_PSI
+import com.volttracker.obdpoc.ui.drive.TirePressures
 
 /**
  * One body reading group from the SW-CAN broadcasts (OBDLink adapters only; the decodes are
  * not yet confirmed on a car). [atMs] is when it was last fresh; null = never heard this session.
  */
-enum class BodyGroup { TIRES, LOCK, DOORS, WINDOWS, CLIMATE, AUX12 }
+enum class BodyGroup { TIRES, LOCK, DOORS, WINDOWS, CLIMATE, AUX12, OIL, WARNINGS }
+
+/** The car's six openings, in the order the Car tab names them. FL is the driver's door on a US car. */
+enum class Opening(
+    val label: String,
+) {
+    DRIVER_DOOR("Driver door"),
+    PASSENGER_DOOR("Passenger door"),
+    REAR_LEFT_DOOR("Rear left door"),
+    REAR_RIGHT_DOOR("Rear right door"),
+    HOOD("Hood"),
+    HATCH("Hatch"),
+}
 
 /**
- * The car's openings as the body module last reported them: the names of the ones open
- * ("Driver door", "Hood", "Hatch"), empty when all are closed.
+ * The openings the body module has reported, each open (true) or closed. The car sends each one
+ * only when it changes, so some may not have reported yet.
  */
 data class Openings(
-    val open: List<String>,
+    val states: Map<Opening, Boolean>,
+) {
+    /** The names of the reported-open ones ("Driver door", "Hood"), in [Opening] order. */
+    val open: List<String> get() = Opening.entries.filter { states[it] == true }.map { it.label }
+
+    /** Every opening has reported. */
+    val complete: Boolean get() = states.size == Opening.entries.size
+
+    companion object {
+        /** All six reported closed. */
+        val allClosed: Openings get() = Openings(Opening.entries.associateWith { false })
+    }
+}
+
+/**
+ * Readings the car sends rarely, remembered between drives (and app restarts) with when they were
+ * read: the tires come about once a drive, so a new drive would otherwise start with none.
+ */
+data class CarMemory(
+    val tires: TirePressures? = null,
+    val tiresAtMs: Long = 0L,
+    val oilLifePct: Int? = null,
+    val oilAtMs: Long = 0L,
 )
 
 /**
@@ -44,9 +79,19 @@ data class CarUiState(
     /** Settings → Units & vehicle: the door-jamb placard pressure (cold), in psi. */
     val placardPsi: Double = TIRE_PLACARD_PSI,
     val openings: Openings? = null,
-    /** Window openings, 0 (closed) to 100 (open), FL / FR / RL / RR. */
-    val windowsPct: List<Int>? = null,
+    /**
+     * Window openings, 0 (closed) to 100 (open), FL / FR / RL / RR; a window that hasn't reported
+     * is null, and the list is null until one has.
+     */
+    val windowsPct: List<Int?>? = null,
     val acOn: Boolean? = null,
+    /** The front blower, 0..100 %. */
+    val fanPct: Int? = null,
+    /** What the A/C compressor draws, kW. */
+    val acKw: Double? = null,
+    /** Codes of the dash warning lights on ([dashWarningLabel]); empty = none on, null = not reported. */
+    val dashWarnings: List<String>? = null,
+    val memory: CarMemory = CarMemory(),
     val remoteStartOn: Boolean? = null,
     val outsideTempC: Double? = null,
     /** When each [BodyGroup] was last fresh (ms); a missing group was never heard this session. */
@@ -60,9 +105,11 @@ data class CarUiState(
         val demo: CarUiState
             get() =
                 CarUiState(
-                    openings = Openings(emptyList()),
+                    openings = Openings.allClosed,
                     windowsPct = listOf(0, 0, 0, 0),
                     acOn = false,
+                    fanPct = 0,
+                    dashWarnings = emptyList(),
                     remoteStartOn = false,
                     outsideTempC = 17.8,
                     seenAtMs = BodyGroup.entries.associateWith { DEMO_NOW_MS - 60_000L },

@@ -9,14 +9,15 @@ import java.util.EnumMap
  *
  * The listen window only runs every ~45 s, so between windows the live sample carries the value
  * last heard plus a per-group `...StaleMs` age. A value not re-heard within [maxAgeMs] is dropped
- * rather than shown as current — event-driven frames (locks, doors, windows) in particular only
- * appear when something changes, so an old "closed" must age out instead of looking live.
+ * rather than shown as current: a lock command, say, is a one-off event, so an old "locked" ages
+ * out instead of looking live.
  *
- * Tire pressures and the energy split are the exception and hold for the session ([HELD_GROUPS]).
- * The car sends them rarely: tires once, at the start of a 21-minute drive on 2026-10-04, and never
+ * Some groups are the exception and hold for the session ([HELD_GROUPS]). The car sends tires and
+ * the energy split rarely: tires once, at the start of a 21-minute drive on 2026-10-04, and never
  * again in 21 later windows; the energy split in 3 of 22 windows. A pressure barely moves within a
- * drive, and the energy counts only creep. Their `...StaleMs` age still goes out, so the screen can
- * say how old the reading is.
+ * drive, and the energy counts only creep. Doors, windows and the washer and bulb warnings are only
+ * sent when they change, so the last report stays the car's state until the next one. Their
+ * `...StaleMs` age still goes out, so the screen can say how old the reading is.
  *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
  * polling thread.
@@ -102,6 +103,8 @@ class SwcanReadings(
         putReading(sample, "tripAKm", SwcanField.TRIP_A)
         putReading(sample, "tripBKm", SwcanField.TRIP_B)
         putReading(sample, "transOilTempC", SwcanField.TRANS_OIL_TEMP)
+        putReading(sample, "oilLifeRemainingPct", SwcanField.OIL_LIFE)
+        putDashWarnings(sample, "dashWarnings")
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
         putGroupStaleMs(sample, "tirePressureStaleMs", SwcanGroup.TIRES, now)
         putGroupStaleMs(sample, "doorLockStaleMs", SwcanGroup.LOCKS, now)
@@ -117,6 +120,21 @@ class SwcanReadings(
         putGroupStaleMs(sample, "wheelSpeedStaleMs", SwcanGroup.WHEELS, now)
         putGroupStaleMs(sample, "tripOdometerStaleMs", SwcanGroup.TRIPS, now)
         putGroupStaleMs(sample, "transOilStaleMs", SwcanGroup.DRIVETRAIN, now)
+        putGroupStaleMs(sample, "oilLifeStaleMs", SwcanGroup.MAINTENANCE, now)
+        putGroupStaleMs(sample, "dashWarningStaleMs", SwcanGroup.WARNINGS, now)
+    }
+
+    /**
+     * The codes of every dash light the warning broadcasts say is on, comma-joined, "" once at
+     * least one of them has reported and none is lit; absent before any has.
+     */
+    private fun putDashWarnings(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val reports = WARNING_FIELDS.mapNotNull { held[it]?.value as? String }
+        if (reports.isEmpty()) return
+        sample.put(key, reports.filter { it.isNotEmpty() }.joinToString(","))
     }
 
     private fun putReading(
@@ -144,6 +162,9 @@ class SwcanReadings(
         const val DEFAULT_MAX_AGE_MS = 180_000L
 
         /** Groups the car sends too rarely to age out; they hold until the session's [clear]. */
-        private val HELD_GROUPS = setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY)
+        private val HELD_GROUPS =
+            setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY, SwcanGroup.DOORS, SwcanGroup.WINDOWS, SwcanGroup.WARNINGS)
+
+        private val WARNING_FIELDS = SwcanField.entries.filter { it.group == SwcanGroup.WARNINGS }
     }
 }

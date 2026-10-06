@@ -106,7 +106,8 @@ import { driveGear, gearDisplayText } from "./gear";
     "driveCycleStaleMs", "remoteStartState", "acCompressorKw", "cycleDrivingKwh", "cycleClimateKwh",
     "cycleConditioningKwh", "batteryEnergyLeftKwh", "energySplitStaleMs", "wheelSpeedFlKph",
     "wheelSpeedFrKph", "wheelSpeedRlKph", "wheelSpeedRrKph", "wheelSpeedStaleMs", "tripAKm", "tripBKm",
-    "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs",
+    "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs", "oilLifeRemainingPct", "oilLifeStaleMs",
+    "dashWarnings", "dashWarningStaleMs",
     // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
     // present while controls are enabled, so they must blank when a sample omits them.
     "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
@@ -1628,6 +1629,9 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "acEvapTempC", label: "Evaporator air temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "heaterCoreTempC", label: "Heater core temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
+    { key: "oilLifeRemainingPct", label: "Oil life (body bus)", group: "Body & comfort", unit: "%", staleKey: "oilLifeStaleMs", enhanced: true },
+    // Comma-joined warning codes; "" means the car reported none lit.
+    { key: "dashWarnings", label: "Dash warnings", group: "Body & comfort", text: true, staleKey: "dashWarningStaleMs", enhanced: true, display: (t) => String(t.dashWarnings ?? "").replace(/_/g, " ").replace(/,/g, ", ") || "none" },
   ];
 
   function formatSignalAge(ms: number) {

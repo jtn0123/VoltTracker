@@ -380,9 +380,15 @@ open class ObdService :
                 if (!active) stopSelf(startId)
                 return if (active) START_STICKY else START_NOT_STICKY
             }
-            ACTION_BODY_TEST -> {
+            ACTION_BODY_TEST, ACTION_BODY_FOCUS -> {
                 // Like a car command, only meaningful on a live session; never starts one.
-                if (running.get()) engine.requestBodyTest(BODY_TEST_MS)
+                if (running.get()) {
+                    if (intent.action == ACTION_BODY_TEST) {
+                        engine.requestBodyTest(BODY_TEST_MS)
+                    } else {
+                        engine.requestBodyFocus(intent.getLongExtra(EXTRA_DURATION_MS, 0L))
+                    }
+                }
                 val active = running.get()
                 if (!active) stopSelf(startId)
                 return if (active) START_STICKY else START_NOT_STICKY
@@ -1147,6 +1153,10 @@ open class ObdService :
         const val ACTION_CANCEL_RETRY = "com.volttracker.obdpoc.action.CANCEL_RETRY"
         const val ACTION_CAR_CONTROL = "com.volttracker.obdpoc.action.CAR_CONTROL"
         const val ACTION_BODY_TEST = "com.volttracker.obdpoc.action.BODY_TEST"
+
+        /** The Car tab is open (or, with a 0 [EXTRA_DURATION_MS], closed): listen to the body bus nonstop. */
+        const val ACTION_BODY_FOCUS = "com.volttracker.obdpoc.action.BODY_FOCUS"
+        const val EXTRA_DURATION_MS = "duration_ms"
 
         /** How long a body test listens: long enough to walk round the car opening things. */
         const val BODY_TEST_MS = 60_000L

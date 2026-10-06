@@ -45,6 +45,8 @@ data class VoltAppActions(
     val onBodyTest: () -> Unit = {},
     /** Car: a short read-only probe asking the body computer for tire pressures. */
     val onTireTest: () -> Unit = {},
+    /** Car: the tab came into view (true) or left it (false), so the body bus is heard nonstop meanwhile. */
+    val onCarTabShown: (Boolean) -> Unit = {},
     /** Health: read the car's trouble codes (the demo only simulates it). */
     val onScanCodes: () -> Unit = {},
     /** Health: clear the car's trouble codes, after the host's confirmation. */

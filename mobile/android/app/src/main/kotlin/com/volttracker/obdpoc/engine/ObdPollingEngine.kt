@@ -122,6 +122,9 @@ open class ObdPollingEngine(
     /** See [SwcanListenRunner.requestBodyTest]; ignored (and logged) off an OBDLink. */
     fun requestBodyTest(durationMs: Long) = swcanListener.requestBodyTest(durationMs)
 
+    /** See [SwcanListenRunner.requestBodyFocus]; safe from any thread. */
+    fun requestBodyFocus(durationMs: Long) = swcanListener.requestBodyFocus(durationMs)
+
     /** The last sample's road speed, read by the SW-CAN runner on the same poll thread. */
     private var lastSpeedKph = Double.NaN
 

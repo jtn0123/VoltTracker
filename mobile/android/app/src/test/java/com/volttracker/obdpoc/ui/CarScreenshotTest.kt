@@ -6,6 +6,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.car.BodyGroup
 import com.volttracker.obdpoc.ui.car.CarControlsUi
 import com.volttracker.obdpoc.ui.car.CarUiState
+import com.volttracker.obdpoc.ui.car.Opening
 import com.volttracker.obdpoc.ui.car.Openings
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.components.VoltTab
@@ -28,7 +29,7 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(qualifiers = "w412dp-h1150dp-420dpi")
+@Config(qualifiers = "w412dp-h1400dp-420dpi")
 class CarScreenshotTest(
     private val stateName: String,
     private val theme: ThemeCase,
@@ -52,6 +53,7 @@ class CarScreenshotTest(
                 tires = TirePressures(38.0, 38.0, 37.0, 38.0),
                 locked = true,
                 cellSpreadMv = 19.0,
+                oilLifePct = 72,
             )
         private val ready = CarControlsUi(enabled = true, gate = "ready")
         private val base =
@@ -73,6 +75,7 @@ class CarScreenshotTest(
                         car =
                             base.car.copy(
                                 controls = ready.copy(lastCommand = "lock", lastOutcome = "confirmed"),
+                                dashWarnings = listOf("washer_fluid_low", "bulb_left_brake"),
                             ),
                     ),
                 "open" to
@@ -80,8 +83,8 @@ class CarScreenshotTest(
                         drive = parked.copy(locked = false),
                         car =
                             base.car.copy(
-                                openings = Openings(listOf("Driver door")),
-                                windowsPct = listOf(60, 0, 0, 0),
+                                openings = Openings(Opening.entries.associateWith { it == Opening.DRIVER_DOOR }),
+                                windowsPct = listOf(60, null, null, null),
                                 controls = ready.copy(gate = "not_in_park", gateDetail = "Put the car in Park first."),
                             ),
                     ),

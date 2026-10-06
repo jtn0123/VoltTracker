@@ -127,6 +127,12 @@ class SwcanReadingsTest {
                 "10 2E 00 40 10 00 C7 7B 9F 00 56 4F",
                 "10 27 40 CB 00 00 00 00 1D",
                 "10 42 C0 CB 00 28 00 02 00 00 00 55",
+                "10 2D 00 40 01 5D 01 0D B1 00 00 FF",
+                "10 26 40 40 04 0E 00 00 00 00 00 00",
+                "10 78 00 40 00 00 01 00 08 00 00 22",
+                "10 78 80 40 08 00 00 00 00 00",
+                "10 3B C0 40 00",
+                "10 63 20 40 00 00",
             ),
             0L,
         )
@@ -140,8 +146,41 @@ class SwcanReadingsTest {
                 .filter { it.endsWith("StaleMs") }
                 .toList()
         assertEquals(SwcanGroup.entries.size, staleKeys.size)
-        assertEquals(SwcanField.entries.size + SwcanGroup.entries.size, sample.length())
+        // The dash-warning broadcasts share one key.
+        val warningFields = SwcanField.entries.count { it.group == SwcanGroup.WARNINGS }
+        assertEquals(SwcanField.entries.size - warningFields + 1 + SwcanGroup.entries.size, sample.length())
+        assertEquals("", sample.getString("dashWarnings"))
+        assertEquals(69.0, sample.getDouble("oilLifeRemainingPct"), 0.0)
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
+    }
+
+    @Test
+    fun doorsWindowsAndWarningsHoldWhileALockAgesOut() {
+        val readings = SwcanReadings(maxAgeMs = 5_000L)
+        readings.record(
+            readingsFrom("0C 41 40 40 00 05 00 05", "0C 63 00 40 01", "10 64 A0 40 28 2D", "10 3B C0 40 01"),
+            0L,
+        )
+        val sample = JSONObject()
+        readings.appendTo(sample, 30 * 60_000L)
+        assertFalse("a lock is an event: it ages out", sample.has("doorLockState"))
+        assertEquals("open", sample.getString("doorFlState"))
+        assertEquals(0.0, sample.getDouble("windowFlPct"), 0.0)
+        assertFalse("a window that sent no reading stays unknown", sample.has("windowFrPct"))
+        assertEquals("washer_fluid_low", sample.getString("dashWarnings"))
+        assertEquals(30 * 60_000L, sample.getLong("doorStatusStaleMs"))
+        assertEquals(30 * 60_000L, sample.getLong("dashWarningStaleMs"))
+    }
+
+    @Test
+    fun dashWarningsMergeTheLightsFromEveryBroadcast() {
+        val readings = SwcanReadings()
+        readings.record(readingsFrom("10 78 00 40 04 00 01 00 08 00 00 22", "10 26 40 40 04 0E 00 00 00 00 00 00"), 0L)
+        readings.record(readingsFrom("10 63 20 40 00 20"), 1_000L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 2_000L)
+        assertEquals("tire_pressure_low,bulb_reverse", sample.getString("dashWarnings"))
+        assertEquals(1_000L, sample.getLong("dashWarningStaleMs"))
     }
 }

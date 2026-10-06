@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.engine
 
 import com.volttracker.obdpoc.CarControlGate
 import com.volttracker.obdpoc.ObdProtocol
+import com.volttracker.obdpoc.SwcanFrame
 import com.volttracker.obdpoc.SwcanFrameDecoder
 import com.volttracker.obdpoc.SwcanGroup
 import com.volttracker.obdpoc.SwcanReading
@@ -18,6 +19,9 @@ import java.util.Locale
  * [Policy.intervalMs] (while the HS bus is answering) the runner pauses polling, switches the
  * adapter to SW-CAN in receive-only mode, monitors for [Policy.listenMs], then puts HS-CAN back
  * exactly as [ObdPollingEngine] set it up and checks the next poll cycle still gets live data.
+ *
+ * While the Car tab is on screen ([requestBodyFocus]) windows run back to back instead, with one HS
+ * poll cycle between them, so a window moving or a door opening shows up within seconds.
  *
  * READ ONLY, by construction. Every command sent here is adapter configuration or monitoring:
  * - `STCMM 0` — monitor without acknowledging frames (the adapter stays electrically silent);
@@ -103,7 +107,10 @@ class SwcanListenRunner(
         /** Stationary cadence: on the car a 1.2 s window every 45 s heard ~3% of the time. */
         val parkedIntervalMs: Long = 15_000L,
         val parkedListenMs: Long = 3_000L,
-        /** A body test listens in chunks this long so no single monitor reply nears the 64 KB cap. */
+        /**
+         * A body test, and any longer window, listens in chunks this long so no single monitor
+         * reply nears the 64 KB cap.
+         */
         val bodyTestChunkMs: Long = 5_000L,
         val bodyTestMaxMs: Long = 90_000L,
         /**
@@ -115,6 +122,20 @@ class SwcanListenRunner(
         val tireHuntIntervalMs: Long = 30_000L,
         val tireHuntMaxWindows: Int = 20,
         /**
+         * The first window after connect. The car broadcasts tire pressures about once a drive, and
+         * the one time a window caught them at the start it was 0.5 min in (2026-10-04).
+         */
+        val startupListenMs: Long = 10_000L,
+        /** Car tab open and parked: one long window after every HS poll cycle. */
+        val focusParkedListenMs: Long = 10_000L,
+        /**
+         * Car tab open while moving: shorter windows, so a sample still lands every ~6 s and the
+         * trip's distance and energy stay continuous (the live trip drops steps over 10 s).
+         */
+        val focusMovingListenMs: Long = 4_000L,
+        /** The longest one focus request holds; the Car tab renews it while it stays open. */
+        val focusMaxLeaseMs: Long = 60_000L,
+        /**
          * Also log every regular window's raw monitor text, payload bytes included, the way a body
          * test does. Debug builds only: it is how frames heard on a drive (tires, doors) get decoded.
          */
@@ -122,6 +143,16 @@ class SwcanListenRunner(
     )
 
     private enum class Identity { UNKNOWN, STN, NOT_STN }
+
+    /** Why a window runs, which sets how long it listens. Logged on every `swcan_window`. */
+    private enum class WindowMode { STARTUP, FOCUS, PARKED, TIRE_HUNT, REGULAR }
+
+    /** One window's monitor output: every chunk's frames and raw text, and whether each stopped cleanly. */
+    private class Heard(
+        val frames: List<SwcanFrame>,
+        val texts: List<String>,
+        val gotPrompt: Boolean,
+    )
 
     val readings = SwcanReadings()
     private var identity = Identity.UNKNOWN
@@ -138,6 +169,9 @@ class SwcanListenRunner(
 
     /** A requested body-test length, set from the service thread and taken by the poll loop. */
     @Volatile private var bodyTestRequestMs = 0L
+
+    /** Until when the Car tab wants near-continuous listening; set from the service thread. */
+    @Volatile private var focusUntilMs = 0L
 
     fun resetSession() {
         readings.clear()
@@ -162,6 +196,17 @@ class SwcanListenRunner(
     fun requestBodyTest(durationMs: Long) {
         bodyTestRequestMs = durationMs.coerceIn(policy.bodyTestChunkMs, policy.bodyTestMaxMs)
     }
+
+    /**
+     * Asks for windows back to back for the next [durationMs] (capped at [Policy.focusMaxLeaseMs]);
+     * 0 or less ends it now. The Car tab renews it while on screen, so a closed or killed screen
+     * lets it lapse on its own. Live HS data then updates once a window instead of every second.
+     */
+    fun requestBodyFocus(durationMs: Long) {
+        focusUntilMs = if (durationMs > 0L) clock() + minOf(durationMs, policy.focusMaxLeaseMs) else 0L
+    }
+
+    private fun isFocused(): Boolean = clock() < focusUntilMs
 
     fun isEnabled(): Boolean = identity == Identity.STN && disabledReason == null
 
@@ -236,7 +281,10 @@ class SwcanListenRunner(
             }
             return
         }
-        if (!isEnabled() || clock() < nextWindowAtMs || io.msSinceLiveData() > policy.maxLiveDataAgeMs) return
+        if (!isEnabled() || io.msSinceLiveData() > policy.maxLiveDataAgeMs) return
+        // Focus runs a window after every poll cycle, but only once the startup window has run.
+        val focusNext = isFocused() && windowCount > 0
+        if (!focusNext && clock() < nextWindowAtMs) return
         runWindow()
     }
 
@@ -244,25 +292,20 @@ class SwcanListenRunner(
     private fun runWindow() {
         io.exclusive {
             val startedAt = clock()
+            val mode = windowMode()
             windowCount += 1
-            val hunting = isTireHunting()
-            if (hunting) tireHuntWindows += 1
+            if (mode == WindowMode.TIRE_HUNT) tireHuntWindows += 1
             val protocol = currentProtocol()
             if (protocol.removePrefix("A") != HS_PROTOCOL) {
                 disable("hs_protocol_$protocol")
-                logWindow("skipped", startedAt, 0, 0, emptySet())
+                logWindow("skipped", startedAt, 0, 0, emptySet(), mode = mode)
                 return@exclusive
             }
             val failedSetup = SETUP_COMMANDS.firstOrNull { !sendOk(it) }
-            val result =
-                if (failedSetup == null) {
-                    io.monitor(MONITOR_COMMAND, listenMs(hunting), policy.stopTimeoutMs)
-                } else {
-                    null
-                }
+            val heard = if (failedSetup == null) listen(listenMs(mode)) else null
             val restored = restoreHs()
-            if (policy.logRawWindows && result != null) logRaw("window", windowCount, result.text)
-            val frames = SwcanFrameDecoder.parseMonitorOutput(result?.text)
+            if (heard != null) logRawWindow(mode, heard)
+            val frames = heard?.frames.orEmpty()
             val decoded = SwcanFrameDecoder.decodeAll(frames)
             readings.record(decoded, clock())
             noteTires(decoded)
@@ -271,11 +314,11 @@ class SwcanListenRunner(
                 when {
                     !restored -> "restore_failed"
                     failedSetup != null -> "setup_failed"
-                    result?.gotPrompt != true -> "no_stop_prompt"
+                    heard?.gotPrompt != true -> "no_stop_prompt"
                     frames.isEmpty() -> "empty"
                     else -> "ok"
                 }
-            logWindow(outcome, startedAt, frames.size, decoded.size, ids, failedSetup, hunting)
+            logWindow(outcome, startedAt, frames.size, decoded.size, ids, failedSetup, mode)
             scheduleAfter(outcome)
             if (!restored) {
                 io.logEvent("swcan_hs_reinit", "reason", "restore_failed")
@@ -287,11 +330,42 @@ class SwcanListenRunner(
         }
     }
 
-    private fun listenMs(hunting: Boolean): Long =
+    /**
+     * Monitors for [totalMs] in equal chunks no longer than [Policy.bodyTestChunkMs], stopping
+     * early if a chunk's stop prompt never comes (the adapter is then not ready for another).
+     */
+    @Throws(IOException::class)
+    private fun listen(totalMs: Long): Heard {
+        val chunks = ((totalMs + policy.bodyTestChunkMs - 1) / policy.bodyTestChunkMs).coerceAtLeast(1L)
+        val frames = mutableListOf<SwcanFrame>()
+        val texts = mutableListOf<String>()
+        var gotPrompt = true
+        for (chunk in 1..chunks) {
+            val result = io.monitor(MONITOR_COMMAND, totalMs / chunks, policy.stopTimeoutMs)
+            frames += SwcanFrameDecoder.parseMonitorOutput(result.text)
+            texts += result.text
+            gotPrompt = result.gotPrompt
+            if (!gotPrompt) break
+        }
+        return Heard(frames, texts, gotPrompt)
+    }
+
+    private fun windowMode(): WindowMode =
         when {
-            io.isStationary() -> policy.parkedListenMs
-            hunting -> policy.tireHuntListenMs
-            else -> policy.listenMs
+            windowCount == 0 -> WindowMode.STARTUP
+            isFocused() -> WindowMode.FOCUS
+            io.isStationary() -> WindowMode.PARKED
+            isTireHunting() -> WindowMode.TIRE_HUNT
+            else -> WindowMode.REGULAR
+        }
+
+    private fun listenMs(mode: WindowMode): Long =
+        when (mode) {
+            WindowMode.STARTUP -> policy.startupListenMs
+            WindowMode.FOCUS -> if (io.isStationary()) policy.focusParkedListenMs else policy.focusMovingListenMs
+            WindowMode.PARKED -> policy.parkedListenMs
+            WindowMode.TIRE_HUNT -> policy.tireHuntListenMs
+            WindowMode.REGULAR -> policy.listenMs
         }
 
     private fun intervalMs(): Long =
@@ -304,6 +378,31 @@ class SwcanListenRunner(
     /** Moving, no tire value heard yet this session, and hunt windows left. */
     private fun isTireHunting(): Boolean =
         !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
+
+    /**
+     * Debug builds log a window's raw frames. Focus windows run back to back for as long as the Car
+     * tab is open, so theirs keep only the body frames ([BODY_LOG_PIDS]): the ones a car test of
+     * doors, windows and locks needs, at a few hundred bytes a window instead of ~60 KB.
+     */
+    private fun logRawWindow(
+        mode: WindowMode,
+        heard: Heard,
+    ) {
+        if (!policy.logRawWindows) return
+        if (mode != WindowMode.FOCUS) {
+            heard.texts.forEach { logRaw("window", windowCount, it) }
+            return
+        }
+        val body = heard.frames.filter { it.extended && it.gmlanPid in BODY_LOG_PIDS }
+        if (body.isEmpty()) return
+        logRaw("focus", windowCount, body.joinToString("\r") { frameText(it) })
+    }
+
+    private fun frameText(frame: SwcanFrame): String =
+        (
+            listOf(frame.id ushr 24, frame.id ushr 16, frame.id ushr 8, frame.id).map { it and 0xFF } +
+                frame.data.toList()
+        ).joinToString(" ") { "%02X".format(Locale.US, it) }
 
     private fun noteTires(decoded: List<SwcanReading>) {
         if (tiresHeard || decoded.none { it.field.group == SwcanGroup.TIRES }) return
@@ -440,7 +539,7 @@ class SwcanListenRunner(
         decodedCount: Int,
         ids: Set<Int>,
         failedCommand: String? = null,
-        tireHunt: Boolean = false,
+        mode: WindowMode,
     ) {
         io.logEvent(
             "swcan_window",
@@ -462,7 +561,9 @@ class SwcanListenRunner(
             "window",
             windowCount.toString(),
             "tireHunt",
-            tireHunt.toString(),
+            (mode == WindowMode.TIRE_HUNT).toString(),
+            "mode",
+            mode.name.lowercase(Locale.US),
         )
     }
 
@@ -478,6 +579,13 @@ class SwcanListenRunner(
         private const val HS_PROTOCOL = "6"
 
         const val MONITOR_COMMAND = "STM"
+
+        /**
+         * Body broadcasts a focus window logs raw: windows, door lock, the four doors, hood, hatch,
+         * tires, washer fluid, bulbs and the window-normalized flags. Never the sensitive ones.
+         */
+        private val BODY_LOG_PIDS =
+            setOf(0x325, 0x20A, 0x318, 0x17B, 0x17C, 0x17D, 0x355, 0x394, 0x1EA, 0x1DE, 0x319, 0x323)
 
         @JvmField
         val SETUP_COMMANDS =

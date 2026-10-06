@@ -97,7 +97,11 @@ class SwcanListenRunnerTest {
 
     private var now = 0L
     private val io = FakeIo()
-    private val policy = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L)
+
+    // The startup window's own length is pinned in theFirstWindowListensLongForTheTireBroadcast;
+    // here it listens as long as a regular one, so each window is one STM.
+    private val policy =
+        SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L, startupListenMs = 1_200L)
     private val runner = SwcanListenRunner(io, policy) { now }
 
     private fun readyStn() {
@@ -361,15 +365,15 @@ class SwcanListenRunnerTest {
     fun aStationaryCarGetsLongerMoreFrequentWindows() {
         readyStn()
         io.stationary = true
-        cycle()
-        assertEquals(listOf(policy.parkedListenMs), io.listenMs)
+        cycle() // the startup window
+        now += policy.parkedIntervalMs
+        cycle() // health check, then the first parked window
+        assertEquals(listOf(policy.startupListenMs, policy.parkedListenMs), io.listenMs)
         now += policy.parkedIntervalMs
         cycle()
-        cycle()
-        assertEquals("parked windows come every parkedIntervalMs", 2, io.count("STM"))
+        assertEquals("parked windows come every parkedIntervalMs", 3, io.count("STM"))
         io.stationary = false
         now += policy.parkedIntervalMs
-        cycle()
         cycle()
         assertEquals("a moving car with no tires yet hunts for them", policy.tireHuntListenMs, io.listenMs.last())
     }
@@ -377,8 +381,10 @@ class SwcanListenRunnerTest {
     @Test
     fun aMovingCarHuntsForTiresUntilItHearsThem() {
         readyStn()
+        cycle() // the startup window
+        now += policy.tireHuntIntervalMs
         cycle()
-        assertEquals(listOf(policy.tireHuntListenMs), io.listenMs)
+        assertEquals(listOf(policy.startupListenMs, policy.tireHuntListenMs), io.listenMs)
         assertEquals("true", io.event("swcan_window")!!["tireHunt"])
         assertNull(io.event("swcan_tires_heard"))
 
@@ -405,28 +411,128 @@ class SwcanListenRunnerTest {
                 firstWindowDelayMs = 10_000L,
                 intervalMs = 45_000L,
                 tireHuntMaxWindows = 2,
+                startupListenMs = 1_200L,
             )
         val runner = SwcanListenRunner(io, capped) { now }
         runner.probeAdapter()
         now += capped.firstWindowDelayMs
+
+        fun twoCycles() {
+            io.liveCycles += 1
+            runner.afterSample()
+            io.liveCycles += 1
+            runner.afterSample()
+        }
+        // The startup window, then the two hunt windows the cap allows, 30 s apart.
         repeat(3) {
-            io.liveCycles += 1
-            runner.afterSample()
-            io.liveCycles += 1
-            runner.afterSample()
+            twoCycles()
             now += capped.tireHuntIntervalMs
         }
-        assertEquals("the third window waits for the normal interval", 2, io.count("STM"))
+        twoCycles()
+        assertEquals("the window after the cap waits for the normal interval", 3, io.count("STM"))
         now += capped.intervalMs - capped.tireHuntIntervalMs
-        io.liveCycles += 1
-        runner.afterSample()
-        io.liveCycles += 1
-        runner.afterSample()
-        assertEquals(3, io.count("STM"))
+        twoCycles()
+        assertEquals(4, io.count("STM"))
         assertEquals(
-            listOf(capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
+            listOf(capped.startupListenMs, capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
             io.listenMs,
         )
+    }
+
+    @Test
+    fun theFirstWindowListensLongForTheTireBroadcast() {
+        val startup = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L)
+        val runner = SwcanListenRunner(io, startup) { now }
+        runner.probeAdapter()
+        now += startup.firstWindowDelayMs
+        io.liveCycles += 1
+        runner.afterSample()
+        assertEquals("10 s in two 5 s chunks", listOf(5_000L, 5_000L), io.listenMs)
+        assertEquals("startup", io.event("swcan_window")!!["mode"])
+        assertEquals("ok", io.event("swcan_window")!!["outcome"])
+        now += startup.tireHuntIntervalMs
+        io.liveCycles += 1
+        runner.afterSample()
+        assertEquals("then the usual windows", startup.tireHuntListenMs, io.listenMs.last())
+    }
+
+    @Test
+    fun theCarTabListensAfterEveryPollCycleWhileItsLeaseLasts() {
+        readyStn()
+        runner.requestBodyFocus(5_000L)
+        now -= 1
+        cycle()
+        assertEquals("focus still waits for the startup window's delay", 0, io.count("STM"))
+        now += 1
+        cycle() // the startup window
+        io.stationary = true
+        cycle() // health check passes, then a focus window straight away
+        cycle()
+        assertEquals(
+            "parked: 10 s windows back to back",
+            listOf(policy.startupListenMs, 5_000L, 5_000L, 5_000L, 5_000L),
+            io.listenMs,
+        )
+        assertEquals("focus", io.event("swcan_window")!!["mode"])
+        io.stationary = false
+        cycle()
+        assertEquals(
+            "moving: short windows, so the trip keeps its samples",
+            policy.focusMovingListenMs,
+            io.listenMs.last(),
+        )
+
+        now += 5_001L
+        val heard = io.listenMs.size
+        cycle()
+        cycle()
+        assertEquals("the lease ran out: back to the interval", heard, io.listenMs.size)
+        assertEquals(0, io.reinitCount)
+        assertTrue(runner.isEnabled())
+    }
+
+    @Test
+    fun aFocusLeaseIsCappedAndAZeroOneEndsIt() {
+        readyStn()
+        cycle() // the startup window
+        runner.requestBodyFocus(30_000L)
+        runner.requestBodyFocus(0L)
+        cycle()
+        assertEquals("a 0 lease ends focus at once", 1, io.count("STM"))
+        runner.requestBodyFocus(10 * 60_000L)
+        now += policy.focusMaxLeaseMs + 1
+        cycle()
+        assertEquals("a lease never runs past the cap", "tire_hunt", io.event("swcan_window")!!["mode"])
+    }
+
+    @Test
+    fun focusWindowsLogOnlyTheBodyFrames() {
+        val rawPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 10_000L,
+                startupListenMs = 1_200L,
+                logRawWindows = true,
+            )
+        val raw = SwcanListenRunner(io, rawPolicy) { now }
+        raw.probeAdapter()
+        now += rawPolicy.firstWindowDelayMs
+        io.liveCycles += 1
+        raw.afterSample() // the startup window logs everything it heard
+        assertEquals("window", io.event("swcan_raw")!!["mode"])
+        // A window frame (arb 0x325) between the 12 V monitor and a lock frame: only the body
+        // frames are kept, re-printed with their ids.
+        io.monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\r10 64 A0 40 28 2D\r0C 41 40 40 00 05 00 05\rSTOPPED\r\r>"
+        raw.requestBodyFocus(30_000L)
+        io.liveCycles += 1
+        raw.afterSample()
+        val logged = io.event("swcan_raw")!!
+        assertEquals("focus", logged["mode"])
+        assertEquals("10 64 A0 40 28 2D\r0C 41 40 40 00 05 00 05", logged["text"])
+        val before = io.events.count { it.first == "swcan_raw" }
+        io.monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\rSTOPPED\r\r>"
+        io.liveCycles += 1
+        raw.afterSample()
+        assertEquals("no body frame: nothing logged", before, io.events.count { it.first == "swcan_raw" })
     }
 
     @Test

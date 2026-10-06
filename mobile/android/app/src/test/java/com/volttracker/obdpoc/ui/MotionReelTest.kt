@@ -110,7 +110,8 @@ class MotionReelTest {
         start { VoltApp(demoState, initialTab = VoltTab.CAR) }
         play("push", HOLD_MS)
 
-        compose.onNodeWithText("Vehicle health").performClick()
+        // Below the fold under the Car tiles: tap it without scrolling the paused clock.
+        compose.onNodeWithText("Vehicle health").performSemanticsAction(SemanticsActions.OnClick)
         play("push", MID_MS)
         // Mid-slide: the Car tab is still underneath the Health screen sliding over it.
         compose.onNodeWithText("Vehicle health").assertExists()
@@ -129,7 +130,8 @@ class MotionReelTest {
 
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         play("push", MID_MS + SCREEN_MS)
-        compose.onNodeWithText("Vehicle health").assertIsDisplayed()
+        // Back on the Car tab, where the row sits below the fold under the tiles.
+        compose.onNodeWithText("Vehicle health").assertExists()
         compose.onNodeWithText("Health").assertDoesNotExist()
     }
 
@@ -249,7 +251,7 @@ class MotionReelTest {
         Settings.Global.putFloat(context.contentResolver, Settings.Global.ANIMATOR_DURATION_SCALE, 0f)
         start { VoltApp(demoState, initialTab = VoltTab.CAR) }
 
-        compose.onNodeWithText("Vehicle health").performClick()
+        compose.onNodeWithText("Vehicle health").performSemanticsAction(SemanticsActions.OnClick)
         play("still", MID_MS)
         // No slide to be part-way through: Health is simply there and the Car tab is gone.
         compose.onNodeWithText("Health").assertIsDisplayed()
