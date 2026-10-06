@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.62.0 (2026-10-06)
+
+### ✳️ New
+
+- **car**: Show the odometer under the car on the Car tab
+  ([#160](https://github.com/jtn0123/VoltTracker/pull/160),
+  [`e424cd8`](https://github.com/jtn0123/VoltTracker/commit/e424cd844ed819e30c118e1d92bc3cfa0b31b017))
+
+
 ## v0.61.0 (2026-10-06)
 
 ### 🔺 Fix
