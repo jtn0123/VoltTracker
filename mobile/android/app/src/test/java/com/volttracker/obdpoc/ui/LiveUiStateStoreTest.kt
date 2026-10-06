@@ -83,6 +83,16 @@ class LiveUiStateStoreTest {
     }
 
     @Test
+    fun theOdometerHoldsBetweenItsSlowReads() {
+        val store = LiveUiStateStore()
+        assertNull(store.state.value.drive.odometerMiles)
+        store.onTelemetry(sample { put("odometerKm", 95_673.5) })
+        assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
+        store.onTelemetry(sample(updatedAt = 2_000L))
+        assertEquals(59_448.76, store.state.value.drive.odometerMiles ?: -1.0, 0.05)
+    }
+
+    @Test
     fun evRangeComesFromTheCarsEstimateNotThisCycleDistance() {
         val store = LiveUiStateStore()
         // Only this-cycle distance reported: must NOT be presented as range.

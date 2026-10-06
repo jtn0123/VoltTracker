@@ -102,6 +102,15 @@ fun CarScreen(
             metric = car.metricUnits,
             modifier = Modifier.padding(top = 4.dp),
         )
+        odometerLine(drive)?.let {
+            Text(
+                it,
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
+            )
+        }
         Controls(drive, car, demo, actions)
         TileRow(
             {

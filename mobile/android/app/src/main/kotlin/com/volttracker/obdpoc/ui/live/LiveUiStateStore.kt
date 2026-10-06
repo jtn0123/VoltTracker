@@ -22,6 +22,7 @@ import com.volttracker.obdpoc.ui.insights.SpeedEfficiency
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import com.volttracker.obdpoc.ui.trips.TripRoute
 import com.volttracker.obdpoc.ui.trips.TripSummary
+import com.volttracker.obdpoc.ui.units.VoltUnits
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
@@ -537,6 +538,8 @@ class LiveUiStateStore(
             displayedSocPercent = displayedSoc,
             evRangeMiles = evRangeMiles(t, current.evRangeMiles),
             fuelPercent = fresh(t, "fuelLevelPct", "fuelLevelStaleMs", current.fuelPercent),
+            // Exactly the inverse of VoltUnits' km per mile, so a metric odometer reads back its own km.
+            odometerMiles = optDouble(t, "odometerKm")?.let { it / VoltUnits.KM_PER_MI } ?: current.odometerMiles,
             gasRangeMiles =
                 fresh(
                     t,

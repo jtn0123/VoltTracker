@@ -46,6 +46,9 @@ fun tempValue(
 
 fun tempUnit(metric: Boolean): String = VoltUnits.of(metric).tempUnit
 
+/** "Odometer 59,448 mi" once the car has reported it; null before. */
+fun odometerLine(drive: DriveUiState): String? = drive.odometerMiles?.let { "Odometer ${drive.units.odometerText(it)}" }
+
 /** "Updated just now" / "Updated 4 min ago" / "Updated 2 hr ago" from the newest body reading. */
 fun CarUiState.updatedLabel(): String? {
     val newest = seenAtMs.values.maxOrNull() ?: return null

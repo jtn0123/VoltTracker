@@ -4,6 +4,7 @@ import com.volttracker.obdpoc.ui.units.VoltUnits
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
+import java.util.Locale
 
 class VoltUnitsTest {
     private val imperial = VoltUnits.Imperial
@@ -25,6 +26,16 @@ class VoltUnitsTest {
         assertEquals("16.1", metric.distanceOneDecimal(10.0))
         assertEquals("km", metric.distanceUnit)
         assertEquals("mi", imperial.distanceUnit)
+    }
+
+    @Test
+    fun theOdometerCutsDownToWholeGroupedUnitsLikeTheCluster() {
+        assertEquals("59,448 mi", imperial.odometerText(59_448.9))
+        assertEquals("812 mi", imperial.odometerText(812.0))
+        // Whole kilometres survive the trip through miles instead of reading one short.
+        for (km in listOf(1L, 61_740L, 95_673L, 999_999L)) {
+            assertEquals("%,d km".format(Locale.US, km), metric.odometerText(km / VoltUnits.KM_PER_MI))
+        }
     }
 
     @Test

@@ -145,6 +145,15 @@ class VirtualVoltComposeTest {
         }
     }
 
+    @Test
+    fun drivingTelemetryReachesTheOdometer() {
+        // 2234B2 is read every 240 cycles, first at cycle 150.
+        drive(Mode.DRIVING, samples = ODOMETER_SAMPLES)
+        show(VoltTab.CAR)
+        // 0x005D6E60 / 64 = 95,673.5 km = 59,448.8 mi, cut down like the cluster.
+        text("Odometer 59,448 mi")
+    }
+
     /** The Car tab: lock, 12 V and climate from the SW-CAN broadcasts the catalog puts on the bus. */
     private fun assertCar(
         last: JSONObject,
@@ -259,6 +268,7 @@ class VirtualVoltComposeTest {
     private companion object {
         const val SAMPLES = 40
         const val TEMPERATURE_SAMPLES = 50
+        const val ODOMETER_SAMPLES = 160
         const val WAIT_TIMEOUT_MS = 60_000L
         const val MI_PER_KM = 0.621371
 
