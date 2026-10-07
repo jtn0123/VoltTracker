@@ -472,4 +472,17 @@ class SwcanFrameDecoderTest {
         assertTrue(decode(SwcanFrameDecoder.ID_REMOTE_START, 0x01).isEmpty())
         assertTrue(decode(SwcanFrameDecoder.ID_REMOTE_START).isEmpty())
     }
+
+    @Test
+    fun powerModeFromAnySourceUnlessFlaggedInvalid() {
+        // arb 0x121; the low two bits are the mode, bit 2 says the value is not valid.
+        val id = 0x10242040
+        assertEquals("off", decode(id, 0x00)[SwcanField.POWER_MODE])
+        assertEquals("accessory", decode(id, 0x01)[SwcanField.POWER_MODE])
+        assertEquals("run", decode(id, 0x02)[SwcanField.POWER_MODE])
+        assertEquals("crank", decode(id, 0x03)[SwcanField.POWER_MODE])
+        assertEquals("another sender of the same frame", "run", decode(0x10242097, 0x02)[SwcanField.POWER_MODE])
+        assertTrue(decode(id, 0x06).isEmpty())
+        assertTrue(decode(id).isEmpty())
+    }
 }

@@ -2,9 +2,11 @@ package com.volttracker.obdpoc.engine
 
 import com.volttracker.obdpoc.CarControlGate
 import com.volttracker.obdpoc.ObdProtocol
+import com.volttracker.obdpoc.SwcanField
 import com.volttracker.obdpoc.SwcanFrame
 import com.volttracker.obdpoc.SwcanFrameDecoder
 import com.volttracker.obdpoc.SwcanGroup
+import com.volttracker.obdpoc.SwcanPrivacy
 import com.volttracker.obdpoc.SwcanReading
 import com.volttracker.obdpoc.SwcanReadings
 import org.json.JSONException
@@ -32,11 +34,15 @@ import java.util.Locale
  * No request, wake-up (`STCSWM 2`), periodic message (`STPPMA`) or raw transmit (`STPX`) is ever
  * issued (SwcanListenRunnerTest pins the full command set).
  *
+ * When the HS bus goes quiet (the car turning off, usually) one bounded quiet capture listens for
+ * the states the body modules send as they shut down ([runQuietCapture]).
+ *
  * Only runs on an STN-based adapter (answers `STI` with `STN…`) whose HS protocol is ISO 15765
  * 11-bit/500k (`ATDPN` 6). A setup failure, [Policy.maxConsecutiveEmpty] windows that hear nothing,
  * or [Policy.maxTroubledWindows] windows whose stop or restore went wrong disable it for the rest of
  * the session. A failed restore always forces a full adapter re-init so HS polling is never left
- * half-configured.
+ * half-configured. A quiet HS bus after a window is only trouble when the car's power mode does not
+ * explain it: a car that has just been switched off answers nothing, and that is not a fault.
  */
 class SwcanListenRunner(
     private val io: Io,
@@ -137,6 +143,16 @@ class SwcanListenRunner(
         /** The longest one focus request holds; the Car tab renews it while it stays open. */
         val focusMaxLeaseMs: Long = 60_000L,
         /**
+         * The quiet capture's cap. On 2026-10-06 the modules sent their doors, windows and tyres in
+         * a burst as the car shut down; the capture ends sooner at a chunk that hears nothing.
+         */
+        val quietCaptureMaxMs: Long = 60_000L,
+        /**
+         * Silence older than this is a car already asleep, not one turning off: no quiet capture,
+         * and a power mode heard longer ago than this no longer explains a quiet HS bus.
+         */
+        val quietCaptureWithinMs: Long = 60_000L,
+        /**
          * Also log every regular window's raw monitor text, payload bytes included, the way a body
          * test does. Debug builds only: it is how frames heard on a drive (tires, doors) get decoded.
          */
@@ -146,14 +162,23 @@ class SwcanListenRunner(
     private enum class Identity { UNKNOWN, STN, NOT_STN }
 
     /** Why a window runs, which sets how long it listens. Logged on every `swcan_window`. */
-    private enum class WindowMode { STARTUP, FOCUS, PARKED, TIRE_HUNT, REGULAR }
+    private enum class WindowMode { STARTUP, FOCUS, PARKED, TIRE_HUNT, REGULAR, QUIET }
 
-    /** One window's monitor output: every chunk's frames and raw text, and whether each stopped cleanly. */
+    /**
+     * One window's monitor output: every chunk's frames, whether the last one stopped cleanly, and
+     * whether any chunk was cut short (the reply hit its cap, or the adapter stopped monitoring by
+     * itself), which leaves a gap in what was heard.
+     */
     private class Heard(
-        val frames: List<SwcanFrame>,
-        val texts: List<String>,
+        val chunks: List<List<SwcanFrame>>,
         val gotPrompt: Boolean,
-    )
+        val partial: Boolean,
+    ) {
+        val frames: List<SwcanFrame> get() = chunks.flatten()
+
+        /** The last chunk heard nothing: the bus had gone quiet. */
+        val endedSilent: Boolean get() = chunks.lastOrNull().isNullOrEmpty()
+    }
 
     val readings = SwcanReadings()
     private var identity = Identity.UNKNOWN
@@ -167,6 +192,16 @@ class SwcanListenRunner(
     private var liveCyclesAtWindowEnd = 0L
     private var tiresHeard = false
     private var tireHuntWindows = 0
+
+    /** The car's last SW-CAN power mode (`off`, `accessory`, `run`, `crank`) and when it was heard. */
+    private var powerMode: String? = null
+    private var powerModeAtMs = 0L
+
+    /** This stretch of HS silence has had its quiet capture; cleared once HS answers again. */
+    private var quietCaptured = false
+
+    /** A quiet HS bus was counted as a troubled window without knowing whether the car was off. */
+    private var unexplainedQuiet = false
 
     /** A requested body-test length, set from the service thread and taken by the poll loop. */
     @Volatile private var bodyTestRequestMs = 0L
@@ -187,6 +222,10 @@ class SwcanListenRunner(
         bodyTestRequestMs = 0L
         tiresHeard = false
         tireHuntWindows = 0
+        powerMode = null
+        powerModeAtMs = 0L
+        quietCaptured = false
+        unexplainedQuiet = false
     }
 
     /**
@@ -266,9 +305,7 @@ class SwcanListenRunner(
         if (healthCheckPending) {
             healthCheckPending = false
             if (io.liveCycleCount() == liveCyclesAtWindowEnd) {
-                disable("hs_not_restored")
-                io.logEvent("swcan_hs_reinit", "reason", "no_live_data_after_window")
-                io.reinitialize()
+                onHsQuietAfterWindow()
                 return
             }
         }
@@ -282,7 +319,12 @@ class SwcanListenRunner(
             }
             return
         }
-        if (!isEnabled() || io.msSinceLiveData() > policy.maxLiveDataAgeMs) return
+        if (!isEnabled()) return
+        if (io.msSinceLiveData() > policy.maxLiveDataAgeMs) {
+            if (quietCaptureDue()) runQuietCapture()
+            return
+        }
+        quietCaptured = false
         // Focus runs a window after every poll cycle, but only once the startup window has run.
         val focusNext = isFocused() && windowCount > 0
         if (!focusNext && clock() < nextWindowAtMs) return
@@ -308,17 +350,8 @@ class SwcanListenRunner(
             if (heard != null) logRawWindow(mode, heard)
             val frames = heard?.frames.orEmpty()
             val decoded = SwcanFrameDecoder.decodeAll(frames)
-            readings.record(decoded, clock())
-            noteTires(decoded)
             val ids = frames.filter { it.extended }.map { it.id }.toSortedSet()
-            val outcome =
-                when {
-                    !restored -> "restore_failed"
-                    failedSetup != null -> "setup_failed"
-                    heard?.gotPrompt != true -> "no_stop_prompt"
-                    frames.isEmpty() -> "empty"
-                    else -> "ok"
-                }
+            val outcome = outcomeOf(restored, failedSetup, heard)
             logWindow(outcome, startedAt, frames.size, decoded.size, ids, failedSetup, mode)
             scheduleAfter(outcome)
             if (!restored) {
@@ -331,6 +364,20 @@ class SwcanListenRunner(
         }
     }
 
+    private fun outcomeOf(
+        restored: Boolean,
+        failedSetup: String?,
+        heard: Heard?,
+    ): String =
+        when {
+            !restored -> "restore_failed"
+            failedSetup != null -> "setup_failed"
+            heard?.gotPrompt != true -> "no_stop_prompt"
+            heard.frames.isEmpty() -> "empty"
+            heard.partial -> "partial"
+            else -> "ok"
+        }
+
     /**
      * Monitors for [totalMs] in equal chunks no longer than [Policy.bodyTestChunkMs], stopping
      * early if a chunk's stop prompt never comes (the adapter is then not ready for another).
@@ -338,17 +385,43 @@ class SwcanListenRunner(
     @Throws(IOException::class)
     private fun listen(totalMs: Long): Heard {
         val chunks = ((totalMs + policy.bodyTestChunkMs - 1) / policy.bodyTestChunkMs).coerceAtLeast(1L)
-        val frames = mutableListOf<SwcanFrame>()
-        val texts = mutableListOf<String>()
+        return listenInChunks(chunks.toInt(), totalMs / chunks) { true }
+    }
+
+    /**
+     * Up to [maxChunks] monitor chunks of [chunkMs], recording what each one decodes as it comes in.
+     * Stops at a chunk with no stop prompt, or when [goOn] (asked after each chunk with that chunk's
+     * frames) says so.
+     */
+    @Throws(IOException::class)
+    private fun listenInChunks(
+        maxChunks: Int,
+        chunkMs: Long,
+        goOn: (List<SwcanFrame>) -> Boolean,
+    ): Heard {
+        val chunks = mutableListOf<List<SwcanFrame>>()
         var gotPrompt = true
-        for (chunk in 1..chunks) {
-            val result = io.monitor(MONITOR_COMMAND, totalMs / chunks, policy.stopTimeoutMs)
-            frames += SwcanFrameDecoder.parseMonitorOutput(result.text)
-            texts += result.text
+        var partial = false
+        while (chunks.size < maxChunks) {
+            val result = io.monitor(MONITOR_COMMAND, chunkMs, policy.stopTimeoutMs)
+            val frames = SwcanFrameDecoder.parseMonitorOutput(result.text)
+            chunks += frames
+            record(SwcanFrameDecoder.decodeAll(frames))
             gotPrompt = result.gotPrompt
-            if (!gotPrompt) break
+            partial = partial || result.capped || result.endedEarly
+            if (!gotPrompt || !goOn(frames)) break
         }
-        return Heard(frames, texts, gotPrompt)
+        return Heard(chunks, gotPrompt, partial)
+    }
+
+    private fun record(decoded: List<SwcanReading>) {
+        val now = clock()
+        readings.record(decoded, now)
+        noteTires(decoded)
+        decoded.lastOrNull { it.field == SwcanField.POWER_MODE }?.let {
+            powerMode = it.value as? String
+            powerModeAtMs = now
+        }
     }
 
     private fun windowMode(): WindowMode =
@@ -367,6 +440,7 @@ class SwcanListenRunner(
             WindowMode.PARKED -> policy.parkedListenMs
             WindowMode.TIRE_HUNT -> policy.tireHuntListenMs
             WindowMode.REGULAR -> policy.listenMs
+            WindowMode.QUIET -> policy.quietCaptureMaxMs
         }
 
     private fun intervalMs(): Long =
@@ -381,29 +455,28 @@ class SwcanListenRunner(
         !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
 
     /**
-     * Debug builds log a window's raw frames. Focus windows run back to back for as long as the Car
-     * tab is open, so theirs keep only the body frames ([BODY_LOG_PIDS]): the ones a car test of
-     * doors, windows and locks needs, at a few hundred bytes a window instead of ~60 KB.
+     * Debug builds log a window's frames, without the sensitive ones ([SwcanPrivacy]). Focus windows
+     * run back to back for as long as the Car tab is open, so theirs keep only the body frames
+     * ([BODY_LOG_PIDS]): the ones a car test of doors, windows and locks needs, at a few hundred
+     * bytes a window instead of ~60 KB.
      */
     private fun logRawWindow(
         mode: WindowMode,
         heard: Heard,
     ) {
         if (!policy.logRawWindows) return
-        if (mode != WindowMode.FOCUS) {
-            heard.texts.forEach { logRaw("window", windowCount, it) }
-            return
+        val label =
+            when (mode) {
+                WindowMode.FOCUS -> "focus"
+                WindowMode.QUIET -> "quiet"
+                else -> "window"
+            }
+        heard.chunks.forEachIndexed { index, chunk ->
+            val kept = if (mode == WindowMode.FOCUS) chunk.filter { it.gmlanPid in BODY_LOG_PIDS } else chunk
+            val text = SwcanPrivacy.loggable(kept)
+            if (text.isNotEmpty()) logRaw(label, windowCount, text, index + 1)
         }
-        val body = heard.frames.filter { it.extended && it.gmlanPid in BODY_LOG_PIDS }
-        if (body.isEmpty()) return
-        logRaw("focus", windowCount, body.joinToString("\r") { frameText(it) })
     }
-
-    private fun frameText(frame: SwcanFrame): String =
-        (
-            listOf(frame.id ushr 24, frame.id ushr 16, frame.id ushr 8, frame.id).map { it and 0xFF } +
-                frame.data.toList()
-        ).joinToString(" ") { "%02X".format(Locale.US, it) }
 
     /** The hunt only ends once all four tyres have a valid pressure, not at the first frame. */
     private fun noteTires(decoded: List<SwcanReading>) {
@@ -429,12 +502,11 @@ class SwcanListenRunner(
                 val result = io.monitor(MONITOR_COMMAND, policy.bodyTestChunkMs, policy.stopTimeoutMs)
                 val frames = SwcanFrameDecoder.parseMonitorOutput(result.text)
                 val decoded = SwcanFrameDecoder.decodeAll(frames)
-                readings.record(decoded, clock())
-                noteTires(decoded)
+                record(decoded)
                 frameCount += frames.size
                 decodedCount += decoded.size
                 frames.filter { it.extended }.mapTo(ids) { it.id }
-                logRaw("body_test", chunk, result.text)
+                logRaw("body_test", windowCount, SwcanPrivacy.loggable(frames), chunk)
                 if (!result.gotPrompt) break
             }
             val restored = restoreHs()
@@ -472,7 +544,8 @@ class SwcanListenRunner(
     private fun scheduleAfter(outcome: String) {
         nextWindowAtMs = clock() + intervalMs()
         when (outcome) {
-            "ok" -> {
+            // A partial window still heard the car; the gap is in its log.
+            "ok", "partial" -> {
                 consecutiveEmpty = 0
                 okWindows += 1
             }
@@ -480,11 +553,92 @@ class SwcanListenRunner(
                 consecutiveEmpty += 1
                 if (consecutiveEmpty >= policy.maxConsecutiveEmpty) disable("no_frames")
             }
-            "no_stop_prompt", "restore_failed" -> {
-                troubledWindows += 1
-                if (troubledWindows >= policy.maxTroubledWindows) disable(outcome)
-            }
+            "no_stop_prompt", "restore_failed" -> countTrouble(outcome)
             else -> disable(outcome)
+        }
+    }
+
+    private fun countTrouble(reason: String) {
+        troubledWindows += 1
+        if (troubledWindows >= policy.maxTroubledWindows) disable(reason)
+    }
+
+    /**
+     * HS polling got nothing in the cycle after a window. If the car's power mode last said off or
+     * accessory it was simply switched off. Otherwise the restore may have left HS broken: that
+     * counts as a troubled window and the adapter is re-initialised. The quiet capture that follows
+     * can still show the car was off, and then the window is forgiven.
+     */
+    private fun onHsQuietAfterWindow() {
+        if (carSwitchedOff()) {
+            io.logEvent("swcan_hs_quiet", "reason", "car_off", "powerMode", powerMode.orEmpty())
+            return
+        }
+        unexplainedQuiet = true
+        countTrouble("hs_not_restored")
+        io.logEvent("swcan_hs_reinit", "reason", "no_live_data_after_window")
+        io.reinitialize()
+    }
+
+    private fun carSwitchedOff(): Boolean =
+        powerMode in OFF_POWER_MODES && clock() - powerModeAtMs <= policy.quietCaptureWithinMs
+
+    /** HS has gone quiet since a window ran, recently enough that the car may be turning off. */
+    private fun quietCaptureDue(): Boolean =
+        !quietCaptured && windowCount > 0 && io.msSinceLiveData() <= policy.quietCaptureWithinMs
+
+    /**
+     * One bounded listen once the HS bus goes quiet, for the door, window and tyre states the body
+     * modules send as the car shuts down. Listens in [Policy.bodyTestChunkMs] chunks up to
+     * [Policy.quietCaptureMaxMs], and stops early at a chunk that hears nothing (the bus asleep) or,
+     * after [QUIET_PROBE_CHUNKS] chunks, unless the power mode says the car is off: a quiet HS bus
+     * with the car still on is not a shutdown, so HS gets the adapter straight back. It never
+     * counts toward giving up for an empty bus, and HS is not health-checked afterwards (the car is
+     * quiet, so there is nothing to check against).
+     */
+    @Throws(IOException::class)
+    private fun runQuietCapture() {
+        quietCaptured = true
+        io.exclusive {
+            val startedAt = clock()
+            windowCount += 1
+            val failedSetup = SETUP_COMMANDS.firstOrNull { !sendOk(it) }
+            val maxChunks = (policy.quietCaptureMaxMs / policy.bodyTestChunkMs).toInt().coerceAtLeast(1)
+            var chunks = 0
+            val heard =
+                if (failedSetup != null) {
+                    null
+                } else {
+                    listenInChunks(maxChunks, policy.bodyTestChunkMs) { chunk ->
+                        chunks += 1
+                        chunk.isNotEmpty() && (chunks < QUIET_PROBE_CHUNKS || carSwitchedOff())
+                    }
+                }
+            val restored = restoreHs()
+            if (heard != null) logRawWindow(WindowMode.QUIET, heard)
+            val frames = heard?.frames.orEmpty()
+            val decodedCount = SwcanFrameDecoder.decodeAll(frames).size
+            val ids = frames.filter { it.extended }.map { it.id }.toSortedSet()
+            val outcome = outcomeOf(restored, failedSetup, heard)
+            logWindow(outcome, startedAt, frames.size, decodedCount, ids, failedSetup, WindowMode.QUIET)
+            val carOff = carSwitchedOff() || heard?.endedSilent == true
+            io.logEvent(
+                "swcan_hs_quiet",
+                "reason",
+                if (carOff) "car_off" else "car_on",
+                "powerMode",
+                powerMode.orEmpty(),
+            )
+            if (carOff && unexplainedQuiet && troubledWindows > 0 && disabledReason == null) troubledWindows -= 1
+            unexplainedQuiet = false
+            nextWindowAtMs = clock() + intervalMs()
+            if (!restored) {
+                countTrouble("restore_failed")
+                io.logEvent("swcan_hs_reinit", "reason", "restore_failed")
+                io.reinitialize()
+            } else if (failedSetup != null || heard?.gotPrompt != true) {
+                countTrouble(outcome)
+            }
         }
     }
 
@@ -528,10 +682,21 @@ class SwcanListenRunner(
 
     private fun logRaw(
         mode: String,
-        chunk: Int,
+        window: Int,
         text: String,
+        chunk: Int = window,
     ) {
-        io.logEvent("swcan_raw", "mode", mode, "chunk", chunk.toString(), "text", text.take(MAX_RAW_CHARS))
+        io.logEvent(
+            "swcan_raw",
+            "mode",
+            mode,
+            "window",
+            window.toString(),
+            "chunk",
+            chunk.toString(),
+            "text",
+            text.take(MAX_RAW_CHARS),
+        )
     }
 
     private fun logWindow(
@@ -571,6 +736,11 @@ class SwcanListenRunner(
 
     companion object {
         private const val PROBE_TIMEOUT_MS = 1_200L
+
+        /** The car sends its power mode about every 5 s, so two 5 s chunks hear it. */
+        private const val QUIET_PROBE_CHUNKS = 2
+
+        private val OFF_POWER_MODES = setOf("off", "accessory")
         private const val COMMAND_TIMEOUT_MS = 1_000L
         private const val MAX_LOGGED_IDS = 48
 

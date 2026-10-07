@@ -107,7 +107,8 @@ import { driveGear, gearDisplayText } from "./gear";
     "cycleConditioningKwh", "batteryEnergyLeftKwh", "energySplitStaleMs", "wheelSpeedFlKph",
     "wheelSpeedFrKph", "wheelSpeedRlKph", "wheelSpeedRrKph", "wheelSpeedStaleMs", "tripAKm", "tripBKm",
     "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs", "oilLifeRemainingPct", "oilLifeStaleMs",
-    "dashWarnings", "dashWarningStaleMs", "dashWarningsComplete", "tireSensorsInvalid",
+    "dashWarnings", "dashWarningStaleMs", "dashWarningsComplete", "tireSensorsInvalid", "powerMode",
+    "powerModeStaleMs",
     // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
     // present while controls are enabled, so they must blank when a sample omits them.
     "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
@@ -1632,6 +1633,7 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "heaterCoreTempC", label: "Heater core temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
     { key: "oilLifeRemainingPct", label: "Oil life (body bus)", group: "Body & comfort", unit: "%", staleKey: "oilLifeStaleMs", enhanced: true },
+    { key: "powerMode", label: "Car power (body bus)", group: "Body & comfort", text: true, staleKey: "powerModeStaleMs", enhanced: true },
     // Comma-joined warning codes; "" means none lit in the broadcasts heard so far, which covers
     // every light only once dashWarningsComplete is true.
     { key: "dashWarnings", label: "Dash warnings", group: "Body & comfort", text: true, staleKey: "dashWarningStaleMs", enhanced: true, display: (t) => String(t.dashWarnings ?? "").replace(/_/g, " ").replace(/,/g, ", ") || (t.dashWarningsComplete === true ? "none" : "none seen so far") },

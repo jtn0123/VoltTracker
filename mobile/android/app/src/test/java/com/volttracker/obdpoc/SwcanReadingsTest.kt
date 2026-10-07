@@ -133,6 +133,7 @@ class SwcanReadingsTest {
                 "10 78 80 40 08 00 00 00 00 00",
                 "10 3B C0 40 00",
                 "10 63 20 40 00 00",
+                "10 24 20 40 02",
             ),
             0L,
         )
@@ -154,6 +155,7 @@ class SwcanReadingsTest {
         assertEquals(69.0, sample.getDouble("oilLifeRemainingPct"), 0.0)
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
+        assertEquals("run", sample.getString("powerMode"))
     }
 
     @Test

@@ -103,7 +103,7 @@ arb:319,319,,0-1 (16 bit flags),"bulb out: center brake, front turns, brakes, lo
 106E0097,370,97,*,audio source status,Audio_Source_Status_LS,,,constant,,same payload every frame on both days
 106D0080,368,80,*,audio master arbitration,Audio_Master_Arbitration_Command,,,constant,,same payload every frame on both days
 10466040,233,40,*,drive-mode customization availability,HSGMLAN_Customization_Setings_LS,,,constant,,same payload every frame on both days
-10242040,121,40,*,system power mode (02 = run),System_Power_Mode_LS.SysPwrMd,,,constant,,same payload every frame on both days
+10242040,121,40,0 bits0-1,"system power mode: 0 off, 1 accessory, 2 run, 3 crank (bit 2 = not valid)",System_Power_Mode_LS.SysPwrMd,enum,,decoded,powerMode,"10-06: run while on, off as the car shut down; heard about every 5 s"
 10244060,122,60,*,system power mode backup,System_Power_Mode_Backup_LS,,,constant,,same payload every frame on both days
 103D20BC,1E9,BC,*,rear vision / auto-brake indications,CSV_EOCM_R_Indications_LS,,,constant,,same payload every frame on both days
 arb:1FFF,1FFF,any,*,"module heartbeat, empty payload; the source byte names the module",,,,heartbeat,,16 modules: 40 58 59 5B 60 66 68 80 81 97 99 AF B9 BB BC CB

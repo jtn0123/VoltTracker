@@ -97,6 +97,7 @@ enum class SwcanField(
     TRIP_B(SwcanGroup.TRIPS),
     TRANS_OIL_TEMP(SwcanGroup.DRIVETRAIN),
     OIL_LIFE(SwcanGroup.MAINTENANCE),
+    POWER_MODE(SwcanGroup.POWER_MODE),
 
     // Dash warning lights, one field per broadcast that carries them; each value is the comma-joined
     // codes of the ones lit, "" when none are (see [SwcanReadings] for how they merge).
@@ -125,6 +126,7 @@ enum class SwcanGroup {
     DRIVETRAIN,
     MAINTENANCE,
     WARNINGS,
+    POWER_MODE,
 }
 
 /**
@@ -178,6 +180,7 @@ object SwcanFrameDecoder {
     const val PID_BULB_OUTAGE = 0x0319
     const val PID_WARNINGS_SLOW = 0x03C0
     const val PID_WARNINGS_SUPER_SLOW = 0x03C4
+    const val PID_POWER_MODE = 0x0121
 
     private const val MAX_29_BIT_ID = 0x1FFFFFFF
     private const val MAX_DATA_BYTES = 8
@@ -195,6 +198,7 @@ object SwcanFrameDecoder {
     private const val WINDOW_BITS = 0x07
     private const val WINDOW_REAR_SHIFT = 3
     private const val HOOD_STATE_BITS = 0x03
+    private const val POWER_MODE_BITS = 0x03
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
     private const val NOT_AVAILABLE_BYTE = 0xFF
     private const val GMLAN_RANGE_SCALE = 0.015625
@@ -328,6 +332,7 @@ object SwcanFrameDecoder {
             PID_WARNINGS_SUPER_SLOW -> warnings(d, SwcanField.WARNINGS_SUPER_SLOW, SUPER_SLOW_WARNINGS)
             PID_WASHER_LEVEL -> warnings(d, SwcanField.WARNING_WASHER, WASHER_WARNINGS)
             PID_BULB_OUTAGE -> warnings(d, SwcanField.WARNING_BULBS, BULB_WARNINGS)
+            PID_POWER_MODE -> powerMode(d)
             else -> none()
         }
     }
@@ -629,6 +634,13 @@ object SwcanFrameDecoder {
         return listOf(text(SwcanField.HOOD, if (d[0] and HOOD_STATE_BITS == 0) "closed" else "open"))
     }
 
+    // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.
+    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s.
+    private fun powerMode(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        return listOf(text(SwcanField.POWER_MODE, POWER_MODES[d[0] and POWER_MODE_BITS]))
+    }
+
     // Engine_Information_4_LS (arb 0x168): byte 4 is the engine oil life left, 0.392 % per count
     // (EngOilRmnLf). It read about 70 % on 2026-10-04; the car refuses the polled oil-life PID.
     private fun oilLife(d: IntArray): List<SwcanReading> {
@@ -668,6 +680,10 @@ object SwcanFrameDecoder {
     )
 
     // GM low-speed DBC layouts. The car sent all of these with no light on, in every capture so far.
+
+    /** GMLAN system power modes by SysPwrMd value. */
+    private val POWER_MODES = listOf("off", "accessory", "run", "crank")
+
     private val FAST_WARNINGS = listOf(WarningFlag(0, 0, "abs"))
     private val SLOW_WARNINGS =
         listOf(
