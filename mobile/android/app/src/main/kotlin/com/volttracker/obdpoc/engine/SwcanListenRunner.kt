@@ -71,8 +71,9 @@ class SwcanListenRunner(
         fun <T> exclusive(block: () -> T): T
 
         /**
-         * True while the car is standing still. Parked, a longer and more frequent window costs
-         * nothing the driver sees and catches the event-only body frames (locks, doors, windows).
+         * True while the car is parked ([ParkedDetector]: in Park, not just stopped at a light).
+         * Parked, a longer and more frequent window costs nothing the driver sees and catches the
+         * event-only body frames (locks, doors, windows).
          */
         fun isStationary(): Boolean = false
 
@@ -375,7 +376,7 @@ class SwcanListenRunner(
             else -> policy.intervalMs
         }
 
-    /** Moving, no tire value heard yet this session, and hunt windows left. */
+    /** Moving, not all four tyres heard yet this session, and hunt windows left. */
     private fun isTireHunting(): Boolean =
         !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
 
@@ -404,8 +405,9 @@ class SwcanListenRunner(
                 frame.data.toList()
         ).joinToString(" ") { "%02X".format(Locale.US, it) }
 
+    /** The hunt only ends once all four tyres have a valid pressure, not at the first frame. */
     private fun noteTires(decoded: List<SwcanReading>) {
-        if (tiresHeard || decoded.none { it.field.group == SwcanGroup.TIRES }) return
+        if (tiresHeard || decoded.none { it.field.group == SwcanGroup.TIRES } || !readings.hasAllTires()) return
         tiresHeard = true
         io.logEvent("swcan_tires_heard", "huntWindows", tireHuntWindows.toString())
     }

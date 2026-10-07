@@ -405,6 +405,28 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun aTireSensorTheCarFlagsInvalidKeepsTheHuntGoing() {
+        readyStn()
+        cycle() // the startup window
+        // Front left flagged invalid (byte 0 bit 0): three of four tyres is not a reading.
+        io.monitorText = "10 3D 40 40 01 00 3C 3D 3E 3F 00 00\rSTOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertNull(io.event("swcan_tires_heard"))
+        assertEquals(policy.tireHuntListenMs, io.listenMs.last())
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals("fl", sample.getString("tireSensorsInvalid"))
+
+        io.monitorText = "10 3D 40 40 00 00 3C 3D 3E 3F 00 00\rSTOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertEquals("the second hunt window had all four", "2", io.event("swcan_tires_heard")!!["huntWindows"])
+    }
+
+    @Test
     fun theTireHuntStopsAfterItsWindowCap() {
         val capped =
             SwcanListenRunner.Policy(

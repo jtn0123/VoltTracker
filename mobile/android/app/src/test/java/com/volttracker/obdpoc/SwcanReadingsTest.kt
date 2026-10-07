@@ -146,10 +146,11 @@ class SwcanReadingsTest {
                 .filter { it.endsWith("StaleMs") }
                 .toList()
         assertEquals(SwcanGroup.entries.size, staleKeys.size)
-        // The dash-warning broadcasts share one key.
         val warningFields = SwcanField.entries.count { it.group == SwcanGroup.WARNINGS }
-        assertEquals(SwcanField.entries.size - warningFields + 1 + SwcanGroup.entries.size, sample.length())
+        // The dash-warning broadcasts share one key, plus whether all of them have reported.
+        assertEquals(SwcanField.entries.size - warningFields + 2 + SwcanGroup.entries.size, sample.length())
         assertEquals("", sample.getString("dashWarnings"))
+        assertTrue(sample.getBoolean("dashWarningsComplete"))
         assertEquals(69.0, sample.getDouble("oilLifeRemainingPct"), 0.0)
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
@@ -200,6 +201,48 @@ class SwcanReadingsTest {
         val sample = JSONObject()
         readings.appendTo(sample, 2_000L)
         assertEquals("tire_pressure_low,bulb_reverse", sample.getString("dashWarnings"))
-        assertEquals(1_000L, sample.getLong("dashWarningStaleMs"))
+        assertEquals("a held group is as old as its oldest report", 2_000L, sample.getLong("dashWarningStaleMs"))
+        assertFalse("two of the five broadcasts haven't reported", sample.getBoolean("dashWarningsComplete"))
+    }
+
+    @Test
+    fun aHeldGroupIsAsOldAsItsOldestMember() {
+        val readings = SwcanReadings()
+        // The driver door closed two hours ago; the passenger door just now.
+        readings.record(readingsFrom("0C 63 00 40 80"), 0L)
+        readings.record(readingsFrom("0C 2F 60 40 00"), 2 * 3_600_000L - 60_000L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 2 * 3_600_000L)
+        assertEquals(
+            "closed doors rest on the two-hour-old report",
+            2 * 3_600_000L,
+            sample.getLong("doorStatusStaleMs"),
+        )
+        // A broadcast group that ages out still reports its freshest member.
+        readings.record(readingsFrom("10 73 40 99 20"), 2 * 3_600_000L - 5_000L)
+        readings.record(readingsFrom("10 81 40 99 20 51 24 00"), 2 * 3_600_000L - 1_000L)
+        val climate = JSONObject()
+        readings.appendTo(climate, 2 * 3_600_000L)
+        assertEquals(1_000L, climate.getLong("climateStaleMs"))
+    }
+
+    @Test
+    fun aTireTheCarFlagsInvalidDropsItsOldPressure() {
+        val readings = SwcanReadings()
+        readings.record(readingsFrom("10 3D 40 40 24 24 3E 3F 3E 3E"), 0L)
+        assertTrue(readings.hasAllTires())
+        // Later the front-left sensor is flagged (byte 0 bit 0) while the others still read.
+        readings.record(readingsFrom("10 3D 40 40 25 24 3E 3F 3E 3E"), 60_000L)
+        assertFalse(readings.hasAllTires())
+        val sample = JSONObject()
+        readings.appendTo(sample, 61_000L)
+        assertFalse("no stale front-left pressure", sample.has("tirePressureFlKpa"))
+        assertEquals(252.0, sample.getDouble("tirePressureRlKpa"), 0.0)
+        assertEquals("fl", sample.getString("tireSensorsInvalid"))
+        readings.record(readingsFrom("10 3D 40 40 24 24 3E 3F 3E 3E"), 120_000L)
+        val good = JSONObject()
+        readings.appendTo(good, 121_000L)
+        assertFalse(good.has("tireSensorsInvalid"))
+        assertEquals(248.0, good.getDouble("tirePressureFlKpa"), 0.0)
     }
 }

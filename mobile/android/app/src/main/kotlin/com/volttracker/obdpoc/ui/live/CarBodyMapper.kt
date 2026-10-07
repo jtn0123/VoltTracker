@@ -36,6 +36,9 @@ internal object CarBodyMapper {
             fanPct = if (climateStale) null else number(t, "blowerPct")?.toInt() ?: current.fanPct,
             acKw = if (climateStale) null else number(t, "acCompressorKw") ?: current.acKw,
             dashWarnings = dashWarnings(t, current.dashWarnings),
+            dashWarningsComplete =
+                if (t.has(WARNINGS_KEY)) t.optBoolean("dashWarningsComplete", false) else current.dashWarningsComplete,
+            tireSensorsInvalid = tireFaults(t, current.tireSensorsInvalid),
             remoteStartOn = onOff(t, "remoteStartState", null, current.remoteStartOn),
             outsideTempC =
                 if (stale(t, "outsideTempStaleMs")) {
@@ -137,6 +140,23 @@ internal object CarBodyMapper {
         return pct.mapIndexed { i, value -> value?.toInt()?.coerceIn(0, PERCENT) ?: known[i] }
     }
 
+    /**
+     * `tireSensorsInvalid` (`fl,rr`) rides with the tyre readings: a sample with any tyre key and no
+     * fault list means every reported sensor is good again.
+     */
+    private fun tireFaults(
+        t: JSONObject,
+        current: List<String>,
+    ): List<String> {
+        val faults = text(t, TIRE_FAULTS_KEY)
+        if (faults == null && TIRE_KEYS.none { t.has(it) }) return current
+        return faults
+            ?.split(',')
+            ?.map { it.trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+    }
+
     /** `dashWarnings`: comma-joined codes of the lights on, "" for none. */
     private fun dashWarnings(
         t: JSONObject,
@@ -200,6 +220,7 @@ internal object CarBodyMapper {
     private const val CLOSED = "closed"
     private const val CLIMATE_STALE = "climateStaleMs"
     private const val WARNINGS_KEY = "dashWarnings"
+    private const val TIRE_FAULTS_KEY = "tireSensorsInvalid"
     private const val DEMO_SOURCE = "demo"
 
     private val OPENING_KEYS =
@@ -219,7 +240,7 @@ internal object CarBodyMapper {
     /** Each group's value keys (any one present counts) and its broadcast-age key. */
     private val GROUP_KEYS =
         mapOf(
-            BodyGroup.TIRES to (TIRE_KEYS to "tirePressureStaleMs"),
+            BodyGroup.TIRES to (TIRE_KEYS + TIRE_FAULTS_KEY to "tirePressureStaleMs"),
             BodyGroup.LOCK to (listOf("doorLockState") to "doorLockStaleMs"),
             BodyGroup.DOORS to (OPENING_KEYS.map { it.second } to "doorStatusStaleMs"),
             BodyGroup.WINDOWS to (WINDOW_KEYS to "windowStaleMs"),

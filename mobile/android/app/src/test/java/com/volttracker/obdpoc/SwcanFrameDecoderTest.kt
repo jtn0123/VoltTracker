@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -12,6 +13,9 @@ import org.junit.Test
  * port; the ones marked with a date are the car's own bytes from that capture.
  */
 class SwcanFrameDecoderTest {
+    /** The byte order of the tyre frame: front left, rear left, front right, rear right. */
+    private val tireBytes = listOf(SwcanField.TIRE_FL, SwcanField.TIRE_RL, SwcanField.TIRE_FR, SwcanField.TIRE_RR)
+
     private fun frame(
         id: Int,
         vararg bytes: Int,
@@ -117,14 +121,33 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
-    fun tirePressuresDropMissingSensors() {
+    fun tirePressuresMarkMissingSensorsInvalid() {
         val v = decode(SwcanFrameDecoder.ID_TPMS, 0, 0, 0x41, 0x40, 0x42, 0xFF)
         assertEquals(260.0, v[SwcanField.TIRE_FL])
         assertEquals(256.0, v[SwcanField.TIRE_RL])
         assertEquals(264.0, v[SwcanField.TIRE_FR])
-        assertFalse(v.containsKey(SwcanField.TIRE_RR))
-        assertFalse(decode(SwcanFrameDecoder.ID_TPMS, 0, 0, 0, 0x40, 0x40, 0x40).containsKey(SwcanField.TIRE_FL))
+        assertSame("0xFF is GM's not-available code", SwcanReading.INVALID, v[SwcanField.TIRE_RR])
+        val flat = decode(SwcanFrameDecoder.ID_TPMS, 0, 0, 0, 0x40, 0x40, 0x40)
+        assertEquals("a valid 0 is a flat tyre, not a missing one", 0.0, flat[SwcanField.TIRE_FL])
         assertTrue(decode(SwcanFrameDecoder.ID_TPMS, 0, 0, 0x40).isEmpty())
+    }
+
+    @Test
+    fun tirePressuresFollowTheirValidityBits() {
+        // 2026-10-04/10-06: the car's frames read 24 24 there with all four sensors good.
+        val good = decode(SwcanFrameDecoder.ID_TPMS, 0x24, 0x24, 0x3E, 0x3F, 0x3E, 0x3E)
+        assertEquals(listOf(248.0, 252.0, 248.0, 248.0), tireBytes.map { good[it] })
+        // Byte 0 bit 0 flags the front left, bit 1 the front right; byte 1 the same for the rears.
+        val frontLeft = decode(SwcanFrameDecoder.ID_TPMS, 0x25, 0x24, 0x3E, 0x3F, 0x3E, 0x3E)
+        assertSame(SwcanReading.INVALID, frontLeft[SwcanField.TIRE_FL])
+        assertEquals(248.0, frontLeft[SwcanField.TIRE_FR])
+        val rears = decode(SwcanFrameDecoder.ID_TPMS, 0x24, 0x27, 0x3E, 0x3F, 0x3E, 0x3E)
+        assertSame(SwcanReading.INVALID, rears[SwcanField.TIRE_RL])
+        assertSame(SwcanReading.INVALID, rears[SwcanField.TIRE_RR])
+        assertEquals(248.0, rears[SwcanField.TIRE_FL])
+        val frontRight = decode(SwcanFrameDecoder.ID_TPMS, 0x26, 0x24, 0x3E, 0x3F, 0x3E, 0x3E)
+        assertSame(SwcanReading.INVALID, frontRight[SwcanField.TIRE_FR])
+        assertEquals(252.0, frontRight[SwcanField.TIRE_RL])
     }
 
     @Test

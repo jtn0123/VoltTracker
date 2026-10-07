@@ -189,7 +189,8 @@ fun climateTile(
 /**
  * The tyres tile: the average against the placard, or the lowest tyre when any is low. The car
  * sends the pressures about once a drive, so until it does this drive the last ones read show,
- * with when they were read.
+ * with when they were read, and without calling them normal: they may have changed since. A
+ * sensor the car flags not valid blanks the tile and says which.
  */
 fun tiresTile(
     drive: DriveUiState,
@@ -198,6 +199,9 @@ fun tiresTile(
     val metric = car.metricUnits
     val unit = pressureUnit(metric)
     val placard = "${pressureValue(car.placardPsi, metric)} $unit"
+    if (car.tireSensorsInvalid.isNotEmpty()) {
+        return CarTile(DASH, " $unit", listOf(tireFaultLine(car.tireSensorsInvalid)))
+    }
     val remembered = car.memory.tires?.takeIf { drive.tires == null }
     val tires =
         drive.tires ?: remembered
@@ -205,11 +209,13 @@ fun tiresTile(
     val low = tires.all.indices.filter { tireLow(tires.all[it], car.placardPsi) }
     val readAt = if (remembered != null) "Read ${ago(car.nowMs - car.memory.tiresAtMs)}" else car.tiresReadLine()
     if (low.isEmpty()) {
+        // An earlier drive's pressures are not a verdict on today's tyres.
+        val verdict = if (remembered == null) " · all normal" else ""
         return CarTile(
             value = pressureValue(tires.all.average(), metric),
             unit = " $unit avg",
-            lines = listOfNotNull("Placard $placard · all normal", readAt),
-            tone = PillTone.EV,
+            lines = listOfNotNull("Placard $placard$verdict", readAt),
+            tone = if (remembered == null) PillTone.EV else PillTone.NEUTRAL,
         )
     }
     val worst = low.minBy { tires.all[it] }
@@ -223,6 +229,16 @@ fun tiresTile(
         warnValue = true,
     )
 }
+
+/** "Front left sensor not reading" / "Front left, rear right sensors not reading". */
+fun tireFaultLine(codes: List<String>): String {
+    val names = codes.mapNotNull { TIRE_CODE_NAMES[it] }.ifEmpty { listOf("A tire") }
+    val joined = names.mapIndexed { i, name -> if (i == 0) name.replaceFirstChar { it.uppercase() } else name }
+    return joined.joinToString(", ") + if (names.size == 1) " sensor not reading" else " sensors not reading"
+}
+
+private val TIRE_CODE_NAMES =
+    mapOf("fl" to "front left", "fr" to "front right", "rl" to "rear left", "rr" to "rear right")
 
 /**
  * "Read 18 min ago" once the pressures are older than a broadcast stays fresh. The car sends them
@@ -311,7 +327,11 @@ fun windowsTile(
     )
 }
 
-private fun downText(pct: Int): String = if (pct >= PERCENT_INT) "fully down" else "$pct% down"
+/**
+ * The car reports a window in sixths (0 up, 6 fully down), but only up, part way and fully down
+ * have been checked against a real window, so the in-between steps aren't shown as percentages.
+ */
+private fun downText(pct: Int): String = if (pct >= PERCENT_INT) "fully down" else "part way down"
 
 /**
  * The doors tile: the four doors, the hood and the hatch. Each reports only when it opens or
@@ -340,14 +360,20 @@ fun doorsTile(
     )
 }
 
-/** The dash-warnings row: the lights the car says are on, "None on", or why it isn't known. */
+/**
+ * The dash-warnings row: the lights the car says are on, "None on", or why it isn't known. "None
+ * on" needs every warning broadcast to have reported; before that, "None seen so far".
+ */
 fun dashWarningsLine(
     car: CarUiState,
     connected: Boolean = true,
 ): ToneText {
     val codes = car.dashWarnings ?: return ToneText(car.missingLine(BodyGroup.WARNINGS, connected), PillTone.NEUTRAL)
     if (codes.isEmpty()) {
-        return ToneText(listOfNotNull("None on", car.asOfLine(BodyGroup.WARNINGS)).joinToString(" · "), PillTone.EV)
+        // Clear from only some of the broadcasts is not an all-clear.
+        val text = if (car.dashWarningsComplete) "None on" else "None seen so far"
+        val tone = if (car.dashWarningsComplete) PillTone.EV else PillTone.NEUTRAL
+        return ToneText(listOfNotNull(text, car.asOfLine(BodyGroup.WARNINGS)).joinToString(" · "), tone)
     }
     return ToneText(codes.joinToString(" · ") { dashWarningLabel(it) }, PillTone.WARN)
 }

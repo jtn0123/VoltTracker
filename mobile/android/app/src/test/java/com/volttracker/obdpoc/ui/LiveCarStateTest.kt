@@ -116,6 +116,49 @@ class LiveCarStateTest {
     }
 
     @Test
+    fun warningCoverageRidesWithTheWarnings() {
+        store.onTelemetry(body { put("dashWarnings", "").put("dashWarningsComplete", false) })
+        assertFalse(car.dashWarningsComplete)
+        store.onTelemetry(body { put("dashWarnings", "").put("dashWarningsComplete", true) })
+        assertTrue(car.dashWarningsComplete)
+        store.onTelemetry(JSONObject().put("updatedAt", 102_000L))
+        assertTrue("absent keeps the last report", car.dashWarningsComplete)
+    }
+
+    @Test
+    fun aTireSensorTheCarFlagsInvalidClearsTheLivePressures() {
+        val allFour: JSONObject.() -> Unit = {
+            put("tirePressureFrKpa", 262.0).put("tirePressureRlKpa", 255.0).put("tirePressureRrKpa", 262.0)
+        }
+        store.onTelemetry(body(block = allFour))
+        assertEquals(
+            38.0,
+            store.state.value.drive.tires!!
+                .fl,
+            0.1,
+        )
+        store.onTelemetry(
+            body {
+                allFour(this)
+                remove("tirePressureFlKpa")
+                put("tireSensorsInvalid", "fl")
+            },
+        )
+        assertEquals(listOf("fl"), car.tireSensorsInvalid)
+        assertNull("three good tyres are not a set", store.state.value.drive.tires)
+        store.onTelemetry(JSONObject().put("updatedAt", 101_000L).put("soc", 60))
+        assertEquals("a sample without tyres keeps the fault", listOf("fl"), car.tireSensorsInvalid)
+        store.onTelemetry(body(at = 102_000L, block = allFour))
+        assertEquals("all four reading again", emptyList<String>(), car.tireSensorsInvalid)
+        assertEquals(
+            38.0,
+            store.state.value.drive.tires!!
+                .fl,
+            0.1,
+        )
+    }
+
+    @Test
     fun aRealCarsTiresAndOilAreRememberedButTheDemosNever() {
         val tires: JSONObject.() -> Unit = {
             put("tirePressureFrKpa", 262.0).put("tirePressureRlKpa", 255.0).put("tirePressureRrKpa", 262.0)

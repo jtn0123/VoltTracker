@@ -91,6 +91,10 @@ data class CarUiState(
     val acKw: Double? = null,
     /** Codes of the dash warning lights on ([dashWarningLabel]); empty = none on, null = not reported. */
     val dashWarnings: List<String>? = null,
+    /** Every warning broadcast has reported, so an empty [dashWarnings] covers every light read. */
+    val dashWarningsComplete: Boolean = false,
+    /** Tyres whose sensor the car flagged not valid ("fl", "fr", "rl", "rr"); their pressure is unknown. */
+    val tireSensorsInvalid: List<String> = emptyList(),
     val memory: CarMemory = CarMemory(),
     val remoteStartOn: Boolean? = null,
     val outsideTempC: Double? = null,
@@ -110,6 +114,7 @@ data class CarUiState(
                     acOn = false,
                     fanPct = 0,
                     dashWarnings = emptyList(),
+                    dashWarningsComplete = true,
                     remoteStartOn = false,
                     outsideTempC = 17.8,
                     seenAtMs = BodyGroup.entries.associateWith { DEMO_NOW_MS - 60_000L },

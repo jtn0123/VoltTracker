@@ -57,6 +57,7 @@ class CarTabLogicTest {
             windowsPct = listOf(0, 0, 0, 0),
             acOn = false,
             dashWarnings = emptyList(),
+            dashWarningsComplete = true,
             remoteStartOn = false,
             outsideTempC = 17.8,
             seenAtMs = BodyGroup.entries.associateWith { now - 60_000L },
@@ -226,9 +227,35 @@ class CarTabLogicTest {
             car.copy(memory = CarMemory(tires = TirePressures(36.0, 36.0, 36.0, 36.0), tiresAtMs = now - 50 * HOUR_MS))
         val tile = tiresTile(parked.copy(tires = null), remembered)
         assertEquals("36", tile.value)
-        assertEquals(listOf("Placard 38 psi · all normal", "Read 2 days ago"), tile.lines)
+        assertEquals(
+            "an old reading is not a verdict on today's tyres",
+            listOf("Placard 38 psi", "Read 2 days ago"),
+            tile.lines,
+        )
+        assertEquals(PillTone.NEUTRAL, tile.tone)
         // This drive's pressures win over the remembered ones.
         assertEquals("38", tiresTile(parked, remembered).value)
+    }
+
+    @Test
+    fun aTireSensorTheCarFlagsInvalidIsNamedInsteadOfAPressure() {
+        val one = tiresTile(parked.copy(tires = null), car.copy(tireSensorsInvalid = listOf("fl")))
+        assertEquals(DASH, one.value)
+        assertEquals(listOf("Front left sensor not reading"), one.lines)
+        val remembered =
+            car.copy(
+                memory =
+                    CarMemory(
+                        tires = TirePressures(36.0, 36.0, 36.0, 36.0),
+                        tiresAtMs =
+                            now - HOUR_MS,
+                    ),
+            )
+        assertEquals(
+            "no remembered pressure stands in for a sensor that is down now",
+            listOf("Front left, rear right sensors not reading"),
+            tiresTile(parked.copy(tires = null), remembered.copy(tireSensorsInvalid = listOf("fl", "rr"))).lines,
+        )
     }
 
     @Test
@@ -259,6 +286,11 @@ class CarTabLogicTest {
         )
         val old = car.copy(seenAtMs = mapOf(BodyGroup.WARNINGS to now - 10 * 60_000L))
         assertEquals("None on · As of 10 min ago", dashWarningsLine(old).text)
+        assertEquals(
+            "a clear report from some of the broadcasts is not an all-clear",
+            ToneText("None seen so far", PillTone.NEUTRAL),
+            dashWarningsLine(car.copy(dashWarningsComplete = false)),
+        )
         assertEquals("Needs OBDLink adapter", dashWarningsLine(CarUiState()).text)
         assertEquals("Shows when connected", dashWarningsLine(CarUiState(), connected = false).text)
         assertEquals("Oil pressure low", dashWarningLabel("oil_pressure_low"))
@@ -271,7 +303,7 @@ class CarTabLogicTest {
         assertEquals(listOf("All four up"), windowsTile(car).lines)
         val one = windowsTile(car.copy(windowsPct = listOf(0, 0, 50, 1)))
         assertEquals("1 open", one.value)
-        assertEquals(listOf("Rear left 50% down", "Others up"), one.lines)
+        assertEquals(listOf("Rear left part way down", "Others up"), one.lines)
         assertEquals(PillTone.WARN, one.tone)
         assertTrue("an open window shows amber, like an open door", one.warnValue)
         assertFalse(windowsTile(car).warnValue)
@@ -295,7 +327,7 @@ class CarTabLogicTest {
         // On-car 10-06: the driver window reports by itself; the others send filler.
         val driverDown = windowsTile(car.copy(windowsPct = listOf(33, null, null, null)))
         assertEquals("1 open", driverDown.value)
-        assertEquals(listOf("Driver 33% down", "Others not reported"), driverDown.lines)
+        assertEquals(listOf("Driver part way down", "Others not reported"), driverDown.lines)
         val driverUp = windowsTile(car.copy(windowsPct = listOf(0, null, null, null)))
         assertEquals("Closed", driverUp.value)
         assertEquals(listOf("Driver up", "Others not reported"), driverUp.lines)

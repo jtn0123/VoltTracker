@@ -25,9 +25,20 @@ class SwcanFrame(
 /** A value decoded from one SW-CAN broadcast frame, keyed by [field]. */
 class SwcanReading(
     val field: SwcanField,
-    /** A [Double] for numeric fields, a [String] for state fields. */
+    /** A [Double] for numeric fields, a [String] for state fields, or [INVALID]. */
     val value: Any,
-)
+) {
+    companion object {
+        /**
+         * The car sent this field but flagged it not valid (a tyre sensor it has lost, say). It
+         * replaces whatever was known, so an old value can't stand in for a reading the car disowned.
+         */
+        @JvmField val INVALID: Any =
+            object {
+                override fun toString(): String = "invalid"
+            }
+    }
+}
 
 /**
  * Every value the listen-only SW-CAN (GMLAN, OBD pin 1, 33.3 kbit/s) path can surface.
@@ -375,14 +386,29 @@ object SwcanFrameDecoder {
         )
     }
 
-    // Tire pressures, 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. 0 and 0xFE/0xFF mean no sensor
-    // reading (a missing or unlearned sensor) and are dropped.
+    /**
+     * Tire_Pressure_Sensors_LS (arb 0x1EA): 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. Each
+     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1),
+     * set when the reading is NOT valid: the car's own frames read `24 24` there with all four
+     * good. A flagged wheel, or the 0xFE/0xFF "not available" codes, reads [SwcanReading.INVALID].
+     * A valid 0 is a real 0 kPa (a flat tyre), not a missing sensor.
+     */
     private fun tpms(d: IntArray): List<SwcanReading> {
         if (d.size < 6) return none()
-        val order = listOf(SwcanField.TIRE_FL, SwcanField.TIRE_RL, SwcanField.TIRE_FR, SwcanField.TIRE_RR)
-        return order.mapIndexedNotNull { index, field ->
+        val wheels =
+            listOf(
+                Triple(SwcanField.TIRE_FL, 0, 0),
+                Triple(SwcanField.TIRE_RL, 1, 0),
+                Triple(SwcanField.TIRE_FR, 0, 1),
+                Triple(SwcanField.TIRE_RR, 1, 1),
+            )
+        return wheels.mapIndexed { index, (field, validityByte, validityBit) ->
             val raw = d[index + 2]
-            if (raw == 0 || raw >= TPMS_INVALID_RAW) null else num(field, (raw * TPMS_KPA_PER_COUNT).toDouble(), 0)
+            if (invalid(d, validityByte, validityBit) || raw >= TPMS_INVALID_RAW) {
+                SwcanReading(field, SwcanReading.INVALID)
+            } else {
+                num(field, (raw * TPMS_KPA_PER_COUNT).toDouble(), 0)
+            }
         }
     }
 

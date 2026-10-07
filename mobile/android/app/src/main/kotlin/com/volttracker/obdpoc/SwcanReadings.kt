@@ -22,6 +22,12 @@ import java.util.EnumMap
  * outside the Car tab the windows usually miss the close (2026-10-06: a rear door heard opening,
  * never closing, would have read open for the rest of the drive).
  *
+ * A held group's age is its OLDEST member's: "doors closed, as of 2 h ago" must not borrow the age
+ * of one door heard a minute ago. A field the car flagged not valid ([SwcanReading.INVALID]) drops
+ * its old value; for the tyres the sample says which ones (`tireSensorsInvalid`). The dash-warning
+ * summary only says "none" for the broadcasts actually heard, so `dashWarningsComplete` says
+ * whether all of them have been.
+ *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
  * polling thread.
  */
@@ -40,6 +46,9 @@ class SwcanReadings(
     }
 
     fun size(): Int = held.size
+
+    /** All four tyre pressures are held and valid: the tyre hunt can stop. */
+    fun hasAllTires(): Boolean = TIRE_FIELDS.all { held[it]?.value is Double }
 
     fun record(
         readings: List<SwcanReading>,
@@ -113,7 +122,9 @@ class SwcanReadings(
         putReading(sample, "tripBKm", SwcanField.TRIP_B)
         putReading(sample, "transOilTempC", SwcanField.TRANS_OIL_TEMP)
         putReading(sample, "oilLifeRemainingPct", SwcanField.OIL_LIFE)
+        putTireFaults(sample, "tireSensorsInvalid")
         putDashWarnings(sample, "dashWarnings")
+        putDashWarningsComplete(sample, "dashWarningsComplete")
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
         putGroupStaleMs(sample, "tirePressureStaleMs", SwcanGroup.TIRES, now)
         putGroupStaleMs(sample, "doorLockStaleMs", SwcanGroup.LOCKS, now)
@@ -135,15 +146,38 @@ class SwcanReadings(
 
     /**
      * The codes of every dash light the warning broadcasts say is on, comma-joined, "" once at
-     * least one of them has reported and none is lit; absent before any has.
+     * least one of them has reported and none is lit; absent before any has. [completeKey] is true
+     * once every warning broadcast has reported, so "none" covers every light the app can read.
      */
     private fun putDashWarnings(
         sample: JSONObject,
         key: String,
     ) {
-        val reports = WARNING_FIELDS.mapNotNull { held[it]?.value as? String }
+        val reports = warningReports()
         if (reports.isEmpty()) return
         sample.put(key, reports.filter { it.isNotEmpty() }.joinToString(","))
+    }
+
+    /** Whether every warning broadcast has reported, so an empty list means none are on. */
+    private fun putDashWarningsComplete(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val reports = warningReports()
+        if (reports.isEmpty()) return
+        sample.put(key, reports.size == WARNING_FIELDS.size)
+    }
+
+    private fun warningReports(): List<String> = WARNING_FIELDS.mapNotNull { held[it]?.value as? String }
+
+    /** The tyres whose sensor the car flagged not valid, as `fl,rr`; absent when none is. */
+    private fun putTireFaults(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val faults = TIRE_FIELDS.filter { held[it]?.value === SwcanReading.INVALID }
+        if (faults.isEmpty()) return
+        sample.put(key, faults.joinToString(",") { TIRE_CODES.getValue(it) })
     }
 
     private fun putReading(
@@ -152,18 +186,24 @@ class SwcanReadings(
         field: SwcanField,
     ) {
         val value = held[field]?.value ?: return
+        if (value === SwcanReading.INVALID) return
         sample.put(key, value)
     }
 
-    /** Age of the freshest value in [group]; omitted when the group has no value. */
+    /**
+     * Age of [group]'s readings; omitted when the group has none. A held group reports its oldest
+     * member, since its summary ("all closed") rests on every one of them; the others, which all
+     * age out within [maxAgeMs], report their freshest.
+     */
     private fun putGroupStaleMs(
         sample: JSONObject,
         key: String,
         group: SwcanGroup,
         now: Long,
     ) {
-        val newest = held.filterKeys { it.group == group }.values.maxOfOrNull { it.atMs } ?: return
-        sample.put(key, maxOf(0L, now - newest))
+        val times = held.filterKeys { it.group == group }.values.map { it.atMs }
+        val at = (if (group in HELD_GROUPS) times.minOrNull() else times.maxOrNull()) ?: return
+        sample.put(key, maxOf(0L, now - at))
     }
 
     companion object {
@@ -180,5 +220,14 @@ class SwcanReadings(
             setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY, SwcanGroup.DOORS, SwcanGroup.WINDOWS, SwcanGroup.WARNINGS)
 
         private val WARNING_FIELDS = SwcanField.entries.filter { it.group == SwcanGroup.WARNINGS }
+
+        private val TIRE_CODES =
+            mapOf(
+                SwcanField.TIRE_FL to "fl",
+                SwcanField.TIRE_FR to "fr",
+                SwcanField.TIRE_RL to "rl",
+                SwcanField.TIRE_RR to "rr",
+            )
+        private val TIRE_FIELDS = TIRE_CODES.keys
     }
 }

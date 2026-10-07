@@ -720,12 +720,14 @@ class LiveUiStateStore(
     /**
      * The four pressures, held for the drive: unlike the other broadcasts the car sends them about
      * once a drive (see [com.volttracker.obdpoc.SwcanReadings]), so their age doesn't clear them.
-     * The Car tab says how old they are.
+     * The Car tab says how old they are. A sensor the car flags not valid clears them: the old
+     * pressure can't stand in for a wheel the car no longer reads.
      */
     private fun tires(
         t: JSONObject,
         current: TirePressures?,
     ): TirePressures? {
+        if (t.optString("tireSensorsInvalid", "").isNotEmpty()) return null
         val psi =
             listOf("Fl", "Fr", "Rl", "Rr").map { corner ->
                 optDouble(t, "tirePressure${corner}Kpa")?.times(PSI_PER_KPA) ?: return current
