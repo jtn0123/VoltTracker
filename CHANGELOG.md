@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.63.0 (2026-10-07)
+
+### ✳️ New
+
+- **health**: Add a battery thermal card, charge count and lifetime charge energy
+  ([#162](https://github.com/jtn0123/VoltTracker/pull/162),
+  [`77efc1a`](https://github.com/jtn0123/VoltTracker/commit/77efc1acfaee2fab81bc2416c70dfb4dbb0dbd1c))
+
+
 ## v0.62.0 (2026-10-06)
 
 ### ✳️ New
