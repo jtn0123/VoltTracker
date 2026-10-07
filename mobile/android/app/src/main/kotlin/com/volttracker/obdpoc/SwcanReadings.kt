@@ -24,7 +24,9 @@ import java.util.EnumMap
  *
  * A held group's age is its OLDEST member's: "doors closed, as of 2 h ago" must not borrow the age
  * of one door heard a minute ago. A field the car flagged not valid ([SwcanReading.INVALID]) drops
- * its old value; for the tyres the sample says which ones (`tireSensorsInvalid`). The dash-warning
+ * its old value, and the sample says so, so a screen holding the old one drops it too: a door, hood
+ * or hatch reads "unknown", and `tireSensorsInvalid` and `windowsInvalid` list the tyres and windows
+ * (`fl,rr`). The dash-warning
  * summary only says "none" for the broadcasts actually heard, so `dashWarningsComplete` says
  * whether all of them have been.
  *
@@ -48,7 +50,7 @@ class SwcanReadings(
     fun size(): Int = held.size
 
     /** All four tyre pressures are held and valid: the tyre hunt can stop. */
-    fun hasAllTires(): Boolean = TIRE_FIELDS.all { held[it]?.value is Double }
+    fun hasAllTires(): Boolean = TIRE_CODES.keys.all { held[it]?.value is Double }
 
     fun record(
         readings: List<SwcanReading>,
@@ -82,12 +84,12 @@ class SwcanReadings(
         putReading(sample, "tirePressureRrKpa", SwcanField.TIRE_RR)
         putReading(sample, "doorLockState", SwcanField.LOCK_STATE)
         putReading(sample, "doorLockSource", SwcanField.LOCK_SOURCE)
-        putReading(sample, "doorFlState", SwcanField.DOOR_FL)
-        putReading(sample, "doorFrState", SwcanField.DOOR_FR)
-        putReading(sample, "doorRlState", SwcanField.DOOR_RL)
-        putReading(sample, "doorRrState", SwcanField.DOOR_RR)
-        putReading(sample, "hoodState", SwcanField.HOOD)
-        putReading(sample, "trunkState", SwcanField.TRUNK)
+        putReading(sample, "doorFlState", SwcanField.DOOR_FL, invalidAs = UNKNOWN)
+        putReading(sample, "doorFrState", SwcanField.DOOR_FR, invalidAs = UNKNOWN)
+        putReading(sample, "doorRlState", SwcanField.DOOR_RL, invalidAs = UNKNOWN)
+        putReading(sample, "doorRrState", SwcanField.DOOR_RR, invalidAs = UNKNOWN)
+        putReading(sample, "hoodState", SwcanField.HOOD, invalidAs = UNKNOWN)
+        putReading(sample, "trunkState", SwcanField.TRUNK, invalidAs = UNKNOWN)
         putReading(sample, "alarmState", SwcanField.ALARM)
         putReading(sample, "windowFlPct", SwcanField.WINDOW_FL)
         putReading(sample, "windowFrPct", SwcanField.WINDOW_FR)
@@ -127,7 +129,8 @@ class SwcanReadings(
         putReading(sample, "seatHeatFrLevel", SwcanField.SEAT_HEAT_FR)
         putReading(sample, "seatHeatRlLevel", SwcanField.SEAT_HEAT_RL)
         putReading(sample, "seatHeatRrLevel", SwcanField.SEAT_HEAT_RR)
-        putTireFaults(sample, "tireSensorsInvalid")
+        putInvalid(sample, "tireSensorsInvalid", TIRE_CODES)
+        putInvalid(sample, "windowsInvalid", WINDOW_CODES)
         putDashWarnings(sample, "dashWarnings")
         putDashWarningsComplete(sample, "dashWarningsComplete")
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
@@ -177,24 +180,30 @@ class SwcanReadings(
 
     private fun warningReports(): List<String> = WARNING_FIELDS.mapNotNull { held[it]?.value as? String }
 
-    /** The tyres whose sensor the car flagged not valid, as `fl,rr`; absent when none is. */
-    private fun putTireFaults(
+    /** Which of [codes]' fields the car last flagged not valid, as `fl,rr`; absent when none is. */
+    private fun putInvalid(
         sample: JSONObject,
         key: String,
+        codes: Map<SwcanField, String>,
     ) {
-        val faults = TIRE_FIELDS.filter { held[it]?.value === SwcanReading.INVALID }
-        if (faults.isEmpty()) return
-        sample.put(key, faults.joinToString(",") { TIRE_CODES.getValue(it) })
+        val invalid = codes.filterKeys { held[it]?.value === SwcanReading.INVALID }.values
+        if (invalid.isEmpty()) return
+        sample.put(key, invalid.joinToString(","))
     }
 
+    /** [field]'s value under [key]; when the car flagged it not valid, [invalidAs], or nothing. */
     private fun putReading(
         sample: JSONObject,
         key: String,
         field: SwcanField,
+        invalidAs: Any? = null,
     ) {
         val value = held[field]?.value ?: return
-        if (value === SwcanReading.INVALID) return
-        sample.put(key, value)
+        if (value !== SwcanReading.INVALID) {
+            sample.put(key, value)
+        } else if (invalidAs != null) {
+            sample.put(key, invalidAs)
+        }
     }
 
     /**
@@ -235,6 +244,12 @@ class SwcanReadings(
                 SwcanField.TIRE_RL to "rl",
                 SwcanField.TIRE_RR to "rr",
             )
-        private val TIRE_FIELDS = TIRE_CODES.keys
+        private val WINDOW_CODES =
+            mapOf(
+                SwcanField.WINDOW_FL to "fl",
+                SwcanField.WINDOW_FR to "fr",
+                SwcanField.WINDOW_RL to "rl",
+                SwcanField.WINDOW_RR to "rr",
+            )
     }
 }

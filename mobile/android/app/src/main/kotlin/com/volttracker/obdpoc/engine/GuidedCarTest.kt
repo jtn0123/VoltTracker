@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.SwcanField
 import com.volttracker.obdpoc.SwcanFrame
 import com.volttracker.obdpoc.SwcanFrameDecoder
 import com.volttracker.obdpoc.SwcanGroup
+import com.volttracker.obdpoc.SwcanPrivacy
 import com.volttracker.obdpoc.SwcanReading
 import java.io.IOException
 import java.util.EnumMap
@@ -42,9 +43,11 @@ internal fun monotonicNowMs(): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoT
  * [SwcanListenRunner.resetSession]) and runs the step again.
  *
  * It first checks that the driver can hear the phone (a tap on "I can hear it") and that the body
- * bus is heard. A step that needs Park waits for Park to be read ([SwcanListenRunner.Io.isInPark]),
- * and the wheels turning during one pauses the test until it is. It ends on Stop, at the end of the
- * drive, or when the adapter keeps failing to switch buses.
+ * bus is heard; Skip can't pass over that check. Before each parked step the gear is read afresh
+ * ([SwcanListenRunner.Io.requestGearRead]) and the step waits for Park ([SwcanListenRunner.Io.isInPark]);
+ * a step with the car switched off may instead go on the body bus having said off, with nothing
+ * moving since. The wheels turning during a parked step pause the test until Park is read again. It
+ * ends on Stop, at the end of the drive, or when the adapter keeps failing to switch buses.
  *
  * Start, Skip, Stop and the hearing check come from the service thread ([request]); progress goes to
  * the Car tab through [GuidedCarTestState].
@@ -117,13 +120,25 @@ class GuidedCarTest(
         var spokenAt = startedAt
         var heardAt = -1L
 
-        /** When the step stopped listening (-1 until then); later lines are the adapter's queue. */
+        /** When the step stopped listening (-1 until then); later lines are late, never what it waits for. */
         var endedAt = -1L
         var runs = 0
         var restarts = 0
-        var gotPrompt = true
-        var restored = true
+
+        /** Whether the last monitor run stopped at the prompt; null when unknown (the link dropped). */
+        var gotPrompt: Boolean? = null
+
+        /** Whether HS came back after the listen; null when unknown (it never got that far). */
+        var restored: Boolean? = null
         var moved = false
+
+        /** Monitor time before each run was heard working (its first frame or quiet tick): not coverage. */
+        var startupMs = 0L
+        private var runHeardAt = -1L
+        private var longLines = 0
+
+        /** Lines that weren't frames, by the adapter's word for them (`CAN ERROR`), or `unparsed`. */
+        private val errors = sortedMapOf<String, Int>()
 
         /** Why it stopped early ([STOPPED], [SKIPPED], [MOVED], [VOICE_FAILED]), or null: it ran its course. */
         var cut: String? = null
@@ -131,7 +146,10 @@ class GuidedCarTest(
         /** What kept the capture from being whole: `no_prompt`, `monitor_stuck`, `cut_short`, `truncated`, … */
         val partial = sortedSetOf<String>()
 
-        /** Each monitor run, as ms after [startedAt]: where the bus was heard, and so where it wasn't. */
+        /**
+         * Each monitor run, as ms after [startedAt], from when it was heard working to its end: where
+         * the bus was heard, and so where it wasn't.
+         */
         private val coverage = mutableListOf<Pair<Long, Long>>()
         private var flushedAt = startedAt
 
@@ -147,17 +165,24 @@ class GuidedCarTest(
                     break
                 }
                 runs += 1
+                runHeardAt = -1L
+                gotPrompt = null
                 val result =
-                    io.monitorStream(
-                        SwcanListenRunner.MONITOR_COMMAND,
-                        leftMs,
-                        STOP_TIMEOUT_MS,
-                        ::onLine,
-                        ::onDrain,
-                    )
+                    try {
+                        io.monitorStream(
+                            SwcanListenRunner.MONITOR_COMMAND,
+                            leftMs,
+                            STOP_TIMEOUT_MS,
+                            ::onLine,
+                            ::onDrain,
+                        )
+                    } finally {
+                        // Kept when the link drops mid-run too: the bus was heard up to then.
+                        endRun(runStart)
+                    }
                 val runEnd = clock()
-                coverage += (runStart - startedAt) to ((if (endedAt >= 0) endedAt else runEnd) - startedAt)
                 gotPrompt = result.gotPrompt
+                longLines += result.longLines
                 if (result.capped) partial += "tail_capped"
                 if (!result.gotPrompt) partial += "no_prompt"
                 if (!result.gotPrompt || endedAt >= 0) break
@@ -176,7 +201,26 @@ class GuidedCarTest(
                 }
             }
             if (endedAt < 0) endedAt = clock()
+            if (longLines > 0) partial += "long_lines"
+            if (shutdownShort()) partial += "shutdown_short"
         }
+
+        /** Closes a run's coverage span: from when it was heard working to the step's end or the run's. */
+        private fun endRun(runStart: Long) {
+            val end = if (endedAt >= 0) endedAt else clock()
+            if (runHeardAt < 0) {
+                startupMs += end - runStart
+                return
+            }
+            startupMs += runHeardAt - runStart
+            coverage += (runHeardAt - startedAt) to (end - startedAt)
+        }
+
+        /** The car was heard switching off, but its shutdown wasn't recorded for the whole [SHUTDOWN_CAPTURE_MS]. */
+        fun shutdownShort(): Boolean =
+            (step.kind == GuidedStepKind.POWER_OFF || step.kind == GuidedStepKind.DRIVE) &&
+                heardAt >= 0 &&
+                endedAt - heardAt < SHUTDOWN_CAPTURE_MS
 
         /** The longest the listen may run: speech, the step's time, and the capture after what it waits for. */
         private fun capMs(): Long {
@@ -187,46 +231,80 @@ class GuidedCarTest(
 
         fun onLine(line: String): Boolean {
             val now = clock()
-            if (saidAt < 0) speak(now)
-            if (line.isNotEmpty()) SwcanFrameDecoder.parseLine(line)?.let { frame(it, now, drained = false) }
+            if (endedAt >= 0) {
+                // Read along with the line the step ended on: late, like the stop's tail.
+                onDrain(line)
+                return false
+            }
+            val text = line.trim()
+            val frame = if (text.isEmpty()) null else SwcanFrameDecoder.parseLine(text)
+            if (text.isNotEmpty() && frame == null) monitorError(text)
+            if (text.isEmpty() || frame != null) {
+                // The monitor is working (a frame, or the bus quiet): now the instruction, so nothing
+                // is done before the bus is heard. An error line is not a monitor that works.
+                if (runHeardAt < 0) runHeardAt = now
+                if (saidAt < 0) speak(now)
+            }
+            frame?.let { frame(it, now, drained = false) }
             if (now - flushedAt >= CHUNK_MS) flush(now)
-            if (endedAt >= 0) return false
-            if (now - saidAt <= SPEECH_MAX_MS && voice.get()?.speaking() == true) spokenAt = now
+            if (saidAt >= 0 && now - saidAt <= SPEECH_MAX_MS && voice.get()?.speaking() == true) spokenAt = now
             if (cut == null) cut = interruption()
+            if (cut == null) startDrive(now)
             val goOn = cut == null && !over(now)
             if (!goOn) endedAt = now
             return goOn
         }
 
-        /** A line the adapter printed after the stop byte: recorded as late, never what the step waits for. */
+        /** A line after the step's end (the stop's tail): recorded as late, never what the step waits for. */
         fun onDrain(line: String) {
-            SwcanFrameDecoder.parseLine(line)?.let { frame(it, clock(), drained = true) }
+            SwcanFrameDecoder.parseLine(line.trim())?.let { frame(it, clock(), drained = true) }
         }
 
-        /** Monitoring has started: now the instruction, so nothing is done before the bus is heard. */
+        /** A line that wasn't a frame: an adapter error (`CAN ERROR`, `BUFFER FULL`), or one cut or garbled. */
+        private fun monitorError(text: String) {
+            val word = SwcanPrivacy.statusWord(text)?.uppercase(Locale.US) ?: UNPARSED
+            errors[word] = (errors[word] ?: 0) + 1
+            partial += "monitor_error"
+        }
+
         private fun speak(now: Long) {
             saidAt = now
             spokenAt = now
             if (say.isNotEmpty()) voice.get()?.say(say)
-            if (step.kind == GuidedStepKind.DRIVE && driveStartedAt < 0) {
-                driveStartedAt = now
-                // Live HS data pauses for the drive: this trip is a diagnostic one, not an ordinary
-                // drive to judge recording quality by.
-                io.logEvent("session_diagnostic", "reason", "guided_drive", "maxMs", step.maxMs.toString())
-            }
         }
 
-        private fun interruption(): String? =
-            when {
+        /**
+         * The drive is underway once its instruction has been said through (or [SPEECH_MAX_MS] has gone
+         * by, the voice not failing): its own time starts then, and what it waits for counts from then.
+         */
+        private fun startDrive(now: Long) {
+            if (step.kind != GuidedStepKind.DRIVE || driveStartedAt >= 0 || saidAt < 0) return
+            if (now - saidAt <= SPEECH_MAX_MS && voice.get()?.speaking() == true) return
+            driveStartedAt = now
+            // Live HS data is paused for the drive: this trip is a diagnostic one, not an ordinary
+            // drive to judge recording quality by.
+            io.logEvent("session_diagnostic", "reason", "guided_drive", "maxMs", step.maxMs.toString())
+        }
+
+        private fun interruption(): String? {
+            if (skipRequested && step.kind == GuidedStepKind.CONFIRM) {
+                // The hearing and body-bus check can't be skipped: every later step relies on it.
+                skipRequested = false
+                io.logEvent("guided_skip_refused", "step", step.id)
+            }
+            // The drive needs the voice until its instruction has been said; after that it ends by itself.
+            val needsVoice = step.kind != GuidedStepKind.DRIVE || driveStartedAt < 0
+            return when {
                 stopRequested -> STOPPED
                 skipRequested -> {
                     skipRequested = false
                     SKIPPED
                 }
-                step.kind != GuidedStepKind.DRIVE && voice.get()?.failed() != false -> VOICE_FAILED
+                needsVoice && voice.get()?.failed() != false -> VOICE_FAILED
                 moved -> MOVED
                 else -> null
             }?.also { if (it != VOICE_FAILED) voice.get()?.interrupt() }
+        }
 
         private fun frame(
             frame: SwcanFrame,
@@ -238,10 +316,11 @@ class GuidedCarTest(
             if (decoded.isEmpty()) return
             bus.record(decoded)
             val expect = step.expect
+            // The drive waits for the car to switch off only once it is underway.
+            val waiting = !drained && heardAt < 0 && (step.kind != GuidedStepKind.DRIVE || driveStartedAt >= 0)
             for (reading in decoded) {
                 val before = lastSeen[reading.field]
-                if (!drained &&
-                    heardAt < 0 &&
+                if (waiting &&
                     expect != null &&
                     reading.field == expect.field &&
                     expect.matches(before, reading.value)
@@ -249,6 +328,7 @@ class GuidedCarTest(
                     heardAt = now
                 }
                 if (!drained && step.phase != GuidedPhase.DRIVING && isMoving(reading)) moved = true
+                if (!drained && reading.field == SwcanField.POWER_MODE) notePowerMode(reading.value, now)
                 lastSeen[reading.field] = reading.value
             }
         }
@@ -265,7 +345,12 @@ class GuidedCarTest(
                 GuidedStepKind.POWER_OFF ->
                     if (heardAt >= 0) now - heardAt >= SHUTDOWN_CAPTURE_MS else now - spokenAt >= step.maxMs
                 GuidedStepKind.DRIVE ->
-                    if (heardAt >= 0) now - heardAt >= SHUTDOWN_CAPTURE_MS else now - driveStartedAt >= step.maxMs
+                    when {
+                        heardAt >= 0 -> now - heardAt >= SHUTDOWN_CAPTURE_MS
+                        driveStartedAt >= 0 -> now - driveStartedAt >= step.maxMs
+                        // Not underway: a monitor never heard working gives up, to be tried again.
+                        else -> saidAt < 0 && now - startedAt >= SPEECH_MAX_MS
+                    }
                 GuidedStepKind.BENCHMARK -> true
             }
 
@@ -284,11 +369,19 @@ class GuidedCarTest(
             io.logEvent("guided_capture", *fields.flatMap { listOf(it.first, it.second) }.toTypedArray())
         }
 
-        /** `0-61234,61400-120000`: each monitor run's span; between them the bus wasn't heard. */
+        /**
+         * `0-61234,61400-120000`: each monitor run's span; between them the bus wasn't heard. The first
+         * [MAX_COVERAGE_SPANS] only; [spans] says how many there were.
+         */
         fun coverageText(): String = coverage.take(MAX_COVERAGE_SPANS).joinToString(",") { "${it.first}-${it.second}" }
 
-        /** The time between monitor runs, when nothing on the bus could be heard. */
+        fun spans(): Int = coverage.size
+
+        /** The time between monitor spans, when nothing on the bus could be heard. */
         fun gapMs(): Long = coverage.zipWithNext { a, b -> b.first - a.second }.sum()
+
+        /** `CAN ERROR:2,unparsed:1`: the lines that weren't frames. */
+        fun errorsText(): String = errors.entries.joinToString(",") { "${it.key}:${it.value}" }
 
         fun captureText(): String = if (partial.isEmpty()) "complete" else "partial:" + partial.joinToString("+")
     }
@@ -322,7 +415,17 @@ class GuidedCarTest(
     private var failedRestores = 0
     private var failedEnters = 0
     private var driveStartedAt = -1L
+
+    /** A drive listen heard the car switch off before the link dropped: the drive is over. */
+    private var driveOffHeard = false
     private var parkWaitSince = -1L
+    private var parkPrompted = false
+
+    /** When the body bus last said the car was off (or in accessory), -1 since it said otherwise. */
+    private var offAt = -1L
+
+    /** [SwcanListenRunner.Io.motionCount] then: any motion since and the car being off no longer counts. */
+    private var motionsAtOff = 0L
 
     /** Set by the poll thread at the end of the drive, taken by it in [takeSessionEnd]. */
     private var sessionEnds = false
@@ -431,7 +534,10 @@ class GuidedCarTest(
         failedRestores = 0
         failedEnters = 0
         driveStartedAt = -1L
+        driveOffHeard = false
         parkWaitSince = -1L
+        parkPrompted = false
+        offAt = -1L
         sessionEnds = false
         voice.getAndSet(io.openVoice())?.close()
         io.logEvent("guided_test_start", "steps", steps.size.toString())
@@ -439,36 +545,66 @@ class GuidedCarTest(
     }
 
     /**
-     * Whether [step] may start: a parked step needs Park, an off-phase one Park or the car off. While
-     * it can't, the test waits (saying why, once), and gives up after [PARK_WAIT_MS].
+     * Whether [step] may start: a parked step needs Park read afresh for it (the gear is asked for,
+     * since it is polled only now and then), an off-phase one that or the car heard off with nothing
+     * moving since. While it can't, the test waits, says why once a fresh read has had time to come,
+     * and gives up after [PARK_WAIT_MS].
      */
     private fun mayStart(step: GuidedStep): Boolean {
-        val ok =
-            when (step.phase) {
-                GuidedPhase.PARKED -> io.isInPark()
-                GuidedPhase.PARKED_OR_OFF -> io.isInPark() || lastSeen[SwcanField.POWER_MODE] in OFF_POWER_MODES
-                GuidedPhase.DRIVING -> true
-            }
+        if (step.phase == GuidedPhase.DRIVING) return true
         val now = clock()
-        if (ok) {
-            val waitedMs = now - parkWaitSince
-            if (parkWaitSince >= 0) io.logEvent("guided_park_read", "step", step.id, "waitedMs", waitedMs.toString())
+        val evidence = parkEvidence(step.phase, now)
+        if (evidence != null) {
+            val waitedMs = if (parkWaitSince >= 0) now - parkWaitSince else 0L
+            io.logEvent("guided_park_read", "step", step.id, "evidence", evidence, "waitedMs", waitedMs.toString())
             parkWaitSince = -1L
+            parkPrompted = false
             return true
         }
-        if (parkWaitSince < 0) {
-            waitForPark(step, PARK_PROMPT)
-        } else if (now - parkWaitSince >= PARK_WAIT_MS) {
+        io.requestGearRead()
+        if (parkWaitSince < 0) parkWaitSince = now
+        if (now - parkWaitSince >= PARK_WAIT_MS) {
             finish("The car wasn't read in Park", "I couldn't tell the car is in Park, so I've stopped the test.")
+        } else if (!parkPrompted && now - parkWaitSince >= PARK_READ_MS) {
+            promptPark(step, PARK_PROMPT)
         }
         return false
     }
 
-    private fun waitForPark(
+    /**
+     * What lets a [phase] step start now: `park` (read in the last few seconds) or, with the car off
+     * allowed, `off` (the body bus said off in the last [OFF_HOLD_MS], and nothing has shown the car
+     * moving since). Null when neither.
+     */
+    private fun parkEvidence(
+        phase: GuidedPhase,
+        now: Long,
+    ): String? =
+        when {
+            io.isInPark() -> "park"
+            phase != GuidedPhase.PARKED_OR_OFF || offAt < 0 -> null
+            now - offAt <= OFF_HOLD_MS && io.motionCount() == motionsAtOff -> "off"
+            else -> null
+        }
+
+    /** A power mode the body bus said: off or accessory starts (or renews) the car-off evidence, anything else ends it. */
+    private fun notePowerMode(
+        mode: Any,
+        now: Long,
+    ) {
+        if (mode in OFF_POWER_MODES) {
+            offAt = now
+            motionsAtOff = io.motionCount()
+        } else {
+            offAt = -1L
+        }
+    }
+
+    private fun promptPark(
         step: GuidedStep,
         prompt: String,
     ) {
-        parkWaitSince = clock()
+        parkPrompted = true
         io.logEvent("guided_waiting_for_park", "step", step.id)
         voice.get()?.say(prompt)
         show(shown.copy(instruction = prompt, confirm = false, note = ""))
@@ -485,7 +621,8 @@ class GuidedCarTest(
             MOVED -> {
                 // The step runs again once Park is read.
                 io.noteMotion()
-                waitForPark(step, MOVING_PROMPT)
+                parkWaitSince = clock()
+                promptPark(step, MOVING_PROMPT)
             }
             NO_CONFIRM -> finish("No tap on “I can hear it”", "I didn't get a tap, so I've stopped the test.")
             NO_BUS -> finish("Not hearing the body bus", "I can't hear the car's body bus, so I've stopped the test.")
@@ -500,22 +637,30 @@ class GuidedCarTest(
 
     @Throws(IOException::class)
     private fun runDrive(step: GuidedStep) {
+        if (driveOffHeard) {
+            // The car was heard switching off before the link dropped: the drive is over, its
+            // shutdown only partly recorded.
+            sessionEnds = true
+            next(SHUTDOWN_SHORT)
+            return
+        }
         showStep(step, DRIVE_NOTE)
-        // Said once: a listen picked up again after a dropped link or a stuck monitor carries on quietly.
+        // Said until the drive is underway: a listen picked up again after that carries on quietly.
         val listen = listen(step, if (driveStartedAt < 0) step.say else "")
         val cut = listen?.cut
         val result =
             when {
                 listen == null || listen.saidAt < 0 -> BUS_FAILED
                 cut != null -> cut
-                listen.heardAt >= 0 -> HEARD
+                listen.heardAt >= 0 -> if (listen.shutdownShort()) SHUTDOWN_SHORT else HEARD
                 driveStartedAt >= 0 && clock() - driveStartedAt >= step.maxMs -> MISSED
                 else -> SEGMENT
             }
         logListen(step, listen, result)
         when (result) {
             STOPPED -> stopNow()
-            HEARD -> {
+            VOICE_FAILED -> finish("The phone couldn't speak", "")
+            HEARD, SHUTDOWN_SHORT -> {
                 sessionEnds = true
                 next(result)
             }
@@ -606,6 +751,7 @@ class GuidedCarTest(
         ex: Exception,
     ) {
         if (listen.endedAt < 0) listen.endedAt = clock()
+        if (listen.step.kind == GuidedStepKind.DRIVE && listen.heardAt >= 0) driveOffHeard = true
         listen.partial += "interrupted"
         listen.flush(clock())
         logListen(listen.step, listen, INTERRUPTED, ex.javaClass.simpleName)
@@ -658,6 +804,8 @@ class GuidedCarTest(
                     else -> DONE
                 }
             step.expect == null -> if (listen.partial.isEmpty()) RECORDED else PARTIAL
+            // Heard switching off, but its shutdown not recorded to the end: not a whole capture.
+            listen.shutdownShort() -> PARTIAL
             listen.heardAt >= 0 -> HEARD
             listen.partial.isNotEmpty() -> PARTIAL
             else -> MISSED
@@ -682,7 +830,15 @@ class GuidedCarTest(
         if (checkTrouble()) return
         index += 1
         attempt = 0
-        if (index >= steps.size) finish("Finished", "That's the whole test. Thank you.")
+        when {
+            index < steps.size -> Unit
+            result == SHUTDOWN_SHORT ->
+                finish(
+                    "Finished, but the car switching off was only partly recorded",
+                    "That's the whole test, though I only recorded part of the car switching off. Thank you.",
+                )
+            else -> finish("Finished", "That's the whole test. Thank you.")
+        }
     }
 
     private fun checkTrouble(): Boolean {
@@ -769,12 +925,16 @@ class GuidedCarTest(
                     "drainedFrames" to listen.recorder.drained.toString(),
                     "chunks" to listen.recorder.chunks.toString(),
                     "coverage" to listen.coverageText(),
+                    "coverageSpans" to listen.spans().toString(),
+                    "coverageCut" to (listen.spans() > MAX_COVERAGE_SPANS).toString(),
                     "gapMs" to listen.gapMs().toString(),
+                    "startupMs" to listen.startupMs.toString(),
                     "monitorRuns" to listen.runs.toString(),
                     "restarts" to listen.restarts.toString(),
+                    "monitorErrors" to listen.errorsText(),
                     "capture" to listen.captureText(),
-                    "gotPrompt" to listen.gotPrompt.toString(),
-                    "restored" to listen.restored.toString(),
+                    "gotPrompt" to (listen.gotPrompt?.toString() ?: UNKNOWN),
+                    "restored" to (listen.restored?.toString() ?: UNKNOWN),
                     "moved" to listen.moved.toString(),
                 )
         }
@@ -803,6 +963,12 @@ class GuidedCarTest(
         private const val MAX_FAILED_RESTORES = 2
         private const val MAX_FAILED_ENTERS = 3
         private const val PARK_WAIT_MS = 5 * 60_000L
+
+        /** Long enough for a requested gear read to come in: only then is the driver asked for Park. */
+        private const val PARK_READ_MS = 15_000L
+
+        /** How long the body bus saying off lets a car-off step start, with nothing moving since. */
+        private const val OFF_HOLD_MS = 10 * 60_000L
         private const val ABANDON_WAIT_MS = 2_000L
         private const val MINUTE_MS = 60_000L
 
@@ -830,6 +996,9 @@ class GuidedCarTest(
         private const val NO_CONFIRM = "no_confirm"
         private const val NO_BUS = "no_bus"
         private const val VOICE_FAILED = "voice_failed"
+        private const val SHUTDOWN_SHORT = "shutdown_short"
+        private const val UNKNOWN = "unknown"
+        private const val UNPARSED = "unparsed"
 
         private val ACKS =
             mapOf(
@@ -846,6 +1015,7 @@ class GuidedCarTest(
                 MISSED to "Didn't hear it",
                 RECORDED to "Recorded",
                 PARTIAL to "Recorded, with gaps",
+                SHUTDOWN_SHORT to "Heard the car switch off; only part of it recorded",
                 SKIPPED to "Skipped",
                 BUS_FAILED to "Couldn't switch to the body bus",
                 SwitchBenchmark.OK to "Timed",

@@ -56,6 +56,54 @@ class SwcanPrivacyTest {
     }
 
     @Test
+    fun aHeaderIsEnoughWhateverFollowsIt() {
+        // A DLC digit, a short payload, or no payload at all: the header alone withholds the line.
+        for (line in listOf(
+            "10 90 C0 40 2 41 42",
+            "1090C040 41 42",
+            "10 90 C0 40",
+            "1090C040",
+            "OK|10 90 C0 40",
+        )) {
+            assertEquals(line, "OK", SwcanPrivacy.redactFrames("$line\rOK"))
+        }
+    }
+
+    @Test
+    fun hsRepliesAHeaderLongPass() {
+        for (reply in listOf("41 0C 1A F8\r>", "62 28 89 01\r>", "410C1AF8\r>", "43 01 33 00\r>")) {
+            assertSame(reply, SwcanPrivacy.redactFrames(reply))
+        }
+    }
+
+    @Test
+    fun offHsOnlyTheAdaptersOwnWordsAreKept() {
+        assertEquals("OK", SwcanPrivacy.statusOnly("OK\r\r>"))
+        assertEquals("A6", SwcanPrivacy.statusOnly("A6\r>"))
+        assertEquals("STOPPED", SwcanPrivacy.statusOnly("STOPPED\r>"))
+        assertEquals("CAN ERROR", SwcanPrivacy.statusOnly("CAN ERROR\r>"))
+        assertEquals("OK|OK|A6", SwcanPrivacy.statusOnly("OK|OK|A6\r>"))
+        // A frame, or a fragment too short to tell from anything else, is withheld whole.
+        assertEquals("[withheld] OK", SwcanPrivacy.statusOnly("10 24 80 40 C8\rOK\r>"))
+        assertEquals("OK|[withheld]", SwcanPrivacy.statusOnly("OK|10 90 C0\r>"))
+        assertEquals("[withheld]", SwcanPrivacy.statusOnly("C8 7B"))
+        assertEquals("", SwcanPrivacy.statusOnly(null))
+    }
+
+    @Test
+    fun statusWordsAreTheAdaptersOwn() {
+        assertEquals("OK", SwcanPrivacy.statusWord(" OK "))
+        assertEquals("?", SwcanPrivacy.statusWord(">?"))
+        assertEquals("BUFFER FULL", SwcanPrivacy.statusWord("BUFFER FULL"))
+        assertEquals("<RX ERROR", SwcanPrivacy.statusWord("<RX ERROR"))
+        assertEquals("STN2255 v5.10.3", SwcanPrivacy.statusWord("STN2255 v5.10.3"))
+        assertEquals("", SwcanPrivacy.statusWord(">"))
+        assertEquals(null, SwcanPrivacy.statusWord("C8"))
+        assertEquals(null, SwcanPrivacy.statusWord("10 24"))
+        assertEquals(null, SwcanPrivacy.statusWord("OK 10"))
+    }
+
+    @Test
     fun theAllowlistHoldsNothingSensitive() {
         assertTrue(SwcanPrivacy.PAYLOAD_PIDS.intersect(SwcanPrivacy.SENSITIVE_PIDS).isEmpty())
         assertTrue(SwcanPrivacy.PAYLOAD_PIDS.containsAll(SwcanPrivacy.PAYLOAD_BYTES.keys))

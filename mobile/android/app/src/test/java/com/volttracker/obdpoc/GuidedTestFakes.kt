@@ -41,6 +41,10 @@ class FakeCarIo(
     var stationary = true
     var inPark = true
     var motionNoted = 0
+    var gearReads = 0
+
+    /** What [motionCount] answers: a test bumps it for motion HS polling saw. */
+    var motions = 0L
 
     /** A body frame the car sends every second, or null for a silent car. */
     var heartbeat: String? = null
@@ -63,6 +67,12 @@ class FakeCarIo(
 
     /** Once set, the next monitor ends by itself this long in (the adapter's buffer filling). */
     var endEarlyAfterMs: Long? = null
+
+    /** What the adapter prints as it ends a monitor by itself, or null for nothing. */
+    var earlyEndLine: String? = "BUFFER FULL"
+
+    /** Each monitor is cut this long in, the way a session ending cuts it: no early end, the stop as usual. */
+    var cutAfterMs: Long? = null
 
     /** Every monitor ends by itself at once. */
     var alwaysEndsAtOnce = false
@@ -105,14 +115,15 @@ class FakeCarIo(
         var listening = true
         for (line in preamble(command)) listening = onLine(line) && listening
         if (alwaysEndsAtOnce) {
-            onLine("BUFFER FULL")
+            earlyEndLine?.let(onLine)
             return ElmConnection.MonitorResult("", true, true, false)
         }
-        while (listening && clock.now - start < listenMs) {
+        val runMs = minOf(listenMs, cutAfterMs ?: listenMs)
+        while (listening && clock.now - start < runMs) {
             endEarlyAfterMs?.let { after ->
                 if (clock.now - start >= after) {
                     endEarlyAfterMs = null
-                    onLine("BUFFER FULL")
+                    earlyEndLine?.let(onLine)
                     return ElmConnection.MonitorResult("", true, true, false)
                 }
             }
@@ -160,8 +171,15 @@ class FakeCarIo(
 
     override fun isInPark(): Boolean = inPark
 
+    override fun requestGearRead() {
+        gearReads += 1
+    }
+
+    override fun motionCount(): Long = motions
+
     override fun noteMotion() {
         motionNoted += 1
+        motions += 1
         inPark = false
     }
 

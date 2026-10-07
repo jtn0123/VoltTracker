@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.SwcanFrameDecoder
+import com.volttracker.obdpoc.SwcanReadings
 import com.volttracker.obdpoc.ui.car.BodyGroup
 import com.volttracker.obdpoc.ui.car.CarMemory
 import com.volttracker.obdpoc.ui.car.Opening
@@ -95,6 +97,37 @@ class LiveCarStateTest {
             fresh.state.value.car.openings
                 ?.states,
         )
+    }
+
+    @Test
+    fun aHoodOrWindowTheCarFlagsNotValidIsNoLongerShown() {
+        // Frame to readings to the telemetry sample to the Car tab, as the service does it.
+        val readings = SwcanReadings()
+
+        fun hear(
+            at: Long,
+            vararg lines: String,
+        ) {
+            readings.record(
+                SwcanFrameDecoder.decodeAll(SwcanFrameDecoder.parseMonitorOutput(lines.joinToString("\r"))),
+                at,
+            )
+            store.onTelemetry(JSONObject().put("updatedAt", at).also { readings.appendTo(it, at) })
+        }
+        hear(1_000L, HOOD_SHUT, WINDOWS_UP)
+        assertEquals(false, car.openings?.states?.get(Opening.HOOD))
+        assertEquals(listOf(0, 0, 0, 0), car.windowsPct)
+
+        hear(2_000L, HOOD_NOT_VALID, DRIVER_WINDOW_NOT_KNOWN)
+        assertNull("the old closed hood doesn't stand in", car.openings?.states?.get(Opening.HOOD))
+        assertEquals("nor the old driver's window", listOf(null, 0, 0, 0), car.windowsPct)
+
+        store.onTelemetry(JSONObject().put("updatedAt", 3_000L))
+        assertEquals("a sample without windows keeps that", listOf(null, 0, 0, 0), car.windowsPct)
+
+        hear(4_000L, HOOD_SHUT, WINDOWS_UP)
+        assertEquals(false, car.openings?.states?.get(Opening.HOOD))
+        assertEquals(listOf(0, 0, 0, 0), car.windowsPct)
     }
 
     @Test
@@ -268,5 +301,15 @@ class LiveCarStateTest {
         assertTrue(car.metricUnits)
         assertEquals(41.0, car.placardPsi, 0.0)
         assertEquals(41.0, store.state.value.drive.tirePlacardPsi, 0.0)
+    }
+
+    private companion object {
+        /** Hood_Status_LS (arb 0x394): shut, then flagged not valid (byte 0 bit 2). */
+        const val HOOD_SHUT = "10 72 80 40 08"
+        const val HOOD_NOT_VALID = "10 72 80 40 04"
+
+        /** Window_Position_Status_LS (arb 0x325): all up, then the driver's window not known (5). */
+        const val WINDOWS_UP = "10 64 A0 40 00 00"
+        const val DRIVER_WINDOW_NOT_KNOWN = "10 64 A0 40 05 00"
     }
 }

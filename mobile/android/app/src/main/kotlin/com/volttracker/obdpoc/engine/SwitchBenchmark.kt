@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.engine
 
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.SwcanFrameDecoder
+import com.volttracker.obdpoc.SwcanPrivacy
 import java.io.IOException
 import java.util.Locale
 
@@ -20,12 +21,15 @@ import java.util.Locale
  * `STBC`, `STI`/`STDI` (adapter-local) and `010D` (a normal OBD read).
  *
  * A cycle only counts when everything in it worked: each batched reply checked (the protocol, then an
- * `OK` per setup command), the stop prompt back, HS restored without the fallback, and HS answering.
- * One that didn't is logged with why (`setup_failed`, `no_stop_prompt`, `restore_fallback`,
- * `hs_no_reply`) and left out of the medians.
+ * `OK` per setup command), the monitor printing nothing but frames, monitoring until it was stopped,
+ * for the whole [LISTEN_MS], the stop prompt back, HS restored without the fallback, and HS
+ * answering. One that didn't is logged with why (`setup_failed`, `monitor_error`, `monitor_ended`,
+ * `short_listen`, `no_stop_prompt`, `restore_fallback`, `hs_no_reply`, `restore_failed`,
+ * `interrupted`) and left out of the medians.
  *
  * Each cycle logs `guided_bench`; each block `guided_bench_summary` with the medians of the cycles that
- * worked and the count of those that didn't. A dropped link logs the adapter's state as unknown.
+ * worked and the count of every one that didn't, a failed restore or a dropped link included. A
+ * dropped link also logs the adapter's state as unknown.
  */
 class SwitchBenchmark(
     private val io: SwcanListenRunner.Io,
@@ -53,6 +57,9 @@ class SwitchBenchmark(
     /** `STBC` answered `?` once: the batched blocks are skipped from then on. */
     private var batchUnsupported = false
 
+    /** A cycle has started and not yet been added to its block: what a dropped link interrupts. */
+    private var inCycle = false
+
     fun reset() {
         identified = false
         replyLogged = false
@@ -72,15 +79,17 @@ class SwitchBenchmark(
         cancelled: () -> Boolean,
     ): String {
         if (batched && batchUnsupported) return UNSUPPORTED
+        val done = mutableListOf<Cycle>()
+        inCycle = false
         return io.exclusive {
             try {
-                runBlock(label, batched, cycles, cancelled)
+                runBlock(label, batched, cycles, cancelled, done)
             } catch (ex: IOException) {
                 // Batching and the bus are whatever they were; the reconnect's re-init (ATZ) resets both.
-                io.logEvent("guided_bus_state_unknown", "step", label, "error", ex.javaClass.simpleName)
+                interrupted(label, batched, done, ex)
                 throw ex
             } catch (ex: RuntimeException) {
-                io.logEvent("guided_bus_state_unknown", "step", label, "error", ex.javaClass.simpleName)
+                interrupted(label, batched, done, ex)
                 try {
                     if (batched) sendOk("STBC 0")
                     bus.leave()
@@ -92,12 +101,29 @@ class SwitchBenchmark(
         }
     }
 
+    /** The cycle the link dropped in, if it was in one, is logged as `interrupted`, then the block's summary. */
+    private fun interrupted(
+        label: String,
+        batched: Boolean,
+        done: MutableList<Cycle>,
+        ex: Exception,
+    ) {
+        if (inCycle) {
+            inCycle = false
+            done += failedCycle(INTERRUPTED)
+            logCycle(label, batched, done.size, done.last())
+        }
+        logSummary(label, batched, done)
+        io.logEvent("guided_bus_state_unknown", "step", label, "error", ex.javaClass.simpleName)
+    }
+
     @Throws(IOException::class)
     private fun runBlock(
         label: String,
         batched: Boolean,
         cycles: Int,
         cancelled: () -> Boolean,
+        done: MutableList<Cycle>,
     ): String =
         run {
             identify()
@@ -106,13 +132,14 @@ class SwitchBenchmark(
                 io.logEvent("guided_bench_summary", "block", label, "mode", "batched", "supported", "false")
                 return@run UNSUPPORTED
             }
-            val done = mutableListOf<Cycle>()
             var outcome = OK
             var hsMisses = 0
             while (done.size < cycles && !cancelled()) {
+                inCycle = true
                 val cycle =
                     (if (batched) batchedCycle() else separateCycle())
                         ?: return@run restoreFailed(batched, label, done)
+                inCycle = false
                 done += cycle
                 logCycle(label, batched, done.size, cycle)
                 hsMisses = if (cycle.hsOk) 0 else hsMisses + 1
@@ -148,12 +175,7 @@ class SwitchBenchmark(
         val heard = if (failed == null) listen(SwcanListenRunner.MONITOR_COMMAND, setupAt) else null
         val stoppedAt = clock()
         if (!bus.leave()) return null
-        val failure =
-            when {
-                heard == null -> SETUP_FAILED
-                !heard.gotPrompt -> NO_STOP_PROMPT
-                else -> ""
-            }
+        val failure = if (heard == null) SETUP_FAILED else heard.failure()
         return finishCycle(startedAt, setupAt, heard, stoppedAt, fellBack = false, failure)
     }
 
@@ -179,7 +201,7 @@ class SwitchBenchmark(
         val failure =
             when {
                 !setupOk -> SETUP_FAILED
-                !heard.gotPrompt -> NO_STOP_PROMPT
+                heard.failure().isNotEmpty() -> heard.failure()
                 !restored -> RESTORE_FALLBACK
                 else -> ""
             }
@@ -221,6 +243,12 @@ class SwitchBenchmark(
         /** A setup command in the batch answered something other than `OK`. */
         var setupBroken = false
         var gotPrompt = false
+
+        /** The adapter ended monitoring by itself, before the listen was over. */
+        var endedEarly = false
+
+        /** The first line after the setup that wasn't a frame (`CAN ERROR`, `?`), as a status word only. */
+        var monitorError = ""
         private var answered = 0
 
         /** A batch's own replies (`A6`, `OK`, `?`), kept to log how this firmware answers. */
@@ -237,12 +265,23 @@ class SwitchBenchmark(
                     text.isEmpty() -> Unit
                     SwcanFrameDecoder.parseLine(text) != null -> if (firstFrameAt < 0) firstFrameAt = now
                     setupAt < 0 -> reply(text, now)
+                    monitorError.isEmpty() -> monitorError = SwcanPrivacy.statusWord(text) ?: UNPARSED
                 }
             }
             val goOn = setupAt < 0 || now - setupAt < LISTEN_MS
             if (!goOn) listenEndedAt = now
             return goOn
         }
+
+        /** Why the listen doesn't count, or "" when it does: the setup itself is checked by the caller. */
+        fun failure(): String =
+            when {
+                monitorError.isNotEmpty() -> MONITOR_ERROR
+                endedEarly -> MONITOR_ENDED
+                !gotPrompt -> NO_STOP_PROMPT
+                setupAt < 0 || listenEndedAt - setupAt < LISTEN_MS -> SHORT_LISTEN
+                else -> ""
+            }
 
         /** The batch's first reply is the protocol, then one `OK` per setup command; anything else breaks it. */
         private fun reply(
@@ -255,8 +294,8 @@ class SwitchBenchmark(
                 upper != "OK" -> setupBroken = true
             }
             answered += 1
-            // Short pieces only: nothing longer than a status word is kept, so never a frame's bytes.
-            if (text.length <= MAX_REPLY_CHARS && replies.size < MAX_REPLIES) replies += text
+            // Status words only, so never a frame's bytes, nor a fragment of a header.
+            if (replies.size < MAX_REPLIES) replies += SwcanPrivacy.statusWord(text) ?: SwcanPrivacy.WITHHELD
             if (answered == BATCH_SETUP_REPLIES) setupAt = now
         }
     }
@@ -270,6 +309,8 @@ class SwitchBenchmark(
         val result = io.monitorStream(command, MONITOR_CAP_MS, STOP_TIMEOUT_MS, heard::onLine) { }
         if (heard.listenEndedAt < 0) heard.listenEndedAt = clock()
         heard.gotPrompt = result.gotPrompt
+        heard.endedEarly = result.endedEarly
+        if (heard.monitorError.isNotEmpty()) io.logEvent("guided_bench_monitor_error", "reply", heard.monitorError)
         return heard
     }
 
@@ -294,16 +335,23 @@ class SwitchBenchmark(
         return false
     }
 
+    /** HS didn't come back in a cycle: it is logged as `restore_failed`, the adapter re-initialised. */
     private fun restoreFailed(
         batched: Boolean,
         label: String,
-        done: List<Cycle>,
+        done: MutableList<Cycle>,
     ): String {
+        inCycle = false
+        done += failedCycle(RESTORE_FAILED)
+        logCycle(label, batched, done.size, done.last())
         if (batched) sendOk("STBC 0")
         reinitialize("bench_restore_failed")
         logSummary(label, batched, done)
         return RESTORE_FAILED
     }
+
+    /** A cycle that ended before it could be timed: only why. */
+    private fun failedCycle(failure: String) = Cycle(-1L, -1L, -1L, -1L, -1L, -1L, false, false, failure)
 
     private fun reinitialize(reason: String) {
         io.logEvent("swcan_hs_reinit", "reason", reason)
@@ -413,13 +461,17 @@ class SwitchBenchmark(
         private const val BATCH_TIMEOUT_MS = 2_000L
         private const val MAX_HS_MISSES = 2
         private const val MAX_ID_CHARS = 64
-        private const val MAX_REPLY_CHARS = 8
         private const val MAX_REPLIES = 24
         private const val HS_PROTOCOL = "6"
         private const val SETUP_FAILED = "setup_failed"
         private const val NO_STOP_PROMPT = "no_stop_prompt"
         private const val RESTORE_FALLBACK = "restore_fallback"
         private const val HS_NO_REPLY = "hs_no_reply"
+        private const val MONITOR_ERROR = "monitor_error"
+        private const val MONITOR_ENDED = "monitor_ended"
+        private const val SHORT_LISTEN = "short_listen"
+        private const val INTERRUPTED = "interrupted"
+        private const val UNPARSED = "unparsed"
 
         /** The protocol check and the setup, monitor last (STBC runs `STM` only as a batch's last command). */
         @JvmField

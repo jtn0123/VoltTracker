@@ -10,27 +10,32 @@ import org.json.JSONObject
  * the car must have stood still (a fresh speed of [STOPPED_KPH] or less, so not crawling in
  * traffic) for [stillForMs], longer than most lights.
  *
- * [isInPark] is stricter, for the guided test's walk-round steps: Park read fresh at a standstill,
- * and nothing since (a fresh speed above a standstill, a fresh gear other than Park, or [moved])
- * has shown the car leaving it. A missing speed (a quiet HS bus while the test holds the adapter,
- * or the car switched off) is not motion and keeps it.
+ * [isInPark] is stricter, for the guided test's walk-round steps: Park read in the last
+ * [parkFreshMs] (the test asks for that read, [GEAR_COMMAND]), at a standstill, and nothing since (a
+ * fresh speed above a standstill, a fresh gear other than Park, or [moved]) has shown the car leaving
+ * it. An older Park is not kept: whatever the car did since was not seen. [motionCount] counts every
+ * sign of motion, so a caller can tell whether there has been any since it last looked.
  *
  * Only touched on the polling thread.
  */
 class ParkedDetector(
     private val stillForMs: Long = 60_000L,
     private val gearFreshMs: Long = 30_000L,
+    private val parkFreshMs: Long = 15_000L,
 ) {
     private var stillSinceMs = NOT_STILL
     private var gear = ""
     private var gearAtMs = 0L
     private var inPark = false
+    private var motions = 0L
 
     fun reset() {
         stillSinceMs = NOT_STILL
         gear = ""
         gearAtMs = 0L
         inPark = false
+        // What the car did meanwhile wasn't seen: a caller comparing [motionCount] must not assume nothing.
+        motions += 1
     }
 
     /**
@@ -55,21 +60,27 @@ class ParkedDetector(
             gear = gearLetter
             gearAtMs = now - maxOf(0L, gearAgeMs)
         }
+        val moving = !speedKph.isNaN() && !still || freshGear && gearLetter != VoltGear.PARK
+        if (moving) motions += 1
         inPark =
             when {
-                !speedKph.isNaN() && !still -> false
-                freshGear && gearLetter != VoltGear.PARK -> false
+                moving -> false
                 freshGear && still -> true
                 else -> inPark
             }
     }
 
-    /** [observe] for a live sample: its decoded gear (`prndlState`) and that reading's age. */
+    /**
+     * [observe] for a live sample: its decoded gear (`prndlState`), aged by when the gear PID last
+     * answered ([gearAnsweredAgoMs], null when it never has), not when it was last asked: a read that
+     * got no answer leaves the old letter in the sample.
+     */
     fun observe(
         sample: JSONObject,
         speedKph: Double,
+        gearAnsweredAgoMs: Long?,
         now: Long,
-    ) = observe(speedKph, sample.optString("prndlState", ""), sample.optLong("prndlStateStaleMs", 0L), now)
+    ) = observe(speedKph, sample.optString("prndlState", ""), gearAnsweredAgoMs ?: Long.MAX_VALUE, now)
 
     fun isParked(now: Long): Boolean {
         if (stillSinceMs == NOT_STILL) return false
@@ -77,19 +88,26 @@ class ParkedDetector(
         return now - stillSinceMs >= stillForMs
     }
 
-    /** Park was read at a standstill and nothing has shown the car moving since. */
-    fun isInPark(): Boolean = inPark
+    /** Park was read at a standstill in the last [parkFreshMs], and nothing has shown the car moving since. */
+    fun isInPark(now: Long): Boolean = inPark && gear == VoltGear.PARK && now - gearAtMs <= parkFreshMs
+
+    /** How many times anything has shown the car moving or out of Park. */
+    fun motionCount(): Long = motions
 
     /** Something other than HS polling (the body bus's wheel speeds) saw the car move. */
     fun moved() {
+        motions += 1
         inPark = false
         stillSinceMs = NOT_STILL
     }
 
-    private companion object {
-        const val NOT_STILL = Long.MIN_VALUE
+    companion object {
+        /** The gear (PRNDL) PID: what the guided test asks to be read before a parked step. */
+        const val GEAR_COMMAND = "222889"
+
+        private const val NOT_STILL = Long.MIN_VALUE
 
         /** A standstill: speed reads whole km/h, so this is a 0 reading, never a crawl. */
-        const val STOPPED_KPH = 0.5
+        private const val STOPPED_KPH = 0.5
     }
 }

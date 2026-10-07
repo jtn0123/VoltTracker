@@ -115,10 +115,16 @@ class SwcanListenRunner(
         fun isStationary(): Boolean = false
 
         /**
-         * The guided test's Park check ([ParkedDetector.isInPark]): the last gear read was Park, at a
-         * standstill, and nothing has shown the car moving since.
+         * The guided test's Park check ([ParkedDetector.isInPark]): Park read in the last few seconds,
+         * at a standstill, and nothing has shown the car moving since.
          */
         fun isInPark(): Boolean = false
+
+        /** Asks the next HS poll cycle to read the gear, so [isInPark] can be answered from a fresh read. */
+        fun requestGearRead() = Unit
+
+        /** How many times anything has shown the car moving ([ParkedDetector.motionCount]); a change means it has. */
+        fun motionCount(): Long = 0L
 
         /** The body bus showed the car moving: Park has to be read again before [isInPark]. */
         fun noteMotion() = Unit

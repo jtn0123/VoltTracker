@@ -309,6 +309,8 @@ open class ElmConnection
             @JvmField val endedEarly: Boolean,
             /** True when the output hit the response cap and was cut short. */
             @JvmField val capped: Boolean,
+            /** Stream lines longer than the line cap, passed on cut short ([monitorStream] only). */
+            @JvmField val longLines: Int = 0,
         )
 
         /**
@@ -349,9 +351,11 @@ open class ElmConnection
          * frame (the time it reached the phone, Bluetooth buffering included). [onLine] returning
          * false stops monitoring early. While the bus is silent [onLine] gets an empty line every
          * [STREAM_IDLE_TICK_MS], so the caller can still stop on a request or on the silence itself.
-         * Lines the adapter still prints after the stop byte (its queue, up to ~4 s on the car) go
-         * to [onDrain], each as it is read, so they keep their own arrival times and the caller can
-         * tell them from the listen proper. The result's text is only what followed the stop byte.
+         * Every line after the one [onLine] stopped on goes to [onDrain] instead, each as it is read:
+         * the rest of what was read with it, then what the adapter still prints after the stop byte
+         * (its queue, up to ~4 s on the car). So they keep their own arrival times and the caller
+         * can tell them from the listen proper. Lines are cut at [MAX_STREAM_LINE_CHARS] (counted in
+         * the result's `longLines`). The result's text is only what followed the stop byte.
          */
         @Throws(IOException::class)
         open fun monitorStream(
@@ -373,6 +377,9 @@ open class ElmConnection
             val buffer = ByteArray(STREAM_BUFFER_BYTES)
             var listening = true
             var heardAtMs = clock.nowMs()
+            streamLongLines = 0
+            // One line to whichever side of the stop it belongs: once onLine has said stop, the drain.
+            val deliver = { text: String -> if (listening) listening = onLine(text) else onDrain(text) }
             while (listening && clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
                 val available = inputStream.available()
                 if (available <= 0) {
@@ -389,15 +396,14 @@ open class ElmConnection
                 heardAtMs = clock.nowMs()
                 for (i in 0 until read) {
                     val c = (buffer[i].toInt() and BYTE_MASK).toChar()
-                    when {
+                    if (c == '>' || c == '\r' || c == '\n') {
+                        val text = line.toString()
+                        line.setLength(0)
+                        if (text.isNotEmpty()) deliver(text)
                         // The adapter stopped monitoring by itself (an error, or its buffer full).
-                        c == '>' -> return MonitorResult(line.toString(), true, true, false)
-                        c == '\r' || c == '\n' ->
-                            if (line.isNotEmpty()) {
-                                listening = onLine(line.toString()) && listening
-                                line.setLength(0)
-                            }
-                        line.length < MAX_STREAM_LINE_CHARS -> line.append(c)
+                        if (c == '>') return MonitorResult(text, true, listening, false, streamLongLines)
+                    } else {
+                        appendCapped(line, c)
                     }
                 }
             }
@@ -415,7 +421,23 @@ open class ElmConnection
                     onDrain,
                 )
             lastTransactTruncated = responseCapped
-            return MonitorResult(tail.toString(), stopped, false, responseCapped)
+            return MonitorResult(tail.toString(), stopped, false, responseCapped, streamLongLines)
+        }
+
+        // Lines [monitorStream] cut at MAX_STREAM_LINE_CHARS; each counted once, at its first dropped character.
+        private var streamLongLines = 0
+
+        private fun appendCapped(
+            line: StringBuilder,
+            c: Char,
+        ) {
+            if (line.length < MAX_STREAM_LINE_CHARS) {
+                line.append(c)
+            } else if (line.length == MAX_STREAM_LINE_CHARS) {
+                // One character past the cap marks the line as cut, so it counts once.
+                line.append(LINE_CUT)
+                streamLongLines += 1
+            }
         }
 
         /**
@@ -447,8 +469,8 @@ open class ElmConnection
                         if (line.isNotEmpty()) onDrain(line.toString())
                         line.setLength(0)
                         if (c == '>') return true
-                    } else if (line.length < MAX_STREAM_LINE_CHARS) {
-                        line.append(c)
+                    } else {
+                        appendCapped(line, c)
                     }
                 }
             }
@@ -558,6 +580,9 @@ open class ElmConnection
             private const val STREAM_POLL_MS = 10L
             const val STREAM_IDLE_TICK_MS = 250L
             private const val MAX_STREAM_LINE_CHARS = 256
+
+            /** Ends a stream line cut at [MAX_STREAM_LINE_CHARS], so it never parses as a whole frame. */
+            private const val LINE_CUT = '~'
             private const val BYTE_MASK = 0xFF
 
             /** True when [response] holds more than the echoed [command] and ELM status lines. */

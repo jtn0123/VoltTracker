@@ -406,10 +406,12 @@ object SwcanFrameDecoder {
 
     /**
      * Tire_Pressure_Sensors_LS (arb 0x1EA): 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. Each
-     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1),
-     * set when the reading is NOT valid: the car's own frames read `24 24` there with all four
-     * good. A flagged wheel, or the 0xFE/0xFF "not available" codes, reads [SwcanReading.INVALID].
-     * A valid 0 is a real 0 kPa (a flat tyre), not a missing sensor.
+     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1).
+     * Which way that bit reads is inferred, not confirmed: the car's frames read `24 24` there (all
+     * four clear) with all four pressures plausible, so set is taken as NOT valid. 0xFE/0xFF are
+     * taken as GM's usual "not available" codes, also unconfirmed on this car. Either reads
+     * [SwcanReading.INVALID]; the raw frame is logged (it is allowlisted), so both can be checked.
+     * A valid 0 is read as 0 kPa (a flat tyre), not as a missing sensor.
      */
     private fun tpms(d: IntArray): List<SwcanReading> {
         if (d.size < 6) return none()

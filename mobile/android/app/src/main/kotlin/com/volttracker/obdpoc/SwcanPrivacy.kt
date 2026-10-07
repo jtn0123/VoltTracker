@@ -157,11 +157,13 @@ object SwcanPrivacy {
     /**
      * [response] without any line that holds a SW-CAN frame. After a body-bus listen the adapter can
      * still print queued frames into the next command's reply, and command replies are stored. It
-     * fails closed: any run of five or more spaced hex bytes, and any unspaced hex token of ten or
+     * fails closed: any run of four or more spaced hex bytes, and any unspaced hex token of eight or
      * more digits, whose first four bytes read as a 29-bit GMLAN header below 0x800 withholds its
-     * line, wherever in the line it starts (after a `|` batch separator, a prompt or a status word).
-     * HS replies don't match: a mode 01/02/03/09/22 reply read as a 29-bit header lands at 0x800 or
-     * above, and an 11-bit header breaks a run of bytes.
+     * line, wherever in the line it starts (after a `|` batch separator, a prompt or a status word),
+     * whatever follows the header (data bytes, a DLC digit, nothing). HS replies don't match: a mode
+     * 01/02/03/09/22 reply read as a 29-bit header lands at 0x800 or above, and an 11-bit header
+     * breaks a run of bytes. A fragment shorter than a header can't be told from an HS reply here;
+     * replies to commands sent on the body bus go through [statusOnly] instead.
      */
     @JvmStatic
     fun redactFrames(response: String?): String? {
@@ -171,27 +173,60 @@ object SwcanPrivacy {
         return lines.filterNot(::isWithheld).joinToString("\r")
     }
 
+    /**
+     * [response] with only the adapter's own words kept ([statusWord]), each `|`-separated piece of
+     * a batch on its own, and anything else, a frame or a fragment of one, replaced by [WITHHELD]:
+     * what may be stored of a reply to a command sent while the adapter is on the body bus.
+     */
+    @JvmStatic
+    fun statusOnly(response: String?): String =
+        response
+            .orEmpty()
+            .split('\r', '\n')
+            .map { line -> line.split('|').joinToString("|") { piece -> statusWord(piece) ?: WITHHELD } }
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+
+    /**
+     * [text] trimmed (and without the `>` prompt) when it is one of the adapter's own words: `OK`,
+     * `?`, `STOPPED`, `NO DATA`, an error or bus status, a protocol number (`A6`), the adapter's id.
+     * Null for anything else, which may be bus data.
+     */
+    @JvmStatic
+    fun statusWord(text: String): String? {
+        val clean = text.replace(">", "").trim()
+        return clean.takeIf { it.isEmpty() || STATUS_WORD.matches(it) }
+    }
+
+    /** What stands in for a reply, or part of one, that may hold bus data. */
+    const val WITHHELD = "[withheld]"
+
+    private val STATUS_WORD =
+        Regex(
+            "OK|\\?|STOPPED|NO DATA|SEARCHING\\.*|UNABLE TO CONNECT|BUS INIT\\.*|BUS BUSY|BUFFER FULL|" +
+                "<?(CAN|BUS|DATA|FB|RX|LV) ERROR|<DATA ERROR|<RX ERROR|ACT ALERT|LV RESET|ERR[0-9]{2}|" +
+                "A?[0-9A-F]|ELM327 V[0-9A-Z.]+|STN[0-9]{4} V[0-9A-Z.]+",
+            RegexOption.IGNORE_CASE,
+        )
+
     private fun isWithheld(line: String): Boolean {
         val tokens = line.uppercase(Locale.US).split(SEPARATORS).filter { it.isNotEmpty() }
         var run = 0
         for ((i, token) in tokens.withIndex()) {
             if (token.length == 2 && token.all(::isHex)) {
                 run += 1
-                if (run >= MIN_FRAME_BYTES && isSwcanHeader(tokens.subList(i - run + 1, i - run + 1 + HEADER_BYTES))) {
-                    return true
-                }
+                if (run == HEADER_BYTES && isSwcanHeader(tokens.subList(i - HEADER_BYTES + 1, i + 1))) return true
             } else {
                 run = 0
-                if (token.length >= MIN_COMPACT_CHARS &&
-                    token.all(::isHex) &&
-                    isSwcanHeader(token.take(8).chunked(2))
-                ) {
-                    return true
-                }
+                if (isCompactHeader(token)) return true
             }
         }
         return false
     }
+
+    /** An unspaced hex token that starts with a body broadcast's 29-bit header. */
+    private fun isCompactHeader(token: String): Boolean =
+        token.length >= HEADER_CHARS && token.all(::isHex) && isSwcanHeader(token.take(HEADER_CHARS).chunked(2))
 
     /** Four header bytes whose GMLAN parameter id (bits 13..25) is a body broadcast's, below 0x800. */
     private fun isSwcanHeader(bytes: List<String>): Boolean {
@@ -202,11 +237,10 @@ object SwcanPrivacy {
     private fun isHex(c: Char): Boolean = c in '0'..'9' || c in 'A'..'F'
 
     private val SEPARATORS = Regex("[\\s|>]+")
-    private const val HEADER_BYTES = 4
 
-    /** A 29-bit header plus at least one data byte. */
-    private const val MIN_FRAME_BYTES = HEADER_BYTES + 1
-    private const val MIN_COMPACT_CHARS = MIN_FRAME_BYTES * 2
+    /** A 29-bit header: four bytes, spaced or not. */
+    private const val HEADER_BYTES = 4
+    private const val HEADER_CHARS = HEADER_BYTES * 2
     private const val HEX_RADIX = 16
     private const val GMLAN_PID_SHIFT = 13
     private const val GMLAN_PID_MASK = 0x1FFFL

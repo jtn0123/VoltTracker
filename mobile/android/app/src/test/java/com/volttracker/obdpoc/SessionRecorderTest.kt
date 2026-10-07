@@ -520,6 +520,54 @@ class SessionRecorderTest {
         assertEquals("03", code.optString("command"))
     }
 
+    /**
+     * Between a switch to another protocol (`STP 61`, the body bus) and the protocol check that shows
+     * HS is back (`ATDPN`), a reply can hold a body frame or a fragment of one: only the adapter's own
+     * words are stored, in the session log and the PID observations alike.
+     */
+    @Test
+    @Throws(InterruptedException::class)
+    fun repliesOffHsKeepOnlyTheAdaptersOwnWords() {
+        val store = RecordingStore()
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-off-hs-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
+        recorder.logCommand("STCMM 0", 1_000L, 5L, "10 90 C0 40 41 42\rOK\r>")
+        recorder.bodyBusMonitoring()
+        recorder.logCommand("ATH0", 1_000L, 5L, "10 9\rOK\r>")
+        recorder.logCommand("ATDPN", 1_000L, 5L, "A6\r>")
+        recorder.logCommand("010C", 1_000L, 5L, "41 0C 1A F8\r>")
+        // A batch that checks HS, then switches: off HS from then on.
+        recorder.logCommand("ATDPN|STP 61", 1_000L, 5L, "A6|OK\r>")
+        recorder.logCommand("ATS1", 1_000L, 5L, "10 90 C0\rOK\r>")
+        recorder.closeSession("connected", "done", "0100", 1)
+        recorder.shutdown()
+
+        val stored =
+            store.pidObservationCalls.map {
+                it.payload!!.optString("command") to
+                    it.payload.optString("rawResponse")
+            }
+        assertEquals(
+            listOf(
+                "STP 61" to "OK",
+                "STCMM 0" to "[withheld] OK",
+                "ATH0" to "[withheld] OK",
+                "ATDPN" to "A6",
+                "010C" to "41 0C 1A F8",
+                "ATDPN|STP 61" to "A6|OK",
+                "ATS1" to "[withheld] OK",
+            ),
+            stored,
+        )
+        val text = sessionLogText(logsDir)
+        assertFalse(text.contains("90 C0"))
+        assertFalse(text.contains("10 9"))
+    }
+
     @Test
     @Throws(InterruptedException::class)
     fun scanModeBatchesPidObservationsUntilShutdown() {

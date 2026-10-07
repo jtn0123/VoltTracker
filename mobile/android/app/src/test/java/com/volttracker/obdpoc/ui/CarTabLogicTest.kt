@@ -191,6 +191,12 @@ class CarTabLogicTest {
         val unreported = climateTile(parked, car.copy(acOn = true, acKw = null))
         assertEquals(" requested", unreported.unit)
         assertFalse(unreported.lines.contains("Compressor idle"))
+        // The compressor drawing power with no A/C request (it cools the battery too) isn't "A/C off".
+        val battery = climateTile(parked, car.copy(acOn = false, acKw = 0.8))
+        assertEquals("Compressor on", battery.value)
+        assertEquals(" 0.8 kW", battery.unit)
+        assertEquals("A/C not requested", battery.lines.first())
+        assertFalse(climateTile(parked, car.copy(acOn = false, acKw = 0.0)).lines.contains("A/C not requested"))
         // Before the A/C reports, the cabin temperature leads as it always did.
         val cabin = climateTile(parked, car.copy(acOn = null, fanPct = 30))
         assertEquals("70", cabin.value)

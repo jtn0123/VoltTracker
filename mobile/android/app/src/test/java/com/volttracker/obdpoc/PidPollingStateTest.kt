@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import com.volttracker.obdpoc.PidSchedule.PidSpec
 import com.volttracker.obdpoc.engine.EngineHost
 import com.volttracker.obdpoc.engine.ObdPollingEngine
+import com.volttracker.obdpoc.engine.ParkedDetector
 import com.volttracker.obdpoc.service.ObdService
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -98,6 +99,38 @@ class PidPollingStateTest {
             state.lastRaw("010D"),
         )
         assertEquals("attempt freshness still reflects the latest poll", 0L, state.staleMsFor("010D", nowMs))
+    }
+
+    @Test
+    fun aRequestedReadJoinsTheNextCycleOnce() {
+        val gear = ParkedDetector.GEAR_COMMAND
+        assertFalse(state.dueForCurrentCycle().any { it.command == gear })
+
+        state.pollSoon(gear)
+        state.pollSoon("NOT A PID")
+        val due = state.dueForCurrentCycle().map { it.command }
+
+        assertEquals(1, due.count { it == gear })
+        assertFalse(due.contains("NOT A PID"))
+        assertTrue("first-sample PIDs are still there", due.containsAll(PidSchedule.FIRST_SAMPLE_COMMANDS))
+        assertFalse("asked for once", state.dueForCurrentCycle().any { it.command == gear })
+    }
+
+    @Test
+    fun answeredAgoCountsOnlyALiveAnswer() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        assertNull("never answered", state.answeredAgoMs("010D"))
+        engine.responses["010D"] = "41 0D 28\r>"
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+
+        nowMs += 2_000L
+        assertEquals(2_000L, state.answeredAgoMs("010D"))
+        engine.responses["010D"] = "NO DATA\r>"
+        state.runScheduledPolls(specs("010D"), StringBuilder())
+        nowMs += 1_000L
+
+        assertEquals("a miss is not an answer", 3_000L, state.answeredAgoMs("010D"))
     }
 
     @Test

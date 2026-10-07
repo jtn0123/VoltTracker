@@ -59,6 +59,9 @@ class PidPollingState(
     private val disableLoggedCommands: MutableSet<String> =
         Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
+    // PIDs asked for out of turn ([pollSoon]): read on the next cycle, once, whatever their schedule.
+    private val requestedCommands: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
+
     // Wall-clock of the last cycle that returned at least one fresh PID value. The engine reads the
     // age of this (see [msSinceLastLiveData]) to notice a fully asleep bus and end the session
     // cleanly instead of polling a dead bus until Bluetooth eventually drops. @Volatile is cheap
@@ -92,12 +95,15 @@ class PidPollingState(
         disabledUntilMsByCommand.clear()
         everLiveCommands.clear()
         disableLoggedCommands.clear()
+        requestedCommands.clear()
         lastLiveDataAtMs = clock.nowMs()
     }
 
     fun isInitialCycle(): Boolean = cycleNum == 0
 
-    fun dueForCurrentCycle(): List<PidSpec> {
+    fun dueForCurrentCycle(): List<PidSpec> = withRequested(scheduledForCurrentCycle())
+
+    private fun scheduledForCurrentCycle(): List<PidSpec> {
         val due = if (isInitialCycle()) PidSchedule.firstSampleSpecs() else PidSchedule.dueOnCycle(cycleNum)
         // Drop PIDs the negative-PID cache has retired, unless their re-probe back-off has expired.
         if (disabledUntilMsByCommand.isEmpty()) {
@@ -109,6 +115,26 @@ class PidPollingState(
             until != null && now < until
         }
     }
+
+    /** [due] plus anything asked for with [pollSoon], which is read even if the negative-PID cache retired it. */
+    private fun withRequested(due: List<PidSpec>): List<PidSpec> {
+        if (requestedCommands.isEmpty()) return due
+        val asked = requestedCommands.toList()
+        requestedCommands.removeAll(asked.toSet())
+        val extra = asked.mapNotNull(PidSchedule::specFor).filter { spec -> due.none { it.command == spec.command } }
+        return if (extra.isEmpty()) due else due + extra
+    }
+
+    /**
+     * Reads [command] on the next cycle as well as on its own schedule: for a reading that has to be
+     * current now (the guided car test's Park check). Unknown commands are ignored. Any thread.
+     */
+    fun pollSoon(command: String) {
+        if (PidSchedule.specFor(command) != null) requestedCommands += command
+    }
+
+    /** How long ago [command] last answered with a value (not when it was last asked), or null if it hasn't. */
+    fun answeredAgoMs(command: String): Long? = lastRawSetAtMsByCommand[command]?.let { maxOf(0L, clock.nowMs() - it) }
 
     fun advanceCycle() {
         cycleNum += 1

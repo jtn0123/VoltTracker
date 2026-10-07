@@ -160,8 +160,9 @@ fun aux12Tile(drive: DriveUiState): CarTile {
  * The climate tile, led by the A/C, which the car sends every few seconds, then the fan, the cabin
  * and outside temperatures, and a running remote start. The A/C reading is the climate control's
  * request for the compressor, so it is only "on" when the compressor is seen drawing power;
- * requested with the compressor idle or not reported, it says so. Before the A/C has reported, the
- * cabin temperature leads instead.
+ * requested with the compressor idle or not reported, it says so. The compressor drawing power
+ * with no request (it also cools the battery) reads as the compressor running, not as the A/C off.
+ * Before the A/C has reported, the cabin temperature leads instead.
  */
 fun climateTile(
     drive: DriveUiState,
@@ -170,6 +171,7 @@ fun climateTile(
     val metric = car.metricUnits
     val cabin = drive.cabinTempF?.let { (it - F_OFFSET) / F_PER_C }
     val ac = car.acOn
+    val compressorKw = car.acKw?.takeIf { it > 0 }
     val temps =
         listOfNotNull(
             cabin?.takeIf { ac != null }?.let { "Cabin ${tempText(it, metric)}" },
@@ -178,6 +180,7 @@ fun climateTile(
     val lines =
         listOfNotNull(
             "Compressor idle".takeIf { ac == true && car.acKw?.let { it <= 0 } == true },
+            "A/C not requested".takeIf { ac == false && compressorKw != null },
             car.fanPct?.takeIf { ac != null }?.let { if (it > 0) "Fan $it%" else "Fan off" },
             temps,
             if (car.remoteStartOn == true) "Remote start running" else null,
@@ -187,10 +190,15 @@ fun climateTile(
     if (ac == null) {
         return CarTile(cabin?.let { tempValue(it, metric) } ?: DASH, "${tempUnit(metric)} cabin", lines, tone)
     }
-    val kw = car.acKw?.takeIf { ac && it > 0 }
     return when {
+        compressorKw != null ->
+            CarTile(
+                if (ac) "A/C on" else "Compressor on",
+                " ${oneDecimal(compressorKw)} kW",
+                lines,
+                tone,
+            )
         !ac -> CarTile("A/C off", "", lines, tone)
-        kw != null -> CarTile("A/C on", " ${oneDecimal(kw)} kW", lines, tone)
         else -> CarTile("A/C", " requested", lines, tone)
     }
 }

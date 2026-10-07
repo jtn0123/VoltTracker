@@ -197,6 +197,24 @@ class SwitchBenchmarkTest {
         assertThrows(IOException::class.java) { benchmark.run("bench_batched", batched = true, cycles = 2) { false } }
 
         assertEquals("bench_batched", io.event("guided_bus_state_unknown")!!["step"])
+        // The cycle it dropped in is counted, as a failure, in the block's summary.
+        assertEquals("interrupted", io.event("guided_bench")!!["failure"])
+        val summary = io.event("guided_bench_summary")!!
+        assertEquals("1", summary["cycles"])
+        assertEquals("0", summary["validCycles"])
+        assertEquals("interrupted:1", summary["failures"])
+    }
+
+    @Test
+    fun aDropBetweenCyclesKeepsTheCyclesThatRan() {
+        io.dropLinkAt = 1_500L
+
+        assertThrows(IOException::class.java) { benchmark.run("bench", batched = false, cycles = 5) { false } }
+
+        val summary = io.event("guided_bench_summary")!!
+        assertEquals("2", summary["cycles"])
+        assertEquals("1", summary["validCycles"])
+        assertEquals("interrupted:1", summary["failures"])
     }
 
     @Test
@@ -219,7 +237,66 @@ class SwitchBenchmarkTest {
 
         assertEquals(SwitchBenchmark.RESTORE_FAILED, outcome)
         assertEquals(1, io.reinitCount)
-        assertEquals("0", io.event("guided_bench_summary")!!["cycles"])
+        assertEquals("restore_failed", io.event("guided_bench")!!["failure"])
+        val summary = io.event("guided_bench_summary")!!
+        assertEquals("1", summary["cycles"])
+        assertEquals("0", summary["validCycles"])
+        assertEquals("restore_failed:1", summary["failures"])
+    }
+
+    @Test
+    fun anErrorWhileMonitoringIsNotATrial() {
+        batching()
+        io.preamble = { listOf("A6|OK|OK|OK|OK|OK|OK|OK|CAN ERROR") }
+
+        val outcome = benchmark.run("bench_batched", batched = true, cycles = 1) { false }
+
+        assertEquals(SwitchBenchmark.PARTIAL, outcome)
+        assertEquals("monitor_error", io.event("guided_bench")!!["failure"])
+        assertEquals("CAN ERROR", io.event("guided_bench_monitor_error")!!["reply"])
+    }
+
+    @Test
+    fun aMonitorCommandTheAdapterRejectsIsNotATrial() {
+        io.preamble = { if (it == SwcanListenRunner.MONITOR_COMMAND) listOf("?") else emptyList() }
+
+        benchmark.run("bench", batched = false, cycles = 1) { false }
+
+        assertEquals("monitor_error", io.event("guided_bench")!!["failure"])
+        assertEquals("?", io.event("guided_bench_monitor_error")!!["reply"])
+        assertEquals("-1", io.event("guided_bench_summary")!!["medianTotalMs"])
+    }
+
+    @Test
+    fun aMonitorTheAdapterEndsByItselfIsNotATrial() {
+        io.earlyEndLine = null
+        io.endEarlyAfterMs = 500L
+
+        benchmark.run("bench", batched = false, cycles = 1) { false }
+
+        assertEquals("monitor_ended", io.event("guided_bench")!!["failure"])
+    }
+
+    @Test
+    fun aListenCutShortIsNotATrial() {
+        io.cutAfterMs = 500L
+
+        benchmark.run("bench", batched = false, cycles = 1) { false }
+
+        assertEquals("short_listen", io.event("guided_bench")!!["failure"])
+    }
+
+    @Test
+    fun aBatchReplyIsLoggedAsStatusWordsOnly() {
+        batching()
+        // A frame fragment where a setup reply should be: its bytes never reach the log.
+        io.preamble = { listOf("A6|OK|10 90 C0") }
+
+        benchmark.run("bench_batched", batched = true, cycles = 1) { false }
+
+        val reply = io.event("guided_bench_batch_reply")!!
+        assertEquals("A6|OK|[withheld]", reply["replies"])
+        assertEquals("false", reply["setupOk"])
     }
 
     @Test

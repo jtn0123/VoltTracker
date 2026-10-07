@@ -79,8 +79,9 @@ column gives the GM message and signal name for each row (`Message.Signal`).
   `app_key` column). That only shows two frames carry the same thing, not that the decode is right.
 - A 20-minute drive gives about 20 windows. Treat one-session fits as leads. Several drives make a fit
   trustworthy.
-- The listen windows are short: about 2.5 s every 45 s while driving. Frames sent once per drive (like
-  tire pressures) or on events (doors, windows) are easy to miss.
+- The listen windows are short: about 2.5 s every 45 s while driving. Frames sent rarely (tire
+  pressures were heard once, at the start of the one drive listened through so far) or on events
+  (doors, windows) are easy to miss.
 
 ## Guided car test logs
 
@@ -169,7 +170,7 @@ From two sessions: a 5-minute parked capture on 2026-09-29 and a 21-minute drive
 That's 56 windows, 40,710 frames and 105 frame ids. Every id heard so far has a row.
 
 - **In the app and confirmed:** door lock, 12 V voltage, tire pressures (GM confirms the corner
-  order), A/C state, evaporator, compressor speed and power, blower (byte 1), cabin air (byte 4),
+  order; which codes mean no reading is inferred), A/C state, evaporator, compressor speed and power, blower (byte 1), cabin air (byte 4),
   PE coolant, drive-cycle EV distance, wheel speeds, transmission oil temperature, and the energy
   screen (used driving, by climate, conditioning the battery, and energy left).
 - **Ready to use (strong):** vehicle speed, drive motor speed, odometer, displayed SOC, engine

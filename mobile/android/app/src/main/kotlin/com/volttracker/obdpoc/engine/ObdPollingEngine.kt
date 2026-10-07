@@ -753,7 +753,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
-            parkedDetector.observe(sample, freshSpeedKph(sample), System.currentTimeMillis())
+            observeParked(parkedDetector, sample, pidPolling)
             appendSwcanReadings(sample)
             carControl.appendTo(sample)
             service.broadcastTelemetry(sample)
@@ -1223,6 +1223,18 @@ open class ObdPollingEngine(
         }
     }
 }
+
+/** Folds [sample] into [detector]: its fresh speed, and its gear aged by when the gear PID last answered. */
+private fun observeParked(
+    detector: ParkedDetector,
+    sample: JSONObject,
+    polling: PidPollingState,
+) = detector.observe(
+    sample,
+    freshSpeedKph(sample),
+    polling.answeredAgoMs(ParkedDetector.GEAR_COMMAND),
+    System.currentTimeMillis(),
+)
 
 /**
  * The sample's speed, or NaN when the car stopped refreshing it (it's off, or asleep): a stale

@@ -214,6 +214,26 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun skipCantPassOverTheHearingCheck() {
+        io.heartbeat = DOOR_CLOSED
+        val test = test(confirmStep, seatStep, seatStep).started()
+        io.onTick = { at ->
+            if (at == 1_000L) test.request(GuidedCarTest.Op.SKIP)
+            if (at == 2_000L) test.request(GuidedCarTest.Op.CONFIRM)
+        }
+
+        test.runNext()
+
+        assertEquals("done", steps().single()["result"])
+        assertEquals("intro", io.event("guided_skip_refused")!!["step"])
+        assertEquals("nothing cut", 0, voice.interrupts)
+
+        io.onTick = {}
+        test.runNext()
+        assertEquals("the refused skip doesn't carry to the next step", "recorded", steps().last()["result"])
+    }
+
+    @Test
     fun noTapEndsTheTest() {
         io.heartbeat = DOOR_CLOSED
         val test = test(confirmStep, seatStep).started()
@@ -254,19 +274,38 @@ class GuidedCarTestTest {
         val test = test(lockStep).started()
 
         assertTrue("waiting holds the turn", test.runNext())
+        assertEquals("the gear is asked for", 1, io.gearReads)
+        assertTrue("no word before a fresh read has had time to come", voice.said.isEmpty())
+
+        clock.advance(15_000L)
         assertTrue(test.runNext())
+        test.runNext()
 
         assertFalse(io.commands.contains("<enter>"))
         assertEquals("said once", listOf(PARK_PROMPT), voice.said)
         assertEquals(PARK_PROMPT, statuses.last().instruction)
         assertEquals("lock", io.event("guided_waiting_for_park")!!["step"])
+        assertEquals(3, io.gearReads)
 
         io.inPark = true
-        clock.advance(20_000L)
+        clock.advance(5_000L)
         test.runNext()
 
-        assertEquals("20000", io.event("guided_park_read")!!["waitedMs"])
+        val read = io.event("guided_park_read")!!
+        assertEquals("20000", read["waitedMs"])
+        assertEquals("park", read["evidence"])
         assertEquals("missed", steps().single()["result"])
+    }
+
+    @Test
+    fun aParkReadAtOnceStartsTheStepWithoutAWord() {
+        val test = test(lockStep).started()
+
+        test.runNext()
+
+        assertEquals("0", io.event("guided_park_read")!!["waitedMs"])
+        assertEquals(0, io.gearReads)
+        assertEquals(null, io.event("guided_waiting_for_park"))
     }
 
     @Test
@@ -292,6 +331,53 @@ class GuidedCarTestTest {
         test.runNext()
 
         assertEquals(listOf("heard", "recorded"), steps().map { it["result"] })
+        assertEquals("off", io.event("guided_park_read")!!["evidence"])
+    }
+
+    @Test
+    fun theCarHeardOffNoLongerCountsOnceAnythingShowsItMoving() {
+        voice.onSay = { if (it == "Turn the car off.") io.broadcast(clock.now + 1_000L, POWER_OFF) }
+        val test = test(powerOff, chargePort).started()
+        test.runNext()
+
+        io.inPark = false
+        io.motions += 1
+        test.runNext()
+
+        assertEquals("no listen without Park", 1, io.commands.count { it == "<enter>" })
+        assertEquals(listOf("power_off"), io.all("guided_park_read").map { it["step"] })
+    }
+
+    @Test
+    fun theCarHeardOffLongAgoNoLongerCounts() {
+        voice.onSay = { if (it == "Turn the car off.") io.broadcast(clock.now + 1_000L, POWER_OFF) }
+        val test = test(powerOff, chargePort).started()
+        test.runNext()
+
+        io.inPark = false
+        clock.advance(10 * 60_000L)
+        test.runNext()
+
+        assertEquals(1, io.commands.count { it == "<enter>" })
+        assertEquals(1, io.gearReads)
+    }
+
+    @Test
+    fun theCarHeardOnAgainEndsTheOffEvidence() {
+        voice.onSay = {
+            if (it == "Turn the car off.") {
+                io.broadcast(clock.now + 1_000L, POWER_OFF)
+                io.broadcast(clock.now + 5_000L, POWER_RUN)
+            }
+        }
+        val test = test(powerOff, chargePort).started()
+        test.runNext()
+        assertEquals("heard", steps().single()["result"])
+
+        io.inPark = false
+        test.runNext()
+
+        assertEquals(1, io.commands.count { it == "<enter>" })
     }
 
     @Test
@@ -374,15 +460,63 @@ class GuidedCarTestTest {
         val step = steps().single()
         assertEquals("2", step["monitorRuns"])
         assertEquals("1", step["restarts"])
-        assertEquals("0-3000,3000-9250", step["coverage"])
-        assertEquals("0", step["gapMs"])
-        assertEquals("complete", step["capture"])
+        // Each run covers the bus from its first line (a quarter second in) to its end.
+        assertEquals("250-3000,3250-9250", step["coverage"])
+        assertEquals("2", step["coverageSpans"])
+        assertEquals("false", step["coverageCut"])
+        assertEquals("250", step["gapMs"])
+        assertEquals("500", step["startupMs"])
+        // The adapter's buffer filling lost frames: the capture says so.
+        assertEquals("BUFFER FULL:1", step["monitorErrors"])
+        assertEquals("partial:monitor_error", step["capture"])
         assertEquals(2, io.commands.count { it == "STM" })
+    }
+
+    @Test
+    fun aMonitorThatEndsWithoutAWordIsPickedUpWithAWholeCapture() {
+        io.endEarlyAfterMs = 3_000L
+        io.earlyEndLine = null
+        val test = test(seatStep).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("2", step["monitorRuns"])
+        assertEquals("", step["monitorErrors"])
+        assertEquals("complete", step["capture"])
+    }
+
+    @Test
+    fun anErrorLineIsNotAMonitorThatWorks() {
+        // The adapter answers the monitor with an error first: the instruction waits for a working bus.
+        io.preamble = { listOf("CAN ERROR", "GARBLED LINE") }
+        val test = test(lockStep, seatStep).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("250", step["saidMs"])
+        assertEquals("CAN ERROR:1,unparsed:1", step["monitorErrors"])
+        assertEquals("partial:monitor_error", step["capture"])
+        assertEquals("partial", step["result"])
+    }
+
+    @Test
+    fun aMonitorThatOnlyErrorsNeverSaysTheStep() {
+        io.alwaysEndsAtOnce = true
+        val test = test(lockStep, seatStep).started()
+
+        test.runNext()
+
+        assertEquals("bus_failed", steps().single()["result"])
+        assertTrue(voice.said.none { it == "Lock the doors." })
     }
 
     @Test
     fun aMonitorThatWontStayUpIsAPartialCapture() {
         io.alwaysEndsAtOnce = true
+        io.earlyEndLine = null
+        io.preamble = { listOf(DOOR_CLOSED) }
         val test = test(seatStep, seatStep).started()
 
         test.runNext()
@@ -422,6 +556,8 @@ class GuidedCarTestTest {
         assertTrue(cut["frames"]!!.toInt() >= 2)
         assertEquals(cut["frames"], captures().single()["frames"])
         assertEquals("seat", io.event("guided_bus_state_unknown")!!["step"])
+        assertEquals("unknown", cut["gotPrompt"])
+        assertEquals("unknown", cut["restored"])
         assertFalse("no restore on a dead link", io.commands.contains("<leave>"))
         assertTrue("the test outlives the reconnect", test.isActive())
 
@@ -465,13 +601,127 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun anOffHeardWhileTheDriveIsBeingSaidDoesNotEndIt() {
+        // An old "off" the car repeats, heard before the drive has even been asked for.
+        voice.onSay = { if (it == "Drive.") io.broadcast(clock.now + 100L, POWER_OFF) }
+        val test = test(shortDrive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("missed", step["result"])
+        assertEquals("", step["heardMs"])
+    }
+
+    @Test
+    fun aVoiceThatFailsBeforeTheDriveIsSaidEndsTheTest() {
+        voice.failed = true
+        val test = test(shortDrive).started()
+
+        test.runNext()
+
+        assertEquals("voice_failed", steps().single()["result"])
+        assertEquals("The phone couldn't speak", statuses.last().ended)
+        assertNull("the drive never started", io.event("session_diagnostic"))
+        assertFalse(test.takeSessionEnd())
+    }
+
+    @Test
+    fun aVoiceThatFailsOnceTheDriveIsUnderwayDoesNotEndIt() {
+        voice.onSay = { if (it == "Drive.") io.broadcast(clock.now + 60_000L, POWER_OFF) }
+        io.onTick = { at -> if (at == 5_000L) voice.failed = true }
+        val test = test(drive).started()
+
+        test.runNext()
+
+        assertEquals("heard", steps().single()["result"])
+        assertTrue(test.takeSessionEnd())
+    }
+
+    @Test
+    fun aShutdownCutShortIsAPartialCaptureOfThePowerOff() {
+        voice.onSay = { if (it == "Turn the car off.") io.broadcast(clock.now + 1_000L, POWER_OFF) }
+        io.earlyEndLine = null
+        io.onTick = { at ->
+            // The adapter stops monitoring a moment after the car switched off, and won't again.
+            if (at == 2_000L) {
+                io.endEarlyAfterMs = 0L
+                io.alwaysEndsAtOnce = true
+            }
+        }
+        val test = test(powerOff, seatStep).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("partial", step["result"])
+        assertEquals("1250", step["heardMs"])
+        assertEquals("partial:monitor_stuck+shutdown_short", step["capture"])
+    }
+
+    @Test
+    fun aDriveWhoseShutdownIsCutShortSaysSo() {
+        voice.onSay = { if (it == "Drive.") io.broadcast(clock.now + 60_000L, POWER_OFF) }
+        io.earlyEndLine = null
+        io.onTick = { at ->
+            if (at == 70_000L) {
+                io.endEarlyAfterMs = 0L
+                io.alwaysEndsAtOnce = true
+            }
+        }
+        val test = test(drive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("shutdown_short", step["result"])
+        assertTrue(step["capture"]!!.contains("shutdown_short"))
+        assertEquals("Finished, but the car switching off was only partly recorded", statuses.last().ended)
+        assertTrue(voice.said.last().startsWith("That's the whole test, though"))
+        assertTrue("the drive is over: the session still ends", test.takeSessionEnd())
+    }
+
+    @Test
+    fun aDriveCutAfterTheCarWasHeardOffEndsWithoutListeningAgain() {
+        voice.onSay = { if (it == "Drive.") io.broadcast(clock.now + 60_000L, POWER_OFF) }
+        io.dropLinkAt = 70_000L
+        val test = test(drive).started()
+        assertThrows(IOException::class.java) { test.runNext() }
+
+        io.dropLinkAt = null
+        test.runNext()
+
+        assertEquals(listOf("interrupted"), steps().map { it["result"] })
+        assertEquals(1, io.commands.count { it == "<enter>" })
+        assertEquals("Finished, but the car switching off was only partly recorded", statuses.last().ended)
+        assertEquals("true", io.event("guided_test_end")!!["endsSession"])
+        assertTrue(test.takeSessionEnd())
+    }
+
+    @Test
+    fun aLineReadWithTheOneTheStepEndedOnIsLate() {
+        // Both come in the tick the lock step runs out: the lock is read after the step is over.
+        io.broadcast(30_750L, DOOR_CLOSED)
+        io.broadcast(30_750L, LOCKED)
+        val test = test(lockStep).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("missed", step["result"])
+        assertEquals("30750", step["listenMs"])
+        assertEquals("1", step["drainedFrames"])
+    }
+
+    @Test
     fun theDriveEndsOnItsOwnAfterItsLongestRun() {
         val test = test(shortDrive).started()
 
         test.runNext()
 
         assertEquals("missed", steps().single()["result"])
-        assertEquals((2 * 60_000L + 250L).toString(), steps().single()["listenMs"])
+        // Two minutes from when "Drive." had been said (0.25 s in, 0.3 s to say, the next tick).
+        assertEquals((2 * 60_000L + 750L).toString(), steps().single()["listenMs"])
         assertFalse(test.isActive())
         assertFalse("the session goes on", test.takeSessionEnd())
     }

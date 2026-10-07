@@ -25,6 +25,7 @@ internal class EngineSwcanIo(
         stopTimeoutMs: Long,
     ): ElmConnection.MonitorResult =
         synchronized(host.ioLock) {
+            host.recorder.bodyBusMonitoring()
             connection().monitor(command, listenMs, stopTimeoutMs, host.running::get)
         }
 
@@ -36,6 +37,7 @@ internal class EngineSwcanIo(
         onDrain: (String) -> Unit,
     ): ElmConnection.MonitorResult =
         synchronized(host.ioLock) {
+            host.recorder.bodyBusMonitoring()
             connection().monitorStream(command, listenMs, stopTimeoutMs, host.running::get, onLine, onDrain)
         }
 
@@ -49,7 +51,11 @@ internal class EngineSwcanIo(
 
     override fun isStationary(): Boolean = parked.isParked(System.currentTimeMillis())
 
-    override fun isInPark(): Boolean = parked.isInPark()
+    override fun isInPark(): Boolean = parked.isInPark(System.currentTimeMillis())
+
+    override fun motionCount(): Long = parked.motionCount()
+
+    override fun requestGearRead() = pidPolling.pollSoon(ParkedDetector.GEAR_COMMAND)
 
     override fun noteMotion() = parked.moved()
 

@@ -234,6 +234,19 @@ class SwcanReadingsTest {
     }
 
     @Test
+    fun aHoodOrWindowTheCarFlagsInvalidSaysSoInTheSample() {
+        val readings = SwcanReadings()
+        // The hood flagged not valid (byte 0 bit 2); the driver's window not known since the car woke (5).
+        readings.record(readingsFrom("10 72 80 40 04", "10 64 A0 40 05 00"), 0L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 1_000L)
+        assertEquals("unknown", sample.getString("hoodState"))
+        assertEquals("fl", sample.getString("windowsInvalid"))
+        assertFalse(sample.has("windowFlPct"))
+        assertEquals(0.0, sample.getDouble("windowFrPct"), 0.0)
+    }
+
+    @Test
     fun aTireTheCarFlagsInvalidDropsItsOldPressure() {
         val readings = SwcanReadings()
         readings.record(readingsFrom("10 3D 40 40 24 24 3E 3F 3E 3E"), 0L)

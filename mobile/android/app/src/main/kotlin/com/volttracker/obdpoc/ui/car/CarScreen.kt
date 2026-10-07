@@ -202,7 +202,10 @@ fun CarScreen(
     }
 }
 
-/** The running guided test: the step, what the phone just said, how the last step went, the hearing check, Skip and Stop. */
+/**
+ * The running guided test: the step, what the phone just said, how the last step went, the hearing
+ * check, Skip (not during the hearing check) and Stop.
+ */
 @Composable
 private fun GuidedTestCard(
     status: GuidedTestStatus,
@@ -244,7 +247,8 @@ private fun GuidedTestCard(
             ) { onGuided("confirm") }
         }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            VoltButton("Skip step", Modifier.weight(1f)) { onGuided("skip") }
+            // The hearing check can't be skipped (the test ignores Skip there), so it isn't offered.
+            if (!status.confirm) VoltButton("Skip step", Modifier.weight(1f)) { onGuided("skip") }
             VoltButton("Stop test", Modifier.weight(1f)) { onGuided("stop") }
         }
     }

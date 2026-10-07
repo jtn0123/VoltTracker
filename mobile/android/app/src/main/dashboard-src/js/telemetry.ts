@@ -98,7 +98,7 @@ import { driveGear, gearDisplayText } from "./gear";
     "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
     "doorLockState", "doorLockSource", "doorLockStaleMs", "doorFlState", "doorFrState",
     "doorRlState", "doorRrState", "hoodState", "trunkState", "doorStatusStaleMs", "alarmState",
-    "alarmStaleMs", "windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct", "windowStaleMs",
+    "alarmStaleMs", "windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct", "windowStaleMs", "windowsInvalid",
     "cabinTempEstC", "blowerPct", "acState", "acCompressorRpm", "acEvapTempC", "heaterCoreTempC",
     "coolantHeaterKw", "climateStaleMs", "peCoolantTempC", "peCoolantStaleMs",
     "chargeCurrentLimitA", "chargeLimitStaleMs", "clusterEvRangeKm", "fuelRangeKm", "rangeStaleMs",
@@ -1625,6 +1625,8 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "windowFrPct", label: "Window front right", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowFrPct) },
     { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowRlPct) },
     { key: "windowRrPct", label: "Window rear right", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowRrPct) },
+    // "fl,rr": windows whose position the car flagged not valid (their position is then omitted).
+    { key: "windowsInvalid", label: "Windows not reading", group: "Body & comfort", text: true, staleKey: "windowStaleMs", enhanced: true },
     { key: "cabinTempEstC", label: "Cabin temp (est.)", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "acState", label: "A/C", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
     { key: "blowerPct", label: "Blower", group: "Body & comfort", unit: "%", staleKey: "climateStaleMs", enhanced: true },
