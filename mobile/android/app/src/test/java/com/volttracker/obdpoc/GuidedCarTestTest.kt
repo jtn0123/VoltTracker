@@ -621,6 +621,34 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun anErrorAsTheBusWakesStaysOnTheCaptureWhileTheStepHearsWhatFollows() {
+        // As at power-on on 10-07: one CAN ERROR as the body bus woke, then the car's frames.
+        val powerOn =
+            GuidedStep(
+                "power_on",
+                GuidedStepKind.EVENT,
+                "Turn the car back on.",
+                120_000L,
+                GuidedExpect.isOneOf(SwcanField.POWER_MODE, "run"),
+            )
+        voice.onSay = {
+            if (it == powerOn.say) {
+                io.broadcast(clock.now + 3_000L, "CAN ERROR")
+                io.broadcast(clock.now + 4_000L, POWER_RUN)
+            }
+        }
+        val test = test(powerOn).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("heard", step["result"])
+        assertEquals(4_000L, heardAfterSaid(step))
+        assertEquals("CAN ERROR:1", step["monitorErrors"])
+        assertEquals("the capture still says what it may have lost", "partial:monitor_error", step["capture"])
+    }
+
+    @Test
     fun aMonitorThatOnlyErrorsNeverSaysTheStep() {
         io.alwaysEndsAtOnce = true
         val test = test(lockStep, seatStep).started()
