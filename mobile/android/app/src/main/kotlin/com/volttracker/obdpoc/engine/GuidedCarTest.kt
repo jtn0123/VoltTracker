@@ -56,7 +56,8 @@ internal fun monotonicNowMs(): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoT
 class GuidedCarTest(
     private val io: SwcanListenRunner.Io,
     private val bus: Bus,
-    private val steps: List<GuidedStep> = GuidedCarScript.steps,
+    private val fullSteps: List<GuidedStep> = GuidedCarScript.steps,
+    private val driveSteps: List<GuidedStep> = GuidedCarScript.driveSteps,
     private val clock: () -> Long = ::monotonicNowMs,
     private val publish: (GuidedTestStatus) -> Unit = GuidedCarTestState::publish,
 ) {
@@ -96,6 +97,9 @@ class GuidedCarTest(
 
     enum class Op {
         START,
+
+        /** The drive on its own ([GuidedCarScript.driveSteps]): the hearing check, then the drive. */
+        START_DRIVE,
         SKIP,
         STOP,
 
@@ -135,6 +139,9 @@ class GuidedCarTest(
 
         /** Wheels turning in a line read after the step ended: the result stands, but Park and car-off no longer do. */
         var lateMotion = false
+
+        /** Times the drive's end was heard and then undone: the car switched back on, or moving. */
+        var resumed = 0
 
         /** Monitor time before each run was heard working (its first frame or quiet tick): not coverage. */
         var startupMs = 0L
@@ -250,13 +257,14 @@ class GuidedCarTest(
             val text = line.trim()
             val frame = if (text.isEmpty()) null else SwcanFrameDecoder.parseLine(text)
             if (text.isNotEmpty() && frame == null) monitorError(text)
+            val cue = saidAt < 0 && (text.isEmpty() || frame != null)
             if (text.isEmpty() || frame != null) {
                 // The monitor is working (a frame, or the bus quiet): now the instruction, so nothing
                 // is done before the bus is heard. An error line is not a monitor that works.
                 if (runHeardAt < 0) runHeardAt = now
                 if (saidAt < 0) speak(now)
             }
-            frame?.let { frame(it, now, drained = false) }
+            frame?.let { frame(it, now, drained = false, cue = cue) }
             if (now - flushedAt >= CHUNK_MS) flush(now)
             if (saidAt >= 0 && now - saidAt <= SPEECH_MAX_MS && voice.get()?.speaking() == true) spokenAt = now
             if (cut == null) cut = interruption()
@@ -321,6 +329,7 @@ class GuidedCarTest(
             frame: SwcanFrame,
             now: Long,
             drained: Boolean,
+            cue: Boolean = false,
         ) {
             recorder.add(frame, now, drained)
             val decoded = SwcanFrameDecoder.decode(frame)
@@ -331,12 +340,21 @@ class GuidedCarTest(
             val waiting = !drained && heardAt < 0 && (step.kind != GuidedStepKind.DRIVE || driveStartedAt >= 0)
             for (reading in decoded) {
                 val before = lastSeen[reading.field]
+                // The line that started the instruction can't be the driver doing it: with nothing
+                // heard before to compare it with, it only sets where the field starts.
                 if (waiting &&
                     expect != null &&
                     reading.field == expect.field &&
+                    !(cue && before == null) &&
                     expect.matches(before, reading.value)
                 ) {
                     heardAt = now
+                }
+                if (!drained && heardAt >= 0 && resumes(reading)) {
+                    // The drive's end only stands if the car stays off: switched back on or moving
+                    // before its shutdown was recorded, and the drive goes on.
+                    heardAt = -1L
+                    resumed += 1
                 }
                 if (step.phase != GuidedPhase.DRIVING && isMoving(reading)) {
                     if (drained) noteLateMotion() else moved = true
@@ -353,6 +371,10 @@ class GuidedCarTest(
             offAt = -1L
             io.noteMotion()
         }
+
+        private fun resumes(reading: SwcanReading): Boolean =
+            step.kind == GuidedStepKind.DRIVE &&
+                (reading.field == SwcanField.POWER_MODE && reading.value != DRIVE_OFF || isMoving(reading))
 
         private fun isMoving(reading: SwcanReading): Boolean =
             reading.field.group == SwcanGroup.WHEELS && (reading.value as? Double ?: 0.0) >= MOTION_KPH
@@ -409,6 +431,9 @@ class GuidedCarTest(
 
     @Volatile private var startRequested = false
 
+    /** The script the requested start runs: the drive on its own, or the whole test. */
+    @Volatile private var driveOnly = false
+
     @Volatile private var skipRequested = false
 
     @Volatile private var stopRequested = false
@@ -427,6 +452,9 @@ class GuidedCarTest(
     private val busLock = ReentrantLock()
     private val offBus = busLock.newCondition()
     private var busThread: Thread? = null
+
+    /** The script running, or last run. */
+    private var steps = fullSteps
 
     /** The step running, -1 when no test is. Poll thread only, like everything below. */
     private var index = -1
@@ -452,7 +480,11 @@ class GuidedCarTest(
     /** Start, skip, stop or the hearing check; safe from any thread. Start is ignored while a test runs. */
     fun request(op: Op) {
         when (op) {
-            Op.START -> if (!running || stopRequested) startRequested = true
+            Op.START, Op.START_DRIVE ->
+                if (!running || stopRequested) {
+                    driveOnly = op == Op.START_DRIVE
+                    startRequested = true
+                }
             Op.SKIP -> skipRequested = true
             Op.STOP -> {
                 startRequested = false
@@ -530,7 +562,8 @@ class GuidedCarTest(
         if (!startRequested) return false
         when (bus.canListen()) {
             null -> {
-                val waiting = GuidedTestStatus(running = true, steps = steps.size, instruction = WAITING)
+                val script = if (driveOnly) driveSteps else fullSteps
+                val waiting = GuidedTestStatus(running = true, steps = script.size, instruction = WAITING)
                 if (shown != waiting) show(waiting)
                 return false
             }
@@ -545,6 +578,7 @@ class GuidedCarTest(
         startRequested = false
         skipRequested = false
         confirmRequested = false
+        steps = if (driveOnly) driveSteps else fullSteps
         index = 0
         attempt = 0
         running = true
@@ -558,7 +592,7 @@ class GuidedCarTest(
         offAt = -1L
         sessionEnds = false
         voice.getAndSet(io.openVoice())?.close()
-        io.logEvent("guided_test_start", "steps", steps.size.toString())
+        io.logEvent("guided_test_start", "steps", steps.size.toString(), "script", if (driveOnly) "drive" else "full")
         return true
     }
 
@@ -958,6 +992,7 @@ class GuidedCarTest(
                     "restored" to (listen.restored?.toString() ?: UNKNOWN),
                     "moved" to listen.moved.toString(),
                     "lateMotion" to listen.lateMotion.toString(),
+                    "resumed" to listen.resumed.toString(),
                 )
         }
         io.logEvent("guided_step", *fields.flatMap { listOf(it.first, it.second) }.toTypedArray())
@@ -1003,6 +1038,9 @@ class GuidedCarTest(
         private const val DRIVE_NOTE =
             "Live data is paused while the drive is recorded. It comes back when the test ends."
         private val OFF_POWER_MODES = setOf("off", "accessory")
+
+        /** The only power mode that ends the drive. */
+        private const val DRIVE_OFF = "off"
 
         private const val HEARD = "heard"
         private const val MISSED = "missed"

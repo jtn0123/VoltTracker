@@ -392,6 +392,51 @@ class SwcanFrameDecoderTest {
     }
 
     @Test
+    fun seatHeatLampsOnTheCarCountDownAPress() {
+        // 10-07: the front buttons pressed four times each, the rear left twice. Bit 5 of a lamp byte
+        // is the indicator request and byte 0 / 1 the heat mode, so neither counts.
+        val front = gmlan(SwcanFrameDecoder.PID_FRONT_SEAT_HEAT)
+        val driver = listOf(intArrayOf(0x0C, 0x00, 0x3C, 0x00), intArrayOf(0x0C, 0x00, 0x2C, 0x00))
+        val passenger = listOf(intArrayOf(0x00, 0x0C, 0x00, 0x24), intArrayOf(0x00, 0x00, 0x00, 0x00))
+        assertEquals(listOf(3.0, 2.0), driver.map { decode(front, *it)[SwcanField.SEAT_HEAT_FL] })
+        assertEquals(listOf(1.0, 0.0), passenger.map { decode(front, *it)[SwcanField.SEAT_HEAT_FR] })
+        val rear = gmlan(SwcanFrameDecoder.PID_REAR_SEAT_HEAT)
+        assertEquals(3.0, decode(rear, 0x0C, 0x00, 0x3C, 0x00)[SwcanField.SEAT_HEAT_RL])
+        assertEquals(0.0, decode(rear, 0x00, 0x00, 0x00, 0x00)[SwcanField.SEAT_HEAT_RL])
+    }
+
+    @Test
+    fun chargePortDoorFromItsTwoBits() {
+        // arb 0x112, byte 0 bits 1-2. 10-07, car off: 02 with the door open, 00 once it was shut.
+        val id = gmlan(SwcanFrameDecoder.PID_CHARGE_PORT)
+        assertEquals("open", decode(id, 0x02)[SwcanField.CHARGE_PORT_DOOR])
+        assertEquals("closed", decode(id, 0x00)[SwcanField.CHARGE_PORT_DOOR])
+        // Never seen on the car: kept as their number.
+        assertEquals("state_2", decode(id, 0x04)[SwcanField.CHARGE_PORT_DOOR])
+        assertEquals("state_3", decode(id, 0x06)[SwcanField.CHARGE_PORT_DOOR])
+        assertEquals("only bits 1-2 count", "open", decode(id, 0xF3)[SwcanField.CHARGE_PORT_DOOR])
+        assertTrue(decode(id).isEmpty(), "no byte 0")
+    }
+
+    @Test
+    fun refuelStateFromTheFirstByteOnly() {
+        // arb 0x3B2, byte 0 bits 0-2. 10-07, car off: 00, then 01 as the fuel door button was pressed,
+        // 02 about two seconds later, 00 once the door was shut.
+        val id = gmlan(SwcanPrivacy.PID_VICM_INFO)
+        assertEquals("idle", decode(id, 0x00)[SwcanField.REFUEL_STATE])
+        assertEquals("requested", decode(id, 0x01)[SwcanField.REFUEL_STATE])
+        assertEquals("ready", decode(id, 0x02)[SwcanField.REFUEL_STATE])
+        assertEquals("never seen: kept as its number", "state_5", decode(id, 0x05)[SwcanField.REFUEL_STATE])
+        assertEquals("the fuel door lamp bit is not the state", "ready", decode(id, 0x0A)[SwcanField.REFUEL_STATE])
+        // The rest of the frame is never read, whatever it holds.
+        assertEquals(
+            mapOf(SwcanField.REFUEL_STATE to "idle"),
+            decode(id, 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF),
+        )
+        assertTrue(decode(id).isEmpty(), "no byte 0")
+    }
+
+    @Test
     fun oilLifeFromTheEngineBroadcast() {
         // 10-06: 01 5D 01 0D B1 00 00 FF while the cluster showed about 70 %
         val oil = decode(gmlan(SwcanFrameDecoder.PID_ENGINE_INFO_4), 0x01, 0x5D, 0x01, 0x0D, 0xB1, 0x00, 0x00, 0xFF)

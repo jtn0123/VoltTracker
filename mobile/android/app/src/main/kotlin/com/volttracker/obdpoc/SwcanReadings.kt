@@ -129,6 +129,8 @@ class SwcanReadings(
         putReading(sample, "seatHeatFrLevel", SwcanField.SEAT_HEAT_FR)
         putReading(sample, "seatHeatRlLevel", SwcanField.SEAT_HEAT_RL)
         putReading(sample, "seatHeatRrLevel", SwcanField.SEAT_HEAT_RR)
+        putReading(sample, "chargePortDoor", SwcanField.CHARGE_PORT_DOOR)
+        putReading(sample, "refuelState", SwcanField.REFUEL_STATE)
         putInvalid(sample, "tireSensorsInvalid", TIRE_CODES)
         putInvalid(sample, "windowsInvalid", WINDOW_CODES)
         putDashWarnings(sample, "dashWarnings")
@@ -151,6 +153,7 @@ class SwcanReadings(
         putGroupStaleMs(sample, "oilLifeStaleMs", SwcanGroup.MAINTENANCE, now)
         putGroupStaleMs(sample, "powerModeStaleMs", SwcanGroup.POWER_MODE, now)
         putGroupStaleMs(sample, "seatHeatStaleMs", SwcanGroup.SEAT_HEAT, now)
+        putGroupStaleMs(sample, "portDoorsStaleMs", SwcanGroup.PORT_DOORS, now)
         putGroupStaleMs(sample, "dashWarningStaleMs", SwcanGroup.WARNINGS, now)
     }
 

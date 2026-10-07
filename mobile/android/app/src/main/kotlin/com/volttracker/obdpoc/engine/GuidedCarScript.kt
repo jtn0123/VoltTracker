@@ -67,8 +67,22 @@ class GuidedExpect(
             max: Double,
         ) = GuidedExpect(field) { _, now -> now is Double && now <= max }
 
-        /** Any new value: for a switch whose starting state isn't known. */
-        fun changes(field: SwcanField) = GuidedExpect(field) { before, now -> before != null && before != now }
+        /**
+         * Any new value: for a switch whose starting state isn't known. [unseen] is where the field
+         * rests when it hasn't been heard yet in the test (a seat heater the driver was asked to
+         * leave off): a first reading other than that counts too. A first reading equal to it
+         * doesn't (a seat that was on at its lowest and went off): that needs a second.
+         */
+        fun changes(
+            field: SwcanField,
+            unseen: Any? = null,
+        ) = GuidedExpect(field) { before, now -> (before ?: unseen).let { it != null && it != now } }
+
+        /** [value], from a different one heard before: the car reporting it, not repeating it. */
+        fun becomes(
+            field: SwcanField,
+            value: String,
+        ) = GuidedExpect(field) { before, now -> before != null && before != value && now == value }
     }
 }
 
@@ -107,6 +121,7 @@ object GuidedCarScript {
     private const val ACT_MS = 30_000L
     private const val WALK_MS = 45_000L
     private const val SEAT_MS = 12_000L
+    private const val FUEL_DOOR_MS = 60_000L
     private const val CONFIRM_MS = 90_000L
 
     private fun event(
@@ -134,15 +149,21 @@ object GuidedCarScript {
         event("${id}_close", "Close it.", GuidedExpect.isOneOf(field, "closed"), maxMs),
     )
 
-    /** Four presses, each its own step: the lamps are read, not assumed, so the levels aren't named. */
+    /**
+     * Four presses, each its own step: the lamps are read, not assumed, so the levels aren't named.
+     * The seats start off ([SEAT_OFF]), so a seat's first broadcast in the test counts as a press.
+     */
     private fun frontSeat(
         id: String,
         name: String,
         field: SwcanField,
+        first: String = "",
     ) = listOf(
-        event("${id}_press_1", "Press the $name seat heater button once.", GuidedExpect.changes(field), SEAT_MS),
+        event("${id}_press_1", "${first}Press the $name seat heater button once.", seatPress(field), SEAT_MS),
     ) +
-        (2..4).map { event("${id}_press_$it", "Press it once more.", GuidedExpect.changes(field), SEAT_MS) }
+        (2..4).map { event("${id}_press_$it", "Press it once more.", seatPress(field), SEAT_MS) }
+
+    private fun seatPress(field: SwcanField) = GuidedExpect.changes(field, unseen = SEAT_OFF)
 
     private fun rearSeat(
         id: String,
@@ -152,7 +173,7 @@ object GuidedCarScript {
         event(
             "${id}_press",
             "If you have heated rear seats, press the $name one's button once. If not, just wait.",
-            GuidedExpect.changes(field),
+            seatPress(field),
             SEAT_MS,
         ),
         timed("${id}_off", "Now press it until it's off. If you don't have them, just wait.", SEAT_MS),
@@ -164,6 +185,27 @@ object GuidedCarScript {
     ) = GuidedStep(id, GuidedStepKind.BENCHMARK, say, 0L, cycles = BENCH_CYCLES)
 
     private val POWER_OFF_MODES = arrayOf("off", "accessory")
+
+    /** A seat heater with no lamps lit: where every seat starts ("make sure every seat heater is off"). */
+    private const val SEAT_OFF = 0.0
+
+    /**
+     * The drive: recorded until the car is switched off (off, not accessory: the drive's end ends
+     * the session), then its shutdown.
+     */
+    private fun drive(say: String) =
+        GuidedStep(
+            "drive",
+            GuidedStepKind.DRIVE,
+            say,
+            35 * 60_000L,
+            GuidedExpect.isOneOf(SwcanField.POWER_MODE, "off"),
+            GuidedPhase.DRIVING,
+        )
+
+    private const val DRIVE_END =
+        "Live data pauses while I record. When you're done, park and turn the car off, and the test " +
+            "finishes by itself."
 
     val steps: List<GuidedStep> =
         listOf(
@@ -216,7 +258,7 @@ object GuidedCarScript {
                 ),
                 event("ac_press_again", "Press it again.", GuidedExpect.changes(SwcanField.AC_STATE)),
             ) +
-            frontSeat("seat_driver", "driver's", SwcanField.SEAT_HEAT_FL) +
+            frontSeat("seat_driver", "driver's", SwcanField.SEAT_HEAT_FL, "Make sure every seat heater is off. Then ") +
             frontSeat("seat_passenger", "passenger", SwcanField.SEAT_HEAT_FR) +
             rearSeat("seat_rear_left", "left", SwcanField.SEAT_HEAT_RL) +
             rearSeat("seat_rear_right", "right", SwcanField.SEAT_HEAT_RR) +
@@ -228,23 +270,36 @@ object GuidedCarScript {
                     60_000L,
                     GuidedExpect.isOneOf(SwcanField.POWER_MODE, *POWER_OFF_MODES),
                 ),
-                timed(
+                event(
                     "charge_port_open",
-                    "Get out and open the charge port door.",
-                    30_000L,
+                    "The car stays off for the next few steps. Get out and open the charge port door.",
+                    GuidedExpect.isOneOf(SwcanField.CHARGE_PORT_DOOR, "open"),
+                    WALK_MS,
                     GuidedPhase.PARKED_OR_OFF,
                 ),
-                timed("charge_port_close", "Close it.", 20_000L, GuidedPhase.PARKED_OR_OFF),
-                timed(
+                event(
+                    "charge_port_close",
+                    "Close it.",
+                    GuidedExpect.becomes(SwcanField.CHARGE_PORT_DOOR, "closed"),
+                    ACT_MS,
+                    GuidedPhase.PARKED_OR_OFF,
+                ),
+                // The button only releases the door (the car says Ready to Refuel); the driver then
+                // opens it by hand. Ready is what the car reports; the door itself opening isn't.
+                event(
                     "fuel_door_open",
-                    "Back in the car, press the fuel door button. It can take a few seconds to open.",
-                    45_000L,
+                    "Back in the car, press the fuel door button on your door for about a second, and " +
+                        "wait for Ready to Refuel on the dash.",
+                    GuidedExpect.isOneOf(SwcanField.REFUEL_STATE, "ready"),
+                    WALK_MS,
                     GuidedPhase.PARKED_OR_OFF,
                 ),
-                timed(
+                event(
                     "fuel_door_close",
-                    "Go and close the fuel door, then get back in.",
-                    45_000L,
+                    "Now get out, press the back edge of the fuel door to open it, then close it and get " +
+                        "back in.",
+                    GuidedExpect.becomes(SwcanField.REFUEL_STATE, "idle"),
+                    FUEL_DOOR_MS,
                     GuidedPhase.PARKED_OR_OFF,
                 ),
                 event(
@@ -254,15 +309,29 @@ object GuidedCarScript {
                     120_000L,
                     GuidedPhase.PARKED_OR_OFF,
                 ),
-                GuidedStep(
-                    "drive",
-                    GuidedStepKind.DRIVE,
-                    "Last part: drive normally for about twenty minutes, and leave the phone alone while you " +
-                        "drive. Live data pauses while I record. " +
-                        "When you're done, park and turn the car off, and the test finishes by itself.",
-                    35 * 60_000L,
-                    GuidedExpect.isOneOf(SwcanField.POWER_MODE, *POWER_OFF_MODES),
-                    GuidedPhase.DRIVING,
+                drive(
+                    "Last part: drive normally for about twenty minutes, and leave the phone alone while " +
+                        "you drive. $DRIVE_END",
                 ),
             )
+
+    /**
+     * The drive on its own, for an owner who has done the parked steps: the hearing check, then the
+     * drive. The bus-switch timing and every parked step are left out.
+     */
+    val driveSteps: List<GuidedStep> =
+        listOf(
+            GuidedStep(
+                "intro",
+                GuidedStepKind.CONFIRM,
+                "Guided drive. Turn the phone's volume up. The car should be on and in Park. I'll record " +
+                    "the car's body bus for the whole drive. If you can hear me, tap I can hear it, on the " +
+                    "Car tab.",
+                CONFIRM_MS,
+            ),
+            drive(
+                "Now drive normally for about twenty minutes, and leave the phone alone while you drive. " +
+                    DRIVE_END,
+            ),
+        )
 }

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui
 
 import android.content.Context
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,10 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.volttracker.obdpoc.AppPrefs
+import com.volttracker.obdpoc.ui.components.LocalVoltNav
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
+import com.volttracker.obdpoc.ui.components.VoltNavActions
+import com.volttracker.obdpoc.ui.components.VoltPrefs
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.description
@@ -137,6 +142,33 @@ class DriveScreenTest {
     fun noConnectOffersMidHandshake() {
         compose.setContent { VoltTheme { DriveScreen(DriveUiState(connecting = true)) } }
         assertEquals(0, compose.onAllNodesWithTextCount("Connect"))
+    }
+
+    @Test
+    fun aParkedSessionOffersDisconnectButADriveDoesNot() {
+        var disconnects = 0
+        var state by mutableStateOf(DriveUiState.demoParked)
+        compose.setContent {
+            CompositionLocalProvider(LocalVoltNav provides VoltNavActions(disconnect = { disconnects++ })) {
+                VoltTheme { DriveScreen(state) }
+            }
+        }
+        compose.onNodeWithText("Disconnect").performClick()
+        assertEquals(1, disconnects)
+
+        state = DriveUiState.demo
+        compose.waitForIdle()
+        assertEquals("a stray tap mid-drive can't end it", 0, compose.onAllNodesWithTextCount("Disconnect"))
+    }
+
+    @Test
+    fun theDemoOffersNoDisconnect() {
+        compose.setContent {
+            CompositionLocalProvider(LocalVoltPrefs provides VoltPrefs(demo = true)) {
+                VoltTheme { DriveScreen(DriveUiState.demoParked) }
+            }
+        }
+        assertEquals(0, compose.onAllNodesWithTextCount("Disconnect"))
     }
 
     @Test

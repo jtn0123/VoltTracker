@@ -16,6 +16,7 @@ import com.volttracker.obdpoc.ui.car.command
 import com.volttracker.obdpoc.ui.car.dashWarningLabel
 import com.volttracker.obdpoc.ui.car.dashWarningsLine
 import com.volttracker.obdpoc.ui.car.doorsTile
+import com.volttracker.obdpoc.ui.car.guidedDriveLine
 import com.volttracker.obdpoc.ui.car.guidedStepLabel
 import com.volttracker.obdpoc.ui.car.guidedTestLine
 import com.volttracker.obdpoc.ui.car.isOn
@@ -457,6 +458,12 @@ class CarTabLogicTest {
         )
         assertEquals("Starting", guidedStepLabel(GuidedTestStatus(running = true, steps = 38)))
         assertEquals("Step 6 of 38", guidedStepLabel(GuidedTestStatus(running = true, step = 6, steps = 38)))
+    }
+
+    @Test
+    fun guidedDriveRowSaysWhatItIs() {
+        assertEquals("Connect to the car to run it", guidedDriveLine(false))
+        assertEquals("Hearing check, then a 20 min drive recorded on the body bus", guidedDriveLine(true))
     }
 
     private fun opened(vararg open: Opening) = Openings(Opening.entries.associateWith { it in open })

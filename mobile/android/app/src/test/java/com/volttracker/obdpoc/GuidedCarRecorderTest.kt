@@ -103,6 +103,53 @@ class GuidedCarRecorderTest {
     }
 
     @Test
+    fun theFuelRateInTheFastLampFrameIsNotAChange() {
+        // arb 0x132, as on 10-07: only byte 7 (the instantaneous fuel rate) moves, about every frame.
+        repeat(60) { i -> add("10 26 40 40 04 0E 00 00 00 00 00 %02X".format(i), 1_000L + i * 50L) }
+        // An ABS lamp (byte 0 bit 0) coming on is still a change.
+        add("10 26 40 40 05 0E 00 00 00 00 00 3C", 4_100L)
+        // The same frame from another sender is followed on its own.
+        add("10 26 40 99 04 0E 00 00 00 00 00 00", 4_200L)
+
+        val chunk = recorder.flush(5_000L)
+        val fields = chunk.fields.toMap()
+
+        assertEquals(
+            "0 10264040 04 0E 00 00 00 00 | 3100 10264040 05 0E 00 00 00 00 | 3200 10264099 04 0E 00 00 00 00",
+            fields["changes"],
+        )
+        assertEquals("0", fields["droppedChanges"])
+        assertTrue("every arrival still counts", fields["ids"]!!.contains("10264040:61/"))
+        assertFalse(chunk.truncated)
+    }
+
+    @Test
+    fun theFastLampFrameStillOverflowsWhenItsLampsChatter() {
+        repeat(45) { i -> add("10 26 40 40 0${i % 2} 0E 00 00 00 00 00 00", 1_000L + i) }
+
+        val chunk = recorder.flush(2_000L)
+
+        assertEquals(
+            40,
+            chunk.fields
+                .toMap()["changes"]!!
+                .split(" | ")
+                .size,
+        )
+        assertEquals("5", chunk.fields.toMap()["droppedChanges"])
+        assertTrue(chunk.truncated)
+    }
+
+    @Test
+    fun aFollowedPrefixCarriesAcrossChunks() {
+        add("10 26 40 40 04 0E 00 00 00 00 00 01", 1_100L)
+        flush(2_000L)
+        add("10 26 40 40 04 0E 00 00 00 00 00 02", 2_100L)
+
+        assertEquals("only the fuel rate moved since the last chunk", "", flush(3_000L)["changes"])
+    }
+
+    @Test
     fun arrivalsPastTheirCapAreCounted() {
         repeat(305) { i -> add("10 24 20 40 02", 1_000L + i * 10L) }
 
@@ -171,5 +218,6 @@ class GuidedCarRecorderTest {
     fun everyLoggedChangeIsAllowlisted() {
         assertTrue(SwcanPrivacy.PAYLOAD_PIDS.containsAll(GuidedCarRecorder.CHANGE_PIDS))
         assertTrue(SwcanPrivacy.PAYLOAD_PIDS.containsAll(GuidedCarRecorder.TIMED_PIDS))
+        assertTrue(GuidedCarRecorder.CHANGE_PIDS.containsAll(GuidedCarRecorder.CHANGE_BYTES.keys))
     }
 }

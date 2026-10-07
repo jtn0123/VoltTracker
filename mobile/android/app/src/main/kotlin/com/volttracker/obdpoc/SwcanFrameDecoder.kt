@@ -106,6 +106,11 @@ enum class SwcanField(
     SEAT_HEAT_RL(SwcanGroup.SEAT_HEAT),
     SEAT_HEAT_RR(SwcanGroup.SEAT_HEAT),
 
+    // The charge port door and the refuel request (the fuel door's release): seen working with the
+    // car off on 2026-10-07.
+    CHARGE_PORT_DOOR(SwcanGroup.PORT_DOORS),
+    REFUEL_STATE(SwcanGroup.PORT_DOORS),
+
     // Dash warning lights, one field per broadcast that carries them; each value is the comma-joined
     // codes of the ones lit, "" when none are (see [SwcanReadings] for how they merge).
     WARNINGS_FAST(SwcanGroup.WARNINGS),
@@ -135,6 +140,7 @@ enum class SwcanGroup {
     WARNINGS,
     POWER_MODE,
     SEAT_HEAT,
+    PORT_DOORS,
 }
 
 /**
@@ -191,6 +197,7 @@ object SwcanFrameDecoder {
     const val PID_POWER_MODE = 0x0121
     const val PID_FRONT_SEAT_HEAT = 0x0391
     const val PID_REAR_SEAT_HEAT = 0x03B4
+    const val PID_CHARGE_PORT = 0x0112
 
     private const val MAX_29_BIT_ID = 0x1FFFFFFF
     private const val MAX_DATA_BYTES = 8
@@ -210,6 +217,8 @@ object SwcanFrameDecoder {
     private const val HOOD_STATE_BITS = 0x03
     private const val SEAT_LEVEL_BITS = 0x1F
     private const val POWER_MODE_BITS = 0x03
+    private const val CHARGE_PORT_BITS = 0x03
+    private const val REFUEL_STATE_BITS = 0x07
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
     private const val NOT_AVAILABLE_BYTE = 0xFF
     private const val GMLAN_RANGE_SCALE = 0.015625
@@ -346,6 +355,8 @@ object SwcanFrameDecoder {
             PID_POWER_MODE -> powerMode(d)
             PID_FRONT_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_FL, SwcanField.SEAT_HEAT_FR)
             PID_REAR_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_RL, SwcanField.SEAT_HEAT_RR)
+            PID_CHARGE_PORT -> chargePortDoor(d)
+            SwcanPrivacy.PID_VICM_INFO -> refuelState(d)
             else -> none()
         }
     }
@@ -675,6 +686,25 @@ object SwcanFrameDecoder {
         )
     }
 
+    // Charging_Sys_Trans_Shift_Lock_LS (arb 0x112): ChrgPrtDrStat is byte 0 bits 1-2. On the car (car
+    // off, 2026-10-07) byte 0 read 0x02 with the door open and 0x00 once it was shut, so 1 = open and
+    // 0 = closed. 2 and 3 were never seen: kept as their number, not guessed at.
+    private fun chargePortDoor(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty()) return none()
+        return listOf(text(SwcanField.CHARGE_PORT_DOOR, CHARGE_PORT_STATES[(d[0] shr 1) and CHARGE_PORT_BITS]))
+    }
+
+    // VICM_Info_LS (arb 0x3B2): VehRefuelSt is byte 0 bits 0-2. Only byte 0 is read (the rest of the
+    // frame is lifetime fuel economy, never kept). On the car it went 0 -> 1 as the fuel door button
+    // was pressed, 2 about two seconds later, and back to 0 as the door was shut: idle, requested,
+    // ready (the door released, which is not the door seen open: FlDrOpenIndOn never set). Other
+    // values are kept as their number.
+    private fun refuelState(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty()) return none()
+        val state = d[0] and REFUEL_STATE_BITS
+        return listOf(text(SwcanField.REFUEL_STATE, REFUEL_STATES.getOrElse(state) { "state_$state" }))
+    }
+
     // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.
     // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s.
     private fun powerMode(d: IntArray): List<SwcanReading> {
@@ -724,6 +754,8 @@ object SwcanFrameDecoder {
 
     /** GMLAN system power modes by SysPwrMd value. */
     private val POWER_MODES = listOf("off", "accessory", "run", "crank")
+    private val CHARGE_PORT_STATES = listOf("closed", "open", "state_2", "state_3")
+    private val REFUEL_STATES = listOf("idle", "requested", "ready")
 
     private val FAST_WARNINGS = listOf(WarningFlag(0, 0, "abs"))
     private val SLOW_WARNINGS =

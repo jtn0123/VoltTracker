@@ -1175,7 +1175,10 @@ open class ObdService :
         const val ACTION_BODY_FOCUS = "com.volttracker.obdpoc.action.BODY_FOCUS"
         const val EXTRA_DURATION_MS = "duration_ms"
 
-        /** Start, skip or stop the guided car test ([EXTRA_GUIDED_OP]: `start`, `skip`, `stop`). Debug builds. */
+        /**
+         * Start, skip or stop the guided car test ([EXTRA_GUIDED_OP]: `start`, `start_drive`, `skip`,
+         * `stop`). Debug builds.
+         */
         const val ACTION_GUIDED_TEST = "com.volttracker.obdpoc.action.GUIDED_TEST"
         const val EXTRA_GUIDED_OP = "guided_op"
 

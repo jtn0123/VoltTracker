@@ -241,6 +241,7 @@ class ComposeDashboardActivity :
                             onConnect = ::connectLastAdapter,
                             onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
                             onStopDemo = ::stopObdService,
+                            onDisconnect = ::stopObdService,
                             onCheckForUpdate = ::checkForUpdate,
                             onInstallUpdate = ::installUpdate,
                             onSettingChange = ::changeSetting,
@@ -438,7 +439,7 @@ class ComposeDashboardActivity :
         return true
     }
 
-    /** Debug builds: `start`, `skip` or `stop` the spoken guided car test (see GuidedCarTest). */
+    /** Debug builds: `start`, `start_drive`, `skip` or `stop` the spoken guided car test (see GuidedCarTest). */
     internal fun guidedTest(op: String) {
         try {
             startService(
@@ -446,7 +447,10 @@ class ComposeDashboardActivity :
                     .setAction(ObdService.ACTION_GUIDED_TEST)
                     .putExtra(ObdService.EXTRA_GUIDED_OP, op),
             )
-            if (op == "start") showMessage("Guided car test starting. Turn the volume up and follow the voice.")
+            when (op) {
+                "start" -> showMessage("Guided car test starting. Turn the volume up and follow the voice.")
+                "start_drive" -> showMessage("Guided drive starting. Turn the volume up and follow the voice.")
+            }
         } catch (ex: RuntimeException) {
             Log.w(AppPrefs.LOG_TAG, "guided test dispatch failed", ex)
         }

@@ -9,9 +9,11 @@ import java.util.Locale
  * by a dropped link keeps everything up to its last chunk. Per 29-bit id: the frame count, the first
  * and last arrival and the shortest and longest gap between arrivals. For [TIMED_PIDS] every arrival
  * time too, which is how the tyre broadcast's interval gets measured. For [CHANGE_PIDS] each new
- * payload, so a door or a seat heater shows when it changed. Times are milliseconds after
- * [startMs], as the phone received them (Bluetooth buffering included); a time marked `*` is a frame
- * the adapter printed after it was told to stop (its queue), so it arrived late by an unknown amount.
+ * payload, so a door or a seat heater shows when it changed ([CHANGE_BYTES] narrows that to the
+ * bytes worth following, for a frame whose last bytes change by the second). Times are
+ * milliseconds after [startMs], as the phone received them (Bluetooth buffering included); a time
+ * marked `*` is a frame the adapter printed after it was told to stop (its queue), so it arrived
+ * late by an unknown amount.
  *
  * Only allowlisted payloads are kept ([SwcanPrivacy.storable], with its byte masks); sensitive frames
  * are not even counted. Nothing is dropped silently: arrivals and changes past their caps are
@@ -107,7 +109,9 @@ class GuidedCarRecorder(
         t: Long,
         drainedFrame: Boolean,
     ) {
-        val data = SwcanPrivacy.storedBytes(frame).joinToString(" ") { "%02X".format(Locale.US, it) }
+        val bytes = SwcanPrivacy.storedBytes(frame)
+        val followed = bytes.take(CHANGE_BYTES[frame.gmlanPid] ?: bytes.size)
+        val data = followed.joinToString(" ") { "%02X".format(Locale.US, it) }
         if (lastPayload.put(frame.id, data) == data) return
         val count = (changesPerId[frame.id] ?: 0) + 1
         changesPerId[frame.id] = count
@@ -225,6 +229,16 @@ class GuidedCarRecorder(
                 0x3C0,
                 0x3C4,
             )
+
+        /**
+         * Frames whose changes are followed in their first bytes only. HS_Indications_Fast (0x132):
+         * bytes 0-5 hold its lamps and status bits, while bytes 6-7 carry the instantaneous fuel
+         * rate (and an axle mode); the rate changed about every frame on the car (2026-10-07) and
+         * filled the frame's change cap in seconds. Its arrivals are still counted and timed like
+         * any frame's.
+         */
+        @JvmField
+        val CHANGE_BYTES: Map<Int, Int> = mapOf(0x132 to 6)
 
         /** Per id, per chunk. */
         private const val MAX_ARRIVALS_PER_PID = 300

@@ -86,6 +86,7 @@ fun VoltApp(
                 openHealth = { push(VoltRoute.HEALTH) },
                 connect = connect,
                 startDemo = { latest.onStartDemo() },
+                disconnect = { latest.onDisconnect() },
                 refresh = { latest.onRefresh() },
                 refreshing = state.historyRefreshing,
             )

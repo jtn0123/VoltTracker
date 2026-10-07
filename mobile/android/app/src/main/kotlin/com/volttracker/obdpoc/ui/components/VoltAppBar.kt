@@ -55,6 +55,8 @@ class VoltNavActions(
     /** Connect to the remembered adapter, or open the adapter picker when none is. */
     val connect: () -> Unit = {},
     val startDemo: () -> Unit = {},
+    /** End the live session. */
+    val disconnect: () -> Unit = {},
     /** Re-read the saved history behind the screen that is showing. */
     val refresh: () -> Unit = {},
     val refreshing: Boolean = false,

@@ -18,6 +18,8 @@ data class VoltAppActions(
     val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},
     val onStopDemo: () -> Unit = {},
+    /** End the live session (as the notification's Disconnect does). */
+    val onDisconnect: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
     /** A stored setting changed (Settings pages, or Drive's Focus/Detailed toggle). */

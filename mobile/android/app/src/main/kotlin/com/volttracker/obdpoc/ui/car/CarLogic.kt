@@ -588,6 +588,12 @@ fun guidedTestLine(
         else -> "Spoken steps round the car, off and on, then a drive (about 35 min)"
     }
 
+const val GUIDED_DRIVE_TITLE = "Guided drive"
+
+/** The Car tab's guided-drive row: the drive on its own, for after the parked steps. */
+fun guidedDriveLine(canTest: Boolean): String =
+    if (canTest) "Hearing check, then a 20 min drive recorded on the body bus" else "Connect to the car to run it"
+
 /** "Step 6 of 38", or "Starting" before the first step. */
 fun guidedStepLabel(status: GuidedTestStatus): String =
     if (status.step > 0) "Step ${status.step} of ${status.steps}" else "Starting"

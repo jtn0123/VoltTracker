@@ -71,14 +71,55 @@ class GuidedCarTestTest {
             GuidedPhase.DRIVING,
         )
 
+    private val seatPress =
+        GuidedStep(
+            "seat_press",
+            GuidedStepKind.EVENT,
+            "Press the seat heater button once.",
+            12_000L,
+            GuidedExpect.changes(SwcanField.SEAT_HEAT_FL, unseen = 0.0),
+        )
+    private val portOpen =
+        GuidedStep(
+            "charge_port_open",
+            GuidedStepKind.EVENT,
+            "Open the charge port door.",
+            45_000L,
+            GuidedExpect.isOneOf(SwcanField.CHARGE_PORT_DOOR, "open"),
+        )
+    private val portClose =
+        GuidedStep(
+            "charge_port_close",
+            GuidedStepKind.EVENT,
+            "Close the charge port door.",
+            30_000L,
+            GuidedExpect.becomes(SwcanField.CHARGE_PORT_DOOR, "closed"),
+        )
+    private val fuelOpen =
+        GuidedStep(
+            "fuel_door_open",
+            GuidedStepKind.EVENT,
+            "Press the fuel door button.",
+            45_000L,
+            GuidedExpect.isOneOf(SwcanField.REFUEL_STATE, "ready"),
+        )
+    private val fuelClose =
+        GuidedStep(
+            "fuel_door_close",
+            GuidedStepKind.EVENT,
+            "Open the fuel door and close it.",
+            60_000L,
+            GuidedExpect.becomes(SwcanField.REFUEL_STATE, "idle"),
+        )
+
     private fun test(vararg steps: GuidedStep) =
         GuidedCarTest(
             object : SwcanListenRunner.Io by io {
                 override fun openVoice() = voice
             },
             bus,
-            steps.toList(),
-            clock::now,
+            fullSteps = steps.toList(),
+            clock = clock::now,
         ) { statuses += it }
 
     private fun GuidedCarTest.started(): GuidedCarTest {
@@ -87,6 +128,9 @@ class GuidedCarTestTest {
     }
 
     private fun steps() = io.all("guided_step")
+
+    /** How long after the instruction was said the step heard what it waited for. */
+    private fun heardAfterSaid(step: Map<String, String>) = step["heardMs"]!!.toLong() - step["saidMs"]!!.toLong()
 
     private fun captures() = io.all("guided_capture")
 
@@ -1035,7 +1079,265 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun aSeatsFirstBroadcastCountsAsAPressFromOff() {
+        voice.onSay = { if (it == seatPress.say) io.broadcast(clock.now + 3_000L, SEAT_FL_HIGH) }
+        val test = test(seatPress).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("heard", step["result"])
+        assertEquals(3_000L, heardAfterSaid(step))
+    }
+
+    @Test
+    fun aSeatsFirstBroadcastReadingOffNeedsASecond() {
+        // It may have been on at its lowest and gone off: not a press from off.
+        voice.onSay = {
+            if (it == seatPress.say) {
+                io.broadcast(clock.now + 2_000L, SEAT_FL_OFF)
+                io.broadcast(clock.now + 4_000L, SEAT_FL_HIGH)
+            }
+        }
+        val test = test(seatPress).started()
+
+        test.runNext()
+
+        assertEquals(4_000L, heardAfterSaid(steps().single()))
+    }
+
+    @Test
+    fun theLineThatStartsTheInstructionIsNotTheDriverDoingIt() {
+        // The monitor's first line is a seat already lit: the instruction is said on it, so it only
+        // sets where the seat starts, and repeating it is no press.
+        io.broadcast(FakeCarIo.TICK_MS, SEAT_FL_HIGH)
+        voice.onSay = {
+            if (it == seatPress.say) {
+                io.broadcast(clock.now + 2_000L, SEAT_FL_HIGH)
+                io.broadcast(clock.now + 4_000L, SEAT_FL_MEDIUM)
+            }
+        }
+        val test = test(seatPress).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals(FakeCarIo.TICK_MS.toString(), step["saidMs"])
+        assertEquals(4_000L, heardAfterSaid(step))
+    }
+
+    @Test
+    fun theChargePortAndFuelDoorMoveOnAsSoonAsTheCarReportsThem() {
+        voice.onSay = {
+            when (it) {
+                portOpen.say -> io.broadcast(clock.now + 10_000L, PORT_OPEN)
+                portClose.say -> io.broadcast(clock.now + 3_000L, PORT_CLOSED)
+                fuelOpen.say -> {
+                    io.broadcast(clock.now + 1_000L, REFUEL_IDLE)
+                    // The button pressed, then the door released a couple of seconds later.
+                    io.broadcast(clock.now + 8_000L, REFUEL_REQUESTED)
+                    io.broadcast(clock.now + 10_000L, REFUEL_READY)
+                }
+                fuelClose.say -> io.broadcast(clock.now + 4_000L, REFUEL_IDLE)
+            }
+        }
+        val test = test(portOpen, portClose, fuelOpen, fuelClose).started()
+
+        repeat(4) { test.runNext() }
+
+        assertEquals(listOf("heard", "heard", "heard", "heard"), steps().map { it["result"] })
+        assertEquals(listOf(10_000L, 3_000L, 10_000L, 4_000L), steps().map { heardAfterSaid(it) })
+    }
+
+    @Test
+    fun aClosingCountsOnlyFromSomethingElse() {
+        // A door already reading closed is no closing; open then closed is.
+        voice.onSay = {
+            if (it == portClose.say) {
+                io.broadcast(clock.now + 1_000L, PORT_CLOSED)
+                io.broadcast(clock.now + 2_000L, PORT_OPEN)
+                io.broadcast(clock.now + 3_000L, PORT_CLOSED)
+            }
+        }
+        val test = test(portClose).started()
+
+        test.runNext()
+
+        assertEquals(3_000L, heardAfterSaid(steps().single()))
+    }
+
+    @Test
+    fun aRefuelRequestThatNeverReadsReadyIsMissed() {
+        voice.onSay = { if (it == fuelOpen.say) io.broadcast(clock.now + 2_000L, REFUEL_REQUESTED) }
+        val test = test(fuelOpen).started()
+
+        test.runNext()
+
+        assertEquals("missed", steps().single()["result"])
+        assertTrue("the test goes on", voice.said.contains("Didn't hear that one. Moving on."))
+    }
+
+    @Test
+    fun aCarSwitchedBackOnBeforeItsShutdownWasRecordedKeepsTheDriveGoing() {
+        voice.onSay = {
+            if (it == "Drive.") {
+                io.broadcast(clock.now + 60_000L, POWER_OFF)
+                io.broadcast(clock.now + 70_000L, POWER_RUN)
+                io.broadcast(clock.now + 5 * 60_000L, POWER_OFF)
+                // The car repeats off while it shuts down: that's no resuming.
+                io.broadcast(clock.now + 5 * 60_000L + 5_000L, POWER_OFF)
+            }
+        }
+        val test = test(drive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("heard", step["result"])
+        assertEquals("1", step["resumed"])
+        assertEquals((5 * 60_000L + 250L).toString(), step["heardMs"])
+        assertEquals((5 * 60_000L + 250L + 30_000L).toString(), step["listenMs"])
+        assertTrue(test.takeSessionEnd())
+    }
+
+    @Test
+    fun accessoryIsNotTheEndOfADrive() {
+        voice.onSay = { if (it == "Drive.") io.broadcast(clock.now + 30_000L, POWER_ACCESSORY) }
+        val test = test(shortDrive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("missed", step["result"])
+        assertEquals("0", step["resumed"])
+        assertFalse(test.takeSessionEnd())
+    }
+
+    @Test
+    fun anOffUndoneByAccessoryOrMotionIsNotTheEndOfADrive() {
+        voice.onSay = {
+            if (it == "Drive.") {
+                io.broadcast(clock.now + 20_000L, POWER_OFF)
+                io.broadcast(clock.now + 25_000L, POWER_ACCESSORY)
+                io.broadcast(clock.now + 60_000L, POWER_OFF)
+                io.broadcast(clock.now + 65_000L, WHEELS_ROLLING)
+            }
+        }
+        val test = test(shortDrive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("missed", step["result"])
+        assertEquals("", step["heardMs"])
+        assertEquals("2", step["resumed"])
+        assertFalse(test.takeSessionEnd())
+    }
+
+    @Test
+    fun theDriveOnItsOwnRunsItsOwnScript() {
+        val test =
+            GuidedCarTest(
+                object : SwcanListenRunner.Io by io {
+                    override fun openVoice() = voice
+                },
+                bus,
+                fullSteps = listOf(lockStep, seatStep),
+                driveSteps = listOf(seatStep),
+                clock = clock::now,
+            ) { statuses += it }
+        bus.ready = null
+        test.request(GuidedCarTest.Op.START_DRIVE)
+        test.runNext()
+        assertEquals("the drive script's length while waiting", 1, statuses.last().steps)
+        bus.ready = true
+
+        test.runNext()
+
+        assertEquals(listOf("seat"), steps().map { it["step"] })
+        assertEquals("drive", io.event("guided_test_start")!!["script"])
+        assertEquals("1", io.event("guided_test_start")!!["steps"])
+        assertFalse(test.isActive())
+
+        test.request(GuidedCarTest.Op.START)
+        test.runNext()
+
+        assertEquals("full", io.event("guided_test_start")!!["script"])
+        assertEquals(listOf("seat", "lock"), steps().map { it["step"] })
+    }
+
+    @Test
+    fun theGuidedDriveIsTheHearingCheckThenTheDrive() {
+        io.heartbeat = DOOR_CLOSED
+        val test =
+            GuidedCarTest(
+                object : SwcanListenRunner.Io by io {
+                    override fun openVoice() = voice
+                },
+                bus,
+                clock = clock::now,
+            ) { statuses += it }
+        voice.onSay = {
+            if (it.startsWith("Guided drive")) test.request(GuidedCarTest.Op.CONFIRM)
+            if (it.startsWith("Now drive")) io.broadcast(clock.now + 20 * 60_000L, POWER_OFF)
+        }
+        test.request(GuidedCarTest.Op.START_DRIVE)
+
+        var turns = 0
+        while (test.runNext()) turns += 1
+
+        assertEquals(2, turns)
+        assertEquals(listOf("intro", "drive"), steps().map { it["step"] })
+        assertEquals("heard", steps().last()["result"])
+        assertEquals("Finished", statuses.last().ended)
+        assertTrue(test.takeSessionEnd())
+    }
+
+    @Test
+    fun theScriptsSeatPressesCountAFirstLampFromOff() {
+        val presses = GuidedCarScript.steps.filter { it.id.startsWith("seat_") && it.kind == GuidedStepKind.EVENT }
+        assertEquals(10, presses.size)
+        for (press in presses) {
+            val expect = press.expect!!
+            assertTrue(press.id, expect.matches(null, 1.0))
+            assertFalse(press.id, expect.matches(null, 0.0))
+        }
+        assertTrue(presses.first().say.startsWith("Make sure every seat heater is off."))
+    }
+
+    @Test
+    fun theScriptsCarOffDoorsWaitForWhatTheCarReports() {
+        val byId = GuidedCarScript.steps.associateBy { it.id }
+        for (id in listOf("charge_port_open", "charge_port_close", "fuel_door_open", "fuel_door_close")) {
+            assertEquals(id, GuidedStepKind.EVENT, byId.getValue(id).kind)
+            assertEquals(id, GuidedPhase.PARKED_OR_OFF, byId.getValue(id).phase)
+        }
+        assertTrue(byId.getValue("charge_port_open").say.startsWith("The car stays off for the next few steps."))
+        val fuelReady = byId.getValue("fuel_door_open").expect!!
+        assertTrue(fuelReady.matches("requested", "ready"))
+        assertFalse("pressed is not yet released", fuelReady.matches("idle", "requested"))
+        val portClosed = byId.getValue("charge_port_close").expect!!
+        assertFalse("closed, with nothing heard before", portClosed.matches(null, "closed"))
+        assertTrue(portClosed.matches("open", "closed"))
+    }
+
+    @Test
+    fun onlyOffEndsEitherDrive() {
+        for (step in listOf(GuidedCarScript.steps.last(), GuidedCarScript.driveSteps.last())) {
+            assertEquals(GuidedStepKind.DRIVE, step.kind)
+            val expect = step.expect!!
+            assertTrue(expect.matches("run", "off"))
+            assertFalse(expect.matches("run", "accessory"))
+        }
+        assertEquals(
+            listOf(GuidedStepKind.CONFIRM, GuidedStepKind.DRIVE),
+            GuidedCarScript.driveSteps.map { it.kind },
+        )
+    }
+
+    @Test
     fun opsComeByWireName() {
+        assertEquals(GuidedCarTest.Op.START_DRIVE, GuidedCarTest.Op.fromWire("start_drive"))
         assertEquals(GuidedCarTest.Op.SKIP, GuidedCarTest.Op.fromWire("skip"))
         assertEquals(GuidedCarTest.Op.CONFIRM, GuidedCarTest.Op.fromWire("confirm"))
         assertNull(GuidedCarTest.Op.fromWire("explode"))
@@ -1079,6 +1381,15 @@ class GuidedCarTestTest {
         const val DOOR_CLOSED = "0C 63 00 40 00"
         const val POWER_OFF = "10 24 20 40 00"
         const val POWER_RUN = "10 24 20 40 02"
+        const val POWER_ACCESSORY = "10 24 20 40 01"
+        const val SEAT_FL_HIGH = "10 72 20 40 0C 00 3C 00"
+        const val SEAT_FL_MEDIUM = "10 72 20 40 0C 00 2C 00"
+        const val SEAT_FL_OFF = "10 72 20 40 00 00 00 00"
+        const val PORT_OPEN = "10 22 40 CB 02"
+        const val PORT_CLOSED = "10 22 40 CB 00"
+        const val REFUEL_IDLE = "10 76 40 CB 00"
+        const val REFUEL_REQUESTED = "10 76 40 CB 01"
+        const val REFUEL_READY = "10 76 40 CB 02"
         const val AC_OFF = "10 73 40 99 10"
         const val AC_ON = "10 73 40 99 20"
         const val WHEELS_ROLLING = "10 6B 80 40 02 53 02 4C 02 4E 02 4C"

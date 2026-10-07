@@ -136,6 +136,8 @@ class SwcanReadingsTest {
                 "10 24 20 40 02",
                 "10 72 20 40 00 00 07 01",
                 "10 76 80 40 00 00 00 00",
+                "10 22 40 CB 02",
+                "10 76 40 CB 01",
             ),
             0L,
         )
@@ -161,6 +163,9 @@ class SwcanReadingsTest {
         assertEquals(3.0, sample.getDouble("seatHeatFlLevel"), 0.0)
         assertEquals(1.0, sample.getDouble("seatHeatFrLevel"), 0.0)
         assertEquals(0.0, sample.getDouble("seatHeatRrLevel"), 0.0)
+        assertEquals("open", sample.getString("chargePortDoor"))
+        assertEquals("requested", sample.getString("refuelState"))
+        assertEquals(0L, sample.getLong("portDoorsStaleMs"))
     }
 
     @Test
