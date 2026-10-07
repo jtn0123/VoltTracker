@@ -108,7 +108,8 @@ import { driveGear, gearDisplayText } from "./gear";
     "wheelSpeedFrKph", "wheelSpeedRlKph", "wheelSpeedRrKph", "wheelSpeedStaleMs", "tripAKm", "tripBKm",
     "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs", "oilLifeRemainingPct", "oilLifeStaleMs",
     "dashWarnings", "dashWarningStaleMs", "dashWarningsComplete", "tireSensorsInvalid", "powerMode",
-    "powerModeStaleMs",
+    "powerModeStaleMs", "seatHeatFlLevel", "seatHeatFrLevel", "seatHeatRlLevel", "seatHeatRrLevel",
+    "seatHeatStaleMs",
     // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
     // present while controls are enabled, so they must blank when a sample omits them.
     "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
@@ -1634,6 +1635,11 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
     { key: "oilLifeRemainingPct", label: "Oil life (body bus)", group: "Body & comfort", unit: "%", staleKey: "oilLifeStaleMs", enhanced: true },
     { key: "powerMode", label: "Car power (body bus)", group: "Body & comfort", text: true, staleKey: "powerModeStaleMs", enhanced: true },
+    // Seat heat: how many of the seat's five level lamps are lit (not yet checked on the car).
+    { key: "seatHeatFlLevel", label: "Seat heat driver (lamps lit)", group: "Body & comfort", staleKey: "seatHeatStaleMs", enhanced: true },
+    { key: "seatHeatFrLevel", label: "Seat heat passenger (lamps lit)", group: "Body & comfort", staleKey: "seatHeatStaleMs", enhanced: true },
+    { key: "seatHeatRlLevel", label: "Seat heat rear left (lamps lit)", group: "Body & comfort", staleKey: "seatHeatStaleMs", enhanced: true },
+    { key: "seatHeatRrLevel", label: "Seat heat rear right (lamps lit)", group: "Body & comfort", staleKey: "seatHeatStaleMs", enhanced: true },
     // Comma-joined warning codes; "" means none lit in the broadcasts heard so far, which covers
     // every light only once dashWarningsComplete is true.
     { key: "dashWarnings", label: "Dash warnings", group: "Body & comfort", text: true, staleKey: "dashWarningStaleMs", enhanced: true, display: (t) => String(t.dashWarnings ?? "").replace(/_/g, " ").replace(/,/g, ", ") || (t.dashWarningsComplete === true ? "none" : "none seen so far") },

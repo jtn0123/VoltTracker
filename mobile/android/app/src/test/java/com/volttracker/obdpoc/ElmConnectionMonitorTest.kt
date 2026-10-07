@@ -155,23 +155,58 @@ class ElmConnectionMonitorTest {
                 if (written == "\r") input.feed("10 24 20 40 02\rSTOPPED\r\r>")
             }
         val lines = mutableListOf<String>()
+        val drained = mutableListOf<String>()
 
         val result =
-            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }, {
                 lines += it
                 true
-            }
+            }) { drained += it }
 
         assertEquals("STM\r\r", out.toString("US-ASCII"))
-        assertEquals(
-            listOf("10 24 80 40 00 00 60 D9", "0C 2F 60 40 01", "10 24 20 40 02", "STOPPED"),
-            lines.filter {
-                it.isNotEmpty()
-            },
-        )
+        assertEquals(listOf("10 24 80 40 00 00 60 D9", "0C 2F 60 40 01"), lines.filter { it.isNotEmpty() })
+        assertEquals(listOf("10 24 20 40 02", "STOPPED"), drained)
         assertTrue(result.gotPrompt)
         assertFalse(result.endedEarly)
         assertEquals("10 24 20 40 02\rSTOPPED\r\r>", result.text)
+    }
+
+    @Test
+    fun theQueueIsHandedOverAsItIsReadNotOnceThePromptComes() {
+        val input = ScriptedInput()
+        val out =
+            ReactiveOutput { written ->
+                // A frame cut off mid-line by the stop, finished in the queue.
+                if (written == "STM\r") input.feed("10 24 80 40 00 00 60")
+                if (written == "\r") input.feed(" D9\r10 24 20 40 02\r")
+            }
+        val drained = mutableListOf<String>()
+
+        // The adapter prints its prompt only once the queued power-mode frame has been handed over.
+        val result =
+            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }, { true }) {
+                drained += it
+                if (it == "10 24 20 40 02") input.feed("STOPPED\r>")
+            }
+
+        assertTrue(result.gotPrompt)
+        assertEquals(listOf("10 24 80 40 00 00 60 D9", "10 24 20 40 02", "STOPPED"), drained)
+    }
+
+    @Test
+    fun aQueueWithoutAPromptStillHandsOverItsLastLine() {
+        val input = ScriptedInput()
+        val out = ReactiveOutput { written -> if (written == "\r") input.feed("10 24 20 40 02\r10 24 20") }
+        val drained = mutableListOf<String>()
+
+        val result =
+            ElmConnection(input, out, clock).monitorStream("STM", 100L, 200L, { true }, { true }) {
+                drained +=
+                    it
+            }
+
+        assertFalse(result.gotPrompt)
+        assertEquals(listOf("10 24 20 40 02", "10 24 20"), drained)
     }
 
     @Test
@@ -184,7 +219,7 @@ class ElmConnectionMonitorTest {
             }
 
         // A listen of 100 s, stopped by the first frame.
-        val result = ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }) { false }
+        val result = ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }, { false }) { }
 
         assertEquals("STM\r\r", out.toString("US-ASCII"))
         assertTrue(result.gotPrompt)
@@ -198,10 +233,10 @@ class ElmConnectionMonitorTest {
 
         // Nothing on the bus: the first idle tick (an empty line) lets the caller end a 100 s listen.
         val result =
-            ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }) {
+            ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }, {
                 lines += it
                 it.isNotEmpty()
-            }
+            }) { }
 
         assertEquals("", lines.first())
         assertTrue(result.gotPrompt)
@@ -215,10 +250,10 @@ class ElmConnectionMonitorTest {
         val lines = mutableListOf<String>()
 
         val result =
-            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }, {
                 lines += it
                 true
-            }
+            }) { }
 
         assertTrue(result.endedEarly)
         assertTrue(result.gotPrompt)
@@ -236,10 +271,10 @@ class ElmConnectionMonitorTest {
             }
         val lines = mutableListOf<String>()
 
-        ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+        ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }, {
             lines += it
             true
-        }
+        }) { }
 
         assertEquals(256, lines.first { it.isNotEmpty() }.length)
     }

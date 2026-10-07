@@ -2,10 +2,11 @@ package com.volttracker.obdpoc
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 
-/** Sensitive SW-CAN frames never reach a log, and the app and the capture tool agree on which. */
+/** Only allowlisted SW-CAN payloads reach a log, sensitive frames never do, and the app and the capture tool agree on which. */
 class SwcanPrivacyTest {
     private fun frames(vararg lines: String): List<SwcanFrame> =
         SwcanFrameDecoder.parseMonitorOutput(lines.joinToString("\r"))
@@ -21,17 +22,45 @@ class SwcanPrivacyTest {
     }
 
     @Test
+    fun aFrameOffTheAllowlistIsNotReprinted() {
+        // Arb 0x3C1 is neither sensitive nor allowlisted: counted elsewhere, never printed.
+        assertEquals("", SwcanPrivacy.loggable(frames("10 78 20 40 01 02")))
+    }
+
+    @Test
     fun theFuelFrameKeepsOnlyItsFuelDoorByte() {
         assertEquals("10 76 40 97 08", SwcanPrivacy.loggable(frames("10 76 40 97 08 11 22 33 44 55")))
     }
 
     @Test
-    fun storedRepliesLoseQueuedSensitiveFrames() {
+    fun storedRepliesLoseEveryQueuedFrame() {
         // After a slow stop, ATH0 is answered with the monitor's queue: a GPS frame among others.
         val reply = "10 2A A0 97 01 02 03 04\r0C 2F 60 40 01\r10 76 40 97 08 11 22\rOK\r\r>"
 
-        assertEquals("0C 2F 60 40 01\rOK\r\r>", SwcanPrivacy.redactFrames(reply))
-        assertEquals("0C 2F 60 40 01 OK", ObdElmDecode.summarizeForStorage("ATH0", reply))
+        assertEquals("OK\r\r>", SwcanPrivacy.redactFrames(reply))
+        assertEquals("OK", ObdElmDecode.summarizeForStorage("ATH0", reply))
+    }
+
+    @Test
+    fun aFrameIsFoundWhereverInTheLineItStarts() {
+        for (line in listOf(
+            "A6|OK|10 2A A0 97 01 02 03 04",
+            "OK|10 90 C0 40 41 42",
+            ">10 2A A0 97 01",
+            "STOPPED 10 24 80 40 C8",
+            "102AA0970102",
+            "OK|102AA09701",
+        )) {
+            assertEquals(line, "OK", SwcanPrivacy.redactFrames("$line\rOK"))
+        }
+    }
+
+    @Test
+    fun theAllowlistHoldsNothingSensitive() {
+        assertTrue(SwcanPrivacy.PAYLOAD_PIDS.intersect(SwcanPrivacy.SENSITIVE_PIDS).isEmpty())
+        assertTrue(SwcanPrivacy.PAYLOAD_PIDS.containsAll(SwcanPrivacy.PAYLOAD_BYTES.keys))
+        // The DBC's key-store, passphrase and Wi-Fi messages are sensitive even unheard.
+        assertTrue(SwcanPrivacy.SENSITIVE_PIDS.containsAll(listOf(0x148, 0x150, 0x486, 0x487, 0x488)))
     }
 
     @Test

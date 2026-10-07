@@ -33,9 +33,10 @@ internal class EngineSwcanIo(
         listenMs: Long,
         stopTimeoutMs: Long,
         onLine: (String) -> Boolean,
+        onDrain: (String) -> Unit,
     ): ElmConnection.MonitorResult =
         synchronized(host.ioLock) {
-            connection().monitorStream(command, listenMs, stopTimeoutMs, host.running::get, onLine)
+            connection().monitorStream(command, listenMs, stopTimeoutMs, host.running::get, onLine, onDrain)
         }
 
     override fun reinitialize() = reinit()
@@ -47,6 +48,10 @@ internal class EngineSwcanIo(
     override fun <T> exclusive(block: () -> T): T = synchronized(host.ioLock) { block() }
 
     override fun isStationary(): Boolean = parked.isParked(System.currentTimeMillis())
+
+    override fun isInPark(): Boolean = parked.isInPark()
+
+    override fun noteMotion() = parked.moved()
 
     override fun openVoice(): GuidedCarTest.Voice = AndroidVoice(host.androidContext)
 

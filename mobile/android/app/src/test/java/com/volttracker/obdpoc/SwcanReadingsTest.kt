@@ -134,6 +134,8 @@ class SwcanReadingsTest {
                 "10 3B C0 40 00",
                 "10 63 20 40 00 00",
                 "10 24 20 40 02",
+                "10 72 20 40 00 00 07 01",
+                "10 76 80 40 00 00 00 00",
             ),
             0L,
         )
@@ -156,6 +158,9 @@ class SwcanReadingsTest {
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
         assertEquals("run", sample.getString("powerMode"))
+        assertEquals(3.0, sample.getDouble("seatHeatFlLevel"), 0.0)
+        assertEquals(1.0, sample.getDouble("seatHeatFrLevel"), 0.0)
+        assertEquals(0.0, sample.getDouble("seatHeatRrLevel"), 0.0)
     }
 
     @Test

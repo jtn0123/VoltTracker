@@ -781,6 +781,9 @@ open class ObdService :
     }
 
     private fun stopCurrentSession(statusMessage: String?) {
+        // While the session still runs, so a guided listen can stop and switch the adapter back to
+        // HS (bounded) before the poll thread is cancelled and the socket closed.
+        if (::engine.isInitialized) engine.guidedTest.abandon()
         releaseSessionWakeLock()
         running.set(false)
         SESSION_ACTIVE.set(false)
@@ -788,10 +791,7 @@ open class ObdService :
         activeTask?.cancel(true)
         activeTask = null
         stopLocationTracking()
-        if (::engine.isInitialized) {
-            engine.guidedTest.abandon()
-            engine.closeSocket()
-        }
+        if (::engine.isInitialized) engine.closeSocket()
         if (statusMessage != null) {
             broadcastStatus("idle", statusMessage, false)
         }

@@ -4,10 +4,16 @@ import com.volttracker.obdpoc.VoltGear
 import org.json.JSONObject
 
 /**
- * Whether the car is parked, for the SW-CAN listen cadence. Standing still is not enough: at a red
- * light the car is in Drive, and a parked-length window there costs live data mid-drive. With a
- * gear reading from the last [gearFreshMs], only Park counts. Without one, the car must have stood
- * still (a fresh speed of [MAX_STILL_KPH] or less) for [stillForMs], longer than most lights.
+ * Whether the car is parked, for the SW-CAN listen cadence and the guided car test. Standing still
+ * is not enough: at a red light the car is in Drive, and a parked-length window there costs live
+ * data mid-drive. With a gear reading from the last [gearFreshMs], only Park counts. Without one,
+ * the car must have stood still (a fresh speed of [STOPPED_KPH] or less, so not crawling in
+ * traffic) for [stillForMs], longer than most lights.
+ *
+ * [isInPark] is stricter, for the guided test's walk-round steps: Park read fresh at a standstill,
+ * and nothing since (a fresh speed above a standstill, a fresh gear other than Park, or [moved])
+ * has shown the car leaving it. A missing speed (a quiet HS bus while the test holds the adapter,
+ * or the car switched off) is not motion and keeps it.
  *
  * Only touched on the polling thread.
  */
@@ -18,11 +24,13 @@ class ParkedDetector(
     private var stillSinceMs = NOT_STILL
     private var gear = ""
     private var gearAtMs = 0L
+    private var inPark = false
 
     fun reset() {
         stillSinceMs = NOT_STILL
         gear = ""
         gearAtMs = 0L
+        inPark = false
     }
 
     /**
@@ -35,17 +43,25 @@ class ParkedDetector(
         gearAgeMs: Long,
         now: Long,
     ) {
-        val still = !speedKph.isNaN() && speedKph <= MAX_STILL_KPH
+        val still = !speedKph.isNaN() && speedKph <= STOPPED_KPH
         stillSinceMs =
             when {
                 !still -> NOT_STILL
                 stillSinceMs == NOT_STILL -> now
                 else -> stillSinceMs
             }
+        val freshGear = gearLetter.isNotEmpty() && gearAgeMs <= gearFreshMs
         if (gearLetter.isNotEmpty()) {
             gear = gearLetter
             gearAtMs = now - maxOf(0L, gearAgeMs)
         }
+        inPark =
+            when {
+                !speedKph.isNaN() && !still -> false
+                freshGear && gearLetter != VoltGear.PARK -> false
+                freshGear && still -> true
+                else -> inPark
+            }
     }
 
     /** [observe] for a live sample: its decoded gear (`prndlState`) and that reading's age. */
@@ -61,10 +77,19 @@ class ParkedDetector(
         return now - stillSinceMs >= stillForMs
     }
 
+    /** Park was read at a standstill and nothing has shown the car moving since. */
+    fun isInPark(): Boolean = inPark
+
+    /** Something other than HS polling (the body bus's wheel speeds) saw the car move. */
+    fun moved() {
+        inPark = false
+        stillSinceMs = NOT_STILL
+    }
+
     private companion object {
         const val NOT_STILL = Long.MIN_VALUE
 
-        /** The engine's own moving threshold (ObdPollingEngine.MOVING_SPEED_KPH). */
-        const val MAX_STILL_KPH = 5.0
+        /** A standstill: speed reads whole km/h, so this is a 0 reading, never a crawl. */
+        const val STOPPED_KPH = 0.5
     }
 }

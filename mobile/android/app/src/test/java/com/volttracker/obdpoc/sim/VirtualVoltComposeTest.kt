@@ -177,9 +177,9 @@ class VirtualVoltComposeTest {
         last: JSONObject,
         aux12Line: String,
     ) {
-        // 0x0C414040 data 00 01 7A 01: locked from the panel.
-        text("LOCKED")
-        compose.onNodeWithContentDescription("Car locked", substring = true).assertIsDisplayed()
+        // 0x0C414040 data 00 01 7A 01: a lock command from the panel (the command, not the latches).
+        text("LOCK SENT")
+        compose.onNodeWithContentDescription("Lock sent", substring = true).assertIsDisplayed()
         // 0x10248040 data 00 00 61 …: 0x61 × 0.1 + 3 = 12.7 V; a moving or plugged-in car is charging it.
         text("12.7 V")
         text(aux12Line)

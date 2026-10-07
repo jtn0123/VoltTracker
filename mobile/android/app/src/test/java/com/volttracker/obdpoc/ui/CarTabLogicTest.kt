@@ -69,9 +69,9 @@ class CarTabLogicTest {
 
     @Test
     fun theHeadlineSaysLockedAndClosedOrWhatNeedsLookingAt() {
-        assertEquals("Locked · All closed", carHeadline(parked, car).text)
+        assertEquals("Lock sent · All closed", carHeadline(parked, car).text)
         assertEquals(PillTone.EV, carHeadline(parked, car).tone)
-        assertEquals("Unlocked · All closed", carHeadline(parked.copy(locked = false), car).text)
+        assertEquals("Unlock sent · All closed", carHeadline(parked.copy(locked = false), car).text)
         val low = parked.copy(tires = TirePressures(38.0, 38.0, 37.0, 31.0))
         assertEquals("Check tire pressure", carHeadline(low, car).text)
         assertEquals(PillTone.WARN, carHeadline(low, car).tone)
@@ -79,14 +79,14 @@ class CarTabLogicTest {
         assertEquals("Driver door, hood open", carHeadline(parked, hood).text)
         assertEquals("A window is open", carHeadline(parked, car.copy(windowsPct = listOf(40, 0, 0, 0))).text)
         // Doors reported but windows not: only the doors are known to be closed.
-        assertEquals("Locked · Doors closed", carHeadline(parked, car.copy(windowsPct = null)).text)
+        assertEquals("Lock sent · Doors closed", carHeadline(parked, car.copy(windowsPct = null)).text)
         assertEquals(
-            "Locked · Doors closed",
+            "Lock sent · Doors closed",
             carHeadline(parked, car.copy(windowsPct = listOf(0, null, null, null))).text,
         )
         // Not every door has reported yet: closed isn't claimed.
         val partial = car.copy(openings = Openings(mapOf(Opening.DRIVER_DOOR to false)))
-        assertEquals("Locked", carHeadline(parked, partial).text)
+        assertEquals("Lock sent", carHeadline(parked, partial).text)
         val washer = car.copy(dashWarnings = listOf("washer_fluid_low"))
         assertEquals(ToneText("Washer fluid low", PillTone.WARN), carHeadline(parked, washer))
         val two = car.copy(dashWarnings = listOf("washer_fluid_low", "bulb_reverse"))
@@ -98,7 +98,7 @@ class CarTabLogicTest {
 
     @Test
     fun aHigherPlacardMakesTheSameTiresLow() {
-        assertEquals("Locked · All closed", carHeadline(parked, car).text)
+        assertEquals("Lock sent · All closed", carHeadline(parked, car).text)
         assertEquals("Check tire pressure", carHeadline(parked, car.copy(placardPsi = 42.0)).text)
     }
 
@@ -183,6 +183,14 @@ class CarTabLogicTest {
         assertEquals(listOf("Fan 40%", "Cabin 21°C · Outside 18°C", "Remote start running"), on.lines)
         assertEquals(PillTone.EV, on.tone)
         assertEquals("Fan off", climateTile(parked, car.copy(fanPct = 0)).lines.first())
+        // Asked for, with the compressor idle or not reported: "requested", not "on".
+        val idle = climateTile(parked, car.copy(acOn = true, acKw = 0.0))
+        assertEquals("A/C", idle.value)
+        assertEquals(" requested", idle.unit)
+        assertEquals("Compressor idle", idle.lines.first())
+        val unreported = climateTile(parked, car.copy(acOn = true, acKw = null))
+        assertEquals(" requested", unreported.unit)
+        assertFalse(unreported.lines.contains("Compressor idle"))
         // Before the A/C reports, the cabin temperature leads as it always did.
         val cabin = climateTile(parked, car.copy(acOn = null, fanPct = 30))
         assertEquals("70", cabin.value)
@@ -244,7 +252,7 @@ class CarTabLogicTest {
     fun aTireSensorTheCarFlagsInvalidIsNamedInsteadOfAPressure() {
         val one = tiresTile(parked.copy(tires = null), car.copy(tireSensorsInvalid = listOf("fl")))
         assertEquals(DASH, one.value)
-        assertEquals(listOf("Front left sensor not reading"), one.lines)
+        assertEquals(listOf("Front left: no valid reading"), one.lines)
         val remembered =
             car.copy(
                 memory =
@@ -256,7 +264,7 @@ class CarTabLogicTest {
             )
         assertEquals(
             "no remembered pressure stands in for a sensor that is down now",
-            listOf("Front left, rear right sensors not reading"),
+            listOf("Front left, rear right: no valid reading"),
             tiresTile(parked.copy(tires = null), remembered.copy(tireSensorsInvalid = listOf("fl", "rr"))).lines,
         )
     }

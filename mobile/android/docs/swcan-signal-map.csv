@@ -128,6 +128,23 @@ arb:47A,47A,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be pr
 arb:480,480,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:481,481,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:482,482,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:148,148,,*,unlock key store (cryptographic),Unlock_Key_Store_Crypt_1_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:150,150,,*,unlock key store (cryptographic),Unlock_Key_Store_Crypt_2_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:17F,17F,,*,keyless start authentication,Keyless_Start_Auth_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:1CA,1CA,,*,theft notification (security column-lock password),Vehicle_Theft_Notification_Stat,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:38A,38A,,*,driver identifier,Driver_Identifier_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:306,306,,*,teen driver settings (PIN stored),Teen_Driver_Control_Info_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:30B,30B,,*,teen driver PIN,Teen_Driver_Customization_Req_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:125,125,,*,Bluetooth tethering pairing reply,BluetoothTetheringPairingRsp_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:476,476,,*,OnStar Wi-Fi station settings,WiFi_Station_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:483,483,,*,OnStar Wi-Fi name (AMM),SSID_AMM_1_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:484,484,,*,OnStar Wi-Fi name (AMM),SSID_AMM_2_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:485,485,,*,OnStar Wi-Fi name (AMM),SSID_AMM_3_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:486,486,,*,OnStar Wi-Fi password (AMM),PassPhrase_1_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:487,487,,*,OnStar Wi-Fi password (AMM),PassPhrase_2_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:488,488,,*,OnStar Wi-Fi password (AMM),PassPhrase_3_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:489,489,,*,OnStar Wi-Fi access point settings (AMM),WiFi_AP_Data_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:490,490,,*,OnStar Wi-Fi station settings (AMM),WiFi_Station_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
 1040A081,205,81,*,chime active,Chime_Active.ChmAct,,,dbc,,flag 00/01
 10400060,200,60,*,"chime command (tone, cadence, repeats)",Chime_Command,,,dbc,,b0 and b4 change together
 104C00BC,260,BC,*,lane departure warning status,Lane_Departure_Warning_LS,,,dbc,,b2 flag 00/18
@@ -140,3 +157,7 @@ arb:482,482,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be pr
 102340BC,11A,BC,*,"forward collision alert, following distance",FCA_VisionBased_Info_LS,,,dbc,,15 distinct
 103A00BB,1D0,BB,*,park assist status,Park_Assistant_General_Status,,,dbc,,heard once
 103A40BB,1D2,BB,*,park assist front sensors,Park_Assistant_Front_Status,,,dbc,,heard once
+arb:391,391,,2 bits0-4,"driver seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.DrvHCSLSeatLev1-5,count,,decoded-unchecked,seatHeatFlLevel,"not matched on our car yet; the guided car test presses each button to check it"
+arb:391,391,,3 bits0-4,"passenger seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.PassHCSLSeatLev1-5,count,,decoded-unchecked,seatHeatFrLevel,"not matched on our car yet; the guided car test presses each button to check it"
+arb:3B4,3B4,,2 bits0-4,"rear left seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RLHCSLSeatLev1-5,count,,decoded-unchecked,seatHeatRlLevel,"not matched on our car yet; the guided car test presses each button to check it"
+arb:3B4,3B4,,3 bits0-4,"rear right seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RRHCSLSeatLev1-5,count,,decoded-unchecked,seatHeatRrLevel,"not matched on our car yet; the guided car test presses each button to check it"

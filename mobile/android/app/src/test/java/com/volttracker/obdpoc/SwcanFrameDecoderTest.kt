@@ -174,7 +174,8 @@ class SwcanFrameDecoderTest {
         assertEquals("closed", decode(SwcanFrameDecoder.ID_HOOD, 0x08)[SwcanField.HOOD])
         assertEquals("open", decode(SwcanFrameDecoder.ID_HOOD, 0x01)[SwcanField.HOOD])
         assertEquals("open", decode(SwcanFrameDecoder.ID_HOOD, 0x02)[SwcanField.HOOD])
-        assertTrue(decode(SwcanFrameDecoder.ID_HOOD, 0x04).isEmpty(), "validity bit set")
+        // A report flagged not valid reads INVALID, so an earlier "closed" can't stand in for it.
+        assertSame(SwcanReading.INVALID, decode(SwcanFrameDecoder.ID_HOOD, 0x04)[SwcanField.HOOD])
         assertEquals("open", decode(SwcanFrameDecoder.ID_TRUNK, 0x01)[SwcanField.TRUNK])
         assertTrue(decode(SwcanFrameDecoder.ID_DOOR_FL).isEmpty())
     }
@@ -346,29 +347,48 @@ class SwcanFrameDecoderTest {
     @Test
     fun windowsReadEachWindowOnItsOwn() {
         val windowId = gmlan(SwcanFrameDecoder.PID_WINDOWS)
+        val notValid = { readings: Map<SwcanField, Any> -> readings.filterValues { it === SwcanReading.INVALID }.keys }
         // 10-06, parked with the windows up: 28 2D is driver 0, the other three 5 (not known since
-        // the car woke); in the window test the driver read 2E 2D (6, fully down), 2B 2D, then 0
+        // the car woke), which read not valid so an older position can't stand in for them; in the
+        // window test the driver read 2E 2D (6, fully down), 2B 2D, then 0
         val parked = decode(windowId, 0x28, 0x2D)
-        assertEquals(mapOf(SwcanField.WINDOW_FL to 0.0), parked)
+        assertEquals(0.0, parked[SwcanField.WINDOW_FL])
+        assertEquals(setOf(SwcanField.WINDOW_RL, SwcanField.WINDOW_FR, SwcanField.WINDOW_RR), notValid(parked))
         // the driver window moving while the others still send 5
-        assertEquals(mapOf(SwcanField.WINDOW_FL to 50.0), decode(windowId, 0x2B, 0x2D))
+        assertEquals(50.0, decode(windowId, 0x2B, 0x2D)[SwcanField.WINDOW_FL])
         // driver 3, left rear 0 while the right side carries 5
         val moving = decode(windowId, 0x03, 0x2D)
         assertEquals(50.0, moving[SwcanField.WINDOW_FL])
         assertEquals(0.0, moving[SwcanField.WINDOW_RL])
-        assertEquals(2, moving.size)
+        assertEquals(setOf(SwcanField.WINDOW_FR, SwcanField.WINDOW_RR), notValid(moving))
         // all four real: drv 6, LR 0, pass 6, RR 0
         val all = decode(windowId, 0x06, 0x06)
         assertEquals(100.0, all[SwcanField.WINDOW_FL])
         assertEquals(0.0, all[SwcanField.WINDOW_RL])
         assertEquals(100.0, all[SwcanField.WINDOW_FR])
         assertEquals(0.0, all[SwcanField.WINDOW_RR])
-        // 7 is undefined: not reported, like 5
-        assertEquals(
-            mapOf(SwcanField.WINDOW_RL to 0.0, SwcanField.WINDOW_FR to 0.0, SwcanField.WINDOW_RR to 0.0),
-            decode(windowId, 0x07, 0x00),
-        )
+        // 7 is undefined: not valid, like 5
+        val seven = decode(windowId, 0x07, 0x00)
+        assertEquals(setOf(SwcanField.WINDOW_FL), notValid(seven))
+        assertEquals(0.0, seven[SwcanField.WINDOW_FR])
         assertTrue(decode(windowId, 0x06).isEmpty())
+    }
+
+    @Test
+    fun seatHeatIsHowManyLevelLampsAreLit() {
+        val front = gmlan(SwcanFrameDecoder.PID_FRONT_SEAT_HEAT)
+        val rear = gmlan(SwcanFrameDecoder.PID_REAR_SEAT_HEAT)
+        // Byte 2 is the driver's (rear left's) five lamps, byte 3 the passenger's (rear right's).
+        val lit = decode(front, 0x00, 0x00, 0x07, 0x01)
+        assertEquals(3.0, lit[SwcanField.SEAT_HEAT_FL])
+        assertEquals(1.0, lit[SwcanField.SEAT_HEAT_FR])
+        assertEquals(5.0, decode(front, 0x00, 0x00, 0x1F, 0x00)[SwcanField.SEAT_HEAT_FL])
+        // Only the five lamp bits count.
+        assertEquals(0.0, decode(front, 0xFF, 0xFF, 0xE0, 0xE0)[SwcanField.SEAT_HEAT_FL])
+        val back = decode(rear, 0x00, 0x00, 0x03, 0x00)
+        assertEquals(2.0, back[SwcanField.SEAT_HEAT_RL])
+        assertEquals(0.0, back[SwcanField.SEAT_HEAT_RR])
+        assertTrue(decode(front, 0x00, 0x00, 0x07).isEmpty())
     }
 
     @Test

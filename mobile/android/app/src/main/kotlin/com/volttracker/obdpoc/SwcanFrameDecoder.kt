@@ -99,6 +99,13 @@ enum class SwcanField(
     OIL_LIFE(SwcanGroup.MAINTENANCE),
     POWER_MODE(SwcanGroup.POWER_MODE),
 
+    // Seat heat: how many of a seat's level lamps are lit (0 = off), from the seat-heat control
+    // modules' indicator broadcasts, not the button presses.
+    SEAT_HEAT_FL(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_FR(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_RL(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_RR(SwcanGroup.SEAT_HEAT),
+
     // Dash warning lights, one field per broadcast that carries them; each value is the comma-joined
     // codes of the ones lit, "" when none are (see [SwcanReadings] for how they merge).
     WARNINGS_FAST(SwcanGroup.WARNINGS),
@@ -127,6 +134,7 @@ enum class SwcanGroup {
     MAINTENANCE,
     WARNINGS,
     POWER_MODE,
+    SEAT_HEAT,
 }
 
 /**
@@ -181,6 +189,8 @@ object SwcanFrameDecoder {
     const val PID_WARNINGS_SLOW = 0x03C0
     const val PID_WARNINGS_SUPER_SLOW = 0x03C4
     const val PID_POWER_MODE = 0x0121
+    const val PID_FRONT_SEAT_HEAT = 0x0391
+    const val PID_REAR_SEAT_HEAT = 0x03B4
 
     private const val MAX_29_BIT_ID = 0x1FFFFFFF
     private const val MAX_DATA_BYTES = 8
@@ -198,6 +208,7 @@ object SwcanFrameDecoder {
     private const val WINDOW_BITS = 0x07
     private const val WINDOW_REAR_SHIFT = 3
     private const val HOOD_STATE_BITS = 0x03
+    private const val SEAT_LEVEL_BITS = 0x1F
     private const val POWER_MODE_BITS = 0x03
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
     private const val NOT_AVAILABLE_BYTE = 0xFF
@@ -333,6 +344,8 @@ object SwcanFrameDecoder {
             PID_WASHER_LEVEL -> warnings(d, SwcanField.WARNING_WASHER, WASHER_WARNINGS)
             PID_BULB_OUTAGE -> warnings(d, SwcanField.WARNING_BULBS, BULB_WARNINGS)
             PID_POWER_MODE -> powerMode(d)
+            PID_FRONT_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_FL, SwcanField.SEAT_HEAT_FR)
+            PID_REAR_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_RL, SwcanField.SEAT_HEAT_RR)
             else -> none()
         }
     }
@@ -610,8 +623,9 @@ object SwcanFrameDecoder {
      * passenger, right rear (GM's DrvWndPosStat / LRWndPosStat / PsWndPosStat / RRWndPosStat).
      * Checked on the car 2026-10-06: 0 is up, 6 fully down, 3 part way (the driver window read 6,
      * 3, then 0 as it came up), and 5 is a window not known since the car woke: each read 5 until it
-     * first moved, then 0. 5 and the undefined 7 are skipped, so each window is read on its own; an
-     * earlier decoder that dropped a frame with any 5 in it never showed the driver's window moving.
+     * first moved, then 0. 5 and the undefined 7 read [SwcanReading.INVALID], each window on its own:
+     * the window's position is not known, so an earlier one must not stand in for it (an earlier
+     * decoder that dropped a frame with any 5 in it never showed the driver's window moving).
      */
     private fun windows(d: IntArray): List<SwcanReading> {
         if (d.size < 2) return none()
@@ -622,16 +636,41 @@ object SwcanFrameDecoder {
                 SwcanField.WINDOW_FR to (d[1] and WINDOW_BITS),
                 SwcanField.WINDOW_RR to ((d[1] shr WINDOW_REAR_SHIFT) and WINDOW_BITS),
             )
-        return raw
-            .filter { it.second != WINDOW_FILLER && it.second <= WINDOW_OPEN_MAX }
-            .map { (field, pos) -> num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0) }
+        return raw.map { (field, pos) ->
+            if (pos == WINDOW_FILLER || pos > WINDOW_OPEN_MAX) {
+                SwcanReading(field, SwcanReading.INVALID)
+            } else {
+                num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0)
+            }
+        }
     }
 
     // Hood_Status_LS (arb 0x394): HdSt is byte 0 bits 0..1, valid unless bit 2 is set. 0 read on the
-    // car with the hood shut (2026-10-06); any other state is treated as open.
+    // car with the hood shut (2026-10-06); any other state is treated as open. A report flagged not
+    // valid reads INVALID, so an earlier "closed" can't stand in for it.
     private fun hood(d: IntArray): List<SwcanReading> {
-        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        if (d.isEmpty()) return none()
+        if (invalid(d, 0, 2)) return listOf(SwcanReading(SwcanField.HOOD, SwcanReading.INVALID))
         return listOf(text(SwcanField.HOOD, if (d[0] and HOOD_STATE_BITS == 0) "closed" else "open"))
+    }
+
+    /**
+     * Front_Seat_Heat_Cool_Control_LS (arb 0x391) and Rear_Seat_Heat_Cool_Control_LS (arb 0x3B4):
+     * the seat-heat modules' level lamps, five per seat, bits 0..4 of byte 2 (driver, rear left) and
+     * byte 3 (passenger, rear right), per GM's signal list (DrvHCSLSeatLev1-5, PassHCSLSeatLev1-5).
+     * The level is how many are lit. Not the switch frames (0x392, 0x3B6), which only say a button is
+     * down. UNCONFIRMED-ON-CAR: the guided car test presses each button to check it.
+     */
+    private fun seatHeat(
+        d: IntArray,
+        left: SwcanField,
+        right: SwcanField,
+    ): List<SwcanReading> {
+        if (d.size < 4) return none()
+        return listOf(
+            num(left, Integer.bitCount(d[2] and SEAT_LEVEL_BITS).toDouble(), 0),
+            num(right, Integer.bitCount(d[3] and SEAT_LEVEL_BITS).toDouble(), 0),
+        )
     }
 
     // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.

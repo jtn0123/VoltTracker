@@ -39,10 +39,29 @@ class SwcanListenRunnerTest {
         var exclusiveDepth = 0
         var commandsOutsideLock = 0
         var stationary = false
+        var inPark = true
         val listenMs = mutableListOf<Long>()
         var onMonitor: (Long) -> Unit = {}
 
+        /** What the guided test's voice says, as it says it. */
+        var onSay: (String) -> Unit = {}
+
         override fun isStationary(): Boolean = stationary
+
+        override fun isInPark(): Boolean = inPark
+
+        override fun openVoice(): GuidedCarTest.Voice =
+            object : GuidedCarTest.Voice {
+                override fun say(text: String) = onSay(text)
+
+                override fun speaking() = false
+
+                override fun failed() = false
+
+                override fun interrupt() = Unit
+
+                override fun close() = Unit
+            }
 
         override fun send(
             command: String,
@@ -104,7 +123,7 @@ class SwcanListenRunnerTest {
     // here it listens as long as a regular one, so each window is one STM.
     private val policy =
         SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L, startupListenMs = 1_200L)
-    private val runner = SwcanListenRunner(io, policy) { now }
+    private val runner = SwcanListenRunner(io, policy, guidedClock = { now }) { now }
 
     private fun readyStn() {
         runner.probeAdapter()
@@ -155,6 +174,8 @@ class SwcanListenRunnerTest {
 
     @Test
     fun aGuidedTestTakesThePollTurnsAndHoldsTheSession() {
+        // The driver taps "I can hear it" as soon as the phone speaks.
+        io.onSay = { runner.guidedTest.request(GuidedCarTest.Op.CONFIRM) }
         runner.guidedTest.request(GuidedCarTest.Op.START)
         assertTrue("waiting for the adapter already holds the session", runner.holdsSession())
         cycle()
@@ -171,6 +192,7 @@ class SwcanListenRunnerTest {
         assertEquals(expected, io.commands)
         assertEquals(0, io.commandsOutsideLock)
         assertEquals("intro", io.event("guided_step")!!["step"])
+        assertEquals("done", io.event("guided_step")!!["result"])
         assertNull("no window of the listener's own", io.event("swcan_window"))
         val sample = JSONObject()
         runner.appendTo(sample, now)
@@ -225,23 +247,48 @@ class SwcanListenRunnerTest {
     }
 
     @Test
-    fun hsSilentAfterWindowForcesReinitAndCountsAsTrouble() {
+    fun hsSilentAfterWindowForcesReinitAndCountsOnceHsAnswersAgain() {
         readyStn()
         cycle()
         cycle(hsAnswered = false)
         assertEquals(1, io.reinitCount)
         assertEquals("no_live_data_after_window", io.event("swcan_hs_reinit")!!["reason"])
-        assertTrue("one quiet cycle is trouble, not the end", runner.isEnabled())
-        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+        assertTrue(runner.isEnabled())
+        assertEquals(
+            "unexplained, so no car controls",
+            CarControlGate.Adapter.STN_UNVERIFIED,
+            runner.controlCapability(),
+        )
         now += policy.intervalMs
         cycle()
         assertEquals(2, io.count("STM"))
         cycle(hsAnswered = false)
         assertEquals(2, io.reinitCount)
-        assertEquals("hs_not_restored", runner.disabledReason())
+        assertNull("the second quiet cycle is not counted until HS answers", runner.disabledReason())
         now += policy.intervalMs
         cycle()
+        assertEquals("HS back after the re-init: the car was on", "hs_not_restored", runner.disabledReason())
         assertEquals(2, io.count("STM"))
+    }
+
+    @Test
+    fun aShutdownAfterOneTroubledWindowIsCapturedNotGivenUpOn() {
+        readyStn()
+        io.onMonitor = { now += it }
+        // One troubled window: HS quiet after it, then back.
+        cycle()
+        cycle(hsAnswered = false)
+        now += policy.intervalMs
+        cycle()
+        // The car is switched off before its power mode was heard: HS quiet again.
+        cycle(hsAnswered = false)
+        assertTrue("not given up before the capture says why", runner.isEnabled())
+        io.monitorText = "10 24 20 40 00\rSTOPPED\r\r>"
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        assertEquals("car_off", io.event("swcan_hs_quiet")!!["reason"])
+        assertTrue(runner.isEnabled())
+        assertNull(runner.disabledReason())
     }
 
     @Test

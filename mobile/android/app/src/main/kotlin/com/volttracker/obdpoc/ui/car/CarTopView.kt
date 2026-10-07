@@ -66,8 +66,9 @@ fun CarTopView(
         buildString {
             append(
                 when (locked) {
-                    true -> "Car locked"
-                    false -> "Car unlocked"
+                    // The car's lock command, not the latches: what was sent, not that they moved.
+                    true -> "Lock sent"
+                    false -> "Unlock sent"
                     null -> "Lock not reported"
                 },
             )

@@ -202,7 +202,7 @@ fun CarScreen(
     }
 }
 
-/** The running guided test: the step, what the phone just said, how the last step went, Skip and Stop. */
+/** The running guided test: the step, what the phone just said, how the last step went, the hearing check, Skip and Stop. */
 @Composable
 private fun GuidedTestCard(
     status: GuidedTestStatus,
@@ -231,11 +231,18 @@ private fun GuidedTestCard(
             )
         }
         Text(
-            GUIDED_TEST_NOTE,
+            status.note.ifEmpty { GUIDED_TEST_NOTE },
             style = VoltType.caption,
             color = VoltColors.textSecondary,
             modifier = Modifier.padding(top = 4.dp),
         )
+        if (status.confirm) {
+            VoltButton(
+                GUIDED_CONFIRM_LABEL,
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                accent = true,
+            ) { onGuided("confirm") }
+        }
         Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             VoltButton("Skip step", Modifier.weight(1f)) { onGuided("skip") }
             VoltButton("Stop test", Modifier.weight(1f)) { onGuided("stop") }

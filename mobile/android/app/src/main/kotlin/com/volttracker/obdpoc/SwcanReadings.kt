@@ -123,6 +123,10 @@ class SwcanReadings(
         putReading(sample, "transOilTempC", SwcanField.TRANS_OIL_TEMP)
         putReading(sample, "oilLifeRemainingPct", SwcanField.OIL_LIFE)
         putReading(sample, "powerMode", SwcanField.POWER_MODE)
+        putReading(sample, "seatHeatFlLevel", SwcanField.SEAT_HEAT_FL)
+        putReading(sample, "seatHeatFrLevel", SwcanField.SEAT_HEAT_FR)
+        putReading(sample, "seatHeatRlLevel", SwcanField.SEAT_HEAT_RL)
+        putReading(sample, "seatHeatRrLevel", SwcanField.SEAT_HEAT_RR)
         putTireFaults(sample, "tireSensorsInvalid")
         putDashWarnings(sample, "dashWarnings")
         putDashWarningsComplete(sample, "dashWarningsComplete")
@@ -143,6 +147,7 @@ class SwcanReadings(
         putGroupStaleMs(sample, "transOilStaleMs", SwcanGroup.DRIVETRAIN, now)
         putGroupStaleMs(sample, "oilLifeStaleMs", SwcanGroup.MAINTENANCE, now)
         putGroupStaleMs(sample, "powerModeStaleMs", SwcanGroup.POWER_MODE, now)
+        putGroupStaleMs(sample, "seatHeatStaleMs", SwcanGroup.SEAT_HEAT, now)
         putGroupStaleMs(sample, "dashWarningStaleMs", SwcanGroup.WARNINGS, now)
     }
 

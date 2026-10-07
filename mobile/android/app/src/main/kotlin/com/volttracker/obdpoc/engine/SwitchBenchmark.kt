@@ -19,7 +19,13 @@ import java.util.Locale
  * separate way before the step ends. Every command is one the listener already sends, plus
  * `STBC`, `STI`/`STDI` (adapter-local) and `010D` (a normal OBD read).
  *
- * Each cycle logs `guided_bench`; each block `guided_bench_summary` with the medians.
+ * A cycle only counts when everything in it worked: each batched reply checked (the protocol, then an
+ * `OK` per setup command), the stop prompt back, HS restored without the fallback, and HS answering.
+ * One that didn't is logged with why (`setup_failed`, `no_stop_prompt`, `restore_fallback`,
+ * `hs_no_reply`) and left out of the medians.
+ *
+ * Each cycle logs `guided_bench`; each block `guided_bench_summary` with the medians of the cycles that
+ * worked and the count of those that didn't. A dropped link logs the adapter's state as unknown.
  */
 class SwitchBenchmark(
     private val io: SwcanListenRunner.Io,
@@ -35,22 +41,28 @@ class SwitchBenchmark(
         val totalMs: Long,
         val hsOk: Boolean,
         val fellBack: Boolean,
+        /** Why the cycle doesn't count, or "" when it does. */
+        val failure: String,
     )
 
     private var identified = false
+
+    /** The first batch's replies have been logged; later ones are only when they went wrong. */
+    private var replyLogged = false
 
     /** `STBC` answered `?` once: the batched blocks are skipped from then on. */
     private var batchUnsupported = false
 
     fun reset() {
         identified = false
+        replyLogged = false
         batchUnsupported = false
     }
 
     /**
-     * Runs one block of [cycles], holding the adapter, and returns [OK], [UNSUPPORTED],
-     * [RESTORE_FAILED] (the adapter was re-initialised) or [HS_FAILED]. [cancelled] is asked
-     * between cycles.
+     * Runs one block of [cycles], holding the adapter, and returns [OK], [PARTIAL] (some cycles
+     * failed), [UNSUPPORTED], [RESTORE_FAILED] (the adapter was re-initialised) or [HS_FAILED].
+     * [cancelled] is asked between cycles.
      */
     @Throws(IOException::class)
     fun run(
@@ -61,19 +73,46 @@ class SwitchBenchmark(
     ): String {
         if (batched && batchUnsupported) return UNSUPPORTED
         return io.exclusive {
+            try {
+                runBlock(label, batched, cycles, cancelled)
+            } catch (ex: IOException) {
+                // Batching and the bus are whatever they were; the reconnect's re-init (ATZ) resets both.
+                io.logEvent("guided_bus_state_unknown", "step", label, "error", ex.javaClass.simpleName)
+                throw ex
+            } catch (ex: RuntimeException) {
+                io.logEvent("guided_bus_state_unknown", "step", label, "error", ex.javaClass.simpleName)
+                try {
+                    if (batched) sendOk("STBC 0")
+                    bus.leave()
+                } catch (restoreFailed: IOException) {
+                    io.logEvent("guided_restore_failed", "step", label, "error", restoreFailed.javaClass.simpleName)
+                }
+                throw ex
+            }
+        }
+    }
+
+    @Throws(IOException::class)
+    private fun runBlock(
+        label: String,
+        batched: Boolean,
+        cycles: Int,
+        cancelled: () -> Boolean,
+    ): String =
+        run {
             identify()
             if (batched && !sendOk("STBC 1")) {
                 batchUnsupported = true
                 io.logEvent("guided_bench_summary", "block", label, "mode", "batched", "supported", "false")
-                return@exclusive UNSUPPORTED
+                return@run UNSUPPORTED
             }
             val done = mutableListOf<Cycle>()
             var outcome = OK
             var hsMisses = 0
             while (done.size < cycles && !cancelled()) {
                 val cycle =
-                    (if (batched) batchedCycle(done.isEmpty()) else separateCycle())
-                        ?: return@exclusive restoreFailed(batched, label, done)
+                    (if (batched) batchedCycle() else separateCycle())
+                        ?: return@run restoreFailed(batched, label, done)
                 done += cycle
                 logCycle(label, batched, done.size, cycle)
                 hsMisses = if (cycle.hsOk) 0 else hsMisses + 1
@@ -82,11 +121,11 @@ class SwitchBenchmark(
                     break
                 }
             }
+            if (outcome == OK && done.any { it.failure.isNotEmpty() }) outcome = PARTIAL
             if (batched && !endBatching()) outcome = RESTORE_FAILED
             logSummary(label, batched, done)
             outcome
         }
-    }
 
     /** The adapter's firmware and hardware, once per test: which firmware batching was timed on. */
     private fun identify() {
@@ -109,19 +148,42 @@ class SwitchBenchmark(
         val heard = if (failed == null) listen(SwcanListenRunner.MONITOR_COMMAND, setupAt) else null
         val stoppedAt = clock()
         if (!bus.leave()) return null
-        return finishCycle(startedAt, setupAt, heard, stoppedAt, fellBack = false)
+        val failure =
+            when {
+                heard == null -> SETUP_FAILED
+                !heard.gotPrompt -> NO_STOP_PROMPT
+                else -> ""
+            }
+        return finishCycle(startedAt, setupAt, heard, stoppedAt, fellBack = false, failure)
     }
 
-    private fun batchedCycle(first: Boolean): Cycle? {
+    private fun batchedCycle(): Cycle? {
         val startedAt = clock()
         val heard = listen(BATCH_SETUP, setupAt = -1L)
         val stoppedAt = clock()
-        if (first) io.logEvent("guided_bench_batch_reply", "replies", heard.replies.joinToString("|"))
-        val setupOk = heard.setupAt >= 0 && heard.protocolOk
-        val restored = setupOk && restoreBatched()
+        val setupOk = heard.setupAt >= 0 && heard.protocolOk && !heard.setupBroken
+        if (!setupOk || !replyLogged) {
+            // How this firmware answers a batch: once, and for every batch that went wrong.
+            replyLogged = true
+            io.logEvent(
+                "guided_bench_batch_reply",
+                "replies",
+                heard.replies.joinToString("|"),
+                "setupOk",
+                setupOk.toString(),
+            )
+        }
+        val restored = setupOk && heard.gotPrompt && restoreBatched()
         if (!restored && !bus.leave()) return null
         val setupAt = if (heard.setupAt >= 0) heard.setupAt else stoppedAt
-        return finishCycle(startedAt, setupAt, heard.takeIf { setupOk }, stoppedAt, fellBack = !restored)
+        val failure =
+            when {
+                !setupOk -> SETUP_FAILED
+                !heard.gotPrompt -> NO_STOP_PROMPT
+                !restored -> RESTORE_FALLBACK
+                else -> ""
+            }
+        return finishCycle(startedAt, setupAt, heard.takeIf { setupOk }, stoppedAt, fellBack = !restored, failure)
     }
 
     private fun finishCycle(
@@ -130,6 +192,7 @@ class SwitchBenchmark(
         heard: Heard?,
         stoppedAt: Long,
         fellBack: Boolean,
+        failure: String,
     ): Cycle {
         val restoredAt = clock()
         val hsOk = ObdProtocol.summarize(io.send("010D", COMMAND_TIMEOUT_MS)).replace(" ", "").contains("410D")
@@ -143,6 +206,7 @@ class SwitchBenchmark(
             totalMs = endedAt - startedAt,
             hsOk = hsOk,
             fellBack = fellBack,
+            failure = failure.ifEmpty { if (hsOk) "" else HS_NO_REPLY },
         )
     }
 
@@ -153,6 +217,11 @@ class SwitchBenchmark(
         var firstFrameAt = -1L
         var listenEndedAt = -1L
         var protocolOk = false
+
+        /** A setup command in the batch answered something other than `OK`. */
+        var setupBroken = false
+        var gotPrompt = false
+        private var answered = 0
 
         /** A batch's own replies (`A6`, `OK`, `?`), kept to log how this firmware answers. */
         val replies = mutableListOf<String>()
@@ -175,15 +244,20 @@ class SwitchBenchmark(
             return goOn
         }
 
-        /** The batch's first reply is the protocol, then one OK per setup command. */
+        /** The batch's first reply is the protocol, then one `OK` per setup command; anything else breaks it. */
         private fun reply(
             text: String,
             now: Long,
         ) {
-            if (replies.isEmpty()) protocolOk = text.uppercase(Locale.US).removePrefix("A") == HS_PROTOCOL
+            val upper = text.uppercase(Locale.US)
+            when {
+                answered == 0 -> protocolOk = upper.removePrefix("A") == HS_PROTOCOL
+                upper != "OK" -> setupBroken = true
+            }
+            answered += 1
             // Short pieces only: nothing longer than a status word is kept, so never a frame's bytes.
             if (text.length <= MAX_REPLY_CHARS && replies.size < MAX_REPLIES) replies += text
-            if (replies.size == BATCH_SETUP_REPLIES) setupAt = now
+            if (answered == BATCH_SETUP_REPLIES) setupAt = now
         }
     }
 
@@ -192,9 +266,10 @@ class SwitchBenchmark(
         setupAt: Long,
     ): Heard {
         val heard = Heard(setupAt)
-        val result = io.monitorStream(command, MONITOR_CAP_MS, STOP_TIMEOUT_MS, heard::onLine)
+        // Lines after the stop byte are the adapter's queue, not part of the timed listen.
+        val result = io.monitorStream(command, MONITOR_CAP_MS, STOP_TIMEOUT_MS, heard::onLine) { }
         if (heard.listenEndedAt < 0) heard.listenEndedAt = clock()
-        if (!result.gotPrompt) heard.setupAt = -1L
+        heard.gotPrompt = result.gotPrompt
         return heard
     }
 
@@ -268,6 +343,8 @@ class SwitchBenchmark(
             cycle.hsOk.toString(),
             "fellBack",
             cycle.fellBack.toString(),
+            "failure",
+            cycle.failure,
         )
     }
 
@@ -276,6 +353,7 @@ class SwitchBenchmark(
         batched: Boolean,
         done: List<Cycle>,
     ) {
+        val valid = done.filter { it.failure.isEmpty() }
         io.logEvent(
             "guided_bench_summary",
             "block",
@@ -286,18 +364,27 @@ class SwitchBenchmark(
             "true",
             "cycles",
             done.size.toString(),
+            "validCycles",
+            valid.size.toString(),
+            "failures",
+            done
+                .filter { it.failure.isNotEmpty() }
+                .groupingBy { it.failure }
+                .eachCount()
+                .entries
+                .joinToString(",") { "${it.key}:${it.value}" },
             "medianTotalMs",
-            median(done.map { it.totalMs }).toString(),
+            median(valid.map { it.totalMs }).toString(),
             "medianSetupMs",
-            median(done.map { it.setupMs }).toString(),
+            median(valid.map { it.setupMs }).toString(),
             "medianFirstFrameMs",
-            median(done.map { it.firstFrameMs }.filter { it >= 0 }).toString(),
+            median(valid.map { it.firstFrameMs }.filter { it >= 0 }).toString(),
             "medianStopMs",
-            median(done.map { it.stopMs }.filter { it >= 0 }).toString(),
+            median(valid.map { it.stopMs }).toString(),
             "medianRestoreMs",
-            median(done.map { it.restoreMs }).toString(),
+            median(valid.map { it.restoreMs }).toString(),
             "medianHsMs",
-            median(done.map { it.hsMs }).toString(),
+            median(valid.map { it.hsMs }).toString(),
             "hsOk",
             done.count { it.hsOk }.toString(),
             "fellBack",
@@ -312,6 +399,7 @@ class SwitchBenchmark(
 
     companion object {
         const val OK = "timed"
+        const val PARTIAL = "timed_partly"
         const val UNSUPPORTED = "unsupported"
         const val RESTORE_FAILED = "restore_failed"
         const val HS_FAILED = "hs_failed"
@@ -328,6 +416,10 @@ class SwitchBenchmark(
         private const val MAX_REPLY_CHARS = 8
         private const val MAX_REPLIES = 24
         private const val HS_PROTOCOL = "6"
+        private const val SETUP_FAILED = "setup_failed"
+        private const val NO_STOP_PROMPT = "no_stop_prompt"
+        private const val RESTORE_FALLBACK = "restore_fallback"
+        private const val HS_NO_REPLY = "hs_no_reply"
 
         /** The protocol check and the setup, monitor last (STBC runs `STM` only as a batch's last command). */
         @JvmField

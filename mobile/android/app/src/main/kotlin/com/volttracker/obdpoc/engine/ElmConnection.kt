@@ -349,8 +349,9 @@ open class ElmConnection
          * frame (the time it reached the phone, Bluetooth buffering included). [onLine] returning
          * false stops monitoring early. While the bus is silent [onLine] gets an empty line every
          * [STREAM_IDLE_TICK_MS], so the caller can still stop on a request or on the silence itself.
-         * Lines the adapter still prints after the stop byte (its queue, up to ~4 s on the car) are
-         * delivered once the prompt is back. The result's text is only what followed the stop byte.
+         * Lines the adapter still prints after the stop byte (its queue, up to ~4 s on the car) go
+         * to [onDrain], each as it is read, so they keep their own arrival times and the caller can
+         * tell them from the listen proper. The result's text is only what followed the stop byte.
          */
         @Throws(IOException::class)
         open fun monitorStream(
@@ -359,6 +360,7 @@ open class ElmConnection
             stopTimeoutMs: Long,
             keepWaiting: KeepWaiting,
             onLine: (String) -> Boolean,
+            onDrain: (String) -> Unit,
         ): MonitorResult {
             val out = output ?: throw IOException("Adapter stream is not open")
             val inputStream = input ?: throw IOException("Adapter stream is not open")
@@ -403,14 +405,55 @@ open class ElmConnection
             out.flush()
             val tail = StringBuilder()
             responseCapped = false
-            val stopped = readUntilPrompt(inputStream, tail, clock.nowMs() + maxOf(0L, stopTimeoutMs), keepWaiting)
+            val stopped =
+                drainUntilPrompt(
+                    inputStream,
+                    line,
+                    tail,
+                    clock.nowMs() + maxOf(0L, stopTimeoutMs),
+                    keepWaiting,
+                    onDrain,
+                )
             lastTransactTruncated = responseCapped
-            line
-                .append(tail)
-                .split('\r', '\n', '>')
-                .filter { it.isNotEmpty() }
-                .forEach { onLine(it) }
             return MonitorResult(tail.toString(), stopped, false, responseCapped)
+        }
+
+        /**
+         * After a stream's stop byte: hands each line to [onDrain] as it is read (finishing the
+         * [line] that was in progress), keeps up to [MAX_RESPONSE_CHARS] of it in [tail], until the
+         * `>` prompt, [deadline], or [keepWaiting] going false. True when the prompt arrived.
+         */
+        private fun drainUntilPrompt(
+            inputStream: InputStream,
+            line: StringBuilder,
+            tail: StringBuilder,
+            deadline: Long,
+            keepWaiting: KeepWaiting,
+            onDrain: (String) -> Unit,
+        ): Boolean {
+            val buffer = ByteArray(STREAM_BUFFER_BYTES)
+            while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (!sleep(STREAM_POLL_MS)) break
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                for (i in 0 until read) {
+                    val c = (buffer[i].toInt() and BYTE_MASK).toChar()
+                    if (tail.length < MAX_RESPONSE_CHARS) tail.append(c) else responseCapped = true
+                    if (c == '>' || c == '\r' || c == '\n') {
+                        if (line.isNotEmpty()) onDrain(line.toString())
+                        line.setLength(0)
+                        if (c == '>') return true
+                    } else if (line.length < MAX_STREAM_LINE_CHARS) {
+                        line.append(c)
+                    }
+                }
+            }
+            if (line.isNotEmpty()) onDrain(line.toString())
+            return false
         }
 
         // Set by readUntilPrompt when output past MAX_RESPONSE_CHARS was discarded.

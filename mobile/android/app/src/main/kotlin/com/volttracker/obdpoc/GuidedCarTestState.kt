@@ -16,6 +16,10 @@ data class GuidedTestStatus(
     val lastResult: String = "",
     /** Set once the test ends: "Finished", "Stopped", or why it could not go on. */
     val ended: String = "",
+    /** The step is waiting for "I can hear it". */
+    val confirm: Boolean = false,
+    /** A line about this step (the drive pauses live data), or "" for the usual note. */
+    val note: String = "",
 )
 
 /**

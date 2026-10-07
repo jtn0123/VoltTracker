@@ -772,9 +772,10 @@ open class ObdPollingEngine(
             carControl.afterSample()
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout. A
-            // guided car test turns the car off and on again, so it holds the session meanwhile.
+            // guided car test turns the car off and on again, so it holds the session meanwhile, and
+            // ends it once the car is switched off after the test's drive.
             val asleep = shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)
-            if (asleep && !swcanListener.holdsSession()) {
+            if (swcanListener.endsSession() || asleep && !swcanListener.holdsSession()) {
                 endForVehicleSleep()
                 return
             }

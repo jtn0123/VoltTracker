@@ -4,8 +4,10 @@ import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.engine.SwitchBenchmark
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.IOException
 
 /** The bus-switch timing check against a fake adapter, in fake time. */
 class SwitchBenchmarkTest {
@@ -38,8 +40,12 @@ class SwitchBenchmarkTest {
         assertEquals("1100", first["totalMs"])
         assertEquals("40", first["hsMs"])
         assertEquals("true", first["hsOk"])
+        assertEquals("", first["failure"])
         val summary = io.event("guided_bench_summary")!!
         assertEquals("3", summary["cycles"])
+        assertEquals("3", summary["validCycles"])
+        assertEquals("", summary["failures"])
+        assertEquals("1100", summary["medianTotalMs"])
         assertEquals("3", summary["hsOk"])
         assertEquals(listOf("STI", "STDI"), io.commands.take(2))
         assertEquals(3, io.commands.count { it == SwcanListenRunner.MONITOR_COMMAND })
@@ -91,6 +97,7 @@ class SwitchBenchmarkTest {
         val outcome = benchmark.run("bench_batched", batched = true, cycles = 2) { false }
 
         assertEquals(SwitchBenchmark.OK, outcome)
+        assertEquals("true", io.event("guided_bench_batch_reply")!!["setupOk"])
         assertEquals(2, io.commands.count { it == SwitchBenchmark.BATCH_SETUP })
         assertEquals(2, io.commands.count { it == SwitchBenchmark.BATCH_RESTORE })
         assertEquals(listOf("STBC 0", "<leave>"), io.commands.takeLast(2))
@@ -121,9 +128,11 @@ class SwitchBenchmarkTest {
         // An error part-way through ends a batch early.
         io.replies[SwitchBenchmark.BATCH_RESTORE] = "OK|OK|OK|?\r\r>"
 
-        benchmark.run("bench_batched", batched = true, cycles = 1) { false }
+        val outcome = benchmark.run("bench_batched", batched = true, cycles = 1) { false }
 
         assertEquals("true", io.event("guided_bench")!!["fellBack"])
+        assertEquals("restore_fallback", io.event("guided_bench")!!["failure"])
+        assertEquals(SwitchBenchmark.PARTIAL, outcome)
         assertEquals("the fallback, then the end", 2, io.commands.count { it == "<leave>" })
     }
 
@@ -132,11 +141,74 @@ class SwitchBenchmarkTest {
         batching()
         io.preamble = { listOf("A6|OK|?") }
 
-        benchmark.run("bench_batched", batched = true, cycles = 1) { false }
+        val outcome = benchmark.run("bench_batched", batched = true, cycles = 1) { false }
 
         val cycle = io.event("guided_bench")!!
         assertEquals("-1", cycle["firstFrameMs"])
         assertEquals("true", cycle["fellBack"])
+        assertEquals("setup_failed", cycle["failure"])
+        assertEquals(SwitchBenchmark.PARTIAL, outcome)
+    }
+
+    @Test
+    fun aBatchWhoseLastSetupCommandFailsIsNotATrial() {
+        batching()
+        // As many replies as the setup has, but the last is an error: STM never ran.
+        io.preamble = { listOf("A6|OK|OK|OK|OK|OK|OK|?") }
+
+        val outcome = benchmark.run("bench_batched", batched = true, cycles = 2) { false }
+
+        assertEquals(SwitchBenchmark.PARTIAL, outcome)
+        assertTrue(io.all("guided_bench").all { it["failure"] == "setup_failed" })
+        val summary = io.event("guided_bench_summary")!!
+        assertEquals("0", summary["validCycles"])
+        assertEquals("setup_failed:2", summary["failures"])
+        assertEquals("no medians from failed trials", "-1", summary["medianTotalMs"])
+        // Every batch that went wrong logs its replies.
+        assertEquals(2, io.all("guided_bench_batch_reply").size)
+        assertEquals("false", io.event("guided_bench_batch_reply")!!["setupOk"])
+    }
+
+    @Test
+    fun aSeparateSetupThatFailsIsNotATrial() {
+        bus.enterFails = "STP 61"
+
+        val outcome = benchmark.run("bench", batched = false, cycles = 2) { false }
+
+        assertEquals(SwitchBenchmark.PARTIAL, outcome)
+        assertEquals(0, io.commands.count { it == SwcanListenRunner.MONITOR_COMMAND })
+        assertEquals("setup_failed:2", io.event("guided_bench_summary")!!["failures"])
+    }
+
+    @Test
+    fun aStopWithoutAPromptIsNotATrial() {
+        io.stopPrompt = false
+
+        benchmark.run("bench", batched = false, cycles = 1) { false }
+
+        assertEquals("no_stop_prompt", io.event("guided_bench")!!["failure"])
+    }
+
+    @Test
+    fun aDroppedLinkLeavesTheAdapterStateUnknown() {
+        batching()
+        io.dropLinkAt = 500L
+
+        assertThrows(IOException::class.java) { benchmark.run("bench_batched", batched = true, cycles = 2) { false } }
+
+        assertEquals("bench_batched", io.event("guided_bus_state_unknown")!!["step"])
+    }
+
+    @Test
+    fun aBugMidBlockStillEndsBatchingAndRestoresHs() {
+        batching()
+        io.crashAt = 500L
+
+        assertThrows(IllegalStateException::class.java) {
+            benchmark.run("bench_batched", batched = true, cycles = 2) { false }
+        }
+
+        assertEquals(listOf("STBC 0", "<leave>"), io.commands.takeLast(2))
     }
 
     @Test
@@ -158,6 +230,7 @@ class SwitchBenchmarkTest {
 
         assertEquals(SwitchBenchmark.HS_FAILED, outcome)
         assertEquals(2, io.all("guided_bench").size)
+        assertTrue(io.all("guided_bench").all { it["failure"] == "hs_no_reply" })
     }
 
     @Test

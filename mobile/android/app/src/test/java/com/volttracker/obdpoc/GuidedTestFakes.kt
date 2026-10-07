@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import com.volttracker.obdpoc.engine.ElmConnection
 import com.volttracker.obdpoc.engine.GuidedCarTest
 import com.volttracker.obdpoc.engine.SwcanListenRunner
+import java.io.IOException
 
 /** Fake time for the guided-test fakes: only they move it. */
 class FakeClock {
@@ -15,8 +16,10 @@ class FakeClock {
 
 /**
  * The adapter and the car behind it, in fake time. Monitoring streams the frames queued with
- * [broadcast] as their time comes, and an idle tick (an empty line) every [TICK_MS] of silence;
- * commands take [commandMs] and answer from [replies] (or [replyQueue] first).
+ * [broadcast] as their time comes (and [heartbeat] every second), and an idle tick (an empty line)
+ * every [TICK_MS] of silence; after the stop byte it prints [stopTail], [STOP_LINE_MS] apart, to the
+ * drain. Commands take [commandMs] and answer from [replies] (or [replyQueue] first). [dropLinkAt]
+ * makes the link fail at a given time.
  */
 class FakeCarIo(
     private val clock: FakeClock,
@@ -36,12 +39,33 @@ class FakeCarIo(
     var stopMs = 60L
     var reinitCount = 0
     var stationary = true
+    var inPark = true
+    var motionNoted = 0
+
+    /** A body frame the car sends every second, or null for a silent car. */
+    var heartbeat: String? = null
+    private var nextBeatAt = 0L
+
+    /** What the adapter still prints after the stop byte (its queue). */
+    var stopTail: List<String> = emptyList()
+
+    /** False: the stop prompt never comes. */
+    var stopPrompt = true
+
+    /** The link drops (an IOException from the monitor) once fake time reaches this. */
+    var dropLinkAt: Long? = null
+
+    /** Thrown from the monitor once fake time reaches this: a bug, not a dropped link. */
+    var crashAt: Long? = null
 
     /** Lines the adapter prints first on each monitor, before any frame. */
     var preamble: (String) -> List<String> = { emptyList() }
 
     /** Once set, the next monitor ends by itself this long in (the adapter's buffer filling). */
     var endEarlyAfterMs: Long? = null
+
+    /** Every monitor ends by itself at once. */
+    var alwaysEndsAtOnce = false
 
     /** Called every tick while monitoring: a test's "driver" acting at a given time. */
     var onTick: (Long) -> Unit = {}
@@ -74,11 +98,16 @@ class FakeCarIo(
         listenMs: Long,
         stopTimeoutMs: Long,
         onLine: (String) -> Boolean,
+        onDrain: (String) -> Unit,
     ): ElmConnection.MonitorResult {
         commands += command
         val start = clock.now
         var listening = true
         for (line in preamble(command)) listening = onLine(line) && listening
+        if (alwaysEndsAtOnce) {
+            onLine("BUFFER FULL")
+            return ElmConnection.MonitorResult("", true, true, false)
+        }
         while (listening && clock.now - start < listenMs) {
             endEarlyAfterMs?.let { after ->
                 if (clock.now - start >= after) {
@@ -88,7 +117,15 @@ class FakeCarIo(
                 }
             }
             clock.advance(TICK_MS)
+            dropLinkAt?.let { if (clock.now >= it) throw IOException("Broken pipe") }
+            crashAt?.let { if (clock.now >= it) throw IllegalStateException("bug") }
             onTick(clock.now)
+            heartbeat?.let {
+                if (clock.now >= nextBeatAt) {
+                    broadcasts += clock.now to it
+                    nextBeatAt = clock.now + 1_000L
+                }
+            }
             val due = broadcasts.filter { it.first <= clock.now }
             broadcasts.removeAll(due)
             listening =
@@ -98,7 +135,13 @@ class FakeCarIo(
                     due.fold(true) { goOn, (_, line) -> onLine(line) && goOn }
                 }
         }
+        for (line in stopTail) {
+            clock.advance(STOP_LINE_MS)
+            onDrain(line)
+        }
         clock.advance(stopMs)
+        if (!stopPrompt) return ElmConnection.MonitorResult("", false, false, false)
+        onDrain("STOPPED")
         return ElmConnection.MonitorResult("STOPPED\r>", true, false, false)
     }
 
@@ -115,6 +158,13 @@ class FakeCarIo(
 
     override fun isStationary(): Boolean = stationary
 
+    override fun isInPark(): Boolean = inPark
+
+    override fun noteMotion() {
+        motionNoted += 1
+        inPark = false
+    }
+
     override fun logEvent(
         event: String,
         vararg pairs: String,
@@ -128,6 +178,7 @@ class FakeCarIo(
 
     companion object {
         const val TICK_MS = 250L
+        const val STOP_LINE_MS = 500L
     }
 }
 
@@ -157,12 +208,17 @@ class FakeBus(
     }
 }
 
-/** Speaks for 50 ms a character in fake time; [onSay] lets a test's "driver" react to an instruction. */
+/**
+ * Speaks for 50 ms a character in fake time; [onSay] lets a test's "driver" react to an instruction.
+ * [failed] scripts a phone that can't speak.
+ */
 class FakeVoice(
     private val clock: FakeClock,
 ) : GuidedCarTest.Voice {
     val said = mutableListOf<String>()
     var closed = false
+    var interrupts = 0
+    var failed = false
     var onSay: (String) -> Unit = {}
     private var speakingUntil = 0L
 
@@ -173,6 +229,13 @@ class FakeVoice(
     }
 
     override fun speaking(): Boolean = clock.now < speakingUntil
+
+    override fun failed(): Boolean = failed
+
+    override fun interrupt() {
+        interrupts += 1
+        speakingUntil = 0L
+    }
 
     override fun close() {
         closed = true

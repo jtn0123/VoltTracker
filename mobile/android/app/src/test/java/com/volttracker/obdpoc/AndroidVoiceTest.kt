@@ -87,6 +87,34 @@ class AndroidVoiceTest {
 
         assertFalse(voice.speaking())
         assertTrue(engine().isShutdown)
+        assertTrue("the test can see it", voice.failed())
+    }
+
+    @Test
+    fun aWorkingEngineHasNotFailed() {
+        val voice = AndroidVoice(context)
+        idle()
+        engine().onInitListener.onInit(TextToSpeech.SUCCESS)
+        voice.say("Lock the doors.")
+        idle()
+
+        assertFalse(voice.failed())
+    }
+
+    @Test
+    fun interruptDropsLinesStillWaiting() {
+        val voice = AndroidVoice(context)
+        voice.say("Open the hatch.")
+        idle()
+
+        voice.interrupt()
+        assertFalse(voice.speaking())
+        idle()
+        engine().onInitListener.onInit(TextToSpeech.SUCCESS)
+        voice.say("Test stopped.")
+        idle()
+
+        assertEquals("only what came after the interrupt", listOf("Test stopped."), engine().spokenTextList)
     }
 
     /** The usage the engine was given, read back through its hidden field (the shadow keeps none). */
