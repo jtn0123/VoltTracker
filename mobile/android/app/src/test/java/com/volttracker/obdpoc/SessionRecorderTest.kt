@@ -568,6 +568,36 @@ class SessionRecorderTest {
         assertFalse(text.contains("10 9"))
     }
 
+    /** An event that carries an adapter's reply keeps no more of it than the command log would. */
+    @Test
+    @Throws(InterruptedException::class)
+    fun aReplyInAnEventIsStoredLikeACommandsReply() {
+        val store = RecordingStore()
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-event-reply-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
+        recorder.logEvent("protocol_probe_pinned_miss", "command", "0100_atsp6_pinned", "response", "10 9\rNO DATA\r>")
+        recorder.logEvent("control_module_voltage_failed", "reason", "decode_failed", "raw", "C0 40 41\r>")
+        recorder.logCommand("ATDPN", 1_000L, 5L, "A6\r>")
+        recorder.logEvent("pid_parse_failed", "command", "0902", "response", "49 02 01 31 47 31\r>")
+        recorder.logEvent("mode01_batch_miss", "consecutiveMisses", "1", "response", "41 0D 00\r>")
+        recorder.logEvent("pid_parse_failed", "command", "010D", "response", "10 90 C0 40 41 42\r>")
+        recorder.closeSession("connected", "done", "0100", 1)
+        recorder.shutdown()
+
+        val text = sessionLogText(logsDir)
+        assertTrue(text.contains("[withheld] NO DATA"))
+        assertFalse(text.contains("10 9\\r"))
+        assertFalse(text.contains("C0 40 41"))
+        assertTrue(text.contains("[VIN redacted"))
+        assertFalse(text.contains("31 47 31"))
+        assertTrue("HS replies are kept", text.contains("41 0D 00"))
+        assertFalse("a body frame on HS is still withheld", text.contains("90 C0"))
+    }
+
     /** Sending the check proves nothing: only its answer (HS protocol 6, or a reset's banner) ends the off-HS stretch. */
     @Test
     @Throws(InterruptedException::class)

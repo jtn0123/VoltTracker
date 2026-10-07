@@ -6,6 +6,7 @@ import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.engine.CellVoltageProbeRunner
 import com.volttracker.obdpoc.engine.ElmConnection
 import com.volttracker.obdpoc.engine.EngineHost
+import com.volttracker.obdpoc.engine.GuidedCarTest
 import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.service.ObdService
 import org.junit.After
@@ -650,6 +651,44 @@ class ObdPollingEngineTest {
             sessionIdDuringRun,
             engine.sessionIdSeenAtFirstReconnect.get(),
         )
+    }
+
+    @Test
+    fun aDropAfterTheGuidedDriveHeardTheCarOffEndsTheSessionWithoutReconnecting() {
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "13.7V\r>"
+        fake.responses["010D"] = "41 0D 00\r>"
+        fake.responses["010C"] = "41 0C 0B B8\r>"
+        val atrvCalls = AtomicInteger()
+        fake.transactInterceptor =
+            TransactInterceptor { command ->
+                if ("ATRV" == command && atrvCalls.incrementAndGet() == 2) {
+                    // The guided drive heard the car switch off, then the link dropped.
+                    guidedDriveHeardOff()
+                    throw IOException("simulated socket drop")
+                }
+                null
+            }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertEquals("no reconnect to a car that switched off", 1, engine.openCount.get())
+        assertTrue(latestObdLogText().contains("ended_vehicle_off"))
+        assertTrue("connection must be closed at session end", fake.closeCalls.get() >= 1)
+        assertFalse("the end was taken once", engine.guidedTest.takeSessionEnd())
+    }
+
+    /**
+     * What the guided test is left with when its drive is cut after the car was heard switching
+     * off ([GuidedCarTestTest.aDriveCutAfterTheCarWasHeardOffEndsAsTheLinkDrops] runs that path).
+     */
+    private fun guidedDriveHeardOff() {
+        GuidedCarTest::class.java
+            .getDeclaredField("sessionEnds")
+            .apply { isAccessible = true }
+            .setBoolean(engine.guidedTest, true)
     }
 
     // ---- 3. Never-connected timeout -------------------------------------------------

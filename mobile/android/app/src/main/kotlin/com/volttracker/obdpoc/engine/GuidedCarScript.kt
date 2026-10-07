@@ -170,8 +170,9 @@ object GuidedCarScript {
             GuidedStep(
                 "intro",
                 GuidedStepKind.CONFIRM,
-                "Guided car test. Turn the phone's volume up, so you can hear me outside the car. The car " +
-                    "should be on and in Park, somewhere you can open every door, the hatch and the hood. I'll " +
+                "Guided car test. Turn the phone's volume up, so you can hear me outside the car. Park " +
+                    "outdoors with the parking brake on, and keep the key with you. The car should be on and in " +
+                    "Park, somewhere you can open every door, the hatch and the hood. I'll " +
                     "say each step once I'm listening for it. Do one thing at a time, and wait for me before " +
                     "the next. If you can hear me, tap I can hear it, on the Car tab.",
                 CONFIRM_MS,
@@ -256,7 +257,8 @@ object GuidedCarScript {
                 GuidedStep(
                     "drive",
                     GuidedStepKind.DRIVE,
-                    "Last part: drive normally for about twenty minutes. Live data pauses while I record. " +
+                    "Last part: drive normally for about twenty minutes, and leave the phone alone while you " +
+                        "drive. Live data pauses while I record. " +
                         "When you're done, park and turn the car off, and the test finishes by itself.",
                     35 * 60_000L,
                     GuidedExpect.isOneOf(SwcanField.POWER_MODE, *POWER_OFF_MODES),

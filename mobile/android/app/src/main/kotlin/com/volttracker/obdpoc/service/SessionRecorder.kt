@@ -371,12 +371,17 @@ class SessionRecorder {
         command: String?,
         response: String?,
     ): String {
-        val offBus = offHs || SwcanPrivacy.switchesProtocol(command)
-        val stored =
-            if (offBus) SwcanPrivacy.statusOnly(response) else ObdElmDecode.summarizeForStorage(command, response)
-        offHs = offBus && !SwcanPrivacy.confirmsHs(command, response)
+        offHs = offHs || SwcanPrivacy.switchesProtocol(command)
+        val stored = replyText(command, response)
+        offHs = offHs && !SwcanPrivacy.confirmsHs(command, response)
         return stored
     }
+
+    /** What of an adapter [response] to [command] an event may keep, by where the adapter is now. */
+    private fun replyText(
+        command: String?,
+        response: String?,
+    ): String = if (offHs) SwcanPrivacy.statusOnly(response) else ObdElmDecode.summarizeForStorage(command, response)
 
     fun logError(
         type: String?,
@@ -395,6 +400,10 @@ class SessionRecorder {
         }
     }
 
+    /**
+     * Logs [event] with its key/value [pairs]. A [REPLY_FIELDS] value is an adapter's reply, stored by
+     * the same rule as a command's ([replyText]): no event keeps what the command log withholds.
+     */
     fun logEvent(
         event: String?,
         vararg pairs: String?,
@@ -403,9 +412,16 @@ class SessionRecorder {
             val payload = JSONObject()
             try {
                 payload.put("event", event)
+                val command =
+                    pairs
+                        .toList()
+                        .chunked(2)
+                        .firstOrNull { it[0] == "command" }
+                        ?.getOrNull(1)
                 var i = 0
                 while (i + 1 < pairs.size) {
-                    payload.put(pairs[i] ?: "", pairs[i + 1])
+                    val key = pairs[i] ?: ""
+                    payload.put(key, if (key in REPLY_FIELDS) replyText(command, pairs[i + 1]) else pairs[i + 1])
                     i += 2
                 }
             } catch (ex: JSONException) {
@@ -663,6 +679,9 @@ class SessionRecorder {
 
     companion object {
         private const val TAG = "SessionRecorder"
+
+        /** Event fields that hold an adapter's reply (`pid_parse_failed`'s `response`, a probe's `raw`). */
+        private val REPLY_FIELDS = setOf("response", "raw")
 
         const val TELEMETRY_QUEUE_CAPACITY: Int = ObdPersistenceWorker.TELEMETRY_QUEUE_CAPACITY
         const val LIFECYCLE_QUEUE_CAPACITY: Int = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY

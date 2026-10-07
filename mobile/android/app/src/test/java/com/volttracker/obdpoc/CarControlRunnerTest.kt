@@ -399,6 +399,17 @@ class CarControlRunnerTest {
     }
 
     @Test
+    fun aFailedTransmitKeepsOnlyTheAdaptersOwnWords() {
+        // A body frame the adapter printed with its error stays out of the outcome.
+        io.transmitReply = "10 90 C0 40 41 42\rCAN ERROR\r\r>"
+        val sample = run(CarCommand.LOCK)
+        assertEquals("failed", sample.getString("carControlLastOutcome"))
+        val detail = sample.getString("carControlLastDetail")
+        assertTrue(detail, detail.contains("[withheld] CAN ERROR"))
+        assertFalse(detail.contains("90 C0"))
+    }
+
+    @Test
     fun stoppedSessionMidCommandFails() {
         io.pauseOk = false
         val sample = run(CarCommand.REMOTE_START)
