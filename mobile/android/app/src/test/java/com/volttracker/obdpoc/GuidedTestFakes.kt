@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.engine.ElmConnection
 import com.volttracker.obdpoc.engine.GuidedCarTest
+import com.volttracker.obdpoc.engine.ParkedDetector
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import java.io.IOException
 
@@ -45,6 +46,9 @@ class FakeCarIo(
 
     /** What [motionCount] answers: a test bumps it for motion HS polling saw. */
     var motions = 0L
+
+    /** Set: Park and motion come from this real detector (in fake time) instead of [inPark] and [motions]. */
+    var detector: ParkedDetector? = null
 
     /** A body frame the car sends every second, or null for a silent car. */
     var heartbeat: String? = null
@@ -169,18 +173,19 @@ class FakeCarIo(
 
     override fun isStationary(): Boolean = stationary
 
-    override fun isInPark(): Boolean = inPark
+    override fun isInPark(): Boolean = detector?.isInPark(clock.now) ?: inPark
 
     override fun requestGearRead() {
         gearReads += 1
     }
 
-    override fun motionCount(): Long = motions
+    override fun motionCount(): Long = detector?.motionCount() ?: motions
 
     override fun noteMotion() {
         motionNoted += 1
         motions += 1
         inPark = false
+        detector?.moved(clock.now)
     }
 
     override fun logEvent(

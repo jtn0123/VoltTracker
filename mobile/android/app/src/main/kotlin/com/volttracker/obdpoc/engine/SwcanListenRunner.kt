@@ -175,8 +175,8 @@ class SwcanListenRunner(
         val tireHuntIntervalMs: Long = 30_000L,
         val tireHuntMaxWindows: Int = 20,
         /**
-         * The first window after connect. The car broadcasts tire pressures about once a drive, and
-         * the one time a window caught them at the start it was 0.5 min in (2026-10-04).
+         * The first window after connect. The car broadcasts tire pressures rarely (how often isn't
+         * known yet), and the one time a window caught them at the start it was 0.5 min in (2026-10-04).
          */
         val startupListenMs: Long = 10_000L,
         /** Car tab open and parked: one long window after every HS poll cycle. */

@@ -40,7 +40,8 @@ internal fun monotonicNowMs(): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoT
  * coverage and anything that made the capture partial. A dropped link logs the listen as
  * `interrupted` with the chunk it was in, and the adapter's state as unknown until the reconnect's
  * re-init; the test outlives the reconnect (the runner keeps it across
- * [SwcanListenRunner.resetSession]) and runs the step again.
+ * [SwcanListenRunner.resetSession]) and runs the step again, unless it was the drive and the car had
+ * been heard switching off: then the test ends there, and so does the session.
  *
  * It first checks that the driver can hear the phone (a tap on "I can hear it") and that the body
  * bus is heard; Skip can't pass over that check. Before each parked step the gear is read afresh
@@ -132,6 +133,9 @@ class GuidedCarTest(
         var restored: Boolean? = null
         var moved = false
 
+        /** Wheels turning in a line read after the step ended: the result stands, but Park and car-off no longer do. */
+        var lateMotion = false
+
         /** Monitor time before each run was heard working (its first frame or quiet tick): not coverage. */
         var startupMs = 0L
         private var runHeardAt = -1L
@@ -192,8 +196,9 @@ class GuidedCarTest(
                     break
                 }
                 // The adapter stopped monitoring by itself (its buffer full): pick up where it left
-                // off, unless it keeps doing so at once.
+                // off, unless it keeps doing so at once. What it sent meanwhile was missed.
                 restarts += 1
+                partial += "monitor_restarted"
                 quickRuns = if (runEnd - runStart < QUICK_RUN_MS) quickRuns + 1 else 0
                 if (quickRuns >= MAX_QUICK_RUNS) {
                     partial += "monitor_stuck"
@@ -216,11 +221,17 @@ class GuidedCarTest(
             coverage += (runHeardAt - startedAt) to (end - startedAt)
         }
 
-        /** The car was heard switching off, but its shutdown wasn't recorded for the whole [SHUTDOWN_CAPTURE_MS]. */
-        fun shutdownShort(): Boolean =
-            (step.kind == GuidedStepKind.POWER_OFF || step.kind == GuidedStepKind.DRIVE) &&
-                heardAt >= 0 &&
-                endedAt - heardAt < SHUTDOWN_CAPTURE_MS
+        /**
+         * The car was heard switching off, but its shutdown wasn't recorded for the whole
+         * [SHUTDOWN_CAPTURE_MS]: the listen ended sooner, or a gap between monitor runs falls in it.
+         */
+        fun shutdownShort(): Boolean {
+            if (step.kind != GuidedStepKind.POWER_OFF && step.kind != GuidedStepKind.DRIVE || heardAt < 0) return false
+            val from = heardAt - startedAt
+            val to = from + SHUTDOWN_CAPTURE_MS
+            return endedAt - heardAt < SHUTDOWN_CAPTURE_MS ||
+                coverage.zipWithNext().any { (a, b) -> a.second < to && b.first > from }
+        }
 
         /** The longest the listen may run: speech, the step's time, and the capture after what it waits for. */
         private fun capMs(): Long {
@@ -327,10 +338,20 @@ class GuidedCarTest(
                 ) {
                     heardAt = now
                 }
-                if (!drained && step.phase != GuidedPhase.DRIVING && isMoving(reading)) moved = true
-                if (!drained && reading.field == SwcanField.POWER_MODE) notePowerMode(reading.value, now)
+                if (step.phase != GuidedPhase.DRIVING && isMoving(reading)) {
+                    if (drained) noteLateMotion() else moved = true
+                }
+                if (reading.field == SwcanField.POWER_MODE) notePowerMode(reading.value, now, drained)
                 lastSeen[reading.field] = reading.value
             }
+        }
+
+        /** Late, the step's result can't change, but whatever Park or car-off said before no longer holds. */
+        private fun noteLateMotion() {
+            if (lateMotion) return
+            lateMotion = true
+            offAt = -1L
+            io.noteMotion()
         }
 
         private fun isMoving(reading: SwcanReading): Boolean =
@@ -416,8 +437,6 @@ class GuidedCarTest(
     private var failedEnters = 0
     private var driveStartedAt = -1L
 
-    /** A drive listen heard the car switch off before the link dropped: the drive is over. */
-    private var driveOffHeard = false
     private var parkWaitSince = -1L
     private var parkPrompted = false
 
@@ -534,7 +553,6 @@ class GuidedCarTest(
         failedRestores = 0
         failedEnters = 0
         driveStartedAt = -1L
-        driveOffHeard = false
         parkWaitSince = -1L
         parkPrompted = false
         offAt = -1L
@@ -587,16 +605,20 @@ class GuidedCarTest(
             else -> null
         }
 
-    /** A power mode the body bus said: off or accessory starts (or renews) the car-off evidence, anything else ends it. */
+    /**
+     * A power mode the body bus said: off or accessory starts (or renews) the car-off evidence,
+     * anything else ends it. A [late] one, read after its step ended, can only end it.
+     */
     private fun notePowerMode(
         mode: Any,
         now: Long,
+        late: Boolean,
     ) {
-        if (mode in OFF_POWER_MODES) {
+        if (mode !in OFF_POWER_MODES) {
+            offAt = -1L
+        } else if (!late) {
             offAt = now
             motionsAtOff = io.motionCount()
-        } else {
-            offAt = -1L
         }
     }
 
@@ -637,13 +659,6 @@ class GuidedCarTest(
 
     @Throws(IOException::class)
     private fun runDrive(step: GuidedStep) {
-        if (driveOffHeard) {
-            // The car was heard switching off before the link dropped: the drive is over, its
-            // shutdown only partly recorded.
-            sessionEnds = true
-            next(SHUTDOWN_SHORT)
-            return
-        }
         showStep(step, DRIVE_NOTE)
         // Said until the drive is underway: a listen picked up again after that carries on quietly.
         val listen = listen(step, if (driveStartedAt < 0) step.say else "")
@@ -751,11 +766,17 @@ class GuidedCarTest(
         ex: Exception,
     ) {
         if (listen.endedAt < 0) listen.endedAt = clock()
-        if (listen.step.kind == GuidedStepKind.DRIVE && listen.heardAt >= 0) driveOffHeard = true
         listen.partial += "interrupted"
         listen.flush(clock())
         logListen(listen.step, listen, INTERRUPTED, ex.javaClass.simpleName)
         io.logEvent("guided_bus_state_unknown", "step", listen.step.id, "error", ex.javaClass.simpleName)
+        if (listen.step.kind == GuidedStepKind.DRIVE && listen.heardAt >= 0) {
+            // The car was heard switching off: the drive is over, its shutdown only partly recorded.
+            // Finished now, so the session ends without waiting on a reconnect the switched-off car
+            // may never answer ([takeSessionEnd], asked by the engine as the link drops).
+            sessionEnds = true
+            next(SHUTDOWN_SHORT)
+        }
     }
 
     @Throws(IOException::class)
@@ -936,6 +957,7 @@ class GuidedCarTest(
                     "gotPrompt" to (listen.gotPrompt?.toString() ?: UNKNOWN),
                     "restored" to (listen.restored?.toString() ?: UNKNOWN),
                     "moved" to listen.moved.toString(),
+                    "lateMotion" to listen.lateMotion.toString(),
                 )
         }
         io.logEvent("guided_step", *fields.flatMap { listOf(it.first, it.second) }.toTypedArray())

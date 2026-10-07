@@ -53,7 +53,8 @@ class SessionRecorder {
     private var currentHeader = ""
 
     // True while the adapter is off HS (from an `STP` protocol switch, or a body-bus monitor, until a
-    // protocol check `ATDPN` or a reset): replies stored then keep only the adapter's status words.
+    // reply proves it back: `ATDPN` answering 6, or a reset's banner): replies stored then keep only
+    // the adapter's status words.
     private var offHs = false
     private var lastPersistedStatusKey = ""
     private var lastPersistedStatusAtMs = 0L
@@ -362,24 +363,18 @@ class SessionRecorder {
 
     /**
      * What of [response] may be stored: [SwcanPrivacy.statusOnly] while the adapter is off HS, where
-     * a reply can hold a bus frame or a fragment of one, else the usual summary. Each piece of a `|`
-     * batch counts: a protocol switch anywhere in it makes the whole reply status-only, and the last
-     * switch or protocol check in it decides where the adapter is left.
+     * a reply can hold a bus frame or a fragment of one, else the usual summary. A protocol switch
+     * anywhere in a `|` batch makes its whole reply status-only, and the adapter counts as back on HS
+     * only once a reply proves it ([SwcanPrivacy.confirmsHs]), not because a check was sent.
      */
     private fun storedReply(
         command: String?,
         response: String?,
     ): String {
-        val pieces =
-            command
-                .orEmpty()
-                .uppercase(Locale.US)
-                .split('|')
-                .map { it.replace(" ", "") }
-        val offBus = offHs || pieces.any { STN_PROTOCOL.matches(it) }
+        val offBus = offHs || SwcanPrivacy.switchesProtocol(command)
         val stored =
             if (offBus) SwcanPrivacy.statusOnly(response) else ObdElmDecode.summarizeForStorage(command, response)
-        pieces.lastOrNull { STN_PROTOCOL.matches(it) || it in HS_CHECKED }?.let { offHs = it !in HS_CHECKED }
+        offHs = offBus && !SwcanPrivacy.confirmsHs(command, response)
         return stored
     }
 
@@ -668,12 +663,6 @@ class SessionRecorder {
 
     companion object {
         private const val TAG = "SessionRecorder"
-
-        /** An STN protocol switch (`STP 61`), not a transmit (`STPX`) or `STPO`. */
-        private val STN_PROTOCOL = Regex("STP[0-9A-F]+")
-
-        /** The protocol check that ends every HS restore, and the resets. */
-        private val HS_CHECKED = setOf("ATDPN", "ATZ", "ATWS")
 
         const val TELEMETRY_QUEUE_CAPACITY: Int = ObdPersistenceWorker.TELEMETRY_QUEUE_CAPACITY
         const val LIFECYCLE_QUEUE_CAPACITY: Int = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY

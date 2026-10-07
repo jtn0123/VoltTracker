@@ -201,6 +201,54 @@ object SwcanPrivacy {
     /** What stands in for a reply, or part of one, that may hold bus data. */
     const val WITHHELD = "[withheld]"
 
+    /** True when [command], or any piece of a `|` batch of commands, switches the adapter's protocol (`STP 61`). */
+    @JvmStatic
+    fun switchesProtocol(command: String?): Boolean = commandPieces(command).any { STN_PROTOCOL.matches(it) }
+
+    /**
+     * Whether [response] shows the adapter back on HS: [command]'s last protocol switch or check
+     * (each piece of a `|` batch counts) is a protocol check that answered HS protocol 6 (`6`, `A6`),
+     * or a reset (`ATZ`, `ATWS`) that printed the adapter's banner. A batch counts only when every
+     * command in it answered: an error ends a batch early, before its check has run. False for a
+     * protocol switch, no check, a reply cut short, or any other answer: sending a check proves
+     * nothing until it is answered.
+     */
+    @JvmStatic
+    fun confirmsHs(
+        command: String?,
+        response: String?,
+    ): Boolean {
+        val pieces = commandPieces(command)
+        val at = pieces.indexOfLast { STN_PROTOCOL.matches(it) || it in HS_CHECKS }
+        if (at < 0 || STN_PROTOCOL.matches(pieces[at])) return false
+        val replies =
+            response
+                .orEmpty()
+                .split('\r', '\n')
+                .map { it.replace(">", "").trim() }
+                .lastOrNull { it.isNotEmpty() }
+                ?.split('|')
+                ?.map { it.trim().uppercase(Locale.US) }
+        if (replies == null || replies.size != pieces.size) return false
+        val reply = replies[at]
+        return if (pieces[at] == "ATDPN") HS_PROTOCOL_REPLY.matches(reply) else RESET_BANNER.matches(reply)
+    }
+
+    private fun commandPieces(command: String?): List<String> =
+        command
+            .orEmpty()
+            .uppercase(Locale.US)
+            .split('|')
+            .map { it.replace(" ", "") }
+
+    /** An STN protocol switch (`STP 61`), not a transmit (`STPX`) or `STPO`. */
+    private val STN_PROTOCOL = Regex("STP[0-9A-F]+")
+
+    /** The protocol check that ends every HS restore, and the resets. */
+    private val HS_CHECKS = setOf("ATDPN", "ATZ", "ATWS")
+    private val HS_PROTOCOL_REPLY = Regex("A?6")
+    private val RESET_BANNER = Regex("(ELM327|STN[0-9]{4}) V.*")
+
     private val STATUS_WORD =
         Regex(
             "OK|\\?|STOPPED|NO DATA|SEARCHING\\.*|UNABLE TO CONNECT|BUS INIT\\.*|BUS BUSY|BUFFER FULL|" +

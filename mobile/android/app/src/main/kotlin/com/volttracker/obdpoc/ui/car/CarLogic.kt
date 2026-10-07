@@ -161,8 +161,9 @@ fun aux12Tile(drive: DriveUiState): CarTile {
  * and outside temperatures, and a running remote start. The A/C reading is the climate control's
  * request for the compressor, so it is only "on" when the compressor is seen drawing power;
  * requested with the compressor idle or not reported, it says so. The compressor drawing power
- * with no request (it also cools the battery) reads as the compressor running, not as the A/C off.
- * Before the A/C has reported, the cabin temperature leads instead.
+ * with no request (it also cools the battery) reads as the compressor running, not as the A/C off,
+ * and no request with the compressor not reported reads "not requested": only a measured idle
+ * compressor makes it "A/C off". Before the A/C has reported, the cabin temperature leads instead.
  */
 fun climateTile(
     drive: DriveUiState,
@@ -198,16 +199,18 @@ fun climateTile(
                 lines,
                 tone,
             )
-        !ac -> CarTile("A/C off", "", lines, tone)
-        else -> CarTile("A/C", " requested", lines, tone)
+        ac -> CarTile("A/C", " requested", lines, tone)
+        car.acKw == null -> CarTile("A/C", " not requested", lines, tone)
+        else -> CarTile("A/C off", "", lines, tone)
     }
 }
 
 /**
  * The tyres tile: the average against the placard, or the lowest tyre when any is low. The car
- * sends the pressures about once a drive, so until it does this drive the last ones read show,
- * with when they were read, and without calling them normal: they may have changed since. A
- * sensor the car flags not valid blanks the tile and says which.
+ * sends the pressures rarely (heard once in the one drive listened through so far; how often it
+ * sends them isn't known yet), so until they are heard this drive the last ones read show, with
+ * when they were read, and without calling them normal: they may have changed since. A sensor the
+ * car flags not valid blanks the tile and says which.
  */
 fun tiresTile(
     drive: DriveUiState,
@@ -263,7 +266,7 @@ private val TIRE_CODE_NAMES =
 
 /**
  * "Read 18 min ago" once the pressures are older than a broadcast stays fresh. The car sends them
- * about once a drive, so they hold until the next session instead of clearing.
+ * rarely (how often isn't known yet), so they hold until the next session instead of clearing.
  */
 private fun CarUiState.tiresReadLine(): String? {
     val age = nowMs - (seenAtMs[BodyGroup.TIRES] ?: return null)

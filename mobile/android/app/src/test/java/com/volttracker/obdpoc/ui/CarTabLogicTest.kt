@@ -168,11 +168,16 @@ class CarTabLogicTest {
 
     @Test
     fun climateLeadsWithTheAirConditioningThenFanAndTemperatures() {
-        val off = climateTile(parked, car)
+        // No A/C request and no compressor power read: not asked for, but the compressor may run.
+        val unasked = climateTile(parked, car)
+        assertEquals("A/C", unasked.value)
+        assertEquals(" not requested", unasked.unit)
+        assertEquals(listOf("Cabin 70°F · Outside 64°F"), unasked.lines)
+        assertEquals(PillTone.NEUTRAL, unasked.tone)
+        // "A/C off" only once the compressor reads no power.
+        val off = climateTile(parked, car.copy(acKw = 0.0))
         assertEquals("A/C off", off.value)
         assertEquals("", off.unit)
-        assertEquals(listOf("Cabin 70°F · Outside 64°F"), off.lines)
-        assertEquals(PillTone.NEUTRAL, off.tone)
         val on =
             climateTile(
                 parked,

@@ -718,8 +718,8 @@ class LiveUiStateStore(
     }
 
     /**
-     * The four pressures, held for the drive: unlike the other broadcasts the car sends them about
-     * once a drive (see [com.volttracker.obdpoc.SwcanReadings]), so their age doesn't clear them.
+     * The four pressures, held for the drive: unlike the other broadcasts the car sends them rarely
+     * (see [com.volttracker.obdpoc.SwcanReadings]), so their age doesn't clear them.
      * The Car tab says how old they are. A sensor the car flags not valid clears them: the old
      * pressure can't stand in for a wheel the car no longer reads.
      */

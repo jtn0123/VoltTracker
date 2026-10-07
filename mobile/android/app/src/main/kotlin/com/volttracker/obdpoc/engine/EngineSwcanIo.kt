@@ -57,7 +57,7 @@ internal class EngineSwcanIo(
 
     override fun requestGearRead() = pidPolling.pollSoon(ParkedDetector.GEAR_COMMAND)
 
-    override fun noteMotion() = parked.moved()
+    override fun noteMotion() = parked.moved(System.currentTimeMillis())
 
     override fun openVoice(): GuidedCarTest.Voice = AndroidVoice(host.androidContext)
 

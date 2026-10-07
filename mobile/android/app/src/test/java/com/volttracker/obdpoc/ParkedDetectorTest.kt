@@ -88,13 +88,36 @@ class ParkedDetectorTest {
         assertFalse("a fresh gear other than Park", detector.isInPark(3_000L))
 
         detector.observe(0.0, "P", 0L, 4_000L)
-        detector.moved()
+        detector.moved(4_000L)
         assertFalse("the body bus saw the wheels turn", detector.isInPark(4_000L))
         assertFalse(detector.isParked(4_000L))
 
         detector.observe(0.0, "P", 0L, 5_000L)
-        detector.reset()
+        detector.reset(5_000L)
         assertFalse(detector.isInPark(5_000L))
+    }
+
+    @Test
+    fun aParkAnsweredBeforeTheLastMotionDoesNotCount() {
+        // The gear PID answered Park at 0 and then went quiet: later samples carry that answer forward.
+        detector.observe(0.0, "P", 0L, 0L)
+        detector.moved(1_000L)
+        detector.observe(0.0, "P", 2_000L, 2_000L)
+        assertFalse("the body bus saw the wheels turn after that Park", detector.isInPark(2_000L))
+        detector.observe(0.0, "P", 0L, 3_000L)
+        assertTrue("a Park answered since counts", detector.isInPark(3_000L))
+
+        detector.observe(3.0, "P", 4_000L, 4_000L)
+        detector.observe(0.0, "P", 5_000L, 5_000L)
+        assertFalse("a speed after the last Park answer", detector.isInPark(5_000L))
+        detector.observe(0.0, "P", 0L, 6_000L)
+        assertTrue(detector.isInPark(6_000L))
+
+        detector.reset(7_000L)
+        detector.observe(0.0, "P", 2_000L, 8_000L)
+        assertFalse("answered before the reset", detector.isInPark(8_000L))
+        detector.observe(0.0, "P", 0L, 9_000L)
+        assertTrue(detector.isInPark(9_000L))
     }
 
     @Test
@@ -108,9 +131,9 @@ class ParkedDetectorTest {
         assertEquals("a speed", parked + 1, detector.motionCount())
         detector.observe(0.0, "D", 0L, 4_000L)
         assertEquals("a gear out of Park", parked + 2, detector.motionCount())
-        detector.moved()
+        detector.moved(5_000L)
         assertEquals("the body bus", parked + 3, detector.motionCount())
-        detector.reset()
+        detector.reset(6_000L)
         assertEquals("a reset: what happened meanwhile wasn't seen", parked + 4, detector.motionCount())
     }
 
@@ -127,7 +150,7 @@ class ParkedDetectorTest {
         detector.observe(Double.NaN, "P", 0L, 0L)
         assertFalse(detector.isParked(0L))
         detector.observe(0.0, "P", 0L, 1_000L)
-        detector.reset()
+        detector.reset(1_000L)
         assertFalse(detector.isParked(1_000L))
     }
 }

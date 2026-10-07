@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.engine.SwcanListenRunner
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -101,6 +103,42 @@ class SwcanPrivacyTest {
         assertEquals(null, SwcanPrivacy.statusWord("C8"))
         assertEquals(null, SwcanPrivacy.statusWord("10 24"))
         assertEquals(null, SwcanPrivacy.statusWord("OK 10"))
+    }
+
+    @Test
+    fun onlyAReplyProvesTheAdapterBackOnHs() {
+        assertTrue(SwcanPrivacy.confirmsHs("ATDPN", "A6\r>"))
+        assertTrue(SwcanPrivacy.confirmsHs("ATDPN", "ATDPN\r6\r\r>"))
+        assertFalse("another protocol", SwcanPrivacy.confirmsHs("ATDPN", "A0\r>"))
+        assertFalse(SwcanPrivacy.confirmsHs("ATDPN", "NO DATA\r>"))
+        assertFalse("no answer yet", SwcanPrivacy.confirmsHs("ATDPN", null))
+        assertFalse("still on the body bus", SwcanPrivacy.confirmsHs("ATDPN", "10 90 C0 40 41 42\r>"))
+        assertTrue(SwcanPrivacy.confirmsHs("ATZ", "ATZ\r\rELM327 v1.4b\r\r>"))
+        assertTrue(SwcanPrivacy.confirmsHs("ATWS", "ELM327 v1.4b\r>"))
+        assertFalse("a reset cut off before its banner", SwcanPrivacy.confirmsHs("ATZ", "\r>"))
+        assertFalse("no check sent", SwcanPrivacy.confirmsHs("ATH0", "OK\r>"))
+        assertFalse(SwcanPrivacy.confirmsHs("STP 61", "OK\r>"))
+    }
+
+    @Test
+    fun aBatchProvesHsOnlyWhenItsCheckRanAndAnswered() {
+        val restore = (SwcanListenRunner.RESTORE_COMMANDS + "ATDPN").joinToString("|")
+        val oks = SwcanListenRunner.RESTORE_COMMANDS.joinToString("|") { "OK" }
+        assertTrue(SwcanPrivacy.confirmsHs(restore, "$oks|A6\r>"))
+        assertFalse("an error ended the batch before its check", SwcanPrivacy.confirmsHs(restore, "OK|OK|?\r>"))
+        assertFalse("the check answered another protocol", SwcanPrivacy.confirmsHs(restore, "$oks|A0\r>"))
+        assertFalse("a switch after the check", SwcanPrivacy.confirmsHs("ATDPN|STP 61", "A6|OK\r>"))
+        assertTrue("a check after the switch", SwcanPrivacy.confirmsHs("STP 61|ATDPN", "OK|A6\r>"))
+    }
+
+    @Test
+    fun aProtocolSwitchIsFoundInAnyPieceOfABatch() {
+        assertTrue(SwcanPrivacy.switchesProtocol("STP 61"))
+        assertTrue(SwcanPrivacy.switchesProtocol("ATDPN|stp33"))
+        assertFalse("a transmit", SwcanPrivacy.switchesProtocol("STPX h:7E0, d:0100"))
+        assertFalse(SwcanPrivacy.switchesProtocol("STPO"))
+        assertFalse(SwcanPrivacy.switchesProtocol("ATSP6"))
+        assertFalse(SwcanPrivacy.switchesProtocol(null))
     }
 
     @Test

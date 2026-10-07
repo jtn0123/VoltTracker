@@ -12,8 +12,10 @@ import org.json.JSONObject
  *
  * [isInPark] is stricter, for the guided test's walk-round steps: Park read in the last
  * [parkFreshMs] (the test asks for that read, [GEAR_COMMAND]), at a standstill, and nothing since (a
- * fresh speed above a standstill, a fresh gear other than Park, or [moved]) has shown the car leaving
- * it. An older Park is not kept: whatever the car did since was not seen. [motionCount] counts every
+ * fresh speed above a standstill, a fresh gear other than Park, [moved], or a [reset]) has shown the
+ * car leaving it. An older Park is not kept: whatever the car did since was not seen. Nor is a Park
+ * answered before the last sign of motion, however recent: the gear's last answer is carried forward
+ * in later samples, and it says nothing about where the car stopped. [motionCount] counts every
  * sign of motion, so a caller can tell whether there has been any since it last looked.
  *
  * Only touched on the polling thread.
@@ -29,13 +31,17 @@ class ParkedDetector(
     private var inPark = false
     private var motions = 0L
 
-    fun reset() {
+    /** When anything last showed the car moving (or a reset hid it): only a Park answered after it counts. */
+    private var motionAtMs = Long.MIN_VALUE
+
+    fun reset(now: Long) {
         stillSinceMs = NOT_STILL
         gear = ""
         gearAtMs = 0L
         inPark = false
         // What the car did meanwhile wasn't seen: a caller comparing [motionCount] must not assume nothing.
         motions += 1
+        motionAtMs = now
     }
 
     /**
@@ -61,11 +67,14 @@ class ParkedDetector(
             gearAtMs = now - maxOf(0L, gearAgeMs)
         }
         val moving = !speedKph.isNaN() && !still || freshGear && gearLetter != VoltGear.PARK
-        if (moving) motions += 1
+        if (moving) {
+            motions += 1
+            motionAtMs = now
+        }
         inPark =
             when {
                 moving -> false
-                freshGear && still -> true
+                freshGear && still && gearAtMs > motionAtMs -> true
                 else -> inPark
             }
     }
@@ -94,9 +103,10 @@ class ParkedDetector(
     /** How many times anything has shown the car moving or out of Park. */
     fun motionCount(): Long = motions
 
-    /** Something other than HS polling (the body bus's wheel speeds) saw the car move. */
-    fun moved() {
+    /** Something other than HS polling (the body bus's wheel speeds) saw the car move at [now]. */
+    fun moved(now: Long) {
         motions += 1
+        motionAtMs = now
         inPark = false
         stillSinceMs = NOT_STILL
     }

@@ -139,7 +139,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
-        parkedDetector.reset()
+        parkedDetector.reset(System.currentTimeMillis())
         lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
@@ -271,6 +271,8 @@ open class ObdPollingEngine(
                     }
                     return
                 } catch (ex: IOException) {
+                    // The guided test's drive heard the car switch off before the link dropped: it is over.
+                    if (swcanListener.endsSession()) return endForVehicleSleep()
                     if (!handleAttemptFailure(retry, ex, attemptStart)) {
                         return
                     }
@@ -805,11 +807,7 @@ open class ObdPollingEngine(
             pidPolling.msSinceLastLiveData().toString(),
         )
         service.clearLastFailureClass()
-        service.broadcastStatus(
-            "idle",
-            "Car went to sleep — stopped logging. Your drive was saved.",
-            false,
-        )
+        service.broadcastStatus("idle", "Car went to sleep — stopped logging. Your drive was saved.", false)
         service.stopSelfFromRunner()
     }
 

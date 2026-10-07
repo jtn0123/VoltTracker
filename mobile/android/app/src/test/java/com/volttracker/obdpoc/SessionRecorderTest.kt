@@ -568,6 +568,41 @@ class SessionRecorderTest {
         assertFalse(text.contains("10 9"))
     }
 
+    /** Sending the check proves nothing: only its answer (HS protocol 6, or a reset's banner) ends the off-HS stretch. */
+    @Test
+    @Throws(InterruptedException::class)
+    fun aCheckThatDoesNotAnswerHsKeepsRepliesToStatusWords() {
+        val store = RecordingStore()
+        val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-hs-proof-" + System.nanoTime())
+        logsDir.mkdirs()
+        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
+
+        recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
+        // A restore batch an error ended before its check ran.
+        recorder.logCommand("ATH0|ATS0|ATDPN", 1_000L, 5L, "OK|?\r>")
+        recorder.logCommand("ATS1", 1_000L, 5L, "10 90 C0\rOK\r>")
+        // A check that answered another protocol, then one cut off before its answer.
+        recorder.logCommand("ATDPN", 1_000L, 5L, "A0\r>")
+        recorder.logCommand("ATDPN", 1_000L, 5L, "")
+        recorder.logCommand("ATS1", 1_000L, 5L, "10 90 C0\rOK\r>")
+        // A reset's banner does prove it.
+        recorder.logCommand("ATZ", 1_000L, 5L, "ATZ\r\rELM327 v1.4b\r\r>")
+        recorder.logCommand("010C", 1_000L, 5L, "41 0C 1A F8\r>")
+        recorder.closeSession("connected", "done", "0100", 1)
+        recorder.shutdown()
+
+        val stored =
+            store.pidObservationCalls.map {
+                it.payload!!.optString("command") to
+                    it.payload.optString("rawResponse")
+            }
+        assertEquals("[withheld] OK", stored[2].second)
+        assertEquals("[withheld] OK", stored[5].second)
+        assertEquals("010C" to "41 0C 1A F8", stored.last())
+        assertFalse(sessionLogText(logsDir).contains("90 C0"))
+    }
+
     @Test
     @Throws(InterruptedException::class)
     fun scanModeBatchesPidObservationsUntilShutdown() {
