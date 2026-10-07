@@ -254,6 +254,7 @@ class ComposeDashboardActivity :
                             onCarControlsEnabled = { carControls.setEnabled(it) },
                             onBodyTest = ::startBodyTest,
                             onTireTest = ::startTireTest,
+                            onGuidedTest = if (BuildConfig.DEBUG) ::guidedTest else null,
                             onCarTabShown = { bodyFocus.setCarTabShown(it) },
                             onScanCodes = { dtc.scan() },
                             onClearCodes = { dtc.clear() },
@@ -435,6 +436,20 @@ class ComposeDashboardActivity :
             ConnectAction.CONNECT -> startObdService(ObdService.ACTION_CONNECT, address, deviceCatalog.lastName())
         }
         return true
+    }
+
+    /** Debug builds: `start`, `skip` or `stop` the spoken guided car test (see GuidedCarTest). */
+    internal fun guidedTest(op: String) {
+        try {
+            startService(
+                Intent(this, ObdService::class.java)
+                    .setAction(ObdService.ACTION_GUIDED_TEST)
+                    .putExtra(ObdService.EXTRA_GUIDED_OP, op),
+            )
+            if (op == "start") showMessage("Guided car test starting. Turn the volume up and follow the voice.")
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "guided test dispatch failed", ex)
+        }
     }
 
     /** Asks the live session for a one-minute body-bus listen (see SwcanListenRunner). */

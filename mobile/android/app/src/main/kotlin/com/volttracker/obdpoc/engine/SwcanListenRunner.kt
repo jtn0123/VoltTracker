@@ -64,6 +64,27 @@ class SwcanListenRunner(
             stopTimeoutMs: Long,
         ): ElmConnection.MonitorResult
 
+        /**
+         * [monitor], each output line handed over as it arrives ([ElmConnection.monitorStream]).
+         * This default runs [monitor] and replays its lines, enough for fakes that time nothing.
+         */
+        @Throws(IOException::class)
+        fun monitorStream(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            onLine: (String) -> Boolean,
+        ): ElmConnection.MonitorResult {
+            val result = monitor(command, listenMs, stopTimeoutMs)
+            for (line in result.text.split('\r', '\n', '>')) {
+                if (line.isNotEmpty() && !onLine(line)) break
+            }
+            return result
+        }
+
+        /** The guided car test's spoken instructions; none by default. */
+        fun openVoice(): GuidedCarTest.Voice? = null
+
         /** Full adapter reset + HS init (ATZ …), used when HS state cannot be trusted. */
         @Throws(IOException::class)
         fun reinitialize()
@@ -209,6 +230,30 @@ class SwcanListenRunner(
     /** Until when the Car tab wants near-continuous listening; set from the service thread. */
     @Volatile private var focusUntilMs = 0L
 
+    /** The guided car test. It outlives [resetSession], so a reconnect picks it up at the same step. */
+    val guidedTest = GuidedCarTest(io, GuidedBus(), clock = clock)
+
+    /** The guided test's bus switch: the same checks, setup and restore as a window. */
+    private inner class GuidedBus : GuidedCarTest.Bus {
+        override fun canListen(): Boolean? = if (identity == Identity.UNKNOWN) null else identity == Identity.STN
+
+        override fun enter(): String? =
+            if (currentProtocol().removePrefix("A") !=
+                HS_PROTOCOL
+            ) {
+                "ATDPN"
+            } else {
+                SETUP_COMMANDS.firstOrNull { !sendOk(it) }
+            }
+
+        override fun leave(): Boolean = restoreHs()
+
+        override fun record(decoded: List<SwcanReading>) = this@SwcanListenRunner.record(decoded)
+    }
+
+    /** A guided test is running or about to: the session must not end for a quiet car meanwhile. */
+    fun holdsSession(): Boolean = guidedTest.isActive()
+
     fun resetSession() {
         readings.clear()
         identity = Identity.UNKNOWN
@@ -309,6 +354,7 @@ class SwcanListenRunner(
                 return
             }
         }
+        if (guidedTest.runNext()) return
         val bodyTestMs = bodyTestRequestMs
         if (bodyTestMs > 0L) {
             bodyTestRequestMs = 0L

@@ -82,7 +82,7 @@ object ObdElmDecode {
         command: String?,
         response: String?,
     ): String {
-        val summary = ObdProtocol.summarize(response)
+        val summary = ObdProtocol.summarize(SwcanPrivacy.redactFrames(response))
         if (!isVinCommand(command)) {
             return summary
         }

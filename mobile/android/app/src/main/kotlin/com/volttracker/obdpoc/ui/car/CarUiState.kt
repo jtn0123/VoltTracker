@@ -137,4 +137,6 @@ data class CarActions(
     val onBodyTest: () -> Unit = {},
     /** Ask the car's body computer for tire pressures (a short read-only probe session). */
     val onTireTest: () -> Unit = {},
+    /** Debug builds: `start`, `skip` or `stop` the guided car test. Null hides it. */
+    val onGuidedTest: ((String) -> Unit)? = null,
 )

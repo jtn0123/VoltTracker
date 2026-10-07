@@ -1,0 +1,59 @@
+package com.volttracker.obdpoc.engine
+
+import com.volttracker.obdpoc.PidPollingState
+
+/**
+ * The engine operations [SwcanListenRunner] (and, through [CarControlEngineIo], car controls) drive.
+ * All adapter IO still goes through the engine's own command path under the adapter IO lock.
+ */
+internal class EngineSwcanIo(
+    private val host: EngineHost,
+    private val connection: () -> ElmConnection,
+    private val sendCommand: (String, Long) -> String,
+    private val reinit: () -> Unit,
+    private val pidPolling: PidPollingState,
+    private val parked: ParkedDetector,
+) : SwcanListenRunner.Io {
+    override fun send(
+        command: String,
+        timeoutMs: Long,
+    ): String = sendCommand(command, timeoutMs)
+
+    override fun monitor(
+        command: String,
+        listenMs: Long,
+        stopTimeoutMs: Long,
+    ): ElmConnection.MonitorResult =
+        synchronized(host.ioLock) {
+            connection().monitor(command, listenMs, stopTimeoutMs, host.running::get)
+        }
+
+    override fun monitorStream(
+        command: String,
+        listenMs: Long,
+        stopTimeoutMs: Long,
+        onLine: (String) -> Boolean,
+    ): ElmConnection.MonitorResult =
+        synchronized(host.ioLock) {
+            connection().monitorStream(command, listenMs, stopTimeoutMs, host.running::get, onLine)
+        }
+
+    override fun reinitialize() = reinit()
+
+    override fun liveCycleCount(): Long = pidPolling.liveCycleCount()
+
+    override fun msSinceLiveData(): Long = pidPolling.msSinceLastLiveData()
+
+    override fun <T> exclusive(block: () -> T): T = synchronized(host.ioLock) { block() }
+
+    override fun isStationary(): Boolean = parked.isParked(System.currentTimeMillis())
+
+    override fun openVoice(): GuidedCarTest.Voice = AndroidVoice(host.androidContext)
+
+    override fun logEvent(
+        event: String,
+        vararg pairs: String,
+    ) {
+        host.recorder.logEvent(event, *pairs)
+    }
+}

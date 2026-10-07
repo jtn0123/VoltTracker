@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.ui.car.BodyGroup
 import com.volttracker.obdpoc.ui.car.CarControl
 import com.volttracker.obdpoc.ui.car.CarControlsUi
@@ -15,6 +16,8 @@ import com.volttracker.obdpoc.ui.car.command
 import com.volttracker.obdpoc.ui.car.dashWarningLabel
 import com.volttracker.obdpoc.ui.car.dashWarningsLine
 import com.volttracker.obdpoc.ui.car.doorsTile
+import com.volttracker.obdpoc.ui.car.guidedStepLabel
+import com.volttracker.obdpoc.ui.car.guidedTestLine
 import com.volttracker.obdpoc.ui.car.isOn
 import com.volttracker.obdpoc.ui.car.label
 import com.volttracker.obdpoc.ui.car.lastResultLine
@@ -416,6 +419,25 @@ class CarTabLogicTest {
         assertEquals("91% health · cells balanced (19 mV)", batterySummary(91.2, 19.4))
         assertEquals("cells balanced (8 mV)", batterySummary(null, 8.0))
         assertEquals("Health appears after a battery read", batterySummary(null, null))
+    }
+
+    @Test
+    fun guidedTestRowSaysWhatItIsAndHowTheLastOneEnded() {
+        assertEquals("Connect to the car to run it", guidedTestLine(false, GuidedTestStatus()))
+        assertEquals(
+            "Spoken steps round the car, off and on, then a drive (about 35 min)",
+            guidedTestLine(true, GuidedTestStatus()),
+        )
+        assertEquals(
+            "Finished · the results are in the session log",
+            guidedTestLine(true, GuidedTestStatus(ended = "Finished")),
+        )
+        assertEquals(
+            "This needs an OBDLink adapter",
+            guidedTestLine(true, GuidedTestStatus(ended = "This needs an OBDLink adapter")),
+        )
+        assertEquals("Starting", guidedStepLabel(GuidedTestStatus(running = true, steps = 38)))
+        assertEquals("Step 6 of 38", guidedStepLabel(GuidedTestStatus(running = true, step = 6, steps = 38)))
     }
 
     private fun opened(vararg open: Opening) = Openings(Opening.entries.associateWith { it in open })

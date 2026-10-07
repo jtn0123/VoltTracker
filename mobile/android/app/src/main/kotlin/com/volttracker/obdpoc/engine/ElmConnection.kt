@@ -343,6 +343,76 @@ open class ElmConnection
             return MonitorResult(response.toString(), stopped, false, responseCapped)
         }
 
+        /**
+         * [monitor] for a long listen: each complete output line goes to [onLine] the moment it is
+         * read instead of being collected, so there is no output cap and the caller can time every
+         * frame (the time it reached the phone, Bluetooth buffering included). [onLine] returning
+         * false stops monitoring early. While the bus is silent [onLine] gets an empty line every
+         * [STREAM_IDLE_TICK_MS], so the caller can still stop on a request or on the silence itself.
+         * Lines the adapter still prints after the stop byte (its queue, up to ~4 s on the car) are
+         * delivered once the prompt is back. The result's text is only what followed the stop byte.
+         */
+        @Throws(IOException::class)
+        open fun monitorStream(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            keepWaiting: KeepWaiting,
+            onLine: (String) -> Boolean,
+        ): MonitorResult {
+            val out = output ?: throw IOException("Adapter stream is not open")
+            val inputStream = input ?: throw IOException("Adapter stream is not open")
+            lastTransactTruncated = false
+            drainInput()
+            out.write((command + "\r").toByteArray(StandardCharsets.US_ASCII))
+            out.flush()
+            val line = StringBuilder()
+            val deadline = clock.nowMs() + maxOf(0L, listenMs)
+            val buffer = ByteArray(STREAM_BUFFER_BYTES)
+            var listening = true
+            var heardAtMs = clock.nowMs()
+            while (listening && clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (clock.nowMs() - heardAtMs >= STREAM_IDLE_TICK_MS) {
+                        heardAtMs = clock.nowMs()
+                        listening = onLine("")
+                    } else if (!sleep(STREAM_POLL_MS)) {
+                        break
+                    }
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                heardAtMs = clock.nowMs()
+                for (i in 0 until read) {
+                    val c = (buffer[i].toInt() and BYTE_MASK).toChar()
+                    when {
+                        // The adapter stopped monitoring by itself (an error, or its buffer full).
+                        c == '>' -> return MonitorResult(line.toString(), true, true, false)
+                        c == '\r' || c == '\n' ->
+                            if (line.isNotEmpty()) {
+                                listening = onLine(line.toString()) && listening
+                                line.setLength(0)
+                            }
+                        line.length < MAX_STREAM_LINE_CHARS -> line.append(c)
+                    }
+                }
+            }
+            out.write('\r'.code)
+            out.flush()
+            val tail = StringBuilder()
+            responseCapped = false
+            val stopped = readUntilPrompt(inputStream, tail, clock.nowMs() + maxOf(0L, stopTimeoutMs), keepWaiting)
+            lastTransactTruncated = responseCapped
+            line
+                .append(tail)
+                .split('\r', '\n', '>')
+                .filter { it.isNotEmpty() }
+                .forEach { onLine(it) }
+            return MonitorResult(tail.toString(), stopped, false, responseCapped)
+        }
+
         // Set by readUntilPrompt when output past MAX_RESPONSE_CHARS was discarded.
         private var responseCapped = false
 
@@ -438,6 +508,14 @@ open class ElmConnection
             // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
             // Keep a single command response bounded so it cannot exhaust the app process heap.
             private const val MAX_RESPONSE_CHARS = 64 * 1024
+
+            // monitorStream: read size, idle poll, silence between idle ticks, and the longest line
+            // kept (a frame is ~40 chars).
+            private const val STREAM_BUFFER_BYTES = 512
+            private const val STREAM_POLL_MS = 10L
+            const val STREAM_IDLE_TICK_MS = 250L
+            private const val MAX_STREAM_LINE_CHARS = 256
+            private const val BYTE_MASK = 0xFF
 
             /** True when [response] holds more than the echoed [command] and ELM status lines. */
             @VisibleForTesting

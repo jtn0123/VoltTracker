@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.car
 
+import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -543,6 +544,27 @@ fun tireTestLine(canTest: Boolean): String =
     if (canTest) "Ask the car for tire pressures (about 30 s)" else "Connect to the car to run it"
 
 const val TIRE_TEST_TITLE = "Tire test"
+
+const val GUIDED_TEST_TITLE = "Guided car test"
+
+/** Under the guided test's status: what running it costs the rest of the app. */
+const val GUIDED_TEST_NOTE = "Live data updates about once a minute while the test runs."
+
+/** The Car tab's guided-test row: what it is, how the last one ended, or why it can't run. */
+fun guidedTestLine(
+    canTest: Boolean,
+    status: GuidedTestStatus,
+): String =
+    when {
+        !canTest -> "Connect to the car to run it"
+        status.ended == "Finished" -> "Finished · the results are in the session log"
+        status.ended.isNotEmpty() -> status.ended
+        else -> "Spoken steps round the car, off and on, then a drive (about 35 min)"
+    }
+
+/** "Step 6 of 38", or "Starting" before the first step. */
+fun guidedStepLabel(status: GuidedTestStatus): String =
+    if (status.step > 0) "Step ${status.step} of ${status.steps}" else "Starting"
 
 private const val NO_GEAR_TEXT = "--"
 

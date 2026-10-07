@@ -58,6 +58,29 @@ object SwcanPrivacy {
             .filter { it.extended && it.gmlanPid !in SENSITIVE_PIDS }
             .joinToString("\r") { line(it) }
 
+    /**
+     * [response] without any line that is a sensitive SW-CAN frame (or the fuel-economy frame).
+     * After a body-bus listen the adapter can still print queued frames into the next command's
+     * reply, and command replies are stored. HS replies never match: a mode 01/09/22 reply read as a
+     * 29-bit header lands at arbitration id 0x800 or above, past every sensitive one.
+     */
+    @JvmStatic
+    fun redactFrames(response: String?): String? {
+        if (response == null) return null
+        val lines = response.split('\r', '\n')
+        if (lines.none(::isWithheld)) return response
+        return lines.filterNot(::isWithheld).joinToString("\r")
+    }
+
+    private fun isWithheld(line: String): Boolean {
+        if (line.length < MIN_FRAME_LINE_CHARS) return false
+        val frame = SwcanFrameDecoder.parseLine(line.replace(">", "")) ?: return false
+        return frame.extended && (frame.gmlanPid in SENSITIVE_PIDS || frame.gmlanPid == PID_VICM_INFO)
+    }
+
+    /** `102AA097` plus a data byte: anything shorter carries no payload. */
+    private const val MIN_FRAME_LINE_CHARS = 10
+
     private fun line(frame: SwcanFrame): String {
         val data = if (frame.gmlanPid == PID_VICM_INFO) frame.data.take(1) else frame.data.toList()
         val header = listOf(frame.id ushr 24, frame.id ushr 16, frame.id ushr 8, frame.id).map { it and 0xFF }

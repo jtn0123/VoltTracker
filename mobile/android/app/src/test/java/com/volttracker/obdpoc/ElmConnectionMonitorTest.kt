@@ -147,6 +147,104 @@ class ElmConnectionMonitorTest {
     }
 
     @Test
+    fun streamHandsOverEachLineThenTheQueueAfterTheStop() {
+        val input = ScriptedInput()
+        val out =
+            ReactiveOutput { written ->
+                if (written == "STM\r") input.feed("10 24 80 40 00 00 60 D9\r0C 2F 60 40 01\r")
+                if (written == "\r") input.feed("10 24 20 40 02\rSTOPPED\r\r>")
+            }
+        val lines = mutableListOf<String>()
+
+        val result =
+            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+                lines += it
+                true
+            }
+
+        assertEquals("STM\r\r", out.toString("US-ASCII"))
+        assertEquals(
+            listOf("10 24 80 40 00 00 60 D9", "0C 2F 60 40 01", "10 24 20 40 02", "STOPPED"),
+            lines.filter {
+                it.isNotEmpty()
+            },
+        )
+        assertTrue(result.gotPrompt)
+        assertFalse(result.endedEarly)
+        assertEquals("10 24 20 40 02\rSTOPPED\r\r>", result.text)
+    }
+
+    @Test
+    fun theCallerCanStopTheStreamEarly() {
+        val input = ScriptedInput()
+        val out =
+            ReactiveOutput { written ->
+                if (written == "STM\r") input.feed("10 24 80 40 00\r")
+                if (written == "\r") input.feed("STOPPED\r>")
+            }
+
+        // A listen of 100 s, stopped by the first frame.
+        val result = ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }) { false }
+
+        assertEquals("STM\r\r", out.toString("US-ASCII"))
+        assertTrue(result.gotPrompt)
+    }
+
+    @Test
+    fun aSilentBusStillGetsIdleTicks() {
+        val input = ScriptedInput()
+        val out = ReactiveOutput { written -> if (written == "\r") input.feed("STOPPED\r>") }
+        val lines = mutableListOf<String>()
+
+        // Nothing on the bus: the first idle tick (an empty line) lets the caller end a 100 s listen.
+        val result =
+            ElmConnection(input, out, clock).monitorStream("STM", 100_000L, 500L, { true }) {
+                lines += it
+                it.isNotEmpty()
+            }
+
+        assertEquals("", lines.first())
+        assertTrue(result.gotPrompt)
+        assertEquals("STM\r\r", out.toString("US-ASCII"))
+    }
+
+    @Test
+    fun aStreamTheAdapterEndsItselfSkipsTheStopByte() {
+        val input = ScriptedInput()
+        val out = ReactiveOutput { written -> if (written == "STM\r") input.feed("BUFFER FULL\r>") }
+        val lines = mutableListOf<String>()
+
+        val result =
+            ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+                lines += it
+                true
+            }
+
+        assertTrue(result.endedEarly)
+        assertTrue(result.gotPrompt)
+        assertEquals(listOf("BUFFER FULL"), lines)
+        assertEquals("STM\r", out.toString("US-ASCII"))
+    }
+
+    @Test
+    fun anEndlessLineIsCutNotHeld() {
+        val input = ScriptedInput()
+        val out =
+            ReactiveOutput { written ->
+                if (written == "STM\r") input.feed("A".repeat(1_000) + "\r")
+                if (written == "\r") input.feed(">")
+            }
+        val lines = mutableListOf<String>()
+
+        ElmConnection(input, out, clock).monitorStream("STM", 200L, 500L, { true }) {
+            lines += it
+            true
+        }
+
+        assertEquals(256, lines.first { it.isNotEmpty() }.length)
+    }
+
+    @Test
     fun closedStreamThrows() {
         assertThrows(IOException::class.java) { ElmConnection(null, null, clock).monitor("STM", 1L, 1L) { true } }
     }

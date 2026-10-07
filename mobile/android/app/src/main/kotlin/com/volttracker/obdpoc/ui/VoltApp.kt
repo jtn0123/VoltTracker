@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.GuidedCarTestState
 import com.volttracker.obdpoc.ui.car.CarActions
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
@@ -266,6 +268,7 @@ private fun VoltTabContent(
                 diag = state.diag,
                 sohPct = state.charge.sohPct,
                 demo = state.settings.demoActive,
+                guided = GuidedCarTestState.status.collectAsState().value,
                 actions =
                     CarActions(
                         onControl = actions.onCarControl,
@@ -273,6 +276,7 @@ private fun VoltTabContent(
                         onDisableControls = { actions.onCarControlsEnabled(false) },
                         onBodyTest = actions.onBodyTest,
                         onTireTest = actions.onTireTest,
+                        onGuidedTest = actions.onGuidedTest,
                     ),
             )
     }

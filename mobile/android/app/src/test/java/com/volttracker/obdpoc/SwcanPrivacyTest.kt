@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Test
 import java.io.File
 
@@ -22,6 +23,29 @@ class SwcanPrivacyTest {
     @Test
     fun theFuelFrameKeepsOnlyItsFuelDoorByte() {
         assertEquals("10 76 40 97 08", SwcanPrivacy.loggable(frames("10 76 40 97 08 11 22 33 44 55")))
+    }
+
+    @Test
+    fun storedRepliesLoseQueuedSensitiveFrames() {
+        // After a slow stop, ATH0 is answered with the monitor's queue: a GPS frame among others.
+        val reply = "10 2A A0 97 01 02 03 04\r0C 2F 60 40 01\r10 76 40 97 08 11 22\rOK\r\r>"
+
+        assertEquals("0C 2F 60 40 01\rOK\r\r>", SwcanPrivacy.redactFrames(reply))
+        assertEquals("0C 2F 60 40 01 OK", ObdElmDecode.summarizeForStorage("ATH0", reply))
+    }
+
+    @Test
+    fun hsRepliesPassUntouched() {
+        for (reply in listOf(
+            "41 0C 1A F8\r\r>",
+            "7E8 06 41 0D 00\r>",
+            "410D00\r>",
+            "62 43 7A 0F 12\r>",
+            "49 02 01 31 47 31\r>",
+        )) {
+            assertSame(reply, SwcanPrivacy.redactFrames(reply))
+        }
+        assertEquals(null, SwcanPrivacy.redactFrames(null))
     }
 
     @Test

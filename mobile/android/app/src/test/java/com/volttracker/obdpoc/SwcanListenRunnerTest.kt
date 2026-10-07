@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.engine.ElmConnection
+import com.volttracker.obdpoc.engine.GuidedCarTest
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -150,6 +151,37 @@ class SwcanListenRunnerTest {
         runner.appendTo(sample, now)
         assertEquals(12.6, sample.getDouble("aux12vVoltage"), 1e-9)
         assertEquals("locked", sample.getString("doorLockState"))
+    }
+
+    @Test
+    fun aGuidedTestTakesThePollTurnsAndHoldsTheSession() {
+        runner.guidedTest.request(GuidedCarTest.Op.START)
+        assertTrue("waiting for the adapter already holds the session", runner.holdsSession())
+        cycle()
+        assertTrue("it waits for the adapter to be identified", io.commands.isEmpty())
+
+        readyStn()
+        // A quiet car (HS silent for 2 min) neither stops it nor gets a quiet capture.
+        io.msSinceLive = 120_000L
+        cycle(hsAnswered = false)
+
+        val expected =
+            listOf("STI", "ATDPN") + SwcanListenRunner.SETUP_COMMANDS + "STM" + SwcanListenRunner.RESTORE_COMMANDS +
+                "ATDPN"
+        assertEquals(expected, io.commands)
+        assertEquals(0, io.commandsOutsideLock)
+        assertEquals("intro", io.event("guided_step")!!["step"])
+        assertNull("no window of the listener's own", io.event("swcan_window"))
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals("what a step hears reaches the Car tab", "locked", sample.getString("doorLockState"))
+
+        runner.resetSession()
+        assertTrue("a reconnect keeps the test", runner.holdsSession())
+        runner.guidedTest.request(GuidedCarTest.Op.STOP)
+        cycle()
+        assertFalse(runner.holdsSession())
+        assertEquals("Stopped", io.event("guided_test_end")!!["ended"])
     }
 
     @Test
