@@ -17,7 +17,10 @@ import java.util.EnumMap
  * again in 21 later windows; the energy split in 3 of 22 windows. A pressure barely moves within a
  * drive, and the energy counts only creep. Doors, windows and the washer and bulb warnings are only
  * sent when they change, so the last report stays the car's state until the next one. Their
- * `...StaleMs` age still goes out, so the screen can say how old the reading is.
+ * `...StaleMs` age still goes out, so the screen can say how old the reading is. An "open" door,
+ * hood or hatch is the exception to the exception: it reads "unknown" after [OPEN_TRUST_MS], since
+ * outside the Car tab the windows usually miss the close (2026-10-06: a rear door heard opening,
+ * never closing, would have read open for the rest of the drive).
  *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
  * polling thread.
@@ -55,6 +58,12 @@ class SwcanReadings(
     ) {
         held.entries.removeAll { it.key.group !in HELD_GROUPS && now - it.value.atMs > maxAgeMs }
         if (held.isEmpty()) return
+        for (entry in held.entries) {
+            val reading = entry.value
+            if (entry.key.group == SwcanGroup.DOORS && reading.value == OPEN && now - reading.atMs > OPEN_TRUST_MS) {
+                entry.setValue(Held(UNKNOWN, reading.atMs))
+            }
+        }
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)
         putReading(sample, "aux12vCurrentA", SwcanField.AUX12V_CURRENT)
@@ -160,6 +169,11 @@ class SwcanReadings(
     companion object {
         /** Four listen intervals: survives one or two empty windows, then blanks. */
         const val DEFAULT_MAX_AGE_MS = 180_000L
+
+        /** How long an "open" door, hood or hatch is believed without hearing it close. */
+        const val OPEN_TRUST_MS = 120_000L
+        private const val OPEN = "open"
+        private const val UNKNOWN = "unknown"
 
         /** Groups the car sends too rarely to age out; they hold until the session's [clear]. */
         private val HELD_GROUPS =

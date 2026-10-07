@@ -33,12 +33,12 @@ arb:224,224,60 (heard),1-3 (17 bits from bit 8),gasoline range (0 = car not on),
 arb:223,223,CB (heard),6-7 (12 bits from bit 51),drive-cycle fuel used (FFF = n/a),Drive_Cycle_Energy_Efficiency_LS.DrvCyclFuelUsd,0.125,L,decoded-unchecked,cycleFuelUsedL,heard as 104460CB on 10-04 (EV-only drive)
 arb:141,141,,2-4 (14 bits from bit 21),drive-cycle energy used,Energy_Storage_System_LS.DrvCycElEnrgUsd,0.1,kWh,decoded-unchecked,cycleEnergyUsedKwh,never heard in 56 windows
 arb:176,176,,0-1,EV range shown by the cluster,HMI_Hybrid_Vehicle_Status_LS.HVDpltnMdRng,1/64,km,decoded-unchecked,clusterEvRangeKm,never heard in 56 windows
-arb:325,325,40 (heard),0-1 (3-bit fields),"window positions FL RL / FR RR, 0 shut .. 6 down, 5 = filler (not reported)",Window_Position_Status_LS,100/6,%,decoded-unchecked,windowFlPct;windowRlPct;windowFrPct;windowRrPct,"heard as 1064A040 on 09-29 (33 35, 36 2D) and 10-06 (28 2D: driver 0, the rest filler). The driver window reports alone, so each window is read on its own. Needs the Car tab in-car test"
+arb:325,325,40 (heard),0-1 (3-bit fields),"window positions: driver b0 bits 0-2, left rear b0 bits 3-5, passenger b1 bits 0-2, right rear b1 bits 3-5; 0 up, 3 part way, 6 fully down, 5 not known since the car woke, 7 undefined",Window_Position_Status_LS,100/6,%,decoded,windowFlPct;windowRlPct;windowFrPct;windowRrPct,"10-06 window test: driver 2E 2D (6) then 2B 2D (3) coming up, then 00 28 and 00 00 once all four had moved; each read 5 until it first moved"
 10260040,130,40,2 bits0-2,"theft alarm: 1 armed, 2 disarmed, 3 sounding, 4 arming",Content_Theft_Sensor_Status.AlrmStat,enum,,decoded-unchecked,alarmState,never heard
-0C630040,318,40,0 bit0,door FL open,Driver_Door_Status.DDAjrSwAtv,,,decoded-unchecked,doorFlState,event-only; never caught in a window
+0C630040,318,40,0 bit0,door FL open,Driver_Door_Status.DDAjrSwAtv,,,decoded-unchecked,doorFlState,"10-06: 80 with the door shut (bit 7 is GM's DDAjrSwAtvM, bit 1 the liftglass ajar)"
 0C2F6040,17B,40,0 bit0,door FR open,Passenger_Door_Status_LS.PDAjrSwAtv,,,decoded-unchecked,doorFrState,event-only; never caught in a window
 0C2F8040,17C,40,0 bit0,door RL open,Left_Rear_Door_Status.RLDoorAjarSwAct,,,decoded-unchecked,doorRlState,event-only; never caught in a window
-0C2FA040,17D,40,0 bit0,door RR open,Right_Rear_Door_Status.RRDoorAjarSwAct,,,decoded-unchecked,doorRrState,event-only; never caught in a window
+0C2FA040,17D,40,0 bit0,door RR open,Right_Rear_Door_Status.RRDoorAjarSwAct,,,decoded-unchecked,doorRrState,"10-06 door test: 01 as the right rear door opened; the close fell between windows"
 10728040,394,40,0 bits0-1 (bit2 = invalid),"hood state, 0 = closed",Hood_Status_LS.HdSt,,,decoded-unchecked,hoodState,10-06 shutdown burst: 08 with the hood shut (state 0); open values unverified
 arb:1DE,1DE,,0 bit0,washer fluid low,Wash_Level_LS.WshFldLw,,,decoded-unchecked,dashWarnings,10-06 shutdown burst: 00 (not low)
 arb:319,319,,0-1 (16 bit flags),"bulb out: center brake, front turns, brakes, low beams, parking, plate, rear turns, rear fog, reverse, daytime",BulbOutage_LS,,,decoded-unchecked,dashWarnings,10-06 shutdown burst: 00 00 (none out)
@@ -118,6 +118,10 @@ arb:155,155,,*,GPS position,,,,sensitive,,"payload must never be printed, logged
 arb:156,156,,*,sent with GPS (treat as location),,,,sensitive,,"payload must never be printed, logged or committed"
 arb:382,382,97,*,compass heading,Compass_Status_LS,,,sensitive,,"direction of travel; with time it tracks a route. payload must never be printed, logged or committed"
 arb:13D,13D,CB,*,location-based charging: saved-location state,Aux_Coolant_Heater_Status_LS,,,sensitive,,"says when the car is at a saved charging location. payload must never be printed, logged or committed"
+arb:146,146,,*,passive entry challenge reply,Passive_Entry_Reply_LS,,,sensitive,,"keyless-entry crypto exchange; payload must never be printed, logged or committed"
+arb:3C9,3C9,,*,passive entry challenge,Passive_Entry_Challenge_LS,,,sensitive,,"keyless-entry crypto exchange; payload must never be printed, logged or committed"
+arb:3C8,3C8,,*,driver key cylinder and passive approach vehicle id,Drv_Dr_Key_Cyl_Status_LS,,,sensitive,,"carries the passive-entry vehicle id"
+arb:1D3,1D3,40,*,restraints key id,Inflatable_Restraints_Key_Id_LS,,,sensitive,,"a key id; treat like the immobilizer frames"
 arb:478,478,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:479,479,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:47A,47A,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"

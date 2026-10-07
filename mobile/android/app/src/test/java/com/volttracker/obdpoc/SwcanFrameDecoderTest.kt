@@ -323,7 +323,8 @@ class SwcanFrameDecoderTest {
     @Test
     fun windowsReadEachWindowOnItsOwn() {
         val windowId = gmlan(SwcanFrameDecoder.PID_WINDOWS)
-        // 10-06, parked with the windows up: 28 2D is driver 0, the other three 5 (no reading)
+        // 10-06, parked with the windows up: 28 2D is driver 0, the other three 5 (not known since
+        // the car woke); in the window test the driver read 2E 2D (6, fully down), 2B 2D, then 0
         val parked = decode(windowId, 0x28, 0x2D)
         assertEquals(mapOf(SwcanField.WINDOW_FL to 0.0), parked)
         // the driver window moving while the others still send 5
@@ -339,8 +340,11 @@ class SwcanFrameDecoderTest {
         assertEquals(0.0, all[SwcanField.WINDOW_RL])
         assertEquals(100.0, all[SwcanField.WINDOW_FR])
         assertEquals(0.0, all[SwcanField.WINDOW_RR])
-        // 7 clamps to fully open
-        assertEquals(100.0, decode(windowId, 0x07, 0x00)[SwcanField.WINDOW_FL])
+        // 7 is undefined: not reported, like 5
+        assertEquals(
+            mapOf(SwcanField.WINDOW_RL to 0.0, SwcanField.WINDOW_FR to 0.0, SwcanField.WINDOW_RR to 0.0),
+            decode(windowId, 0x07, 0x00),
+        )
         assertTrue(decode(windowId, 0x06).isEmpty())
     }
 

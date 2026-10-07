@@ -577,10 +577,10 @@ object SwcanFrameDecoder {
     /**
      * Window_Position_Status_LS (arb 0x325): a 3-bit position per window, driver, left rear,
      * passenger, right rear (GM's DrvWndPosStat / LRWndPosStat / PsWndPosStat / RRWndPosStat).
-     * 0 is shut and 6 fully down; 5 is a window with no reading, so that window is skipped. The
-     * driver's window is reported on its own: on 2026-10-06 the car parked with every window up sent
-     * `28 2D` (driver 0, the others 5), and an earlier decoder that dropped such frames whole could
-     * never show the driver's window moving while the others sat still.
+     * Checked on the car 2026-10-06: 0 is up, 6 fully down, 3 part way (the driver window read 6,
+     * 3, then 0 as it came up), and 5 is a window not known since the car woke: each read 5 until it
+     * first moved, then 0. 5 and the undefined 7 are skipped, so each window is read on its own; an
+     * earlier decoder that dropped a frame with any 5 in it never showed the driver's window moving.
      */
     private fun windows(d: IntArray): List<SwcanReading> {
         if (d.size < 2) return none()
@@ -592,8 +592,8 @@ object SwcanFrameDecoder {
                 SwcanField.WINDOW_RR to ((d[1] shr WINDOW_REAR_SHIFT) and WINDOW_BITS),
             )
         return raw
-            .filter { it.second != WINDOW_FILLER }
-            .map { (field, pos) -> num(field, minOf(pos, WINDOW_OPEN_MAX) * 100.0 / WINDOW_OPEN_MAX, 0) }
+            .filter { it.second != WINDOW_FILLER && it.second <= WINDOW_OPEN_MAX }
+            .map { (field, pos) -> num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0) }
     }
 
     // Hood_Status_LS (arb 0x394): HdSt is byte 0 bits 0..1, valid unless bit 2 is set. 0 read on the

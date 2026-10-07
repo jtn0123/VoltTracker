@@ -159,18 +159,37 @@ class SwcanReadingsTest {
     fun doorsWindowsAndWarningsHoldWhileALockAgesOut() {
         val readings = SwcanReadings(maxAgeMs = 5_000L)
         readings.record(
-            readingsFrom("0C 41 40 40 00 05 00 05", "0C 63 00 40 01", "10 64 A0 40 28 2D", "10 3B C0 40 01"),
+            readingsFrom("0C 41 40 40 00 05 00 05", "0C 63 00 40 80", "10 64 A0 40 28 2D", "10 3B C0 40 01"),
             0L,
         )
         val sample = JSONObject()
         readings.appendTo(sample, 30 * 60_000L)
         assertFalse("a lock is an event: it ages out", sample.has("doorLockState"))
-        assertEquals("open", sample.getString("doorFlState"))
+        assertEquals("closed", sample.getString("doorFlState"))
         assertEquals(0.0, sample.getDouble("windowFlPct"), 0.0)
         assertFalse("a window that sent no reading stays unknown", sample.has("windowFrPct"))
         assertEquals("washer_fluid_low", sample.getString("dashWarnings"))
         assertEquals(30 * 60_000L, sample.getLong("doorStatusStaleMs"))
         assertEquals(30 * 60_000L, sample.getLong("dashWarningStaleMs"))
+    }
+
+    @Test
+    fun anOpenDoorIsOnlyBelievedForTwoMinutesWithoutAClose() {
+        val readings = SwcanReadings()
+        // 10-06: the right rear door heard opening (17D: 01), its close missed between windows
+        readings.record(readingsFrom("0C 2F A0 40 01", "0C 63 00 40 80"), 0L)
+        val soon = JSONObject()
+        readings.appendTo(soon, SwcanReadings.OPEN_TRUST_MS)
+        assertEquals("open", soon.getString("doorRrState"))
+        val later = JSONObject()
+        readings.appendTo(later, SwcanReadings.OPEN_TRUST_MS + 1)
+        assertEquals("unknown", later.getString("doorRrState"))
+        assertEquals("a closed door holds", "closed", later.getString("doorFlState"))
+        assertEquals(SwcanReadings.OPEN_TRUST_MS + 1, later.getLong("doorStatusStaleMs"))
+        readings.record(readingsFrom("0C 2F A0 40 01"), 200_000L)
+        val again = JSONObject()
+        readings.appendTo(again, 201_000L)
+        assertEquals("heard open again", "open", again.getString("doorRrState"))
     }
 
     @Test

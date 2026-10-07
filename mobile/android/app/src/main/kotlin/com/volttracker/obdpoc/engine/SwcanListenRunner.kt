@@ -585,7 +585,33 @@ class SwcanListenRunner(
          * tires, washer fluid, bulbs and the window-normalized flags. Never the sensitive ones.
          */
         private val BODY_LOG_PIDS =
-            setOf(0x325, 0x20A, 0x318, 0x17B, 0x17C, 0x17D, 0x355, 0x394, 0x1EA, 0x1DE, 0x319, 0x323)
+            setOf(
+                0x325,
+                0x20A,
+                0x318,
+                0x17B,
+                0x17C,
+                0x17D,
+                0x355,
+                0x394,
+                0x1EA,
+                0x1DE,
+                0x319,
+                0x323,
+                // Not decoded yet, for the next car test: seat heat (front, rear), fuel door and
+                // refuel state, charge-port door, charge cord, power mode, hatch release.
+                0x391,
+                0x392,
+                0x393,
+                0x3B4,
+                0x3B6,
+                0x3B8,
+                0x3B2,
+                0x112,
+                0x176,
+                0x121,
+                0x35A,
+            )
 
         @JvmField
         val SETUP_COMMANDS =
