@@ -27,6 +27,9 @@ class SwcanListenRunnerTest {
         var monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\r0C 41 40 40 00 05 00 05\rSTOPPED\r\r>"
         var monitorPrompt = true
         val dpnQueue = ArrayDeque<String>()
+
+        /** One-off replies, used before [replies]: e.g. the monitor's leftover frames after a slow stop. */
+        val replyQueue = mutableMapOf<String, ArrayDeque<String>>()
         var probeThrows = false
         var liveCycles = 0L
         var msSinceLive = 0L
@@ -47,6 +50,7 @@ class SwcanListenRunnerTest {
             if (exclusiveDepth == 0 && command != "STI") commandsOutsideLock += 1
             commands.add(command)
             if (command == "ATDPN" && dpnQueue.isNotEmpty()) return dpnQueue.removeFirst()
+            replyQueue[command]?.removeFirstOrNull()?.let { return it }
             return replies[command] ?: "OK\r\r>"
         }
 
@@ -210,22 +214,52 @@ class SwcanListenRunnerTest {
     }
 
     @Test
-    fun restoreFailureReinitializesAdapter() {
+    fun restoreFailureReinitializesAndASecondOneDisables() {
         io.replies["ATSP6"] = "?\r\r>"
         readyStn()
         cycle()
         assertEquals("restore_failed", io.event("swcan_window")!!["outcome"])
+        assertEquals("both passes ran", 2, io.count("ATSP6"))
         assertEquals(1, io.reinitCount)
+        assertNull("one bad window is recovered, not fatal", runner.disabledReason())
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+        now += policy.intervalMs
+        cycle()
+        assertEquals(2, io.reinitCount)
         assertEquals("restore_failed", runner.disabledReason())
+        now += policy.intervalMs
+        cycle()
+        assertEquals(2, io.count("STM"))
     }
 
     @Test
     fun restoreRequiresHsProtocolBack() {
-        io.dpnQueue.addAll(listOf("6\r\r>", "61\r\r>"))
+        io.dpnQueue.addAll(listOf("6\r\r>", "61\r\r>", "61\r\r>"))
         readyStn()
         cycle()
-        assertEquals("restore_failed", runner.disabledReason())
+        assertEquals("restore_failed", io.event("swcan_window")!!["outcome"])
         assertEquals(1, io.reinitCount)
+    }
+
+    @Test
+    fun aSlowStopIsRetriedLikeOnTheCar() {
+        // 2026-10-05: the adapter kept printing queued frames after the stop byte, so the first
+        // restore commands got frames instead of OK. A second pass found it back at its prompt.
+        io.replyQueue["ATH0"] = ArrayDeque(listOf(""))
+        io.replyQueue["ATS0"] = ArrayDeque(listOf("00 10 40 00 00 10 0A\r>"))
+        io.replyQueue["ATCAF1"] = ArrayDeque(listOf("10 21 00 40 00 00\r>"))
+        readyStn()
+        cycle()
+        assertEquals("ok", io.event("swcan_window")!!["outcome"])
+        assertEquals("1", io.event("swcan_restore_retry")!!["window"])
+        assertEquals(
+            "the failed pass skips the protocol check; the retry ends with it",
+            SwcanListenRunner.RESTORE_COMMANDS + SwcanListenRunner.RESTORE_COMMANDS + "ATDPN",
+            io.commands.drop(io.commands.indexOf("STM") + 1),
+        )
+        assertEquals(0, io.reinitCount)
+        assertTrue(runner.isEnabled())
+        assertEquals(CarControlGate.Adapter.READY, runner.controlCapability())
     }
 
     @Test
@@ -253,9 +287,13 @@ class SwcanListenRunnerTest {
     }
 
     @Test
-    fun missingStopPromptDisables() {
+    fun aSecondMissingStopPromptDisables() {
         io.monitorPrompt = false
         readyStn()
+        cycle()
+        assertEquals("no_stop_prompt", io.event("swcan_window")!!["outcome"])
+        assertTrue(runner.isEnabled())
+        now += policy.intervalMs
         cycle()
         assertEquals("no_stop_prompt", runner.disabledReason())
     }
@@ -315,7 +353,7 @@ class SwcanListenRunnerTest {
         io.monitorPrompt = false
         readyStn()
         cycle()
-        assertEquals("no_stop_prompt", runner.disabledReason())
+        assertNull(runner.disabledReason())
         assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
     }
 

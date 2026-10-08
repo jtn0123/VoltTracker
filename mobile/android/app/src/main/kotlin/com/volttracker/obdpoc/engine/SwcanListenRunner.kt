@@ -29,9 +29,10 @@ import java.util.Locale
  * issued (SwcanListenRunnerTest pins the full command set).
  *
  * Only runs on an STN-based adapter (answers `STI` with `STN…`) whose HS protocol is ISO 15765
- * 11-bit/500k (`ATDPN` 6). Any setup or restore failure, or [Policy.maxConsecutiveEmpty] windows
- * that hear nothing, disables it for the rest of the session. A restore failure also forces a full
- * adapter re-init so HS polling is never left half-configured.
+ * 11-bit/500k (`ATDPN` 6). A setup failure, [Policy.maxConsecutiveEmpty] windows that hear nothing,
+ * or [Policy.maxTroubledWindows] windows whose stop or restore went wrong disable it for the rest of
+ * the session. A failed restore always forces a full adapter re-init so HS polling is never left
+ * half-configured.
  */
 class SwcanListenRunner(
     private val io: Io,
@@ -83,10 +84,22 @@ class SwcanListenRunner(
         val firstWindowDelayMs: Long = 20_000L,
         val intervalMs: Long = 45_000L,
         val listenMs: Long = 1_200L,
-        val stopTimeoutMs: Long = 1_500L,
+        /**
+         * How long to wait for the prompt after the stop byte. On the car the adapter has kept
+         * printing queued frames for about 4 s after it (drives of 2026-10-03 and 10-05); it
+         * returns as soon as the prompt arrives, so the usual stop costs nothing extra.
+         */
+        val stopTimeoutMs: Long = 5_000L,
         /** Only listen while HS-CAN answered within this long — a sleeping car has no SW-CAN either. */
         val maxLiveDataAgeMs: Long = 5_000L,
         val maxConsecutiveEmpty: Int = 3,
+        /**
+         * Windows whose stop prompt never came or whose restore failed (even after a retry) before
+         * the listener gives up for the session. The first is recovered by a full re-init. On the
+         * car it struck once per drive (2026-10-03 in window 66, 10-05 in window 3), and giving up
+         * there lost SW-CAN for the rest of the drive.
+         */
+        val maxTroubledWindows: Int = 2,
         /** Stationary cadence: on the car a 1.2 s window every 45 s heard ~3% of the time. */
         val parkedIntervalMs: Long = 15_000L,
         val parkedListenMs: Long = 3_000L,
@@ -117,6 +130,7 @@ class SwcanListenRunner(
     private var consecutiveEmpty = 0
     private var windowCount = 0
     private var okWindows = 0
+    private var troubledWindows = 0
     private var healthCheckPending = false
     private var liveCyclesAtWindowEnd = 0L
     private var tiresHeard = false
@@ -133,6 +147,7 @@ class SwcanListenRunner(
         consecutiveEmpty = 0
         windowCount = 0
         okWindows = 0
+        troubledWindows = 0
         healthCheckPending = false
         bodyTestRequestMs = 0L
         tiresHeard = false
@@ -155,13 +170,16 @@ class SwcanListenRunner(
     /**
      * What car controls may assume about this adapter: only an STN adapter that has actually heard
      * this car's SW-CAN traffic, and has not failed to switch buses cleanly, is [CarControlGate.Adapter.READY].
-     * A listener that went quiet because the car stopped broadcasting ("no_frames") keeps READY.
+     * A listener that went quiet because the car stopped broadcasting ("no_frames") keeps READY. One
+     * troubled window is enough to lose it, even though listening carries on.
      */
     fun controlCapability(): CarControlGate.Adapter =
         when {
             identity == Identity.UNKNOWN -> CarControlGate.Adapter.UNKNOWN
             identity == Identity.NOT_STN -> CarControlGate.Adapter.NOT_STN
-            okWindows > 0 && (disabledReason == null || disabledReason == "no_frames") -> CarControlGate.Adapter.READY
+            okWindows > 0 &&
+                troubledWindows == 0 &&
+                (disabledReason == null || disabledReason == "no_frames") -> CarControlGate.Adapter.READY
             else -> CarControlGate.Adapter.STN_UNVERIFIED
         }
 
@@ -361,6 +379,10 @@ class SwcanListenRunner(
                 consecutiveEmpty += 1
                 if (consecutiveEmpty >= policy.maxConsecutiveEmpty) disable("no_frames")
             }
+            "no_stop_prompt", "restore_failed" -> {
+                troubledWindows += 1
+                if (troubledWindows >= policy.maxTroubledWindows) disable(outcome)
+            }
             else -> disable(outcome)
         }
     }
@@ -368,9 +390,17 @@ class SwcanListenRunner(
     /**
      * Puts the adapter back to the HS state [ObdPollingEngine.initializeElm327] leaves it in:
      * headers/spaces off, CAN formatting on, ISO 15765 11-bit 500k, automatic receive filtering,
-     * broadcast header. Every step runs even if an earlier one fails.
+     * broadcast header. Every step runs even if an earlier one fails, and a failed pass is run once
+     * more: after a slow stop the first commands are answered with the monitor's leftover frames,
+     * and by the time they have been the adapter is back at its prompt.
      */
     private fun restoreHs(): Boolean {
+        if (restorePass()) return true
+        io.logEvent("swcan_restore_retry", "window", windowCount.toString())
+        return restorePass()
+    }
+
+    private fun restorePass(): Boolean {
         var ok = true
         for (command in RESTORE_COMMANDS) {
             ok = sendOk(command) && ok
