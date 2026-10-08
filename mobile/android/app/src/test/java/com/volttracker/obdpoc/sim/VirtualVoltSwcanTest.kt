@@ -96,14 +96,16 @@ class VirtualVoltSwcanTest {
         service.running.set(false)
         waitFor("adapter to close") { adapter.closeCalls.get() > 0 }
 
-        val commands = adapter.commands()
-        val doorHeard =
-            synchronized(adapter.exchanges) {
-                adapter.exchanges.count { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
-            }
+        val exchanges = synchronized(adapter.exchanges) { adapter.exchanges.toList() }
+        val doorHeard = exchanges.count { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
         assertTrue("the 60 s body test listened in 5 s chunks, not one window ($doorHeard)", doorHeard >= 12)
-        val lastStm = commands.lastIndexOf("STM")
-        assertTrue("HS-CAN restored after the listen", commands.drop(lastStm).contains("ATSP6"))
+        // Checked after the body test's last chunk, not the session's last STM: the 0 ms windows run
+        // back to back, and stopping the session cuts one short before its restore.
+        val bodyTestEnd = exchanges.indexOfLast { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
+        assertTrue(
+            "HS-CAN restored after the body test",
+            exchanges.drop(bodyTestEnd + 1).any { it.command == "ATSP6" },
+        )
     }
 
     @Test
