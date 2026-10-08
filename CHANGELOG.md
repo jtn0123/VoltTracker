@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.65.0 (2026-10-08)
+
+### ✳️ New
+
+- **car**: Add a spoken guided car test that times the bus switch and logs the body bus
+  ([#173](https://github.com/jtn0123/VoltTracker/pull/173),
+  [`5855e7d`](https://github.com/jtn0123/VoltTracker/commit/5855e7d391a8e2b1bf59017ad6e5eab83d05052b))
+
+
 ## v0.64.0 (2026-10-08)
 
 ### ✳️ New
