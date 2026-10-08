@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.63.1 (2026-10-08)
+
+### 🔺 Fix
+
+- **swcan**: Keep listening after one slow stop instead of losing SW-CAN for the drive
+  ([#168](https://github.com/jtn0123/VoltTracker/pull/168),
+  [`0704b28`](https://github.com/jtn0123/VoltTracker/commit/0704b28e96625580de7a48c2df86868b0a2662da))
+
+
 ## v0.63.0 (2026-10-07)
 
 ### ✳️ New
