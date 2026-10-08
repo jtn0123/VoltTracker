@@ -134,6 +134,10 @@ class SwcanReadingsTest {
                 "10 3B C0 40 00",
                 "10 63 20 40 00 00",
                 "10 24 20 40 02",
+                "10 72 20 40 00 00 07 01",
+                "10 76 80 40 00 00 00 00",
+                "10 22 40 CB 02",
+                "10 76 40 CB 01",
             ),
             0L,
         )
@@ -156,6 +160,12 @@ class SwcanReadingsTest {
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
         assertEquals("run", sample.getString("powerMode"))
+        assertEquals(3.0, sample.getDouble("seatHeatFlLevel"), 0.0)
+        assertEquals(1.0, sample.getDouble("seatHeatFrLevel"), 0.0)
+        assertEquals(0.0, sample.getDouble("seatHeatRrLevel"), 0.0)
+        assertEquals("open", sample.getString("chargePortDoor"))
+        assertEquals("requested", sample.getString("refuelState"))
+        assertEquals(0L, sample.getLong("portDoorsStaleMs"))
     }
 
     @Test
@@ -226,6 +236,19 @@ class SwcanReadingsTest {
         val climate = JSONObject()
         readings.appendTo(climate, 2 * 3_600_000L)
         assertEquals(1_000L, climate.getLong("climateStaleMs"))
+    }
+
+    @Test
+    fun aHoodOrWindowTheCarFlagsInvalidSaysSoInTheSample() {
+        val readings = SwcanReadings()
+        // The hood flagged not valid (byte 0 bit 2); the driver's window not known since the car woke (5).
+        readings.record(readingsFrom("10 72 80 40 04", "10 64 A0 40 05 00"), 0L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 1_000L)
+        assertEquals("unknown", sample.getString("hoodState"))
+        assertEquals("fl", sample.getString("windowsInvalid"))
+        assertFalse(sample.has("windowFlPct"))
+        assertEquals(0.0, sample.getDouble("windowFrPct"), 0.0)
     }
 
     @Test

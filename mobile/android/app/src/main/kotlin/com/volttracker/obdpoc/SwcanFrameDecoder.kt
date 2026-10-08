@@ -99,6 +99,18 @@ enum class SwcanField(
     OIL_LIFE(SwcanGroup.MAINTENANCE),
     POWER_MODE(SwcanGroup.POWER_MODE),
 
+    // Seat heat: how many of a seat's level lamps are lit (0 = off), from the seat-heat control
+    // modules' indicator broadcasts, not the button presses.
+    SEAT_HEAT_FL(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_FR(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_RL(SwcanGroup.SEAT_HEAT),
+    SEAT_HEAT_RR(SwcanGroup.SEAT_HEAT),
+
+    // The charge port door and the refuel request (the fuel door's release): seen working with the
+    // car off on 2026-10-07.
+    CHARGE_PORT_DOOR(SwcanGroup.PORT_DOORS),
+    REFUEL_STATE(SwcanGroup.PORT_DOORS),
+
     // Dash warning lights, one field per broadcast that carries them; each value is the comma-joined
     // codes of the ones lit, "" when none are (see [SwcanReadings] for how they merge).
     WARNINGS_FAST(SwcanGroup.WARNINGS),
@@ -127,6 +139,8 @@ enum class SwcanGroup {
     MAINTENANCE,
     WARNINGS,
     POWER_MODE,
+    SEAT_HEAT,
+    PORT_DOORS,
 }
 
 /**
@@ -181,6 +195,9 @@ object SwcanFrameDecoder {
     const val PID_WARNINGS_SLOW = 0x03C0
     const val PID_WARNINGS_SUPER_SLOW = 0x03C4
     const val PID_POWER_MODE = 0x0121
+    const val PID_FRONT_SEAT_HEAT = 0x0391
+    const val PID_REAR_SEAT_HEAT = 0x03B4
+    const val PID_CHARGE_PORT = 0x0112
 
     private const val MAX_29_BIT_ID = 0x1FFFFFFF
     private const val MAX_DATA_BYTES = 8
@@ -198,7 +215,10 @@ object SwcanFrameDecoder {
     private const val WINDOW_BITS = 0x07
     private const val WINDOW_REAR_SHIFT = 3
     private const val HOOD_STATE_BITS = 0x03
+    private const val SEAT_LEVEL_BITS = 0x1F
     private const val POWER_MODE_BITS = 0x03
+    private const val CHARGE_PORT_BITS = 0x03
+    private const val REFUEL_STATE_BITS = 0x07
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
     private const val NOT_AVAILABLE_BYTE = 0xFF
     private const val GMLAN_RANGE_SCALE = 0.015625
@@ -333,6 +353,10 @@ object SwcanFrameDecoder {
             PID_WASHER_LEVEL -> warnings(d, SwcanField.WARNING_WASHER, WASHER_WARNINGS)
             PID_BULB_OUTAGE -> warnings(d, SwcanField.WARNING_BULBS, BULB_WARNINGS)
             PID_POWER_MODE -> powerMode(d)
+            PID_FRONT_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_FL, SwcanField.SEAT_HEAT_FR)
+            PID_REAR_SEAT_HEAT -> seatHeat(d, SwcanField.SEAT_HEAT_RL, SwcanField.SEAT_HEAT_RR)
+            PID_CHARGE_PORT -> chargePortDoor(d)
+            SwcanPrivacy.PID_VICM_INFO -> refuelState(d)
             else -> none()
         }
     }
@@ -393,10 +417,12 @@ object SwcanFrameDecoder {
 
     /**
      * Tire_Pressure_Sensors_LS (arb 0x1EA): 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. Each
-     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1),
-     * set when the reading is NOT valid: the car's own frames read `24 24` there with all four
-     * good. A flagged wheel, or the 0xFE/0xFF "not available" codes, reads [SwcanReading.INVALID].
-     * A valid 0 is a real 0 kPa (a flat tyre), not a missing sensor.
+     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1).
+     * Which way that bit reads is inferred, not confirmed: the car's frames read `24 24` there (all
+     * four clear) with all four pressures plausible, so set is taken as NOT valid. 0xFE/0xFF are
+     * taken as GM's usual "not available" codes, also unconfirmed on this car. Either reads
+     * [SwcanReading.INVALID]; the raw frame is logged (it is allowlisted), so both can be checked.
+     * A valid 0 is read as 0 kPa (a flat tyre), not as a missing sensor.
      */
     private fun tpms(d: IntArray): List<SwcanReading> {
         if (d.size < 6) return none()
@@ -610,8 +636,9 @@ object SwcanFrameDecoder {
      * passenger, right rear (GM's DrvWndPosStat / LRWndPosStat / PsWndPosStat / RRWndPosStat).
      * Checked on the car 2026-10-06: 0 is up, 6 fully down, 3 part way (the driver window read 6,
      * 3, then 0 as it came up), and 5 is a window not known since the car woke: each read 5 until it
-     * first moved, then 0. 5 and the undefined 7 are skipped, so each window is read on its own; an
-     * earlier decoder that dropped a frame with any 5 in it never showed the driver's window moving.
+     * first moved, then 0. 5 and the undefined 7 read [SwcanReading.INVALID], each window on its own:
+     * the window's position is not known, so an earlier one must not stand in for it (an earlier
+     * decoder that dropped a frame with any 5 in it never showed the driver's window moving).
      */
     private fun windows(d: IntArray): List<SwcanReading> {
         if (d.size < 2) return none()
@@ -622,22 +649,68 @@ object SwcanFrameDecoder {
                 SwcanField.WINDOW_FR to (d[1] and WINDOW_BITS),
                 SwcanField.WINDOW_RR to ((d[1] shr WINDOW_REAR_SHIFT) and WINDOW_BITS),
             )
-        return raw
-            .filter { it.second != WINDOW_FILLER && it.second <= WINDOW_OPEN_MAX }
-            .map { (field, pos) -> num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0) }
+        return raw.map { (field, pos) ->
+            if (pos == WINDOW_FILLER || pos > WINDOW_OPEN_MAX) {
+                SwcanReading(field, SwcanReading.INVALID)
+            } else {
+                num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0)
+            }
+        }
     }
 
     // Hood_Status_LS (arb 0x394): HdSt is byte 0 bits 0..1, valid unless bit 2 is set. 0 read on the
-    // car with the hood shut (2026-10-06); any other state is treated as open.
+    // car with the hood shut (2026-10-06); any other state is treated as open. A report flagged not
+    // valid reads INVALID, so an earlier "closed" can't stand in for it.
     private fun hood(d: IntArray): List<SwcanReading> {
-        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        if (d.isEmpty()) return none()
+        if (invalid(d, 0, 2)) return listOf(SwcanReading(SwcanField.HOOD, SwcanReading.INVALID))
         return listOf(text(SwcanField.HOOD, if (d[0] and HOOD_STATE_BITS == 0) "closed" else "open"))
     }
 
+    /**
+     * Front_Seat_Heat_Cool_Control_LS (arb 0x391) and Rear_Seat_Heat_Cool_Control_LS (arb 0x3B4):
+     * the seat-heat modules' level lamps, five per seat, bits 0..4 of byte 2 (driver, rear left) and
+     * byte 3 (passenger, rear right), per GM's signal list (DrvHCSLSeatLev1-5, PassHCSLSeatLev1-5).
+     * The level is how many are lit. Not the switch frames (0x392, 0x3B6), which only say a button is
+     * down. UNCONFIRMED-ON-CAR: the guided car test presses each button to check it.
+     */
+    private fun seatHeat(
+        d: IntArray,
+        left: SwcanField,
+        right: SwcanField,
+    ): List<SwcanReading> {
+        if (d.size < 4) return none()
+        return listOf(
+            num(left, Integer.bitCount(d[2] and SEAT_LEVEL_BITS).toDouble(), 0),
+            num(right, Integer.bitCount(d[3] and SEAT_LEVEL_BITS).toDouble(), 0),
+        )
+    }
+
+    // Charging_Sys_Trans_Shift_Lock_LS (arb 0x112): ChrgPrtDrStat is byte 0 bits 1-2. On the car (car
+    // off, 2026-10-07) byte 0 read 0x02 with the door open and 0x00 once it was shut, so 1 = open and
+    // 0 = closed. 2 and 3 were never seen: kept as their number, not guessed at.
+    private fun chargePortDoor(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty()) return none()
+        return listOf(text(SwcanField.CHARGE_PORT_DOOR, CHARGE_PORT_STATES[(d[0] shr 1) and CHARGE_PORT_BITS]))
+    }
+
+    // VICM_Info_LS (arb 0x3B2): VehRefuelSt is byte 0 bits 0-2. Only byte 0 is read (the rest of the
+    // frame is lifetime fuel economy, never kept). On the car it went 0 -> 1 as the fuel door button
+    // was pressed, 2 about two seconds later, and back to 0 as the door was shut: idle, requested,
+    // ready (the door released, which is not the door seen open: FlDrOpenIndOn never set). Other
+    // values are kept as their number.
+    private fun refuelState(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty()) return none()
+        val state = d[0] and REFUEL_STATE_BITS
+        return listOf(text(SwcanField.REFUEL_STATE, REFUEL_STATES.getOrElse(state) { "state_$state" }))
+    }
+
     // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.
-    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s.
+    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s. A report
+    // flagged not valid reads INVALID, so an earlier "off" can't stand in for it.
     private fun powerMode(d: IntArray): List<SwcanReading> {
-        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        if (d.isEmpty()) return none()
+        if (invalid(d, 0, 2)) return listOf(SwcanReading(SwcanField.POWER_MODE, SwcanReading.INVALID))
         return listOf(text(SwcanField.POWER_MODE, POWER_MODES[d[0] and POWER_MODE_BITS]))
     }
 
@@ -683,6 +756,8 @@ object SwcanFrameDecoder {
 
     /** GMLAN system power modes by SysPwrMd value. */
     private val POWER_MODES = listOf("off", "accessory", "run", "crank")
+    private val CHARGE_PORT_STATES = listOf("closed", "open", "state_2", "state_3")
+    private val REFUEL_STATES = listOf("idle", "requested", "ready")
 
     private val FAST_WARNINGS = listOf(WarningFlag(0, 0, "abs"))
     private val SLOW_WARNINGS =

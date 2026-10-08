@@ -9,6 +9,7 @@ import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.ObdSessionLog
 import com.volttracker.obdpoc.SessionSummary
 import com.volttracker.obdpoc.SessionSummaryStore
+import com.volttracker.obdpoc.SwcanPrivacy
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException
@@ -50,6 +51,11 @@ class SessionRecorder {
     private var activeAdapterName = ""
     private var activeAddress = ""
     private var currentHeader = ""
+
+    // True while the adapter is off HS (from an `STP` protocol switch, or a body-bus monitor, until a
+    // reply proves it back: `ATDPN` answering 6, or a reset's banner): replies stored then keep only
+    // the adapter's status words.
+    private var offHs = false
     private var lastPersistedStatusKey = ""
     private var lastPersistedStatusAtMs = 0L
     private val pendingPidObservations = ArrayList<PendingPidObservation>(PID_OBSERVATION_BATCH_SIZE)
@@ -327,12 +333,13 @@ class SessionRecorder {
             val payload = JSONObject()
             val observedAtMs = System.currentTimeMillis()
             val header = currentHeader
+            val stored = storedReply(command, response)
             try {
                 payload.put("command", command)
                 payload.put("header", header)
                 payload.put("timeoutMs", timeoutMs)
                 payload.put("durationMs", durationMs)
-                payload.put("response", ObdElmDecode.summarizeForStorage(command, response))
+                payload.put("response", stored)
                 payload.put("gotPrompt", response != null && response.indexOf('>') >= 0)
                 payload.put("truncatedOnDeadline", truncatedOnDeadline)
                 if (truncatedOnDeadline) {
@@ -344,10 +351,37 @@ class SessionRecorder {
                 Log.w(TAG, "command log payload encode failed", ex)
             }
             logJson("command", payload)
-            persistPidObservation(command, header, observedAtMs, timeoutMs, durationMs, response)
+            persistPidObservation(command, header, observedAtMs, timeoutMs, durationMs, response, stored)
             updateHeaderState(command)
         }
     }
+
+    /** A body-bus monitor is starting: replies are stored as status words only until HS is back. */
+    fun bodyBusMonitoring() {
+        synchronized(lock) { offHs = true }
+    }
+
+    /**
+     * What of [response] may be stored: [SwcanPrivacy.statusOnly] while the adapter is off HS, where
+     * a reply can hold a bus frame or a fragment of one, else the usual summary. A protocol switch
+     * anywhere in a `|` batch makes its whole reply status-only, and the adapter counts as back on HS
+     * only once a reply proves it ([SwcanPrivacy.confirmsHs]), not because a check was sent.
+     */
+    private fun storedReply(
+        command: String?,
+        response: String?,
+    ): String {
+        offHs = offHs || SwcanPrivacy.switchesProtocol(command)
+        val stored = replyText(command, response)
+        offHs = offHs && !SwcanPrivacy.confirmsHs(command, response)
+        return stored
+    }
+
+    /** What of an adapter [response] to [command] an event may keep, by where the adapter is now. */
+    private fun replyText(
+        command: String?,
+        response: String?,
+    ): String = if (offHs) SwcanPrivacy.statusOnly(response) else ObdElmDecode.summarizeForStorage(command, response)
 
     fun logError(
         type: String?,
@@ -366,6 +400,10 @@ class SessionRecorder {
         }
     }
 
+    /**
+     * Logs [event] with its key/value [pairs]. A [REPLY_FIELDS] value is an adapter's reply, stored by
+     * the same rule as a command's ([replyText]): no event keeps what the command log withholds.
+     */
     fun logEvent(
         event: String?,
         vararg pairs: String?,
@@ -374,9 +412,16 @@ class SessionRecorder {
             val payload = JSONObject()
             try {
                 payload.put("event", event)
+                val command =
+                    pairs
+                        .toList()
+                        .chunked(2)
+                        .firstOrNull { it[0] == "command" }
+                        ?.getOrNull(1)
                 var i = 0
                 while (i + 1 < pairs.size) {
-                    payload.put(pairs[i] ?: "", pairs[i + 1])
+                    val key = pairs[i] ?: ""
+                    payload.put(key, if (key in REPLY_FIELDS) replyText(command, pairs[i + 1]) else pairs[i + 1])
                     i += 2
                 }
             } catch (ex: JSONException) {
@@ -549,6 +594,7 @@ class SessionRecorder {
         timeoutMs: Long,
         durationMs: Long,
         response: String?,
+        summary: String,
     ) {
         val sessionId = activeSessionId
         val store = localStore
@@ -556,7 +602,6 @@ class SessionRecorder {
             return
         }
         val safeCommand = command?.trim()?.uppercase(Locale.US) ?: ""
-        val summary = ObdElmDecode.summarizeForStorage(safeCommand, response)
         val parsed = ObdProtocol.parseKnownValue(safeCommand, response)
         val diagnosticCodes = ObdProtocol.parseDiagnosticTroubleCodes(safeCommand, response, header)
         val payload = JSONObject()
@@ -634,6 +679,9 @@ class SessionRecorder {
 
     companion object {
         private const val TAG = "SessionRecorder"
+
+        /** Event fields that hold an adapter's reply (`pid_parse_failed`'s `response`, a probe's `raw`). */
+        private val REPLY_FIELDS = setOf("response", "raw")
 
         const val TELEMETRY_QUEUE_CAPACITY: Int = ObdPersistenceWorker.TELEMETRY_QUEUE_CAPACITY
         const val LIFECYCLE_QUEUE_CAPACITY: Int = ObdPersistenceWorker.LIFECYCLE_QUEUE_CAPACITY

@@ -309,6 +309,8 @@ open class ElmConnection
             @JvmField val endedEarly: Boolean,
             /** True when the output hit the response cap and was cut short. */
             @JvmField val capped: Boolean,
+            /** Stream lines longer than the line cap, passed on cut short ([monitorStream] only). */
+            @JvmField val longLines: Int = 0,
         )
 
         /**
@@ -341,6 +343,139 @@ open class ElmConnection
             val stopped = readUntilPrompt(inputStream, response, clock.nowMs() + maxOf(0L, stopTimeoutMs), keepWaiting)
             lastTransactTruncated = responseCapped
             return MonitorResult(response.toString(), stopped, false, responseCapped)
+        }
+
+        /**
+         * [monitor] for a long listen: each complete output line goes to [onLine] the moment it is
+         * read instead of being collected, so there is no output cap and the caller can time every
+         * frame (the time it reached the phone, Bluetooth buffering included). [onLine] returning
+         * false stops monitoring early. While the bus is silent [onLine] gets an empty line every
+         * [STREAM_IDLE_TICK_MS], so the caller can still stop on a request or on the silence itself.
+         * Every line after the one [onLine] stopped on goes to [onDrain] instead, each as it is read:
+         * the rest of what was read with it, then what the adapter still prints after the stop byte
+         * (its queue, up to ~4 s on the car). So they keep their own arrival times and the caller
+         * can tell them from the listen proper. Lines are cut at [MAX_STREAM_LINE_CHARS] (counted in
+         * the result's `longLines`). The result's text is only what followed the stop byte.
+         */
+        @Throws(IOException::class)
+        open fun monitorStream(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            keepWaiting: KeepWaiting,
+            onLine: (String) -> Boolean,
+            onDrain: (String) -> Unit,
+        ): MonitorResult {
+            val out = output ?: throw IOException("Adapter stream is not open")
+            val inputStream = input ?: throw IOException("Adapter stream is not open")
+            lastTransactTruncated = false
+            drainInput()
+            out.write((command + "\r").toByteArray(StandardCharsets.US_ASCII))
+            out.flush()
+            val line = StringBuilder()
+            val deadline = clock.nowMs() + maxOf(0L, listenMs)
+            val buffer = ByteArray(STREAM_BUFFER_BYTES)
+            var listening = true
+            var heardAtMs = clock.nowMs()
+            streamLongLines = 0
+            // One line to whichever side of the stop it belongs: once onLine has said stop, the drain.
+            val deliver = { text: String -> if (listening) listening = onLine(text) else onDrain(text) }
+            while (listening && clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (clock.nowMs() - heardAtMs >= STREAM_IDLE_TICK_MS) {
+                        heardAtMs = clock.nowMs()
+                        listening = onLine("")
+                    } else if (!sleep(STREAM_POLL_MS)) {
+                        break
+                    }
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                heardAtMs = clock.nowMs()
+                for (i in 0 until read) {
+                    val c = (buffer[i].toInt() and BYTE_MASK).toChar()
+                    if (c == '>' || c == '\r' || c == '\n') {
+                        val text = line.toString()
+                        line.setLength(0)
+                        if (text.isNotEmpty()) deliver(text)
+                        // The adapter stopped monitoring by itself (an error, or its buffer full).
+                        if (c == '>') return MonitorResult(text, true, listening, false, streamLongLines)
+                    } else {
+                        appendCapped(line, c)
+                    }
+                }
+            }
+            out.write('\r'.code)
+            out.flush()
+            val tail = StringBuilder()
+            responseCapped = false
+            val stopped =
+                drainUntilPrompt(
+                    inputStream,
+                    line,
+                    tail,
+                    clock.nowMs() + maxOf(0L, stopTimeoutMs),
+                    keepWaiting,
+                    onDrain,
+                )
+            lastTransactTruncated = responseCapped
+            return MonitorResult(tail.toString(), stopped, false, responseCapped, streamLongLines)
+        }
+
+        // Lines [monitorStream] cut at MAX_STREAM_LINE_CHARS; each counted once, at its first dropped character.
+        private var streamLongLines = 0
+
+        private fun appendCapped(
+            line: StringBuilder,
+            c: Char,
+        ) {
+            if (line.length < MAX_STREAM_LINE_CHARS) {
+                line.append(c)
+            } else if (line.length == MAX_STREAM_LINE_CHARS) {
+                // One character past the cap marks the line as cut, so it counts once.
+                line.append(LINE_CUT)
+                streamLongLines += 1
+            }
+        }
+
+        /**
+         * After a stream's stop byte: hands each line to [onDrain] as it is read (finishing the
+         * [line] that was in progress), keeps up to [MAX_RESPONSE_CHARS] of it in [tail], until the
+         * `>` prompt, [deadline], or [keepWaiting] going false. True when the prompt arrived.
+         */
+        private fun drainUntilPrompt(
+            inputStream: InputStream,
+            line: StringBuilder,
+            tail: StringBuilder,
+            deadline: Long,
+            keepWaiting: KeepWaiting,
+            onDrain: (String) -> Unit,
+        ): Boolean {
+            val buffer = ByteArray(STREAM_BUFFER_BYTES)
+            while (clock.nowMs() < deadline && keepWaiting.getAsBoolean()) {
+                val available = inputStream.available()
+                if (available <= 0) {
+                    if (!sleep(STREAM_POLL_MS)) break
+                    continue
+                }
+                val read = inputStream.read(buffer, 0, minOf(buffer.size, available))
+                if (read < 0) break
+                for (i in 0 until read) {
+                    val c = (buffer[i].toInt() and BYTE_MASK).toChar()
+                    if (tail.length < MAX_RESPONSE_CHARS) tail.append(c) else responseCapped = true
+                    if (c == '>' || c == '\r' || c == '\n') {
+                        if (line.isNotEmpty()) onDrain(line.toString())
+                        line.setLength(0)
+                        if (c == '>') return true
+                    } else {
+                        appendCapped(line, c)
+                    }
+                }
+            }
+            if (line.isNotEmpty()) onDrain(line.toString())
+            return false
         }
 
         // Set by readUntilPrompt when output past MAX_RESPONSE_CHARS was discarded.
@@ -438,6 +573,17 @@ open class ElmConnection
             // A malfunctioning or malicious adapter can stream forever without an ELM prompt.
             // Keep a single command response bounded so it cannot exhaust the app process heap.
             private const val MAX_RESPONSE_CHARS = 64 * 1024
+
+            // monitorStream: read size, idle poll, silence between idle ticks, and the longest line
+            // kept (a frame is ~40 chars).
+            private const val STREAM_BUFFER_BYTES = 512
+            private const val STREAM_POLL_MS = 10L
+            const val STREAM_IDLE_TICK_MS = 250L
+            private const val MAX_STREAM_LINE_CHARS = 256
+
+            /** Ends a stream line cut at [MAX_STREAM_LINE_CHARS], so it never parses as a whole frame. */
+            private const val LINE_CUT = '~'
+            private const val BYTE_MASK = 0xFF
 
             /** True when [response] holds more than the echoed [command] and ELM status lines. */
             @VisibleForTesting

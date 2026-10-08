@@ -36,6 +36,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.ui.components.ConnectRow
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconSquare
@@ -83,6 +84,8 @@ fun CarScreen(
     sohPct: Double?,
     demo: Boolean,
     modifier: Modifier = Modifier,
+    /** The guided car test's progress (debug builds offer it; see [CarActions.onGuidedTest]). */
+    guided: GuidedTestStatus = GuidedTestStatus(),
     actions: CarActions = CarActions(),
 ) {
     val nav = LocalVoltNav.current
@@ -95,6 +98,7 @@ fun CarScreen(
     ) {
         // Everything on this tab is live: off the link it offers the same two ways in as Drive.
         ConnectRow(drive.connected, drive.connecting, nav.connect, nav.startDemo)
+        actions.onGuidedTest?.takeIf { guided.running }?.let { GuidedTestCard(guided, it) }
         StatusRow(drive, car)
         CarTopView(
             tires = drive.tires,
@@ -185,6 +189,74 @@ fun CarScreen(
                 subtitle = tireTestLine(canTest),
                 onClick = actions.onTireTest.takeIf { canTest },
             )
+            actions.onGuidedTest?.let { onGuided ->
+                VoltListDivider()
+                VoltListRow(
+                    icon = VoltIcons.Scan,
+                    title = GUIDED_TEST_TITLE,
+                    subtitle = guidedTestLine(canTest, guided),
+                    onClick = { onGuided("start") }.takeIf { canTest && !guided.running },
+                )
+                VoltListDivider()
+                VoltListRow(
+                    icon = VoltIcons.Drive,
+                    title = GUIDED_DRIVE_TITLE,
+                    subtitle = guidedDriveLine(canTest),
+                    onClick = { onGuided("start_drive") }.takeIf { canTest && !guided.running },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * The running guided test: the step, what the phone just said, how the last step went, the hearing
+ * check, Skip (not during the hearing check) and Stop.
+ */
+@Composable
+private fun GuidedTestCard(
+    status: GuidedTestStatus,
+    onGuided: (String) -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+            .voltCard()
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        VoltLabel("$GUIDED_TEST_TITLE · ${guidedStepLabel(status)}")
+        Text(
+            status.instruction,
+            style = VoltType.bodyStrong,
+            color = VoltColors.textPrimary,
+            modifier = Modifier.padding(top = 6.dp),
+        )
+        if (status.lastResult.isNotEmpty()) {
+            Text(
+                "Last step: ${status.lastResult}",
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
+        Text(
+            status.note.ifEmpty { GUIDED_TEST_NOTE },
+            style = VoltType.caption,
+            color = VoltColors.textSecondary,
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (status.confirm) {
+            VoltButton(
+                GUIDED_CONFIRM_LABEL,
+                Modifier.fillMaxWidth().padding(top = 10.dp),
+                accent = true,
+            ) { onGuided("confirm") }
+        }
+        Row(Modifier.fillMaxWidth().padding(top = 10.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // The hearing check can't be skipped (the test ignores Skip there), so it isn't offered.
+            if (!status.confirm) VoltButton("Skip step", Modifier.weight(1f)) { onGuided("skip") }
+            VoltButton("Stop test", Modifier.weight(1f)) { onGuided("stop") }
         }
     }
 }

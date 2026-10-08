@@ -129,15 +129,21 @@ internal object CarBodyMapper {
         return if (states.isEmpty()) null else Openings(states)
     }
 
-    /** Each window the sample reports replaces what was known of it; the rest stay as they were. */
+    /**
+     * Each window the sample reports replaces what was known of it, and one it lists as not valid
+     * (`windowsInvalid`, `fl,rr`) is no longer known; the rest stay as they were.
+     */
     private fun windows(
         t: JSONObject,
         current: List<Int?>?,
     ): List<Int?>? {
         val pct = WINDOW_KEYS.map { number(t, it) }
-        if (pct.all { it == null }) return current
+        val invalid = codes(t, WINDOWS_INVALID_KEY)
+        if (pct.all { it == null } && invalid.isEmpty()) return current
         val known = current ?: WINDOW_KEYS.map { null }
-        return pct.mapIndexed { i, value -> value?.toInt()?.coerceIn(0, PERCENT) ?: known[i] }
+        return pct.mapIndexed { i, value ->
+            if (WINDOW_CODES[i] in invalid) null else value?.toInt()?.coerceIn(0, PERCENT) ?: known[i]
+        }
     }
 
     /**
@@ -148,14 +154,20 @@ internal object CarBodyMapper {
         t: JSONObject,
         current: List<String>,
     ): List<String> {
-        val faults = text(t, TIRE_FAULTS_KEY)
-        if (faults == null && TIRE_KEYS.none { t.has(it) }) return current
-        return faults
+        if (text(t, TIRE_FAULTS_KEY) == null && TIRE_KEYS.none { t.has(it) }) return current
+        return codes(t, TIRE_FAULTS_KEY)
+    }
+
+    /** A comma-joined list of wheel or window codes (`fl,rr`); empty when absent. */
+    private fun codes(
+        t: JSONObject,
+        key: String,
+    ): List<String> =
+        text(t, key)
             ?.split(',')
             ?.map { it.trim() }
             ?.filter { it.isNotEmpty() }
             .orEmpty()
-    }
 
     /** `dashWarnings`: comma-joined codes of the lights on, "" for none. */
     private fun dashWarnings(
@@ -233,6 +245,10 @@ internal object CarBodyMapper {
             Opening.HATCH to "trunkState",
         )
     private val WINDOW_KEYS = listOf("windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct")
+    private const val WINDOWS_INVALID_KEY = "windowsInvalid"
+
+    /** [WINDOW_KEYS]' codes in `windowsInvalid`. */
+    private val WINDOW_CODES = listOf("fl", "fr", "rl", "rr")
 
     /** FL, FR, RL, RR, the order [TirePressures] takes them. */
     private val TIRE_KEYS = listOf("tirePressureFlKpa", "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa")
@@ -243,7 +259,7 @@ internal object CarBodyMapper {
             BodyGroup.TIRES to (TIRE_KEYS + TIRE_FAULTS_KEY to "tirePressureStaleMs"),
             BodyGroup.LOCK to (listOf("doorLockState") to "doorLockStaleMs"),
             BodyGroup.DOORS to (OPENING_KEYS.map { it.second } to "doorStatusStaleMs"),
-            BodyGroup.WINDOWS to (WINDOW_KEYS to "windowStaleMs"),
+            BodyGroup.WINDOWS to (WINDOW_KEYS + WINDOWS_INVALID_KEY to "windowStaleMs"),
             BodyGroup.CLIMATE to (listOf("acState", "blowerPct", "cabinTempEstC") to CLIMATE_STALE),
             BodyGroup.AUX12 to (listOf("aux12vVoltage") to "aux12vStaleMs"),
             BodyGroup.OIL to (listOf("oilLifeRemainingPct") to "oilLifeStaleMs"),

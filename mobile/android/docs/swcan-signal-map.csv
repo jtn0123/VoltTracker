@@ -4,7 +4,7 @@ id,arb,src,bytes,name,gm_signal,scale,unit,status,app_key,evidence
 10248040,124,40,2,12 V battery voltage,Battery_Voltage.BatVlt,0.1*raw + 3,V,decoded,aux12vVoltage,"r .985 vs polled 12 V (fit 0.092*raw + 3.5, 2 sessions); 0x61 = 12.7 V in regulated-voltage mode"
 10248040,124,40,3,12 V battery state of charge,Battery_Voltage.BatSOC,0.392,%,decoded,aux12vSocPct,always FF (not available) on this car; the app drops it
 10248040,124,40,5,"12 V battery current, charge positive",Battery_Voltage.BattCrntFltrd,signed 0.5,A,decoded-unchecked,aux12vCurrentA,not compared against anything yet
-103D4040,1EA,40,2;3;4;5,"tire pressures FL RL FR RR (0, FE, FF = no reading)",Tire_Pressure_Sensors_LS.TireLFPrs/TireLRPrs/TireRFPrs/TireRRPrs,4,kPa,decoded,tirePressureFlKpa;tirePressureRlKpa;tirePressureFrKpa;tirePressureRrKpa,"10-04: sent once per drive, in the first seconds after start. GM's layout confirms the corner order (b2 LF, b3 LR, b4 RF, b5 RR)"
+103D4040,1EA,40,2;3;4;5,"tire pressures FL RL FR RR (FE, FF and a set validity bit taken as no reading, both inferred; a valid 0 reads 0 kPa)",Tire_Pressure_Sensors_LS.TireLFPrs/TireLRPrs/TireRFPrs/TireRRPrs,4,kPa,decoded,tirePressureFlKpa;tirePressureRlKpa;tirePressureFrKpa;tirePressureRrKpa,"10-04: heard once, in the first seconds after start. 10-07: a 6 min drive listened through end to end heard it 6 times, first 36 s in, then 8 to 94 s apart (about once a minute while driving). GM's layout confirms the corner order (b2 LF, b3 LR, b4 RF, b5 RR). Validity-bit polarity inferred from 24 24 with all four plausible; FE/FF as not available is GM's usual code, unconfirmed here"
 102700CB,138,CB,1,A/C evaporator outlet air temperature,Thrml_Ref_Compressor_Status_LS.EvpCorOtltAirTmpCalcd,0.5*raw - 40,C,decoded,acEvapTempC,09-29: rose after A/C off
 102700CB,138,CB,2-3 (14 bits),A/C compressor speed,Thrml_Ref_Compressor_Status_LS.ThrmlRefCompSpd,1,rpm,decoded,acCompressorRpm,0 with A/C off; tracks 0x102740CB b4 (r .998)
 102740CB,13A,CB,4,A/C compressor power,Climate_Control_Status_LS.ClmCntCmpPwrUsdClc,0.04,kW,decoded,acCompressorKw,"10-04: about 1.1 kW with the A/C on, 3.6 kW at 6900 rpm; r .998 vs acCompressorRpm. App reads it from #165"
@@ -95,7 +95,7 @@ arb:319,319,,0-1 (16 bit flags),"bulb out: center brake, front turns, brakes, lo
 1022E040,117,40,*,driven-wheel rotation counters and timestamps,Driven_Whl_Rotational_Stat_LS,,,opaque,,301 distinct in 301 frames: free-running pulse counters
 10230040,118,40,*,non-driven-wheel rotation counters and timestamps,Non_Drvn_Whl_Rot_Status_LS,,,opaque,,301 distinct in 301 frames: free-running pulse counters
 108680CB,434,CB,*,HV battery charge start and finish times,High_Volt_Batt_Time_Pwr_Chrg_LS,,,dbc,,heard once on 10-04
-10264040,132,40,0 bit0,"fast warning indicators: ABS",HS_Indications_Fast_LS.ABSIO,,,decoded-unchecked,dashWarnings,same payload every frame on both days (light off)
+10264040,132,40,0 bit0,"fast warning indicators: ABS",HS_Indications_Fast_LS.ABSIO,,,decoded-unchecked,dashWarnings,"bytes 0-5 the same every frame so far (light off); 10-07: bytes 6-7, the instantaneous fuel rate, change about every frame"
 10780040,3C0,40,0-1 (bit flags),"slow warning indicators: tire low b0.2, oil starvation b0.5, brake fluid low b0.7 (b0.4 = invalid), brake pads b1.5, brake system b1.7",HS_Indications_Slow_LS,,,decoded-unchecked,dashWarnings,same payload every frame on both days (no light on)
 10806040,403,40,*,alternative fuel information,Alternative_Fuel_Information_LS,,,constant,,same payload every frame on both days
 10788040,3C4,40,0-2 (bit flags),"super-slow warning indicators: oil hot b0.5; oil change b1.1, oil level b1.2, oil pressure b1.3, reduced power b1.5, fuel cap b1.6, engine hot b1.7; power steering b2.1, steering assist b2.6",HS_Indications_SuperSlow_LS,,,decoded-unchecked,dashWarnings,same payload every frame on both days (no light on)
@@ -104,6 +104,8 @@ arb:319,319,,0-1 (16 bit flags),"bulb out: center brake, front turns, brakes, lo
 106D0080,368,80,*,audio master arbitration,Audio_Master_Arbitration_Command,,,constant,,same payload every frame on both days
 10466040,233,40,*,drive-mode customization availability,HSGMLAN_Customization_Setings_LS,,,constant,,same payload every frame on both days
 10242040,121,40,0 bits0-1,"system power mode: 0 off, 1 accessory, 2 run, 3 crank (bit 2 = not valid)",System_Power_Mode_LS.SysPwrMd,enum,,decoded,powerMode,"10-06: run while on, off as the car shut down; heard about every 5 s"
+102240CB,112,CB,0 bits1-2,"charge port door: 0 closed, 1 open (2 and 3 not seen)",Charging_Sys_Trans_Shift_Lock_LS.ChrgPrtDrStat,enum,,decoded,chargePortDoor,"10-07, car off: 02 with the door open, 00 once it was shut; first time this frame was heard on our car"
+107640CB,3B2,CB,0 bits0-2,"refuel state: 0 idle, 1 requested, 2 ready (fuel door released)",VICM_Info_LS.VehRefuelSt,enum,,decoded,refuelState,"10-07, car off: 1 as the fuel door button was pressed, 2 about 2 s later, 0 once the door was shut; FlDrOpenIndOn (bit 3) never set; only byte 0 of this frame is ever kept"
 10244060,122,60,*,system power mode backup,System_Power_Mode_Backup_LS,,,constant,,same payload every frame on both days
 103D20BC,1E9,BC,*,rear vision / auto-brake indications,CSV_EOCM_R_Indications_LS,,,constant,,same payload every frame on both days
 arb:1FFF,1FFF,any,*,"module heartbeat, empty payload; the source byte names the module",,,,heartbeat,,16 modules: 40 58 59 5B 60 66 68 80 81 97 99 AF B9 BB BC CB
@@ -128,6 +130,23 @@ arb:47A,47A,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be pr
 arb:480,480,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:481,481,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
 arb:482,482,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be printed, logged or committed"
+arb:148,148,,*,unlock key store (cryptographic),Unlock_Key_Store_Crypt_1_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:150,150,,*,unlock key store (cryptographic),Unlock_Key_Store_Crypt_2_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:17F,17F,,*,keyless start authentication,Keyless_Start_Auth_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:1CA,1CA,,*,theft notification (security column-lock password),Vehicle_Theft_Notification_Stat,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:38A,38A,,*,driver identifier,Driver_Identifier_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:306,306,,*,teen driver settings (PIN stored),Teen_Driver_Control_Info_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:30B,30B,,*,teen driver PIN,Teen_Driver_Customization_Req_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:125,125,,*,Bluetooth tethering pairing reply,BluetoothTetheringPairingRsp_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:476,476,,*,OnStar Wi-Fi station settings,WiFi_Station_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:483,483,,*,OnStar Wi-Fi name (AMM),SSID_AMM_1_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:484,484,,*,OnStar Wi-Fi name (AMM),SSID_AMM_2_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:485,485,,*,OnStar Wi-Fi name (AMM),SSID_AMM_3_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:486,486,,*,OnStar Wi-Fi password (AMM),PassPhrase_1_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:487,487,,*,OnStar Wi-Fi password (AMM),PassPhrase_2_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:488,488,,*,OnStar Wi-Fi password (AMM),PassPhrase_3_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:489,489,,*,OnStar Wi-Fi access point settings (AMM),WiFi_AP_Data_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
+arb:490,490,,*,OnStar Wi-Fi station settings (AMM),WiFi_Station_AMM_LS,,,sensitive,,"named in GM's signal list (DBC), not heard yet; payload must never be printed, logged or committed"
 1040A081,205,81,*,chime active,Chime_Active.ChmAct,,,dbc,,flag 00/01
 10400060,200,60,*,"chime command (tone, cadence, repeats)",Chime_Command,,,dbc,,b0 and b4 change together
 104C00BC,260,BC,*,lane departure warning status,Lane_Departure_Warning_LS,,,dbc,,b2 flag 00/18
@@ -140,3 +159,7 @@ arb:482,482,,*,OnStar Wi-Fi hotspot text,,,,sensitive,,"payload must never be pr
 102340BC,11A,BC,*,"forward collision alert, following distance",FCA_VisionBased_Info_LS,,,dbc,,15 distinct
 103A00BB,1D0,BB,*,park assist status,Park_Assistant_General_Status,,,dbc,,heard once
 103A40BB,1D2,BB,*,park assist front sensors,Park_Assistant_Front_Status,,,dbc,,heard once
+arb:391,391,40 (heard),2 bits0-4,"driver seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.DrvHCSLSeatLev1-5,count,,decoded,seatHeatFlLevel,"10-07: 3, 2, 1, 0 lamps press by press (byte 2 3C, 2C, 24, 00); bits 5-6 are the indicator request, byte 0 0C the heat mode"
+arb:391,391,40 (heard),3 bits0-4,"passenger seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.PassHCSLSeatLev1-5,count,,decoded,seatHeatFrLevel,"10-07: 3, 2, 1, 0 lamps press by press (byte 3 3C, 2C, 24, 00); byte 1 0C the heat mode"
+arb:3B4,3B4,40 (heard),2 bits0-4,"rear left seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RLHCSLSeatLev1-5,count,,decoded,seatHeatRlLevel,"10-07: 3 lamps on the first press, 0 on the next"
+arb:3B4,3B4,40 (heard),3 bits0-4,"rear right seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RRHCSLSeatLev1-5,count,,decoded,seatHeatRrLevel,"10-07: 3 lamps on the first press; this car's right rear switch (3B6 bit 3) then read held down, so lower levels weren't seen"

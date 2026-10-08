@@ -25,6 +25,8 @@ import com.volttracker.obdpoc.EventNotificationCoordinator
 import com.volttracker.obdpoc.EventNotificationPrefs
 import com.volttracker.obdpoc.EventNotifier
 import com.volttracker.obdpoc.FailureClass
+import com.volttracker.obdpoc.GuidedCarTestState
+import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.LiveDashboardSnapshot
 import com.volttracker.obdpoc.OBDLog
 import com.volttracker.obdpoc.ObdSessionLog
@@ -44,6 +46,7 @@ import com.volttracker.obdpoc.WidgetTelemetryCoalescer
 import com.volttracker.obdpoc.data.ObdLocalStore
 import com.volttracker.obdpoc.data.ObdSessionRecovery
 import com.volttracker.obdpoc.engine.EngineHost
+import com.volttracker.obdpoc.engine.GuidedCarTest
 import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.location.LocationManagerTracker
@@ -388,6 +391,19 @@ open class ObdService :
                     } else {
                         engine.requestBodyFocus(intent.getLongExtra(EXTRA_DURATION_MS, 0L))
                     }
+                }
+                val active = running.get()
+                if (!active) stopSelf(startId)
+                return if (active) START_STICKY else START_NOT_STICKY
+            }
+            ACTION_GUIDED_TEST -> {
+                // Start and Skip need a live session; Stop always works, so a card left showing a
+                // test from a session that has ended can still be cleared.
+                val op = GuidedCarTest.Op.fromWire(intent.getStringExtra(EXTRA_GUIDED_OP))
+                if (op == GuidedCarTest.Op.STOP && !running.get()) {
+                    GuidedCarTestState.publish(GuidedTestStatus())
+                } else if (op != null && running.get()) {
+                    engine.guidedTest.request(op)
                 }
                 val active = running.get()
                 if (!active) stopSelf(startId)
@@ -765,6 +781,9 @@ open class ObdService :
     }
 
     private fun stopCurrentSession(statusMessage: String?) {
+        // While the session still runs, so a guided listen can stop and switch the adapter back to
+        // HS (bounded) before the poll thread is cancelled and the socket closed.
+        if (::engine.isInitialized) engine.guidedTest.abandon()
         releaseSessionWakeLock()
         running.set(false)
         SESSION_ACTIVE.set(false)
@@ -772,9 +791,7 @@ open class ObdService :
         activeTask?.cancel(true)
         activeTask = null
         stopLocationTracking()
-        if (::engine.isInitialized) {
-            engine.closeSocket()
-        }
+        if (::engine.isInitialized) engine.closeSocket()
         if (statusMessage != null) {
             broadcastStatus("idle", statusMessage, false)
         }
@@ -1157,6 +1174,13 @@ open class ObdService :
         /** The Car tab is open (or, with a 0 [EXTRA_DURATION_MS], closed): listen to the body bus nonstop. */
         const val ACTION_BODY_FOCUS = "com.volttracker.obdpoc.action.BODY_FOCUS"
         const val EXTRA_DURATION_MS = "duration_ms"
+
+        /**
+         * Start, skip or stop the guided car test ([EXTRA_GUIDED_OP]: `start`, `start_drive`, `skip`,
+         * `stop`). Debug builds.
+         */
+        const val ACTION_GUIDED_TEST = "com.volttracker.obdpoc.action.GUIDED_TEST"
+        const val EXTRA_GUIDED_OP = "guided_op"
 
         /** How long a body test listens: long enough to walk round the car opening things. */
         const val BODY_TEST_MS = 60_000L

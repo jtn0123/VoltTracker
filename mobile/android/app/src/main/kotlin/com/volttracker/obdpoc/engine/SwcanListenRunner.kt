@@ -47,6 +47,9 @@ import java.util.Locale
 class SwcanListenRunner(
     private val io: Io,
     private val policy: Policy = Policy(),
+    /** The guided test's clock: one that never jumps, since that test measures intervals. */
+    guidedClock: () -> Long = ::monotonicNowMs,
+    /** Wall time: readings are stamped with it and aged against each live sample's `updatedAt`. */
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     /** The engine operations the runner needs; implemented by [ObdPollingEngine]. */
@@ -63,6 +66,34 @@ class SwcanListenRunner(
             listenMs: Long,
             stopTimeoutMs: Long,
         ): ElmConnection.MonitorResult
+
+        /**
+         * [monitor], each output line handed over as it arrives ([ElmConnection.monitorStream]):
+         * to [onLine] while listening, to [onDrain] once the stop byte has gone. This default runs
+         * [monitor] and replays its lines, enough for fakes that time nothing.
+         */
+        @Throws(IOException::class)
+        fun monitorStream(
+            command: String,
+            listenMs: Long,
+            stopTimeoutMs: Long,
+            onLine: (String) -> Boolean,
+            onDrain: (String) -> Unit,
+        ): ElmConnection.MonitorResult {
+            val result = monitor(command, listenMs, stopTimeoutMs)
+            var listening = true
+            for (line in result.text.split('\r', '\n', '>')) {
+                when {
+                    line.isEmpty() -> Unit
+                    listening -> listening = onLine(line)
+                    else -> onDrain(line)
+                }
+            }
+            return result
+        }
+
+        /** The guided car test's spoken instructions; none by default. */
+        fun openVoice(): GuidedCarTest.Voice? = null
 
         /** Full adapter reset + HS init (ATZ …), used when HS state cannot be trusted. */
         @Throws(IOException::class)
@@ -82,6 +113,21 @@ class SwcanListenRunner(
          * event-only body frames (locks, doors, windows).
          */
         fun isStationary(): Boolean = false
+
+        /**
+         * The guided test's Park check ([ParkedDetector.isInPark]): Park read in the last few seconds,
+         * at a standstill, and nothing has shown the car moving since.
+         */
+        fun isInPark(): Boolean = false
+
+        /** Asks the next HS poll cycle to read the gear, so [isInPark] can be answered from a fresh read. */
+        fun requestGearRead() = Unit
+
+        /** How many times anything has shown the car moving ([ParkedDetector.motionCount]); a change means it has. */
+        fun motionCount(): Long = 0L
+
+        /** The body bus showed the car moving: Park has to be read again before [isInPark]. */
+        fun noteMotion() = Unit
 
         /** Session JSONL event, like every other engine event. */
         fun logEvent(
@@ -123,14 +169,17 @@ class SwcanListenRunner(
         /**
          * Tire hunt: the tire frame was never heard parked (sensors stay quiet until the wheels
          * roll), and a 1.2 s window every 45 s rarely lands on it. While moving with no tire value
-         * yet this session, listen longer and more often, for a bounded number of windows.
+         * yet this session, listen longer and more often, for a bounded number of windows. On a
+         * drive (2026-10-07) the car sent them about once a minute, 8 to 94 s apart, so the hunt
+         * listens often rather than long: a window pauses live data for its listen plus 2.5-5 s of
+         * bus switching, which has to stay under the live trip's 10 s step. 32 windows cover 10-12 min.
          */
         val tireHuntListenMs: Long = 4_000L,
-        val tireHuntIntervalMs: Long = 30_000L,
-        val tireHuntMaxWindows: Int = 20,
+        val tireHuntIntervalMs: Long = 15_000L,
+        val tireHuntMaxWindows: Int = 32,
         /**
-         * The first window after connect. The car broadcasts tire pressures about once a drive, and
-         * the one time a window caught them at the start it was 0.5 min in (2026-10-04).
+         * The first window after connect. The one time a window caught the tire pressures at the
+         * start it was 0.5 min in (2026-10-04); while driving they come about once a minute.
          */
         val startupListenMs: Long = 10_000L,
         /** Car tab open and parked: one long window after every HS poll cycle. */
@@ -153,8 +202,9 @@ class SwcanListenRunner(
          */
         val quietCaptureWithinMs: Long = 60_000L,
         /**
-         * Also log every regular window's raw monitor text, payload bytes included, the way a body
-         * test does. Debug builds only: it is how frames heard on a drive (tires, doors) get decoded.
+         * Also log every regular window's raw monitor text, the allowlisted body broadcasts' payload
+         * bytes included ([SwcanPrivacy.PAYLOAD_PIDS]), the way a body test does. Debug builds only:
+         * it is how frames heard on a drive (tires, doors) get decoded.
          */
         val logRawWindows: Boolean = false,
     )
@@ -200,14 +250,49 @@ class SwcanListenRunner(
     /** This stretch of HS silence has had its quiet capture; cleared once HS answers again. */
     private var quietCaptured = false
 
-    /** A quiet HS bus was counted as a troubled window without knowing whether the car was off. */
+    /**
+     * HS went quiet after a window without a power mode to explain it. Not counted as trouble yet:
+     * the quiet capture that follows says whether the car was simply switched off, and HS answering
+     * again (past [quietAtLiveCycles]) says the window's restore really did leave it broken.
+     */
     private var unexplainedQuiet = false
+    private var quietAtLiveCycles = 0L
 
     /** A requested body-test length, set from the service thread and taken by the poll loop. */
     @Volatile private var bodyTestRequestMs = 0L
 
     /** Until when the Car tab wants near-continuous listening; set from the service thread. */
     @Volatile private var focusUntilMs = 0L
+
+    /** The guided car test. It outlives [resetSession], so a reconnect picks it up at the same step. */
+    val guidedTest = GuidedCarTest(io, GuidedBus(), clock = guidedClock)
+
+    /** The guided test's bus switch: the same checks, setup and restore as a window. */
+    private inner class GuidedBus : GuidedCarTest.Bus {
+        override fun canListen(): Boolean? = if (identity == Identity.UNKNOWN) null else identity == Identity.STN
+
+        override fun enter(): String? =
+            if (currentProtocol().removePrefix("A") !=
+                HS_PROTOCOL
+            ) {
+                "ATDPN"
+            } else {
+                SETUP_COMMANDS.firstOrNull { !sendOk(it) }
+            }
+
+        override fun leave(): Boolean = restoreHs()
+
+        override fun record(decoded: List<SwcanReading>) = this@SwcanListenRunner.record(decoded)
+    }
+
+    /** A guided test is running or about to: the session must not end for a quiet car meanwhile. */
+    fun holdsSession(): Boolean = guidedTest.isActive()
+
+    /**
+     * The guided test heard the car switched off after its drive and has finished its capture: end
+     * the session now, as for a car gone to sleep. True once.
+     */
+    fun endsSession(): Boolean = guidedTest.takeSessionEnd()
 
     fun resetSession() {
         readings.clear()
@@ -226,6 +311,7 @@ class SwcanListenRunner(
         powerModeAtMs = 0L
         quietCaptured = false
         unexplainedQuiet = false
+        quietAtLiveCycles = 0L
     }
 
     /**
@@ -256,7 +342,8 @@ class SwcanListenRunner(
      * What car controls may assume about this adapter: only an STN adapter that has actually heard
      * this car's SW-CAN traffic, and has not failed to switch buses cleanly, is [CarControlGate.Adapter.READY].
      * A listener that went quiet because the car stopped broadcasting ("no_frames") keeps READY. One
-     * troubled window is enough to lose it, even though listening carries on.
+     * troubled window is enough to lose it, even though listening carries on, and so is a quiet HS
+     * bus after a window until it is explained.
      */
     fun controlCapability(): CarControlGate.Adapter =
         when {
@@ -264,6 +351,7 @@ class SwcanListenRunner(
             identity == Identity.NOT_STN -> CarControlGate.Adapter.NOT_STN
             okWindows > 0 &&
                 troubledWindows == 0 &&
+                !unexplainedQuiet &&
                 (disabledReason == null || disabledReason == "no_frames") -> CarControlGate.Adapter.READY
             else -> CarControlGate.Adapter.STN_UNVERIFIED
         }
@@ -309,6 +397,12 @@ class SwcanListenRunner(
                 return
             }
         }
+        if (unexplainedQuiet && io.liveCycleCount() > quietAtLiveCycles) {
+            // HS came back after the re-init, so the car was on: the window's restore had broken it.
+            unexplainedQuiet = false
+            countTrouble("hs_not_restored")
+        }
+        if (guidedTest.runNext()) return
         val bodyTestMs = bodyTestRequestMs
         if (bodyTestMs > 0L) {
             bodyTestRequestMs = 0L
@@ -455,7 +549,7 @@ class SwcanListenRunner(
         !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
 
     /**
-     * Debug builds log a window's frames, without the sensitive ones ([SwcanPrivacy]). Focus windows
+     * Debug builds log a window's frames, only the allowlisted ones ([SwcanPrivacy]). Focus windows
      * run back to back for as long as the Car tab is open, so theirs keep only the body frames
      * ([BODY_LOG_PIDS]): the ones a car test of doors, windows and locks needs, at a few hundred
      * bytes a window instead of ~60 KB.
@@ -565,9 +659,10 @@ class SwcanListenRunner(
 
     /**
      * HS polling got nothing in the cycle after a window. If the car's power mode last said off or
-     * accessory it was simply switched off. Otherwise the restore may have left HS broken: that
-     * counts as a troubled window and the adapter is re-initialised. The quiet capture that follows
-     * can still show the car was off, and then the window is forgiven.
+     * accessory it was simply switched off. Otherwise the restore may have left HS broken, so the
+     * adapter is re-initialised, but the window is not counted as trouble yet: a car switched off
+     * just before its power mode was heard looks the same. The quiet capture that follows decides
+     * (car off: nothing counted; car on: counted), or HS answering again does.
      */
     private fun onHsQuietAfterWindow() {
         if (carSwitchedOff()) {
@@ -575,9 +670,9 @@ class SwcanListenRunner(
             return
         }
         unexplainedQuiet = true
-        countTrouble("hs_not_restored")
         io.logEvent("swcan_hs_reinit", "reason", "no_live_data_after_window")
         io.reinitialize()
+        quietAtLiveCycles = io.liveCycleCount()
     }
 
     private fun carSwitchedOff(): Boolean =
@@ -629,7 +724,7 @@ class SwcanListenRunner(
                 "powerMode",
                 powerMode.orEmpty(),
             )
-            if (carOff && unexplainedQuiet && troubledWindows > 0 && disabledReason == null) troubledWindows -= 1
+            if (unexplainedQuiet && !carOff) countTrouble("hs_not_restored")
             unexplainedQuiet = false
             nextWindowAtMs = clock() + intervalMs()
             if (!restored) {

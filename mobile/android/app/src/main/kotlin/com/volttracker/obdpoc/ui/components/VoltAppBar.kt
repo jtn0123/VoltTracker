@@ -55,6 +55,12 @@ class VoltNavActions(
     /** Connect to the remembered adapter, or open the adapter picker when none is. */
     val connect: () -> Unit = {},
     val startDemo: () -> Unit = {},
+    /**
+     * End the live session; null while it mustn't be offered: mid-drive, where a stray tap would end
+     * it, or while a guided test holds the session (its live data paused, the phase can still read
+     * parked).
+     */
+    val disconnect: (() -> Unit)? = null,
     /** Re-read the saved history behind the screen that is showing. */
     val refresh: () -> Unit = {},
     val refreshing: Boolean = false,

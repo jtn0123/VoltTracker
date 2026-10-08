@@ -69,6 +69,9 @@ open class ObdPollingEngine(
     private val swcanListener: SwcanListenRunner
     private val carControl: CarControlSession
 
+    /** Park, not just a stop at a light, for the SW-CAN runner on the same poll thread. */
+    private val parkedDetector = ParkedDetector()
+
     // Written on the poll/IO thread, read on the main thread when closeSessionLog finalizes the
     // session row — @Volatile for the cross-thread visibility edge so the finalized row can't
     // record stale counters (B8). Single writer, so a plain volatile is sufficient.
@@ -102,10 +105,11 @@ open class ObdPollingEngine(
         tpmsDiscoveryRunner = TpmsDiscoveryRunner(service, this)
         cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
-        swcanListener = SwcanListenRunner(SwcanIo(), swcanPolicy)
+        val io = EngineSwcanIo(service, ::connection, ::sendCommand, ::initializeElm327, pidPolling, parkedDetector)
+        swcanListener = SwcanListenRunner(io, swcanPolicy)
         val carControlIo =
             CarControlEngineIo(
-                adapter = SwcanIo(),
+                adapter = io,
                 listener = swcanListener,
                 settings =
                     CarControlSettings {
@@ -125,44 +129,8 @@ open class ObdPollingEngine(
     /** See [SwcanListenRunner.requestBodyFocus]; safe from any thread. */
     fun requestBodyFocus(durationMs: Long) = swcanListener.requestBodyFocus(durationMs)
 
-    /** Park, not just a stop at a light, for the SW-CAN runner on the same poll thread. */
-    private val parkedDetector = ParkedDetector()
-
-    /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
-    private inner class SwcanIo : SwcanListenRunner.Io {
-        override fun send(
-            command: String,
-            timeoutMs: Long,
-        ): String = sendCommand(command, timeoutMs)
-
-        override fun monitor(
-            command: String,
-            listenMs: Long,
-            stopTimeoutMs: Long,
-        ): ElmConnection.MonitorResult =
-            synchronized(service.ioLock) {
-                connection.monitor(command, listenMs, stopTimeoutMs, service.running::get)
-            }
-
-        override fun reinitialize() {
-            initializeElm327()
-        }
-
-        override fun liveCycleCount(): Long = pidPolling.liveCycleCount()
-
-        override fun msSinceLiveData(): Long = pidPolling.msSinceLastLiveData()
-
-        override fun <T> exclusive(block: () -> T): T = synchronized(service.ioLock) { block() }
-
-        override fun isStationary(): Boolean = parkedDetector.isParked(System.currentTimeMillis())
-
-        override fun logEvent(
-            event: String,
-            vararg pairs: String,
-        ) {
-            service.recorder.logEvent(event, *pairs)
-        }
-    }
+    /** The guided car test; its [GuidedCarTest.request] and [GuidedCarTest.abandon] are safe from any thread. */
+    val guidedTest: GuidedCarTest get() = swcanListener.guidedTest
 
     fun beginSession(supportedPidsSeed: String?) {
         sampleCount = 0
@@ -171,7 +139,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
-        parkedDetector.reset()
+        parkedDetector.reset(System.currentTimeMillis())
         lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
@@ -303,6 +271,8 @@ open class ObdPollingEngine(
                     }
                     return
                 } catch (ex: IOException) {
+                    // The guided test's drive heard the car switch off before the link dropped: it is over.
+                    if (swcanListener.endsSession()) return endForVehicleSleep()
                     if (!handleAttemptFailure(retry, ex, attemptStart)) {
                         return
                     }
@@ -785,7 +755,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
-            parkedDetector.observe(sample, freshSpeedKph(sample), System.currentTimeMillis())
+            observeParked(parkedDetector, sample, pidPolling)
             appendSwcanReadings(sample)
             carControl.appendTo(sample)
             service.broadcastTelemetry(sample)
@@ -803,8 +773,11 @@ open class ObdPollingEngine(
             // A user-confirmed car command, if one is waiting (see CarControlRunner).
             carControl.afterSample()
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
-            // of polling a dead bus for an hour and eventually logging a bogus connect_timeout.
-            if (shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)) {
+            // of polling a dead bus for an hour and eventually logging a bogus connect_timeout. A
+            // guided car test turns the car off and on again, so it holds the session meanwhile, and
+            // ends it once the car is switched off after the test's drive.
+            val asleep = shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)
+            if (swcanListener.endsSession() || asleep && !swcanListener.holdsSession()) {
                 endForVehicleSleep()
                 return
             }
@@ -834,11 +807,7 @@ open class ObdPollingEngine(
             pidPolling.msSinceLastLiveData().toString(),
         )
         service.clearLastFailureClass()
-        service.broadcastStatus(
-            "idle",
-            "Car went to sleep — stopped logging. Your drive was saved.",
-            false,
-        )
+        service.broadcastStatus("idle", "Car went to sleep — stopped logging. Your drive was saved.", false)
         service.stopSelfFromRunner()
     }
 
@@ -1252,6 +1221,18 @@ open class ObdPollingEngine(
         }
     }
 }
+
+/** Folds [sample] into [detector]: its fresh speed, and its gear aged by when the gear PID last answered. */
+private fun observeParked(
+    detector: ParkedDetector,
+    sample: JSONObject,
+    polling: PidPollingState,
+) = detector.observe(
+    sample,
+    freshSpeedKph(sample),
+    polling.answeredAgoMs(ParkedDetector.GEAR_COMMAND),
+    System.currentTimeMillis(),
+)
 
 /**
  * The sample's speed, or NaN when the car stopped refreshing it (it's off, or asleep): a stale

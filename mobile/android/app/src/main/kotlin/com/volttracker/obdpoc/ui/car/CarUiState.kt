@@ -42,7 +42,7 @@ data class Openings(
 
 /**
  * Readings the car sends rarely, remembered between drives (and app restarts) with when they were
- * read: the tires come about once a drive, so a new drive would otherwise start with none.
+ * read: the tires come rarely (how often isn't known yet), so a new drive would otherwise start with none.
  */
 data class CarMemory(
     val tires: TirePressures? = null,
@@ -137,4 +137,6 @@ data class CarActions(
     val onBodyTest: () -> Unit = {},
     /** Ask the car's body computer for tire pressures (a short read-only probe session). */
     val onTireTest: () -> Unit = {},
+    /** Debug builds: `start`, `skip` or `stop` the guided car test. Null hides it. */
+    val onGuidedTest: ((String) -> Unit)? = null,
 )

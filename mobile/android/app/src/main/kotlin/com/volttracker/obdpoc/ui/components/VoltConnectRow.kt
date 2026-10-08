@@ -6,6 +6,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -17,7 +18,10 @@ import androidx.compose.ui.unit.dp
 /**
  * Offered while no session is live (Drive and Charge): reconnect the last adapter, or preview
  * with demo data. Hidden mid-handshake so a second tap can't start a replacement session; the
- * two buttons wrap onto two lines at large text sizes instead of clipping.
+ * two buttons wrap onto two lines at large text sizes instead of clipping. While a live session
+ * runs, the same spot offers Disconnect instead, so the way out isn't only in the notification:
+ * when [VoltNavActions.disconnect] offers it (never mid-drive or during a guided test), and not in
+ * demo, which Settings stops.
  */
 @Composable
 fun ConnectRow(
@@ -28,24 +32,37 @@ fun ConnectRow(
     modifier: Modifier = Modifier,
 ) {
     val reduceMotion = LocalVoltPrefs.current.reduceMotion
-    // Folds away once a session starts, so the cards below slide up instead of jumping.
-    AnimatedVisibility(
-        visible = !connected && !connecting,
-        enter =
-            expandVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
-                fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)),
-        exit =
-            shrinkVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
-                fadeOut(VoltMotion.spec(VoltMotion.FAST_MS, reduceMotion)),
-        modifier = modifier,
-    ) {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+    val demo = LocalVoltPrefs.current.demo
+    val disconnect = LocalVoltNav.current.disconnect
+    val enter =
+        expandVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
+            fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion))
+    val exit =
+        shrinkVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
+            fadeOut(VoltMotion.spec(VoltMotion.FAST_MS, reduceMotion))
+    Column(modifier) {
+        // Folds away once a session starts, so the cards below slide up instead of jumping.
+        AnimatedVisibility(visible = !connected && !connecting, enter = enter, exit = exit) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                VoltButton(text = "Connect", accent = true, onClick = onConnect)
+                VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
+            }
+        }
+        AnimatedVisibility(
+            visible = connected && !connecting && !demo && disconnect != null,
+            enter = enter,
+            exit = exit,
         ) {
-            VoltButton(text = "Connect", accent = true, onClick = onConnect)
-            VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
+            FlowRow(
+                modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+            ) {
+                VoltButton(text = "Disconnect", onClick = { disconnect?.invoke() })
+            }
         }
     }
 }

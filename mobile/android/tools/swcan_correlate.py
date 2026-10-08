@@ -77,12 +77,17 @@ STATUSES = {
     "sensitive",
     "unknown",
 }
-# GMLAN parameter ids that carry the VIN, location, immobilizer ids and the OnStar Wi-Fi settings.
+# GMLAN parameter ids that carry the VIN, location, immobilizer and key ids, the driver's identity and
+# the OnStar Wi-Fi settings.
 MUST_BE_SENSITIVE = {
     0x762, 0x764,  # VIN
     0x155, 0x156,  # GPS
     0x160, 0x182, 0x183, 0x184,  # immobilizer id and environment id
-    0x474, 0x478, 0x479, 0x47A, 0x480, 0x481, 0x482,  # Wi-Fi settings, name, password
+    0x148, 0x150, 0x17F,  # unlock key store (cryptographic), keyless-start authentication
+    0x1CA, 0x38A,  # theft notification (security column-lock password), driver identifier
+    0x306, 0x30B, 0x125,  # teen driver PIN, Bluetooth tethering pairing reply
+    0x474, 0x476, 0x478, 0x479, 0x47A, 0x480, 0x481, 0x482,  # Wi-Fi settings, name, password
+    0x483, 0x484, 0x485, 0x486, 0x487, 0x488, 0x489, 0x490,  # their AMM copies
     0x382, 0x13D,  # compass heading, location-based charging state
     0x146, 0x3C9, 0x3C8, 0x1D3,  # passive-entry challenge and reply, vehicle and key ids
 }

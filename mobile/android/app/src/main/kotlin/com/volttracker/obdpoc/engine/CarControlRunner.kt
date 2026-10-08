@@ -10,6 +10,7 @@ import com.volttracker.obdpoc.ControlStep
 import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.SwcanField
 import com.volttracker.obdpoc.SwcanFrameDecoder
+import com.volttracker.obdpoc.SwcanPrivacy
 import com.volttracker.obdpoc.SwcanReading
 import org.json.JSONException
 import org.json.JSONObject
@@ -323,7 +324,12 @@ class CarControlRunner(
     ): String? {
         if (!selectBus(run, frame.bus)) return "protocol ${frame.bus.stnProtocol}"
         val response = io.send(CarControlFrames.stpxFor(frame), TRANSMIT_TIMEOUT_MS)
-        if (!transmitOk(response)) return "transmit %X: %s".format(Locale.US, frame.id, ObdProtocol.summarize(response))
+        if (!transmitOk(
+                response,
+            )
+        ) {
+            return "transmit %X: %s".format(Locale.US, frame.id, SwcanPrivacy.statusOnly(response))
+        }
         run.framesSent += 1
         if (frame.id == CarControlFrames.TELEMATICS_ID) {
             run.releasePending = frame != CarControlFrames.TELEMATICS_RELEASE

@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -22,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import com.volttracker.obdpoc.GuidedCarTestState
 import com.volttracker.obdpoc.ui.car.CarActions
 import com.volttracker.obdpoc.ui.car.CarScreen
 import com.volttracker.obdpoc.ui.car.carBadge
@@ -41,6 +43,7 @@ import com.volttracker.obdpoc.ui.diag.FreezeFrameScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
+import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.drive.isFirstRun
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
@@ -77,13 +80,16 @@ fun VoltApp(
     val pop: () -> Unit = { routes = routes.dropLast(1) }
     val latest by rememberUpdatedState(actions)
     val connect: () -> Unit = { connectOrOpenAdapter(latest, push) }
+    val guided by GuidedCarTestState.status.collectAsState()
+    val canDisconnect = state.drive.phase != DrivePhase.DRIVE && !guided.running
     val nav =
-        remember(state.historyRefreshing) {
+        remember(state.historyRefreshing, canDisconnect) {
             VoltNavActions(
                 openSettings = { push(VoltRoute.SETTINGS) },
                 openHealth = { push(VoltRoute.HEALTH) },
                 connect = connect,
                 startDemo = { latest.onStartDemo() },
+                disconnect = { latest.onDisconnect() }.takeIf { canDisconnect },
                 refresh = { latest.onRefresh() },
                 refreshing = state.historyRefreshing,
             )
@@ -266,6 +272,7 @@ private fun VoltTabContent(
                 diag = state.diag,
                 sohPct = state.charge.sohPct,
                 demo = state.settings.demoActive,
+                guided = GuidedCarTestState.status.collectAsState().value,
                 actions =
                     CarActions(
                         onControl = actions.onCarControl,
@@ -273,6 +280,7 @@ private fun VoltTabContent(
                         onDisableControls = { actions.onCarControlsEnabled(false) },
                         onBodyTest = actions.onBodyTest,
                         onTireTest = actions.onTireTest,
+                        onGuidedTest = actions.onGuidedTest,
                     ),
             )
     }

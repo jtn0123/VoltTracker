@@ -27,7 +27,13 @@ column gives the GM message and signal name for each row (`Message.Signal`).
 
 1. **Capture.** Debug builds log every SW-CAN listen window as a `swcan_raw` event in the session log
    (`SwcanListenRunner.Policy(logRawWindows = BuildConfig.DEBUG)`). Drive with a debug build. Car →
-   "Body test" listens for 60 s straight, which helps with events like doors and windows.
+   "Body test" listens for 60 s straight, which helps with events like doors and windows. The guided
+   car test (below) does one action at a time and logs what each one changed.
+
+   `swcan_raw` keeps only frames on the allowlist, `SwcanPrivacy.PAYLOAD_PIDS`; some of those keep
+   only their first few bytes (`PAYLOAD_BYTES`). Every other frame is left out, so a new id never
+   shows up there. To study an id the allowlist doesn't have, add it to `PAYLOAD_PIDS` first, once
+   you've checked it carries nothing personal (see [Sensitive frames](#sensitive-frames)).
 2. **Pull the logs** from the phone (debug app only, no root):
 
    ```bash
@@ -36,8 +42,8 @@ column gives the GM message and signal name for each row (`Message.Signal`).
    adb exec-out run-as com.volttracker.obdpoc.debug cat files/obd-logs/session-<epochMs>-obd.jsonl > ~/volttracker-logs/session-<epochMs>.jsonl
    ```
 
-   These logs are **not redacted**: they hold VIN, GPS and the OnStar Wi-Fi details. Keep them out of
-   the repo. The tool reads logs only from `~/volttracker-logs` (subfolders too), picked by name.
+   These logs are **still sensitive**: other events in them hold the VIN, GPS and older sessions' raw
+   frames. Keep them out of the repo. The tool reads logs only from `~/volttracker-logs` (subfolders too), picked by name.
 3. **Match frames to telemetry:**
 
    ```bash
@@ -73,8 +79,29 @@ column gives the GM message and signal name for each row (`Message.Signal`).
   `app_key` column). That only shows two frames carry the same thing, not that the decode is right.
 - A 20-minute drive gives about 20 windows. Treat one-session fits as leads. Several drives make a fit
   trustworthy.
-- The listen windows are short: about 2.5 s every 45 s while driving. Frames sent once per drive (like
-  tire pressures) or on events (doors, windows) are easy to miss.
+- The listen windows are short: about 2.5 s every 45 s while driving. Frames sent rarely (tire
+  pressures were heard once, at the start of the one drive listened through so far) or on events
+  (doors, windows) are easy to miss.
+
+## Guided car test logs
+
+Car → "Guided car test" speaks one action at a time (lock, a window, each door, hatch, hood, A/C,
+seat heat, power off, charge port, fuel door, power on, a drive) and listens on the body bus for each.
+It writes three kinds of event to the session log:
+
+- `guided_step`: one per step and attempt. `result` is `heard`, `missed`, `partial`, `recorded` and
+  so on. `saidMs`, `spokenMs` and `heardMs` are milliseconds after the listen started (the phone
+  speaks once it is listening), `coverage` lists the spans the monitor was up, and `capture` says
+  `complete` or `partial:` with the reasons (`no_prompt`, `monitor_stuck`, `truncated`, …).
+- `guided_capture`: what the listen heard, one chunk per 30 s, numbered by `chunk`, with `step`,
+  `attempt` and `originEpochMs` to line it up. `ids` holds per-id counts and gaps, `arrivals` every
+  arrival of the slow broadcasts (tyres, power mode, oil, warnings), `changes` each new allowlisted
+  payload. A time marked `*` came from the adapter's queue after the stop byte, so it is late by an
+  unknown amount. Anything past a cap is counted in `droppedChanges`/`droppedArrivals` or named in
+  `truncated`.
+- `guided_bench` (one per cycle), `guided_bench_summary`, `guided_bench_adapter` and
+  `guided_bench_batch_reply`: the bus-switch timing. A cycle with a `failure` (`setup_failed`,
+  `no_stop_prompt`, `restore_fallback`, `hs_no_reply`) is left out of the summary's medians.
 
 ## Columns
 
@@ -143,7 +170,7 @@ From two sessions: a 5-minute parked capture on 2026-09-29 and a 21-minute drive
 That's 56 windows, 40,710 frames and 105 frame ids. Every id heard so far has a row.
 
 - **In the app and confirmed:** door lock, 12 V voltage, tire pressures (GM confirms the corner
-  order), A/C state, evaporator, compressor speed and power, blower (byte 1), cabin air (byte 4),
+  order; which codes mean no reading is inferred), A/C state, evaporator, compressor speed and power, blower (byte 1), cabin air (byte 4),
   PE coolant, drive-cycle EV distance, wheel speeds, transmission oil temperature, and the energy
   screen (used driving, by climate, conditioning the battery, and energy left).
 - **Ready to use (strong):** vehicle speed, drive motor speed, odometer, displayed SOC, engine

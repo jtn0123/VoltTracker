@@ -18,6 +18,8 @@ data class VoltAppActions(
     val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},
     val onStopDemo: () -> Unit = {},
+    /** End the live session (as the notification's Disconnect does). */
+    val onDisconnect: () -> Unit = {},
     val onCheckForUpdate: () -> Unit = {},
     val onInstallUpdate: () -> Unit = {},
     /** A stored setting changed (Settings pages, or Drive's Focus/Detailed toggle). */
@@ -45,6 +47,8 @@ data class VoltAppActions(
     val onBodyTest: () -> Unit = {},
     /** Car: a short read-only probe asking the body computer for tire pressures. */
     val onTireTest: () -> Unit = {},
+    /** Car, debug builds: `start`, `skip` or `stop` the spoken guided car test. Null hides it. */
+    val onGuidedTest: ((String) -> Unit)? = null,
     /** Car: the tab came into view (true) or left it (false), so the body bus is heard nonstop meanwhile. */
     val onCarTabShown: (Boolean) -> Unit = {},
     /** Health: read the car's trouble codes (the demo only simulates it). */

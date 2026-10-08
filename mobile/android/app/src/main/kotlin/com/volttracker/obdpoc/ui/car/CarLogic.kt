@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.car
 
+import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.NOT_REPORTED
 import com.volttracker.obdpoc.ui.components.PillTone
@@ -105,10 +106,11 @@ fun carHeadline(
             car.windowsPct?.all { it != null } != true -> "Doors closed"
             else -> "All closed"
         }
+    // The body bus carries the lock command, not the latches' positions: say what was sent.
     val lock =
         when (drive.locked) {
-            true -> "Locked"
-            false -> "Unlocked"
+            true -> "Lock sent"
+            false -> "Unlock sent"
             null -> null
         }
     return when {
@@ -155,9 +157,13 @@ fun aux12Tile(drive: DriveUiState): CarTile {
 }
 
 /**
- * The climate tile, led by the A/C (on or off, and what its compressor draws), which the car sends
- * every few seconds, then the fan, the cabin and outside temperatures, and a running remote start.
- * Before the A/C has reported, the cabin temperature leads instead.
+ * The climate tile, led by the A/C, which the car sends every few seconds, then the fan, the cabin
+ * and outside temperatures, and a running remote start. The A/C reading is the climate control's
+ * request for the compressor, so it is only "on" when the compressor is seen drawing power;
+ * requested with the compressor idle or not reported, it says so. The compressor drawing power
+ * with no request (it also cools the battery) reads as the compressor running, not as the A/C off,
+ * and no request with the compressor not reported reads "not requested": only a measured idle
+ * compressor makes it "A/C off". Before the A/C has reported, the cabin temperature leads instead.
  */
 fun climateTile(
     drive: DriveUiState,
@@ -166,6 +172,7 @@ fun climateTile(
     val metric = car.metricUnits
     val cabin = drive.cabinTempF?.let { (it - F_OFFSET) / F_PER_C }
     val ac = car.acOn
+    val compressorKw = car.acKw?.takeIf { it > 0 }
     val temps =
         listOfNotNull(
             cabin?.takeIf { ac != null }?.let { "Cabin ${tempText(it, metric)}" },
@@ -173,6 +180,8 @@ fun climateTile(
         ).joinToString(" · ").ifEmpty { null }
     val lines =
         listOfNotNull(
+            "Compressor idle".takeIf { ac == true && car.acKw?.let { it <= 0 } == true },
+            "A/C not requested".takeIf { ac == false && compressorKw != null },
             car.fanPct?.takeIf { ac != null }?.let { if (it > 0) "Fan $it%" else "Fan off" },
             temps,
             if (car.remoteStartOn == true) "Remote start running" else null,
@@ -182,15 +191,26 @@ fun climateTile(
     if (ac == null) {
         return CarTile(cabin?.let { tempValue(it, metric) } ?: DASH, "${tempUnit(metric)} cabin", lines, tone)
     }
-    val kw = car.acKw?.takeIf { ac && it > 0 }?.let { " ${oneDecimal(it)} kW" } ?: ""
-    return CarTile(if (ac) "A/C on" else "A/C off", kw, lines, tone)
+    return when {
+        compressorKw != null ->
+            CarTile(
+                if (ac) "A/C on" else "Compressor on",
+                " ${oneDecimal(compressorKw)} kW",
+                lines,
+                tone,
+            )
+        ac -> CarTile("A/C", " requested", lines, tone)
+        car.acKw == null -> CarTile("A/C", " not requested", lines, tone)
+        else -> CarTile("A/C off", "", lines, tone)
+    }
 }
 
 /**
  * The tyres tile: the average against the placard, or the lowest tyre when any is low. The car
- * sends the pressures about once a drive, so until it does this drive the last ones read show,
- * with when they were read, and without calling them normal: they may have changed since. A
- * sensor the car flags not valid blanks the tile and says which.
+ * sends the pressures rarely (heard once in the one drive listened through so far; how often it
+ * sends them isn't known yet), so until they are heard this drive the last ones read show, with
+ * when they were read, and without calling them normal: they may have changed since. A sensor the
+ * car flags not valid blanks the tile and says which.
  */
 fun tiresTile(
     drive: DriveUiState,
@@ -230,11 +250,15 @@ fun tiresTile(
     )
 }
 
-/** "Front left sensor not reading" / "Front left, rear right sensors not reading". */
+/**
+ * "Front left: no valid reading" / "Front left, rear right: no valid reading". The car's flag for a
+ * tyre's reading is read as not valid; GM's signal list names the flag but not which way round it
+ * is, so this says what the reading is, not that the sensor has failed.
+ */
 fun tireFaultLine(codes: List<String>): String {
     val names = codes.mapNotNull { TIRE_CODE_NAMES[it] }.ifEmpty { listOf("A tire") }
     val joined = names.mapIndexed { i, name -> if (i == 0) name.replaceFirstChar { it.uppercase() } else name }
-    return joined.joinToString(", ") + if (names.size == 1) " sensor not reading" else " sensors not reading"
+    return joined.joinToString(", ") + ": no valid reading"
 }
 
 private val TIRE_CODE_NAMES =
@@ -242,7 +266,7 @@ private val TIRE_CODE_NAMES =
 
 /**
  * "Read 18 min ago" once the pressures are older than a broadcast stays fresh. The car sends them
- * about once a drive, so they hold until the next session instead of clearing.
+ * rarely (how often isn't known yet), so they hold until the next session instead of clearing.
  */
 private fun CarUiState.tiresReadLine(): String? {
     val age = nowMs - (seenAtMs[BodyGroup.TIRES] ?: return null)
@@ -543,6 +567,36 @@ fun tireTestLine(canTest: Boolean): String =
     if (canTest) "Ask the car for tire pressures (about 30 s)" else "Connect to the car to run it"
 
 const val TIRE_TEST_TITLE = "Tire test"
+
+const val GUIDED_TEST_TITLE = "Guided car test"
+
+/** Under the guided test's status: what running it costs the rest of the app. */
+const val GUIDED_TEST_NOTE = "Live data updates between steps while the test runs."
+
+/** The guided test's first step waits for this: the driver can hear the phone. */
+const val GUIDED_CONFIRM_LABEL = "I can hear it"
+
+/** The Car tab's guided-test row: what it is, how the last one ended, or why it can't run. */
+fun guidedTestLine(
+    canTest: Boolean,
+    status: GuidedTestStatus,
+): String =
+    when {
+        !canTest -> "Connect to the car to run it"
+        status.ended == "Finished" -> "Finished · the results are in the session log"
+        status.ended.isNotEmpty() -> status.ended
+        else -> "Spoken steps round the car, off and on, then a drive (about 35 min)"
+    }
+
+const val GUIDED_DRIVE_TITLE = "Guided drive"
+
+/** The Car tab's guided-drive row: the drive on its own, for after the parked steps. */
+fun guidedDriveLine(canTest: Boolean): String =
+    if (canTest) "Hearing check, then a 20 min drive recorded on the body bus" else "Connect to the car to run it"
+
+/** "Step 6 of 38", or "Starting" before the first step. */
+fun guidedStepLabel(status: GuidedTestStatus): String =
+    if (status.step > 0) "Step ${status.step} of ${status.steps}" else "Starting"
 
 private const val NO_GEAR_TEXT = "--"
 

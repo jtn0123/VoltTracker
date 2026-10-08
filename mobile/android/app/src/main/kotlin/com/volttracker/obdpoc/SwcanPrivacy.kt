@@ -3,14 +3,15 @@ package com.volttracker.obdpoc
 import java.util.Locale
 
 /**
- * What of the car's SW-CAN traffic may be written to a log. The broadcasts in [SENSITIVE_PIDS]
- * carry the VIN, the car's location, immobilizer and passive-entry ids and the OnStar Wi-Fi name and
- * password, so they are dropped before anything is stored, and the lifetime fuel-economy frame
- * ([PID_VICM_INFO]) keeps only its first byte, the refuel state and fuel door. Plain 11-bit frames
- * are diagnostics, not body broadcasts, and are dropped too.
+ * What of the car's SW-CAN traffic may be written to a log. Payloads are allowlisted: only the body
+ * broadcasts in [PAYLOAD_PIDS] keep their data bytes, some only their first few ([PAYLOAD_BYTES]),
+ * and every other frame is at most counted by id. The broadcasts in [SENSITIVE_PIDS] carry the VIN,
+ * the car's location, immobilizer, key-store and passive-entry ids, the driver's identity and the
+ * OnStar Wi-Fi name and password, so they are not even counted. Plain 11-bit frames are
+ * diagnostics, not body broadcasts, and are dropped too.
  *
- * `tools/swcan_correlate.py` holds the same list as `MUST_BE_SENSITIVE`; SwcanPrivacyTest keeps the
- * two equal.
+ * `tools/swcan_correlate.py` holds the same sensitive list as `MUST_BE_SENSITIVE`; SwcanPrivacyTest
+ * keeps the two equal.
  */
 object SwcanPrivacy {
     @JvmField
@@ -27,14 +28,34 @@ object SwcanPrivacy {
             0x182,
             0x183,
             0x184,
-            // OnStar Wi-Fi settings, name and password
+            // unlock key store (cryptographic), keyless-start authentication
+            0x148,
+            0x150,
+            0x17F,
+            // theft notification (carries the security column-lock password), driver identifier
+            0x1CA,
+            0x38A,
+            // teen driver PIN, Bluetooth tethering pairing reply
+            0x306,
+            0x30B,
+            0x125,
+            // OnStar Wi-Fi settings, name and password, and their AMM copies
             0x474,
+            0x476,
             0x478,
             0x479,
             0x47A,
             0x480,
             0x481,
             0x482,
+            0x483,
+            0x484,
+            0x485,
+            0x486,
+            0x487,
+            0x488,
+            0x489,
+            0x490,
             // compass heading, location-based charging state
             0x382,
             0x13D,
@@ -49,18 +70,232 @@ object SwcanPrivacy {
     const val PID_VICM_INFO = 0x3B2
 
     /**
-     * [frames] as monitor lines (`10 24 80 40 C8 7B`, one per CR) without the sensitive ones, the
+     * The broadcasts whose payloads may be stored: doors, locks, windows, hood and hatch, seat heat,
+     * climate, tyres, dash warnings, power mode, charge port and cord, 12 V, and the speeds and gear
+     * lever that show the car moving. Not the odometer, trip meters, hour meters, clocks, or the
+     * energy and distance counters. SwcanPrivacyTest checks that nothing here is in [SENSITIVE_PIDS].
+     */
+    @JvmField
+    val PAYLOAD_PIDS: Set<Int> =
+        setOf(
+            // doors, lock command, hatch and its release, hood, windows and their normalized flags, theft alarm
+            0x318,
+            0x17B,
+            0x17C,
+            0x17D,
+            0x20A,
+            0x355,
+            0x35A,
+            0x394,
+            0x325,
+            0x323,
+            0x130,
+            // tyres, warnings, washer fluid, bulbs, oil life
+            0x1EA,
+            0x132,
+            0x3C0,
+            0x3C4,
+            0x1DE,
+            0x319,
+            0x168,
+            // power mode, charge port door, charge cord, refuel state and fuel door, 12 V, remote start
+            0x121,
+            0x112,
+            0x176,
+            PID_VICM_INFO,
+            0x124,
+            0x1C8,
+            // climate
+            0x138,
+            0x13A,
+            0x39A,
+            0x40A,
+            0x312,
+            0x36A,
+            0x31A,
+            0x170,
+            // seat heat: indicators, switches, requests
+            0x391,
+            0x392,
+            0x393,
+            0x3B4,
+            0x3B6,
+            0x3B8,
+            // vehicle and wheel speeds, gear lever
+            0x108,
+            0x35C,
+            0x165,
+        )
+
+    /**
+     * Frames that keep only their first bytes: the fuel frame its fuel-door byte, the hybrid status
+     * its charge-cord and charger bytes (the last ones are the charge-complete time of day).
+     */
+    @JvmField
+    val PAYLOAD_BYTES: Map<Int, Int> = mapOf(PID_VICM_INFO to 1, 0x176 to 5)
+
+    /** Whether [frame]'s payload may be stored. */
+    @JvmStatic
+    fun storable(frame: SwcanFrame): Boolean = frame.extended && frame.gmlanPid in PAYLOAD_PIDS
+
+    /** Whether [frame] may be counted by id; its payload may still not be ([storable]). */
+    @JvmStatic
+    fun countable(frame: SwcanFrame): Boolean = frame.extended && frame.gmlanPid !in SENSITIVE_PIDS
+
+    /** [frame]'s data bytes as they may be stored ([PAYLOAD_BYTES]); only for a [storable] frame. */
+    @JvmStatic
+    fun storedBytes(frame: SwcanFrame): List<Int> =
+        PAYLOAD_BYTES[frame.gmlanPid]?.let { frame.data.take(it) } ?: frame.data.toList()
+
+    /**
+     * [frames] as monitor lines (`10 24 80 40 C8 7B`, one per CR), only the [storable] ones, the
      * form `tools/swcan_correlate.py` reads back.
      */
     @JvmStatic
-    fun loggable(frames: List<SwcanFrame>): String =
-        frames
-            .filter { it.extended && it.gmlanPid !in SENSITIVE_PIDS }
-            .joinToString("\r") { line(it) }
+    fun loggable(frames: List<SwcanFrame>): String = frames.filter(::storable).joinToString("\r") { line(it) }
+
+    /**
+     * [response] without any line that holds a SW-CAN frame. After a body-bus listen the adapter can
+     * still print queued frames into the next command's reply, and command replies are stored. It
+     * fails closed: any run of four or more spaced hex bytes, and any unspaced hex token of eight or
+     * more digits, whose first four bytes read as a 29-bit GMLAN header below 0x800 withholds its
+     * line, wherever in the line it starts (after a `|` batch separator, a prompt or a status word),
+     * whatever follows the header (data bytes, a DLC digit, nothing). HS replies don't match: a mode
+     * 01/02/03/09/22 reply read as a 29-bit header lands at 0x800 or above, and an 11-bit header
+     * breaks a run of bytes. A fragment shorter than a header can't be told from an HS reply here;
+     * replies to commands sent on the body bus go through [statusOnly] instead.
+     */
+    @JvmStatic
+    fun redactFrames(response: String?): String? {
+        if (response == null) return null
+        val lines = response.split('\r', '\n')
+        if (lines.none(::isWithheld)) return response
+        return lines.filterNot(::isWithheld).joinToString("\r")
+    }
+
+    /**
+     * [response] with only the adapter's own words kept ([statusWord]), each `|`-separated piece of
+     * a batch on its own, and anything else, a frame or a fragment of one, replaced by [WITHHELD]:
+     * what may be stored of a reply to a command sent while the adapter is on the body bus.
+     */
+    @JvmStatic
+    fun statusOnly(response: String?): String =
+        response
+            .orEmpty()
+            .split('\r', '\n')
+            .map { line -> line.split('|').joinToString("|") { piece -> statusWord(piece) ?: WITHHELD } }
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+
+    /**
+     * [text] trimmed (and without the `>` prompt) when it is one of the adapter's own words: `OK`,
+     * `?`, `STOPPED`, `NO DATA`, an error or bus status, a protocol number (`A6`), the adapter's id.
+     * Null for anything else, which may be bus data.
+     */
+    @JvmStatic
+    fun statusWord(text: String): String? {
+        val clean = text.replace(">", "").trim()
+        return clean.takeIf { it.isEmpty() || STATUS_WORD.matches(it) }
+    }
+
+    /** What stands in for a reply, or part of one, that may hold bus data. */
+    const val WITHHELD = "[withheld]"
+
+    /** True when [command], or any piece of a `|` batch of commands, switches the adapter's protocol (`STP 61`). */
+    @JvmStatic
+    fun switchesProtocol(command: String?): Boolean = commandPieces(command).any { STN_PROTOCOL.matches(it) }
+
+    /**
+     * Whether [response] shows the adapter back on HS: [command]'s last protocol switch or check
+     * (each piece of a `|` batch counts) is a protocol check that answered HS protocol 6 (`6`, `A6`),
+     * or a reset (`ATZ`, `ATWS`) that printed the adapter's banner. A batch counts only when every
+     * command in it answered: an error ends a batch early, before its check has run. False for a
+     * protocol switch, no check, a reply cut short, or any other answer: sending a check proves
+     * nothing until it is answered.
+     */
+    @JvmStatic
+    fun confirmsHs(
+        command: String?,
+        response: String?,
+    ): Boolean {
+        val pieces = commandPieces(command)
+        val at = pieces.indexOfLast { STN_PROTOCOL.matches(it) || it in HS_CHECKS }
+        if (at < 0 || STN_PROTOCOL.matches(pieces[at])) return false
+        val replies =
+            response
+                .orEmpty()
+                .split('\r', '\n')
+                .map { it.replace(">", "").trim() }
+                .lastOrNull { it.isNotEmpty() }
+                ?.split('|')
+                ?.map { it.trim().uppercase(Locale.US) }
+        if (replies == null || replies.size != pieces.size) return false
+        val reply = replies[at]
+        return if (pieces[at] == "ATDPN") HS_PROTOCOL_REPLY.matches(reply) else RESET_BANNER.matches(reply)
+    }
+
+    private fun commandPieces(command: String?): List<String> =
+        command
+            .orEmpty()
+            .uppercase(Locale.US)
+            .split('|')
+            .map { it.replace(" ", "") }
+
+    /** An STN protocol switch (`STP 61`), not a transmit (`STPX`) or `STPO`. */
+    private val STN_PROTOCOL = Regex("STP[0-9A-F]+")
+
+    /** The protocol check that ends every HS restore, and the resets. */
+    private val HS_CHECKS = setOf("ATDPN", "ATZ", "ATWS")
+    private val HS_PROTOCOL_REPLY = Regex("A?6")
+    private val RESET_BANNER = Regex("(ELM327|STN[0-9]{4}) V.*")
+
+    private val STATUS_WORD =
+        Regex(
+            "OK|\\?|STOPPED|NO DATA|SEARCHING\\.*|UNABLE TO CONNECT|BUS INIT\\.*|BUS BUSY|BUFFER FULL|" +
+                "<?(CAN|BUS|DATA|FB|RX|LV) ERROR|<DATA ERROR|<RX ERROR|ACT ALERT|LV RESET|ERR[0-9]{2}|" +
+                "A?[0-9A-F]|ELM327 V[0-9A-Z.]+|STN[0-9]{4} V[0-9A-Z.]+",
+            RegexOption.IGNORE_CASE,
+        )
+
+    private fun isWithheld(line: String): Boolean {
+        val tokens = line.uppercase(Locale.US).split(SEPARATORS).filter { it.isNotEmpty() }
+        var run = 0
+        for ((i, token) in tokens.withIndex()) {
+            if (token.length == 2 && token.all(::isHex)) {
+                run += 1
+                if (run == HEADER_BYTES && isSwcanHeader(tokens.subList(i - HEADER_BYTES + 1, i + 1))) return true
+            } else {
+                run = 0
+                if (isCompactHeader(token)) return true
+            }
+        }
+        return false
+    }
+
+    /** An unspaced hex token that starts with a body broadcast's 29-bit header. */
+    private fun isCompactHeader(token: String): Boolean =
+        token.length >= HEADER_CHARS && token.all(::isHex) && isSwcanHeader(token.take(HEADER_CHARS).chunked(2))
+
+    /** Four header bytes whose GMLAN parameter id (bits 13..25) is a body broadcast's, below 0x800. */
+    private fun isSwcanHeader(bytes: List<String>): Boolean {
+        val id = bytes.joinToString("").toLong(HEX_RADIX)
+        return ((id ushr GMLAN_PID_SHIFT) and GMLAN_PID_MASK) < FIRST_HS_REPLY_PID
+    }
+
+    private fun isHex(c: Char): Boolean = c in '0'..'9' || c in 'A'..'F'
+
+    private val SEPARATORS = Regex("[\\s|>]+")
+
+    /** A 29-bit header: four bytes, spaced or not. */
+    private const val HEADER_BYTES = 4
+    private const val HEADER_CHARS = HEADER_BYTES * 2
+    private const val HEX_RADIX = 16
+    private const val GMLAN_PID_SHIFT = 13
+    private const val GMLAN_PID_MASK = 0x1FFFL
+    private const val FIRST_HS_REPLY_PID = 0x800L
 
     private fun line(frame: SwcanFrame): String {
-        val data = if (frame.gmlanPid == PID_VICM_INFO) frame.data.take(1) else frame.data.toList()
         val header = listOf(frame.id ushr 24, frame.id ushr 16, frame.id ushr 8, frame.id).map { it and 0xFF }
-        return (header + data).joinToString(" ") { "%02X".format(Locale.US, it) }
+        return (header + storedBytes(frame)).joinToString(" ") { "%02X".format(Locale.US, it) }
     }
 }

@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc
 
 import com.volttracker.obdpoc.engine.ElmConnection
+import com.volttracker.obdpoc.engine.GuidedCarTest
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -38,10 +39,29 @@ class SwcanListenRunnerTest {
         var exclusiveDepth = 0
         var commandsOutsideLock = 0
         var stationary = false
+        var inPark = true
         val listenMs = mutableListOf<Long>()
         var onMonitor: (Long) -> Unit = {}
 
+        /** What the guided test's voice says, as it says it. */
+        var onSay: (String) -> Unit = {}
+
         override fun isStationary(): Boolean = stationary
+
+        override fun isInPark(): Boolean = inPark
+
+        override fun openVoice(): GuidedCarTest.Voice =
+            object : GuidedCarTest.Voice {
+                override fun say(text: String) = onSay(text)
+
+                override fun speaking() = false
+
+                override fun failed() = false
+
+                override fun interrupt() = Unit
+
+                override fun close() = Unit
+            }
 
         override fun send(
             command: String,
@@ -103,7 +123,7 @@ class SwcanListenRunnerTest {
     // here it listens as long as a regular one, so each window is one STM.
     private val policy =
         SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L, startupListenMs = 1_200L)
-    private val runner = SwcanListenRunner(io, policy) { now }
+    private val runner = SwcanListenRunner(io, policy, guidedClock = { now }) { now }
 
     private fun readyStn() {
         runner.probeAdapter()
@@ -153,6 +173,40 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun aGuidedTestTakesThePollTurnsAndHoldsTheSession() {
+        // The driver taps "I can hear it" as soon as the phone speaks.
+        io.onSay = { runner.guidedTest.request(GuidedCarTest.Op.CONFIRM) }
+        runner.guidedTest.request(GuidedCarTest.Op.START)
+        assertTrue("waiting for the adapter already holds the session", runner.holdsSession())
+        cycle()
+        assertTrue("it waits for the adapter to be identified", io.commands.isEmpty())
+
+        readyStn()
+        // A quiet car (HS silent for 2 min) neither stops it nor gets a quiet capture.
+        io.msSinceLive = 120_000L
+        cycle(hsAnswered = false)
+
+        val expected =
+            listOf("STI", "ATDPN") + SwcanListenRunner.SETUP_COMMANDS + "STM" + SwcanListenRunner.RESTORE_COMMANDS +
+                "ATDPN"
+        assertEquals(expected, io.commands)
+        assertEquals(0, io.commandsOutsideLock)
+        assertEquals("intro", io.event("guided_step")!!["step"])
+        assertEquals("done", io.event("guided_step")!!["result"])
+        assertNull("no window of the listener's own", io.event("swcan_window"))
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals("what a step hears reaches the Car tab", "locked", sample.getString("doorLockState"))
+
+        runner.resetSession()
+        assertTrue("a reconnect keeps the test", runner.holdsSession())
+        runner.guidedTest.request(GuidedCarTest.Op.STOP)
+        cycle()
+        assertFalse(runner.holdsSession())
+        assertEquals("Stopped", io.event("guided_test_end")!!["ended"])
+    }
+
+    @Test
     fun onlyAdapterLocalReceiveCommandsAreEverSent() {
         // The listener must never put anything on the bus: no raw transmit, periodic message,
         // SW-CAN high-voltage wake-up, wake message, RTR, or OBD request.
@@ -193,23 +247,48 @@ class SwcanListenRunnerTest {
     }
 
     @Test
-    fun hsSilentAfterWindowForcesReinitAndCountsAsTrouble() {
+    fun hsSilentAfterWindowForcesReinitAndCountsOnceHsAnswersAgain() {
         readyStn()
         cycle()
         cycle(hsAnswered = false)
         assertEquals(1, io.reinitCount)
         assertEquals("no_live_data_after_window", io.event("swcan_hs_reinit")!!["reason"])
-        assertTrue("one quiet cycle is trouble, not the end", runner.isEnabled())
-        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+        assertTrue(runner.isEnabled())
+        assertEquals(
+            "unexplained, so no car controls",
+            CarControlGate.Adapter.STN_UNVERIFIED,
+            runner.controlCapability(),
+        )
         now += policy.intervalMs
         cycle()
         assertEquals(2, io.count("STM"))
         cycle(hsAnswered = false)
         assertEquals(2, io.reinitCount)
-        assertEquals("hs_not_restored", runner.disabledReason())
+        assertNull("the second quiet cycle is not counted until HS answers", runner.disabledReason())
         now += policy.intervalMs
         cycle()
+        assertEquals("HS back after the re-init: the car was on", "hs_not_restored", runner.disabledReason())
         assertEquals(2, io.count("STM"))
+    }
+
+    @Test
+    fun aShutdownAfterOneTroubledWindowIsCapturedNotGivenUpOn() {
+        readyStn()
+        io.onMonitor = { now += it }
+        // One troubled window: HS quiet after it, then back.
+        cycle()
+        cycle(hsAnswered = false)
+        now += policy.intervalMs
+        cycle()
+        // The car is switched off before its power mode was heard: HS quiet again.
+        cycle(hsAnswered = false)
+        assertTrue("not given up before the capture says why", runner.isEnabled())
+        io.monitorText = "10 24 20 40 00\rSTOPPED\r\r>"
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        assertEquals("car_off", io.event("swcan_hs_quiet")!!["reason"])
+        assertTrue(runner.isEnabled())
+        assertNull(runner.disabledReason())
     }
 
     @Test
@@ -546,7 +625,7 @@ class SwcanListenRunnerTest {
             io.liveCycles += 1
             runner.afterSample()
         }
-        // The startup window, then the two hunt windows the cap allows, 30 s apart.
+        // The startup window, then the two hunt windows the cap allows.
         repeat(3) {
             twoCycles()
             now += capped.tireHuntIntervalMs
@@ -559,6 +638,20 @@ class SwcanListenRunnerTest {
         assertEquals(
             listOf(capped.startupListenMs, capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
             io.listenMs,
+        )
+    }
+
+    @Test
+    fun theTireHuntKeepsTheLiveTripWholeAndOutlastsTheBroadcastGap() {
+        val defaults = SwcanListenRunner.Policy()
+        // On the car a window paused live data for its listen plus up to ~5 s of bus switching
+        // (2026-10-04..07), and the live trip drops any step over 10 s.
+        assertTrue(defaults.tireHuntListenMs + 5_000L <= 10_000L)
+        // The car sent its tire pressures about once a minute while driving (2026-10-07): the hunt
+        // listens at least every 20 s, for at least 10 minutes of driving.
+        assertTrue(defaults.tireHuntIntervalMs + defaults.tireHuntListenMs <= 20_000L)
+        assertTrue(
+            defaults.tireHuntMaxWindows * (defaults.tireHuntIntervalMs + defaults.tireHuntListenMs) >= 10 * 60_000L,
         )
     }
 
