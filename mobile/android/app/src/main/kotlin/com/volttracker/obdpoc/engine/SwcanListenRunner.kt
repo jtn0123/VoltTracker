@@ -169,14 +169,17 @@ class SwcanListenRunner(
         /**
          * Tire hunt: the tire frame was never heard parked (sensors stay quiet until the wheels
          * roll), and a 1.2 s window every 45 s rarely lands on it. While moving with no tire value
-         * yet this session, listen longer and more often, for a bounded number of windows.
+         * yet this session, listen longer and more often, for a bounded number of windows. On a
+         * drive (2026-10-07) the car sent them about once a minute, 8 to 94 s apart, so the hunt
+         * listens often rather than long: a window pauses live data for its listen plus 2.5-5 s of
+         * bus switching, which has to stay under the live trip's 10 s step. 32 windows cover 10-12 min.
          */
         val tireHuntListenMs: Long = 4_000L,
-        val tireHuntIntervalMs: Long = 30_000L,
-        val tireHuntMaxWindows: Int = 20,
+        val tireHuntIntervalMs: Long = 15_000L,
+        val tireHuntMaxWindows: Int = 32,
         /**
-         * The first window after connect. The car broadcasts tire pressures rarely (how often isn't
-         * known yet), and the one time a window caught them at the start it was 0.5 min in (2026-10-04).
+         * The first window after connect. The one time a window caught the tire pressures at the
+         * start it was 0.5 min in (2026-10-04); while driving they come about once a minute.
          */
         val startupListenMs: Long = 10_000L,
         /** Car tab open and parked: one long window after every HS poll cycle. */

@@ -625,7 +625,7 @@ class SwcanListenRunnerTest {
             io.liveCycles += 1
             runner.afterSample()
         }
-        // The startup window, then the two hunt windows the cap allows, 30 s apart.
+        // The startup window, then the two hunt windows the cap allows.
         repeat(3) {
             twoCycles()
             now += capped.tireHuntIntervalMs
@@ -638,6 +638,20 @@ class SwcanListenRunnerTest {
         assertEquals(
             listOf(capped.startupListenMs, capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
             io.listenMs,
+        )
+    }
+
+    @Test
+    fun theTireHuntKeepsTheLiveTripWholeAndOutlastsTheBroadcastGap() {
+        val defaults = SwcanListenRunner.Policy()
+        // On the car a window paused live data for its listen plus up to ~5 s of bus switching
+        // (2026-10-04..07), and the live trip drops any step over 10 s.
+        assertTrue(defaults.tireHuntListenMs + 5_000L <= 10_000L)
+        // The car sent its tire pressures about once a minute while driving (2026-10-07): the hunt
+        // listens at least every 20 s, for at least 10 minutes of driving.
+        assertTrue(defaults.tireHuntIntervalMs + defaults.tireHuntListenMs <= 20_000L)
+        assertTrue(
+            defaults.tireHuntMaxWindows * (defaults.tireHuntIntervalMs + defaults.tireHuntListenMs) >= 10 * 60_000L,
         )
     }
 
