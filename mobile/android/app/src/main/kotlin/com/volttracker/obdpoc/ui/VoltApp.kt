@@ -43,6 +43,7 @@ import com.volttracker.obdpoc.ui.diag.FreezeFrameScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
+import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveScreen
 import com.volttracker.obdpoc.ui.drive.isFirstRun
 import com.volttracker.obdpoc.ui.insights.InsightsScreen
@@ -79,14 +80,16 @@ fun VoltApp(
     val pop: () -> Unit = { routes = routes.dropLast(1) }
     val latest by rememberUpdatedState(actions)
     val connect: () -> Unit = { connectOrOpenAdapter(latest, push) }
+    val guided by GuidedCarTestState.status.collectAsState()
+    val canDisconnect = state.drive.phase != DrivePhase.DRIVE && !guided.running
     val nav =
-        remember(state.historyRefreshing) {
+        remember(state.historyRefreshing, canDisconnect) {
             VoltNavActions(
                 openSettings = { push(VoltRoute.SETTINGS) },
                 openHealth = { push(VoltRoute.HEALTH) },
                 connect = connect,
                 startDemo = { latest.onStartDemo() },
-                disconnect = { latest.onDisconnect() },
+                disconnect = { latest.onDisconnect() }.takeIf { canDisconnect },
                 refresh = { latest.onRefresh() },
                 refreshing = state.historyRefreshing,
             )

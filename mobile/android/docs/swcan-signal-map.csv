@@ -159,7 +159,7 @@ arb:490,490,,*,OnStar Wi-Fi station settings (AMM),WiFi_Station_AMM_LS,,,sensiti
 102340BC,11A,BC,*,"forward collision alert, following distance",FCA_VisionBased_Info_LS,,,dbc,,15 distinct
 103A00BB,1D0,BB,*,park assist status,Park_Assistant_General_Status,,,dbc,,heard once
 103A40BB,1D2,BB,*,park assist front sensors,Park_Assistant_Front_Status,,,dbc,,heard once
-arb:391,391,40 (heard),2 bits0-4,"driver seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.DrvHCSLSeatLev1-5,count,,decoded,seatHeatFlLevel,"10-07: 3, 2, 1, 0 lamps press by press (byte 2 3C, 2C, 24, 00); bit 5 is the indicator request, byte 0 0C the heat mode"
+arb:391,391,40 (heard),2 bits0-4,"driver seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.DrvHCSLSeatLev1-5,count,,decoded,seatHeatFlLevel,"10-07: 3, 2, 1, 0 lamps press by press (byte 2 3C, 2C, 24, 00); bits 5-6 are the indicator request, byte 0 0C the heat mode"
 arb:391,391,40 (heard),3 bits0-4,"passenger seat heat level lamps, five; level = lamps lit",Front_Seat_Heat_Cool_Control_LS.PassHCSLSeatLev1-5,count,,decoded,seatHeatFrLevel,"10-07: 3, 2, 1, 0 lamps press by press (byte 3 3C, 2C, 24, 00); byte 1 0C the heat mode"
 arb:3B4,3B4,40 (heard),2 bits0-4,"rear left seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RLHCSLSeatLev1-5,count,,decoded,seatHeatRlLevel,"10-07: 3 lamps on the first press, 0 on the next"
 arb:3B4,3B4,40 (heard),3 bits0-4,"rear right seat heat level lamps, five; level = lamps lit",Rear_Seat_Heat_Cool_Control_LS.RRHCSLSeatLev1-5,count,,decoded,seatHeatRrLevel,"10-07: 3 lamps on the first press; this car's right rear switch (3B6 bit 3) then read held down, so lower levels weren't seen"

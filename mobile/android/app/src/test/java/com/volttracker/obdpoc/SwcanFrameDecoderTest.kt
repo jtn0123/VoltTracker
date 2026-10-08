@@ -393,8 +393,8 @@ class SwcanFrameDecoderTest {
 
     @Test
     fun seatHeatLampsOnTheCarCountDownAPress() {
-        // 10-07: the front buttons pressed four times each, the rear left twice. Bit 5 of a lamp byte
-        // is the indicator request and byte 0 / 1 the heat mode, so neither counts.
+        // 10-07: the front buttons pressed four times each, the rear left twice. Bits 5-6 of a lamp
+        // byte are the indicator request and byte 0 / 1 the heat mode, so neither counts.
         val front = gmlan(SwcanFrameDecoder.PID_FRONT_SEAT_HEAT)
         val driver = listOf(intArrayOf(0x0C, 0x00, 0x3C, 0x00), intArrayOf(0x0C, 0x00, 0x2C, 0x00))
         val passenger = listOf(intArrayOf(0x00, 0x0C, 0x00, 0x24), intArrayOf(0x00, 0x00, 0x00, 0x00))
@@ -547,7 +547,9 @@ class SwcanFrameDecoderTest {
         assertEquals("run", decode(id, 0x02)[SwcanField.POWER_MODE])
         assertEquals("crank", decode(id, 0x03)[SwcanField.POWER_MODE])
         assertEquals("another sender of the same frame", "run", decode(0x10242097, 0x02)[SwcanField.POWER_MODE])
-        assertTrue(decode(id, 0x06).isEmpty())
+        // Flagged not valid: it replaces what was known, so an old "off" can't stand.
+        assertSame(SwcanReading.INVALID, decode(id, 0x04)[SwcanField.POWER_MODE])
+        assertSame(SwcanReading.INVALID, decode(id, 0x06)[SwcanField.POWER_MODE])
         assertTrue(decode(id).isEmpty())
     }
 }

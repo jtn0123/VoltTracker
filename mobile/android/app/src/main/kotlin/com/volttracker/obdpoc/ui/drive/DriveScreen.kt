@@ -94,14 +94,7 @@ fun DriveScreen(
         ) {
             if (detailed && !firstRun) {
                 if (largeText) outside?.let { VoltChip(it, Modifier.padding(bottom = 8.dp)) }
-                ConnectRow(
-                    state.connected,
-                    state.connecting,
-                    onConnect,
-                    onStartDemo,
-                    parked =
-                        state.phase != DrivePhase.DRIVE,
-                )
+                ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 CockpitContent(state)
             } else if (landscape != null) {
                 // Sideways the ring alone overflowed the short window; it sits beside the cards,
@@ -111,27 +104,13 @@ fun DriveScreen(
                         ArcGauge(state, Modifier.widthIn(max = landscape))
                     }
                     Column(Modifier.weight(1f)) {
-                        ConnectRow(
-                            state.connected,
-                            state.connecting,
-                            onConnect,
-                            onStartDemo,
-                            parked =
-                                state.phase != DrivePhase.DRIVE,
-                        )
+                        ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                         FocusCards(state, showEnergyFlow, firstRun)
                     }
                 }
             } else {
                 ArcGauge(state, Modifier.align(Alignment.CenterHorizontally))
-                ConnectRow(
-                    state.connected,
-                    state.connecting,
-                    onConnect,
-                    onStartDemo,
-                    parked =
-                        state.phase != DrivePhase.DRIVE,
-                )
+                ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
                 FocusCards(state, showEnergyFlow, firstRun)
             }
         }

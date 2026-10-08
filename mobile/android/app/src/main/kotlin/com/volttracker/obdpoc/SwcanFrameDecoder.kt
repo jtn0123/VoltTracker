@@ -706,9 +706,11 @@ object SwcanFrameDecoder {
     }
 
     // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.
-    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s.
+    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s. A report
+    // flagged not valid reads INVALID, so an earlier "off" can't stand in for it.
     private fun powerMode(d: IntArray): List<SwcanReading> {
-        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        if (d.isEmpty()) return none()
+        if (invalid(d, 0, 2)) return listOf(SwcanReading(SwcanField.POWER_MODE, SwcanReading.INVALID))
         return listOf(text(SwcanField.POWER_MODE, POWER_MODES[d[0] and POWER_MODE_BITS]))
     }
 

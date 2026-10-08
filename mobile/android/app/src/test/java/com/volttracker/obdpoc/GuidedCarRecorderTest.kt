@@ -106,6 +106,8 @@ class GuidedCarRecorderTest {
     fun theFuelRateInTheFastLampFrameIsNotAChange() {
         // arb 0x132, as on 10-07: only byte 7 (the instantaneous fuel rate) moves, about every frame.
         repeat(60) { i -> add("10 26 40 40 04 0E 00 00 00 00 00 %02X".format(i), 1_000L + i * 50L) }
+        // A door opening in the middle of it is its own change.
+        add("0C 63 00 40 01", 2_010L)
         // An ABS lamp (byte 0 bit 0) coming on is still a change.
         add("10 26 40 40 05 0E 00 00 00 00 00 3C", 4_100L)
         // The same frame from another sender is followed on its own.
@@ -115,7 +117,8 @@ class GuidedCarRecorderTest {
         val fields = chunk.fields.toMap()
 
         assertEquals(
-            "0 10264040 04 0E 00 00 00 00 | 3100 10264040 05 0E 00 00 00 00 | 3200 10264099 04 0E 00 00 00 00",
+            "0 10264040 04 0E 00 00 00 00 | 1010 0C630040 01 | 3100 10264040 05 0E 00 00 00 00 | " +
+                "3200 10264099 04 0E 00 00 00 00",
             fields["changes"],
         )
         assertEquals("0", fields["droppedChanges"])

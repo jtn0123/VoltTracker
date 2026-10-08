@@ -118,6 +118,12 @@ object GuidedCarScript {
     const val BENCH_SEPARATE = "bench_separate"
     const val BENCH_BATCHED = "bench_batched"
 
+    /**
+     * Its own step before the presses, so a seat turned off here is heard as where it starts and
+     * not taken for the first press.
+     */
+    const val SEATS_OFF = "seats_off"
+
     private const val ACT_MS = 30_000L
     private const val WALK_MS = 45_000L
     private const val SEAT_MS = 12_000L
@@ -151,15 +157,15 @@ object GuidedCarScript {
 
     /**
      * Four presses, each its own step: the lamps are read, not assumed, so the levels aren't named.
-     * The seats start off ([SEAT_OFF]), so a seat's first broadcast in the test counts as a press.
+     * The seats start off ([SEAT_OFF], after [SEATS_OFF]), so a seat's first broadcast in the test
+     * counts as a press.
      */
     private fun frontSeat(
         id: String,
         name: String,
         field: SwcanField,
-        first: String = "",
     ) = listOf(
-        event("${id}_press_1", "${first}Press the $name seat heater button once.", seatPress(field), SEAT_MS),
+        event("${id}_press_1", "Press the $name seat heater button once.", seatPress(field), SEAT_MS),
     ) +
         (2..4).map { event("${id}_press_$it", "Press it once more.", seatPress(field), SEAT_MS) }
 
@@ -186,7 +192,7 @@ object GuidedCarScript {
 
     private val POWER_OFF_MODES = arrayOf("off", "accessory")
 
-    /** A seat heater with no lamps lit: where every seat starts ("make sure every seat heater is off"). */
+    /** A seat heater with no lamps lit: where every seat starts ([SEATS_OFF]). */
     private const val SEAT_OFF = 0.0
 
     /**
@@ -258,7 +264,8 @@ object GuidedCarScript {
                 ),
                 event("ac_press_again", "Press it again.", GuidedExpect.changes(SwcanField.AC_STATE)),
             ) +
-            frontSeat("seat_driver", "driver's", SwcanField.SEAT_HEAT_FL, "Make sure every seat heater is off. Then ") +
+            listOf(timed(SEATS_OFF, "Make sure every seat heater is off, then wait for me.", SEAT_MS)) +
+            frontSeat("seat_driver", "driver's", SwcanField.SEAT_HEAT_FL) +
             frontSeat("seat_passenger", "passenger", SwcanField.SEAT_HEAT_FR) +
             rearSeat("seat_rear_left", "left", SwcanField.SEAT_HEAT_RL) +
             rearSeat("seat_rear_right", "right", SwcanField.SEAT_HEAT_RR) +
@@ -294,10 +301,11 @@ object GuidedCarScript {
                     WALK_MS,
                     GuidedPhase.PARKED_OR_OFF,
                 ),
+                // Unconditional, it would send the owner to a door the car never released.
                 event(
                     "fuel_door_close",
-                    "Now get out, press the back edge of the fuel door to open it, then close it and get " +
-                        "back in.",
+                    "If the dash showed Ready to Refuel, get out, press the back edge of the fuel door to " +
+                        "open it, then close it and get back in. If it didn't, just wait.",
                     GuidedExpect.becomes(SwcanField.REFUEL_STATE, "idle"),
                     FUEL_DOOR_MS,
                     GuidedPhase.PARKED_OR_OFF,

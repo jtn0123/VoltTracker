@@ -59,7 +59,6 @@ import com.volttracker.obdpoc.ui.components.voltCard
 import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcSeverity
 import com.volttracker.obdpoc.ui.diag.summary
-import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.drive.Meter
 import com.volttracker.obdpoc.ui.drive.NumberUnit
@@ -98,14 +97,7 @@ fun CarScreen(
         statusSubtitle = true,
     ) {
         // Everything on this tab is live: off the link it offers the same two ways in as Drive.
-        ConnectRow(
-            drive.connected,
-            drive.connecting,
-            nav.connect,
-            nav.startDemo,
-            parked =
-                drive.phase != DrivePhase.DRIVE,
-        )
+        ConnectRow(drive.connected, drive.connecting, nav.connect, nav.startDemo)
         actions.onGuidedTest?.takeIf { guided.running }?.let { GuidedTestCard(guided, it) }
         StatusRow(drive, car)
         CarTopView(

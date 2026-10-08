@@ -19,9 +19,9 @@ import androidx.compose.ui.unit.dp
  * Offered while no session is live (Drive and Charge): reconnect the last adapter, or preview
  * with demo data. Hidden mid-handshake so a second tap can't start a replacement session; the
  * two buttons wrap onto two lines at large text sizes instead of clipping. While a live session
- * runs and the car isn't being driven ([parked]), the same spot offers Disconnect instead, so the
- * way out isn't only in the notification (not during a drive, where a stray tap would end it; not
- * in demo, which Settings stops).
+ * runs, the same spot offers Disconnect instead, so the way out isn't only in the notification:
+ * when [VoltNavActions.disconnect] offers it (never mid-drive or during a guided test), and not in
+ * demo, which Settings stops.
  */
 @Composable
 fun ConnectRow(
@@ -30,10 +30,10 @@ fun ConnectRow(
     onConnect: () -> Unit,
     onStartDemo: () -> Unit,
     modifier: Modifier = Modifier,
-    parked: Boolean = true,
 ) {
     val reduceMotion = LocalVoltPrefs.current.reduceMotion
     val demo = LocalVoltPrefs.current.demo
+    val disconnect = LocalVoltNav.current.disconnect
     val enter =
         expandVertically(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion)) +
             fadeIn(VoltMotion.spec(VoltMotion.STANDARD_MS, reduceMotion))
@@ -52,12 +52,16 @@ fun ConnectRow(
                 VoltButton(text = "Demo", icon = VoltIcons.Play, onClick = onStartDemo)
             }
         }
-        AnimatedVisibility(visible = connected && !connecting && parked && !demo, enter = enter, exit = exit) {
+        AnimatedVisibility(
+            visible = connected && !connecting && !demo && disconnect != null,
+            enter = enter,
+            exit = exit,
+        ) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp),
                 horizontalArrangement = Arrangement.Center,
             ) {
-                VoltButton(text = "Disconnect", onClick = LocalVoltNav.current.disconnect)
+                VoltButton(text = "Disconnect", onClick = { disconnect?.invoke() })
             }
         }
     }

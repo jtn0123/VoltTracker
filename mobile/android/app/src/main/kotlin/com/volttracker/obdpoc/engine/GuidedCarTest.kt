@@ -340,12 +340,12 @@ class GuidedCarTest(
             val waiting = !drained && heardAt < 0 && (step.kind != GuidedStepKind.DRIVE || driveStartedAt >= 0)
             for (reading in decoded) {
                 val before = lastSeen[reading.field]
-                // The line that started the instruction can't be the driver doing it: with nothing
-                // heard before to compare it with, it only sets where the field starts.
+                // The line that started the instruction can't be the driver doing it: it came before
+                // they were asked, so it only sets where the field starts.
                 if (waiting &&
                     expect != null &&
                     reading.field == expect.field &&
-                    !(cue && before == null) &&
+                    !cue &&
                     expect.matches(before, reading.value)
                 ) {
                     heardAt = now

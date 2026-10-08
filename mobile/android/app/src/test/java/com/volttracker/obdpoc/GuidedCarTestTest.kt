@@ -1155,6 +1155,25 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun aCueLineIsNotTheDriverDoingItEvenForAFieldHeardBefore() {
+        // The seat read off during an earlier step, then reads lit on the line that starts this one.
+        val test = test(seatStep, seatPress).started()
+        io.broadcast(1_000L, SEAT_FL_OFF)
+        test.runNext()
+        io.broadcast(clock.now, SEAT_FL_HIGH)
+        voice.onSay = {
+            if (it == seatPress.say) {
+                io.broadcast(clock.now + 2_000L, SEAT_FL_HIGH)
+                io.broadcast(clock.now + 4_000L, SEAT_FL_MEDIUM)
+            }
+        }
+
+        test.runNext()
+
+        assertEquals(4_000L, heardAfterSaid(steps().last()))
+    }
+
+    @Test
     fun theChargePortAndFuelDoorMoveOnAsSoonAsTheCarReportsThem() {
         voice.onSay = {
             when (it) {
@@ -1206,6 +1225,23 @@ class GuidedCarTestTest {
     }
 
     @Test
+    fun aFuelDoorNeverReleasedIsSaidAndTheNextStepOnlyAsksIfItWas() {
+        val script = GuidedCarScript.steps.associateBy { it.id }
+        val open = script.getValue("fuel_door_open")
+        val close = script.getValue("fuel_door_close")
+        voice.onSay = { if (it == open.say) io.broadcast(clock.now + 2_000L, REFUEL_REQUESTED) }
+        val test = test(open, close).started()
+
+        repeat(2) { test.runNext() }
+
+        assertEquals(listOf("missed", "missed"), steps().map { it["result"] })
+        assertEquals(open.say, voice.said[0])
+        assertEquals("Didn't hear that one. Moving on.", voice.said[1])
+        assertTrue(voice.said[2].startsWith("If the dash showed Ready to Refuel,"))
+        assertTrue(voice.said[2].endsWith("If it didn't, just wait."))
+    }
+
+    @Test
     fun aCarSwitchedBackOnBeforeItsShutdownWasRecordedKeepsTheDriveGoing() {
         voice.onSay = {
             if (it == "Drive.") {
@@ -1226,6 +1262,24 @@ class GuidedCarTestTest {
         assertEquals((5 * 60_000L + 250L).toString(), step["heardMs"])
         assertEquals((5 * 60_000L + 250L + 30_000L).toString(), step["listenMs"])
         assertTrue(test.takeSessionEnd())
+    }
+
+    @Test
+    fun anOffTheCarThenFlagsNotValidIsNotTheEndOfADrive() {
+        voice.onSay = {
+            if (it == "Drive.") {
+                io.broadcast(clock.now + 20_000L, POWER_OFF)
+                io.broadcast(clock.now + 25_000L, POWER_NOT_VALID)
+            }
+        }
+        val test = test(shortDrive).started()
+
+        test.runNext()
+
+        val step = steps().single()
+        assertEquals("missed", step["result"])
+        assertEquals("1", step["resumed"])
+        assertFalse(test.takeSessionEnd())
     }
 
     @Test
@@ -1330,7 +1384,12 @@ class GuidedCarTestTest {
             assertTrue(press.id, expect.matches(null, 1.0))
             assertFalse(press.id, expect.matches(null, 0.0))
         }
-        assertTrue(presses.first().say.startsWith("Make sure every seat heater is off."))
+        // Turning the seats off is its own step first, so it can't be taken for a press.
+        val ids = GuidedCarScript.steps.map { it.id }
+        val prep = GuidedCarScript.steps[ids.indexOf(presses.first().id) - 1]
+        assertEquals(GuidedCarScript.SEATS_OFF, prep.id)
+        assertEquals(GuidedStepKind.TIMED, prep.kind)
+        assertTrue(prep.say.startsWith("Make sure every seat heater is off"))
     }
 
     @Test
@@ -1410,6 +1469,7 @@ class GuidedCarTestTest {
         const val POWER_OFF = "10 24 20 40 00"
         const val POWER_RUN = "10 24 20 40 02"
         const val POWER_ACCESSORY = "10 24 20 40 01"
+        const val POWER_NOT_VALID = "10 24 20 40 04"
         const val SEAT_FL_HIGH = "10 72 20 40 0C 00 3C 00"
         const val SEAT_FL_MEDIUM = "10 72 20 40 0C 00 2C 00"
         const val SEAT_FL_OFF = "10 72 20 40 00 00 00 00"
