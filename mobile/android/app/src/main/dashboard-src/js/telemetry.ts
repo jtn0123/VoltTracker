@@ -106,7 +106,9 @@ import { driveGear, gearDisplayText } from "./gear";
     "driveCycleStaleMs", "remoteStartState", "acCompressorKw", "cycleDrivingKwh", "cycleClimateKwh",
     "cycleConditioningKwh", "batteryEnergyLeftKwh", "energySplitStaleMs", "wheelSpeedFlKph",
     "wheelSpeedFrKph", "wheelSpeedRlKph", "wheelSpeedRrKph", "wheelSpeedStaleMs", "tripAKm", "tripBKm",
-    "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs",
+    "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs", "oilLifeRemainingPct", "oilLifeStaleMs",
+    "dashWarnings", "dashWarningStaleMs", "dashWarningsComplete", "tireSensorsInvalid", "powerMode",
+    "powerModeStaleMs",
     // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
     // present while controls are enabled, so they must blank when a sample omits them.
     "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",
@@ -1606,6 +1608,8 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "tirePressureFrKpa", label: "Tire front right", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
     { key: "tirePressureRlKpa", label: "Tire rear left", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
     { key: "tirePressureRrKpa", label: "Tire rear right", group: "Body & comfort", kind: "pressure", staleKey: "tirePressureStaleMs", enhanced: true },
+    // "fl,rr": tyres whose sensor the car flagged not valid (their pressure is then omitted).
+    { key: "tireSensorsInvalid", label: "Tire sensors not reading", group: "Body & comfort", text: true, staleKey: "tirePressureStaleMs", enhanced: true },
     { key: "doorLockState", label: "Locks", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
     { key: "doorLockSource", label: "Last lock source", group: "Body & comfort", text: true, staleKey: "doorLockStaleMs", enhanced: true },
     { key: "doorFlState", label: "Door front left", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
@@ -1616,10 +1620,10 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "trunkState", label: "Hatch", group: "Body & comfort", text: true, staleKey: "doorStatusStaleMs", enhanced: true },
     { key: "alarmState", label: "Alarm", group: "Body & comfort", text: true, staleKey: "alarmStaleMs", enhanced: true },
     { key: "remoteStartState", label: "Remote start", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
-    { key: "windowFlPct", label: "Window front left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
-    { key: "windowFrPct", label: "Window front right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
-    { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
-    { key: "windowRrPct", label: "Window rear right", group: "Body & comfort", unit: "% open", staleKey: "windowStaleMs", enhanced: true },
+    { key: "windowFlPct", label: "Window front left", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowFlPct) },
+    { key: "windowFrPct", label: "Window front right", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowFrPct) },
+    { key: "windowRlPct", label: "Window rear left", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowRlPct) },
+    { key: "windowRrPct", label: "Window rear right", group: "Body & comfort", staleKey: "windowStaleMs", enhanced: true, display: (t) => windowPositionText(t.windowRrPct) },
     { key: "cabinTempEstC", label: "Cabin temp (est.)", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "acState", label: "A/C", group: "Body & comfort", text: true, staleKey: "climateStaleMs", enhanced: true },
     { key: "blowerPct", label: "Blower", group: "Body & comfort", unit: "%", staleKey: "climateStaleMs", enhanced: true },
@@ -1628,6 +1632,11 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "acEvapTempC", label: "Evaporator air temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "heaterCoreTempC", label: "Heater core temp", group: "Body & comfort", kind: "temp", staleKey: "climateStaleMs", enhanced: true },
     { key: "coolantHeaterKw", label: "Cabin heater power", group: "Body & comfort", unit: "kW", staleKey: "climateStaleMs", enhanced: true },
+    { key: "oilLifeRemainingPct", label: "Oil life (body bus)", group: "Body & comfort", unit: "%", staleKey: "oilLifeStaleMs", enhanced: true },
+    { key: "powerMode", label: "Car power (body bus)", group: "Body & comfort", text: true, staleKey: "powerModeStaleMs", enhanced: true },
+    // Comma-joined warning codes; "" means none lit in the broadcasts heard so far, which covers
+    // every light only once dashWarningsComplete is true.
+    { key: "dashWarnings", label: "Dash warnings", group: "Body & comfort", text: true, staleKey: "dashWarningStaleMs", enhanced: true, display: (t) => String(t.dashWarnings ?? "").replace(/_/g, " ").replace(/,/g, ", ") || (t.dashWarningsComplete === true ? "none" : "none seen so far") },
   ];
 
   function formatSignalAge(ms: number) {
@@ -1653,6 +1662,16 @@ import { driveGear, gearDisplayText } from "./gear";
     if (!Number.isFinite(n) || (typeof raw === "string" && raw.trim() === "")) return String(raw);
     if (Number.isInteger(n)) return String(n);
     return String(Number(n.toFixed(Math.abs(n) < 10 ? 3 : 2)));
+  }
+
+  // The car reports a window in sixths (0 up, 100 fully down here), but only up, part way and
+  // fully down were checked on a real window, so the steps between aren't shown as percentages.
+  function windowPositionText(raw: unknown): string | null {
+    if (raw === undefined || raw === null || raw === "") return null;
+    const pct = Number(raw);
+    if (!Number.isFinite(pct)) return null;
+    if (pct <= 2) return "up";
+    return pct >= 100 ? "fully down" : "part way down";
   }
 
   function liveSignalText(spec: LiveSignalSpec, raw: unknown, t: PayloadRecord): string {

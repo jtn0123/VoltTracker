@@ -25,9 +25,20 @@ class SwcanFrame(
 /** A value decoded from one SW-CAN broadcast frame, keyed by [field]. */
 class SwcanReading(
     val field: SwcanField,
-    /** A [Double] for numeric fields, a [String] for state fields. */
+    /** A [Double] for numeric fields, a [String] for state fields, or [INVALID]. */
     val value: Any,
-)
+) {
+    companion object {
+        /**
+         * The car sent this field but flagged it not valid (a tyre sensor it has lost, say). It
+         * replaces whatever was known, so an old value can't stand in for a reading the car disowned.
+         */
+        @JvmField val INVALID: Any =
+            object {
+                override fun toString(): String = "invalid"
+            }
+    }
+}
 
 /**
  * Every value the listen-only SW-CAN (GMLAN, OBD pin 1, 33.3 kbit/s) path can surface.
@@ -85,6 +96,16 @@ enum class SwcanField(
     TRIP_A(SwcanGroup.TRIPS),
     TRIP_B(SwcanGroup.TRIPS),
     TRANS_OIL_TEMP(SwcanGroup.DRIVETRAIN),
+    OIL_LIFE(SwcanGroup.MAINTENANCE),
+    POWER_MODE(SwcanGroup.POWER_MODE),
+
+    // Dash warning lights, one field per broadcast that carries them; each value is the comma-joined
+    // codes of the ones lit, "" when none are (see [SwcanReadings] for how they merge).
+    WARNINGS_FAST(SwcanGroup.WARNINGS),
+    WARNINGS_SLOW(SwcanGroup.WARNINGS),
+    WARNINGS_SUPER_SLOW(SwcanGroup.WARNINGS),
+    WARNING_WASHER(SwcanGroup.WARNINGS),
+    WARNING_BULBS(SwcanGroup.WARNINGS),
 }
 
 enum class SwcanGroup {
@@ -103,6 +124,9 @@ enum class SwcanGroup {
     WHEELS,
     TRIPS,
     DRIVETRAIN,
+    MAINTENANCE,
+    WARNINGS,
+    POWER_MODE,
 }
 
 /**
@@ -150,6 +174,13 @@ object SwcanFrameDecoder {
     const val PID_FUEL_RANGE = 0x0224
     const val PID_DRIVE_CYCLE_DISTANCE = 0x0225
     const val PID_WINDOWS = 0x0325
+    const val PID_WARNINGS_FAST = 0x0132
+    const val PID_ENGINE_INFO_4 = 0x0168
+    const val PID_WASHER_LEVEL = 0x01DE
+    const val PID_BULB_OUTAGE = 0x0319
+    const val PID_WARNINGS_SLOW = 0x03C0
+    const val PID_WARNINGS_SUPER_SLOW = 0x03C4
+    const val PID_POWER_MODE = 0x0121
 
     private const val MAX_29_BIT_ID = 0x1FFFFFFF
     private const val MAX_DATA_BYTES = 8
@@ -161,11 +192,13 @@ object SwcanFrameDecoder {
     private const val SIGNED_BYTE_OFFSET = 256
     private const val SIGNED_BYTE_MAX = 127
 
-    // Window positions run 0 (shut) to 6 (fully down); 5 is the BCM's "no reading" filler.
+    // Window positions run 0 (shut) to 6 (fully down); 5 is a window's "no reading" filler.
     private const val WINDOW_OPEN_MAX = 6
     private const val WINDOW_FILLER = 5
     private const val WINDOW_BITS = 0x07
     private const val WINDOW_REAR_SHIFT = 3
+    private const val HOOD_STATE_BITS = 0x03
+    private const val POWER_MODE_BITS = 0x03
     private const val NOT_AVAILABLE_12_BIT = 0xFFF
     private const val NOT_AVAILABLE_BYTE = 0xFF
     private const val GMLAN_RANGE_SCALE = 0.015625
@@ -263,7 +296,7 @@ object SwcanFrameDecoder {
             ID_DOOR_FR -> bit(d, 0, 0, SwcanField.DOOR_FR, "open", "closed")
             ID_DOOR_RL -> bit(d, 0, 0, SwcanField.DOOR_RL, "open", "closed")
             ID_DOOR_RR -> bit(d, 0, 0, SwcanField.DOOR_RR, "open", "closed")
-            ID_HOOD -> bit(d, 0, 1, SwcanField.HOOD, "open", "closed")
+            ID_HOOD -> hood(d)
             ID_TRUNK -> bit(d, 0, 0, SwcanField.TRUNK, "open", "closed")
             ID_AC_COMPRESSOR -> acCompressor(d)
             ID_COOLANT_HEATER -> if (d.size >= 3) listOf(num(SwcanField.COOLANT_HEATER_KW, d[1] * 0.04, 2)) else none()
@@ -293,6 +326,13 @@ object SwcanFrameDecoder {
             PID_DRIVE_CYCLE_DISTANCE -> driveCycleDistance(d)
             PID_DRIVE_CYCLE_ENERGY -> driveCycleFuel(d)
             PID_WINDOWS -> windows(d)
+            PID_ENGINE_INFO_4 -> oilLife(d)
+            PID_WARNINGS_FAST -> warnings(d, SwcanField.WARNINGS_FAST, FAST_WARNINGS)
+            PID_WARNINGS_SLOW -> slowWarnings(d)
+            PID_WARNINGS_SUPER_SLOW -> warnings(d, SwcanField.WARNINGS_SUPER_SLOW, SUPER_SLOW_WARNINGS)
+            PID_WASHER_LEVEL -> warnings(d, SwcanField.WARNING_WASHER, WASHER_WARNINGS)
+            PID_BULB_OUTAGE -> warnings(d, SwcanField.WARNING_BULBS, BULB_WARNINGS)
+            PID_POWER_MODE -> powerMode(d)
             else -> none()
         }
     }
@@ -351,14 +391,29 @@ object SwcanFrameDecoder {
         )
     }
 
-    // Tire pressures, 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. 0 and 0xFE/0xFF mean no sensor
-    // reading (a missing or unlearned sensor) and are dropped.
+    /**
+     * Tire_Pressure_Sensors_LS (arb 0x1EA): 4 kPa per count, bytes 2..5 = FL, RL, FR, RR. Each
+     * pressure has a validity bit (TireLFPrsV byte 0 bit 0, RF bit 1, LR byte 1 bit 0, RR bit 1),
+     * set when the reading is NOT valid: the car's own frames read `24 24` there with all four
+     * good. A flagged wheel, or the 0xFE/0xFF "not available" codes, reads [SwcanReading.INVALID].
+     * A valid 0 is a real 0 kPa (a flat tyre), not a missing sensor.
+     */
     private fun tpms(d: IntArray): List<SwcanReading> {
         if (d.size < 6) return none()
-        val order = listOf(SwcanField.TIRE_FL, SwcanField.TIRE_RL, SwcanField.TIRE_FR, SwcanField.TIRE_RR)
-        return order.mapIndexedNotNull { index, field ->
+        val wheels =
+            listOf(
+                Triple(SwcanField.TIRE_FL, 0, 0),
+                Triple(SwcanField.TIRE_RL, 1, 0),
+                Triple(SwcanField.TIRE_FR, 0, 1),
+                Triple(SwcanField.TIRE_RR, 1, 1),
+            )
+        return wheels.mapIndexed { index, (field, validityByte, validityBit) ->
             val raw = d[index + 2]
-            if (raw == 0 || raw >= TPMS_INVALID_RAW) null else num(field, (raw * TPMS_KPA_PER_COUNT).toDouble(), 0)
+            if (invalid(d, validityByte, validityBit) || raw >= TPMS_INVALID_RAW) {
+                SwcanReading(field, SwcanReading.INVALID)
+            } else {
+                num(field, (raw * TPMS_KPA_PER_COUNT).toDouble(), 0)
+            }
         }
     }
 
@@ -551,10 +606,12 @@ object SwcanFrameDecoder {
     }
 
     /**
-     * Window_Position_Status_LS. Positions only mean something WHILE the glass moves; at rest the
-     * BCM sends a fixed idle pattern (driver 0, others 5). Per OVMS's on-car analysis 5 is a
-     * per-window "no reading" filler, so it is skipped, and a frame where all three non-driver
-     * windows read 5 is pure idle filler and yields nothing (not even the driver's 0).
+     * Window_Position_Status_LS (arb 0x325): a 3-bit position per window, driver, left rear,
+     * passenger, right rear (GM's DrvWndPosStat / LRWndPosStat / PsWndPosStat / RRWndPosStat).
+     * Checked on the car 2026-10-06: 0 is up, 6 fully down, 3 part way (the driver window read 6,
+     * 3, then 0 as it came up), and 5 is a window not known since the car woke: each read 5 until it
+     * first moved, then 0. 5 and the undefined 7 are skipped, so each window is read on its own; an
+     * earlier decoder that dropped a frame with any 5 in it never showed the driver's window moving.
      */
     private fun windows(d: IntArray): List<SwcanReading> {
         if (d.size < 2) return none()
@@ -565,11 +622,110 @@ object SwcanFrameDecoder {
                 SwcanField.WINDOW_FR to (d[1] and WINDOW_BITS),
                 SwcanField.WINDOW_RR to ((d[1] shr WINDOW_REAR_SHIFT) and WINDOW_BITS),
             )
-        if (raw.drop(1).all { it.second == WINDOW_FILLER }) return none()
         return raw
-            .filter { it.second != WINDOW_FILLER }
-            .map { (field, pos) -> num(field, minOf(pos, WINDOW_OPEN_MAX) * 100.0 / WINDOW_OPEN_MAX, 0) }
+            .filter { it.second != WINDOW_FILLER && it.second <= WINDOW_OPEN_MAX }
+            .map { (field, pos) -> num(field, pos * 100.0 / WINDOW_OPEN_MAX, 0) }
     }
+
+    // Hood_Status_LS (arb 0x394): HdSt is byte 0 bits 0..1, valid unless bit 2 is set. 0 read on the
+    // car with the hood shut (2026-10-06); any other state is treated as open.
+    private fun hood(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        return listOf(text(SwcanField.HOOD, if (d[0] and HOOD_STATE_BITS == 0) "closed" else "open"))
+    }
+
+    // System_Power_Mode_LS (arb 0x121): SysPwrMd in byte 0 bits 0-1, its validity flag in bit 2.
+    // On the car it read run while on and off as it shut down (2026-10-06), about every 5 s.
+    private fun powerMode(d: IntArray): List<SwcanReading> {
+        if (d.isEmpty() || invalid(d, 0, 2)) return none()
+        return listOf(text(SwcanField.POWER_MODE, POWER_MODES[d[0] and POWER_MODE_BITS]))
+    }
+
+    // Engine_Information_4_LS (arb 0x168): byte 4 is the engine oil life left, 0.392 % per count
+    // (EngOilRmnLf). It read about 70 % on 2026-10-04; the car refuses the polled oil-life PID.
+    private fun oilLife(d: IntArray): List<SwcanReading> {
+        if (d.size < 5) return none()
+        return listOf(num(SwcanField.OIL_LIFE, d[4] * PERCENT_PER_COUNT, 0))
+    }
+
+    // HS_Indications_Slow_LS (arb 0x3C0): the flag lights, plus brake fluid low (byte 0 bit 7),
+    // which only counts while its validity bit (byte 0 bit 4) is clear.
+    private fun slowWarnings(d: IntArray): List<SwcanReading> {
+        if (d.size < 2) return none()
+        val fluid = (d[0] shr 7) and 1 == 1 && !invalid(d, 0, 4)
+        val codes = litCodes(d, SLOW_WARNINGS) + listOfNotNull(if (fluid) "brake_fluid_low" else null)
+        return listOf(text(SwcanField.WARNINGS_SLOW, codes.joinToString(",")))
+    }
+
+    /** One dash-warning broadcast: the codes of the lights it says are on, "" for none. */
+    private fun warnings(
+        d: IntArray,
+        field: SwcanField,
+        flags: List<WarningFlag>,
+    ): List<SwcanReading> {
+        if (d.size <= flags.maxOf { it.byteIndex }) return none()
+        return listOf(text(field, litCodes(d, flags).joinToString(",")))
+    }
+
+    private fun litCodes(
+        d: IntArray,
+        flags: List<WarningFlag>,
+    ): List<String> = flags.filter { (d[it.byteIndex] shr it.bit) and 1 == 1 }.map { it.code }
+
+    /** A one-bit warning light in a GM indication frame (DBC start bit = byte * 8 + bit). */
+    private class WarningFlag(
+        val byteIndex: Int,
+        val bit: Int,
+        val code: String,
+    )
+
+    // GM low-speed DBC layouts. The car sent all of these with no light on, in every capture so far.
+
+    /** GMLAN system power modes by SysPwrMd value. */
+    private val POWER_MODES = listOf("off", "accessory", "run", "crank")
+
+    private val FAST_WARNINGS = listOf(WarningFlag(0, 0, "abs"))
+    private val SLOW_WARNINGS =
+        listOf(
+            WarningFlag(0, 2, "tire_pressure_low"),
+            WarningFlag(0, 5, "oil_starvation"),
+            WarningFlag(1, 5, "brake_pads"),
+            WarningFlag(1, 7, "brake_system"),
+        )
+    private val SUPER_SLOW_WARNINGS =
+        listOf(
+            WarningFlag(0, 5, "oil_hot"),
+            WarningFlag(1, 1, "oil_change"),
+            WarningFlag(1, 2, "oil_level_low"),
+            WarningFlag(1, 3, "oil_pressure_low"),
+            WarningFlag(1, 5, "reduced_power"),
+            WarningFlag(1, 6, "fuel_cap"),
+            WarningFlag(1, 7, "engine_hot"),
+            WarningFlag(2, 1, "power_steering"),
+            WarningFlag(2, 6, "steering_assist_reduced"),
+        )
+    private val WASHER_WARNINGS = listOf(WarningFlag(0, 0, "washer_fluid_low"))
+
+    // BulbOutage_LS (arb 0x319): one bit per failed lamp, 16 lamps over two bytes.
+    private val BULB_WARNINGS =
+        listOf(
+            "bulb_center_brake",
+            "bulb_front_left_turn",
+            "bulb_front_right_turn",
+            "bulb_left_brake",
+            "bulb_left_low_beam",
+            "bulb_left_parking",
+            "bulb_license_plate",
+            "bulb_rear_left_turn",
+            "bulb_rear_right_turn",
+            "bulb_right_brake",
+            "bulb_right_low_beam",
+            "bulb_right_parking",
+            "bulb_rear_fog",
+            "bulb_reverse",
+            "bulb_left_daytime",
+            "bulb_right_daytime",
+        ).mapIndexed { i, code -> WarningFlag(i / 8, i % 8, code) }
 
     /**
      * DBC Motorola (`@0+`) signal extraction: [start] is the MSB's bit number (byte = n/8, bit =

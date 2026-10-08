@@ -37,6 +37,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.volttracker.obdpoc.ui.components.ConnectRow
+import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.components.IconSquare
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
 import com.volttracker.obdpoc.ui.components.NavBadge
@@ -124,15 +125,36 @@ fun CarScreen(
                 val tires = tiresTile(drive, car)
                 val icon =
                     when {
-                        drive.tires == null -> VoltIcons.Car
+                        tires.value == DASH -> VoltIcons.Car
                         tires.tone == PillTone.NEUTRAL || tires.tone == PillTone.EV -> VoltIcons.Check
                         else -> VoltIcons.Alert
                     }
                 Tile("Tires", icon, tires, it, iconTone = tires.tone)
             },
-            { Tile("Windows", VoltIcons.Window, windowsTile(car, drive.connected), it) },
+            {
+                val oil = oilTile(drive, car)
+                Tile("Oil life", VoltIcons.Wrench, oil, it, iconTone = oil.tone)
+            },
+        )
+        TileRow(
+            {
+                val windows = windowsTile(car, drive.connected)
+                Tile("Windows", VoltIcons.Window, windows, it, iconTone = windows.tone)
+            },
+            {
+                val doors = doorsTile(car, drive.connected)
+                Tile("Doors", VoltIcons.Car, doors, it, iconTone = doors.tone)
+            },
         )
         VoltListCard(Modifier.padding(top = 10.dp)) {
+            val warnings = dashWarningsLine(car, drive.connected)
+            VoltListRow(
+                icon = VoltIcons.Alert,
+                title = "Dash warnings",
+                subtitle = warnings.text,
+                tone = warnings.tone,
+            )
+            VoltListDivider()
             VoltListRow(
                 icon = VoltIcons.Pulse,
                 title = "Vehicle health",

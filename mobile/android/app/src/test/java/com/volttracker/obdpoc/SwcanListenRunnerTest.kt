@@ -26,6 +26,7 @@ class SwcanListenRunnerTest {
             )
         var monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\r0C 41 40 40 00 05 00 05\rSTOPPED\r\r>"
         var monitorPrompt = true
+        var monitorCapped = false
         val dpnQueue = ArrayDeque<String>()
 
         /** One-off replies, used before [replies]: e.g. the monitor's leftover frames after a slow stop. */
@@ -62,7 +63,7 @@ class SwcanListenRunnerTest {
             commands.add(command)
             this.listenMs.add(listenMs)
             onMonitor(listenMs)
-            return ElmConnection.MonitorResult(monitorText, monitorPrompt, false, false)
+            return ElmConnection.MonitorResult(monitorText, monitorPrompt, false, monitorCapped)
         }
 
         override fun reinitialize() {
@@ -97,7 +98,11 @@ class SwcanListenRunnerTest {
 
     private var now = 0L
     private val io = FakeIo()
-    private val policy = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L)
+
+    // The startup window's own length is pinned in theFirstWindowListensLongForTheTireBroadcast;
+    // here it listens as long as a regular one, so each window is one STM.
+    private val policy =
+        SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L, startupListenMs = 1_200L)
     private val runner = SwcanListenRunner(io, policy) { now }
 
     private fun readyStn() {
@@ -188,16 +193,116 @@ class SwcanListenRunnerTest {
     }
 
     @Test
-    fun hsSilentAfterWindowForcesReinitAndDisables() {
+    fun hsSilentAfterWindowForcesReinitAndCountsAsTrouble() {
         readyStn()
         cycle()
         cycle(hsAnswered = false)
         assertEquals(1, io.reinitCount)
-        assertEquals("hs_not_restored", runner.disabledReason())
         assertEquals("no_live_data_after_window", io.event("swcan_hs_reinit")!!["reason"])
+        assertTrue("one quiet cycle is trouble, not the end", runner.isEnabled())
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
         now += policy.intervalMs
         cycle()
-        assertEquals(1, io.count("STM"))
+        assertEquals(2, io.count("STM"))
+        cycle(hsAnswered = false)
+        assertEquals(2, io.reinitCount)
+        assertEquals("hs_not_restored", runner.disabledReason())
+        now += policy.intervalMs
+        cycle()
+        assertEquals(2, io.count("STM"))
+    }
+
+    @Test
+    fun aCarSwitchedOffIsNotABrokenRestore() {
+        readyStn()
+        // The window hears the car's power mode go to off (arb 0x121, mode 0).
+        io.monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\r10 24 20 40 00\rSTOPPED\r\r>"
+        cycle()
+        cycle(hsAnswered = false)
+        assertEquals(0, io.reinitCount)
+        assertEquals("car_off", io.event("swcan_hs_quiet")!!["reason"])
+        assertTrue(runner.isEnabled())
+        assertEquals(
+            "car controls stay available after parking",
+            CarControlGate.Adapter.READY,
+            runner.controlCapability(),
+        )
+    }
+
+    @Test
+    fun aQuietBusGetsOneBoundedCaptureForTheShutdownBurst() {
+        readyStn()
+        io.onMonitor = { now += it }
+        io.monitorText = "10 24 20 40 00\r0C 2F 60 40 00\rSTOPPED\r\r>"
+        cycle()
+        cycle(hsAnswered = false) // health check: the car is off
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        val cap = (policy.quietCaptureMaxMs / policy.bodyTestChunkMs).toInt()
+        assertEquals("the window, then the capture up to its cap", 1 + cap, io.count("STM"))
+        assertEquals("quiet", io.event("swcan_window")!!["mode"])
+        assertEquals("car_off", io.event("swcan_hs_quiet")!!["reason"])
+        assertEquals(
+            SwcanListenRunner.RESTORE_COMMANDS,
+            io.commands
+                .takeLast(
+                    SwcanListenRunner.RESTORE_COMMANDS.size + 1,
+                ).dropLast(1),
+        )
+        // One capture per stretch of silence, and no health check after it.
+        now += 1_000L
+        cycle(hsAnswered = false)
+        assertEquals(1 + cap, io.count("STM"))
+        assertEquals(0, io.reinitCount)
+        // HS back: the next silence gets its own capture, which ends at the first chunk that
+        // hears nothing (the bus gone to sleep).
+        io.msSinceLive = 0L
+        cycle()
+        io.monitorText = "STOPPED\r\r>"
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        assertEquals(1 + cap + 1, io.count("STM"))
+        assertEquals("empty", io.event("swcan_window")!!["outcome"])
+        assertTrue("a sleeping bus never counts toward giving up", runner.isEnabled())
+    }
+
+    @Test
+    fun aQuietHsBusWithTheCarStillOnGivesTheAdapterBackFast() {
+        readyStn()
+        io.onMonitor = { now += it }
+        io.monitorText = "10 24 20 40 02\r0C 2F 60 40 00\rSTOPPED\r\r>"
+        cycle()
+        cycle(hsAnswered = false) // the car says run: this silence is trouble
+        assertEquals(1, io.reinitCount)
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        assertEquals("two probe chunks, then HS gets the adapter back", 3, io.count("STM"))
+        assertEquals("car_on", io.event("swcan_hs_quiet")!!["reason"])
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+    }
+
+    @Test
+    fun aCaptureThatFindsTheCarOffForgivesTheQuietWindow() {
+        readyStn()
+        io.onMonitor = { now += it }
+        cycle() // no power mode heard in this window
+        cycle(hsAnswered = false)
+        assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, runner.controlCapability())
+        io.monitorText = "10 24 20 40 00\rSTOPPED\r\r>"
+        io.msSinceLive = 6_000L
+        cycle(hsAnswered = false)
+        assertEquals("car_off", io.event("swcan_hs_quiet")!!["reason"])
+        assertEquals(CarControlGate.Adapter.READY, runner.controlCapability())
+    }
+
+    @Test
+    fun aWindowCutShortIsPartialButStillCounts() {
+        readyStn()
+        io.monitorCapped = true
+        cycle()
+        assertEquals("partial", io.event("swcan_window")!!["outcome"])
+        cycle()
+        assertEquals(CarControlGate.Adapter.READY, runner.controlCapability())
     }
 
     @Test
@@ -361,15 +466,15 @@ class SwcanListenRunnerTest {
     fun aStationaryCarGetsLongerMoreFrequentWindows() {
         readyStn()
         io.stationary = true
-        cycle()
-        assertEquals(listOf(policy.parkedListenMs), io.listenMs)
+        cycle() // the startup window
+        now += policy.parkedIntervalMs
+        cycle() // health check, then the first parked window
+        assertEquals(listOf(policy.startupListenMs, policy.parkedListenMs), io.listenMs)
         now += policy.parkedIntervalMs
         cycle()
-        cycle()
-        assertEquals("parked windows come every parkedIntervalMs", 2, io.count("STM"))
+        assertEquals("parked windows come every parkedIntervalMs", 3, io.count("STM"))
         io.stationary = false
         now += policy.parkedIntervalMs
-        cycle()
         cycle()
         assertEquals("a moving car with no tires yet hunts for them", policy.tireHuntListenMs, io.listenMs.last())
     }
@@ -377,8 +482,10 @@ class SwcanListenRunnerTest {
     @Test
     fun aMovingCarHuntsForTiresUntilItHearsThem() {
         readyStn()
+        cycle() // the startup window
+        now += policy.tireHuntIntervalMs
         cycle()
-        assertEquals(listOf(policy.tireHuntListenMs), io.listenMs)
+        assertEquals(listOf(policy.startupListenMs, policy.tireHuntListenMs), io.listenMs)
         assertEquals("true", io.event("swcan_window")!!["tireHunt"])
         assertNull(io.event("swcan_tires_heard"))
 
@@ -399,34 +506,156 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun aTireSensorTheCarFlagsInvalidKeepsTheHuntGoing() {
+        readyStn()
+        cycle() // the startup window
+        // Front left flagged invalid (byte 0 bit 0): three of four tyres is not a reading.
+        io.monitorText = "10 3D 40 40 01 00 3C 3D 3E 3F 00 00\rSTOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertNull(io.event("swcan_tires_heard"))
+        assertEquals(policy.tireHuntListenMs, io.listenMs.last())
+        val sample = JSONObject()
+        runner.appendTo(sample, now)
+        assertEquals("fl", sample.getString("tireSensorsInvalid"))
+
+        io.monitorText = "10 3D 40 40 00 00 3C 3D 3E 3F 00 00\rSTOPPED\r\r>"
+        now += policy.tireHuntIntervalMs
+        cycle()
+        cycle()
+        assertEquals("the second hunt window had all four", "2", io.event("swcan_tires_heard")!!["huntWindows"])
+    }
+
+    @Test
     fun theTireHuntStopsAfterItsWindowCap() {
         val capped =
             SwcanListenRunner.Policy(
                 firstWindowDelayMs = 10_000L,
                 intervalMs = 45_000L,
                 tireHuntMaxWindows = 2,
+                startupListenMs = 1_200L,
             )
         val runner = SwcanListenRunner(io, capped) { now }
         runner.probeAdapter()
         now += capped.firstWindowDelayMs
+
+        fun twoCycles() {
+            io.liveCycles += 1
+            runner.afterSample()
+            io.liveCycles += 1
+            runner.afterSample()
+        }
+        // The startup window, then the two hunt windows the cap allows, 30 s apart.
         repeat(3) {
-            io.liveCycles += 1
-            runner.afterSample()
-            io.liveCycles += 1
-            runner.afterSample()
+            twoCycles()
             now += capped.tireHuntIntervalMs
         }
-        assertEquals("the third window waits for the normal interval", 2, io.count("STM"))
+        twoCycles()
+        assertEquals("the window after the cap waits for the normal interval", 3, io.count("STM"))
         now += capped.intervalMs - capped.tireHuntIntervalMs
-        io.liveCycles += 1
-        runner.afterSample()
-        io.liveCycles += 1
-        runner.afterSample()
-        assertEquals(3, io.count("STM"))
+        twoCycles()
+        assertEquals(4, io.count("STM"))
         assertEquals(
-            listOf(capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
+            listOf(capped.startupListenMs, capped.tireHuntListenMs, capped.tireHuntListenMs, capped.listenMs),
             io.listenMs,
         )
+    }
+
+    @Test
+    fun theFirstWindowListensLongForTheTireBroadcast() {
+        val startup = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L)
+        val runner = SwcanListenRunner(io, startup) { now }
+        runner.probeAdapter()
+        now += startup.firstWindowDelayMs
+        io.liveCycles += 1
+        runner.afterSample()
+        assertEquals("10 s in two 5 s chunks", listOf(5_000L, 5_000L), io.listenMs)
+        assertEquals("startup", io.event("swcan_window")!!["mode"])
+        assertEquals("ok", io.event("swcan_window")!!["outcome"])
+        now += startup.tireHuntIntervalMs
+        io.liveCycles += 1
+        runner.afterSample()
+        assertEquals("then the usual windows", startup.tireHuntListenMs, io.listenMs.last())
+    }
+
+    @Test
+    fun theCarTabListensAfterEveryPollCycleWhileItsLeaseLasts() {
+        readyStn()
+        runner.requestBodyFocus(5_000L)
+        now -= 1
+        cycle()
+        assertEquals("focus still waits for the startup window's delay", 0, io.count("STM"))
+        now += 1
+        cycle() // the startup window
+        io.stationary = true
+        cycle() // health check passes, then a focus window straight away
+        cycle()
+        assertEquals(
+            "parked: 10 s windows back to back",
+            listOf(policy.startupListenMs, 5_000L, 5_000L, 5_000L, 5_000L),
+            io.listenMs,
+        )
+        assertEquals("focus", io.event("swcan_window")!!["mode"])
+        io.stationary = false
+        cycle()
+        assertEquals(
+            "moving: short windows, so the trip keeps its samples",
+            policy.focusMovingListenMs,
+            io.listenMs.last(),
+        )
+
+        now += 5_001L
+        val heard = io.listenMs.size
+        cycle()
+        cycle()
+        assertEquals("the lease ran out: back to the interval", heard, io.listenMs.size)
+        assertEquals(0, io.reinitCount)
+        assertTrue(runner.isEnabled())
+    }
+
+    @Test
+    fun aFocusLeaseIsCappedAndAZeroOneEndsIt() {
+        readyStn()
+        cycle() // the startup window
+        runner.requestBodyFocus(30_000L)
+        runner.requestBodyFocus(0L)
+        cycle()
+        assertEquals("a 0 lease ends focus at once", 1, io.count("STM"))
+        runner.requestBodyFocus(10 * 60_000L)
+        now += policy.focusMaxLeaseMs + 1
+        cycle()
+        assertEquals("a lease never runs past the cap", "tire_hunt", io.event("swcan_window")!!["mode"])
+    }
+
+    @Test
+    fun focusWindowsLogOnlyTheBodyFrames() {
+        val rawPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 10_000L,
+                startupListenMs = 1_200L,
+                logRawWindows = true,
+            )
+        val raw = SwcanListenRunner(io, rawPolicy) { now }
+        raw.probeAdapter()
+        now += rawPolicy.firstWindowDelayMs
+        io.liveCycles += 1
+        raw.afterSample() // the startup window logs everything it heard
+        assertEquals("window", io.event("swcan_raw")!!["mode"])
+        // A window frame (arb 0x325) between the 12 V monitor and a lock frame: only the body
+        // frames are kept, re-printed with their ids.
+        io.monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\r10 64 A0 40 28 2D\r0C 41 40 40 00 05 00 05\rSTOPPED\r\r>"
+        raw.requestBodyFocus(30_000L)
+        io.liveCycles += 1
+        raw.afterSample()
+        val logged = io.event("swcan_raw")!!
+        assertEquals("focus", logged["mode"])
+        assertEquals("10 64 A0 40 28 2D\r0C 41 40 40 00 05 00 05", logged["text"])
+        val before = io.events.count { it.first == "swcan_raw" }
+        io.monitorText = "10 24 80 40 00 00 60 D9 00 FC 00 00\rSTOPPED\r\r>"
+        io.liveCycles += 1
+        raw.afterSample()
+        assertEquals("no body frame: nothing logged", before, io.events.count { it.first == "swcan_raw" })
     }
 
     @Test
@@ -461,7 +690,12 @@ class SwcanListenRunnerTest {
         cycle()
         assertNull("windows carry ids only by default", io.event("swcan_raw"))
 
-        val rawPolicy = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, logRawWindows = true)
+        val rawPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 10_000L,
+                startupListenMs = 1_200L,
+                logRawWindows = true,
+            )
         val raw = SwcanListenRunner(io, rawPolicy) { now }
         raw.probeAdapter()
         now += rawPolicy.firstWindowDelayMs
@@ -470,7 +704,31 @@ class SwcanListenRunnerTest {
         val logged = io.event("swcan_raw")!!
         assertEquals("window", logged["mode"])
         assertEquals("1", logged["chunk"])
-        assertEquals(io.monitorText, logged["text"])
+        assertEquals("10 24 80 40 00 00 60 D9 00 FC 00 00\r0C 41 40 40 00 05 00 05", logged["text"])
+    }
+
+    @Test
+    fun rawLogsNeverHoldTheSensitiveFrames() {
+        val rawPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 10_000L,
+                startupListenMs = 1_200L,
+                logRawWindows = true,
+            )
+        val raw = SwcanListenRunner(io, rawPolicy) { now }
+        raw.probeAdapter()
+        now += rawPolicy.firstWindowDelayMs
+        // A door frame, a location frame (arb 0x155) and the fuel frame (arb 0x3B2).
+        io.monitorText = "0C 2F 60 40 01\r10 2A A0 97 01 02 03 04\r10 76 40 97 08 11 22 33\rSTOPPED\r\r>"
+        io.liveCycles += 1
+        raw.afterSample()
+        assertEquals("0C 2F 60 40 01\r10 76 40 97 08", io.event("swcan_raw")!!["text"])
+        runner.probeAdapter()
+        now += policy.firstWindowDelayMs
+        runner.requestBodyTest(5_000L)
+        cycle()
+        assertEquals("body_test", io.event("swcan_raw")!!["mode"])
+        assertEquals("0C 2F 60 40 01\r10 76 40 97 08", io.event("swcan_raw")!!["text"])
     }
 
     @Test

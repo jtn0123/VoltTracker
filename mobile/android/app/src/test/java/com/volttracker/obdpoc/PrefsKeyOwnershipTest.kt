@@ -67,7 +67,8 @@ class PrefsKeyOwnershipTest {
                 com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_DARK_STYLE,
                 com.volttracker.obdpoc.ui.theme.AppearancePrefs.KEY_ACCENT,
                 "raw_retention_days",
-            ) + SharedDisplayPrefs.KEYS.map { SharedDisplayPrefs.PREFIX + it }
+            ) + SharedDisplayPrefs.KEYS.map { SharedDisplayPrefs.PREFIX + it } +
+                com.volttracker.obdpoc.ui.car.CarMemoryPrefs.KEYS
 
         val allKeys = widgetKeys + notificationKeys + otherKeys
 

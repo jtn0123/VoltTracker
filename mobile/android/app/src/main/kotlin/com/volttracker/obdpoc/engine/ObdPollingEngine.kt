@@ -122,8 +122,11 @@ open class ObdPollingEngine(
     /** See [SwcanListenRunner.requestBodyTest]; ignored (and logged) off an OBDLink. */
     fun requestBodyTest(durationMs: Long) = swcanListener.requestBodyTest(durationMs)
 
-    /** The last sample's road speed, read by the SW-CAN runner on the same poll thread. */
-    private var lastSpeedKph = Double.NaN
+    /** See [SwcanListenRunner.requestBodyFocus]; safe from any thread. */
+    fun requestBodyFocus(durationMs: Long) = swcanListener.requestBodyFocus(durationMs)
+
+    /** Park, not just a stop at a light, for the SW-CAN runner on the same poll thread. */
+    private val parkedDetector = ParkedDetector()
 
     /** Engine operations the SW-CAN listener drives; all adapter IO still goes through [sendCommand]. */
     private inner class SwcanIo : SwcanListenRunner.Io {
@@ -151,7 +154,7 @@ open class ObdPollingEngine(
 
         override fun <T> exclusive(block: () -> T): T = synchronized(service.ioLock) { block() }
 
-        override fun isStationary(): Boolean = lastSpeedKph.let { !it.isNaN() && it <= MOVING_SPEED_KPH }
+        override fun isStationary(): Boolean = parkedDetector.isParked(System.currentTimeMillis())
 
         override fun logEvent(
             event: String,
@@ -168,7 +171,7 @@ open class ObdPollingEngine(
         supportedPidsSummary = supportedPidsSeed ?: ""
         redactedVin = ""
         lastVehicleState = ""
-        lastSpeedKph = Double.NaN
+        parkedDetector.reset()
         lastKnownVehicleState = ""
         deferredInitProbesPending = false
         connectAttemptStartedAtMs = 0L
@@ -782,7 +785,7 @@ open class ObdPollingEngine(
                 service.recorder.logEvent("empty_sample_skipped")
                 continue
             }
-            lastSpeedKph = freshSpeedKph(sample)
+            parkedDetector.observe(sample, freshSpeedKph(sample), System.currentTimeMillis())
             appendSwcanReadings(sample)
             carControl.appendTo(sample)
             service.broadcastTelemetry(sample)

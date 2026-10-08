@@ -329,6 +329,8 @@ class DemoPollingLoop(
         sample.put("remoteStartState", "off")
         sample.put("cabinTempEstC", ObdElmDecode.round1(21.0 + Math.sin(t / 15.0)))
         sample.put("acState", "on")
+        sample.put("oilLifeRemainingPct", 72.0)
+        sample.put("dashWarnings", "")
         sample.put("peCoolantTempC", ObdElmDecode.round1(32.0 + 2.0 * Math.sin(t / 10.0)))
         sample.put("clusterEvRangeKm", ObdElmDecode.round1(demoSoc(t) / 100.0 * 66.0))
         sample.put("fuelRangeKm", 471.0)

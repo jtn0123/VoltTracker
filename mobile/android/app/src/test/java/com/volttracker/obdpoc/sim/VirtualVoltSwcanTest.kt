@@ -72,6 +72,7 @@ class VirtualVoltSwcanTest {
                 parkedIntervalMs = 0L,
                 parkedListenMs = 0L,
                 tireHuntMaxWindows = 0,
+                startupListenMs = 0L,
             )
         val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
         controllers.add(controller)
@@ -95,14 +96,61 @@ class VirtualVoltSwcanTest {
         service.running.set(false)
         waitFor("adapter to close") { adapter.closeCalls.get() > 0 }
 
-        val commands = adapter.commands()
-        val doorHeard =
+        val exchanges = synchronized(adapter.exchanges) { adapter.exchanges.toList() }
+        val doorHeard = exchanges.count { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
+        assertTrue("the 60 s body test listened in 5 s chunks, not one window ($doorHeard)", doorHeard >= 12)
+        // Checked after the body test's last chunk, not the session's last STM: the 0 ms windows run
+        // back to back, and stopping the session cuts one short before its restore.
+        val bodyTestEnd = exchanges.indexOfLast { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
+        assertTrue(
+            "HS-CAN restored after the body test",
+            exchanges.drop(bodyTestEnd + 1).any { it.command == "ATSP6" },
+        )
+    }
+
+    @Test
+    fun theCarTabHearsAnEventFrameTheShortWindowsMissWhilePollingGoesOn() {
+        val adapter = VirtualVolt(Mode.DRIVING, stn = true)
+        adapter.body.doorFlOpen = true
+        VirtualVoltService.nextConnection = adapter
+        VirtualVoltService.nextSwcanPolicy =
+            SwcanListenRunner.Policy(
+                firstWindowDelayMs = 0L,
+                intervalMs = 0L,
+                listenMs = 0L,
+                stopTimeoutMs = 0L,
+                parkedIntervalMs = 0L,
+                parkedListenMs = 0L,
+                tireHuntMaxWindows = 0,
+                startupListenMs = 0L,
+            )
+        val controller = Robolectric.buildService(VirtualVoltService::class.java).create()
+        controllers.add(controller)
+        val service = controller.get()
+        service.localStore!!.clearAllData()
+        service.onStartCommand(VirtualVoltTestSupport.connectIntent(service, "Virtual OBDLink"), 0, 1)
+        waitFor("first samples") { service.engineSamples.size >= 5 }
+        assertTrue(synchronized(service.wirePayloads) { service.wirePayloads.none { it.has("doorFlState") } })
+
+        service.onStartCommand(
+            Intent(service, VirtualVoltService::class.java)
+                .setAction(ObdService.ACTION_BODY_FOCUS)
+                .putExtra(ObdService.EXTRA_DURATION_MS, 30_000L),
+            0,
+            2,
+        )
+        waitFor("the Car tab to hear the door") {
+            synchronized(service.wirePayloads) { service.wirePayloads.any { it.optString("doorFlState") == "open" } }
+        }
+        val heardAt = service.engineSamples.size
+        waitFor("polling to go on between the focus windows") { service.engineSamples.size >= heardAt + 5 }
+        service.running.set(false)
+        waitFor("adapter to close") { adapter.closeCalls.get() > 0 }
+        val focusWindows =
             synchronized(adapter.exchanges) {
                 adapter.exchanges.count { it.command == "STM" && it.reply.contains(DOOR_FL_FRAME) }
             }
-        assertTrue("the 60 s body test listened in 5 s chunks, not one window ($doorHeard)", doorHeard >= 12)
-        val lastStm = commands.lastIndexOf("STM")
-        assertTrue("HS-CAN restored after the listen", commands.drop(lastStm).contains("ATSP6"))
+        assertTrue("moving: 4 s windows, one after each poll cycle ($focusWindows)", focusWindows >= 2)
     }
 
     @Test

@@ -90,6 +90,8 @@ fun VoltApp(
         }
     val screen = screenViewName(tab, routes.lastOrNull())
     LaunchedEffect(screen) { actions.onScreenShown(screen) }
+    val carShown = tab == VoltTab.CAR && routes.isEmpty()
+    LaunchedEffect(carShown) { actions.onCarTabShown(carShown) }
     val prefs = rememberSystemPrefs(quietLiveData = state.settings.quietLiveData, demo = state.settings.demoActive)
     VoltTheme(
         appearance = state.settings.appearance,

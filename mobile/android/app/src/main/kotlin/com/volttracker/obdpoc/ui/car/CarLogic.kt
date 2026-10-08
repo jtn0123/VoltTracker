@@ -73,9 +73,19 @@ fun CarUiState.missingLine(
         group == BodyGroup.AUX12 -> NOT_REPORTED
         seenAtMs.isEmpty() -> NEEDS_OBDLINK
         group == BodyGroup.TIRES -> TIRES_AFTER_DRIVE
-        group == BodyGroup.CLIMATE -> NOT_SENT_YET
+        group == BodyGroup.WINDOWS -> SENT_ON_MOVE
+        group in SENT_STEADILY -> NOT_SENT_YET
         else -> SENT_ON_CHANGE
     }
+}
+
+/** Groups the car broadcasts every few seconds, rather than only when something changes. */
+private val SENT_STEADILY = setOf(BodyGroup.CLIMATE, BodyGroup.OIL, BodyGroup.WARNINGS)
+
+/** "As of 5 min ago" once a held reading is older than a broadcast stays fresh; null while fresh. */
+private fun CarUiState.asOfLine(group: BodyGroup): String? {
+    val age = nowMs - (seenAtMs[group] ?: return null)
+    return if (age > FRESH_MS) "As of ${ago(age)}" else null
 }
 
 /** The status pill over the car: anything open or low first, else the lock and closures. */
@@ -84,14 +94,15 @@ fun carHeadline(
     car: CarUiState,
 ): ToneText {
     val open = car.openings?.open.orEmpty()
-    val windowsOpen = car.windowsPct?.count { it > WINDOW_OPEN_PCT } ?: 0
+    val windowsOpen = car.windowsPct?.count { (it ?: 0) > WINDOW_OPEN_PCT } ?: 0
     val lowTires = drive.tires?.all?.count { tireLow(it, car.placardPsi) } ?: 0
-    val doorsClosed = car.openings != null && open.isEmpty()
-    // "All closed" only when the windows reported too; doors alone say just that.
+    val warnings = car.dashWarnings.orEmpty()
+    val doorsClosed = car.openings?.complete == true && open.isEmpty()
+    // "All closed" only when every window reported too; doors alone say just that.
     val closedText =
         when {
             !doorsClosed || windowsOpen > 0 -> null
-            car.windowsPct == null -> "Doors closed"
+            car.windowsPct?.all { it != null } != true -> "Doors closed"
             else -> "All closed"
         }
     val lock =
@@ -104,6 +115,8 @@ fun carHeadline(
         open.isNotEmpty() -> ToneText(openText(open), PillTone.WARN)
         windowsOpen > 0 -> ToneText(if (windowsOpen == 1) "A window is open" else "Windows open", PillTone.WARN)
         lowTires > 0 -> ToneText("Check tire pressure", PillTone.WARN)
+        warnings.size == 1 -> ToneText(dashWarningLabel(warnings.first()), PillTone.WARN)
+        warnings.isNotEmpty() -> ToneText("${warnings.size} dash warnings", PillTone.WARN)
         lock == null && car.openings == null -> ToneText("Lock and doors not reported", PillTone.NEUTRAL)
         else ->
             ToneText(
@@ -141,33 +154,44 @@ fun aux12Tile(drive: DriveUiState): CarTile {
     )
 }
 
-/** The climate tile: the estimated cabin temperature, outside, the A/C, and a running remote start. */
+/**
+ * The climate tile, led by the A/C (on or off, and what its compressor draws), which the car sends
+ * every few seconds, then the fan, the cabin and outside temperatures, and a running remote start.
+ * Before the A/C has reported, the cabin temperature leads instead.
+ */
 fun climateTile(
     drive: DriveUiState,
     car: CarUiState,
 ): CarTile {
     val metric = car.metricUnits
     val cabin = drive.cabinTempF?.let { (it - F_OFFSET) / F_PER_C }
-    val outside =
+    val ac = car.acOn
+    val temps =
         listOfNotNull(
+            cabin?.takeIf { ac != null }?.let { "Cabin ${tempText(it, metric)}" },
             car.outsideTempC?.let { "Outside ${tempText(it, metric)}" },
-            car.acOn?.let { if (it) "A/C on" else "A/C off" },
         ).joinToString(" · ").ifEmpty { null }
     val lines =
         listOfNotNull(
-            outside,
+            car.fanPct?.takeIf { ac != null }?.let { if (it > 0) "Fan $it%" else "Fan off" },
+            temps,
             if (car.remoteStartOn == true) "Remote start running" else null,
-            if (cabin == null) car.missingLine(BodyGroup.CLIMATE, drive.connected) else null,
+            if (ac == null && cabin == null) car.missingLine(BodyGroup.CLIMATE, drive.connected) else null,
         )
-    return CarTile(
-        value = cabin?.let { tempValue(it, metric) } ?: DASH,
-        unit = "${tempUnit(metric)} cabin",
-        lines = lines,
-        tone = if (car.remoteStartOn == true) PillTone.EV else PillTone.NEUTRAL,
-    )
+    val tone = if (car.remoteStartOn == true || ac == true) PillTone.EV else PillTone.NEUTRAL
+    if (ac == null) {
+        return CarTile(cabin?.let { tempValue(it, metric) } ?: DASH, "${tempUnit(metric)} cabin", lines, tone)
+    }
+    val kw = car.acKw?.takeIf { ac && it > 0 }?.let { " ${oneDecimal(it)} kW" } ?: ""
+    return CarTile(if (ac) "A/C on" else "A/C off", kw, lines, tone)
 }
 
-/** The tyres tile: the average against the placard, or the lowest tyre when any is low. */
+/**
+ * The tyres tile: the average against the placard, or the lowest tyre when any is low. The car
+ * sends the pressures about once a drive, so until it does this drive the last ones read show,
+ * with when they were read, and without calling them normal: they may have changed since. A
+ * sensor the car flags not valid blanks the tile and says which.
+ */
 fun tiresTile(
     drive: DriveUiState,
     car: CarUiState,
@@ -175,15 +199,23 @@ fun tiresTile(
     val metric = car.metricUnits
     val unit = pressureUnit(metric)
     val placard = "${pressureValue(car.placardPsi, metric)} $unit"
-    val tires = drive.tires ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES, drive.connected)))
+    if (car.tireSensorsInvalid.isNotEmpty()) {
+        return CarTile(DASH, " $unit", listOf(tireFaultLine(car.tireSensorsInvalid)))
+    }
+    val remembered = car.memory.tires?.takeIf { drive.tires == null }
+    val tires =
+        drive.tires ?: remembered
+            ?: return CarTile(DASH, " $unit", listOf(car.missingLine(BodyGroup.TIRES, drive.connected)))
     val low = tires.all.indices.filter { tireLow(tires.all[it], car.placardPsi) }
-    val readAt = car.tiresReadLine()
+    val readAt = if (remembered != null) "Read ${ago(car.nowMs - car.memory.tiresAtMs)}" else car.tiresReadLine()
     if (low.isEmpty()) {
+        // An earlier drive's pressures are not a verdict on today's tyres.
+        val verdict = if (remembered == null) " · all normal" else ""
         return CarTile(
             value = pressureValue(tires.all.average(), metric),
             unit = " $unit avg",
-            lines = listOfNotNull("Placard $placard · all normal", readAt),
-            tone = PillTone.EV,
+            lines = listOfNotNull("Placard $placard$verdict", readAt),
+            tone = if (remembered == null) PillTone.EV else PillTone.NEUTRAL,
         )
     }
     val worst = low.minBy { tires.all[it] }
@@ -198,47 +230,200 @@ fun tiresTile(
     )
 }
 
+/** "Front left sensor not reading" / "Front left, rear right sensors not reading". */
+fun tireFaultLine(codes: List<String>): String {
+    val names = codes.mapNotNull { TIRE_CODE_NAMES[it] }.ifEmpty { listOf("A tire") }
+    val joined = names.mapIndexed { i, name -> if (i == 0) name.replaceFirstChar { it.uppercase() } else name }
+    return joined.joinToString(", ") + if (names.size == 1) " sensor not reading" else " sensors not reading"
+}
+
+private val TIRE_CODE_NAMES =
+    mapOf("fl" to "front left", "fr" to "front right", "rl" to "rear left", "rr" to "rear right")
+
 /**
  * "Read 18 min ago" once the pressures are older than a broadcast stays fresh. The car sends them
  * about once a drive, so they hold until the next session instead of clearing.
  */
 private fun CarUiState.tiresReadLine(): String? {
     val age = nowMs - (seenAtMs[BodyGroup.TIRES] ?: return null)
-    return if (age > TIRES_FRESH_MS) "Read ${ago(age)}" else null
+    return if (age > FRESH_MS) "Read ${ago(age)}" else null
 }
 
-/** Matches the Live store's broadcast staleness: younger pressures read as current. */
-private const val TIRES_FRESH_MS = 120_000L
+/** Matches the Live store's broadcast staleness: younger readings read as current. */
+private const val FRESH_MS = 120_000L
 
-/** The windows tile, with the doors, hood and hatch under it. */
+/**
+ * The oil-life tile: what the car's oil-life monitor has left, from the live reading or, between
+ * drives, the last one read. Amber from [OIL_CHANGE_SOON_PCT] down.
+ */
+fun oilTile(
+    drive: DriveUiState,
+    car: CarUiState,
+): CarTile {
+    val remembered = car.memory.oilLifePct?.takeIf { drive.oilLifePct == null }
+    val pct =
+        drive.oilLifePct ?: remembered
+            ?: return CarTile(DASH, "%", listOf(car.missingLine(BodyGroup.OIL, drive.connected)))
+    val low = pct <= OIL_CHANGE_SOON_PCT
+    return CarTile(
+        value = pct.toString(),
+        unit = "%",
+        lines =
+            listOfNotNull(
+                if (low) "Plan an oil change" else "Engine oil left",
+                remembered?.let { "Read ${ago(car.nowMs - car.memory.oilAtMs)}" },
+            ),
+        tone = if (low) PillTone.WARN else PillTone.NEUTRAL,
+        meter = (pct / PERCENT).coerceIn(0f, 1f),
+        warnValue = low,
+    )
+}
+
+/** GM's monitor asks for a change near 0 %; the tile turns amber well before. */
+const val OIL_CHANGE_SOON_PCT = 15
+
+/**
+ * The windows tile: how many are down, then which and how far. The car reports a window when it
+ * moves, so one that hasn't moved this session may not have reported yet.
+ */
 fun windowsTile(
     car: CarUiState,
     connected: Boolean = true,
 ): CarTile {
-    val windows = car.windowsPct
-    val openCount = windows?.count { it > WINDOW_OPEN_PCT }
+    val known =
+        car.windowsPct
+            ?.withIndex()
+            ?.filter { it.value != null }
+            .orEmpty()
+    if (known.isEmpty()) return CarTile(DASH, lines = listOf(car.missingLine(BodyGroup.WINDOWS, connected)))
+    val open = known.filter { (it.value ?: 0) > WINDOW_OPEN_PCT }
+    val shut = known.filter { (it.value ?: 0) <= WINDOW_OPEN_PCT }
+    val unknown = WINDOW_NAMES.size - known.size
     val value =
         when {
-            openCount == null -> DASH
-            openCount == 0 -> "Closed"
-            openCount == windows.size -> "All open"
-            else -> "$openCount open"
+            open.isEmpty() -> "Closed"
+            open.size == WINDOW_NAMES.size -> "All open"
+            else -> "${open.size} open"
         }
-    val openings = car.openings
-    val doors =
+    val shutLine =
         when {
-            openings == null -> null
-            openings.open.isEmpty() -> "Doors, hood, hatch closed"
-            else -> openText(openings.open)
+            shut.isEmpty() -> null
+            unknown == 0 && open.isEmpty() -> "All four up"
+            unknown == 0 -> "Others up"
+            else -> shut.joinToString(", ") { WINDOW_NAMES[it.index] } + " up"
         }
     val lines =
-        listOfNotNull(
-            if (openCount == null) car.missingLine(BodyGroup.WINDOWS, connected) else null,
-            doors,
-        ).ifEmpty { listOf(car.missingLine(BodyGroup.DOORS, connected)) }
-    val warn = (openCount ?: 0) > 0 || openings?.open.orEmpty().isNotEmpty()
-    return CarTile(value = value, lines = lines.distinct(), tone = if (warn) PillTone.WARN else PillTone.NEUTRAL)
+        open.map { "${WINDOW_NAMES[it.index]} ${downText(it.value ?: 0)}" } +
+            listOfNotNull(
+                shutLine,
+                if (unknown > 0) "Others not reported" else null,
+                car.asOfLine(BodyGroup.WINDOWS),
+            )
+    return CarTile(
+        value = value,
+        lines = lines,
+        tone = if (open.isEmpty()) PillTone.NEUTRAL else PillTone.WARN,
+        warnValue = open.isNotEmpty(),
+    )
 }
+
+/**
+ * The car reports a window in sixths (0 up, 6 fully down), but only up, part way and fully down
+ * have been checked against a real window, so the in-between steps aren't shown as percentages.
+ */
+private fun downText(pct: Int): String = if (pct >= PERCENT_INT) "fully down" else "part way down"
+
+/**
+ * The doors tile: the four doors, the hood and the hatch. Each reports only when it opens or
+ * closes, so until all six have, the tile says how many it knows.
+ */
+fun doorsTile(
+    car: CarUiState,
+    connected: Boolean = true,
+): CarTile {
+    val openings = car.openings ?: return CarTile(DASH, lines = listOf(car.missingLine(BodyGroup.DOORS, connected)))
+    val open = openings.open
+    val lines =
+        listOfNotNull(
+            when {
+                open.isNotEmpty() -> openText(open)
+                openings.complete -> "Doors, hood and hatch"
+                else -> "${openings.states.size} of ${Opening.entries.size} reported"
+            },
+            car.asOfLine(BodyGroup.DOORS),
+        )
+    return CarTile(
+        value = if (open.isEmpty()) "Closed" else "${open.size} open",
+        lines = lines,
+        tone = if (open.isEmpty()) PillTone.NEUTRAL else PillTone.WARN,
+        warnValue = open.isNotEmpty(),
+    )
+}
+
+/**
+ * The dash-warnings row: the lights the car says are on, "None on", or why it isn't known. "None
+ * on" needs every warning broadcast to have reported; before that, "None seen so far".
+ */
+fun dashWarningsLine(
+    car: CarUiState,
+    connected: Boolean = true,
+): ToneText {
+    val codes = car.dashWarnings ?: return ToneText(car.missingLine(BodyGroup.WARNINGS, connected), PillTone.NEUTRAL)
+    if (codes.isEmpty()) {
+        // Clear from only some of the broadcasts is not an all-clear.
+        val text = if (car.dashWarningsComplete) "None on" else "None seen so far"
+        val tone = if (car.dashWarningsComplete) PillTone.EV else PillTone.NEUTRAL
+        return ToneText(listOfNotNull(text, car.asOfLine(BodyGroup.WARNINGS)).joinToString(" · "), tone)
+    }
+    return ToneText(codes.joinToString(" · ") { dashWarningLabel(it) }, PillTone.WARN)
+}
+
+/** A dash warning's name, from the code the SW-CAN decoder gives it. */
+fun dashWarningLabel(code: String): String =
+    DASH_WARNING_LABELS[code]
+        ?: BULB_LABELS[code.removePrefix(BULB_PREFIX)]?.takeIf { code.startsWith(BULB_PREFIX) }?.let { "$it out" }
+        ?: code.replace('_', ' ').replaceFirstChar { it.uppercase() }
+
+private val DASH_WARNING_LABELS =
+    mapOf(
+        "abs" to "ABS warning",
+        "tire_pressure_low" to "Tire pressure low",
+        "oil_starvation" to "Oil starvation",
+        "brake_fluid_low" to "Brake fluid low",
+        "brake_pads" to "Brake pads worn",
+        "brake_system" to "Service brake system",
+        "oil_hot" to "Engine oil hot",
+        "oil_change" to "Change engine oil soon",
+        "oil_level_low" to "Oil level low",
+        "oil_pressure_low" to "Oil pressure low",
+        "reduced_power" to "Reduced engine power",
+        "fuel_cap" to "Check fuel cap",
+        "engine_hot" to "Engine overheating",
+        "power_steering" to "Service power steering",
+        "steering_assist_reduced" to "Steering assist reduced",
+        "washer_fluid_low" to "Washer fluid low",
+    )
+
+private const val BULB_PREFIX = "bulb_"
+private val BULB_LABELS =
+    mapOf(
+        "center_brake" to "Center brake light",
+        "front_left_turn" to "Front left turn signal",
+        "front_right_turn" to "Front right turn signal",
+        "left_brake" to "Left brake light",
+        "left_low_beam" to "Left low beam",
+        "left_parking" to "Left parking light",
+        "license_plate" to "License plate light",
+        "rear_left_turn" to "Rear left turn signal",
+        "rear_right_turn" to "Rear right turn signal",
+        "right_brake" to "Right brake light",
+        "right_low_beam" to "Right low beam",
+        "right_parking" to "Right parking light",
+        "rear_fog" to "Rear fog light",
+        "reverse" to "Reverse light",
+        "left_daytime" to "Left daytime light",
+        "right_daytime" to "Right daytime light",
+    )
 
 /** "Driver door open" / "Driver door, hood open". */
 fun openText(open: List<String>): String =
@@ -331,10 +516,13 @@ fun CarControlsUi.lastResultLine(): ToneText? {
 
 private fun ago(ms: Long): String {
     val minutes = (ms.coerceAtLeast(0L) / MINUTE_MS).toInt()
+    val days = minutes / MINUTES_PER_DAY
     return when {
         minutes < 1 -> "just now"
         minutes < MINUTES_PER_HOUR -> "$minutes min ago"
-        else -> "${minutes / MINUTES_PER_HOUR} hr ago"
+        days < 1 -> "${minutes / MINUTES_PER_HOUR} hr ago"
+        days == 1 -> "1 day ago"
+        else -> "$days days ago"
     }
 }
 
@@ -342,6 +530,9 @@ const val GATE_READY = "ready"
 const val GATE_BUSY = "busy"
 
 private val TIRE_NAMES = listOf("front left", "front right", "rear left", "rear right")
+
+/** FL, FR, RL, RR, the order [CarUiState.windowsPct] holds them. */
+private val WINDOW_NAMES = listOf("Driver", "Passenger", "Rear left", "Rear right")
 
 /** The Car tab's body-test row: what it does, or why it can't run yet. */
 fun bodyTestLine(canTest: Boolean): String =
@@ -361,11 +552,14 @@ const val TIRES_AFTER_DRIVE = "Shows after a short drive"
 const val SHOWS_WHEN_CONNECTED = "Shows when connected"
 const val NOT_SENT_YET = "Not sent by the car yet"
 const val SENT_ON_CHANGE = "Updates when one opens or locks"
+const val SENT_ON_MOVE = "Updates when a window moves"
 
 /** A window more than this far down reads as open (the broadcast rounds a closed window to 0–1). */
 private const val WINDOW_OPEN_PCT = 2
 private const val F_PER_C = 9.0 / 5.0
 private const val F_OFFSET = 32.0
 private const val PERCENT = 100f
+private const val PERCENT_INT = 100
 private const val MINUTE_MS = 60_000L
 private const val MINUTES_PER_HOUR = 60
+private const val MINUTES_PER_DAY = 24 * MINUTES_PER_HOUR

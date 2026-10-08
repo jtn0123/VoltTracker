@@ -31,6 +31,8 @@ import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.ui.VoltApp
 import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.VoltAppUiState
+import com.volttracker.obdpoc.ui.car.BodyFocusPinger
+import com.volttracker.obdpoc.ui.car.CarMemoryPrefs
 import com.volttracker.obdpoc.ui.diag.DtcCatalog
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
@@ -96,6 +98,9 @@ class ComposeDashboardActivity :
     private lateinit var backups: BackupController<ComposeDashboardActivity>
     private val tripExports by lazy { TripExportController(applicationContext, this) }
     private val carControls by lazy { ComposeCarControls(this, { prefs }, store, ::showMessage) }
+
+    /** Listens to the body bus nonstop while the Car tab is in front (see [BodyFocusPinger]). */
+    private val bodyFocus by lazy { BodyFocusPinger.forService(this) }
     private val dtc: ComposeDtcActions by lazy {
         ComposeDtcActions(this, this, { prefs }, store, ::showMessage) { history.loadHealth() }
     }
@@ -188,6 +193,7 @@ class ComposeDashboardActivity :
         backups.restoreState(savedInstanceState)
         updates = UpdateCoordinator.shared(this)
         store.onVersionLabel("Volt Tracker ${BuildConfig.VERSION_NAME}")
+        store.onCarMemory(CarMemoryPrefs.read(prefs))
         refreshSettings()
         // A recreated Activity starts with a fresh store; the coordinator's
         // retained result (an offered build, say) must not be forgotten.
@@ -248,6 +254,7 @@ class ComposeDashboardActivity :
                             onCarControlsEnabled = { carControls.setEnabled(it) },
                             onBodyTest = ::startBodyTest,
                             onTireTest = ::startTireTest,
+                            onCarTabShown = { bodyFocus.setCarTabShown(it) },
                             onScanCodes = { dtc.scan() },
                             onClearCodes = { dtc.clear() },
                             onShareHealthReport = { dtc.share(it) },
@@ -278,6 +285,7 @@ class ComposeDashboardActivity :
         carControls.refresh()
         experience.onResume()
         signalAppForeground(true)
+        bodyFocus.setResumed(true)
         maybeAutoConnect()
         // One silent update check per process start — the auto half of
         // auto-update. Manual re-checks live in Settings.
@@ -290,6 +298,8 @@ class ComposeDashboardActivity :
     }
 
     override fun onStop() {
+        // The store only hears the car while this screen is in front, so this is the last change.
+        CarMemoryPrefs.write(prefs, store.state.value.car.memory)
         // Hand the database back unless a backup, restore or export is still using it.
         if (!DatabaseOperationLease.isHeld() && !exportInFlight.get()) closeLocalStore()
         super.onStop()
@@ -312,6 +322,7 @@ class ComposeDashboardActivity :
             // Not registered — nothing to do.
         }
         signalAppForeground(false)
+        bodyFocus.setResumed(false)
         experience.onPause()
         super.onPause()
     }

@@ -127,6 +127,13 @@ class SwcanReadingsTest {
                 "10 2E 00 40 10 00 C7 7B 9F 00 56 4F",
                 "10 27 40 CB 00 00 00 00 1D",
                 "10 42 C0 CB 00 28 00 02 00 00 00 55",
+                "10 2D 00 40 01 5D 01 0D B1 00 00 FF",
+                "10 26 40 40 04 0E 00 00 00 00 00 00",
+                "10 78 00 40 00 00 01 00 08 00 00 22",
+                "10 78 80 40 08 00 00 00 00 00",
+                "10 3B C0 40 00",
+                "10 63 20 40 00 00",
+                "10 24 20 40 02",
             ),
             0L,
         )
@@ -140,8 +147,104 @@ class SwcanReadingsTest {
                 .filter { it.endsWith("StaleMs") }
                 .toList()
         assertEquals(SwcanGroup.entries.size, staleKeys.size)
-        assertEquals(SwcanField.entries.size + SwcanGroup.entries.size, sample.length())
+        val warningFields = SwcanField.entries.count { it.group == SwcanGroup.WARNINGS }
+        // The dash-warning broadcasts share one key, plus whether all of them have reported.
+        assertEquals(SwcanField.entries.size - warningFields + 2 + SwcanGroup.entries.size, sample.length())
+        assertEquals("", sample.getString("dashWarnings"))
+        assertTrue(sample.getBoolean("dashWarningsComplete"))
+        assertEquals(69.0, sample.getDouble("oilLifeRemainingPct"), 0.0)
         assertTrue(sample.has("windowFrPct"))
         assertEquals("on", sample.getString("remoteStartState"))
+        assertEquals("run", sample.getString("powerMode"))
+    }
+
+    @Test
+    fun doorsWindowsAndWarningsHoldWhileALockAgesOut() {
+        val readings = SwcanReadings(maxAgeMs = 5_000L)
+        readings.record(
+            readingsFrom("0C 41 40 40 00 05 00 05", "0C 63 00 40 80", "10 64 A0 40 28 2D", "10 3B C0 40 01"),
+            0L,
+        )
+        val sample = JSONObject()
+        readings.appendTo(sample, 30 * 60_000L)
+        assertFalse("a lock is an event: it ages out", sample.has("doorLockState"))
+        assertEquals("closed", sample.getString("doorFlState"))
+        assertEquals(0.0, sample.getDouble("windowFlPct"), 0.0)
+        assertFalse("a window that sent no reading stays unknown", sample.has("windowFrPct"))
+        assertEquals("washer_fluid_low", sample.getString("dashWarnings"))
+        assertEquals(30 * 60_000L, sample.getLong("doorStatusStaleMs"))
+        assertEquals(30 * 60_000L, sample.getLong("dashWarningStaleMs"))
+    }
+
+    @Test
+    fun anOpenDoorIsOnlyBelievedForTwoMinutesWithoutAClose() {
+        val readings = SwcanReadings()
+        // 10-06: the right rear door heard opening (17D: 01), its close missed between windows
+        readings.record(readingsFrom("0C 2F A0 40 01", "0C 63 00 40 80"), 0L)
+        val soon = JSONObject()
+        readings.appendTo(soon, SwcanReadings.OPEN_TRUST_MS)
+        assertEquals("open", soon.getString("doorRrState"))
+        val later = JSONObject()
+        readings.appendTo(later, SwcanReadings.OPEN_TRUST_MS + 1)
+        assertEquals("unknown", later.getString("doorRrState"))
+        assertEquals("a closed door holds", "closed", later.getString("doorFlState"))
+        assertEquals(SwcanReadings.OPEN_TRUST_MS + 1, later.getLong("doorStatusStaleMs"))
+        readings.record(readingsFrom("0C 2F A0 40 01"), 200_000L)
+        val again = JSONObject()
+        readings.appendTo(again, 201_000L)
+        assertEquals("heard open again", "open", again.getString("doorRrState"))
+    }
+
+    @Test
+    fun dashWarningsMergeTheLightsFromEveryBroadcast() {
+        val readings = SwcanReadings()
+        readings.record(readingsFrom("10 78 00 40 04 00 01 00 08 00 00 22", "10 26 40 40 04 0E 00 00 00 00 00 00"), 0L)
+        readings.record(readingsFrom("10 63 20 40 00 20"), 1_000L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 2_000L)
+        assertEquals("tire_pressure_low,bulb_reverse", sample.getString("dashWarnings"))
+        assertEquals("a held group is as old as its oldest report", 2_000L, sample.getLong("dashWarningStaleMs"))
+        assertFalse("two of the five broadcasts haven't reported", sample.getBoolean("dashWarningsComplete"))
+    }
+
+    @Test
+    fun aHeldGroupIsAsOldAsItsOldestMember() {
+        val readings = SwcanReadings()
+        // The driver door closed two hours ago; the passenger door just now.
+        readings.record(readingsFrom("0C 63 00 40 80"), 0L)
+        readings.record(readingsFrom("0C 2F 60 40 00"), 2 * 3_600_000L - 60_000L)
+        val sample = JSONObject()
+        readings.appendTo(sample, 2 * 3_600_000L)
+        assertEquals(
+            "closed doors rest on the two-hour-old report",
+            2 * 3_600_000L,
+            sample.getLong("doorStatusStaleMs"),
+        )
+        // A broadcast group that ages out still reports its freshest member.
+        readings.record(readingsFrom("10 73 40 99 20"), 2 * 3_600_000L - 5_000L)
+        readings.record(readingsFrom("10 81 40 99 20 51 24 00"), 2 * 3_600_000L - 1_000L)
+        val climate = JSONObject()
+        readings.appendTo(climate, 2 * 3_600_000L)
+        assertEquals(1_000L, climate.getLong("climateStaleMs"))
+    }
+
+    @Test
+    fun aTireTheCarFlagsInvalidDropsItsOldPressure() {
+        val readings = SwcanReadings()
+        readings.record(readingsFrom("10 3D 40 40 24 24 3E 3F 3E 3E"), 0L)
+        assertTrue(readings.hasAllTires())
+        // Later the front-left sensor is flagged (byte 0 bit 0) while the others still read.
+        readings.record(readingsFrom("10 3D 40 40 25 24 3E 3F 3E 3E"), 60_000L)
+        assertFalse(readings.hasAllTires())
+        val sample = JSONObject()
+        readings.appendTo(sample, 61_000L)
+        assertFalse("no stale front-left pressure", sample.has("tirePressureFlKpa"))
+        assertEquals(252.0, sample.getDouble("tirePressureRlKpa"), 0.0)
+        assertEquals("fl", sample.getString("tireSensorsInvalid"))
+        readings.record(readingsFrom("10 3D 40 40 24 24 3E 3F 3E 3E"), 120_000L)
+        val good = JSONObject()
+        readings.appendTo(good, 121_000L)
+        assertFalse(good.has("tireSensorsInvalid"))
+        assertEquals(248.0, good.getDouble("tirePressureFlKpa"), 0.0)
     }
 }

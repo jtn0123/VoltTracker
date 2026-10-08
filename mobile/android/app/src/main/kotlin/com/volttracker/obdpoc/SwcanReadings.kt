@@ -9,14 +9,24 @@ import java.util.EnumMap
  *
  * The listen window only runs every ~45 s, so between windows the live sample carries the value
  * last heard plus a per-group `...StaleMs` age. A value not re-heard within [maxAgeMs] is dropped
- * rather than shown as current — event-driven frames (locks, doors, windows) in particular only
- * appear when something changes, so an old "closed" must age out instead of looking live.
+ * rather than shown as current: a lock command, say, is a one-off event, so an old "locked" ages
+ * out instead of looking live.
  *
- * Tire pressures and the energy split are the exception and hold for the session ([HELD_GROUPS]).
- * The car sends them rarely: tires once, at the start of a 21-minute drive on 2026-10-04, and never
+ * Some groups are the exception and hold for the session ([HELD_GROUPS]). The car sends tires and
+ * the energy split rarely: tires once, at the start of a 21-minute drive on 2026-10-04, and never
  * again in 21 later windows; the energy split in 3 of 22 windows. A pressure barely moves within a
- * drive, and the energy counts only creep. Their `...StaleMs` age still goes out, so the screen can
- * say how old the reading is.
+ * drive, and the energy counts only creep. Doors, windows and the washer and bulb warnings are only
+ * sent when they change, so the last report stays the car's state until the next one. Their
+ * `...StaleMs` age still goes out, so the screen can say how old the reading is. An "open" door,
+ * hood or hatch is the exception to the exception: it reads "unknown" after [OPEN_TRUST_MS], since
+ * outside the Car tab the windows usually miss the close (2026-10-06: a rear door heard opening,
+ * never closing, would have read open for the rest of the drive).
+ *
+ * A held group's age is its OLDEST member's: "doors closed, as of 2 h ago" must not borrow the age
+ * of one door heard a minute ago. A field the car flagged not valid ([SwcanReading.INVALID]) drops
+ * its old value; for the tyres the sample says which ones (`tireSensorsInvalid`). The dash-warning
+ * summary only says "none" for the broadcasts actually heard, so `dashWarningsComplete` says
+ * whether all of them have been.
  *
  * All values are UNCONFIRMED-ON-CAR decodes (see [SwcanFrameDecoder]). Only touched on the
  * polling thread.
@@ -37,6 +47,9 @@ class SwcanReadings(
 
     fun size(): Int = held.size
 
+    /** All four tyre pressures are held and valid: the tyre hunt can stop. */
+    fun hasAllTires(): Boolean = TIRE_FIELDS.all { held[it]?.value is Double }
+
     fun record(
         readings: List<SwcanReading>,
         atMs: Long,
@@ -54,6 +67,12 @@ class SwcanReadings(
     ) {
         held.entries.removeAll { it.key.group !in HELD_GROUPS && now - it.value.atMs > maxAgeMs }
         if (held.isEmpty()) return
+        for (entry in held.entries) {
+            val reading = entry.value
+            if (entry.key.group == SwcanGroup.DOORS && reading.value == OPEN && now - reading.atMs > OPEN_TRUST_MS) {
+                entry.setValue(Held(UNKNOWN, reading.atMs))
+            }
+        }
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)
         putReading(sample, "aux12vCurrentA", SwcanField.AUX12V_CURRENT)
@@ -102,6 +121,11 @@ class SwcanReadings(
         putReading(sample, "tripAKm", SwcanField.TRIP_A)
         putReading(sample, "tripBKm", SwcanField.TRIP_B)
         putReading(sample, "transOilTempC", SwcanField.TRANS_OIL_TEMP)
+        putReading(sample, "oilLifeRemainingPct", SwcanField.OIL_LIFE)
+        putReading(sample, "powerMode", SwcanField.POWER_MODE)
+        putTireFaults(sample, "tireSensorsInvalid")
+        putDashWarnings(sample, "dashWarnings")
+        putDashWarningsComplete(sample, "dashWarningsComplete")
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
         putGroupStaleMs(sample, "tirePressureStaleMs", SwcanGroup.TIRES, now)
         putGroupStaleMs(sample, "doorLockStaleMs", SwcanGroup.LOCKS, now)
@@ -117,6 +141,45 @@ class SwcanReadings(
         putGroupStaleMs(sample, "wheelSpeedStaleMs", SwcanGroup.WHEELS, now)
         putGroupStaleMs(sample, "tripOdometerStaleMs", SwcanGroup.TRIPS, now)
         putGroupStaleMs(sample, "transOilStaleMs", SwcanGroup.DRIVETRAIN, now)
+        putGroupStaleMs(sample, "oilLifeStaleMs", SwcanGroup.MAINTENANCE, now)
+        putGroupStaleMs(sample, "powerModeStaleMs", SwcanGroup.POWER_MODE, now)
+        putGroupStaleMs(sample, "dashWarningStaleMs", SwcanGroup.WARNINGS, now)
+    }
+
+    /**
+     * The codes of every dash light the warning broadcasts say is on, comma-joined, "" once at
+     * least one of them has reported and none is lit; absent before any has. [completeKey] is true
+     * once every warning broadcast has reported, so "none" covers every light the app can read.
+     */
+    private fun putDashWarnings(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val reports = warningReports()
+        if (reports.isEmpty()) return
+        sample.put(key, reports.filter { it.isNotEmpty() }.joinToString(","))
+    }
+
+    /** Whether every warning broadcast has reported, so an empty list means none are on. */
+    private fun putDashWarningsComplete(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val reports = warningReports()
+        if (reports.isEmpty()) return
+        sample.put(key, reports.size == WARNING_FIELDS.size)
+    }
+
+    private fun warningReports(): List<String> = WARNING_FIELDS.mapNotNull { held[it]?.value as? String }
+
+    /** The tyres whose sensor the car flagged not valid, as `fl,rr`; absent when none is. */
+    private fun putTireFaults(
+        sample: JSONObject,
+        key: String,
+    ) {
+        val faults = TIRE_FIELDS.filter { held[it]?.value === SwcanReading.INVALID }
+        if (faults.isEmpty()) return
+        sample.put(key, faults.joinToString(",") { TIRE_CODES.getValue(it) })
     }
 
     private fun putReading(
@@ -125,25 +188,48 @@ class SwcanReadings(
         field: SwcanField,
     ) {
         val value = held[field]?.value ?: return
+        if (value === SwcanReading.INVALID) return
         sample.put(key, value)
     }
 
-    /** Age of the freshest value in [group]; omitted when the group has no value. */
+    /**
+     * Age of [group]'s readings; omitted when the group has none. A held group reports its oldest
+     * member, since its summary ("all closed") rests on every one of them; the others, which all
+     * age out within [maxAgeMs], report their freshest.
+     */
     private fun putGroupStaleMs(
         sample: JSONObject,
         key: String,
         group: SwcanGroup,
         now: Long,
     ) {
-        val newest = held.filterKeys { it.group == group }.values.maxOfOrNull { it.atMs } ?: return
-        sample.put(key, maxOf(0L, now - newest))
+        val times = held.filterKeys { it.group == group }.values.map { it.atMs }
+        val at = (if (group in HELD_GROUPS) times.minOrNull() else times.maxOrNull()) ?: return
+        sample.put(key, maxOf(0L, now - at))
     }
 
     companion object {
         /** Four listen intervals: survives one or two empty windows, then blanks. */
         const val DEFAULT_MAX_AGE_MS = 180_000L
 
+        /** How long an "open" door, hood or hatch is believed without hearing it close. */
+        const val OPEN_TRUST_MS = 120_000L
+        private const val OPEN = "open"
+        private const val UNKNOWN = "unknown"
+
         /** Groups the car sends too rarely to age out; they hold until the session's [clear]. */
-        private val HELD_GROUPS = setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY)
+        private val HELD_GROUPS =
+            setOf(SwcanGroup.TIRES, SwcanGroup.ENERGY, SwcanGroup.DOORS, SwcanGroup.WINDOWS, SwcanGroup.WARNINGS)
+
+        private val WARNING_FIELDS = SwcanField.entries.filter { it.group == SwcanGroup.WARNINGS }
+
+        private val TIRE_CODES =
+            mapOf(
+                SwcanField.TIRE_FL to "fl",
+                SwcanField.TIRE_FR to "fr",
+                SwcanField.TIRE_RL to "rl",
+                SwcanField.TIRE_RR to "rr",
+            )
+        private val TIRE_FIELDS = TIRE_CODES.keys
     }
 }

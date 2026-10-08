@@ -5,6 +5,7 @@ import com.volttracker.obdpoc.ui.ConnectionFailure
 import com.volttracker.obdpoc.ui.HistoryLoad
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.car.CarControl
+import com.volttracker.obdpoc.ui.car.CarMemory
 import com.volttracker.obdpoc.ui.car.CarUiState
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
@@ -181,8 +182,19 @@ class LiveUiStateStore(
                                 connecting = transitioning,
                                 statusLabel = label,
                             ),
-                        car = if (demoEnded) s.car.withoutDemoBody() else s.car,
-                        trips = s.trips.copy(connected = connected, connecting = transitioning, statusLabel = label),
+                        // The Car tab measures "read 2 hr ago" against this, so it follows the clock too.
+                        car =
+                            (if (demoEnded) s.car.withoutDemoBody() else s.car).let {
+                                it.copy(
+                                    nowMs = maxOf(it.nowMs, nowMs()),
+                                )
+                            },
+                        trips =
+                            s.trips.copy(
+                                connected = connected,
+                                connecting = transitioning,
+                                statusLabel = label,
+                            ),
                         insights =
                             s.insights.copy(connected = connected, connecting = transitioning, statusLabel = label),
                         diag =
@@ -246,6 +258,7 @@ class LiveUiStateStore(
         CarUiState(
             metricUnits = metricUnits,
             placardPsi = placardPsi,
+            memory = memory,
             controls = controls.copy(lastCommand = null, lastOutcome = null, lastDetail = null),
         )
 
@@ -274,6 +287,12 @@ class LiveUiStateStore(
                     next.copy(settings = next.settings.copy(demoActive = demo))
                 },
             )
+    }
+
+    /** The tyres and oil life remembered from earlier drives (see [CarMemory]), read at start-up. */
+    fun onCarMemory(memory: CarMemory) {
+        _state.value =
+            _state.value.let { s -> s.copy(car = s.car.copy(memory = memory, nowMs = maxOf(s.car.nowMs, nowMs()))) }
     }
 
     /** Logged charges read from the store (newest first), for the Charge tab's Recent sessions. */
@@ -575,7 +594,10 @@ class LiveUiStateStore(
                 (optDouble(t, "transmissionTempC") ?: optDouble(t, "transOilTempC"))?.let { cToF(it).toInt() }
                     ?: current.transTempF,
             oilTempF = optDouble(t, "engineOilTempC")?.let { cToF(it).toInt() } ?: current.oilTempF,
-            oilLifePct = optDouble(t, "engineOilLifePct")?.toInt() ?: current.oilLifePct,
+            // The polled PID when the car answers it (a 2017 refuses it), else the SW-CAN broadcast.
+            oilLifePct =
+                (optDouble(t, "engineOilLifePct") ?: optDouble(t, "oilLifeRemainingPct"))?.toInt()
+                    ?: current.oilLifePct,
             tires = tires(t, current.tires),
             locked = demoLockOverride ?: lockState(t, current.locked),
             cellSpreadMv = optDouble(t, "cellBalanceMv") ?: current.cellSpreadMv,
@@ -698,12 +720,14 @@ class LiveUiStateStore(
     /**
      * The four pressures, held for the drive: unlike the other broadcasts the car sends them about
      * once a drive (see [com.volttracker.obdpoc.SwcanReadings]), so their age doesn't clear them.
-     * The Car tab says how old they are.
+     * The Car tab says how old they are. A sensor the car flags not valid clears them: the old
+     * pressure can't stand in for a wheel the car no longer reads.
      */
     private fun tires(
         t: JSONObject,
         current: TirePressures?,
     ): TirePressures? {
+        if (t.optString("tireSensorsInvalid", "").isNotEmpty()) return null
         val psi =
             listOf("Fl", "Fr", "Rl", "Rr").map { corner ->
                 optDouble(t, "tirePressure${corner}Kpa")?.times(PSI_PER_KPA) ?: return current
@@ -722,13 +746,6 @@ class LiveUiStateStore(
             "unlocked" -> false
             "" -> current
             else -> null
-        }
-    }
-
-    private fun cellVoltages(t: JSONObject): List<Double?>? {
-        val array = t.optJSONArray("cellVoltages") ?: return null
-        return (0 until array.length()).map { i ->
-            if (array.isNull(i)) null else array.optDouble(i).takeIf { it.isFinite() }
         }
     }
 
@@ -1031,6 +1048,13 @@ class LiveUiStateStore(
 }
 
 private fun cToF(c: Double): Double = c * 9.0 / 5.0 + 32.0
+
+private fun cellVoltages(t: JSONObject): List<Double?>? {
+    val array = t.optJSONArray("cellVoltages") ?: return null
+    return (0 until array.length()).map { i ->
+        if (array.isNull(i)) null else array.optDouble(i).takeIf { it.isFinite() }
+    }
+}
 
 private fun fToC(f: Double): Double = (f - 32.0) * 5.0 / 9.0
 

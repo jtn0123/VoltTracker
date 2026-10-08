@@ -66,7 +66,7 @@ class VoltAppNavigationTest {
         compose.onNodeWithText("DRIVEN ON ELECTRICITY").performScrollTo().assertIsDisplayed()
 
         tab("Car").performClick()
-        compose.onNodeWithText("Vehicle health").assertIsDisplayed()
+        compose.onNodeWithText("Vehicle health").performScrollTo().assertIsDisplayed()
 
         tab("Drive").performClick()
         compose.onNodeWithContentDescription("47 miles per hour", substring = true).assertIsDisplayed()
@@ -87,7 +87,7 @@ class VoltAppNavigationTest {
     fun carOpensHealthAndSystemBackUnwindsTheStack() {
         compose.setContent { VoltApp(demoState, initialTab = VoltTab.CAR) }
 
-        compose.onNodeWithText("Vehicle health").performClick()
+        compose.onNodeWithText("Vehicle health").performScrollTo().performClick()
         compose.onNodeWithText("Health").assertIsDisplayed()
 
         // Settings over Health, then two system backs: Settings → Health → Car.
@@ -96,7 +96,7 @@ class VoltAppNavigationTest {
         systemBack()
         compose.onNodeWithText("Health").assertIsDisplayed()
         systemBack()
-        compose.onNodeWithText("Vehicle health").assertIsDisplayed()
+        compose.onNodeWithText("Vehicle health").performScrollTo().assertIsDisplayed()
     }
 
     @Test

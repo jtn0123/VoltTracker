@@ -183,10 +183,11 @@ class VirtualVoltComposeTest {
         // 0x10248040 data 00 00 61 …: 0x61 × 0.1 + 3 = 12.7 V; a moving or plugged-in car is charging it.
         text("12.7 V")
         text(aux12Line)
-        // 0x10440099 cabin air estimate 30.5 °C = 86 °F; 0x10734099 A/C on; outside from 22801F.
-        text("86°F cabin")
+        // 0x10734099 A/C on leads; 0x10440099 cabin air estimate 30.5 °C = 86 °F; outside from 22801F.
+        // The A/C leads the tile, with the compressor's draw beside it.
+        compose.onNodeWithText("A/C on", substring = true).performScrollTo().assertIsDisplayed()
         val outsideF = (last.getDouble("outsideTempC") * 9 / 5 + 32).roundToInt()
-        text("Outside $outsideF°F · A/C on")
+        text("Cabin 86°F · Outside $outsideF°F")
     }
 
     /**

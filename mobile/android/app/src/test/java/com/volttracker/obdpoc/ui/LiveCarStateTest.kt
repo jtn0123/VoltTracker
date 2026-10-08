@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc.ui
 
 import com.volttracker.obdpoc.ui.car.BodyGroup
+import com.volttracker.obdpoc.ui.car.CarMemory
+import com.volttracker.obdpoc.ui.car.Opening
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -54,7 +56,7 @@ class LiveCarStateTest {
     }
 
     @Test
-    fun anAbsentReadingKeepsTheLastOneAndAStaleOneClearsIt() {
+    fun anAbsentReadingKeepsTheLastOneAndOnlyAStaleClimateClears() {
         store.onTelemetry(body())
         store.onTelemetry(JSONObject().put("updatedAt", 101_000L))
         assertEquals(emptyList<String>(), car.openings?.open)
@@ -64,23 +66,127 @@ class LiveCarStateTest {
                 put("doorStatusStaleMs", 150_000).put("windowStaleMs", 150_000).put("climateStaleMs", 150_000)
             },
         )
-        assertNull(car.openings)
-        assertNull(car.windowsPct)
-        assertNull(car.acOn)
+        // Doors and windows are only sent when they change, so an old report is still the car's state.
+        assertEquals(emptyList<String>(), car.openings?.open)
+        assertEquals(listOf(0, 0, 0, 0), car.windowsPct)
+        assertNull("climate is sent every few seconds: a stale one clears", car.acOn)
         assertEquals("absent staleness keeps the reading", 18.0, car.outsideTempC ?: 0.0, 0.0)
-        // Heard, then stale: the last time it was fresh is kept for "No reading for N min".
-        assertEquals(100_000L, car.seenAtMs[BodyGroup.DOORS])
+        // When it was heard is kept, for "As of N min ago".
+        assertEquals(250_000L, car.seenAtMs[BodyGroup.DOORS])
         store.onTelemetry(body(at = 401_000L) { put("outsideTempStaleMs", 150_000) })
         assertNull("a stale outside temperature is not shown", car.outsideTempC)
     }
 
     @Test
-    fun anUnknownOrPartialReadingIsNotReportedRatherThanGuessed() {
+    fun anUnknownReadingIsNotGuessedAndEachDoorAndWindowStandsAlone() {
         store.onTelemetry(body { put("hoodState", "ajar").put("acState", "auto") })
-        assertNull(car.openings)
+        assertNull("an unknown hood state is not guessed", car.openings?.states?.get(Opening.HOOD))
+        assertEquals(Opening.entries.size - 1, car.openings?.states?.size)
         assertNull(car.acOn)
-        store.onTelemetry(body { remove("windowRrPct") })
-        assertNull(car.windowsPct)
+        store.onTelemetry(JSONObject().put("updatedAt", 101_000L).put("windowFlPct", 33).put("doorFlState", "open"))
+        assertEquals("one window reports alone; the rest keep theirs", listOf(33, 0, 0, 0), car.windowsPct)
+        assertEquals(listOf("Driver door"), car.openings?.open)
+
+        val fresh = LiveUiStateStore { 0L }
+        fresh.onTelemetry(JSONObject().put("updatedAt", 1L).put("windowFlPct", 0).put("hoodState", "closed"))
+        assertEquals(listOf(0, null, null, null), fresh.state.value.car.windowsPct)
+        assertEquals(
+            mapOf(Opening.HOOD to false),
+            fresh.state.value.car.openings
+                ?.states,
+        )
+    }
+
+    @Test
+    fun oilLifeAndDashWarningsAreMapped() {
+        store.onTelemetry(
+            body {
+                put("oilLifeRemainingPct", 69.0).put("oilLifeStaleMs", 5_000)
+                put("dashWarnings", "washer_fluid_low,bulb_reverse").put("dashWarningStaleMs", 1_000)
+            },
+        )
+        assertEquals(69, store.state.value.drive.oilLifePct)
+        assertEquals(listOf("washer_fluid_low", "bulb_reverse"), car.dashWarnings)
+        assertEquals(95_000L, car.seenAtMs[BodyGroup.OIL])
+        assertEquals(99_000L, car.seenAtMs[BodyGroup.WARNINGS])
+        store.onTelemetry(body(at = 101_000L) { put("dashWarnings", "") })
+        assertEquals("none lit", emptyList<String>(), car.dashWarnings)
+        store.onTelemetry(JSONObject().put("updatedAt", 102_000L))
+        assertEquals("absent keeps the last report", emptyList<String>(), car.dashWarnings)
+    }
+
+    @Test
+    fun warningCoverageRidesWithTheWarnings() {
+        store.onTelemetry(body { put("dashWarnings", "").put("dashWarningsComplete", false) })
+        assertFalse(car.dashWarningsComplete)
+        store.onTelemetry(body { put("dashWarnings", "").put("dashWarningsComplete", true) })
+        assertTrue(car.dashWarningsComplete)
+        store.onTelemetry(JSONObject().put("updatedAt", 102_000L))
+        assertTrue("absent keeps the last report", car.dashWarningsComplete)
+    }
+
+    @Test
+    fun aTireSensorTheCarFlagsInvalidClearsTheLivePressures() {
+        val allFour: JSONObject.() -> Unit = {
+            put("tirePressureFrKpa", 262.0).put("tirePressureRlKpa", 255.0).put("tirePressureRrKpa", 262.0)
+        }
+        store.onTelemetry(body(block = allFour))
+        assertEquals(
+            38.0,
+            store.state.value.drive.tires!!
+                .fl,
+            0.1,
+        )
+        store.onTelemetry(
+            body {
+                allFour(this)
+                remove("tirePressureFlKpa")
+                put("tireSensorsInvalid", "fl")
+            },
+        )
+        assertEquals(listOf("fl"), car.tireSensorsInvalid)
+        assertNull("three good tyres are not a set", store.state.value.drive.tires)
+        store.onTelemetry(JSONObject().put("updatedAt", 101_000L).put("soc", 60))
+        assertEquals("a sample without tyres keeps the fault", listOf("fl"), car.tireSensorsInvalid)
+        store.onTelemetry(body(at = 102_000L, block = allFour))
+        assertEquals("all four reading again", emptyList<String>(), car.tireSensorsInvalid)
+        assertEquals(
+            38.0,
+            store.state.value.drive.tires!!
+                .fl,
+            0.1,
+        )
+    }
+
+    @Test
+    fun aRealCarsTiresAndOilAreRememberedButTheDemosNever() {
+        val tires: JSONObject.() -> Unit = {
+            put("tirePressureFrKpa", 262.0).put("tirePressureRlKpa", 255.0).put("tirePressureRrKpa", 262.0)
+            put("oilLifeRemainingPct", 70.0).put("oilLifeStaleMs", 0)
+        }
+        store.onTelemetry(body(block = tires))
+        assertEquals(38.0, car.memory.tires!!.fl, 0.1)
+        assertEquals("heard 30 s before the sample", 70_000L, car.memory.tiresAtMs)
+        assertEquals(70, car.memory.oilLifePct)
+        assertEquals(100_000L, car.memory.oilAtMs)
+        store.onTelemetry(JSONObject().put("updatedAt", 200_000L).put("tirePressureFlKpa", 200.0))
+        assertEquals("a partial set doesn't replace a whole one", 70_000L, car.memory.tiresAtMs)
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertEquals("kept past a disconnect", 70, car.memory.oilLifePct)
+
+        val demo = LiveUiStateStore { 0L }
+        demo.onCarMemory(CarMemory(oilLifePct = 40, oilAtMs = 5L))
+        demo.onStatus(JSONObject().put("state", "demo").put("adapter", "Demo stream"))
+        demo.onTelemetry(
+            body {
+                tires(this)
+                put("source", "demo")
+            },
+        )
+        assertNull(demo.state.value.car.memory.tires)
+        assertEquals(40, demo.state.value.car.memory.oilLifePct)
+        demo.onStatus(JSONObject().put("state", "disconnected"))
+        assertEquals("the demo ending keeps what was remembered", 40, demo.state.value.car.memory.oilLifePct)
     }
 
     @Test

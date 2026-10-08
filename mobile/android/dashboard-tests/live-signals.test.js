@@ -191,7 +191,16 @@ describe('live-signals diagnostic panel', () => {
       expect(valueOf('EV distance since full charge')).toBe('35 mi');
       expect(valueOf('Fuel used (cycle)')).toBe('1.0 gal');
       expect(valueOf('12V state of charge')).toBe('80%');
-      expect(valueOf('Window front left')).toBe('40% open');
+      // Only up, part way and fully down were checked on a real window: no percentages.
+      expect(valueOf('Window front left')).toBe('part way down');
+    });
+
+    it('names a window up or fully down instead of a percentage', () => {
+      const VD = window.VoltDashboard;
+      VD.updateTelemetry({ ...SAMPLE, windowFlPct: 0, windowRrPct: 100, updatedAt: Date.now() });
+      VD.updateDiagnostics();
+      expect(valueOf('Window front left')).toBe('up');
+      expect(valueOf('Window rear right')).toBe('fully down');
     });
 
     it('keeps kPa, km, km/h, °C and litres for metric', () => {
