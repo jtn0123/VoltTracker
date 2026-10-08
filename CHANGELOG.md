@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.64.0 (2026-10-08)
+
+### ✳️ New
+
+- **car**: Show A/C, oil life, dash warnings, doors and windows on the Car tab
+  ([#172](https://github.com/jtn0123/VoltTracker/pull/172),
+  [`977774b`](https://github.com/jtn0123/VoltTracker/commit/977774b7f8acc9ec853b85e1fd70f512f21bc200))
+
+
 ## v0.63.1 (2026-10-08)
 
 ### 🔺 Fix
