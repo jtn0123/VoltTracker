@@ -130,7 +130,8 @@ class GuidedCarTestTest {
     private fun steps() = io.all("guided_step")
 
     /** How long after the instruction was said the step heard what it waited for. */
-    private fun heardAfterSaid(step: Map<String, String>) = step["heardMs"]!!.toLong() - step["saidMs"]!!.toLong()
+    private fun heardAfterSaid(step: Map<String, String>) =
+        step.getValue("heardMs").toLong() - step.getValue("saidMs").toLong()
 
     private fun captures() = io.all("guided_capture")
 
@@ -158,7 +159,7 @@ class GuidedCarTestTest {
         val chunk = captures().single()
         assertEquals("lock", chunk["step"])
         assertEquals("1", chunk["chunk"])
-        assertTrue(chunk["changes"]!!.contains("0C414040 00 01 00 01"))
+        assertTrue(chunk.getValue("changes").contains("0C414040 00 01 00 01"))
     }
 
     @Test
@@ -544,9 +545,9 @@ class GuidedCarTestTest {
         assertEquals(chunks[0]["toMs"], chunks[1]["fromMs"])
         assertEquals(chunks[1]["toMs"], chunks[2]["fromMs"])
         assertEquals("3", steps().single()["chunks"])
-        val frames = chunks.sumOf { it["frames"]!!.toInt() }
-        assertEquals(steps().single()["frames"]!!.toInt(), frames)
-        assertTrue(chunks.all { it["originEpochMs"]!!.toLong() > 0L })
+        val frames = chunks.sumOf { it.getValue("frames").toInt() }
+        assertEquals(steps().single().getValue("frames").toInt(), frames)
+        assertTrue(chunks.all { it.getValue("originEpochMs").toLong() > 0L })
     }
 
     @Test
@@ -563,8 +564,8 @@ class GuidedCarTestTest {
         // A missed lock step listens past one 30 s chunk; the late frames are in the last.
         val chunk = captures().last()
         assertEquals("2", chunk["drainedFrames"])
-        assertTrue(chunk["arrivals"]!!.contains("*"))
-        assertTrue(chunk["changes"]!!.contains("*"))
+        assertTrue(chunk.getValue("arrivals").contains("*"))
+        assertTrue(chunk.getValue("changes").contains("*"))
     }
 
     @Test
@@ -700,7 +701,7 @@ class GuidedCarTestTest {
         assertEquals("interrupted", cut["result"])
         assertEquals("IOException", cut["error"])
         assertEquals("partial:interrupted", cut["capture"])
-        assertTrue(cut["frames"]!!.toInt() >= 2)
+        assertTrue(cut.getValue("frames").toInt() >= 2)
         assertEquals(cut["frames"], captures().single()["frames"])
         assertEquals("seat", io.event("guided_bus_state_unknown")!!["step"])
         assertEquals("unknown", cut["gotPrompt"])
@@ -820,7 +821,7 @@ class GuidedCarTestTest {
         assertEquals("2", step["monitorRuns"])
         assertTrue(
             "the listen itself ran the whole 30 s",
-            step["listenMs"]!!.toLong() - step["heardMs"]!!.toLong() >= 30_000L,
+            step.getValue("listenMs").toLong() - step.getValue("heardMs").toLong() >= 30_000L,
         )
         assertEquals("shutdown_short", step["result"])
         assertEquals("partial:monitor_restarted+shutdown_short", step["capture"])
@@ -857,7 +858,7 @@ class GuidedCarTestTest {
 
         val step = steps().single()
         assertEquals("shutdown_short", step["result"])
-        assertTrue(step["capture"]!!.contains("shutdown_short"))
+        assertTrue(step.getValue("capture").contains("shutdown_short"))
         assertEquals("Finished, but the car switching off was only partly recorded", statuses.last().ended)
         assertTrue(voice.said.last().startsWith("That's the whole test, though"))
         assertTrue("the drive is over: the session still ends", test.takeSessionEnd())
@@ -1084,7 +1085,7 @@ class GuidedCarTestTest {
         assertFalse(logged.contains("102AA097"))
         assertFalse(logged.contains("01 02 03 04"))
         assertFalse(logged.contains("1028C040"))
-        assertTrue(captures().single()["ids"]!!.contains("0C630040"))
+        assertTrue(captures().single().getValue("ids").contains("0C630040"))
     }
 
     @Test

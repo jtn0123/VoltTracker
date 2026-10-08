@@ -109,7 +109,7 @@ import { driveGear, gearDisplayText } from "./gear";
     "tripOdometerStaleMs", "transOilTempC", "transOilStaleMs", "oilLifeRemainingPct", "oilLifeStaleMs",
     "dashWarnings", "dashWarningStaleMs", "dashWarningsComplete", "tireSensorsInvalid", "powerMode",
     "powerModeStaleMs", "seatHeatFlLevel", "seatHeatFrLevel", "seatHeatRlLevel", "seatHeatRrLevel",
-    "seatHeatStaleMs",
+    "seatHeatStaleMs", "chargePortDoor", "refuelState", "portDoorsStaleMs",
     // Experimental car controls: gate + last command outcome (CarControlRunner.appendTo). Only
     // present while controls are enabled, so they must blank when a sample omits them.
     "carControlGate", "carControlGateDetail", "carControlBusy", "carControlLastCommand",

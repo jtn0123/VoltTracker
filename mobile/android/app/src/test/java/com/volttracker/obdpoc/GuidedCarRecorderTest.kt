@@ -70,7 +70,7 @@ class GuidedCarRecorderTest {
         assertEquals("2000", second["toMs"])
         assertEquals("2", second["frames"])
         assertEquals("2", second["chunk"])
-        assertTrue(second["ids"]!!.contains("0C630040:1/1500-1500"))
+        assertTrue(second.getValue("ids").contains("0C630040:1/1500-1500"))
         assertEquals("the door payload is the same as last chunk's", "1600 10242040 02", second["changes"])
         assertEquals(2, recorder.chunks)
         assertEquals(3, recorder.frames)
@@ -96,7 +96,7 @@ class GuidedCarRecorderTest {
         val chunk = recorder.flush(2_000L)
         val fields = chunk.fields.toMap()
 
-        assertEquals(40, fields["changes"]!!.split(" | ").size)
+        assertEquals(40, fields.getValue("changes").split(" | ").size)
         assertEquals("5", fields["droppedChanges"])
         assertTrue(chunk.truncated)
         assertTrue(recorder.lossy)
@@ -126,7 +126,7 @@ class GuidedCarRecorderTest {
             fields["changes"],
         )
         assertEquals("0", fields["droppedChanges"])
-        assertTrue("every arrival still counts", fields["ids"]!!.contains("10264040:61/"))
+        assertTrue("every arrival still counts", fields.getValue("ids").contains("10264040:61/"))
         assertFalse(chunk.truncated)
     }
 
@@ -139,7 +139,8 @@ class GuidedCarRecorderTest {
         assertEquals(
             40,
             chunk.fields
-                .toMap()["changes"]!!
+                .toMap()
+                .getValue("changes")
                 .split(" | ")
                 .size,
         )
@@ -180,7 +181,7 @@ class GuidedCarRecorderTest {
         val chunk = recorder.flush(2_000L)
         val fields = chunk.fields.toMap()
 
-        assertEquals(GuidedCarRecorder.MAX_FIELD_CHARS, fields["ids"]!!.length)
+        assertEquals(GuidedCarRecorder.MAX_FIELD_CHARS, fields.getValue("ids").length)
         assertEquals("ids", fields["truncated"])
         assertTrue(chunk.truncated)
     }
@@ -215,7 +216,7 @@ class GuidedCarRecorderTest {
         add("10 76 40 97 08 11 22 33 44 55", 1_100L)
         add("10 76 40 97 08 11 22 33 44 66", 1_200L)
 
-        val changes = flush(2_000L)["changes"]!!
+        val changes = flush(2_000L).getValue("changes")
 
         assertEquals("100 10764097 08", changes)
         assertFalse(changes.contains("11"))
