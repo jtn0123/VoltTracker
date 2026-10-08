@@ -125,6 +125,13 @@ class GuidedCarTest(
         var spokenAt = startedAt
         var heardAt = -1L
 
+        /**
+         * What the field read before the reading the step waited for, or [UNHEARD]: the test hadn't
+         * heard it yet, so the match was against where it was taken to start (a seat asked to be off),
+         * not against a reading.
+         */
+        var heardFrom = ""
+
         /** When the step stopped listening (-1 until then); later lines are late, never what it waits for. */
         var endedAt = -1L
         var runs = 0
@@ -349,11 +356,13 @@ class GuidedCarTest(
                     expect.matches(before, reading.value)
                 ) {
                     heardAt = now
+                    heardFrom = before?.toString() ?: UNHEARD
                 }
                 if (!drained && heardAt >= 0 && resumes(reading)) {
                     // The drive's end only stands if the car stays off: switched back on or moving
                     // before its shutdown was recorded, and the drive goes on.
                     heardAt = -1L
+                    heardFrom = ""
                     resumed += 1
                 }
                 if (step.phase != GuidedPhase.DRIVING && isMoving(reading)) {
@@ -976,6 +985,7 @@ class GuidedCarTest(
                     "saidMs" to since(listen.saidAt),
                     "spokenMs" to since(listen.spokenAt),
                     "heardMs" to since(listen.heardAt),
+                    "heardFrom" to listen.heardFrom,
                     "frames" to listen.recorder.frames.toString(),
                     "drainedFrames" to listen.recorder.drained.toString(),
                     "chunks" to listen.recorder.chunks.toString(),
@@ -1058,6 +1068,7 @@ class GuidedCarTest(
         private const val VOICE_FAILED = "voice_failed"
         private const val SHUTDOWN_SHORT = "shutdown_short"
         private const val UNKNOWN = "unknown"
+        private const val UNHEARD = "unheard"
         private const val UNPARSED = "unparsed"
 
         private val ACKS =

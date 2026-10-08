@@ -1116,6 +1116,8 @@ class GuidedCarTestTest {
         val step = steps().single()
         assertEquals("heard", step["result"])
         assertEquals(3_000L, heardAfterSaid(step))
+        // Counted from where the seat was taken to start, not from a reading: the log says so.
+        assertEquals("unheard", step["heardFrom"])
     }
 
     @Test
@@ -1131,7 +1133,9 @@ class GuidedCarTestTest {
 
         test.runNext()
 
-        assertEquals(4_000L, heardAfterSaid(steps().single()))
+        val step = steps().single()
+        assertEquals(4_000L, heardAfterSaid(step))
+        assertEquals("0.0", step["heardFrom"])
     }
 
     @Test
@@ -1152,6 +1156,7 @@ class GuidedCarTestTest {
         val step = steps().single()
         assertEquals(FakeCarIo.TICK_MS.toString(), step["saidMs"])
         assertEquals(4_000L, heardAfterSaid(step))
+        assertEquals("3.0", step["heardFrom"])
     }
 
     @Test
