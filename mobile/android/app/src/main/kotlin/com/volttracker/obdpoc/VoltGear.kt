@@ -30,18 +30,18 @@ class GearReading(
 /**
  * Decodes the Volt's mode-22 PRNDL PID (`222889`, HPCM2 on `7E1`) into a gear letter.
  *
- * The encoding is not published anywhere we could find (OVMS decodes a different HS-CAN frame,
- * `0x1F5` byte 3, with 1=P 2=R 3=N 4=D 5=L — not this code). The table below is inferred from 55
- * real drive sessions on the 2017 Volt (2026-06/09 logs; the PID is polled only every ~37 s):
+ * The codes follow the lever order, 8/7/6/5 = P/R/N/D, with 3 = L. That matches an established
+ * Volt app's shifter table and our own 2017 field logs (55 drive sessions, 2026-06/10; the PID is
+ * polled only every ~37 s):
  *
  * | raw | letter | confidence | evidence |
  * |-----|--------|------------|----------|
  * | 8 | P | confirmed | last value in 42/55 sessions; 3080 still vs 116 moving samples (the moving ones are the ~37 s poll lag while pulling away) |
- * | 3 | D | confirmed | first value in 49/55 sessions; 46k moving samples up to 152 km/h — the everyday forward gear. Cannot tell D from L on its own (see 5) |
- * | 7 | R | tentative | short low-speed runs right after P at a session start and right before P at the end (3→7→8 ×9: reversing into a space; 8→7→3: backing out) |
- * | 6 | N | tentative | 3 runs of ~1–2 min stationary at low draw, between D and D/P |
- * | 2 | L | tentative | 3 brief runs, always 3→2→3, captured during hard deceleration with the strongest regen of any code (median −25 kW coasting) |
- * | 5 | L | tentative | 4 late sessions of long forward driving incl. highway (to 139 km/h): a forward gear that is not the everyday one. Could equally be D with 3 = L (the codes 8/7/6/5 = P/R/N/D would then follow the lever order) — confirm on the car |
+ * | 7 | R | confirmed | short low-speed runs right after P at a session start and right before P at the end (3→7→8 ×9: reversing into a space; 8→7→3: backing out) |
+ * | 6 | N | confirmed | runs of ~1–2 min stationary at low draw, between forward gears and P |
+ * | 5 | D | confirmed | long forward driving incl. highway (to 139 km/h) |
+ * | 3 | L | confirmed | first value in 49/55 sessions; 46k moving samples up to 152 km/h — this car is driven in L |
+ * | 2 | L | tentative | not in the reference table; 3 brief runs, always 3→2→3, during hard deceleration with the strongest regen of any code (median −25 kW coasting), so read as part of L |
  *
  * Any other code decodes to [UNKNOWN] with a `?` letter; the raw value is always kept (the live
  * sample's `prndlRaw`) so the table can be confirmed from future logs.
@@ -62,11 +62,11 @@ object VoltGear {
     private val TABLE: Map<Int, Pair<String, GearConfidence>> =
         mapOf(
             PARK_RAW to (PARK to GearConfidence.CONFIRMED),
-            3 to ("D" to GearConfidence.CONFIRMED),
-            7 to ("R" to GearConfidence.TENTATIVE),
-            6 to ("N" to GearConfidence.TENTATIVE),
+            7 to ("R" to GearConfidence.CONFIRMED),
+            6 to ("N" to GearConfidence.CONFIRMED),
+            5 to ("D" to GearConfidence.CONFIRMED),
+            3 to ("L" to GearConfidence.CONFIRMED),
             2 to ("L" to GearConfidence.TENTATIVE),
-            5 to ("L" to GearConfidence.TENTATIVE),
         )
 
     /** Decodes [raw]; null only when there is no reading at all. */

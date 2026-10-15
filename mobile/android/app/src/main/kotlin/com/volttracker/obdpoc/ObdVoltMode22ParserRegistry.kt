@@ -135,6 +135,8 @@ internal object ObdVoltMode22ParserRegistry {
     private val BRAKE_PEDAL_MM_RANGE = Range(-200.0, 200.0)
     private val PUMP_RPM_RANGE = Range(0.0, 10_000.0)
     private val HEATER_POWER_RANGE = Range(-100.0, 10_000.0)
+    private val CLIMATE_POWER_RANGE = Range(0.0, 10_000.0)
+    private val TIRE_KPA_RANGE = Range(0.0, 600.0)
     private val EV_DISTANCE_KM_RANGE = Range(0.0, 655.35)
     private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
     private val EV_RANGE_KM_RANGE = Range(0.0, 300.0)
@@ -159,9 +161,7 @@ internal object ObdVoltMode22ParserRegistry {
             put("222487", wordPid("ev distance this cycle", "km", 2, 100.0, false, EV_DISTANCE_KM_RANGE))
             // PRNDL is a clean gear code; emit the number, not rawByteValue's "RAW_<n>".
             put("222889", bytePid("prndl state", "", 0, 1.0, 0.0))
-            val transmissionTemperature = bytePid("transmission temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE)
-            put("221940", transmissionTemperature)
-            put("22194001", transmissionTemperature)
+            put("221940", bytePid("transmission temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("22434F", bytePid("hv battery temperature", "deg C", 0, 1.0, -40.0, TEMP_C_RANGE))
             put("224368", bytePid("charger ac voltage", "V", 0, 2.0, 0.0, AC_VOLTAGE_RANGE))
             put("224369", bytePid("charger ac current", "A", 1, 0.2, 0.0, AC_CURRENT_RANGE))
@@ -262,13 +262,14 @@ internal object ObdVoltMode22ParserRegistry {
                 },
             )
             put("228334", bytePid("hv battery displayed soc", "%", 2, 100.0 / 255.0, 0.0))
-            put("2241B2", wordPid("battery coolant pump rpm", "rpm", 0, 1.0, true, PUMP_RPM_RANGE))
-            put(
-                "2241B4",
-                Mode22Parser { command, response ->
-                    rawByteValue(response, command, "battery coolant valve", "raw")
-                },
-            )
+            // 2241B2/2241B4 track the climate loads (A/C power follows the SW-CAN compressor kW
+            // on this car); they were first read here as the battery coolant pump and valve.
+            put("2241B2", wordPid("AC compressor power", "W", 0, 1.0, false, CLIMATE_POWER_RANGE))
+            put("2241B4", wordPid("cabin heater power", "W", 0, 1.0, false, CLIMATE_POWER_RANGE))
+            put("22435A", bytePid("battery coolant pump speed", "rpm", 0, 25.0, 0.0, PUMP_RPM_RANGE))
+            for (wheel in BcmTirePressure.Wheel.entries) {
+                put(wheel.command, wordPid(wheel.label, "kPa", 1, 16.0, false, TIRE_KPA_RANGE, WORD_NOT_AVAILABLE))
+            }
             put("2241B6", wordPid("battery heater power", "W", 0, 1.0, true, HEATER_POWER_RANGE))
             // 22801E/22801F: outside air temperature uses the GM convention A/2 - 40
             // (range -40..+87.5 C). The earlier 0.125/-5 encoding could only express
@@ -415,19 +416,5 @@ internal object ObdVoltMode22ParserRegistry {
             if (active) 1.0 else 0.0,
             "",
         )
-    }
-
-    private fun rawByteValue(
-        response: String?,
-        command: String?,
-        name: String?,
-        unit: String?,
-    ): ParsedPidValue? {
-        val payload = mode22Payload(response, command)
-        if (payload == null || payload.isEmpty()) {
-            return null
-        }
-        val raw = payload[0]
-        return ParsedPidValue(name, "RAW_$raw", raw.toDouble(), unit)
     }
 }

@@ -139,7 +139,7 @@ class VirtualVoltDtcTest {
         assertEquals("P0128", scan.getJSONObject("freezeFrame").getString("dtc"))
         val sent = car.commands()
         assertTrue(sent.contains("0200"))
-        for (header in listOf("ATSH7E4", "ATSH7E1", "ATSH7E0", "ATSH7E2", "ATSH7E6", "ATSH7E7")) {
+        for (header in listOf("ATSH7E4", "ATSH7E1", "ATSH7E0", "ATSH7E6", "ATSH7E7")) {
             assertTrue("full scan addressed $header", sent.contains(header))
         }
         // The Volt only speaks 11-bit CAN: the 29-bit probes go unanswered, and the VIN read on CAN 11-bit

@@ -111,7 +111,7 @@ data class DriveUiState(
     val lifetimeChargedKwh: Double? = null,
     /** The six pack-section temperatures (°F, `2240D7`…`2240E1`); null where a section hasn't reported. */
     val packSectionTempsF: List<Int?> = emptyList(),
-    /** Battery coolant pump speed (rpm, `2241B2`); null until reported. */
+    /** Battery coolant pump speed (rpm, `22435A`); null until reported. */
     val batteryCoolantPumpRpm: Int? = null,
     /** Battery heater power (W, `2241B6`); 0 while it is off, null until reported. */
     val batteryHeaterW: Int? = null,

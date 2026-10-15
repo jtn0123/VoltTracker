@@ -437,6 +437,8 @@ class ObdProtocolTest {
         assertTrue(ObdProtocol.isBenignSentinelResponse("22432A", "62432A00"))
         assertTrue(ObdProtocol.isBenignSentinelResponse("22432C", "62432C0000"))
         assertTrue(ObdProtocol.isBenignSentinelResponse("010D", "410DFF"))
+        assertTrue("a tire with no reading", ObdProtocol.isBenignSentinelResponse("225005", "625005FFFF"))
+        assertFalse("one FF byte is a value", ObdProtocol.isBenignSentinelResponse("22203F", "62203FFF"))
         // A genuinely unmodeled non-zero frame is NOT benign: it stays a real parse failure.
         assertFalse(ObdProtocol.isBenignSentinelResponse("22203F", "62203F17"))
         assertFalse(ObdProtocol.isBenignSentinelResponse("010D", "410D3C"))
@@ -643,15 +645,6 @@ class ObdProtocolTest {
         assertNotNull(transTemp)
         assertEquals("transmission temperature", transTemp!!.name)
         assertEquals(50.0, transTemp.valueNumeric!!, 0.01)
-
-        val transTempSelector = ObdProtocol.parseKnownValue("22194001", "621940015A")
-        assertNotNull(transTempSelector)
-        assertEquals("transmission temperature", transTempSelector!!.name)
-        assertEquals(50.0, transTempSelector.valueNumeric!!, 0.01)
-
-        val transTempSelectorShortEcho = ObdProtocol.parseKnownValue("22194001", "6219405A")
-        assertNotNull(transTempSelectorShortEcho)
-        assertEquals(50.0, transTempSelectorShortEcho!!.valueNumeric!!, 0.01)
     }
 
     @Test
@@ -689,16 +682,24 @@ class ObdProtocolTest {
 
     @Test
     fun batteryThermalAccessoryPidsDecode() {
-        val pump = ObdProtocol.parseKnownValue("2241B2", "6241B203E8")
-        assertNotNull(pump)
-        assertEquals("battery coolant pump rpm", pump!!.name)
-        assertEquals(1000.0, pump.valueNumeric!!, 0.01)
+        val acPower = ObdProtocol.parseKnownValue("2241B2", "6241B204C4")
+        assertNotNull(acPower)
+        assertEquals("AC compressor power", acPower!!.name)
+        assertEquals(1220.0, acPower.valueNumeric!!, 0.01)
+        assertEquals("W", acPower.unit)
 
-        val valve = ObdProtocol.parseKnownValue("2241B4", "6241B407")
-        assertNotNull(valve)
-        assertEquals("battery coolant valve", valve!!.name)
-        assertEquals("RAW_7", valve.valueText)
-        assertEquals(7.0, valve.valueNumeric!!, 0.01)
+        val cabinHeat = ObdProtocol.parseKnownValue("2241B4", "6241B41770")
+        assertNotNull(cabinHeat)
+        assertEquals("cabin heater power", cabinHeat!!.name)
+        assertEquals(6000.0, cabinHeat.valueNumeric!!, 0.01)
+        assertEquals(0.0, ObdProtocol.parseKnownValue("2241B4", "6241B40000")!!.valueNumeric!!, 0.01)
+        assertNull("a one-byte reply is not a power word", ObdProtocol.parseKnownValue("2241B4", "6241B407"))
+
+        val pump = ObdProtocol.parseKnownValue("22435A", "62435A30")
+        assertNotNull(pump)
+        assertEquals("battery coolant pump speed", pump!!.name)
+        assertEquals(1200.0, pump.valueNumeric!!, 0.01)
+        assertEquals("rpm", pump.unit)
 
         val heater = ObdProtocol.parseKnownValue("2241B6", "6241B607D0")
         assertNotNull(heater)

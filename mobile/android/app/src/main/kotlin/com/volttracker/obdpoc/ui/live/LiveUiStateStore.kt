@@ -589,7 +589,7 @@ class LiveUiStateStore(
             cabinTempF =
                 fresh(t, "cabinTempEstC", "climateStaleMs", current.cabinTempF?.let { fToC(it.toDouble()) })
                     ?.let { cToF(it).toInt() },
-            // The polled 221940 when the car answers it (a 2017 doesn't), else the SW-CAN broadcast.
+            // The polled 221940 (7E1 on a gen 2) when the car answers it, else the SW-CAN broadcast.
             transTempF =
                 (optDouble(t, "transmissionTempC") ?: optDouble(t, "transOilTempC"))?.let { cToF(it).toInt() }
                     ?: current.transTempF,

@@ -226,10 +226,10 @@ describe('live-signals diagnostic panel', () => {
     const VD = window.VoltDashboard;
     const chip = document.getElementById('driveGearChip');
     expect(chip.hidden).toBe(true);
-    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now(), prndlState: 'R', prndlRaw: 7, gearConfidence: 'tentative', prndlStateStaleMs: 2000 });
+    VD.updateTelemetry({ source: 'obd', connected: true, sampleCount: 1, updatedAt: Date.now(), prndlState: 'L', prndlRaw: 2, gearConfidence: 'tentative', prndlStateStaleMs: 2000 });
     VD.updateLiveUi();
     expect(chip.hidden).toBe(false);
-    expect(document.getElementById('driveGearValue').textContent).toBe('R');
+    expect(document.getElementById('driveGearValue').textContent).toBe('L');
     expect(chip.dataset.confidence).toBe('tentative');
     expect(chip.getAttribute('aria-label')).toContain('not yet confirmed');
 

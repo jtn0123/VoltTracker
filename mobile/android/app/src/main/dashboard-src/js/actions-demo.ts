@@ -210,8 +210,8 @@ export function runBrowserDemoStream(
       motorAPowerKw: moving ? Number((powerKw * 0.6).toFixed(1)) : 0,
       transmissionTempC: Number((68 + 3 * Math.sin(t / 7)).toFixed(1)),
       prndlState: moving ? "D" : "P",
-      // Raw PRNDL codes (VoltGear.kt): 8 = Park, 3 = Drive, both confirmed from field logs.
-      prndlRaw: moving ? 3 : 8,
+      // Raw PRNDL codes (VoltGear.kt): 8 = Park, 5 = Drive.
+      prndlRaw: moving ? 5 : 8,
       gearConfidence: "confirmed",
       motorTempC: Number((55 + 5 * Math.sin(t / 9)).toFixed(1)),
       inverterTempC: Number((42 + 3 * Math.sin(t / 8)).toFixed(1)),

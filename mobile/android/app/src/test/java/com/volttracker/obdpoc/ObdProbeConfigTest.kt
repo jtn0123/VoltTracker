@@ -100,8 +100,12 @@ class ObdProbeConfigTest {
             contains(ObdProbes.VOLT_7E1_PROBES, "222883"),
         )
         assertTrue(
-            "battery coolant pump PID 2241B2 missing",
+            "A/C compressor power PID 2241B2 missing",
             contains(ObdProbes.VOLT_7E4_PROBES, "2241B2"),
+        )
+        assertTrue(
+            "battery coolant pump PID 22435A missing",
+            contains(ObdProbes.VOLT_7E4_PROBES, "22435A"),
         )
         assertTrue(
             "engine oil life PID 22119F missing",
@@ -116,12 +120,8 @@ class ObdProbeConfigTest {
             contains(ObdProbes.VOLT_7E0_PROBES, "221154"),
         )
         assertTrue(
-            "transmission temperature PID 221940 missing",
-            contains(ObdProbes.VOLT_7E2_PROBES, "221940"),
-        )
-        assertTrue(
-            "transmission temperature selector PID 22194001 missing",
-            contains(ObdProbes.VOLT_7E2_PROBES, "22194001"),
+            "transmission temperature PID 221940 missing from 7E1 (a gen 2 answers it there)",
+            contains(ObdProbes.VOLT_7E1_PROBES, "221940"),
         )
         assertTrue(
             "HV battery capacity PID 2241A3 missing",
@@ -141,7 +141,6 @@ class ObdProbeConfigTest {
         private fun allVoltProbes(): Array<String> =
             ObdProbes.VOLT_7E0_PROBES +
                 ObdProbes.VOLT_7E1_PROBES +
-                ObdProbes.VOLT_7E2_PROBES +
                 ObdProbes.VOLT_7E4_PROBES +
                 ObdProbes.VOLT_7E6_PROBES +
                 ObdProbes.VOLT_7E7_LAYOUT_PROBES

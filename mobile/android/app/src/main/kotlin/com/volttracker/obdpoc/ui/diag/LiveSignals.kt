@@ -22,10 +22,11 @@ data class SignalGroup(
  * The live readings worth reading at a glance, grouped the way a driver thinks about the car, in
  * the chosen units. Missing readings show [DASH] rather than vanishing, so the list doesn't jump
  * around as samples arrive. The readings only some Volts report (oil life, inverter temperature,
- * 12 V charge; the 2017 refuses or blanks them) and the SW-CAN broadcasts only an OBDLink hears
- * (transmission temperature on a 2017, energy left, the energy & trips group) stay out until the car
- * sends one, so a car or adapter that never has them never shows a row that is always blank. Only
- * meaningful while connected; the screen shows an empty state otherwise.
+ * 12 V charge; the 2017 refuses or blanks them), transmission temperature (polled, or the SW-CAN
+ * broadcast) and the SW-CAN broadcasts only an OBDLink hears (energy left, the energy & trips
+ * group) stay out until the car sends one, so a car or adapter that never has them never shows a
+ * row that is always blank. Only meaningful while connected; the screen shows an empty state
+ * otherwise.
  */
 fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
     val u = drive.units

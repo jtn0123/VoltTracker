@@ -36,7 +36,7 @@ contain VIN frames. Everything learned about individual SW-CAN frames, from this
   A/C state, A/C compressor/evap, cabin temp, dash SOC `228334`, fuel level `012F`
   fix, blower (byte 2), and gas range (sent from source `0x60`).
 - **Confirmed from the same session's polling:** `015B`, motor A/B voltage and current,
-  motor A/B temperature, EV distance this cycle, coolant valve, heater power and duty,
+  motor A/B temperature, EV distance this cycle, A/C and cabin heater power, battery heater power and duty,
   PEM coolant, outside air raw/filtered, and the six pack-section temperatures. All are
   `Evidence.REAL` in the sim, so the scorecard gates them.
 - **Refused:** `221C26` inverter temperature on 7E1 (`7F 22 31` every time).

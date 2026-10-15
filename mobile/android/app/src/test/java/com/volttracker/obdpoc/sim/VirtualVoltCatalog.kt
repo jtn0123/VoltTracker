@@ -89,14 +89,13 @@ object VirtualVoltCatalog {
             // Motor voltages: 8340 (336.0 V) from the car with the pack at 352 V.
             entry("7E1", "222885", Evidence.REAL, both("6228858340")),
             entry("7E1", "222886", Evidence.REAL, both("6228868340")),
-            entry("7E1", "222889", Evidence.SEEN, split("62288903", "62288908")), // D / P (VoltGear)
+            entry("7E1", "222889", Evidence.SEEN, split("62288903", "62288908")), // L / P: this car is driven in L
             // Every read on 2026-09-29 came back 7F 22 31: this car's 7E1 has no inverter temperature.
             entry("7E1", "221C26", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             // The car sent 6224870000 (0 km, parked); driving is 12.34 km.
             entry("7E1", "222487", Evidence.REAL, split("62248704D2", "6224870000")),
-            // --- Mode 22 on 7E2 (transmission) -----------------------------------------------
-            entry("7E2", "221940", Evidence.DEAD, both(null)),
-            entry("7E2", "22194001", Evidence.DEAD, both(null)),
+            // Trans fluid temp: NO DATA on 7E2 (the gen 1 header); a gen 2 keeps it here. 50 C.
+            entry("7E1", "221940", Evidence.GUESS, both("6219405A")),
             // --- Mode 22 on 7E4 (battery / charger) --------------------------------------------
             entry("7E4", "22434F", Evidence.REAL, both("62434F43")),
             entry("7E4", "22436B", Evidence.REAL, chargingOnly("62436B02A0")),
@@ -116,12 +115,14 @@ object VirtualVoltCatalog {
             entry("7E4", "22432C", Evidence.PLACEHOLDER, both("62432C00")),
             // Real logs (2026-07): every read of 22435F came back 7F 22 31.
             entry("7E4", "22435F", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
-            // Coolant pump: 0x0433..0x04C4 rpm on the 2026-10-03 drive.
+            // A/C compressor power: 0x0433..0x04C4 W on the 2026-10-03 drive, following the SW-CAN
+            // compressor kW.
             entry("7E4", "2241B2", Evidence.REAL, both("6241B204C4")),
-            // Coolant valve, heater power and outside air (raw 26.5 C, filtered 27 C), from the car on
-            // 2026-09-29.
-            entry("7E4", "2241B4", Evidence.REAL, both("6241B400")),
+            // Cabin heater power (0 W, heat off), battery heater power and outside air (raw 26.5 C,
+            // filtered 27 C), from the car on 2026-09-29.
+            entry("7E4", "2241B4", Evidence.REAL, both("6241B40000")),
             entry("7E4", "2241B6", Evidence.REAL, both("6241B60000")),
+            entry("7E4", "22435A", Evidence.GUESS, both("62435A30")), // coolant pump 48 x 25 = 1200 rpm
             entry("7E4", "22801E", Evidence.REAL, both("62801E85")),
             entry("7E4", "22801F", Evidence.REAL, both("62801F86")),
             // Charge count, in the layout the car answered on 2026-10-03 (about one a day). Usage
@@ -152,8 +153,11 @@ object VirtualVoltCatalog {
             // 57 C / 56 C from the car on 2026-09-29 (car on). Still assumed asleep while charging.
             entry("257", "2228CB", Evidence.REAL, split("6228CB61", null)),
             entry("258", "22368F", Evidence.REAL, split("62368F60", null)),
-            // Body module tires, FL RL FR RR at 4 kPa/count (240-252 kPa); unconfirmed on the car.
-            entry("241", "22C901", Evidence.GUESS, both("62C9013C3D3E3F")),
+            // Body module tires, one word per wheel in 1/16 kPa (240-252 kPa); unconfirmed on the car.
+            entry("241", "225008", Evidence.GUESS, both("6250080F00")),
+            entry("241", "225007", Evidence.GUESS, both("6250070F40")),
+            entry("241", "225006", Evidence.GUESS, both("6250060F80")),
+            entry("241", "225005", Evidence.GUESS, both("6250050FC0")),
         )
 
     /**
@@ -291,7 +295,6 @@ object VirtualVoltCatalog {
         221C26 inverterTempC
         222487 evDistanceThisCycleKm
         221940 transmissionTempC
-        22194001 transmissionTempC
         22434F batteryTemp
         22436B chargerHvVoltage chargerPowerKw
         22436C chargerHvCurrent chargerPowerKw
@@ -319,15 +322,19 @@ object VirtualVoltCatalog {
         2240DF packSection5TempC
         2240E1 packSection6TempC
         22368F motorBTempC
-        2241B2 batteryCoolantPumpRpm
-        2241B4 batteryCoolantValveRaw
+        2241B2 acPowerW
+        2241B4 cabinHeatPowerW
+        22435A batteryCoolantPumpRpm
         2241B6 batteryHeaterPowerW
         22801E outsideTempRawC
         22801F outsideTempC
         2243A5 hvBatteryChargeCount
         22437D lastChargeEnergyWh
         2241A3 capacityAh sohPct packEnergyKwh
-        22C901 tirePressureFlKpa tirePressureFrKpa tirePressureRlKpa tirePressureRrKpa
+        225008 tirePressureFlKpa
+        225007 tirePressureRlKpa
+        225006 tirePressureFrKpa
+        225005 tirePressureRrKpa
         """.trimIndent()
             .lines()
             .filter(String::isNotBlank)

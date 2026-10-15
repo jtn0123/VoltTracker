@@ -182,8 +182,8 @@ class LiveUiStateStoreTest {
     @Test
     fun aTentativeGearDecodeShowsItsLetter() {
         val store = LiveUiStateStore()
-        store.onTelemetry(sample { put("prndlState", "R").put("prndlRaw", 7).put("gearConfidence", "tentative") })
-        assertEquals("R", store.state.value.drive.gear)
+        store.onTelemetry(sample { put("prndlState", "L").put("prndlRaw", 2).put("gearConfidence", "tentative") })
+        assertEquals("L", store.state.value.drive.gear)
     }
 
     @Test

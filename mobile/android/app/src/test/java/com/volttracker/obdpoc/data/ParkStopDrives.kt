@@ -91,7 +91,7 @@ internal class ParkStopDrives(
 
     companion object {
         const val PARK = 8
-        const val DRIVE = 3
+        const val DRIVE = 5
         const val HALF_MINUTE_MS = 30_000L
         const val BASE_MS = 1_780_000_000_000L
 
