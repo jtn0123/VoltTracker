@@ -655,6 +655,7 @@ class LiveUiStateStore(
             energyLeftKwh = optDouble(t, "batteryEnergyLeftKwh") ?: current.energyLeftKwh,
             carTripAMiles = tripMiles(t, "tripAKm", current.carTripAMiles),
             carTripBMiles = tripMiles(t, "tripBKm", current.carTripBMiles),
+            gen2 = Gen2StatusMapper.map(t),
             lastDrive = session.lastDrive,
         )
     }

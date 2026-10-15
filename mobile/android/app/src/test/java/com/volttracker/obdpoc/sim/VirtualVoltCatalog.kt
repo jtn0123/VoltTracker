@@ -96,6 +96,10 @@ object VirtualVoltCatalog {
             entry("7E1", "222487", Evidence.REAL, split("62248704D2", "6224870000")),
             // Trans fluid temp: NO DATA on 7E2 (the gen 1 header); a gen 2 keeps it here. 50 C.
             entry("7E1", "221940", Evidence.GUESS, both("6219405A")),
+            // Gen 2 status reads in the layout an established Volt app decodes on a 2017; made-up
+            // values. Engine start: "Battery charge low" (D bit 3) while driving, clear on the plug.
+            entry("7E1", "222439", Evidence.GUESS, split("62243900000008", "62243900000000")),
+            entry("7E1", "222C05", Evidence.GUESS, both("622C0533")), // aux trans pump 20 %
             // --- Mode 22 on 7E4 (battery / charger) --------------------------------------------
             entry("7E4", "22434F", Evidence.REAL, both("62434F43")),
             entry("7E4", "22436B", Evidence.REAL, chargingOnly("62436B02A0")),
@@ -123,6 +127,23 @@ object VirtualVoltCatalog {
             entry("7E4", "2241B4", Evidence.REAL, both("6241B40000")),
             entry("7E4", "2241B6", Evidence.REAL, both("6241B60000")),
             entry("7E4", "22435A", Evidence.GUESS, both("62435A30")), // coolant pump 48 x 25 = 1200 rpm
+            entry("7E4", "224357", Evidence.GUESS, both("62435766")), // electronics coolant pump 40 %
+            entry("7E4", "2243DE", Evidence.GUESS, both("6243DE00")), // conditioning off
+            entry("7E4", "22441E", Evidence.GUESS, both("62441E00000000")), // 12 V top-up off
+            entry("7E4", "2243AE", Evidence.GUESS, split("6243AE00", "6243AE02")), // none / charging
+            entry("7E4", "224532", Evidence.GUESS, split("62453200", "62453201")), // not ready / ready
+            entry("7E4", "224530", Evidence.GUESS, both("62453000")), // passed
+            entry("7E4", "22452F", Evidence.GUESS, both("62452F00")), // passed
+            entry("7E4", "2283E1", Evidence.GUESS, both("6283E1031700")), // Tue 23:00
+            entry("7E4", "2283E2", Evidence.GUESS, both("6283E204041E")), // Wed 04:30
+            entry("7E4", "228375", Evidence.GUESS, both("628375031700")),
+            entry("7E4", "228377", Evidence.GUESS, both("628377040A00")), // Wed 10:00
+            // Charge records come back multi-frame (3 echo + 6 data bytes), segmented under ATH0.
+            entry("7E4", "2243CB", Evidence.GUESS, both("009\r0:6243CB010000\r1:000000AAAAAAAA")), // full
+            entry("7E4", "2243CC", Evidence.GUESS, both("009\r0:6243CC040000\r1:000000AAAAAAAA")), // unplugged
+            entry("7E4", "2243CD", Evidence.GUESS, both("009\r0:6243CD010000\r1:000000AAAAAAAA")),
+            entry("7E4", "2243CE", Evidence.GUESS, both("009\r0:6243CE030000\r1:000000AAAAAAAA")),
+            entry("7E4", "2243CF", Evidence.GUESS, both("009\r0:6243CF010000\r1:000000AAAAAAAA")),
             entry("7E4", "22801E", Evidence.REAL, both("62801E85")),
             entry("7E4", "22801F", Evidence.REAL, both("62801F86")),
             // Charge count, in the layout the car answered on 2026-10-03 (about one a day). Usage
@@ -158,6 +179,8 @@ object VirtualVoltCatalog {
             entry("241", "225007", Evidence.GUESS, both("6250070F40")),
             entry("241", "225006", Evidence.GUESS, both("6250060F80")),
             entry("241", "225005", Evidence.GUESS, both("6250050FC0")),
+            entry("241", "228537", Evidence.GUESS, both("6285370000")), // no remote start running
+            entry("241", "229025", Evidence.GUESS, both("62902502")), // two remote starts left
         )
 
     /**
@@ -335,6 +358,26 @@ object VirtualVoltCatalog {
         225007 tirePressureRlKpa
         225006 tirePressureFrKpa
         225005 tirePressureRrKpa
+        222439 engineStartReason
+        222C05 auxTransPumpPct
+        224357 peCoolantPumpPct
+        2243DE batteryConditioning
+        22441E aux12vMaintenanceCharge
+        2243AE chargeState
+        224532 chargeSystemStatus
+        224530 chargeEnableCheck
+        22452F chargeControlCheck
+        2283E1 chargeStartTime
+        2283E2 chargeCompleteTime
+        228375 chargeStartTime120v
+        228377 chargeCompleteTime120v
+        2243CB chargeRecord1
+        2243CC chargeRecord2
+        2243CD chargeRecord3
+        2243CE chargeRecord4
+        2243CF chargeRecord5
+        228537 remoteStartSecondsLeft
+        229025 remoteStartsLeft
         """.trimIndent()
             .lines()
             .filter(String::isNotBlank)

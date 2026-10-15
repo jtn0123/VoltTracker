@@ -205,6 +205,7 @@ class DemoPollingLoop(
                 )
                 putPowertrainSignals(sample, t, leg, charging)
                 putBodySignals(sample, t, charging)
+                putGen2Status(sample, leg, charging)
                 putDemoPosition(sample, routeT, speedKph)
                 sample.put("updatedAt", System.currentTimeMillis())
                 engine.appendSessionHealth(sample)
@@ -366,6 +367,34 @@ class DemoPollingLoop(
         sample.put("batteryEnergyLeftKwh", ObdElmDecode.round1(demoSoc(t) / 100.0 * DEMO_USABLE_KWH))
         sample.put("tripAKm", 32.4)
         sample.put("tripBKm", 1287.6)
+    }
+
+    /** Gen 2 status reads (Gen2Readings): start reason, pumps, conditioning and the charger's view. */
+    private fun putGen2Status(
+        sample: JSONObject,
+        leg: DemoLeg,
+        charging: Boolean,
+    ) {
+        sample.put("engineStartReason", if (leg == DemoLeg.GAS) "Battery charge low" else Gen2StatusDecoders.NO_REASON)
+        sample.put("auxTransPumpPct", if (leg.moving) 20 else 0)
+        sample.put("peCoolantPumpPct", 40)
+        sample.put("batteryCoolantPumpRpm", 1200)
+        sample.put("batteryConditioning", "Off")
+        sample.put("aux12vMaintenanceCharge", "Off")
+        sample.put("acPowerW", 1100)
+        sample.put("cabinHeatPowerW", 0)
+        sample.put("chargeState", if (charging) "Charging" else "None")
+        sample.put("chargeSystemStatus", if (charging) "Ready" else "Not ready")
+        sample.put("chargeEnableCheck", "Passed")
+        sample.put("chargeControlCheck", "Passed")
+        sample.put("chargeStartTime", "Tue 23:00")
+        sample.put("chargeCompleteTime", "Wed 04:30")
+        sample.put("chargeRecord1", "Full charge")
+        sample.put("chargeRecord2", "Unplugged at the car")
+        sample.put("chargeRecord3", "Full charge")
+        sample.put("chargeRecord4", "Waiting for charge time; Full charge")
+        sample.put("chargeRecord5", "Full charge")
+        sample.put("remoteStartsLeft", 2)
     }
 
     private fun putDemoPosition(

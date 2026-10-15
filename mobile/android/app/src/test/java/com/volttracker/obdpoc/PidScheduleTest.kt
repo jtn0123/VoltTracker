@@ -134,12 +134,17 @@ class PidScheduleTest {
     fun chargeFamilyPidsAreConditionalAndAlwaysOnPidsAreNot() {
         // Charge/plug-only PIDs must be exempt from the live-poll negative-PID cache so a legitimate
         // NO-DATA while driving can't disable them before a later charge session.
-        for (command in arrayOf("22436B", "22436C", "224373", "224531", "22437D", "2243A5", "222487")) {
+        val chargerStatus = arrayOf("2243AE", "224532", "224530", "22452F", "2283E1", "2283E2", "228375", "228377")
+        for (
+        command in arrayOf("22436B", "22436C", "224373", "224531", "22437D", "2243A5", "222487") +
+            chargerStatus +
+            Gen2StatusDecoders.CHARGE_RECORD_COMMANDS
+        ) {
             assertTrue("$command must be conditional", findByCommand(command).conditional)
             assertTrue("$command must report conditional via the lookup", PidSchedule.isConditional(command))
         }
         // Core always-on PIDs and unknown commands are not conditional.
-        for (command in arrayOf("010D", "015C", "222414")) {
+        for (command in arrayOf("010D", "015C", "222414", "222439", "2243DE")) {
             assertFalse("$command must not be conditional", PidSchedule.isConditional(command))
         }
         assertFalse("an unknown command is not conditional", PidSchedule.isConditional("ZZZZ"))
@@ -439,5 +444,22 @@ class PidScheduleTest {
         }
         assertEquals(12, findByCommand("012F").periodCycles)
         assertEquals(1, findByCommand("012F").phaseOffset)
+    }
+
+    @Test
+    fun gen2StatusReadsStayOffTheFastLanesAndChargeRecordsAreRare() {
+        for (command in arrayOf("222439", "2243AE")) {
+            assertEquals("$command cadence", 24, findByCommand(command).periodCycles)
+        }
+        for (command in arrayOf("222C05", "224357", "2243DE", "22441E", "224532", "2283E1", "228537", "229025")) {
+            assertEquals("$command cadence", 48, findByCommand(command).periodCycles)
+        }
+        for (command in Gen2StatusDecoders.CHARGE_RECORD_COMMANDS) {
+            val spec = findByCommand(command)
+            assertEquals("$command cadence", 240, spec.periodCycles)
+            assertEquals("$command header", PidSchedule.Header.HV_PACK_7E4, spec.header)
+        }
+        assertEquals(PidSchedule.Header.HV_PACK_7E1, findByCommand("222439").header)
+        assertEquals(PidSchedule.Header.BODY_241, findByCommand("229025").header)
     }
 }

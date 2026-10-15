@@ -52,6 +52,31 @@ describe('live-signals diagnostic panel', () => {
     expect(row.querySelector('.live-signal-age').textContent).toBe('30s ago');
   });
 
+  it('lists the gen 2 status words with their own ages', () => {
+    const VD = window.VoltDashboard;
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      engineStartReason: 'Battery charge low; Hood open',
+      engineStartReasonStaleMs: 12000,
+      chargeRecord1: 'Full charge',
+      chargeRecordsStaleMs: 60000,
+      remoteStartSecondsLeft: 590,
+      remoteStartCountStaleMs: 0,
+      peCoolantPumpPct: 40,
+    });
+    VD.updateDiagnostics();
+    const reason = rowFor('Engine start reason');
+    expect(reason.dataset.status).toBe('live');
+    expect(reason.querySelector('.live-signal-value').textContent).toBe('Battery charge low; Hood open');
+    expect(reason.querySelector('.live-signal-age').textContent).toBe('12s ago');
+    expect(rowFor('Charge record 1').querySelector('.live-signal-value').textContent).toBe('Full charge');
+    expect(rowFor('Remote start time left').querySelector('.live-signal-value').textContent).toBe('9:50');
+    expect(rowFor('Power electronics coolant pump').querySelector('.live-signal-value').textContent).toBe('40%');
+  });
+
   it('marks present metrics reporting and absent ones as no data', () => {
     const VD = window.VoltDashboard;
     // A sample where speed/soc/motor/gear report but the odometer is absent (the
