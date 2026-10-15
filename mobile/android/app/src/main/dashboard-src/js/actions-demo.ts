@@ -272,6 +272,13 @@ export function runBrowserDemoStream(
       tripAKm: 32.4,
       tripBKm: 1287.6,
       ...(charging ? { chargeCurrentLimitA: 12 } : {}),
+      // Gen 2 status reads (Gen2Readings.kt): a few of putGen2Status's in DemoPollingLoop.kt,
+      // enough to show the rows while keeping the lazy demo chunk inside its budget.
+      engineStartReason: gas ? "Battery charge low" : "None",
+      batteryConditioning: "Off",
+      chargeState: charging ? "Charging" : "None",
+      chargeStartTime: "Tue 23:00",
+      chargeRecord1: "Full charge",
       latitude: lat,
       longitude: lng,
       updatedAt: Date.now(),

@@ -4,6 +4,7 @@ import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.diag.liveSignalGroups
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.Gen2Status
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -121,5 +122,63 @@ class LiveSignalsTest {
         assertEquals("20.1 mi", value(heard, "Trip A"))
         assertEquals("32.4 km", value(heard.copy(metricUnits = true), "Trip A"))
         assertEquals("Energy & trips", liveSignalGroups(heard).last().title)
+    }
+
+    @Test
+    fun theCarsStatusWordsShowOnlyOnceReported() {
+        val empty = DriveUiState(connected = true)
+        val labels = liveSignalGroups(empty).flatMap { it.rows }.map { it.label }
+        val statusRows = listOf("Conditioning", "Coolant pump", "Last start reason", "Remote starts left")
+        assertTrue("no status rows before the car answers: $labels", labels.none { it in statusRows })
+        assertTrue(liveSignalGroups(empty).none { it.title == "Charging" })
+
+        val reported =
+            empty.copy(
+                batteryCoolantPumpRpm = 1200,
+                gen2 =
+                    Gen2Status(
+                        engineStartReason = "Battery charge low",
+                        auxTransPumpPct = 20,
+                        peCoolantPumpPct = 40,
+                        batteryConditioning = "Active cooling",
+                        maintenance12v = "Off",
+                        chargeState = "Charging",
+                        chargeSystem = "Ready",
+                        chargeEnableCheck = "Passed",
+                        chargeControlCheck = "Passed",
+                        chargeStart = "Tue 23:00",
+                        chargeComplete = "Wed 04:30",
+                        chargeRecords = listOf("Full charge", null, "Unplugged at the car", null, null),
+                        acPowerW = 1100,
+                        cabinHeatPowerW = 0,
+                        remoteStartSecondsLeft = 590,
+                        remoteStartsLeft = 2,
+                    ),
+            )
+        assertEquals("1200 rpm", value(reported, "Coolant pump"))
+        assertEquals("Active cooling", value(reported, "Conditioning"))
+        assertEquals("20%", value(reported, "Aux transmission pump"))
+        assertEquals("40%", value(reported, "Electronics coolant pump"))
+        assertEquals("Battery charge low", value(reported, "Last start reason"))
+        assertEquals("Off", value(reported, "12 V top-up from pack"))
+        assertEquals("1100 W", value(reported, "A/C power"))
+        assertEquals("0 W", value(reported, "Cabin heater power"))
+        assertEquals("9:50", value(reported, "Remote start time left"))
+        assertEquals("2", value(reported, "Remote starts left"))
+        val charging = liveSignalGroups(reported).single { it.title == "Charging" }
+        assertEquals(
+            listOf(
+                "Charge state",
+                "Charge system",
+                "Enable check",
+                "Control check",
+                "Charge starts",
+                "Charge completes",
+                "Charge record 1",
+                "Charge record 3",
+            ),
+            charging.rows.map { it.label },
+        )
+        assertEquals("Unplugged at the car", value(reported, "Charge record 3"))
     }
 }

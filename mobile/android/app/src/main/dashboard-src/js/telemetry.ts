@@ -93,6 +93,15 @@ import { driveGear, gearDisplayText } from "./gear";
     "pemCoolantStaleMs", "lifetimeChargeEnergyKwh", "lifetimeChargeEnergyStaleMs", "packSection1TempC",
     "packSection2TempC", "packSection3TempC", "packSection4TempC", "packSection5TempC",
     "packSection6TempC", "packSectionTempStaleMs",
+    // Gen 2 status reads (Gen2Readings.kt): start reason, pumps, conditioning, charger state.
+    "engineStartReason", "engineStartReasonStaleMs", "auxTransPumpPct", "auxTransPumpStaleMs",
+    "peCoolantPumpPct", "peCoolantPumpStaleMs", "batteryConditioning", "batteryConditioningStaleMs",
+    "aux12vMaintenanceCharge", "aux12vMaintenanceStaleMs", "chargeState", "chargeStateStaleMs",
+    "chargeSystemStatus", "chargeEnableCheck", "chargeControlCheck", "chargeSystemStaleMs",
+    "chargeStartTime", "chargeCompleteTime", "chargeStartTime120v", "chargeCompleteTime120v",
+    "chargeTimesStaleMs", "chargeRecord1", "chargeRecord2", "chargeRecord3", "chargeRecord4",
+    "chargeRecord5", "chargeRecordsStaleMs", "remoteStartSecondsLeft", "remoteStartsLeft",
+    "remoteStartCountStaleMs",
     // SW-CAN (GMLAN) broadcasts from the OBDLink listen window (SwcanReadings.kt).
     "aux12vVoltage", "aux12vSocPct", "aux12vCurrentA", "aux12vStaleMs", "tirePressureFlKpa",
     "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
@@ -1517,6 +1526,34 @@ import { driveGear, gearDisplayText } from "./gear";
     pressure: (n) => units.pressureText(kpa(n)),
     volume: (n) => units.volumeText(liters(n)),
   };
+  // The gen 2 status words (Gen2Readings.kt) and pump duties: [key, label, group, staleKey, unit].
+  // A row without a unit is text. Built from tuples to keep the startup bundle small.
+  type Gen2Row = [key: string, label: string, group: string, staleKey: string, unit?: string];
+  const GEN2_SIGNALS: LiveSignalSpec[] = ([
+    ["batteryCoolantPumpRpm", "Battery coolant pump", "Battery", "batteryCoolantPumpStaleMs", "rpm"],
+    ["batteryConditioning", "Battery conditioning", "Battery", "batteryConditioningStaleMs"],
+    ["engineStartReason", "Engine start reason", "Motor & drive", "engineStartReasonStaleMs"],
+    ["auxTransPumpPct", "Aux transmission pump", "Motor & drive", "auxTransPumpStaleMs", "%"],
+    ["peCoolantPumpPct", "Power electronics coolant pump", "Motor & drive", "peCoolantPumpStaleMs", "%"],
+    ["chargeState", "Charge state", "Charging", "chargeStateStaleMs"],
+    ["chargeSystemStatus", "Charge system", "Charging", "chargeSystemStaleMs"],
+    ["chargeEnableCheck", "Charge enable check", "Charging", "chargeSystemStaleMs"],
+    ["chargeControlCheck", "Charge control check", "Charging", "chargeSystemStaleMs"],
+    ["chargeStartTime", "Charge start time", "Charging", "chargeTimesStaleMs"],
+    ["chargeCompleteTime", "Charge complete time", "Charging", "chargeTimesStaleMs"],
+    ["chargeStartTime120v", "120V charge start time", "Charging", "chargeTimesStaleMs"],
+    ["chargeCompleteTime120v", "120V charge complete time", "Charging", "chargeTimesStaleMs"],
+    // How each of the car's last five charges ended, "; "-joined ("None" = nothing flagged).
+    ...[1, 2, 3, 4, 5].map((n): Gen2Row => [`chargeRecord${n}`, `Charge record ${n}`, "Charging", "chargeRecordsStaleMs"]),
+    ["aux12vMaintenanceCharge", "12V maintenance charge", "Charging", "aux12vMaintenanceStaleMs"],
+    ["remoteStartsLeft", "Remote starts left", "Body & comfort", "remoteStartCountStaleMs", ""],
+  ] as Gen2Row[]).map(([key, label, group, staleKey, unit]): LiveSignalSpec =>
+    ({ key, label, group, staleKey, enhanced: true, ...(unit === undefined ? { text: true } : unit ? { unit } : {}) }));
+  GEN2_SIGNALS.push({
+    key: "remoteStartSecondsLeft", label: "Remote start time left", group: "Body & comfort", staleKey: "remoteStartCountStaleMs",
+    enhanced: true, display: (t) => minutesSecondsText(t.remoteStartSecondsLeft),
+  });
+
   const LIVE_SIGNAL_GROUPS = ["Core", "Battery", "Motor & drive", "Charging", "Body & comfort"];
   const LIVE_SIGNALS: LiveSignalSpec[] = [
     { key: "speedKph", label: "Speed", group: "Core", kind: "speed", staleKey: "speedKphStaleMs" },
@@ -1545,6 +1582,7 @@ import { driveGear, gearDisplayText } from "./gear";
     { key: "hvIsolationKohm", label: "HV isolation", group: "Battery", unit: "kΩ", staleKey: "hvIsolationStaleMs", enhanced: true },
     { key: "evRangeKm", label: "EV range (car estimate)", group: "Battery", kind: "distance", staleKey: "evRangeStaleMs", enhanced: true },
     { key: "batteryHeaterPct", label: "Battery heater duty", group: "Battery", unit: "%", staleKey: "batteryHeaterPctStaleMs", enhanced: true },
+    { key: "batteryCoolantPumpRpm", label: "Battery coolant pump", group: "Battery", unit: "rpm", staleKey: "batteryCoolantPumpStaleMs", enhanced: true },
     { key: "packSection1TempC", label: "Pack section 1 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
     { key: "packSection2TempC", label: "Pack section 2 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
     { key: "packSection3TempC", label: "Pack section 3 temp", group: "Battery", kind: "temp", staleKey: "packSectionTempStaleMs", enhanced: true },
@@ -1645,6 +1683,7 @@ import { driveGear, gearDisplayText } from "./gear";
     // Comma-joined warning codes; "" means none lit in the broadcasts heard so far, which covers
     // every light only once dashWarningsComplete is true.
     { key: "dashWarnings", label: "Dash warnings", group: "Body & comfort", text: true, staleKey: "dashWarningStaleMs", enhanced: true, display: (t) => String(t.dashWarnings ?? "").replace(/_/g, " ").replace(/,/g, ", ") || (t.dashWarningsComplete === true ? "none" : "none seen so far") },
+    ...GEN2_SIGNALS,
   ];
 
   function formatSignalAge(ms: number) {
@@ -1680,6 +1719,14 @@ import { driveGear, gearDisplayText } from "./gear";
     if (!Number.isFinite(pct)) return null;
     if (pct <= 2) return "up";
     return pct >= 100 ? "fully down" : "part way down";
+  }
+
+  // A countdown in whole seconds, as m:ss ("9:50").
+  function minutesSecondsText(raw: unknown): string | null {
+    const secs = Number(raw);
+    if (raw === undefined || raw === null || raw === "" || !Number.isFinite(secs) || secs < 0) return null;
+    const whole = Math.round(secs);
+    return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
   }
 
   function liveSignalText(spec: LiveSignalSpec, raw: unknown, t: PayloadRecord): string {

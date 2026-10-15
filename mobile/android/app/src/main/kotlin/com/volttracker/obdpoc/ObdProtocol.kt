@@ -792,7 +792,9 @@ object ObdProtocol {
             return null
         }
         val body = cleanCommand.substring(2)
-        val hex = adapterHexLines(response).joinToString("")
+        // A multi-frame reply (charge records) arrives segmented under ATH0 + CAF1 ("009",
+        // "0: 62 43 CB …", "1: …"); reassemble it so the segment indices don't land in the data.
+        val hex = elmSegmentedHex(response) ?: adapterHexLines(response).joinToString("")
         // Preferred: the full echoed DID, reading all following bytes (the all-zeros sentinel check
         // in isBenignSentinelResponse needs the whole payload, so this path stays unbounded). The
         // >2-byte fallback below is BOUNDED: some ECUs echo only the leading 2-byte DID (dropping the

@@ -28,6 +28,7 @@ class LiveSampleReader(
      */
     private val parseFailureReported = HashSet<String>()
     private var bcmTiresLogged = false
+    private val gen2Readings = Gen2Readings(service, pidPolling)
 
     /**
      * Consecutive speed-poll cycles on which PID 010D returned the 0xFF sentinel. The Volt reports
@@ -46,6 +47,7 @@ class LiveSampleReader(
     fun reset() {
         parseFailureReported.clear()
         bcmTiresLogged = false
+        gen2Readings.reset()
         consecutiveSpeedSentinels = 0
     }
 
@@ -139,6 +141,7 @@ class LiveSampleReader(
 
             val now = System.currentTimeMillis()
             appendBcmTires(sample, now)
+            gen2Readings.appendTo(sample, now)
             pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now)
             pidPolling.putStaleMsIfTracked(sample, "speedKphStaleMs", "010D", now)
             pidPolling.putStaleMsIfTracked(sample, "rpmStaleMs", "010C", now)

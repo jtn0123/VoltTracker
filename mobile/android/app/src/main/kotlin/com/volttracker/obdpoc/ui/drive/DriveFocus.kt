@@ -166,6 +166,8 @@ internal fun RangeCard(state: DriveUiState) {
                 listOfNotNull(
                     fuel?.let { "${it.toInt()}% tank" } ?: "Tank level not reported",
                     "engine running".takeIf { state.connected && state.mode == DriveMode.GAS },
+                    // Why it started ("Battery charge low"), when the car says.
+                    state.gen2.firstStartReason?.takeIf { state.connected && state.mode == DriveMode.GAS },
                 ).joinToString(" · "),
             dim = false,
         )

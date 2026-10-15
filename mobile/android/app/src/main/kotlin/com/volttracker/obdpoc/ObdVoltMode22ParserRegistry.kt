@@ -277,6 +277,12 @@ internal object ObdVoltMode22ParserRegistry {
             // never report a freezing morning or a hot summer day.
             put("22801E", bytePid("outside air temperature raw", "deg C", 1, 0.5, -40.0, TEMP_C_RANGE))
             put("22801F", bytePid("outside air temperature filtered", "deg C", 1, 0.5, -40.0, TEMP_C_RANGE))
+            // Gen 2 pump duties and the BCM's remote-start count, as an established Volt app reads
+            // them on a 2017; the status words (start reason, charge state…) are Gen2StatusDecoders.
+            put("222C05", bytePid("aux transmission pump speed", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("224357", bytePid("power electronics coolant pump speed", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("229025", bytePid("remote starts left", "count", 0, 1.0, 0.0))
+            putAll(Gen2StatusDecoders.parsers())
         }
 
     private fun voltByteValue(
