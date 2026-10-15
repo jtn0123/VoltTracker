@@ -95,7 +95,7 @@ not, and what is still only a candidate.
 | 2026-06-03 | `0.6.2-dev` | Broad Scan on user's Volt | Battery/charger/SOC fields positive; tire-pressure candidates negative. |
 | 2026-06-03 | `0.6.2-dev` | Detail Probe UI and persisted capability panel | App now shows Working/No hit/Candidate/Deferred counts from SQLite `field_capabilities`. |
 | 2026-06-09 | `0.9.3-dev` (PR #187) | Sensor-expansion wave added in code (no on-car test yet) | ~35 new diagnostic-only candidates + 7E6/7E7 scan coverage; `2241A3` capacity promoted to rare live polling on community evidence (needs on-car confirmation); TPMS candidates marked rejected. |
-| 2026-10-14 | gen 2 parity stack (#179, #180, `feat/gen2-more-readings`) | Reads added in code from an established Volt app's gen 2 list (no on-car test yet) | See [`gen2-parity.md`](gen2-parity.md) for what is ported, what still needs the car, and what was skipped and why. |
+| 2026-10-14 | gen 2 parity stack (#179, #180, #181) | Reads added in code from an established Volt app's gen 2 list (no on-car test yet) | See [`gen2-parity.md`](gen2-parity.md) for what is ported, what still needs the car, and what was skipped and why. |
 
 ## After Each Scan
 

@@ -11,8 +11,8 @@ log. Logs from the car hold VIN and GPS frames, so they stay off the repo.
 
 ## On-car test checklist
 
-The stack is #179 (decode fixes), then #180 (status reads), then the follow-up branch
-`feat/gen2-more-readings`. Install the top of the stack and run these in one or two sessions.
+The stack is #179 (decode fixes), then #180 (status reads), then #181 (more reads and polish).
+Install the top of the stack and run these in one or two sessions.
 Most of the checks only need the phone screen; the session log is the backup.
 
 ### Parked, car on (about 5 minutes)
@@ -92,7 +92,7 @@ Status reads (#180):
 - Pump duties.
 - Remote start countdown and starts left.
 
-Follow-up (`feat/gen2-more-readings`):
+More reads and polish (#181):
 
 - New reads: remote start reason, 12 V battery capacity, battery coolant temperature, charger
   input and output duty, EGR command and cooler temperatures.
