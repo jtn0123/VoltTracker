@@ -438,6 +438,41 @@ class PidPollingStateTest {
     }
 
     @Test
+    fun bodyModuleSetsItsOwnFlowControlAndHandsItBack() {
+        // 0x241 replies on 0x641, out of reach of the adapter's automatic flow control, so its
+        // two-frame 12 V capacity reply needs flow control addressed to 0x241, then handed back.
+        state.runScheduledPolls(specs("22434F", "22CB31"), StringBuilder())
+
+        assertEquals(
+            listOf(
+                "ATSH7E4",
+                "22434F",
+                "ATSH241",
+                "ATCRA641",
+                "ATFCSH241",
+                "ATFCSD300000",
+                "ATFCSM1",
+                "22CB31",
+                "ATFCSM0",
+                "ATAR",
+                "ATSH7DF",
+            ),
+            engine.commandLog,
+        )
+    }
+
+    @Test
+    fun onlyTheBodyModuleDeclaresManualFlowControl() {
+        for (header in PidSchedule.Header.entries) {
+            assertEquals(
+                "flow control for $header",
+                header == PidSchedule.Header.BODY_241,
+                header.flowControlCommands.isNotEmpty(),
+            )
+        }
+    }
+
+    @Test
     fun headersWithoutACustomReceiveFilterNeverTouchIt() {
         state.runScheduledPolls(specs("22434F", "2240D7"), StringBuilder())
 

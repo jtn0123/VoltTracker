@@ -134,7 +134,8 @@ class PidScheduleTest {
     fun chargeFamilyPidsAreConditionalAndAlwaysOnPidsAreNot() {
         // Charge/plug-only PIDs must be exempt from the live-poll negative-PID cache so a legitimate
         // NO-DATA while driving can't disable them before a later charge session.
-        val chargerStatus = arrayOf("2243AE", "224532", "224530", "22452F", "2283E1", "2283E2", "228375", "228377")
+        val chargerStatus =
+            arrayOf("2243AE", "224532", "224530", "22452F", "2283E1", "2283E2", "228375", "228377", "22452D", "22452E")
         for (
         command in arrayOf("22436B", "22436C", "224373", "224531", "22437D", "2243A5", "222487") +
             chargerStatus +
@@ -451,7 +452,24 @@ class PidScheduleTest {
         for (command in arrayOf("222439", "2243AE")) {
             assertEquals("$command cadence", 24, findByCommand(command).periodCycles)
         }
-        for (command in arrayOf("222C05", "224357", "2243DE", "22441E", "224532", "2283E1", "228537", "229025")) {
+        for (
+        command in arrayOf(
+            "222C05",
+            "224357",
+            "2243DE",
+            "22441E",
+            "224532",
+            "2283E1",
+            "228537",
+            "229025",
+            "22900D",
+            "22452D",
+            "2241A4",
+            "22002C",
+            "223040",
+            "223041",
+        )
+        ) {
             assertEquals("$command cadence", 48, findByCommand(command).periodCycles)
         }
         for (command in Gen2StatusDecoders.CHARGE_RECORD_COMMANDS) {
@@ -461,5 +479,17 @@ class PidScheduleTest {
         }
         assertEquals(PidSchedule.Header.HV_PACK_7E1, findByCommand("222439").header)
         assertEquals(PidSchedule.Header.BODY_241, findByCommand("229025").header)
+        assertEquals(PidSchedule.Header.POWERTRAIN_7E0, findByCommand("22002C").header)
+    }
+
+    @Test
+    fun twelveVoltCapacityRidesAnExistingBodyModuleSwitch() {
+        val capacity = findByCommand("22CB31")
+        assertEquals(PidSchedule.Header.BODY_241, capacity.header)
+        assertEquals(240, capacity.periodCycles)
+        // On a cycle the tire reads already switch to 0x241 for, so it costs no extra switch.
+        val tires = findByCommand("225008")
+        assertEquals(tires.phaseOffset, capacity.phaseOffset % tires.periodCycles)
+        assertTrue(PidSchedule.dueOnCycle(capacity.phaseOffset).any { it.command == "225008" })
     }
 }

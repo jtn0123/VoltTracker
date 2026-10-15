@@ -105,6 +105,8 @@ data class DriveUiState(
     val minCellNumber: Int? = null,
     /** HV pack internal resistance in mΩ (`2240E9`); rises as the pack ages. */
     val packResistanceMohm: Double? = null,
+    /** HV insulation resistance to the chassis in kΩ (`2243A6`); null until measured. */
+    val hvIsolationKohm: Int? = null,
     /** How many times the pack has been charged (`2243A5`); null until reported. */
     val packChargeCount: Int? = null,
     /** Energy charged into the pack over its life, in kWh (`224389`); null until reported. */

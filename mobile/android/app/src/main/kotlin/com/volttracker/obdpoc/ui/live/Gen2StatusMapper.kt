@@ -36,6 +36,14 @@ internal object Gen2StatusMapper {
             cabinHeatPowerW = whole(t, "cabinHeatPowerW"),
             remoteStartSecondsLeft = whole(t, "remoteStartSecondsLeft"),
             remoteStartsLeft = whole(t, "remoteStartsLeft"),
+            remoteStartReason = text(t, "remoteStartReason"),
+            batteryCoolantF = fahrenheit(t, "batteryCoolantC"),
+            chargerAcDutyPct = whole(t, "chargerAcDutyPct"),
+            chargerOutputDutyPct = whole(t, "chargerOutputDutyPct"),
+            egrCommandedPct = whole(t, "egrCommandedPct"),
+            egrCooler1F = fahrenheit(t, "egrCoolerTemp1C"),
+            egrCooler2F = fahrenheit(t, "egrCoolerTemp2C"),
+            aux12vCapacityAh = number(t, "aux12vCapacityAh"),
         )
 
     private fun text(
@@ -46,5 +54,18 @@ internal object Gen2StatusMapper {
     private fun whole(
         t: JSONObject,
         key: String,
-    ): Int? = if (t.isNull(key)) null else t.optDouble(key).takeIf { it.isFinite() }?.roundToInt()
+    ): Int? = number(t, key)?.roundToInt()
+
+    private fun fahrenheit(
+        t: JSONObject,
+        key: String,
+    ): Int? = number(t, key)?.let { (it * FAHRENHEIT_PER_CELSIUS + FAHRENHEIT_AT_ZERO_C).roundToInt() }
+
+    private fun number(
+        t: JSONObject,
+        key: String,
+    ): Double? = if (t.isNull(key)) null else t.optDouble(key).takeIf { it.isFinite() }
+
+    private const val FAHRENHEIT_PER_CELSIUS = 1.8
+    private const val FAHRENHEIT_AT_ZERO_C = 32.0
 }

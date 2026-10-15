@@ -54,6 +54,26 @@ class ObdElmDecodeContractTest {
     }
 
     @Test
+    fun gen2LiveReadsAreLabelledWithTheirDecodedName() {
+        // The raw log's label and the decoded value's name must agree, so a row reads the same in
+        // both places. The scan-only candidates are checked in Gen2ScanCandidatesTest.
+        for (
+        (command, response) in listOf(
+            "22900D" to "62900D00",
+            "22452D" to "62452D80",
+            "22452E" to "62452E80",
+            "22002C" to "62002C10",
+            "223040" to "6230400514",
+            "223041" to "6230410514",
+            "22CB31" to "62CB312980",
+        )
+        ) {
+            val decoded = ObdProtocol.parseKnownValue(command, response)
+            assertEquals("label for $command", decoded?.name, ObdElmDecode.nameForCommand(command.lowercase()))
+        }
+    }
+
+    @Test
     fun unknownOrMissingCommandHasNoDashboardLabel() {
         assertEquals("", ObdElmDecode.nameForCommand(null))
         assertEquals("", ObdElmDecode.nameForCommand(""))

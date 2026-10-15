@@ -15,6 +15,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.volttracker.obdpoc.ui.components.ButtonStyle
 import com.volttracker.obdpoc.ui.components.LocalVoltNav
+import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltButton
 import com.volttracker.obdpoc.ui.components.VoltEmptyState
 import com.volttracker.obdpoc.ui.components.VoltLabel
@@ -56,7 +57,7 @@ fun LiveSignalsScreen(
                 secondAction = nav.demoAction(),
             )
         } else {
-            liveSignalGroups(drive).forEach { group ->
+            liveSignalGroups(drive, LocalVoltPrefs.current.clock24h).forEach { group ->
                 VoltLabel(group.title, modifier = Modifier.padding(start = 4.dp, top = 4.dp, bottom = 6.dp))
                 VoltListCard {
                     group.rows.forEachIndexed { i, row ->

@@ -101,7 +101,9 @@ import { driveGear, gearDisplayText } from "./gear";
     "chargeStartTime", "chargeCompleteTime", "chargeStartTime120v", "chargeCompleteTime120v",
     "chargeTimesStaleMs", "chargeRecord1", "chargeRecord2", "chargeRecord3", "chargeRecord4",
     "chargeRecord5", "chargeRecordsStaleMs", "remoteStartSecondsLeft", "remoteStartsLeft",
-    "remoteStartCountStaleMs",
+    "remoteStartCountStaleMs", "remoteStartReason", "batteryCoolantC", "batteryCoolantStaleMs",
+    "chargerAcDutyPct", "chargerOutputDutyPct", "chargerDutyStaleMs", "egrCommandedPct",
+    "egrCoolerTemp1C", "egrCoolerTemp2C", "egrStaleMs", "aux12vCapacityAh", "aux12vCapacityStaleMs",
     // SW-CAN (GMLAN) broadcasts from the OBDLink listen window (SwcanReadings.kt).
     "aux12vVoltage", "aux12vSocPct", "aux12vCurrentA", "aux12vStaleMs", "tirePressureFlKpa",
     "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
@@ -1547,8 +1549,21 @@ import { driveGear, gearDisplayText } from "./gear";
     ...[1, 2, 3, 4, 5].map((n): Gen2Row => [`chargeRecord${n}`, `Charge record ${n}`, "Charging", "chargeRecordsStaleMs"]),
     ["aux12vMaintenanceCharge", "12V maintenance charge", "Charging", "aux12vMaintenanceStaleMs"],
     ["remoteStartsLeft", "Remote starts left", "Body & comfort", "remoteStartCountStaleMs", ""],
+    ["remoteStartReason", "Last started by", "Body & comfort", "remoteStartCountStaleMs"],
+    ["aux12vCapacityAh", "12V battery capacity", "Body & comfort", "aux12vCapacityStaleMs", "Ah"],
+    ["chargerAcDutyPct", "Charger input duty", "Charging", "chargerDutyStaleMs", "%"],
+    ["chargerOutputDutyPct", "Charger output duty", "Charging", "chargerDutyStaleMs", "%"],
+    ["egrCommandedPct", "EGR command", "Motor & drive", "egrStaleMs", "%"],
   ] as Gen2Row[]).map(([key, label, group, staleKey, unit]): LiveSignalSpec =>
     ({ key, label, group, staleKey, enhanced: true, ...(unit === undefined ? { text: true } : unit ? { unit } : {}) }));
+  // Temperatures follow the user's units, so they carry a kind rather than a unit.
+  for (const [key, label, group, staleKey] of [
+    ["batteryCoolantC", "Battery coolant temp", "Battery", "batteryCoolantStaleMs"],
+    ["egrCoolerTemp1C", "EGR cooler temp 1", "Motor & drive", "egrStaleMs"],
+    ["egrCoolerTemp2C", "EGR cooler temp 2", "Motor & drive", "egrStaleMs"],
+  ] as const) {
+    GEN2_SIGNALS.push({ key, label, group, kind: "temp", staleKey, enhanced: true });
+  }
   GEN2_SIGNALS.push({
     key: "remoteStartSecondsLeft", label: "Remote start time left", group: "Body & comfort", staleKey: "remoteStartCountStaleMs",
     enhanced: true, display: (t) => minutesSecondsText(t.remoteStartSecondsLeft),

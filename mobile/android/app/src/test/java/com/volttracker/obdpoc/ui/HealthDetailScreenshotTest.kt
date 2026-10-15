@@ -8,12 +8,14 @@ import com.volttracker.obdpoc.ui.diag.DiagUiState
 import com.volttracker.obdpoc.ui.diag.DtcCode
 import com.volttracker.obdpoc.ui.diag.rawReadings
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.Gen2Status
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
 import org.json.JSONObject
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -36,6 +38,8 @@ class HealthDetailScreenshotTest(
     fun capture() {
         val (route, state) = STATES.getValue(stateName)
         val themed = state.copy(settings = theme.applyTo(state.settings))
+        // The full list, so the review image shows every gen 2 row.
+        if (stateName == "live-signals-gen2") RuntimeEnvironment.setQualifiers("+h2400dp")
         compose.setContent {
             VoltApp(
                 themed,
@@ -85,6 +89,34 @@ class HealthDetailScreenshotTest(
                             )
                     ),
                 "live-signals" to (VoltRoute.SIGNALS to base),
+                // Every gen 2 read reported, plugged in and waiting on the car's schedule.
+                "live-signals-gen2" to
+                    (
+                        VoltRoute.SIGNALS to
+                            base.copy(
+                                drive =
+                                    base.drive.copy(
+                                        hvIsolationKohm = 2_000,
+                                        gen2 =
+                                            Gen2Status(
+                                                engineStartReason = "None",
+                                                remoteStartReason = "Ignition switch",
+                                                batteryConditioning = "Active heating",
+                                                batteryCoolantF = 68,
+                                                egrCommandedPct = 12,
+                                                egrCooler1F = 194,
+                                                egrCooler2F = 178,
+                                                aux12vCapacityAh = 41.5,
+                                                chargeState = "Waiting",
+                                                chargeSystem = "Ready",
+                                                chargerAcDutyPct = 72,
+                                                chargerOutputDutyPct = 68,
+                                                chargeStart = "Tue 23:05",
+                                                remoteStartsLeft = 2,
+                                            ),
+                                    ),
+                            )
+                    ),
                 "all-readings" to (VoltRoute.ALL_READINGS to base),
             )
 

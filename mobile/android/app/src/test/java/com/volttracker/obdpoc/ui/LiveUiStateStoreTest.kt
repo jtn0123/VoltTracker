@@ -694,6 +694,34 @@ class LiveUiStateStoreTest {
     }
 
     @Test
+    fun theChargersOwnStateAndScheduleReachTheChargeTabUntilDisconnect() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(
+            sample(speedKph = 0) {
+                put("vehicleState", "parked").put("chargeState", "Waiting").put("chargeStartTime", "Tue 23:05")
+            },
+        )
+        assertEquals("Waiting", store.state.value.charge.carChargeState)
+        assertEquals("Tue 23:05", store.state.value.charge.carChargeStart)
+
+        store.onStatus(JSONObject().put("state", "disconnected"))
+        assertNull(store.state.value.charge.carChargeState)
+        assertNull(store.state.value.charge.carChargeStart)
+    }
+
+    @Test
+    fun hvInsulationHoldsBetweenReadsAndZeroIsNotAReading() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample { put("hvIsolationKohm", 0) })
+        assertNull("the pack hasn't measured it yet", store.state.value.drive.hvIsolationKohm)
+        store.onTelemetry(sample(updatedAt = 2_000L) { put("hvIsolationKohm", 2_500.0) })
+        assertEquals(2_500, store.state.value.drive.hvIsolationKohm)
+        store.onTelemetry(sample(updatedAt = 3_000L))
+        assertEquals(2_500, store.state.value.drive.hvIsolationKohm)
+    }
+
+    @Test
     fun stoppingWhileChargingLeavesNoChargerReadingOnTheChargeTab() {
         val store = LiveUiStateStore()
         store.onStatus(JSONObject().put("state", "connected"))

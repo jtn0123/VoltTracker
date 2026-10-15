@@ -79,6 +79,10 @@ object VirtualVoltCatalog {
             entry("7E0", "22119F01", Evidence.DEAD, both(NEGATIVE_OUT_OF_RANGE)),
             // The car answered 62115474 (76 °C oil) on 2026-09-29, warm from the drive there.
             entry("7E0", "221154", Evidence.REAL, both("62115474")),
+            // EGR command 31 / 255 = 12 %, cooler temps 90 C and 84 C (made up; a gen 2 engine read).
+            entry("7E0", "22002C", Evidence.GUESS, both("62002C1F")),
+            entry("7E0", "223040", Evidence.GUESS, both("6230400514")),
+            entry("7E0", "223041", Evidence.GUESS, both("62304104D8")),
             // --- Mode 22 on 7E1 (hybrid powertrain) -----------------------------------------
             entry("7E1", "222414", Evidence.REAL, split("622414FE87", "6224140000")),
             entry("7E1", "222429", Evidence.REAL, both("6224295806")),
@@ -144,6 +148,9 @@ object VirtualVoltCatalog {
             entry("7E4", "2243CD", Evidence.GUESS, both("009\r0:6243CD010000\r1:000000AAAAAAAA")),
             entry("7E4", "2243CE", Evidence.GUESS, both("009\r0:6243CE030000\r1:000000AAAAAAAA")),
             entry("7E4", "2243CF", Evidence.GUESS, both("009\r0:6243CF010000\r1:000000AAAAAAAA")),
+            entry("7E4", "22452D", Evidence.GUESS, chargingOnly("62452DB8")), // charger input duty 72 %
+            entry("7E4", "22452E", Evidence.GUESS, chargingOnly("62452EAD")), // charger output duty 68 %
+            entry("7E4", "2241A4", Evidence.GUESS, both("6241A43E")), // battery coolant 22 C
             entry("7E4", "22801E", Evidence.REAL, both("62801E85")),
             entry("7E4", "22801F", Evidence.REAL, both("62801F86")),
             // Charge count, in the layout the car answered on 2026-10-03 (about one a day). Usage
@@ -181,6 +188,9 @@ object VirtualVoltCatalog {
             entry("241", "225005", Evidence.GUESS, both("6250050FC0")),
             entry("241", "228537", Evidence.GUESS, both("6285370000")), // no remote start running
             entry("241", "229025", Evidence.GUESS, both("62902502")), // two remote starts left
+            entry("241", "22900D", Evidence.GUESS, both("62900D00")), // started with the ignition switch
+            // 12 V capacity, 0x2980 / 256 = 41.5 Ah: a two-frame reply, so it needs the BCM's flow control.
+            entry("241", "22CB31", Evidence.GUESS, both("008\r0:62CB31298000\r1:0000AAAAAAAAAA")),
         )
 
     /**
@@ -378,6 +388,14 @@ object VirtualVoltCatalog {
         2243CF chargeRecord5
         228537 remoteStartSecondsLeft
         229025 remoteStartsLeft
+        22900D remoteStartReason
+        22CB31 aux12vCapacityAh
+        22452D chargerAcDutyPct
+        22452E chargerOutputDutyPct
+        2241A4 batteryCoolantC
+        22002C egrCommandedPct
+        223040 egrCoolerTemp1C
+        223041 egrCoolerTemp2C
         """.trimIndent()
             .lines()
             .filter(String::isNotBlank)
