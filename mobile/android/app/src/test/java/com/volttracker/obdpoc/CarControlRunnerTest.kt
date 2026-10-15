@@ -290,6 +290,22 @@ class CarControlRunnerTest {
     }
 
     @Test
+    fun aLow12VoltBatteryRefusesAWakeButNotARemoteStop() {
+        runner.observe(JSONObject().put("voltage", 11.2).put("voltageStaleMs", 0L), now)
+        parked()
+        io.confirmations.add(CarCommand.LOCK)
+        runner.request(CarCommand.LOCK)
+        runner.afterSample()
+        assertEquals("low_12v", io.event("car_control")!!["reason"])
+        assertTrue(io.commands.isEmpty())
+
+        // Stopping a remote start sends no wake, so a low reading must not strand the car running.
+        now += 5_000L
+        io.monitorText = "10 39 00 40 00\rSTOPPED\r\r>"
+        assertEquals("confirmed", run(CarCommand.REMOTE_STOP).getString("carControlLastOutcome"))
+    }
+
+    @Test
     fun movingCarIsRefused() {
         io.confirmations.add(CarCommand.UNLOCK)
         runner.observe(JSONObject().put("speedKph", 20.0).put("prndlState", "D").put("vehicleState", "driving_ev"), now)

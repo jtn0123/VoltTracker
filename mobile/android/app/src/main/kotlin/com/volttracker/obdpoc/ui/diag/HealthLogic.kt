@@ -226,6 +226,7 @@ data class HvBattery(
     val resistanceMohm: Double? = null,
     val chargeCount: Int? = null,
     val chargedKwh: Double? = null,
+    val isolationKohm: Int? = null,
 ) {
     val reported: Boolean
         get() =
@@ -234,7 +235,8 @@ data class HvBattery(
                 spreadMv != null ||
                 resistanceMohm != null ||
                 chargeCount != null ||
-                chargedKwh != null
+                chargedKwh != null ||
+                isolationKohm != null
 }
 
 /** The Gen 2 Volt pack's rated capacity: the "of 52 Ah new" the Ah figure is read against. */
@@ -259,7 +261,33 @@ fun hvBattery(
         resistanceMohm = drive.packResistanceMohm,
         chargeCount = drive.packChargeCount,
         chargedKwh = drive.lifetimeChargedKwh,
+        isolationKohm = drive.hvIsolationKohm,
     )
+
+/**
+ * The high-voltage system's insulation to the chassis, graded: "Insulation 6,375 kΩ · good". Below
+ * [ISOLATION_LOW_KOHM] it is worth a check, and below [ISOLATION_NO_CHARGE_KOHM] the car is
+ * expected to refuse to charge. Null before the pack has measured it.
+ */
+fun HvBattery.isolationLine(): HealthLine? {
+    val kohm = isolationKohm ?: return null
+    val reading = "Insulation ${"%,d".format(Locale.US, kohm)} kΩ"
+    return when {
+        kohm < ISOLATION_NO_CHARGE_KOHM ->
+            HealthLine(
+                "$reading · too low to charge, have the HV system checked",
+                PillTone.BAD,
+            )
+        kohm < ISOLATION_LOW_KOHM -> HealthLine("$reading · low, have the HV system checked", PillTone.WARN)
+        else -> HealthLine("$reading · good", PillTone.NEUTRAL)
+    }
+}
+
+/** Below this the HV insulation is low enough to check. */
+const val ISOLATION_LOW_KOHM = 400
+
+/** Below this a Volt is expected to refuse to charge. */
+const val ISOLATION_NO_CHARGE_KOHM = 300
 
 /** "Internal resistance 293 mΩ · charged 1,234 times (12,346 kWh)", whichever the pack has reported; null before any. */
 fun HvBattery.agingLine(): String? =
@@ -287,12 +315,26 @@ data class BatteryThermal(
     val heaterW: Int?,
     val electronicsF: Int?,
     val units: VoltUnits,
+    /** The battery coolant loop (°F). */
+    val coolantF: Int? = null,
+    /** The car's conditioning mode: "Off", "Active heating", "Passive cooling", … */
+    val conditioning: String? = null,
 ) {
     val reported: Boolean get() =
         sectionsF.any { it != null } ||
             pumpRpm != null ||
             heaterW != null ||
-            electronicsF != null
+            electronicsF != null ||
+            coolantF != null ||
+            conditioning != null
+
+    /** "Active heating · battery coolant 68°F", whichever the car has reported; null before either. */
+    val conditioningLine: String?
+        get() =
+            listOfNotNull(
+                conditioning?.let { if (it == "Off") "Not conditioning" else it },
+                coolantF?.let { "battery coolant ${units.tempText(it.toDouble())}" },
+            ).joinToString(" · ").replaceFirstChar { it.uppercase() }.ifEmpty { null }
 
     /** Each section in the chosen units ("74°F"), [DASH] where one hasn't reported. */
     val sectionTexts: List<String> get() = sectionsF.map { f -> f?.let { units.tempText(it.toDouble()) } ?: DASH }
@@ -322,6 +364,8 @@ fun batteryThermal(drive: DriveUiState): BatteryThermal =
         heaterW = drive.batteryHeaterW,
         electronicsF = drive.pemCoolantF,
         units = drive.units,
+        coolantF = drive.gen2.batteryCoolantF,
+        conditioning = drive.gen2.batteryConditioning,
     )
 
 private const val WATTS_PER_KW = 1000.0
@@ -359,6 +403,7 @@ fun healthReport(
                 battery.resistanceMohm?.let { "internal resistance ${it.roundToInt()} mΩ" },
                 battery.chargedText(),
                 battery.weakestLabel()?.let { "weakest cell $it" },
+                battery.isolationLine()?.text?.replaceFirstChar { it.lowercase() },
             ).joinToString(", ")
     }
     if (thermal?.reported == true) {
@@ -369,6 +414,7 @@ fun healthReport(
                 thermal.pumpText?.let { if (it == "Off") "coolant pump off" else "coolant pump $it rpm" },
                 thermal.heaterText?.let { if (it == "Off") "heater off" else "heater $it kW" },
                 thermal.electronicsText?.let { "electronics coolant $it${thermal.units.tempUnit}" },
+                thermal.conditioningLine?.replaceFirstChar { it.lowercase() },
             ).joinToString(", ")
     }
     if (diag.sohHistory.isNotEmpty()) lines += "Battery health trend: ${sohTrend(diag.sohHistory).sentence}"

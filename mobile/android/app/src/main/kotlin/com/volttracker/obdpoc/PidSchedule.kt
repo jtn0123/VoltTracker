@@ -33,6 +33,12 @@ object PidSchedule {
          * reply on request+0x400 (0x257 answers on 0x657), which the auto filter drops.
          */
         @JvmField val receiveFilterCommand: String? = null,
+        /**
+         * ELM commands that address this node's ISO-TP flow control. The adapter's automatic flow
+         * control answers a first frame on reply ID - 8, which only reaches a 7E0-7E7 module; a node
+         * replying on request + 0x400 never hears it and stops after its first frame.
+         */
+        @JvmField val flowControlCommands: List<String> = emptyList(),
     ) {
         BROADCAST(null),
         POWERTRAIN_7E0("ATSH7E0"),
@@ -47,7 +53,9 @@ object PidSchedule {
         MOTOR_GEN_B_258("ATSH258", "ATCRA658"),
 
         // Body control module (GM physical 0x241, replies on 0x641): where GM keeps tire pressures.
-        BODY_241("ATSH241", "ATCRA641"),
+        // Flow control goes to 0x241 (clear to send, no block limit, no gap) for its multi-frame
+        // 12 V capacity reply.
+        BODY_241("ATSH241", "ATCRA641", listOf("ATFCSH241", "ATFCSD300000", "ATFCSM1")),
     }
 
     /** Restore the broadcast header after a non-broadcast block of reads. */
@@ -55,6 +63,9 @@ object PidSchedule {
 
     /** Hand the CAN receive filter back to the adapter after a [Header.receiveFilterCommand]. */
     const val RESTORE_AUTO_RECEIVE_COMMAND = "ATAR"
+
+    /** Hand ISO-TP flow control back to the adapter after a [Header.flowControlCommands] block. */
+    const val RESTORE_AUTO_FLOW_CONTROL_COMMAND = "ATFCSM0"
 
     /**
      * Hot-lane broadcast Mode-01 PIDs that get batched into a single request when the adapter
@@ -172,6 +183,10 @@ object PidSchedule {
             // is switched every cycle for pack current, so these sit on the quietest phases.
             PidSpec("222439", Header.HV_PACK_7E1, 24, 7), // engine start reason
             PidSpec("222C05", Header.HV_PACK_7E1, 48, 19), // aux transmission pump speed
+            // EGR command and cooler temperatures (engine computer). Quiet phase, own 7E0 switch.
+            PidSpec("22002C", Header.POWERTRAIN_7E0, 48, 43), // EGR commanded
+            PidSpec("223040", Header.POWERTRAIN_7E0, 48, 43), // EGR cooler temperature 1
+            PidSpec("223041", Header.POWERTRAIN_7E0, 48, 43), // EGR cooler temperature 2
             // Charge-family PIDs only answer while plugged/charging on some Volt model-years, so they
             // are marked conditional = exempt from the negative-PID cache (a "NO DATA" while driving
             // must not disable them before a later charge session).
@@ -192,6 +207,8 @@ object PidSchedule {
             PidSpec("2283E2", Header.HV_PACK_7E4, 48, 47, conditional = true), // charge complete time
             PidSpec("228375", Header.HV_PACK_7E4, 48, 47, conditional = true), // 120V charge start time
             PidSpec("228377", Header.HV_PACK_7E4, 48, 47, conditional = true), // 120V charge complete time
+            PidSpec("22452D", Header.HV_PACK_7E4, 48, 29, conditional = true), // charger AC duty cycle
+            PidSpec("22452E", Header.HV_PACK_7E4, 48, 29, conditional = true), // charger output duty cycle
             // How the last five charges ended: multi-frame replies, so rare and on a light cycle.
             PidSpec("2243CB", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 1
             PidSpec("2243CC", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 2
@@ -201,6 +218,7 @@ object PidSchedule {
             PidSpec("2243DE", Header.HV_PACK_7E4, 48, 17), // battery conditioning mode
             PidSpec("22441E", Header.HV_PACK_7E4, 48, 17), // 12V maintenance charge
             PidSpec("224357", Header.HV_PACK_7E4, 48, 41), // power electronics coolant pump speed
+            PidSpec("2241A4", Header.HV_PACK_7E4, 48, 35), // battery coolant temperature
             // The dash SOC and EV range are the Drive screen's headline. On the 24-cycle lane the
             // first read landed ~100 s into a session, so the ring showed the raw pack % (14) and
             // then jumped to the dash's (0). Every 6 cycles, sharing 22434F's 7E4 phase: ~10 s.
@@ -244,13 +262,17 @@ object PidSchedule {
             PidSpec("2228CB", Header.MOTOR_GEN_A_257, 48, 44), // motor-generator A temperature
             PidSpec("22368F", Header.MOTOR_GEN_B_258, 48, 44), // motor-generator B temperature
             // Tire pressures from the body control module, one DID per wheel (BcmTirePressure).
-            // Single-frame replies, so no flow control. Early first read, then ~40 s.
+            // Early first read, then ~40 s.
             PidSpec("225008", Header.BODY_241, 48, 3), // tire pressure front left
             PidSpec("225007", Header.BODY_241, 48, 3), // tire pressure rear left
             PidSpec("225006", Header.BODY_241, 48, 3), // tire pressure front right
             PidSpec("225005", Header.BODY_241, 48, 3), // tire pressure rear right
             PidSpec("228537", Header.BODY_241, 48, 3), // remote start time left
             PidSpec("229025", Header.BODY_241, 48, 3), // remote starts left
+            PidSpec("22900D", Header.BODY_241, 48, 3), // remote start reason
+            // 12 V battery capacity: a two-frame reply, hence the BCM's flow control. Barely moves,
+            // so it rides one in five of the BCM switches.
+            PidSpec("22CB31", Header.BODY_241, 240, 51), // 12V battery capacity
         )
 
     private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }

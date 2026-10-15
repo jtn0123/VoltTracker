@@ -77,6 +77,40 @@ describe('live-signals diagnostic panel', () => {
     expect(rowFor('Power electronics coolant pump').querySelector('.live-signal-value').textContent).toBe('40%');
   });
 
+  it('lists the extra gen 2 reads, temperatures in the chosen units', () => {
+    const VD = window.VoltDashboard;
+    VD.updateTelemetry({
+      source: 'obd',
+      connected: true,
+      sampleCount: 1,
+      updatedAt: Date.now(),
+      remoteStartReason: 'Ignition switch',
+      remoteStartCountStaleMs: 0,
+      aux12vCapacityAh: 41.5,
+      aux12vCapacityStaleMs: 0,
+      chargerAcDutyPct: 72,
+      chargerOutputDutyPct: 68,
+      chargerDutyStaleMs: 0,
+      egrCommandedPct: 12,
+      egrCoolerTemp1C: 90,
+      egrStaleMs: 0,
+      batteryCoolantC: 20,
+      batteryCoolantStaleMs: 5000,
+    });
+    VD.updateDiagnostics();
+    const value = (label) => rowFor(label).querySelector('.live-signal-value').textContent;
+    expect(value('Last started by')).toBe('Ignition switch');
+    expect(value('12V battery capacity')).toBe('41.5 Ah');
+    expect(value('Charger input duty')).toBe('72%');
+    expect(value('Charger output duty')).toBe('68%');
+    expect(value('EGR command')).toBe('12%');
+    expect(value('EGR cooler temp 1')).toBe('194°F');
+    const coolant = rowFor('Battery coolant temp');
+    expect(coolant.querySelector('.live-signal-value').textContent).toBe('68°F');
+    expect(coolant.querySelector('.live-signal-age').textContent).toBe('5s ago');
+    expect(coolant.querySelector('.live-signal-tag')).not.toBeNull();
+  });
+
   it('marks present metrics reporting and absent ones as no data', () => {
     const VD = window.VoltDashboard;
     // A sample where speed/soc/motor/gear report but the odometer is absent (the

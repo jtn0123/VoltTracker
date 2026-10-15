@@ -155,7 +155,7 @@ class LiveSignalsTest {
                         remoteStartsLeft = 2,
                     ),
             )
-        assertEquals("1200 rpm", value(reported, "Coolant pump"))
+        assertEquals("1,200 rpm", value(reported, "Coolant pump"))
         assertEquals("Active cooling", value(reported, "Conditioning"))
         assertEquals("20%", value(reported, "Aux transmission pump"))
         assertEquals("40%", value(reported, "Electronics coolant pump"))
@@ -180,5 +180,55 @@ class LiveSignalsTest {
             charging.rows.map { it.label },
         )
         assertEquals("Unplugged at the car", value(reported, "Charge record 3"))
+        // The car's charge times read in the phone's clock.
+        assertEquals("Tue 11:00 PM", value(reported, "Charge starts"))
+        val in24h = liveSignalGroups(reported, h24 = true).flatMap { it.rows }.first { it.label == "Charge starts" }
+        assertEquals("Tue 23:00", in24h.value)
+    }
+
+    @Test
+    fun theExtraGen2ReadsShowOnlyOnceReported() {
+        val empty = DriveUiState(connected = true)
+        val extraRows =
+            listOf(
+                "Coolant temperature",
+                "Insulation",
+                "EGR command",
+                "EGR cooler 1",
+                "EGR cooler 2",
+                "12 V capacity",
+                "Last started by",
+                "Charger input duty",
+                "Charger output duty",
+            )
+        val labels = liveSignalGroups(empty).flatMap { it.rows }.map { it.label }
+        assertTrue("no extra rows before the car answers: $labels", labels.none { it in extraRows })
+
+        val reported =
+            empty.copy(
+                hvIsolationKohm = 2_500,
+                gen2 =
+                    Gen2Status(
+                        remoteStartReason = "Ignition switch",
+                        batteryCoolantF = 68,
+                        chargerAcDutyPct = 72,
+                        chargerOutputDutyPct = 68,
+                        egrCommandedPct = 12,
+                        egrCooler1F = 194,
+                        egrCooler2F = 183,
+                        aux12vCapacityAh = 41.5,
+                    ),
+            )
+        assertEquals("68°F", value(reported, "Coolant temperature"))
+        assertEquals("2,500 kΩ", value(reported, "Insulation"))
+        assertEquals("12%", value(reported, "EGR command"))
+        assertEquals("194°F", value(reported, "EGR cooler 1"))
+        assertEquals("183°F", value(reported, "EGR cooler 2"))
+        assertEquals("41.5 Ah", value(reported, "12 V capacity"))
+        assertEquals("Ignition switch", value(reported, "Last started by"))
+        assertEquals("72%", value(reported, "Charger input duty"))
+        assertEquals("68%", value(reported, "Charger output duty"))
+        // A metric driver reads the temperatures in Celsius.
+        assertEquals("20°C", value(reported.copy(metricUnits = true), "Coolant temperature"))
     }
 }

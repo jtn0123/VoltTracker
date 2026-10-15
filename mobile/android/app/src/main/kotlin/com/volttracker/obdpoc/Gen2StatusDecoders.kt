@@ -8,8 +8,8 @@ import java.util.Locale
 /**
  * Gen 2 Volt status DIDs that decode to words rather than a number: bit fields (why the engine
  * started, how recent charges ended), small enums (charge state, battery conditioning, the charge
- * system's self-checks), a flag (12 V maintenance charging), the car's own charge timetable and
- * the remote-start countdown.
+ * system's self-checks, how the car was last started), a flag (12 V maintenance charging), the
+ * car's own charge timetable and the remote-start countdown.
  * The DIDs and their tables are GM's, as an established Volt app reads them on a 2017.
  * [ObdVoltMode22ParserRegistry] registers [parsers].
  */
@@ -36,6 +36,7 @@ internal object Gen2StatusDecoders {
             put("228375", weekTime("120V charge start time"))
             put("228377", weekTime("120V charge complete time"))
             put("228537", remoteStartTimeLeft())
+            put("22900D", enum("remote start reason", REMOTE_START_REASONS))
         }
 
     /**
@@ -123,6 +124,8 @@ internal object Gen2StatusDecoders {
         listOf("Off", "Active cooling", "Active heating", "Passive cooling", "Passive heating")
     private val CHARGE_SYSTEM_STATES = listOf("Not ready", "Ready", "Shutting down")
     private val CHECK_RESULTS = listOf("Passed", "Failed")
+    private val REMOTE_START_REASONS =
+        listOf("Ignition switch", "Remote start (power take-off)", "Remote start", "Not reporting")
 
     // Bytes A..D, each listing bits 0..7; null is a reserved bit.
     private val ENGINE_START_REASONS: List<List<String?>> =

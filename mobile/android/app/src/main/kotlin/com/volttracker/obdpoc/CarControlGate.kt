@@ -17,6 +17,10 @@ import org.json.JSONObject
  * Gear: the live sample's `prndlState` is the [VoltGear]-decoded letter. Only [VoltGear.PARK]
  * (raw code 8, confirmed from field logs) passes; every other letter, including `?` for an
  * undecoded code, refuses.
+ *
+ * A command that wakes the car's body bus is also refused while the adapter's fresh 12 V reading
+ * (`ATRV`) is at or below [Policy.minWakeVolts]: waking a flat 12 V battery only drains it further.
+ * This one check passes when the voltage is unknown, so a missing reading never strands the car.
  */
 class CarControlGate(
     private val policy: Policy = Policy(),
@@ -29,6 +33,10 @@ class CarControlGate(
         val maxGearAgeMs: Long = 120_000L,
         /** Minimum spacing between command starts (no bursts, no auto-repeat). */
         val minIntervalMs: Long = 3_000L,
+        /** A wake is refused at or below this 12 V reading. */
+        val minWakeVolts: Double = 11.6,
+        /** `ATRV` is polled every few cycles; an older reading is not trusted either way. */
+        val maxVoltageAgeMs: Long = 60_000L,
     )
 
     /** What the adapter can do, as established by the SW-CAN listener this session. */
@@ -69,6 +77,10 @@ class CarControlGate(
         GEAR_UNKNOWN("gear_unknown", "Gear is unknown or stale. Waiting for the next gear reading."),
         NOT_IN_PARK("not_in_park", "The car is not in Park."),
         MOVED_SINCE_PARK("moved_since_park", "The car moved since Park was last read. Waiting for a new gear reading."),
+        LOW_12V(
+            "low_12v",
+            "The 12 V battery is too low to wake the car safely. Charge it or start the car first.",
+        ),
         RATE_LIMITED("rate_limited", "Wait a few seconds between commands."),
         BUSY("busy", "Another command is still running."),
     }
@@ -80,6 +92,8 @@ class CarControlGate(
     private var gear: String? = null
     private var gearAtMs = NEVER
     private var vehicleState = ""
+    private var volts: Double? = null
+    private var voltsAtMs = NEVER
 
     fun reset() {
         sampleAtMs = NEVER
@@ -89,6 +103,8 @@ class CarControlGate(
         gear = null
         gearAtMs = NEVER
         vehicleState = ""
+        volts = null
+        voltsAtMs = NEVER
     }
 
     /** Records what [sample] (broadcast at [now]) says about motion, gear and driving state. */
@@ -109,6 +125,11 @@ class CarControlGate(
             speedAtMs = at
             if (speed > 0.0) lastMovingAtMs = maxOf(lastMovingAtMs, at)
         }
+        val voltage = sample.optDouble("voltage", Double.NaN)
+        if (voltage.isFinite()) {
+            volts = voltage
+            voltsAtMs = now - maxOf(0L, sample.optLong("voltageStaleMs", 0L))
+        }
         val gearValue = sample.optString("prndlState", "")
         if (gearValue.isNotEmpty()) {
             gear = gearValue
@@ -116,14 +137,28 @@ class CarControlGate(
         }
     }
 
-    /** Null when a command may be sent now; otherwise the first reason it may not. */
+    /**
+     * Null when a command may be sent now; otherwise the first reason it may not. [wakesCar] is
+     * whether the command starts with a body-bus wake ([CarControlFrames.wakesCar]).
+     */
     fun evaluate(
         now: Long,
         adapter: Adapter,
         lastCommandAtMs: Long,
+        wakesCar: Boolean = true,
     ): Block? {
         adapterBlock(adapter)?.let { return it }
-        return motionBlock(now) ?: if (now - lastCommandAtMs < policy.minIntervalMs) Block.RATE_LIMITED else null
+        motionBlock(now)?.let { return it }
+        return when {
+            wakesCar && lowForWake(now) -> Block.LOW_12V
+            now - lastCommandAtMs < policy.minIntervalMs -> Block.RATE_LIMITED
+            else -> null
+        }
+    }
+
+    private fun lowForWake(now: Long): Boolean {
+        val reading = volts ?: return false
+        return now - voltsAtMs <= policy.maxVoltageAgeMs && reading <= policy.minWakeVolts
     }
 
     private fun adapterBlock(adapter: Adapter): Block? =

@@ -70,6 +70,10 @@ data class ChargeUiState(
     val history: HistoryLoad = HistoryLoad.LOADED,
     /** Settings → Units: how distances, speeds and temperatures are shown. */
     val metricUnits: Boolean = false,
+    /** The charger's own state ("Waiting", "Charging", "Complete", "Error", "None"); null until read. */
+    val carChargeState: String? = null,
+    /** When the car's charge schedule starts charging, as "Tue 23:05"; null when it hasn't said. */
+    val carChargeStart: String? = null,
 ) {
     val units: VoltUnits get() = VoltUnits.of(metricUnits)
 

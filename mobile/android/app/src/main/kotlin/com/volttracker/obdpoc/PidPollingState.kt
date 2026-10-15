@@ -215,6 +215,7 @@ class PidPollingState(
         val specsByHeader = groupByHeader(due)
         var switched = false
         var receiveFilterSet = false
+        var flowControlSet = false
         for (header in Header.entries) {
             val headerSpecs = specsByHeader[header] ?: continue
             if (header != Header.BROADCAST) {
@@ -230,9 +231,14 @@ class PidPollingState(
                     continue
                 }
                 receiveFilterSet = selectHeader(header, headerCommand, receiveFilterSet)
+                header.flowControlCommands.forEach { engine.sendCommand(it, 1500) }
+                flowControlSet = flowControlSet || header.flowControlCommands.isNotEmpty()
                 switched = true
             }
             pollHeaderGroup(header, headerSpecs, batchedTier1, rawThisCycle, outcomes)
+        }
+        if (flowControlSet) {
+            engine.sendCommand(PidSchedule.RESTORE_AUTO_FLOW_CONTROL_COMMAND, 1500)
         }
         if (receiveFilterSet) {
             engine.sendCommand(PidSchedule.RESTORE_AUTO_RECEIVE_COMMAND, 1500)
