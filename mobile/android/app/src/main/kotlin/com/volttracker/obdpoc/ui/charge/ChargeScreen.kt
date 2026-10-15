@@ -189,12 +189,25 @@ private fun ChargingSide(state: ChargeUiState) {
 
 @Composable
 private fun IdleSide(state: ChargeUiState) {
+    val carState = state.carChargeState.takeIf { state.connected }
     Box(Modifier.announceChanges(LocalVoltPrefs.current)) {
-        VoltPill(if (state.connected) "Not charging" else "Not connected", PillTone.NEUTRAL)
+        when (carState) {
+            CAR_WAITING -> VoltPill("Plugged in · waiting", PillTone.VOLT)
+            CAR_COMPLETE -> VoltPill("Charge complete", PillTone.EV)
+            CAR_ERROR -> VoltPill("Charge error", PillTone.BAD)
+            else -> VoltPill(if (state.connected) "Not charging" else "Not connected", PillTone.NEUTRAL)
+        }
     }
     Spacer(Modifier.height(12.dp))
     val last = state.sessions.firstOrNull()
-    if (last != null) {
+    if (carState == CAR_WAITING) {
+        // Non-breaking spaces keep "Tue 11:05 PM" on one line.
+        val start =
+            state.carChargeStart?.let { weekTimeLabel(it, LocalVoltPrefs.current.clock24h).replace(' ', NBSP) }
+        SideLine(start?.let { "The car starts charging $it" } ?: "Waiting for the car's charge schedule")
+    } else if (carState == CAR_ERROR) {
+        SideLine("The car stopped the charge. Check the cord and the outlet.")
+    } else if (last != null) {
         SideLine("Last charge ${sessionWhen(last.startedAtMs, h24 = LocalVoltPrefs.current.clock24h)}")
         Text(
             text = lastChargeDetail(last),
@@ -209,6 +222,12 @@ private fun IdleSide(state: ChargeUiState) {
         SideLine("Connect the adapter to follow a charge")
     }
 }
+
+// The charger's own states (Gen2StatusDecoders) the idle hero speaks to.
+private const val CAR_WAITING = "Waiting"
+private const val CAR_COMPLETE = "Complete"
+private const val CAR_ERROR = "Error"
+private const val NBSP = '\u00A0'
 
 /** "Level 2 · 24% → 91% · 11.8 kWh" for the unplugged hero. */
 private fun lastChargeDetail(last: ChargeSession): String =

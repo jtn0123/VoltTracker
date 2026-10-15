@@ -102,6 +102,14 @@ class CarControlFramesTest {
     }
 
     @Test
+    fun everyCommandButRemoteStopWakesTheCar() {
+        // Stopping a remote start talks to a car that is already awake, so it alone skips the wake
+        // and with it the 12 V guard.
+        val waking = CarCommand.entries.filter { CarControlFrames.wakesCar(it) }
+        assertEquals(CarCommand.entries - CarCommand.REMOTE_STOP, waking)
+    }
+
+    @Test
     fun highVoltageWakeupOnlyEverCarriesTheWakeFrame() {
         for (command in CarCommand.entries) {
             val steps = command.steps

@@ -14,6 +14,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
@@ -35,6 +36,8 @@ class DiagScreenshotTest(
     @Test
     fun capture() {
         val state = STATES.getValue(stateName).let { it.copy(settings = theme.applyTo(it.settings)) }
+        // The full page, so the review image reaches the battery and thermal cards.
+        if (stateName == "gen2") RuntimeEnvironment.setQualifiers("+h1700dp")
         compose.setContent { VoltApp(state, initialTab = VoltTab.CAR, initialRoutes = listOf(VoltRoute.HEALTH)) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/health-$stateName-${theme.key}.png")
     }
@@ -54,6 +57,15 @@ class DiagScreenshotTest(
             mapOf(
                 "normal" to base,
                 "fault" to base.copy(diag = DiagUiState.demo),
+                // The gen 2 reads on the battery and thermal cards: insulation and conditioning.
+                "gen2" to
+                    base.copy(
+                        drive =
+                            drive.copy(
+                                hvIsolationKohm = 2_000,
+                                gen2 = drive.gen2.copy(batteryConditioning = "Active heating", batteryCoolantF = 68),
+                            ),
+                    ),
                 "alert" to
                     base.copy(
                         diag =

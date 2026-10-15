@@ -223,7 +223,7 @@ class CarControlRunner(
         val command = request.command
         // Consumed first and unconditionally, so a refused command's confirmation can't be reused.
         val confirmed = io.consumeConfirmation(command)
-        val block = gate.evaluate(now, io.adapterCapability(), lastCommandAtMs)
+        val block = gate.evaluate(now, io.adapterCapability(), lastCommandAtMs, CarControlFrames.wakesCar(command))
         when {
             now - request.atMs > policy.maxRequestAgeMs ->
                 refuse(command, "expired", "The request waited too long and was dropped. Try again.", now)
