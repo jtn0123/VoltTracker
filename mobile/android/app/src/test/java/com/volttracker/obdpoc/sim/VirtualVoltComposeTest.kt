@@ -136,9 +136,8 @@ class VirtualVoltComposeTest {
         signal("Oil temperature", "168°F")
         signal("Motor A temperature", "134°F")
         signal("Motor B temperature", "132°F")
-        // The car never answers 221940, but its SW-CAN broadcast carries the drive-unit oil:
-        // 0x102E0040 byte 3 = 0x7B → 83 °C.
-        signal("Transmission temperature", "181°F")
+        // 221940 on 7E1 = 0x5A → 50 °C; it wins over the SW-CAN drive-unit oil (83 °C).
+        signal("Transmission temperature", "122°F")
         // The car refuses 221C26 (7F 22 31) and 22119F: no blank rows.
         for (refused in listOf("Inverter temperature", "Oil life", "Torque")) {
             compose.onNodeWithText(refused).assertDoesNotExist()
@@ -166,8 +165,8 @@ class VirtualVoltComposeTest {
         text("Internal resistance 293 mΩ · charged 1,234 times (12,346 kWh)")
         // Sections 2240D7..2240E1 = 0x44..0x46 → 28..30 °C = 82..86 °F.
         text("82–86°F")
-        // 2241B2 = 0x04C4 rpm; 2241B6 = 0 W; 221C43 = 0x50 → 40 °C = 104 °F.
-        signal("coolant pump", "1,220 rpm")
+        // 22435A = 0x30 × 25 rpm; 2241B6 = 0 W; 221C43 = 0x50 → 40 °C = 104 °F.
+        signal("coolant pump", "1,200 rpm")
         signal("pack heater", "Off")
         signal("electronics coolant", "104°F")
     }

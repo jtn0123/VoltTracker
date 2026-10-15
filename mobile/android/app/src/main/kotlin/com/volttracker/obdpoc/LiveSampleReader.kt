@@ -223,13 +223,14 @@ class LiveSampleReader(
             if (!EnhancedPidProfiles.isPositiveResponse(command, raw)) {
                 continue
             }
-            if (ObdProtocol.parseKnownValue(command, raw) != null || BcmTirePressure.parse(raw) != null) {
+            if (ObdProtocol.parseKnownValue(command, raw) != null) {
                 continue
             }
-            // A recognized no-reading sentinel (all-zero Mode 22 payload, or the 0xFF speed sentinel)
-            // is the ECU answering with "idle / nothing to report", not a malformed frame. Surfacing
-            // it as pid_parse_failed cries wolf (e.g. engine torque 62203F00 with the engine off, or a
-            // cell-number PID before the BECM has picked a min/max cell), so skip it here.
+            // A recognized no-reading sentinel (all-zero Mode 22 payload, a lone FFFF word, or the 0xFF
+            // speed sentinel) is the ECU answering with "idle / nothing to report", not a malformed
+            // frame. Surfacing it as pid_parse_failed cries wolf (e.g. engine torque 62203F00 with the
+            // engine off, a cell-number PID before the BECM has picked a min/max cell, or a tire with
+            // no sensor reading), so skip it here.
             if (ObdProtocol.isBenignSentinelResponse(command, raw)) {
                 continue
             }
@@ -390,9 +391,10 @@ class LiveSampleReader(
         putDerivedMotorPower(sample, "motorBPowerKw", "222886", "222884")
         putNumeric(sample, "evDistanceThisCycleKm", "222487", 2)
         putGear(sample)
-        putNumericFirst(sample, "transmissionTempC", 0, "22194001", "221940")
-        putNumeric(sample, "batteryCoolantPumpRpm", "2241B2", 0)
-        putNumeric(sample, "batteryCoolantValveRaw", "2241B4", 0)
+        putNumeric(sample, "transmissionTempC", "221940", 0)
+        putNumeric(sample, "acPowerW", "2241B2", 0)
+        putNumeric(sample, "cabinHeatPowerW", "2241B4", 0)
+        putNumeric(sample, "batteryCoolantPumpRpm", "22435A", 0)
         putNumeric(sample, "batteryHeaterPowerW", "2241B6", 0)
         putNumeric(sample, "outsideTempRawC", "22801E", 1)
         putNumeric(sample, "outsideTempC", "22801F", 1)
@@ -533,26 +535,14 @@ class LiveSampleReader(
             now,
         )
         putStaleMsForPresentValue(sample, "prndlState", "prndlStateStaleMs", "222889", now)
-        putStaleMsForFirstPresentValue(
-            sample,
-            "transmissionTempC",
-            "transmissionTempStaleMs",
-            now,
-            "22194001",
-            "221940",
-        )
+        putStaleMsForPresentValue(sample, "transmissionTempC", "transmissionTempStaleMs", "221940", now)
+        putStaleMsForPresentValue(sample, "acPowerW", "acPowerStaleMs", "2241B2", now)
+        putStaleMsForPresentValue(sample, "cabinHeatPowerW", "cabinHeatPowerStaleMs", "2241B4", now)
         putStaleMsForPresentValue(
             sample,
             "batteryCoolantPumpRpm",
             "batteryCoolantPumpStaleMs",
-            "2241B2",
-            now,
-        )
-        putStaleMsForPresentValue(
-            sample,
-            "batteryCoolantValveRaw",
-            "batteryCoolantValveStaleMs",
-            "2241B4",
+            "22435A",
             now,
         )
         putStaleMsForPresentValue(
@@ -581,24 +571,28 @@ class LiveSampleReader(
         sample: JSONObject,
         now: Long,
     ) {
-        val raw = pidPolling.lastRaw(BcmTirePressure.COMMAND)
-        val tires = BcmTirePressure.parse(raw) ?: return
+        var firstDecoded: String? = null
+        for (wheel in BcmTirePressure.Wheel.entries) {
+            val kpa = ObdProtocol.parseKnownValue(wheel.command, pidPolling.lastRaw(wheel.command))?.valueNumeric
+            if (kpa != null) {
+                putRoundedNumeric(sample, wheel.sampleKey, kpa, 0)
+                firstDecoded = firstDecoded ?: wheel.command
+            }
+        }
+        val staleFrom = firstDecoded ?: return
         if (!bcmTiresLogged) {
-            // Once per session: the raw reply and the chosen scale, so a drive log confirms both.
+            // Once per session: the four raw replies, so a drive log can check wheel order and scale
+            // against the SW-CAN tire frame.
             bcmTiresLogged = true
             service.recorder.logEvent(
                 "bcm_tires_first_read",
-                "response",
-                ObdProtocol.summarize(raw),
-                "kpaPerCount",
-                tires.kpaPerCount.toString(),
+                "responses",
+                BcmTirePressure.Wheel.entries.joinToString(" | ") { wheel ->
+                    ObdProtocol.summarize(pidPolling.lastRaw(wheel.command))
+                },
             )
         }
-        tires.flKpa?.let { putRoundedNumeric(sample, "tirePressureFlKpa", it, 0) }
-        tires.frKpa?.let { putRoundedNumeric(sample, "tirePressureFrKpa", it, 0) }
-        tires.rlKpa?.let { putRoundedNumeric(sample, "tirePressureRlKpa", it, 0) }
-        tires.rrKpa?.let { putRoundedNumeric(sample, "tirePressureRrKpa", it, 0) }
-        pidPolling.putStaleMsIfTracked(sample, "tirePressureStaleMs", BcmTirePressure.COMMAND, now)
+        pidPolling.putStaleMsIfTracked(sample, "tirePressureStaleMs", staleFrom, now)
     }
 
     @Throws(JSONException::class)

@@ -7,7 +7,7 @@ import { GEAR_FRESH_MS, driveGear, gearDisplayText } from '../app/src/main/dashb
 describe('gearDisplayText', () => {
   it('shows the decoded letter for confirmed and tentative codes', () => {
     expect(gearDisplayText({ prndlState: 'P', prndlRaw: 8, gearConfidence: 'confirmed' })).toBe('P');
-    expect(gearDisplayText({ prndlState: 'R', prndlRaw: 7, gearConfidence: 'tentative' })).toBe('R');
+    expect(gearDisplayText({ prndlState: 'L', prndlRaw: 2, gearConfidence: 'tentative' })).toBe('L');
   });
 
   it('shows an unseen code as unknown with its raw number', () => {
@@ -25,7 +25,7 @@ describe('gearDisplayText', () => {
 
 describe('driveGear (Drive tab gear chip)', () => {
   it('shows a confirmed letter as-is', () => {
-    expect(driveGear({ prndlState: 'D', prndlRaw: 3, gearConfidence: 'confirmed', prndlStateStaleMs: 1000 })).toEqual({
+    expect(driveGear({ prndlState: 'D', prndlRaw: 5, gearConfidence: 'confirmed', prndlStateStaleMs: 1000 })).toEqual({
       text: 'D',
       label: 'Gear D',
       confidence: 'confirmed',
@@ -33,7 +33,7 @@ describe('driveGear (Drive tab gear chip)', () => {
   });
 
   it('shows a tentative letter and says it is unconfirmed', () => {
-    const gear = driveGear({ prndlState: 'L', prndlRaw: 5, gearConfidence: 'tentative' });
+    const gear = driveGear({ prndlState: 'L', prndlRaw: 2, gearConfidence: 'tentative' });
     expect(gear.text).toBe('L');
     expect(gear.confidence).toBe('tentative');
     expect(gear.label).toContain('not yet confirmed');

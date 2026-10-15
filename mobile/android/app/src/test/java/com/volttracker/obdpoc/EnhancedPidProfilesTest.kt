@@ -60,8 +60,8 @@ class EnhancedPidProfilesTest {
         for (profile in EnhancedPidProfiles.forCategory("tpms")) {
             assertEquals("tpms", profile.category)
             assertEquals(EnhancedPidProfiles.STAGE_TIRES, profile.scanStage)
-            // The engine-computer and receiver guesses were refused on the car; the body-computer
-            // reads (headers 241/751) are still untried candidates.
+            // The engine-computer and receiver guesses were refused on the car; the body computer's
+            // per-wheel reads (header 241) are candidates until the car confirms them.
             val expected =
                 if (profile.header in BODY_TPMS_HEADERS) {
                     EnhancedPidProfiles.STATUS_CANDIDATE
@@ -133,6 +133,6 @@ class EnhancedPidProfilesTest {
     }
 
     private companion object {
-        val BODY_TPMS_HEADERS = setOf("ATSH241", "ATSH751")
+        val BODY_TPMS_HEADERS = setOf("ATSH241")
     }
 }

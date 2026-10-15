@@ -217,8 +217,9 @@ class LiveSampleReaderParseFailureTest {
         assertEquals(-9.0, sample.optDouble("motorBPowerKw"), 0.1)
         assertEquals(12.34, sample.optDouble("evDistanceThisCycleKm"), 0.01)
         assertEquals(50, sample.optInt("transmissionTempC"))
-        assertEquals(1000, sample.optInt("batteryCoolantPumpRpm"))
-        assertEquals(7, sample.optInt("batteryCoolantValveRaw"))
+        assertEquals(1000, sample.optInt("acPowerW"))
+        assertEquals(2000, sample.optInt("cabinHeatPowerW"))
+        assertEquals(1200, sample.optInt("batteryCoolantPumpRpm"))
         assertEquals(2000, sample.optInt("batteryHeaterPowerW"))
         assertEquals(35.0, sample.optDouble("outsideTempC"), 0.01)
         assertEquals("driving_gas", sample.optString("vehicleState"))
@@ -263,8 +264,11 @@ class LiveSampleReaderParseFailureTest {
 
     @Test
     fun bodyComputerTiresFillTheTireKeysAndLogTheFirstRead() {
-        // 4 kPa per count, FL, RL, FR, RR; the RR sensor reports "no reading".
-        engine.responses[BcmTirePressure.COMMAND] = "62 C9 01 3C 3D 3E FE\r>"
+        // One word per wheel in 1/16 kPa; the RR sensor reports "no reading" (FFFF).
+        engine.responses["225008"] = "62 50 08 0F 00\r>"
+        engine.responses["225007"] = "62 50 07 0F 40\r>"
+        engine.responses["225006"] = "62 50 06 0F 80\r>"
+        engine.responses["225005"] = "62 50 05 FF FF\r>"
         val sample = readUntil("tirePressureFlKpa")
         assertEquals(240, sample.getInt("tirePressureFlKpa"))
         assertEquals(244, sample.getInt("tirePressureRlKpa"))
@@ -273,8 +277,11 @@ class LiveSampleReaderParseFailureTest {
         assertTrue(sample.has("tirePressureStaleMs"))
         reader.read(context)
         assertEquals(1, countAllEvents("bcm_tires_first_read"))
-        assertEquals("4.0", eventPayloads("bcm_tires_first_read").single().optString("kpaPerCount"))
-        assertEquals(0, countEvents("pid_parse_failed", BcmTirePressure.COMMAND))
+        val responses = eventPayloads("bcm_tires_first_read").single().optString("responses")
+        assertTrue(responses, responses.startsWith("62 50 08 0F 00"))
+        for (wheel in BcmTirePressure.Wheel.entries) {
+            assertEquals(0, countEvents("pid_parse_failed", wheel.command))
+        }
     }
 
     /** Reads until the slow-cadence PID feeding [key] has been polled (bounded). */
@@ -333,10 +340,10 @@ class LiveSampleReaderParseFailureTest {
                 "222885" to "62 28 85 88 B8\r>",
                 "222886" to "62 28 86 75 30\r>",
                 "222487" to "62 24 87 04 D2\r>",
-                "22194001" to "62 19 40 01 5A\r>",
                 "221940" to "62 19 40 5A\r>",
                 "2241B2" to "62 41 B2 03 E8\r>",
-                "2241B4" to "62 41 B4 07\r>",
+                "2241B4" to "62 41 B4 07 D0\r>",
+                "22435A" to "62 43 5A 30\r>",
                 "2241B6" to "62 41 B6 07 D0\r>",
                 "22801E" to "62 80 1E 28\r>",
                 "22801F" to "62 80 1F 96\r>",

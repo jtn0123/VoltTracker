@@ -116,7 +116,6 @@ class ObdProtocolFuzzTest {
                 ObdProbes.LIVE_PROBES +
                     ObdProbes.VOLT_7E0_PROBES +
                     ObdProbes.VOLT_7E1_PROBES +
-                    ObdProbes.VOLT_7E2_PROBES +
                     ObdProbes.VOLT_7E4_PROBES +
                     ObdProbes.VOLT_7E6_PROBES +
                     ObdProbes.VOLT_7E7_LAYOUT_PROBES +

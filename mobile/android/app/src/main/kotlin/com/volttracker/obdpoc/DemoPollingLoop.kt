@@ -51,7 +51,7 @@ class DemoPollingLoop(
         private const val SOC_CHARGE_CAP = 95.0
 
         /** Raw PRNDL code for D (see [VoltGear]); the demo only ever shows P or D. */
-        private const val DEMO_DRIVE_GEAR_RAW = 3
+        private const val DEMO_DRIVE_GEAR_RAW = 5
         private const val DEMO_CLOSED = "closed"
 
         /** A 2017's usable pack energy when full (kWh), for the demo's "energy left". */

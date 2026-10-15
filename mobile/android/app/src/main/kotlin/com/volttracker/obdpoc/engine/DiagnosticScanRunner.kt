@@ -202,15 +202,10 @@ class DiagnosticScanRunner(
         for (probe in ObdProbes.VOLT_7E1_PROBES) {
             probeCommand(probe, 4200, raw)
         }
-        publishProgress("Reading Volt powertrain, transmission, and brake modules...")
+        publishProgress("Reading Volt powertrain and brake modules...")
         ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E0 maintenance and engine probes")
         probeCommand("ATSH7E0", 1800, raw)
         for (probe in ObdProbes.VOLT_7E0_PROBES) {
-            probeCommand(probe, 4200, raw)
-        }
-        ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E2 transmission probes")
-        probeCommand("ATSH7E2", 1800, raw)
-        for (probe in ObdProbes.VOLT_7E2_PROBES) {
             probeCommand(probe, 4200, raw)
         }
         ObdElmDecode.appendProbeLine(raw, "volt-discovery", "ATSH7E6 brake-module probes")

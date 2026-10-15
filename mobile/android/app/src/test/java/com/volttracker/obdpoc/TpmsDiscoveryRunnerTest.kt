@@ -67,14 +67,11 @@ class TpmsDiscoveryRunnerTest {
         val bcm = engine.commands.indexOf("ATSH241")
         assertTrue("the BCM header is probed", bcm >= 0)
         assertEquals(
-            listOf("ATSH241", "ATCRA641", "22C901", "22C902", "ATAR"),
-            engine.commands.subList(bcm, bcm + 5),
+            listOf("ATSH241", "ATCRA641", "225008", "225007", "225006", "225005", "ATAR"),
+            engine.commands.subList(bcm, bcm + 7),
         )
-        val torque = engine.commands.indexOf("ATSH751")
-        assertEquals(listOf("ATSH751", "ATCRA7XX"), engine.commands.subList(torque, torque + 2))
-        assertEquals("ATAR", engine.commands.subList(torque, engine.commands.size).first { it == "ATAR" })
         val raw = service.lastTelemetry()!!.getString("raw")
-        assertTrue(raw.contains("22C901"))
+        assertTrue(raw.contains("225008"))
     }
 
     private class FakeService : ObdService() {

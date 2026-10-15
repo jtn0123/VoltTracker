@@ -45,6 +45,7 @@ object ObdProbes {
             "222886",
             "222487",
             "222889",
+            "221940",
             "221141",
             "221C26",
             "221C28",
@@ -55,8 +56,6 @@ object ObdProbes {
         )
 
     @JvmField val VOLT_7E0_PROBES: Array<String> = arrayOf("22119F", "22119F01", "221154", "221C47")
-
-    @JvmField val VOLT_7E2_PROBES: Array<String> = arrayOf("221940", "22194001")
 
     @JvmField
     val VOLT_7E4_PROBES: Array<String> =
@@ -100,6 +99,7 @@ object ObdProbes {
             "228334",
             "2241B2",
             "2241B4",
+            "22435A",
             "2241B6",
             "22801E",
             "22801F",

@@ -174,9 +174,9 @@ class TpmsDiscoveryRunner(
     companion object {
         /**
          * Reply filters for headers outside 7E0-7E7: the BCM answers 0x241 on 0x641 (GM's +0x400,
-         * like the 0x257 motor node); 0x751's reply ID is unknown, so accept any 7xx reply.
+         * like the 0x257 motor node).
          */
-        private val RECEIVE_FILTERS = mapOf("ATSH241" to "ATCRA641", "ATSH751" to "ATCRA7XX")
+        private val RECEIVE_FILTERS = mapOf("ATSH241" to "ATCRA641")
         private const val RESTORE_AUTO_RECEIVE = "ATAR"
 
         private fun isPassive(profile: EnhancedPidProfile): Boolean = profile.pollLane == "passive"

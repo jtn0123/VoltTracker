@@ -2,45 +2,54 @@ package com.volttracker.obdpoc
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class BcmTirePressureTest {
+    private fun kpa(
+        command: String,
+        response: String?,
+    ): Double? = ObdProtocol.parseKnownValue(command, response)?.valueNumeric
+
     @Test
-    fun aFourKpaReplyReadsInWheelOrder() {
-        val tires = BcmTirePressure.parse("7E8 07 62 C9 01 3C 3D 3E 3F\r>")!!
-        assertEquals(4.0, tires.kpaPerCount, 0.0)
-        assertEquals(240.0, tires.flKpa!!, 1e-9)
-        assertEquals(244.0, tires.rlKpa!!, 1e-9)
-        assertEquals(248.0, tires.frKpa!!, 1e-9)
-        assertEquals(252.0, tires.rrKpa!!, 1e-9)
+    fun eachWheelIsAWordInSixteenthsOfAKpa() {
+        // 0x0F00 = 3840 / 16 = 240 kPa (34.8 psi); the layout carries one word per wheel.
+        assertEquals(240.0, kpa("225008", "641 05 62 50 08 0F 00\r>")!!, 1e-9)
+        assertEquals(244.0, kpa("225007", "62 50 07 0F 40")!!, 1e-9)
+        assertEquals(248.0, kpa("225006", "6250060F80")!!, 1e-9)
+        assertEquals(252.0, kpa("225005", "6250050FC0")!!, 1e-9)
+        assertEquals("1/16 kPa resolution", 240.0625, kpa("225008", "6250080F01")!!, 1e-9)
     }
 
     @Test
-    fun aCommunityScaleReplyPicksOnePointThreeSevenThree() {
-        // 0xAF = 175 counts * 1.373 = 240.3 kPa (35 psi).
-        val tires = BcmTirePressure.parse("62C901AFAFB0AE")!!
-        assertEquals(1.373, tires.kpaPerCount, 0.0)
-        assertEquals(175 * 1.373, tires.flKpa!!, 1e-9)
-        assertEquals(174 * 1.373, tires.rrKpa!!, 1e-9)
+    fun wheelsMapToTheSwcanTireKeys() {
+        val keys = BcmTirePressure.Wheel.entries.associate { it.command to it.sampleKey }
+        assertEquals(
+            mapOf(
+                "225008" to "tirePressureFlKpa",
+                "225007" to "tirePressureRlKpa",
+                "225006" to "tirePressureFrKpa",
+                "225005" to "tirePressureRrKpa",
+            ),
+            keys,
+        )
     }
 
     @Test
-    fun aMissingSensorIsNullButTheRestStillRead() {
-        val tires = BcmTirePressure.parse("62 C9 01 00 3C FF 3C")!!
-        assertNull(tires.flKpa)
-        assertNull(tires.frKpa)
-        assertEquals(240.0, tires.rlKpa!!, 1e-9)
+    fun aMissingSensorRefusalsAndNonsenseAreNoReading() {
+        assertNull("no reading", kpa("225008", "62 50 08 FF FF"))
+        assertNull(kpa("225008", null))
+        assertNull(kpa("225008", "NO DATA"))
+        assertNull("negative reply", kpa("225008", "7F 22 31"))
+        assertNull("one byte is not a word", kpa("225008", "62 50 08 0F"))
+        // 0xFFFE / 16 = 4095.9 kPa: no tire holds that.
+        assertNull("implausible", kpa("225008", "62 50 08 FF FE"))
     }
 
     @Test
-    fun refusalsShortRepliesAndNonsenseAreRejected() {
-        assertNull(BcmTirePressure.parse(null))
-        assertNull(BcmTirePressure.parse("NO DATA"))
-        assertNull("negative reply", BcmTirePressure.parse("7F 22 31"))
-        assertNull("too few bytes", BcmTirePressure.parse("62 C9 01 3C 3C"))
-        assertNull("no valid wheel", BcmTirePressure.parse("62 C9 01 FE FE FF 00"))
-        assertNull("not hex", BcmTirePressure.parse("62 C9 01 3C 3C 3C ZZ"))
-        // A median near 240 kPa at 4/count, but one wheel at 0xFD*4 = 1012 kPa is impossible.
-        assertNull("implausible wheel", BcmTirePressure.parse("62 C9 01 3C 3C 3C FD"))
+    fun catalogListsEachWheelAtTheBodyModule() {
+        val profiles = BcmTirePressure.catalogProfiles()
+        assertEquals(listOf("225008", "225007", "225006", "225005"), profiles.map { it.command })
+        assertTrue(profiles.all { it.header == "ATSH241" && it.unit == "kPa" })
     }
 }
