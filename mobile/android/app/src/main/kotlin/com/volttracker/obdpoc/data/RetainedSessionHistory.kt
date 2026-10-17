@@ -101,7 +101,8 @@ internal object RetainedSessionHistory {
                 } else {
                     null
                 }
-            val facts = record ?: legacyRecord(donor, from) ?: continue
+            val facts = record ?: legacyRecord(donor, from)
+            if (facts == null) continue
             checkedJson {
                 insert(
                     db,

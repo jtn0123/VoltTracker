@@ -98,7 +98,7 @@ class RawDataMaintenanceTest {
                 assertTrue(DatabaseOperationLease.isHeld())
                 assertNull(DatabaseOperationLease.tryRegisterPersistence())
                 assertNull(DatabaseOperationLease.tryAcquire("backup"))
-                if (fail) throw IllegalStateException("disk full")
+                check(!fail) { "disk full" }
                 retention.add(it)
             }
         coordinator.request()
