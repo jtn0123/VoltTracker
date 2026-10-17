@@ -44,8 +44,17 @@ fun ChargeSessionChart(
 ) {
     val span = state.chartSpan() ?: return
     val measured = state.measuredPoints()
-    val projected = state.projectedPoints()
     val pal = LocalVoltPalette.current
+    if (measured.isEmpty()) {
+        Text(
+            "Waiting for battery percentage",
+            style = VoltType.caption,
+            color = pal.muted,
+            modifier = modifier.fillMaxWidth().padding(vertical = 16.dp),
+        )
+        return
+    }
+    val projected = state.projectedPoints()
     val measurer = rememberTextMeasurer()
     val axisStyle = VoltType.caption.copy(color = VoltColors.textTertiary)
     val lowest = (measured + projected).minOf { it.soc }

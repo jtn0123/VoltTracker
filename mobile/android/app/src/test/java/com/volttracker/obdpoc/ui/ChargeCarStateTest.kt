@@ -1,9 +1,12 @@
 package com.volttracker.obdpoc.ui
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,6 +44,31 @@ class ChargeCarStateTest {
     }
 
     private fun count(text: String): Int = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().size
+
+    @Test
+    fun chargingBeforeSocArrivesShowsAPlaceholderThenRecovers() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+
+        fun sample(at: Long) =
+            JSONObject()
+                .put("updatedAt", at)
+                .put("vehicleState", "charging")
+                .put("chargerPowerKw", 3.6)
+                .put("speedKph", 0)
+        store.onTelemetry(sample(1000L))
+        store.onTelemetry(sample(2000L))
+        compose.setContent {
+            val ui by store.state.collectAsState()
+            VoltTheme {
+                CompositionLocalProvider(LocalVoltPrefs provides VoltPrefs()) { ChargeScreen(ui.charge) }
+            }
+        }
+        compose.onNodeWithText("Waiting for battery percentage").assertIsDisplayed()
+        compose.runOnIdle { store.onTelemetry(sample(3000L).put("soc", 63)) }
+        compose.onNodeWithText("Waiting for battery percentage").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Charge session: 63% to 63% so far").assertIsDisplayed()
+    }
 
     @Test
     fun engineRunningInParkDoesNotShowThePlugInChargingHero() {
