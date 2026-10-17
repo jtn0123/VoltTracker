@@ -19,14 +19,6 @@ import org.json.JSONObject
  * rewriting the leading session-id component with the merge's session map restores the edits.
  */
 internal object TripEditRemapper {
-    /** `status_events.kind` values whose detail/payload embed a canonical route key. */
-    private val TRIP_EDIT_KINDS =
-        setOf(
-            ObdTripLabels.EVENT_KIND,
-            ObdTripFavorites.EVENT_KIND,
-            ObdTripExclusions.EVENT_KIND,
-        )
-
     /**
      * Rewrites the embedded route key in a donor `status_events` row (both `detail` and
      * `payload.routeKey`) using [sessionMap]. Non-trip-edit kinds, malformed keys, unparseable
@@ -37,7 +29,7 @@ internal object TripEditRemapper {
         cv: ContentValues,
         sessionMap: Map<Long, Long>,
     ) {
-        if (cv.getAsString("kind") !in TRIP_EDIT_KINDS) {
+        if (cv.getAsString("kind") !in TripEditKinds.durable) {
             return
         }
         remapRouteKey(cv.getAsString("detail"), sessionMap)?.let { cv.put("detail", it) }
@@ -73,8 +65,14 @@ internal object TripEditRemapper {
         }
         return try {
             val json = JSONObject(payload)
-            val remapped = remapRouteKey(json.optString("routeKey", ""), sessionMap) ?: return null
-            json.put("routeKey", remapped).toString()
+            var changed = false
+            for (key in listOf("routeKey", "splitKey")) {
+                remapRouteKey(json.optString(key, ""), sessionMap)?.let {
+                    json.put(key, it)
+                    changed = true
+                }
+            }
+            if (changed) json.toString() else null
         } catch (ignored: JSONException) {
             // Unparseable payloads copy through untouched; the read side already tolerates them.
             null

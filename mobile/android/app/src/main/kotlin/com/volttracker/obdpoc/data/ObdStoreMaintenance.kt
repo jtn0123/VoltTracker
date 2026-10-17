@@ -79,7 +79,7 @@ class ObdStoreMaintenance(
                 VoltTrackerDb.TABLE_EVENTS,
                 "occurred_at_ms",
                 cutoffMs,
-                "kind NOT IN ('trip_label','trip_favorite','trip_hidden')",
+                "kind NOT IN (${TripEditKinds.durable.joinToString(",") { "'$it'" }})",
             )
         deleted += deleteInBatches(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs)
         invalidateTripCachesForSessions(db, affectedSessions)
