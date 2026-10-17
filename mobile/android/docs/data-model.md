@@ -151,6 +151,21 @@ Tables distinguish captured data, retained history and rebuildable projections:
   "not a trip") and dropped wholesale by a full data clear.
   FK `session_id → sessions(_id) ON DELETE CASCADE`.
 
+## Retained session history (schema v18)
+
+`retained_session_history` holds authoritative compact trip facts and charge
+contributions captured transactionally before raw expiry. It includes hidden
+trips so hide/restore stays reversible. Labels and favorites remain event overlays.
+Charge contributions keep the historical SOC boundaries needed for inferred
+charges across sessions. Projection-cache version changes do not invalidate
+these facts; future changes to their JSON format require a schema migration.
+Backup merge remaps session IDs and trip/inferred-charge keys and preserves
+existing target facts when importing an overlapping backup.
+
+After expiry, changing split geometry requires raw inputs that no longer exist.
+Split/merge attempts are refused without writing a new decision; existing split
+provenance survives. Labels, favorites and hide/restore remain editable.
+
 ## Maintenance log + trip labels + favorites (schema v12–v13)
 
 - **`maintenance_log`** (raw) — PK `_id`. User-authored service entries (M5):

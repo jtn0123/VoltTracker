@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data
 
 import android.database.sqlite.SQLiteDatabase
+import androidx.core.database.sqlite.transaction
 import com.volttracker.obdpoc.materialize.TripSplitRules
 
 /** Result of a user split or merge: the split key and the trip keys that now exist around it. */
@@ -37,6 +38,15 @@ internal class ObdStoreTripSplitEdits(
     private val rematerializeTrips: (ObdSessionRecord) -> Unit,
 ) {
     fun splitTripAtStop(
+        routeKey: String?,
+        stopStartMs: Long,
+        stopEndMs: Long,
+    ): TripSplitOutcome? =
+        helper.writableDatabase.transaction {
+            splitWithRawInputs(routeKey, stopStartMs, stopEndMs)
+        }
+
+    private fun splitWithRawInputs(
         routeKey: String?,
         stopStartMs: Long,
         stopEndMs: Long,
@@ -81,7 +91,12 @@ internal class ObdStoreTripSplitEdits(
         return TripSplitOutcome(splitKey, false, keys)
     }
 
-    fun mergeTripSplit(splitKey: String?): TripSplitOutcome? {
+    fun mergeTripSplit(splitKey: String?): TripSplitOutcome? =
+        helper.writableDatabase.transaction {
+            mergeWithRawInputs(splitKey)
+        }
+
+    private fun mergeWithRawInputs(splitKey: String?): TripSplitOutcome? {
         val canonical = ObdTripExclusions.canonicalRouteKey(splitKey) ?: return null
         val parsed = DriveWindowDetector.parseRouteKey(canonical) ?: return null
         val db = helper.writableDatabase
@@ -117,8 +132,16 @@ internal class ObdStoreTripSplitEdits(
     ): ObdSessionRecord? {
         val session =
             db
-                .query(VoltTrackerDb.TABLE_SESSIONS, null, "_id = ?", arrayOf(sessionId.toString()), null, null, null)
-                .use { cursor -> if (cursor.moveToFirst()) ObdStoreSupport.readSession(cursor) else null }
+                .query(
+                    VoltTrackerDb.TABLE_SESSIONS,
+                    null,
+                    "_id = ? AND NOT EXISTS (SELECT 1 FROM ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY} r " +
+                        "WHERE r.session_id = ${VoltTrackerDb.TABLE_SESSIONS}._id)",
+                    arrayOf(sessionId.toString()),
+                    null,
+                    null,
+                    null,
+                ).use { cursor -> if (cursor.moveToFirst()) ObdStoreSupport.readSession(cursor) else null }
         return session?.takeIf { TripSplitRules.appliesTo(it.tripRulesVersion) }
     }
 
