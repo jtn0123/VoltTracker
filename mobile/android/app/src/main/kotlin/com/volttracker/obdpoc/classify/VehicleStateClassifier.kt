@@ -80,5 +80,6 @@ object VehicleStateClassifier {
             input.adapterVoltage == null &&
             input.packCurrentA == null &&
             input.pluggedHint == null &&
-            input.engineRunningHint == null && input.chargeState == null
+            input.engineRunningHint == null &&
+            input.chargeState == null
 }
