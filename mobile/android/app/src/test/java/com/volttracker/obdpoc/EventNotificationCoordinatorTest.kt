@@ -62,6 +62,8 @@ class EventNotificationCoordinatorTest {
     ): JSONObject {
         val payload = JSONObject()
         payload.put("source", "obd")
+        // Charge-event fixtures include the classifier confirmation supplied by live telemetry.
+        payload.put("vehicleState", "charging")
         payload.put("updatedAt", atMs)
         packCurrentA?.let { payload.put("packCurrentA", it) }
         packVoltage?.let { payload.put("packVoltage", it) }
@@ -357,6 +359,7 @@ class EventNotificationCoordinatorTest {
     private fun chargingSampleNoTimestamp(): JSONObject {
         val payload = JSONObject()
         payload.put("source", "obd")
+        payload.put("vehicleState", "charging")
         payload.put("packCurrentA", -20.0)
         payload.put("packVoltage", 355.0)
         payload.put("speedKph", 0.0)

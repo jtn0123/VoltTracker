@@ -256,6 +256,28 @@ The engine-on/Park reproduction is **synthetic software evidence**, not a newly 
 capture: the October 15 recording had no engine-running-in-Park samples. Physical acceptance
 of this follow-up is still needed.
 
+## Follow-up: the reported charging message was a notification
+
+The owner clarified that the message appeared in an Android notification. The event-alert
+decider had another independent shortcut: stationary negative pack current armed a charge,
+without consulting the charger-backed vehicle classification. An engine generating into
+the pack in Park could therefore trigger **Charging stopped / Check the plug and charger**,
+**Charge complete**, or **Charge target reached**, even while live telemetry said `ready`
+and the dedicated charger state was None. The earlier native-screen fix did not cover this
+notification path. The exact notification wording reported on the car is still unconfirmed.
+
+Charge alerts now require `vehicleState == charging` as well as stationary current into
+the pack. Missing or unknown classification cannot arm a charge from current alone. The
+existing minimum sample count, end debounce, energy integration and alert preferences
+remain in force. Low-SOC alerts still work while the engine runs in Park.
+
+Robolectric regressions feed synthetic engine-on/Park telemetry through the real vehicle
+classifier, coordinator and Android notification manager. Three negative cases failed
+before this change: false target/completion, false interruption, and absent/unknown
+classification. Positive controls still post all three genuine plug-in charge alert kinds.
+These tests establish software behavior; a new on-car recording and notification check
+remain necessary after installation.
+
 ## Next test drive with F1–F6
 
 - Record normally, including time in the background. Note roughly when the adapter connects

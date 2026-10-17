@@ -119,6 +119,7 @@ class EventNotificationCoordinator(
             speedKph = optDoubleOrNull(payload, "speedKph"),
             socPct = optDoubleOrNull(payload, "soc"),
             packTempC = optDoubleOrNull(payload, "batteryTemp"),
+            externalChargeConfirmed = payload.optString("vehicleState") == "charging",
         )
     }
 
