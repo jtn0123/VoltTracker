@@ -114,6 +114,48 @@ class ComposeSignalHistoryTest {
         assertTrue(store.state.value.signalHistory.recording == null)
     }
 
+    @Test fun completedExportSharesOnlyAfterUiDeliveryAndReleasesBusyState() {
+        val csv = "epoch_ms,controller_voltage_v\n1000,12.4\n"
+        store.onSignalHistory(state(42))
+        controller.csvWriter = { id, writer ->
+            assertEquals(42L, id)
+            writer.write(csv)
+            1
+        }
+        controller.export()
+        queue.tasks.removeFirst().run()
+        assertTrue(store.state.value.signalHistory.exporting)
+        assertTrue(shared.isEmpty())
+        posts.removeAt(0).run()
+        assertFalse(store.state.value.signalHistory.exporting)
+        assertTrue(messages.isEmpty())
+        val chooser = shared.single()
+        assertEquals(Intent.ACTION_CHOOSER, chooser.action)
+        val send = chooser.getParcelableExtra(Intent.EXTRA_INTENT, Intent::class.java)!!
+        assertEquals("text/csv", send.type)
+        val uri = send.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri::class.java)!!
+        val context = RuntimeEnvironment.getApplication()
+        val exported =
+            context.contentResolver
+                .openInputStream(uri)!!
+                .bufferedReader()
+                .use { it.readText() }
+        assertEquals(csv, exported)
+    }
+
+    @Test fun switchingToDemoDuringExportDoesNotShareTheRealRecording() {
+        store.onSignalHistory(state(42))
+        controller.csvWriter = { _, writer ->
+            writer.write("epoch_ms\n1000\n")
+            1
+        }
+        controller.export()
+        store.onSettings { it.copy(demoActive = true) }
+        finish()
+        assertTrue(shared.isEmpty())
+        assertTrue(messages.isEmpty())
+    }
+
     private fun finish() {
         while (queue.tasks.isNotEmpty()) queue.tasks.removeFirst().run()
         while (posts.isNotEmpty()) posts.removeAt(0).run()

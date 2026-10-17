@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.content.Intent
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.signals.SignalSession
 import com.volttracker.obdpoc.ui.diag.SignalHistoryUiState
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import java.io.Writer
@@ -85,37 +86,41 @@ internal class ComposeSignalHistory(
         store.onSignalHistory(state.copy(exporting = true))
         try {
             executor.execute {
-                val intent =
-                    try {
-                        TripExportShareIntent
-                            .writeDiagnosticCsv(context, session.startedAtMs) { csvWriter(session.id, it) }
-                            ?.let { TripExportShareIntent.buildShareIntent(context, it) }
-                    } catch (_: RuntimeException) {
-                        null
-                    }
-                post(
-                    Runnable {
-                        if (token == generation.get() && !store.state.value.settings.demoActive) {
-                            store.onSignalHistory(
-                                store.state.value.signalHistory
-                                    .copy(exporting = false),
-                            )
-                            if (intent == null) {
-                                message("Couldn't export recorded signals.")
-                            } else {
-                                try {
-                                    share(Intent.createChooser(intent, "Share diagnostic CSV"))
-                                } catch (_: RuntimeException) {
-                                    message("Couldn't open sharing.")
-                                }
-                            }
-                        }
-                    },
-                )
+                val intent = buildExportIntent(session)
+                post(Runnable { completeExport(token, intent) })
             }
         } catch (_: RejectedExecutionException) {
             store.onSignalHistory(state.copy(exporting = false))
             message("Couldn't start the export.")
+        }
+    }
+
+    private fun buildExportIntent(session: SignalSession): Intent? =
+        try {
+            TripExportShareIntent
+                .writeDiagnosticCsv(context, session.startedAtMs) { csvWriter(session.id, it) }
+                ?.let { TripExportShareIntent.buildShareIntent(context, it) }
+        } catch (_: RuntimeException) {
+            null
+        }
+
+    private fun completeExport(
+        token: Int,
+        intent: Intent?,
+    ) {
+        if (token != generation.get() || store.state.value.settings.demoActive) return
+        store.onSignalHistory(
+            store.state.value.signalHistory
+                .copy(exporting = false),
+        )
+        if (intent == null) {
+            message("Couldn't export recorded signals.")
+            return
+        }
+        try {
+            share(Intent.createChooser(intent, "Share diagnostic CSV"))
+        } catch (_: RuntimeException) {
+            message("Couldn't open sharing.")
         }
     }
 
