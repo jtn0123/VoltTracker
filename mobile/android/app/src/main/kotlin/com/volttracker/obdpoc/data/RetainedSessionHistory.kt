@@ -70,7 +70,8 @@ internal object RetainedSessionHistory {
         if (!tableExists(db, VoltTrackerDb.TABLE_SESSIONS) ||
             !tableExists(db, VoltTrackerDb.TABLE_TRIP_LIST_CACHE) ||
             !tableExists(db, VoltTrackerDb.TABLE_TELEMETRY) ||
-            !tableExists(db, VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS)
+            !tableExists(db, VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS) ||
+            !hasSessionCounters(db)
         ) {
             return
         }
@@ -124,7 +125,8 @@ internal object RetainedSessionHistory {
         if (!tableExists(db, VoltTrackerDb.TABLE_TRIP_LIST_CACHE) ||
             !tableExists(db, VoltTrackerDb.TABLE_CHARGE_SESSION_ROLLUPS) ||
             !tableExists(db, VoltTrackerDb.TABLE_SESSIONS) ||
-            !tableExists(db, VoltTrackerDb.TABLE_TELEMETRY)
+            !tableExists(db, VoltTrackerDb.TABLE_TELEMETRY) ||
+            !hasSessionCounters(db)
         ) {
             return null
         }
@@ -202,6 +204,14 @@ internal object RetainedSessionHistory {
                 "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
                 arrayOf(table),
             ).use { it.moveToFirst() }
+
+    private fun hasSessionCounters(db: SQLiteDatabase): Boolean {
+        val columns = HashSet<String>()
+        db.rawQuery("PRAGMA table_info(${VoltTrackerDb.TABLE_SESSIONS})", null).use { c ->
+            while (c.moveToNext()) columns.add(c.getString(1))
+        }
+        return columns.containsAll(listOf("_id", "ended_at_ms", "sample_count"))
+    }
 
     private fun remapJson(
         value: Any,

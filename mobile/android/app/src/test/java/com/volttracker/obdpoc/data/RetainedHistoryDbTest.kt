@@ -95,6 +95,25 @@ class RetainedHistoryDbTest {
     }
 
     @Test
+    fun aVersion17PrunedBackupCanBeUpgradedThenMergedWithoutLosingHistory() {
+        twoTrips()
+        store.pruneRawDataOlderThan(60)
+        saveDonor()
+        store.clearAllData()
+        SQLiteDatabase.openDatabase(donor.path, null, SQLiteDatabase.OPEN_READWRITE).use { db ->
+            db.execSQL("DROP TABLE ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY}")
+            db.version = 17
+        }
+        assertEquals(BackupMigrator.Result.MIGRATED, BackupMigrator.migrateToCurrentVersion(context, donor))
+        assertTrue(store.dbMaintenance.mergeFrom(donor).ok)
+        assertEquals(2, store.getTripsJson(20).length())
+        val key = store.getTripsJson(20).getJSONObject(0).getString("id")
+        store.tripEdits.setTripHidden(key, true)
+        store.tripEdits.setTripHidden(key, false)
+        assertEquals(2, store.getTripsJson(20).length())
+    }
+
+    @Test
     fun mergingAPrunedBackupRemapsRetainedTripsAndIsIdempotent() {
         twoTrips()
         val originalKey = store.getTripsJson(20).getJSONObject(0).getString("id")
