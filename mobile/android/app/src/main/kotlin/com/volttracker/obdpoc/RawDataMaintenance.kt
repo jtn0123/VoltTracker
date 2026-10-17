@@ -8,6 +8,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.edit
 import com.volttracker.obdpoc.data.ObdLocalStore
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
@@ -63,9 +64,7 @@ internal class RawDataMaintenance(
                 if (lastRun > 0 && nowMs() - lastRun in 0 until INTERVAL_MS) return
                 val days = settings.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
                 if (days > 0) maintain(days)
-                if (!settings.edit().putLong(LAST_SUCCESS, nowMs()).commit()) {
-                    Log.w(AppPrefs.LOG_TAG, "Raw maintenance completion timestamp could not be saved")
-                }
+                settings.edit(commit = true) { putLong(LAST_SUCCESS, nowMs()) }
             } catch (ex: RuntimeException) {
                 Log.w(AppPrefs.LOG_TAG, "Raw maintenance failed; retrying on a later lifecycle request", ex)
             }
