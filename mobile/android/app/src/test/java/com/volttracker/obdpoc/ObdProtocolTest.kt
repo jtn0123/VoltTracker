@@ -15,6 +15,15 @@ import java.util.Locale
  * here instead of on a wasted car trip.
  */
 class ObdProtocolTest {
+    @Test
+    fun shutdownControllerVoltageIsUnavailableRatherThanNearlyZero() {
+        assertNull(ObdProtocol.parseKnownValue("0142", "41420012"))
+        assertEquals(12.4, ObdProtocol.parseKnownValue("0142", "41420012\r41423070")!!.valueNumeric!!, 0.001)
+        val mixed = "008\r0:4104005B2542\r41423064\r414230A0\r1:0012AAAAAAAAAA"
+        val voltage = ObdMode01Batch.split(mixed, listOf("04", "5B", "42"))!!["42"]
+        assertEquals(12.388, ObdProtocol.parseKnownValue("0142", voltage)!!.valueNumeric!!, 0.001)
+    }
+
     // ---- Standard mode-01 PIDs (real captures) -------------------------------------
 
     @Test

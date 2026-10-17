@@ -19,7 +19,15 @@ object VehicleStateClassifier {
 
         val reasons = ArrayList<String>(3)
 
-        if (input.pluggedHint == true) {
+        val moving = input.speedKph != null && input.speedKph > DRIVING_SPEED_KPH
+        if (!moving && input.chargeState == "Charging") {
+            return ClassifierResult(VehicleState.CHARGING, Confidence.OBSERVED, listOf("charger_charging"))
+        }
+        if (!moving && input.chargeState in listOf("Waiting", "Complete", "Error")) {
+            return ClassifierResult(VehicleState.PLUGGED, Confidence.OBSERVED, listOf("charger_plugged"))
+        }
+        val plugged = input.chargeState != "None" && input.pluggedHint == true
+        if (!moving && plugged) {
             if (input.packCurrentA != null && input.packCurrentA <= -CHARGING_CURRENT_A) {
                 reasons.add("plugged")
                 reasons.add("current_into_pack")
@@ -30,7 +38,6 @@ object VehicleStateClassifier {
         }
 
         val engineRunning = input.engineRunningHint == true || (input.rpm != null && input.rpm > IGNITION_RPM)
-        val moving = input.speedKph != null && input.speedKph > DRIVING_SPEED_KPH
 
         if (engineRunning) {
             if (moving) {
@@ -73,5 +80,5 @@ object VehicleStateClassifier {
             input.adapterVoltage == null &&
             input.packCurrentA == null &&
             input.pluggedHint == null &&
-            input.engineRunningHint == null
+            input.engineRunningHint == null && input.chargeState == null
 }

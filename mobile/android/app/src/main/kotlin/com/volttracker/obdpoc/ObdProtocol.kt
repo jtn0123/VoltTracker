@@ -447,8 +447,18 @@ object ObdProtocol {
             1
         }
 
-    internal fun parseControlModuleVoltage(response: String?): Double? =
-        mode01Bytes(response, "42", 2)?.let { ((it[0] * 256.0) + it[1]) / 1000.0 }
+    internal fun parseControlModuleVoltage(response: String?): Double? {
+        if (response == null) return null
+        // Several modules answer a broadcast. A shutting-down controller returned 0012 (18 mV)
+        // alongside healthy modules; skip that unavailable value and use a plausible responder.
+        for (hex in adapterHexLines(response)) {
+            for (match in Regex("4142([0-9A-F]{4})").findAll(hex)) {
+                val volts = match.groupValues[1].toInt(16) / 1000.0
+                if (volts in 6.0..32.0) return volts
+            }
+        }
+        return null
+    }
 
     internal fun parseUnsignedMode01Word(
         response: String?,

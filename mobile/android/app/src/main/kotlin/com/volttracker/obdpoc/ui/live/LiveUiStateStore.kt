@@ -57,6 +57,10 @@ class LiveUiStateStore(
         )
     val state: StateFlow<VoltAppUiState> = _state
 
+    fun onSignalHistory(history: com.volttracker.obdpoc.ui.diag.SignalHistoryUiState) {
+        _state.value = _state.value.copy(signalHistory = history)
+    }
+
     fun onHistoryRefreshing(refreshing: Boolean) {
         _state.value = _state.value.copy(historyRefreshing = refreshing)
     }

@@ -14,6 +14,24 @@ import java.util.Locale
  * without re-running the rules, so silent drift in this file is a real product bug.
  */
 class VehicleStateClassifierTest {
+    @Test
+    fun dedicatedChargerStateWinsOverCurrentAndLegacyHintsWhileStationary() {
+        for (state in listOf("Waiting", "Complete", "Error")) {
+            val input = ClassifierInput(0.0, 0, 12.5, -10.0, true, false, SAMPLE_AT, chargeState = state)
+            assertEquals(state, VehicleState.PLUGGED, VehicleStateClassifier.classify(input).state)
+        }
+        val charging = ClassifierInput(null, 0, 12.5, null, null, false, SAMPLE_AT, chargeState = "Charging")
+        assertEquals(VehicleState.CHARGING, VehicleStateClassifier.classify(charging).state)
+        val off = ClassifierInput(null, 0, 12.3, 0.0, true, false, SAMPLE_AT, chargeState = "None")
+        assertEquals(VehicleState.PARKED, VehicleStateClassifier.classify(off).state)
+    }
+
+    @Test
+    fun movingRegenerationCannotBeMistakenForCharging() {
+        val input = ClassifierInput(50.0, 0, 14.0, -45.0, true, false, SAMPLE_AT, chargeState = "Charging")
+        assertEquals(VehicleState.DRIVING_EV, VehicleStateClassifier.classify(input).state)
+    }
+
     private fun input(
         speedKph: Double?,
         rpm: Int?,

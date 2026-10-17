@@ -104,6 +104,9 @@ class SwcanListenRunner(
 
         fun msSinceLiveData(): Long
 
+        /** Complete recent direct tire readings make a broadcast hunt redundant. */
+        fun hasFreshDirectTires(): Boolean = false
+
         /** Runs [block] holding the adapter IO lock, so no other runner interleaves commands. */
         fun <T> exclusive(block: () -> T): T
 
@@ -529,7 +532,15 @@ class SwcanListenRunner(
 
     private fun listenMs(mode: WindowMode): Long =
         when (mode) {
-            WindowMode.STARTUP -> policy.startupListenMs
+            WindowMode.STARTUP ->
+                if (io.isStationary()) {
+                    policy.startupListenMs
+                } else {
+                    minOf(
+                        policy.startupListenMs,
+                        policy.listenMs,
+                    )
+                }
             WindowMode.FOCUS -> if (io.isStationary()) policy.focusParkedListenMs else policy.focusMovingListenMs
             WindowMode.PARKED -> policy.parkedListenMs
             WindowMode.TIRE_HUNT -> policy.tireHuntListenMs
@@ -546,7 +557,7 @@ class SwcanListenRunner(
 
     /** Moving, not all four tyres heard yet this session, and hunt windows left. */
     private fun isTireHunting(): Boolean =
-        !tiresHeard && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
+        !tiresHeard && !io.hasFreshDirectTires() && !io.isStationary() && tireHuntWindows < policy.tireHuntMaxWindows
 
     /**
      * Debug builds log a window's frames, only the allowlisted ones ([SwcanPrivacy]). Focus windows

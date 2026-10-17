@@ -42,6 +42,7 @@ import com.volttracker.obdpoc.ui.diag.DiagScreen
 import com.volttracker.obdpoc.ui.diag.FreezeFrameScreen
 import com.volttracker.obdpoc.ui.diag.HealthActions
 import com.volttracker.obdpoc.ui.diag.LiveSignalsScreen
+import com.volttracker.obdpoc.ui.diag.SignalHistoryScreen
 import com.volttracker.obdpoc.ui.diag.hvBattery
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveScreen
@@ -208,7 +209,9 @@ internal fun screenViewName(
 ): String =
     when (route) {
         VoltRoute.SETTINGS, VoltRoute.ADAPTER -> "settings"
-        VoltRoute.HEALTH, VoltRoute.SIGNALS, VoltRoute.FREEZE_FRAME, VoltRoute.ALL_READINGS -> "diagnostics"
+        VoltRoute.HEALTH, VoltRoute.SIGNALS, VoltRoute.SIGNAL_HISTORY,
+        VoltRoute.FREEZE_FRAME, VoltRoute.ALL_READINGS,
+        -> "diagnostics"
         VoltRoute.TRIP -> "map"
         VoltRoute.CHARGE -> "charge"
         null ->
@@ -315,7 +318,19 @@ private fun VoltRouteContent(
                     ),
             )
         VoltRoute.SIGNALS ->
-            LiveSignalsScreen(state.drive, onBack = onBack, onOpenAllReadings = { open(VoltRoute.ALL_READINGS) })
+            LiveSignalsScreen(state.drive, onBack = onBack, onOpenAllReadings = {
+                open(VoltRoute.ALL_READINGS)
+            }, onOpenHistory = { open(VoltRoute.SIGNAL_HISTORY) })
+        VoltRoute.SIGNAL_HISTORY ->
+            SignalHistoryScreen(
+                state.signalHistory,
+                metric = state.drive.metricUnits,
+                demo = state.settings.demoActive,
+                onBack = onBack,
+                onRefresh = actions.onLoadSignalHistory,
+                onSession = actions.onSelectSignalSession,
+                onExport = actions.onExportSignals,
+            )
         VoltRoute.FREEZE_FRAME -> FreezeFrameScreen(state.diag, state.drive.units, onBack = onBack)
         VoltRoute.ALL_READINGS -> AllReadingsScreen(state.drive, onBack = onBack)
         VoltRoute.TRIP ->
