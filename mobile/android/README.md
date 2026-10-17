@@ -214,6 +214,19 @@ The app now writes two layers of local data:
 
 SQLite tables capture OBD sessions, parsed telemetry samples, status/debug events, and adapter history summaries. The Settings screen shows a database summary so field tests can confirm whether sessions and samples are being saved without pulling files from the phone.
 
+SQLite raw telemetry, GPS fixes, PID observations and runtime events default to
+**60 days** of retention (`raw_retention_days`; values ≤0 disable automatic pruning).
+Both dashboards request background maintenance on activity start/stop, delayed
+10 seconds. A saved completion timestamp limits successful runs to once per
+24 hours. Active recording, backup or restore defers a run until a later lifecycle
+request; this is opportunistic maintenance, not a daily alarm.
+
+Compact finalized trip/charge history and user labels, favorites, hide/restore and
+split/merge decisions survive pruning. Detailed routes, raw charts and PID history
+expire with their samples. Export a backup before expiry if those details matter;
+a later backup contains the remaining summaries and detail, not expired samples.
+The separate JSONL field logs use their own rolling-log policy.
+
 For the data/privacy model, backup contents, and map tile network behavior, see
 [`docs/privacy-data-handling.md`](docs/privacy-data-handling.md).
 

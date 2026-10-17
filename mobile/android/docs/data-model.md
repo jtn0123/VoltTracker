@@ -7,7 +7,7 @@ in
 in `VoltTrackerDb`. If this doc and the DDL disagree, the DDL wins — update this
 doc to match.
 
-Current `VoltTrackerDb.DATABASE_VERSION` is **17**. Migrations are append-only and
+Current `VoltTrackerDb.DATABASE_VERSION` is **18**. Migrations are append-only and
 non-destructive; v11 → v12 added the `maintenance_log` table and the
 `trip_segments.label` column, v12 → v13 added the nullable
 `maintenance_log.interval_km` (`REAL`) and `interval_months` (`INTEGER`) service-interval
@@ -19,15 +19,21 @@ v16 → v17 added gear-aware trip splitting's columns: `sessions.trip_rules_vers
 `INTEGER`). Existing sessions stay at version 0 and existing rows keep `NULL` gear —
 deliberately not backfilled — so trips saved before the cutover keep their exact
 windows and route keys (see `materialize/TripSplitRules.kt`).
+v17 → v18 adds `retained_session_history`: compact finalized-trip facts and charge
+contributions saved before their raw inputs expire. Surviving older pruned caches
+are promoted on upgrade; facts already lost by an older build cannot be recovered.
 
 ## Table overview
 
-Tables fall into two buckets:
+Tables distinguish captured data, retained history and rebuildable projections:
 
 - **Raw** — written directly from capture (sessions, telemetry, observations,
   GPS, DTCs, adapter history). These are the system of record.
-- **Derived / cache** — computed from raw rows and safe to rebuild. Dropping and
-  recomputing them changes performance, not correctness.
+- **Retained history** — authoritative compact facts saved before raw retention.
+  These are not caches: never discard them on cache-version changes or edits.
+- **Derived / cache** — rebuilt from raw rows or retained history. Older databases
+  can have pruned caches as their only remaining facts; promote those before
+  invalidating them. Other derived detail still requires its original raw inputs.
 
 | Table | Kind | What it holds |
 |-------|------|----------------|
@@ -47,6 +53,7 @@ Tables fall into two buckets:
 | `session_trip_rollups` | **derived/cache** | Per-session scalar trip rollup (distance/duration/max speed/route flag). |
 | `trip_list_cache` | **derived/cache** | One row per finalized trip caching the exact trip JSON the Trips list renders. |
 | `charge_session_rollups` | **derived/cache** | Per-finalized-session blob caching that session's contribution to the inferred-charge scan (G2). |
+| `retained_session_history` | **retained history** | Per-session trip JSON array (including hidden trips) and charge contribution JSON; survives projection invalidation and merges with session/key remapping. |
 | `exports` | raw | Export job records (type, status, file, range, manifest). |
 | `maintenance_log` | raw | User-authored service-log entries (M5) + optional service interval (M1/C4); FK-free, survives a data clear. |
 
@@ -227,7 +234,7 @@ Each table carries time-ordered indexes for its dominant read (e.g.
 lookup indexes for the deduped tables (`idx_diagnostic_codes_lookup`,
 `idx_field_capabilities_lookup`). Schema v7 added **time-only** prune indexes
 (`idx_telemetry_captured_at`, `idx_location_samples_captured_at`,
-`idx_events_occurred_at`, `idx_pid_observations_observed_at`) so the daily raw-
+`idx_events_occurred_at`, `idx_pid_observations_observed_at`) so the raw-
 data prune in `ObdStoreMaintenance.pruneRawDataOlderThan` doesn't full-scan —
 the composite `(session_id, …)` indexes can't help a query that doesn't
 constrain `session_id`. Schema v12 added `idx_maintenance_log_created` on

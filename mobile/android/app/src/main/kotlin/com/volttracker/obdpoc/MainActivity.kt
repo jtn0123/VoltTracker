@@ -528,19 +528,6 @@ open class MainActivity :
             }
         troubleshooter = TroubleshooterBridge(this)
         ObdNotifications.ensureChannel(this)
-        submitBackground {
-            try {
-                val retentionDays =
-                    activityPrefs.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
-                val pruned = localStore?.dbMaintenance?.runStartupMaintenance(retentionDays) ?: 0
-                if (pruned > 0) {
-                    markStorageSummaryDirty()
-                    Log.i(TAG, "Pruned $pruned raw rows older than $retentionDays days")
-                }
-            } catch (ex: RuntimeException) {
-                Log.w(TAG, "Retention prune failed; continuing without it", ex)
-            }
-        }
 
         // The dashboard WebView sits inside a plain FrameLayout so the native error/reconnecting
         // surface (report items B1/B2) can be layered over it, and so a dead WebView can be
