@@ -95,6 +95,7 @@ internal class DriveSessionTracker {
     }
 
     fun apply(sample: Sample) {
+        if (sample.phase == DrivePhase.UNKNOWN) return
         if (sample.atMs <= 0 || sample.atMs <= lastAtMs) return
         val stepS = if (lastAtMs > 0) (sample.atMs - lastAtMs) / MS_PER_S else Double.NaN
         onPhase(sample)
@@ -135,6 +136,7 @@ internal class DriveSessionTracker {
                 chargePointSpacingMs = CHARGE_POINT_MS
             }
             DrivePhase.PARKED -> closeDriveIfAny()
+            DrivePhase.UNKNOWN -> Unit
         }
     }
 

@@ -308,6 +308,7 @@ fun gaugeDescription(
     if (!state.connected) return "Battery $NOT_REPORTED. Connect to see your Volt live"
     val battery = state.shownSocPercent?.let { "Battery ${it.toInt()} percent" } ?: "Battery not reported"
     return when (state.phase) {
+        DrivePhase.UNKNOWN -> "Waiting for live data"
         DrivePhase.DRIVE -> {
             val perHour = if (units.metric) "kilometres per hour" else "miles per hour"
             val speed = state.speedMph?.let { "${units.speed(it.toDouble())} $perHour" } ?: "Speed not reported"

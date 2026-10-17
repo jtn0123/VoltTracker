@@ -166,6 +166,7 @@ fun driveSubtitle(state: DriveUiState): String {
         DrivePhase.DRIVE -> "Live · ${state.adapterLabel}"
         DrivePhase.CHARGING -> "Connected · charging"
         DrivePhase.PARKED -> "Connected · parked"
+        DrivePhase.UNKNOWN -> "Connected · waiting for live data"
     }
 }
 

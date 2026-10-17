@@ -7,7 +7,7 @@ import com.volttracker.obdpoc.ui.units.VoltUnits
 enum class DriveMode { EV, GAS }
 
 /** What the car is doing — the Drive ring morphs between these (mockups Direction A). */
-enum class DrivePhase { DRIVE, PARKED, CHARGING }
+enum class DrivePhase { DRIVE, PARKED, CHARGING, UNKNOWN }
 
 /** Tyre pressures in psi, from the SW-CAN TPMS broadcast (OBDLink adapters only). */
 data class TirePressures(

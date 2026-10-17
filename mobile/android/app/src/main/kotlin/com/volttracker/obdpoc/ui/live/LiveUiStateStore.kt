@@ -101,24 +101,28 @@ class LiveUiStateStore(
     fun expireCoreReadings() {
         val s = _state.value
         if (!s.drive.connected) return
+        val silent = nowMs() - lastTelemetryReceivedAt !in 0..CORE_READING_FRESH_MS
+        if (silent) trackedPhase = DrivePhase.UNKNOWN
         val drive =
-            s.drive.copy(
-                speedMph = s.drive.speedMph.takeIf { coreIsFresh("speedKph") },
-                powerKw = s.drive.powerKw.takeIf { coreIsFresh("powerKw") },
-                socPercent = s.drive.socPercent.takeIf { coreIsFresh("soc") },
-                displayedSocPercent =
-                    s.drive.displayedSocPercent.takeIf {
-                        nowMs() - lastTelemetryReceivedAt in 0..CORE_READING_FRESH_MS
-                    },
-            )
+            s.drive
+                .copy(
+                    speedMph = s.drive.speedMph.takeIf { coreIsFresh("speedKph") },
+                    powerKw = s.drive.powerKw.takeIf { coreIsFresh("powerKw") },
+                    socPercent = s.drive.socPercent.takeIf { coreIsFresh("soc") },
+                    displayedSocPercent =
+                        s.drive.displayedSocPercent.takeIf {
+                            nowMs() - lastTelemetryReceivedAt in 0..CORE_READING_FRESH_MS
+                        },
+                ).let { if (silent) it.withoutFreshCharge() else it }
         _state.value =
             s.copy(
                 drive = drive,
                 charge =
-                    s.charge.copy(
-                        socPercent = drive.socPercent,
-                        displayedSocPercent = drive.displayedSocPercent,
-                    ),
+                    s.charge
+                        .copy(
+                            socPercent = drive.socPercent,
+                            displayedSocPercent = drive.displayedSocPercent,
+                        ).let { if (silent) it.withoutFreshCharge() else it },
             )
     }
 
@@ -245,6 +249,7 @@ class LiveUiStateStore(
             socPercent = if (demoEnded) null else socPercent,
             displayedSocPercent = if (demoEnded) null else displayedSocPercent,
             charging = false,
+            waitingForTelemetry = false,
             evRangeMiles = null,
             chargeKw = 0.0,
             acVolts = null,
@@ -469,6 +474,7 @@ class LiveUiStateStore(
             charge =
                 s.charge.copy(
                     charging = charging,
+                    waitingForTelemetry = drive.phase == DrivePhase.UNKNOWN,
                     socPercent = drive.socPercent,
                     displayedSocPercent = drive.displayedSocPercent,
                     evRangeMiles = drive.evRangeMiles,

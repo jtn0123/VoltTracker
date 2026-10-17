@@ -391,6 +391,7 @@ internal data class ModePillSpec(
 internal fun modePill(state: DriveUiState): ModePillSpec =
     when {
         !state.connected -> ModePillSpec("Not connected", PillTone.NEUTRAL)
+        state.phase == DrivePhase.UNKNOWN -> ModePillSpec("Waiting for live data", PillTone.NEUTRAL, dot = false)
         state.phase == DrivePhase.CHARGING ->
             ModePillSpec(listOfNotNull("Charging", levelName(state.chargeLevel)).joinToString(" · "), PillTone.EV)
         state.phase == DrivePhase.PARKED ->
@@ -595,6 +596,11 @@ private fun ParkedCenter(
             color = VoltColors.textSecondary,
             modifier = Modifier.padding(top = 4.dp),
         )
+        return
+    }
+    if (state.phase == DrivePhase.UNKNOWN) {
+        SocNumber(DASH, k)
+        Text("Waiting for live data", style = VoltType.heroUnit, color = VoltColors.textSecondary)
         return
     }
     SocNumber(state.shownSocPercent?.let { "${glideWhole(it.toInt(), "gauge-soc-text")}" } ?: DASH, k)
