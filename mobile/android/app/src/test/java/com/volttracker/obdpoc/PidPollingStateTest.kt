@@ -31,6 +31,38 @@ import java.util.Collections
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [30])
 class PidPollingStateTest {
+    @Test
+    fun tireHuntRequiresAllFourValidRecentDirectAnswers() {
+        var now = 1_000L
+        state.setClockForTesting { now }
+        val io =
+            com.volttracker.obdpoc.engine.EngineSwcanIo(
+                service,
+                {
+                    com.volttracker.obdpoc.engine
+                        .ElmConnection()
+                },
+                { _, _ -> ">" },
+                {},
+                state,
+                ParkedDetector(),
+            )
+        for (wheel in BcmTirePressure.Wheel.entries) {
+            engine.responses[wheel.command] = "62${wheel.command.drop(2)}0F00"
+        }
+        state.runScheduledPolls(specs("225008", "225007", "225006"), StringBuilder())
+        assertFalse(io.hasFreshDirectTires())
+        state.runScheduledPolls(specs("225005"), StringBuilder())
+        assertTrue(io.hasFreshDirectTires())
+        now += 120_001L
+        assertFalse(io.hasFreshDirectTires())
+        state.runScheduledPolls(specs("225008", "225007", "225006", "225005"), StringBuilder())
+        assertTrue(io.hasFreshDirectTires())
+        engine.responses["225005"] = "625005FFFF"
+        state.runScheduledPolls(specs("225005"), StringBuilder())
+        assertFalse(io.hasFreshDirectTires())
+    }
+
     private lateinit var service: ObdService
     private lateinit var engine: CapturingEngine
     private lateinit var state: PidPollingState

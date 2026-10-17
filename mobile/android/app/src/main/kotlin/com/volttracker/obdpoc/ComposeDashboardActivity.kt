@@ -97,6 +97,18 @@ class ComposeDashboardActivity :
     private lateinit var troubleshooter: TroubleshooterBridge<ComposeDashboardActivity>
     private lateinit var backups: BackupController<ComposeDashboardActivity>
     private val tripExports by lazy { TripExportController(applicationContext, this) }
+    private val signalHistory by lazy {
+        ComposeSignalHistory(
+            applicationContext,
+            backgroundExecutor,
+            store,
+            ::runOnUiThread,
+            ::startActivity,
+            ::showMessage,
+        ) {
+            ObdLocalStore(applicationContext)
+        }
+    }
     private val carControls by lazy { ComposeCarControls(this, { prefs }, store, ::showMessage) }
 
     /** Listens to the body bus nonstop while the Car tab is in front (see [BodyFocusPinger]). */
@@ -250,6 +262,9 @@ class ComposeDashboardActivity :
                             onRefresh = { loadHistoryFor(shownView) },
                             onSelectTrip = ::selectTrip,
                             onExportTrip = ::exportTrip,
+                            onLoadSignalHistory = { signalHistory.load() },
+                            onSelectSignalSession = { signalHistory.load(it) },
+                            onExportSignals = { signalHistory.export() },
                             onInsightsPeriod = ::selectInsightsPeriod,
                             onCarControl = { carControls.request(it) },
                             onCarControlsEnabled = { carControls.setEnabled(it) },
@@ -308,6 +323,7 @@ class ComposeDashboardActivity :
     }
 
     override fun onDestroy() {
+        signalHistory.dispose()
         backups.dispose()
         troubleshooter.shutdown()
         backgroundExecutor.shutdownNow()

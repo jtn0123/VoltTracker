@@ -22,6 +22,8 @@ class ClassifierInput(
     @JvmField val engineRunningHint: Boolean?,
     /** Wall-clock when the underlying sample was taken. Always set. */
     @JvmField val sampleAtMs: Long,
+    /** Fresh dedicated charger state; the caller drops stale replies. A speed sentinel is not plug evidence. */
+    @JvmField val chargeState: String? = null,
 ) {
     init {
         // Reject physically-impossible values so a parser bug surfaces here instead of silently

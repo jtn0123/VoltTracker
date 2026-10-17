@@ -58,13 +58,10 @@ class VoltageProbeTest {
     }
 
     @Test
-    fun acceptsLowVoltageReadingForC9Hint() {
-        // 4142 00 01 → 0.001 V — a totally dead battery. We deliberately accept this so the
-        // dashboard's low-voltage hint (C9) fires exactly when the user most needs it; the prior
-        // 4 V floor was hiding the worst-case readings.
-        val v = VoltageProbe.parseVolts("41 42 00 01\r>")
-        assertNotNull(v)
-        assertEquals(0.001, v!!, EPS)
+    fun shutdownUnavailableVoltageDoesNotBecomeALowBatteryAlarm() {
+        // The car returned 18 mV during shutdown while other modules were near 12 V.
+        assertNull(VoltageProbe.parseVolts("41 42 00 12\r>"))
+        assertEquals(12.4, VoltageProbe.parseVolts("41420012\r41423070")!!, EPS)
     }
 
     @Test

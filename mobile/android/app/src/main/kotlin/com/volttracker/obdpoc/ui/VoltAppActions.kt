@@ -59,4 +59,7 @@ data class VoltAppActions(
     val onShareHealthReport: (String) -> Unit = {},
     /** A trip or charge receipt: share this text (subject, body) through the share sheet. */
     val onShareText: (String, String) -> Unit = { _, _ -> },
+    val onLoadSignalHistory: () -> Unit = {},
+    val onSelectSignalSession: (Long) -> Unit = {},
+    val onExportSignals: () -> Unit = {},
 )

@@ -172,7 +172,7 @@ object PidSchedule {
             PidSpec("222885", Header.HV_PACK_7E1, 12, 2), // motor A voltage
             PidSpec("222884", Header.HV_PACK_7E1, 12, 4), // motor B current
             PidSpec("222886", Header.HV_PACK_7E1, 12, 4), // motor B voltage
-            PidSpec("222889", Header.HV_PACK_7E1, 24, 10), // PRNDL / gear state
+            PidSpec("222889", Header.HV_PACK_7E1, 4, 1), // PRNDL: early, then every few seconds
             // Readings Voltage shows but this app never asked for. Not yet confirmed on the target
             // car; the negative-PID cache retires any the car refuses, and each decoder is bounded.
             PidSpec("221C26", Header.HV_PACK_7E1, 24, 10), // inverter temperature
@@ -244,9 +244,10 @@ object PidSchedule {
             PidSpec("22801F", Header.HV_PACK_7E4, 24, 5), // outside temp filtered
             PidSpec("2243A5", Header.HV_PACK_7E4, 120, 84, conditional = true), // charge count
             PidSpec("22437D", Header.HV_PACK_7E4, 120, 90, conditional = true), // last charge energy
-            PidSpec("2241A3", Header.HV_PACK_7E4, 240, 210), // HV battery capacity, rare trend sample
-            PidSpec("2240E9", Header.HV_PACK_7E4, 240, 210), // pack internal resistance (read by Voltage)
-            PidSpec("2243A6", Header.HV_PACK_7E4, 240, 210), // HV isolation resistance (read by Voltage)
+            // Core Health arrives near connect, spread across cycles; repeats stay rare.
+            PidSpec("2241A3", Header.HV_PACK_7E4, 240, 4), // HV battery capacity
+            PidSpec("2240E9", Header.HV_PACK_7E4, 240, 6), // pack internal resistance
+            PidSpec("2243A6", Header.HV_PACK_7E4, 240, 8), // HV isolation resistance
             PidSpec("224389", Header.HV_PACK_7E4, 240, 210), // lifetime charge energy (OVMS)
             // Six pack-section temperatures from the BECM cell interface. Thermal mass makes them
             // slow, and six reads is a heavy block, so they share one rare 7E7 switch.

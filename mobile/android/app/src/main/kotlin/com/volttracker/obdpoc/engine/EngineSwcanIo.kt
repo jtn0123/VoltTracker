@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.engine
 
+import com.volttracker.obdpoc.BcmTirePressure
+import com.volttracker.obdpoc.ObdProtocol
 import com.volttracker.obdpoc.PidPollingState
 
 /**
@@ -46,6 +48,14 @@ internal class EngineSwcanIo(
     override fun liveCycleCount(): Long = pidPolling.liveCycleCount()
 
     override fun msSinceLiveData(): Long = pidPolling.msSinceLastLiveData()
+
+    override fun hasFreshDirectTires(): Boolean =
+        BcmTirePressure.Wheel.entries.all { wheel ->
+            val age = pidPolling.answeredAgoMs(wheel.command)
+            age != null &&
+                age <= 120_000L &&
+                ObdProtocol.parseKnownValue(wheel.command, pidPolling.lastRaw(wheel.command))?.valueNumeric != null
+        }
 
     override fun <T> exclusive(block: () -> T): T = synchronized(host.ioLock) { block() }
 

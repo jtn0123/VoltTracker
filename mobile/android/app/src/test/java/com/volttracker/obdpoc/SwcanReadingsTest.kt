@@ -65,6 +65,51 @@ class SwcanReadingsTest {
     }
 
     @Test
+    fun oldBroadcastCannotOverwriteFreshDirectTires() {
+        val readings = SwcanReadings()
+        readings.record(readingsFrom("10 3D 40 40 24 24 3D 3E 37 38"), 1_000L)
+        val sample =
+            JSONObject()
+                .put("tirePressureFlKpa", 248.0)
+                .put("tirePressureFrKpa", 252.0)
+                .put("tirePressureRlKpa", 250.0)
+                .put("tirePressureRrKpa", 250.0)
+                .put("tirePressureStaleMs", 500L)
+        readings.appendTo(sample, 1_240_000L)
+        assertEquals(248.0, sample.getDouble("tirePressureFlKpa"), 0.0)
+        assertEquals(252.0, sample.getDouble("tirePressureFrKpa"), 0.0)
+        assertEquals(500L, sample.getLong("tirePressureStaleMs"))
+    }
+
+    @Test
+    fun tireSourcesAreChosenPerWheelAndAgeUsesTheOldestChosenWheel() {
+        val readings = SwcanReadings()
+        readings.record(listOf(SwcanReading(SwcanField.TIRE_FL, 244.0)), 9_000L)
+        readings.record(listOf(SwcanReading(SwcanField.TIRE_FR, 240.0)), 1_000L)
+        val sample =
+            JSONObject()
+                .put("tirePressureFlKpa", 248.0)
+                .put("tirePressureFlStaleMs", 5_000L)
+                .put("tirePressureFrKpa", 252.0)
+                .put("tirePressureFrStaleMs", 500L)
+                .put("tirePressureStaleMs", 5_000L)
+        readings.appendTo(sample, 10_000L)
+        assertEquals(244.0, sample.getDouble("tirePressureFlKpa"), 0.0)
+        assertEquals(252.0, sample.getDouble("tirePressureFrKpa"), 0.0)
+        assertEquals(1_000L, sample.getLong("tirePressureStaleMs"))
+    }
+
+    @Test
+    fun anInvalidBroadcastCannotHideAValidDirectWheel() {
+        val readings = SwcanReadings()
+        readings.record(listOf(SwcanReading(SwcanField.TIRE_FL, SwcanReading.INVALID)), 1_000L)
+        val sample = JSONObject().put("tirePressureFlKpa", 248).put("tirePressureFlStaleMs", 10L)
+        readings.appendTo(sample, 10_000L)
+        assertEquals(248, sample.getInt("tirePressureFlKpa"))
+        assertFalse(sample.has("tireSensorsInvalid"))
+    }
+
+    @Test
     fun energySplitHoldsForTheSessionWithItsAge() {
         // The car's own frame from the 2026-10-04 drive; it came in 3 of 22 listen windows.
         val readings = SwcanReadings(maxAgeMs = 5_000L)
@@ -150,10 +195,10 @@ class SwcanReadingsTest {
                 .asSequence()
                 .filter { it.endsWith("StaleMs") }
                 .toList()
-        assertEquals(SwcanGroup.entries.size, staleKeys.size)
+        assertEquals(SwcanGroup.entries.size + 4, staleKeys.size)
         val warningFields = SwcanField.entries.count { it.group == SwcanGroup.WARNINGS }
         // The dash-warning broadcasts share one key, plus whether all of them have reported.
-        assertEquals(SwcanField.entries.size - warningFields + 2 + SwcanGroup.entries.size, sample.length())
+        assertEquals(SwcanField.entries.size - warningFields + 2 + SwcanGroup.entries.size + 4, sample.length())
         assertEquals("", sample.getString("dashWarnings"))
         assertTrue(sample.getBoolean("dashWarningsComplete"))
         assertEquals(69.0, sample.getDouble("oilLifeRemainingPct"), 0.0)

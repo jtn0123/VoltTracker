@@ -107,6 +107,7 @@ import { driveGear, gearDisplayText } from "./gear";
     // SW-CAN (GMLAN) broadcasts from the OBDLink listen window (SwcanReadings.kt).
     "aux12vVoltage", "aux12vSocPct", "aux12vCurrentA", "aux12vStaleMs", "tirePressureFlKpa",
     "tirePressureFrKpa", "tirePressureRlKpa", "tirePressureRrKpa", "tirePressureStaleMs",
+    "tirePressureFlStaleMs", "tirePressureFrStaleMs", "tirePressureRlStaleMs", "tirePressureRrStaleMs",
     "doorLockState", "doorLockSource", "doorLockStaleMs", "doorFlState", "doorFrState",
     "doorRlState", "doorRrState", "hoodState", "trunkState", "doorStatusStaleMs", "alarmState",
     "alarmStaleMs", "windowFlPct", "windowFrPct", "windowRlPct", "windowRrPct", "windowStaleMs", "windowsInvalid",

@@ -9,8 +9,8 @@ import com.volttracker.obdpoc.materialize.PackEnergyMath
  *
  * The event kinds:
  *
- * - **Charge complete / interrupted** — fires once when an active charge (pack current flowing into
- *   the pack at low speed, the same high-confidence signal [ChargeSessionMaterializer] uses)
+ * - **Charge complete / interrupted** — fires once when an active plug-in charge (confirmed by the
+ *   charger-backed vehicle classifier, with pack current flowing into the pack at low speed)
  *   transitions back to not-charging. When charging stopped with the SOC at (or near) the user's
  *   target it's a [ChargeComplete] carrying the energy integrated across the charge window
  *   (trapezoidal, same sign convention as the materializer); when it stopped well below the target
@@ -128,6 +128,8 @@ class EventNotificationDecider(
         val speedKph: Double?,
         val socPct: Double?,
         val packTempC: Double?,
+        /** True only when the live classifier confirms plug-in charging; current alone is ambiguous. */
+        val externalChargeConfirmed: Boolean = false,
     )
 
     // ---- charge accumulation -----------------------------------------------------------
@@ -372,8 +374,8 @@ class EventNotificationDecider(
 
     companion object {
         /**
-         * Pack current more negative than this (amps INTO the pack) counts as charging — but only as
-         * one of the two gates; see [isChargingSample], which also requires the car to be stationary.
+         * Pack current more negative than this (amps INTO the pack) counts toward an externally
+         * confirmed charge. Engine generation in Park must never arm charge alerts on its own.
          */
         const val CHARGING_PACK_CURRENT_A_THRESHOLD = 1.0
 
@@ -418,12 +420,14 @@ class EventNotificationDecider(
         const val VOLT_FULL_SOC_PCT = 90.0
 
         /**
-         * A sample counts as charging only when BOTH gates pass: the car is stationary (speed at or
-         * below [STATIONARY_SPEED_KPH], or unknown) AND pack current is flowing into the pack (more
-         * negative than [CHARGING_PACK_CURRENT_A_THRESHOLD]). A moving car, or one with no/positive
-         * pack current, is not charging.
+         * Require charger-backed confirmation before interpreting stationary current into the pack
+         * as a plug-in charge. The engine can also put energy into the battery while parked. Missing
+         * or unknown classification is not permission to fall back to current-only detection.
          */
         private fun isChargingSample(sample: Sample): Boolean {
+            if (!sample.externalChargeConfirmed) {
+                return false
+            }
             val speed = sample.speedKph
             if (speed != null && (!speed.isFinite() || speed > STATIONARY_SPEED_KPH)) {
                 return false

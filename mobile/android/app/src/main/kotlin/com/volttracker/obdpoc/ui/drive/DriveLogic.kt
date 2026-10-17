@@ -147,7 +147,7 @@ fun aux12Status(
 ): ToneText =
     when {
         volts == null -> ToneText("Not reported", PillTone.NEUTRAL)
-        phase != DrivePhase.PARKED || volts >= AUX_CHARGING_V -> ToneText("Charging", PillTone.EV)
+        phase != DrivePhase.PARKED || volts >= AUX_CHARGING_V -> ToneText("12 V system active", PillTone.EV)
         volts >= AUX_HEALTHY_V -> ToneText("Healthy", PillTone.EV)
         volts >= AUX_LOW_V -> ToneText("Low", PillTone.WARN)
         else -> ToneText("Weak", PillTone.BAD)
