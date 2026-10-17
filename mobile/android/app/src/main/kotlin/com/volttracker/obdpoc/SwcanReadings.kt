@@ -78,7 +78,16 @@ class SwcanReadings(
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)
         putReading(sample, "aux12vCurrentA", SwcanField.AUX12V_CURRENT)
-        appendTires(sample, now)
+        putTire(sample, "tirePressureFlKpa", "tirePressureFlStaleMs", SwcanField.TIRE_FL, now)
+        putTire(sample, "tirePressureFrKpa", "tirePressureFrStaleMs", SwcanField.TIRE_FR, now)
+        putTire(sample, "tirePressureRlKpa", "tirePressureRlStaleMs", SwcanField.TIRE_RL, now)
+        putTire(sample, "tirePressureRrKpa", "tirePressureRrStaleMs", SwcanField.TIRE_RR, now)
+        val tireAges =
+            TIRE_CODES.values.mapNotNull { code ->
+                val key = "tirePressure${code.replaceFirstChar(Char::uppercase)}"
+                sample.optLong("${key}StaleMs", -1L).takeIf { sample.has("${key}Kpa") && it >= 0 }
+            }
+        tireAges.maxOrNull()?.let { sample.put("tirePressureStaleMs", it) }
         putReading(sample, "doorLockState", SwcanField.LOCK_STATE)
         putReading(sample, "doorLockSource", SwcanField.LOCK_SOURCE)
         putReading(sample, "doorFlState", SwcanField.DOOR_FL, invalidAs = UNKNOWN)
@@ -197,28 +206,22 @@ class SwcanReadings(
     }
 
     /** Select the newest valid source per wheel; an old held broadcast cannot freeze a fresh BCM read. */
-    private fun appendTires(
+    private fun putTire(
         sample: JSONObject,
+        key: String,
+        ageKey: String,
+        field: SwcanField,
         now: Long,
     ) {
-        for ((field, code) in TIRE_CODES) {
-            val key = "tirePressure${code.replaceFirstChar(Char::uppercase)}"
-            val existingAge = sample.optLong("${key}StaleMs", sample.optLong("tirePressureStaleMs", Long.MAX_VALUE))
-            val broadcast = held[field]
-            val broadcastAge = broadcast?.let { maxOf(0L, now - it.atMs) } ?: Long.MAX_VALUE
-            if (broadcast?.value is Double && (!sample.has("${key}Kpa") || broadcastAge < existingAge)) {
-                sample.put("${key}Kpa", broadcast.value)
-                sample.put("${key}StaleMs", broadcastAge)
-            } else if (sample.has("${key}Kpa") && existingAge != Long.MAX_VALUE) {
-                sample.put("${key}StaleMs", existingAge)
-            }
+        val existingAge = sample.optLong(ageKey, sample.optLong("tirePressureStaleMs", Long.MAX_VALUE))
+        val broadcast = held[field]
+        val broadcastAge = broadcast?.let { maxOf(0L, now - it.atMs) } ?: Long.MAX_VALUE
+        if (broadcast?.value is Double && (!sample.has(key) || broadcastAge < existingAge)) {
+            sample.put(key, broadcast.value)
+            sample.put(ageKey, broadcastAge)
+        } else if (sample.has(key) && existingAge != Long.MAX_VALUE) {
+            sample.put(ageKey, existingAge)
         }
-        val ages =
-            TIRE_CODES.values.mapNotNull { code ->
-                val key = "tirePressure${code.replaceFirstChar(Char::uppercase)}"
-                sample.optLong("${key}StaleMs", -1L).takeIf { sample.has("${key}Kpa") && it >= 0 }
-            }
-        ages.maxOrNull()?.let { sample.put("tirePressureStaleMs", it) }
     }
 
     /** [field]'s value under [key]; when the car flagged it not valid, [invalidAs], or nothing. */
