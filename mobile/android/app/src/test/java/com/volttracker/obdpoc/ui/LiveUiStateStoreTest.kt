@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.ui
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.drive.DriveMode
+import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.insights.CellDrift
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
@@ -425,6 +426,60 @@ class LiveUiStateStoreTest {
 
         assertFalse(s.drive.connected)
         assertEquals("Connecting…", s.drive.statusLabel)
+    }
+
+    @Test
+    fun anEngineIdlingInParkDoesNotStartAPlugInChargeFromPowerAlone() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(
+            sample(speedKph = 0) {
+                put("prndlState", "P").put("rpm", 1400).put("vehicleState", "ready")
+                put("packCurrentA", -20.0).put("powerKw", -7.0)
+                put("chargeState", "None").put("chargeStateStaleMs", 0)
+                put("chargerPowerKw", 3.6).put("chargerAcVoltage", 0).put("chargerAcCurrentA", 0)
+            },
+        )
+        assertEquals(DrivePhase.PARKED, store.state.value.drive.phase)
+        assertEquals(DriveMode.GAS, store.state.value.drive.mode)
+        assertFalse(store.state.value.charge.charging)
+        assertNull(store.state.value.drive.chargeEta)
+        assertNull(store.state.value.charge.startedAtMs)
+    }
+
+    @Test
+    fun drivingAndRegenerationAreNotOverriddenByAnOldChargerPowerReading() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(
+            sample {
+                put("vehicleState", "driving_gas").put("rpm", 1400)
+                put("packCurrentA", -20.0).put("powerKw", -7.0).put("chargerPowerKw", 3.6)
+            },
+        )
+        assertEquals(DrivePhase.DRIVE, store.state.value.drive.phase)
+        assertFalse(store.state.value.charge.charging)
+    }
+
+    @Test
+    fun losingChargingEvidenceClearsThePhaseInsteadOfHoldingTheOldCharge() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(sample(speedKph = 0) { put("vehicleState", "charging").put("prndlState", "P") })
+        assertTrue(store.state.value.charge.charging)
+        store.onTelemetry(JSONObject().put("updatedAt", 2_000L).put("vehicleState", "ready").put("rpm", 1400))
+        assertEquals(DrivePhase.PARKED, store.state.value.drive.phase)
+        assertFalse(store.state.value.charge.charging)
+    }
+
+    @Test
+    fun aConfirmedChargeDoesNotNeedAMinimumPowerToRemainCharging() {
+        val store = LiveUiStateStore()
+        store.onTelemetry(
+            sample(speedKph = 0) {
+                put("vehicleState", "charging").put("prndlState", "P").put("rpm", 0)
+                put("chargeState", "Charging").put("chargeStateStaleMs", 0).put("chargerPowerKw", 0)
+            },
+        )
+        assertEquals(DrivePhase.CHARGING, store.state.value.drive.phase)
+        assertTrue(store.state.value.charge.charging)
     }
 
     @Test

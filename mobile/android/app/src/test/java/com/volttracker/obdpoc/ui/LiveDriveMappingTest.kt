@@ -27,12 +27,13 @@ class LiveDriveMappingTest {
     private fun LiveUiStateStore.drive() = state.value.drive
 
     @Test
-    fun phaseFollowsTheClassifierThenChargerThenGearAndSpeed() {
+    fun phaseFollowsTheClassifierThenGearAndSpeedWithoutGuessingFromPower() {
         val store = LiveUiStateStore()
         store.onTelemetry(sample(1_000L) { put("vehicleState", "charging") })
         assertEquals(DrivePhase.CHARGING, store.drive().phase)
         store.onTelemetry(sample(2_000L) { put("chargerPowerKw", 3.6) })
-        assertEquals(DrivePhase.CHARGING, store.drive().phase)
+        // Power alone neither proves a plug-in connection nor keeps the previous charge alive.
+        assertEquals(DrivePhase.PARKED, store.drive().phase)
         store.onTelemetry(sample(3_000L) { put("vehicleState", "driving_ev") })
         assertEquals(DrivePhase.DRIVE, store.drive().phase)
         store.onTelemetry(sample(4_000L) { put("vehicleState", "parked") })

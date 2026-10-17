@@ -230,6 +230,32 @@ after shutdown; they are not evidence of six mid-drive dropouts. The median tele
 was 1.444 s and the 95th percentile 3.805 s. Those are measured whole-session values, not a
 benchmark against Voltage.
 
+## Follow-up: engine running in Park still looked like plug-in charging
+
+After the phone update, the owner reported that waiting in Park with the engine running
+still looked like charging. The earlier classifier fix did not remove the native UI's
+independent `chargerPowerKw >= 0.5` shortcut. That shortcut could override a `ready`,
+`parked` or driving classifier result and begin a fictitious live charge. The UI also kept
+its previous charging phase when the next sample had no usable gear/speed evidence.
+
+Voltage 2.2.3 keeps these concepts separate. Its `M4/h.java:E()` reads `2243AE` alongside
+charger voltage/current; the charging UI in `T4/A.java` tests the dedicated state for `2`
+(Charging). Its separate 12 V screen uses BCM battery current (`2290FB`), not that charger
+state. A battery receiving energy from the engine or DC–DC converter is not evidence of
+a plug-in charge.
+
+The native UI now follows the charger-backed classifier and clears an unconfirmed charging
+phase. Raw power remains a reading, not a charging-state override. The 12 V status text now
+says **12 V system active**, so it cannot be mistaken for plug-in charging; this wording does
+not assert the current direction of the still-unchecked SW-CAN 12 V current decode.
+
+JVM and Compose regressions reproduce an engine-on/Park/charger-None sample with positive
+charger power, driving with an old positive charger-power reading, and missing evidence
+after a charge. A genuine confirmed charge still remains charging at zero reported power.
+The engine-on/Park reproduction is **synthetic software evidence**, not a newly pulled car
+capture: the October 15 recording had no engine-running-in-Park samples. Physical acceptance
+of this follow-up is still needed.
+
 ## Next test drive with F1–F6
 
 - Record normally, including time in the background. Note roughly when the adapter connects

@@ -125,10 +125,16 @@ class DriveLogicTest {
     }
 
     @Test
+    fun twelveVoltSupportDoesNotReadLikeAPlugInCharge() {
+        assertEquals("12 V system active", aux12Status(14.2, DrivePhase.PARKED).text)
+        assertEquals("12 V system active", aux12Status(12.7, DrivePhase.DRIVE).text)
+    }
+
+    @Test
     fun twelveVoltHealthOnlyJudgedAtRest() {
         assertEquals("Not reported", aux12Status(null, DrivePhase.PARKED).text)
-        assertEquals("Charging", aux12Status(12.1, DrivePhase.DRIVE).text)
-        assertEquals("Charging", aux12Status(13.8, DrivePhase.PARKED).text)
+        assertEquals("12 V system active", aux12Status(12.1, DrivePhase.DRIVE).text)
+        assertEquals("12 V system active", aux12Status(13.8, DrivePhase.PARKED).text)
         assertEquals("Healthy", aux12Status(12.6, DrivePhase.PARKED).text)
         assertEquals(PillTone.WARN, aux12Status(12.2, DrivePhase.PARKED).tone)
         assertEquals(PillTone.BAD, aux12Status(11.6, DrivePhase.PARKED).tone)

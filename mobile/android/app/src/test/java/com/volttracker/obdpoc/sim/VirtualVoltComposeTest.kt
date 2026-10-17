@@ -91,7 +91,7 @@ class VirtualVoltComposeTest {
         text("${milesWhole(EV_RANGE_KM + last.getDouble("fuelRangeKm"))} mi total")
 
         tab(VoltTab.CAR)
-        assertCar(last, aux12Line = "car on · charging")
+        assertCar(last, aux12Line = "car on · 12 V system active")
     }
 
     @Test
@@ -124,7 +124,7 @@ class VirtualVoltComposeTest {
         text("3.4 kW onboard")
 
         tab(VoltTab.CAR)
-        assertCar(last, aux12Line = "plugged in · charging")
+        assertCar(last, aux12Line = "plugged in · 12 V system active")
     }
 
     @Test

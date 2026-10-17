@@ -5,13 +5,17 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.charge.ChargeScreen
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.charge.weekTimeLabel
 import com.volttracker.obdpoc.ui.components.LocalVoltPrefs
 import com.volttracker.obdpoc.ui.components.VoltPrefs
+import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.theme.VoltTheme
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -37,6 +41,33 @@ class ChargeCarStateTest {
     }
 
     private fun count(text: String): Int = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().size
+
+    @Test
+    fun engineRunningInParkDoesNotShowThePlugInChargingHero() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(
+            JSONObject()
+                .put("updatedAt", 1000L)
+                .put("speedKph", 0)
+                .put("prndlState", "P")
+                .put("rpm", 1400)
+                .put("vehicleState", "ready")
+                .put("soc", 62)
+                .put("packCurrentA", -20)
+                .put("powerKw", -7)
+                .put("chargerPowerKw", 3.6)
+                .put("chargeState", "None")
+                .put("chargeStateStaleMs", 0)
+                .put("chargerAcVoltage", 0)
+                .put("chargerAcCurrentA", 0),
+        )
+        show(store.state.value.charge)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/parked-engine-charge.png")
+        compose.onNodeWithText("NOT CHARGING").assertIsDisplayed()
+        compose.onNodeWithText("CHARGING").assertDoesNotExist()
+        compose.onNodeWithText("Full by", substring = true).assertDoesNotExist()
+    }
 
     @Test
     fun weekTimesFollowThePhonesClock() {
