@@ -47,6 +47,7 @@ class ObdStoreMaintenance(
         val db = helper.writableDatabase
         // Finalized history is durable: build compact trip + charge summaries before removing the
         // raw samples they depend on. User-authored review events are retained below as metadata.
+        RetainedSessionHistory.preserveBeforePrune(db, cutoffMs, ObdStoreTrips(helper))
         ObdStoreTrips(helper).materializeFinalizedSessionsBefore(cutoffMs)
         ObdStoreChargeSummary.materializeFinalizedSessionsBefore(db, cutoffMs)
 

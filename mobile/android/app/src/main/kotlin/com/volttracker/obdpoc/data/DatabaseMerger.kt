@@ -89,6 +89,7 @@ object DatabaseMerger {
         try {
             progress.publish("Preparing merge")
             target.transaction {
+                RetainedSessionHistory.preserveLegacySummaries(target)
                 rows += VehicleIdentityMerge.copyVehicles(target, donor, vehicleMap, vehicleCounts, progress)
                 rows += copySessions(target, donor, sessionMap, sessionCounts, progress)
                 rows +=
@@ -174,6 +175,7 @@ object DatabaseMerger {
                 rows += AdapterHistoryMerge.copy(target, donor, sessionMap, progress)
                 rows += DiagnosticCodeMerge.copy(target, donor, sessionMap, progress)
                 rows += copyMaintenanceLog(target, donor, progress)
+                rows += RetainedSessionHistory.merge(target, donor, sessionMap)
                 progress.publish("Refreshing trip projections")
                 invalidateTripProjectionCaches(target, sessionMap.values)
             }

@@ -942,6 +942,34 @@ class VoltTrackerDbMigrationTest {
     }
 
     @Test
+    fun v17ToV18PreservesAlreadyPrunedTripFactsAndCanRerun() {
+        val context = RuntimeEnvironment.getApplication()
+        val name = "volttracker_migration_v17_v18.db"
+        context.deleteDatabase(name)
+        VoltTrackerDb(context, name).use { helper ->
+            val db = helper.writableDatabase
+            db.execSQL(
+                "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS} (_id, mode, started_at_ms, ended_at_ms, status, sample_count, created_at_ms) VALUES (1, 'obd', 1000, 2000, 'complete', 5, 1000)",
+            )
+            db.execSQL(
+                "INSERT INTO ${VoltTrackerDb.TABLE_TRIP_LIST_CACHE} (session_id, ended_at_ms, rollup_version, trip_json) VALUES (1, 2000, 8, ?)",
+                arrayOf("{\"id\":\"1:1000:2000\",\"sessionId\":1,\"distanceMeters\":1000}"),
+            )
+            db.execSQL("DROP TABLE ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY}")
+            db.version = 17
+        }
+        VoltTrackerDb(context, name).use { helper ->
+            val db = helper.writableDatabase
+            val facts = checkNotNull(RetainedSessionHistory.trips(db, 1))
+            assertEquals(1, facts.size)
+            assertEquals("1:1000:2000", facts.single().getString("id"))
+            helper.onUpgrade(db, 17, 18)
+            assertEquals(1, checkNotNull(RetainedSessionHistory.trips(db, 1)).size)
+        }
+        context.deleteDatabase(name)
+    }
+
+    @Test
     fun databaseVersionBumpRequiresMigrationCoverageUpdate() {
         assertEquals(
             "DATABASE_VERSION changed. Add a focused migration test for the new version, " +
@@ -1086,7 +1114,7 @@ class VoltTrackerDbMigrationTest {
     }
 
     companion object {
-        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 17
+        private const val EXPECTED_MIGRATION_COVERAGE_VERSION = 18
 
         // Steps above this version are guarded (IF NOT EXISTS / column checks) and so re-runnable.
         private const val RERUNNABLE_FROM_VERSION = 8

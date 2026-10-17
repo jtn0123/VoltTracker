@@ -141,6 +141,10 @@ internal object VoltTrackerMigrations {
             Step(17, "gear-aware-trip-split-columns") { db ->
                 addGearAwareTripColumns(db)
             },
+            Step(18, "durable-retained-session-history") { db ->
+                VoltTrackerSchema.createRetainedSessionHistory(db)
+                RetainedSessionHistory.preserveLegacySummaries(db)
+            },
         )
 
     /**
