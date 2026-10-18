@@ -1,6 +1,90 @@
 # CHANGELOG
 
 
+## v0.66.0 (2026-10-18)
+
+### 🔺 Fix
+
+- Correct gen 2 gear, trans temp, climate power and tire decodes
+  ([`469d43e`](https://github.com/jtn0123/VoltTracker/commit/469d43e024f07e0b481abe4c0c6b5466bb791a0b))
+
+- Expire live charging claims when telemetry goes silent
+  ([`9317605`](https://github.com/jtn0123/VoltTracker/commit/93176057e1cf16d1d7f8ce37a35dab2b85c61b90))
+
+- Keep per-wheel tire ages in the dashboard contract
+  ([`118e17e`](https://github.com/jtn0123/VoltTracker/commit/118e17eb5ba14d2a622f76f7afb1359d522061e1))
+
+- Persist maintenance throttle with the preferences KTX API
+  ([`6fd0436`](https://github.com/jtn0123/VoltTracker/commit/6fd043643bc37bd4ef6f9eab01c3cad8b409f812))
+
+- Preserve retained history through edits and backup merge
+  ([`5648d51`](https://github.com/jtn0123/VoltTracker/commit/5648d514f7b5a83c2a7a0b900d55100b391ab3be))
+
+- Reject geometry edits after their raw inputs expire
+  ([`83a4a16`](https://github.com/jtn0123/VoltTracker/commit/83a4a166f30679ebdddf7a43eea5812b73457173))
+
+- Render charging safely before battery SOC arrives
+  ([`a4fa943`](https://github.com/jtn0123/VoltTracker/commit/a4fa943b52b1c1a609bfe4d0b6c9e3d21066b27d))
+
+- Require charger confirmation for charge notifications
+  ([`4c2a21c`](https://github.com/jtn0123/VoltTracker/commit/4c2a21cba0269d681910ee5eb9cbf9bf9733fd61))
+
+- Retain and remap user trip split decisions
+  ([`37130d2`](https://github.com/jtn0123/VoltTracker/commit/37130d237f6e2c82a8b87be99fa28429e7ad1380))
+
+- Schedule safe raw retention for native dashboard use
+  ([`ebd608d`](https://github.com/jtn0123/VoltTracker/commit/ebd608d5cacd0e2fca855a424616b926a21bf241))
+
+- Tolerate partial legacy schemas during history backfill
+  ([`02e8dd6`](https://github.com/jtn0123/VoltTracker/commit/02e8dd661303e2bcb78ecb20af0d7468f9780a18))
+
+- Use charger status for native charging UI
+  ([`bb4c1d8`](https://github.com/jtn0123/VoltTracker/commit/bb4c1d8e8deea464169bed83fd4521584d2b3711))
+
+### 🔷 Changed
+
+- Patch Gradle wrapper to 9.8.1
+  ([`de04e74`](https://github.com/jtn0123/VoltTracker/commit/de04e74625ef9e3de13aaffee71f936597295be0))
+
+### 🔷 Changed
+
+- Format charger-state null checks consistently
+  ([`d4f70a0`](https://github.com/jtn0123/VoltTracker/commit/d4f70a0c95b5f74ca929f915001fe59b3b14662a))
+
+### 🔷 Changed
+
+- Gen 2 parity status and on-car test checklist
+  ([`216ad09`](https://github.com/jtn0123/VoltTracker/commit/216ad092ea8a29bd24bfb91e3dbd40e9d0d0dfd4))
+
+- Point the gen 2 checklist at #181
+  ([`15e0414`](https://github.com/jtn0123/VoltTracker/commit/15e04140ac479e475500307d1292721198d1d319))
+
+- Record high-priority fixes and remaining car acceptance
+  ([`9e47c75`](https://github.com/jtn0123/VoltTracker/commit/9e47c759de89288d41094d21673434d40ff208ea))
+
+### ✳️ New
+
+- Polish field telemetry and add recorded signal history
+  ([`1b353c7`](https://github.com/jtn0123/VoltTracker/commit/1b353c7976eaffc9368e43ff8eb8b9ce0bb7dc76))
+
+- Read gen 2 12 V capacity, charger duty, EGR and remote start reason
+  ([`d15dfe5`](https://github.com/jtn0123/VoltTracker/commit/d15dfe5451aa1b9374ede1f9cece6d1a6e35fb9e))
+
+- Read gen 2 engine start reason, charger status and charge records
+  ([`e67fe1c`](https://github.com/jtn0123/VoltTracker/commit/e67fe1cb43cdcacb069c7ba5d25bf932147fd6fc))
+
+- Show HV insulation and the car's charger state, guard wakes on a low 12 V
+  ([`a0b2737`](https://github.com/jtn0123/VoltTracker/commit/a0b273740d0915137ae2b39a2f0eb8fc08ac573f))
+
+### 🔷 Changed
+
+- Clarify nullable history fallback and test precondition
+  ([`4dbc452`](https://github.com/jtn0123/VoltTracker/commit/4dbc4527665ff05866fed0e427b681618e64b01a))
+
+- Separate diagnostic export work from UI completion
+  ([`6c93914`](https://github.com/jtn0123/VoltTracker/commit/6c939145ff32b0e2ac4b065b5fadf7126a45517f))
+
+
 ## v0.65.0 (2026-10-08)
 
 ### ✳️ New
