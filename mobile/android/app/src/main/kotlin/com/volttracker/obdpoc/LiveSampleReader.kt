@@ -31,15 +31,6 @@ class LiveSampleReader(
     private val gen2Readings = Gen2Readings(service, pidPolling)
 
     /**
-     * Consecutive speed-poll cycles on which PID 010D returned the 0xFF sentinel. The Volt reports
-     * 0xFF for speed while charging, but 0xFF is also the generic OBD "no data" value, so we require
-     * the sentinel to persist before treating it as a plugged hint to the classifier — a single
-     * transient glitch mid-drive must not flip vehicleState to PLUGGED for one sample. Reset on the
-     * initial cycle of each session (defensive; the reader is normally one instance per session).
-     */
-    private var consecutiveSpeedSentinels = 0
-
-    /**
      * Clears per-session state so a reader instance reused across stop/start cycles on the same
      * service does not carry parse-failure suppression (which would permanently hide the
      * `pid_parse_failed` diagnostic for a PID that failed once in an earlier session).
@@ -48,7 +39,6 @@ class LiveSampleReader(
         parseFailureReported.clear()
         bcmTiresLogged = false
         gen2Readings.reset()
-        consecutiveSpeedSentinels = 0
     }
 
     interface SampleContext {
@@ -89,15 +79,6 @@ class LiveSampleReader(
             val polledSpeedThisCycle = PidPollingState.wasPolledThisCycle(due, "010D")
             val chargeTransitionHint =
                 polledSpeedThisCycle && ObdProtocol.hasMaxSpeedSentinel(speedRaw)
-            // Debounce: only a sustained 0xFF sentinel (real charging) becomes a plugged hint, not a
-            // one-off mid-drive glitch. Count only on cycles where 010D was actually polled so a
-            // schedule skip can't reset the run.
-            if (isInitialCycle) consecutiveSpeedSentinels = 0
-            if (polledSpeedThisCycle) {
-                consecutiveSpeedSentinels =
-                    if (ObdProtocol.hasMaxSpeedSentinel(speedRaw)) consecutiveSpeedSentinels + 1 else 0
-            }
-            val sustainedChargeSentinel = consecutiveSpeedSentinels >= SPEED_SENTINEL_PLUGGED_CYCLES
             val acceptedSpeed = appendSpeed(sample, speed, polledSpeedThisCycle)
             if (acceptedSpeed == null && polledSpeedThisCycle && chargeTransitionHint) {
                 sample.put("speedRejectedKph", 255)
@@ -140,7 +121,7 @@ class LiveSampleReader(
             appendOvmsFields(sample)
 
             val now = System.currentTimeMillis()
-            appendBcmTires(sample, now)
+            appendBcmTires(sample)
             gen2Readings.appendTo(sample, now)
             pidPolling.putStaleMsIfTracked(sample, "voltageStaleMs", "ATRV", now)
             pidPolling.putStaleMsIfTracked(sample, "speedKphStaleMs", "010D", now)
@@ -190,7 +171,7 @@ class LiveSampleReader(
             sample.put("sessionMs", maxOf(0, now - service.sessionStartedAtMs))
             sample.put("supportedPids", context.supportedPidsSummary())
             val packCurrentA = appendPackCurrent(sample, packCurrentRaw)
-            appendVehicleState(sample, acceptedSpeed, rpm, voltage, packCurrentA, sustainedChargeSentinel, now)
+            appendVehicleState(sample, acceptedSpeed, rpm, voltage, packCurrentA, now)
             sample.put("updatedAt", now)
             context.appendSessionHealth(sample)
             context.appendLocation(sample)
@@ -566,23 +547,23 @@ class LiveSampleReader(
 
     /**
      * Tire pressures read from the body control module ([BcmTirePressure]), under the same keys the
-     * SW-CAN tire frame fills. A fresher SW-CAN value, when one is heard, replaces these later in
-     * the sample (see SwcanReadings.appendTo).
+     * SW-CAN tire frame fills. Each wheel's successful-answer age lets SwcanReadings.appendTo
+     * keep whichever source is newer.
      */
     @Throws(JSONException::class)
-    private fun appendBcmTires(
-        sample: JSONObject,
-        now: Long,
-    ) {
-        var firstDecoded: String? = null
+    private fun appendBcmTires(sample: JSONObject) {
+        val ages = mutableListOf<Long>()
         for (wheel in BcmTirePressure.Wheel.entries) {
             val kpa = ObdProtocol.parseKnownValue(wheel.command, pidPolling.lastRaw(wheel.command))?.valueNumeric
             if (kpa != null) {
                 putRoundedNumeric(sample, wheel.sampleKey, kpa, 0)
-                firstDecoded = firstDecoded ?: wheel.command
+                pidPolling.answeredAgoMs(wheel.command)?.let { age ->
+                    sample.put(wheel.sampleKey.removeSuffix("Kpa") + "StaleMs", age)
+                    ages += age
+                }
             }
         }
-        val staleFrom = firstDecoded ?: return
+        if (ages.isEmpty()) return
         if (!bcmTiresLogged) {
             // Once per session: the four raw replies, so a drive log can check wheel order and scale
             // against the SW-CAN tire frame.
@@ -595,7 +576,7 @@ class LiveSampleReader(
                 },
             )
         }
-        pidPolling.putStaleMsIfTracked(sample, "tirePressureStaleMs", staleFrom, now)
+        sample.put("tirePressureStaleMs", ages.max())
     }
 
     @Throws(JSONException::class)
@@ -780,7 +761,6 @@ class LiveSampleReader(
         rpm: Float?,
         voltage: Float?,
         packCurrentA: Double?,
-        pluggedHint: Boolean,
         now: Long,
     ) {
         val engineRunningHint = rpm?.let { it > 200f }
@@ -791,9 +771,13 @@ class LiveSampleReader(
                     rpm?.let { Math.round(it) },
                     voltage?.toDouble(),
                     packCurrentA,
-                    if (pluggedHint) true else null,
+                    null,
                     engineRunningHint,
                     now,
+                    chargeState =
+                        pidPolling.answeredAgoMs("2243AE")?.takeIf { it <= 60_000L }?.let {
+                            ObdProtocol.parseKnownValue("2243AE", pidPolling.lastRaw("2243AE"))?.valueText
+                        },
                 )
             } catch (ex: IllegalArgumentException) {
                 service.recorder.logError("classifier_input_rejected", ex)
@@ -806,9 +790,6 @@ class LiveSampleReader(
     }
 
     private companion object {
-        /** Consecutive 010D 0xFF sentinels required before treating it as a plugged hint. */
-        private const val SPEED_SENTINEL_PLUGGED_CYCLES = 2
-
         /** BECM (7E7) pack-section temperature DIDs, sections 1-6 in order. */
         private val PACK_SECTION_TEMP_COMMANDS = listOf("2240D7", "2240D9", "2240DB", "2240DD", "2240DF", "2240E1")
     }

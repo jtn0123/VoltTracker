@@ -57,6 +57,10 @@ class LiveUiStateStore(
         )
     val state: StateFlow<VoltAppUiState> = _state
 
+    fun onSignalHistory(history: com.volttracker.obdpoc.ui.diag.SignalHistoryUiState) {
+        _state.value = _state.value.copy(signalHistory = history)
+    }
+
     fun onHistoryRefreshing(refreshing: Boolean) {
         _state.value = _state.value.copy(historyRefreshing = refreshing)
     }
@@ -688,7 +692,8 @@ class LiveUiStateStore(
     }
 
     /**
-     * Charging when the classifier says so or the charger draws a real Level-1-or-better load;
+     * Charging only when the classifier confirms it from charger status. A positive power
+     * reading alone must not override ready/parked/driving or start a plug-in charge session;
      * driving when it says so, or the car is moving / in a drive gear; parked in P or at rest.
      */
     private fun phaseOf(
@@ -698,12 +703,12 @@ class LiveUiStateStore(
     ): DrivePhase {
         val vehicleState = t.optString("vehicleState", "")
         val gear = t.optString("prndlState", "")
-        val chargerKw = optDouble(t, "chargerPowerKw") ?: 0.0
         return when {
-            vehicleState == "charging" || chargerKw >= MIN_CHARGE_KW -> DrivePhase.CHARGING
+            vehicleState == "charging" -> DrivePhase.CHARGING
             vehicleState == "driving_ev" || vehicleState == "driving_gas" -> DrivePhase.DRIVE
             vehicleState == "parked" || gear == VoltGear.PARK -> DrivePhase.PARKED
             speedMph > 0 || gear in DRIVE_GEARS -> DrivePhase.DRIVE
+            vehicleState == "ready" || vehicleState == "plugged" || current == DrivePhase.CHARGING -> DrivePhase.PARKED
             else -> current
         }
     }
@@ -1002,7 +1007,6 @@ class LiveUiStateStore(
         /** Mirrors telemetry.ts EV_RANGE_STALE_MS. */
         const val EV_RANGE_STALE_MS = 120_000.0
         const val GAS_RPM_FLOOR = 300
-        const val MIN_CHARGE_KW = 0.5
         const val MIN_TRIP_KWH = 0.05
         const val MIN_CYCLE_FUEL_L = 0.1
         const val LITRES_PER_GALLON = 3.785411784

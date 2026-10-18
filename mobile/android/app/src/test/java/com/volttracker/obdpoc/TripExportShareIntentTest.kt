@@ -32,6 +32,34 @@ import java.io.File
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class TripExportShareIntentTest {
+    @Test
+    fun diagnosticCsvUsesTheExistingShareProviderAndDeletesFailedPartialFiles() {
+        val csv =
+            TripExportShareIntent.writeDiagnosticCsv(context, 1_000) { writer ->
+                writer.write("timestamp_utc,adapter_voltage_v\n1970-01-01T00:00:01Z,12.4\n")
+                1
+            }!!
+        assertEquals(1, csv.pointCount)
+        val intent = TripExportShareIntent.buildShareIntent(context, csv)!!
+        assertEquals("text/csv", intent.type)
+        assertTrue(intent.flags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+        assertEquals(
+            "content",
+            IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, android.net.Uri::class.java)!!.scheme,
+        )
+        val dir = File(context.cacheDir, "trip-exports")
+        val before = dir.listFiles()!!.toSet()
+        assertNull(
+            TripExportShareIntent.writeDiagnosticCsv(context, 1_000) { writer ->
+                writer.write("partial")
+                throw IllegalStateException("SQLite read failed")
+            },
+        )
+        assertEquals(before, dir.listFiles()!!.toSet())
+        assertNull(TripExportShareIntent.writeDiagnosticCsv(context, 1_000) { 0 })
+        assertEquals(before, dir.listFiles()!!.toSet())
+    }
+
     private lateinit var context: Context
 
     @Before

@@ -78,10 +78,16 @@ class SwcanReadings(
         putReading(sample, "aux12vVoltage", SwcanField.AUX12V_VOLTAGE)
         putReading(sample, "aux12vSocPct", SwcanField.AUX12V_SOC)
         putReading(sample, "aux12vCurrentA", SwcanField.AUX12V_CURRENT)
-        putReading(sample, "tirePressureFlKpa", SwcanField.TIRE_FL)
-        putReading(sample, "tirePressureFrKpa", SwcanField.TIRE_FR)
-        putReading(sample, "tirePressureRlKpa", SwcanField.TIRE_RL)
-        putReading(sample, "tirePressureRrKpa", SwcanField.TIRE_RR)
+        putTire(sample, "tirePressureFlKpa", "tirePressureFlStaleMs", SwcanField.TIRE_FL, now)
+        putTire(sample, "tirePressureFrKpa", "tirePressureFrStaleMs", SwcanField.TIRE_FR, now)
+        putTire(sample, "tirePressureRlKpa", "tirePressureRlStaleMs", SwcanField.TIRE_RL, now)
+        putTire(sample, "tirePressureRrKpa", "tirePressureRrStaleMs", SwcanField.TIRE_RR, now)
+        val tireAges =
+            TIRE_CODES.values.mapNotNull { code ->
+                val key = "tirePressure${code.replaceFirstChar(Char::uppercase)}"
+                sample.optLong("${key}StaleMs", -1L).takeIf { sample.has("${key}Kpa") && it >= 0 }
+            }
+        tireAges.maxOrNull()?.let { sample.put("tirePressureStaleMs", it) }
         putReading(sample, "doorLockState", SwcanField.LOCK_STATE)
         putReading(sample, "doorLockSource", SwcanField.LOCK_SOURCE)
         putReading(sample, "doorFlState", SwcanField.DOOR_FL, invalidAs = UNKNOWN)
@@ -131,12 +137,17 @@ class SwcanReadings(
         putReading(sample, "seatHeatRrLevel", SwcanField.SEAT_HEAT_RR)
         putReading(sample, "chargePortDoor", SwcanField.CHARGE_PORT_DOOR)
         putReading(sample, "refuelState", SwcanField.REFUEL_STATE)
-        putInvalid(sample, "tireSensorsInvalid", TIRE_CODES)
+        putInvalid(
+            sample,
+            "tireSensorsInvalid",
+            TIRE_CODES.filterValues {
+                !sample.has("tirePressure${it.replaceFirstChar(Char::uppercase)}Kpa")
+            },
+        )
         putInvalid(sample, "windowsInvalid", WINDOW_CODES)
         putDashWarnings(sample, "dashWarnings")
         putDashWarningsComplete(sample, "dashWarningsComplete")
         putGroupStaleMs(sample, "aux12vStaleMs", SwcanGroup.AUX_12V, now)
-        putGroupStaleMs(sample, "tirePressureStaleMs", SwcanGroup.TIRES, now)
         putGroupStaleMs(sample, "doorLockStaleMs", SwcanGroup.LOCKS, now)
         putGroupStaleMs(sample, "doorStatusStaleMs", SwcanGroup.DOORS, now)
         putGroupStaleMs(sample, "alarmStaleMs", SwcanGroup.ALARM, now)
@@ -192,6 +203,25 @@ class SwcanReadings(
         val invalid = codes.filterKeys { held[it]?.value === SwcanReading.INVALID }.values
         if (invalid.isEmpty()) return
         sample.put(key, invalid.joinToString(","))
+    }
+
+    /** Select the newest valid source per wheel; an old held broadcast cannot freeze a fresh BCM read. */
+    private fun putTire(
+        sample: JSONObject,
+        key: String,
+        ageKey: String,
+        field: SwcanField,
+        now: Long,
+    ) {
+        val existingAge = sample.optLong(ageKey, sample.optLong("tirePressureStaleMs", Long.MAX_VALUE))
+        val broadcast = held[field]
+        val broadcastAge = broadcast?.let { maxOf(0L, now - it.atMs) } ?: Long.MAX_VALUE
+        if (broadcast?.value is Double && (!sample.has(key) || broadcastAge < existingAge)) {
+            sample.put(key, broadcast.value)
+            sample.put(ageKey, broadcastAge)
+        } else if (sample.has(key) && existingAge != Long.MAX_VALUE) {
+            sample.put(ageKey, existingAge)
+        }
     }
 
     /** [field]'s value under [key]; when the car flagged it not valid, [invalidAs], or nothing. */

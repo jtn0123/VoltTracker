@@ -144,7 +144,7 @@ fun aux12Tile(drive: DriveUiState): CarTile {
             DrivePhase.CHARGING -> "plugged in"
         }
     val lines =
-        listOfNotNull(soc?.let { "$it%" }, phase, status.text.lowercase(Locale.US))
+        listOfNotNull(soc?.let { "$it%" }, phase, status.text.replaceFirstChar(Char::lowercaseChar))
             .distinct()
             .joinToString(" · ")
     return CarTile(

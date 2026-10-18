@@ -61,6 +61,9 @@ open class ObdLocalStore(
     /** Detailed enhanced-capability signal logs (list/export/delete + probe-history checks). */
     open val signalLogs: ObdSignalLogStore = ObdStoreSignalLogs(reports)
 
+    /** Saved diagnostic charts and CSV, read from the original session samples. */
+    val signalHistory: ObdStoreSignalHistory by lazy { ObdStoreSignalHistory(helper) }
+
     /** The user-authored maintenance log (M5): add, list, delete. */
     open val maintenanceLog: ObdMaintenanceLogStore = ObdStoreMaintenanceLog(writer, reports)
 

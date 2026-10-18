@@ -15,6 +15,37 @@ The stack is #179 (decode fixes), then #180 (status reads), then #181 (more read
 Install the top of the stack and run these in one or two sessions.
 Most of the checks only need the phone screen; the session log is the backup.
 
+The [October 15 field-run review](field-run-review-2026-10-15.md) records the first target-car
+results for this stack: 35 previously unproven request/header pairs answered. It also identifies
+three confirmed integration issues (old tire broadcasts overriding newer BCM reads, redundant
+tire hunts, and shutdown mistaken for plugged in), plus slow initial Health reads. Charging
+transitions, charge-record order, and the twelve Detailed signals candidates remain untested.
+Use that review for the measured results; the unchecked items below remain the acceptance list.
+
+### Follow-up fixes and recorded signal history
+
+The field-run follow-up implements F1–F6 from the review:
+
+- Tires choose the newest valid source per wheel, with per-wheel ages. A complete fresh set of
+  valid BCM replies also suppresses the long broadcast hunt; ordinary body-bus listening remains active.
+- The first body-bus capture while driving is bounded to the regular listen duration. Parked
+  captures retain their longer window.
+- The classifier uses a fresh dedicated charger state. `010D=FF` alone no longer asserts plugged;
+  moving regeneration cannot become a charging state.
+- Gear is requested on cycle 1 and every 4 cycles. Capacity, pack resistance and insulation
+  are first requested on cycles 4, 6 and 8 respectively, then keep their slow trend refresh.
+- Controller voltage skips implausible near-zero shutdown values and tries another responding
+  module; adapter and battery-sensor voltage remain separate readings.
+- **Health → Live signals → Signal history & CSV** opens saved recordings, even offline.
+  Fourteen numeric signals have charts; CSV also includes engine-start, conditioning, charger
+  and remote-start status. The viewer lists the latest 50 OBD recordings with retained samples.
+  Charts use the selected display units and retain extrema and breaks. CSV streams every
+  original sample in fixed units with UTC timestamps and source ages, without GPS/VIN/raw frames.
+  Demo charts are isolated from real history and cannot be exported.
+
+The capture supports regression tests; a new drive is still needed to measure actual startup
+times and confirm the changed integration on the car. The plugged-in acceptance list still applies.
+
 ### Parked, car on (about 5 minutes)
 
 - [ ] Drive shows P in Park. (#179)

@@ -39,6 +39,7 @@ class SwcanListenRunnerTest {
         var exclusiveDepth = 0
         var commandsOutsideLock = 0
         var stationary = false
+        var directTiresFresh = false
         var inPark = true
         val listenMs = mutableListOf<Long>()
         var onMonitor: (Long) -> Unit = {}
@@ -47,6 +48,8 @@ class SwcanListenRunnerTest {
         var onSay: (String) -> Unit = {}
 
         override fun isStationary(): Boolean = stationary
+
+        override fun hasFreshDirectTires(): Boolean = directTiresFresh
 
         override fun isInPark(): Boolean = inPark
 
@@ -659,6 +662,7 @@ class SwcanListenRunnerTest {
     fun theFirstWindowListensLongForTheTireBroadcast() {
         val startup = SwcanListenRunner.Policy(firstWindowDelayMs = 10_000L, intervalMs = 30_000L)
         val runner = SwcanListenRunner(io, startup) { now }
+        io.stationary = true
         runner.probeAdapter()
         now += startup.firstWindowDelayMs
         io.liveCycles += 1
@@ -666,10 +670,38 @@ class SwcanListenRunnerTest {
         assertEquals("10 s in two 5 s chunks", listOf(5_000L, 5_000L), io.listenMs)
         assertEquals("startup", io.event("swcan_window")!!["mode"])
         assertEquals("ok", io.event("swcan_window")!!["outcome"])
-        now += startup.tireHuntIntervalMs
+        io.stationary = false
+        now += startup.parkedIntervalMs
         io.liveCycles += 1
         runner.afterSample()
         assertEquals("then the usual windows", startup.tireHuntListenMs, io.listenMs.last())
+    }
+
+    @Test
+    fun successfulDirectTiresSkipHuntsButRetainNormalBodyListening() {
+        io.directTiresFresh = true
+        readyStn()
+        cycle()
+        now += policy.intervalMs
+        cycle()
+        assertEquals(listOf(policy.listenMs, policy.listenMs), io.listenMs)
+        assertEquals("regular", io.event("swcan_window")!!["mode"])
+        io.directTiresFresh = false
+        now += policy.intervalMs
+        cycle()
+        assertEquals("fallback resumes when direct readings expire", policy.tireHuntListenMs, io.listenMs.last())
+        assertEquals("tire_hunt", io.event("swcan_window")!!["mode"])
+    }
+
+    @Test
+    fun movingStartupNeverTakesTheLongParkedCapture() {
+        val defaults = SwcanListenRunner.Policy()
+        val moving = SwcanListenRunner(io, defaults) { now }
+        moving.probeAdapter()
+        now += defaults.firstWindowDelayMs
+        io.liveCycles += 1
+        moving.afterSample()
+        assertEquals(listOf(defaults.listenMs), io.listenMs)
     }
 
     @Test

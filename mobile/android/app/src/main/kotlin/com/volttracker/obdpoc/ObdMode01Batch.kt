@@ -29,6 +29,13 @@ internal object ObdMode01Batch {
         for (hex in sources) {
             collectJ1979Frames(hex, cleanPids.toSet(), frames)
         }
+        if ("42" in cleanPids) {
+            val volts =
+                ObdProtocol.parseControlModuleVoltage(response)
+                    ?: ObdProtocol.parseControlModuleVoltage(frames["42"])
+                    ?: return null
+            frames["42"] = "4142%04X".format(Locale.US, Math.round(volts * 1000).toInt())
+        }
         return if (frames.keys.containsAll(cleanPids)) cleanPids.associateWith(frames::getValue) else null
     }
 
@@ -37,6 +44,10 @@ internal object ObdMode01Batch {
         response: String,
         pid: String,
     ): String? {
+        if (pid == "42") {
+            val volts = ObdProtocol.parseControlModuleVoltage(response) ?: return null
+            return "4142%04X".format(Locale.US, Math.round(volts * 1000).toInt())
+        }
         val bytes = ObdProtocol.mode01Bytes(response, pid, ObdProtocol.mode01PayloadBytes(pid)) ?: return null
         return "41" + pid + bytes.joinToString("") { "%02X".format(Locale.US, it) }
     }

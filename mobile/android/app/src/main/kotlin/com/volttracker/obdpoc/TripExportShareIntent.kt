@@ -68,6 +68,33 @@ object TripExportShareIntent {
     // near-simultaneous export delete the first's file before it is handed to the share chooser.
     private const val STALE_EXPORT_TTL_MS = 60L * 60L * 1000L
 
+    /** Streams all diagnostic rows of a recording, using the existing temporary share-file path. */
+    fun writeDiagnosticCsv(
+        ctx: Context,
+        startedAtMs: Long,
+        write: (java.io.Writer) -> Int,
+    ): TripExportFile? {
+        val dir = prepareOutDir(ctx) ?: return null
+        val file = File(dir, "volt-signals-$startedAtMs-${System.nanoTime()}.csv")
+        return try {
+            val count = file.bufferedWriter(Charsets.UTF_8).use(write)
+            if (count <= 0) {
+                file.deleteOrLog()
+                null
+            } else {
+                TripExportFile(file, Format.CSV, count)
+            }
+        } catch (ex: IOException) {
+            file.deleteOrLog()
+            Log.w(TAG, "diagnostic CSV write failed", ex)
+            null
+        } catch (ex: RuntimeException) {
+            file.deleteOrLog()
+            Log.w(TAG, "diagnostic CSV read failed", ex)
+            null
+        }
+    }
+
     /**
      * Serializes [route] in [format] and writes it to the trip-export cache dir. Returns null when
      * the route has no usable points or the file couldn't be written. Exposed so the bridge can read

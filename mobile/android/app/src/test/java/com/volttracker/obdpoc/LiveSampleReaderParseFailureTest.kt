@@ -150,6 +150,50 @@ class LiveSampleReaderParseFailureTest {
     }
 
     @Test
+    fun shutdownSpeedSentinelDoesNotInventAPlugConnection() {
+        engine.responses["010D"] = "410DFF"
+        engine.responses["010C"] = "410C0000"
+        engine.responses["ATRV"] = "12.3V"
+        engine.responses["2243AE"] = "6243AE00"
+        val sample = readUntil("chargeState")
+        assertEquals("None", sample.getString("chargeState"))
+        assertEquals("parked", sample.getString("vehicleState"))
+    }
+
+    @Test
+    fun staleChargerStateAndSpeedSentinelsCannotHoldTheCarAsCharging() {
+        var now = System.currentTimeMillis()
+        pidPolling.setClockForTesting { now }
+        engine.responses["010D"] = "410DFF"
+        engine.responses["010C"] = "410C0000"
+        engine.responses["ATRV"] = "12.3V"
+        engine.responses["2243AE"] = "6243AE02"
+        assertEquals("charging", readUntil("chargeState").getString("vehicleState"))
+        now += 60_001L
+        engine.responses["2243AE"] = "NO DATA"
+        pidPolling.pollSoon("ATRV")
+        assertEquals("parked", reader.read(context).getString("vehicleState"))
+    }
+
+    @Test
+    fun directTiresSurviveTheFullSampleThenBroadcastMerge() {
+        engine.responses["225008"] = "6250080F80"
+        engine.responses["225007"] = "6250070F80"
+        engine.responses["225006"] = "6250060FC0"
+        engine.responses["225005"] = "6250050F80"
+        val sample = readUntil("tirePressureFlKpa")
+        val broadcast = SwcanReadings()
+        broadcast.record(
+            SwcanFrameDecoder.decodeAll(SwcanFrameDecoder.parseMonitorOutput("10 3D 40 40 24 24 3D 3E 37 38")),
+            System.currentTimeMillis() - 1_200_000L,
+        )
+        broadcast.appendTo(sample, System.currentTimeMillis())
+        assertEquals(248, sample.getInt("tirePressureFlKpa"))
+        assertEquals(252, sample.getInt("tirePressureFrKpa"))
+        assertTrue(sample.getLong("tirePressureStaleMs") < 10_000L)
+    }
+
+    @Test
     fun jsonEncodingFailureReturnsEmptySample() {
         engine.responses["010D"] = "41 0D 32\r>"
 

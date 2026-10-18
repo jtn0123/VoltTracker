@@ -147,7 +147,10 @@ class CarTabLogicTest {
         assertEquals(DASH, aux12Tile(DriveUiState()).value)
         assertEquals(listOf("Shows when connected"), aux12Tile(DriveUiState()).lines)
         assertEquals(listOf("Not reported"), aux12Tile(DriveUiState(connected = true)).lines)
-        assertEquals("86% · plugged in · charging", aux12Tile(parked.copy(phase = DrivePhase.CHARGING)).lines.first())
+        assertEquals(
+            "86% · plugged in · 12 V system active",
+            aux12Tile(parked.copy(phase = DrivePhase.CHARGING)).lines.first(),
+        )
         // On-car: in Park with the car on, GM's regulated voltage sits at 12.7 V. A fresh gear
         // reading says the car is on, so the tile must not call it "resting".
         assertEquals(

@@ -3,6 +3,7 @@ package com.volttracker.obdpoc.ui
 import com.volttracker.obdpoc.ui.car.CarUiState
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.diag.DiagUiState
+import com.volttracker.obdpoc.ui.diag.SignalHistoryUiState
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.insights.InsightsUiState
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
@@ -22,6 +23,7 @@ data class VoltAppUiState(
     val insights: InsightsUiState = InsightsUiState(),
     val car: CarUiState = CarUiState(),
     val diag: DiagUiState = DiagUiState(),
+    val signalHistory: SignalHistoryUiState = SignalHistoryUiState(),
     val settings: SettingsUiState = SettingsUiState(),
 )
 

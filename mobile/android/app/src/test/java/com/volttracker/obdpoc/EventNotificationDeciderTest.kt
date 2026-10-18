@@ -35,7 +35,16 @@ class EventNotificationDeciderTest {
         speedKph: Double? = 0.0,
         socPct: Double? = null,
         packTempC: Double? = null,
-    ) = EventNotificationDecider.Sample(atMs, packCurrentA, packVoltage, speedKph, socPct, packTempC)
+    ) = EventNotificationDecider.Sample(
+        atMs,
+        packCurrentA,
+        packVoltage,
+        speedKph,
+        socPct,
+        packTempC,
+        // These charge-math fixtures represent an already confirmed plug-in session.
+        externalChargeConfirmed = true,
+    )
 
     // ---- charge complete ---------------------------------------------------------------
 

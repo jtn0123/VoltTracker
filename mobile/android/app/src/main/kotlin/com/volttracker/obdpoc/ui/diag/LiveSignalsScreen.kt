@@ -40,6 +40,7 @@ fun LiveSignalsScreen(
     modifier: Modifier = Modifier,
     onBack: () -> Unit = {},
     onOpenAllReadings: () -> Unit = {},
+    onOpenHistory: () -> Unit = {},
 ) {
     VoltScreen(
         title = "Live signals",
@@ -48,6 +49,13 @@ fun LiveSignalsScreen(
         onBack = onBack,
         modifier = modifier,
     ) {
+        VoltButton(
+            "Signal history & CSV",
+            onClick = onOpenHistory,
+            style = ButtonStyle.SECONDARY,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
         if (!drive.connected) {
             val nav = LocalVoltNav.current
             VoltEmptyState(

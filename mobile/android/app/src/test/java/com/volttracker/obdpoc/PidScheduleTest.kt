@@ -19,6 +19,20 @@ import org.junit.Test
  */
 class PidScheduleTest {
     @Test
+    fun coreHealthArrivesEarlyWithoutOneHeavyStartupBlock() {
+        val health = listOf("2241A3", "2240E9", "2243A6")
+        val firstCycles =
+            health.map { command ->
+                (1..12).firstOrNull { cycle -> PidSchedule.shouldPoll(cycle, findByCommand(command)) }
+            }
+        assertTrue("all core health reads must arrive in the first twelve cycles", firstCycles.all { it != null })
+        assertEquals("spread startup reads over separate cycles", health.size, firstCycles.toSet().size)
+        val gear = findByCommand("222889")
+        assertTrue("gear must arrive by the second cycle", gear.phaseOffset in 1..2)
+        assertTrue("gear must stay responsive", gear.periodCycles <= 4)
+    }
+
+    @Test
     fun specsAreInternallyConsistent() {
         assertFalse("at least one spec expected", PidSchedule.SPECS.isEmpty())
         for (spec in PidSchedule.SPECS) {
@@ -94,7 +108,6 @@ class PidScheduleTest {
             "22119F",
             "22119F01",
             "221154",
-            "222889",
             "222487",
             "221940",
             "2241B2",
@@ -208,7 +221,6 @@ class PidScheduleTest {
             "0142",
             "011F",
             "010F",
-            "222889",
             "22436B",
             "22436C",
             "224373",
