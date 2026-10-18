@@ -93,6 +93,15 @@ class Gen2StatusDecodersTest {
     }
 
     @Test
+    fun remoteStartReasonReadsByteA() {
+        assertEquals("Ignition switch", text("22900D", "62 90 0D 00"))
+        assertEquals("Remote start (power take-off)", text("22900D", "62 90 0D 01"))
+        assertEquals("Remote start", text("22900D", "62 90 0D 02"))
+        assertEquals("Not reporting", text("22900D", "62 90 0D 03"))
+        assertNull(text("22900D", "62 90 0D 04"))
+    }
+
+    @Test
     fun pumpsAndRemoteStartCounters() {
         assertEquals(20.0, number("222C05", "62 2C 05 33")!!, 0.0)
         assertEquals(40.0, number("224357", "62 43 57 66")!!, 0.0)

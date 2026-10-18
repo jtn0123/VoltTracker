@@ -54,6 +54,30 @@ class Gen2StatusMapperTest {
     }
 
     @Test
+    fun readsTheExtraGen2KeysAndShowsTemperaturesInFahrenheit() {
+        val status =
+            Gen2StatusMapper.map(
+                JSONObject()
+                    .put("remoteStartReason", "Remote start")
+                    .put("batteryCoolantC", 20)
+                    .put("chargerAcDutyPct", 72)
+                    .put("chargerOutputDutyPct", 67.6)
+                    .put("egrCommandedPct", 12)
+                    .put("egrCoolerTemp1C", 90)
+                    .put("egrCoolerTemp2C", -40)
+                    .put("aux12vCapacityAh", 41.5),
+            )
+        assertEquals("Remote start", status.remoteStartReason)
+        assertEquals(68, status.batteryCoolantF)
+        assertEquals(72, status.chargerAcDutyPct)
+        assertEquals(68, status.chargerOutputDutyPct)
+        assertEquals(12, status.egrCommandedPct)
+        assertEquals(194, status.egrCooler1F)
+        assertEquals(-40, status.egrCooler2F)
+        assertEquals(41.5, status.aux12vCapacityAh!!, 0.0)
+    }
+
+    @Test
     fun anAbsentOrBlankKeyIsNotReported() {
         assertEquals(Gen2Status(), Gen2StatusMapper.map(JSONObject()))
         val blank = Gen2StatusMapper.map(JSONObject().put("chargeState", "").put("acPowerW", JSONObject.NULL))

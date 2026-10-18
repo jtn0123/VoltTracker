@@ -1,5 +1,6 @@
 package com.volttracker.obdpoc.ui.diag
 
+import com.volttracker.obdpoc.ui.charge.weekTimeLabel
 import com.volttracker.obdpoc.ui.components.DASH
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DriveUiState
@@ -25,12 +26,16 @@ data class SignalGroup(
  * around as samples arrive. The readings only some Volts report (oil life, inverter temperature,
  * 12 V charge; the 2017 refuses or blanks them), transmission temperature (polled, or the SW-CAN
  * broadcast) and the SW-CAN broadcasts only an OBDLink hears (energy left, the energy & trips
- * group) stay out until the car sends one, as do the car's status words (start reason, pumps,
- * conditioning, the charging group), so a car or adapter that never has them never shows a row
- * that is always blank. Only meaningful while connected; the screen shows an empty state
+ * group) stay out until the car sends one, as do the gen 2 reads (start reason, pumps,
+ * conditioning, insulation, EGR, 12 V capacity, the charging group), so a car or adapter that
+ * never has them never shows a row that is always blank. The car's charge times read in the
+ * phone's clock ([h24]). Only meaningful while connected; the screen shows an empty state
  * otherwise.
  */
-fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
+fun liveSignalGroups(
+    drive: DriveUiState,
+    h24: Boolean = false,
+): List<SignalGroup> {
     val u = drive.units
 
     fun temp(f: Int?) = f?.let { u.tempText(it.toDouble()) } ?: DASH
@@ -52,8 +57,10 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                 SignalRow("Highest cell", drive.maxCellVolts?.let { "%.3f V".format(Locale.US, it) } ?: DASH),
                 SignalRow("Cell spread", drive.cellSpreadMv?.let { "${it.roundToInt()} mV" } ?: DASH),
                 drive.energyLeftKwh?.let { SignalRow("Energy left", kwh(it)) },
-                ifReported("Coolant pump", drive.batteryCoolantPumpRpm) { "$it rpm" },
+                ifReported("Coolant pump", drive.batteryCoolantPumpRpm) { "%,d rpm".format(Locale.US, it) },
+                ifReported("Coolant temperature", drive.gen2.batteryCoolantF),
                 drive.gen2.batteryConditioning?.let { SignalRow("Conditioning", it) },
+                ifReported("Insulation", drive.hvIsolationKohm) { "%,d kΩ".format(Locale.US, it) },
             ),
         ),
         SignalGroup(
@@ -82,6 +89,9 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                 SignalRow("Fuel", drive.fuelPercent?.let { "${it.roundToInt()}%" } ?: DASH),
                 ifReported("Oil life", drive.oilLifePct) { "$it%" },
                 drive.gen2.engineStartReason?.let { SignalRow("Last start reason", it) },
+                ifReported("EGR command", drive.gen2.egrCommandedPct) { "$it%" },
+                ifReported("EGR cooler 1", drive.gen2.egrCooler1F),
+                ifReported("EGR cooler 2", drive.gen2.egrCooler2F),
             ),
         ),
         SignalGroup(
@@ -92,6 +102,7 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                     (drive.aux12Volts ?: drive.auxVolts)?.let { "%.2f V".format(Locale.US, it) } ?: DASH,
                 ),
                 ifReported("12 V charge", drive.aux12SocPercent) { "$it%" },
+                drive.gen2.aux12vCapacityAh?.let { SignalRow("12 V capacity", "${oneDecimal(it)} Ah") },
                 SignalRow("Cabin", temp(drive.cabinTempF)),
                 SignalRow("Outside", temp(drive.ambientF)),
                 SignalRow("GPS accuracy", drive.gpsAccuracyFt?.let { gpsText(it, drive.metricUnits) } ?: DASH),
@@ -100,18 +111,23 @@ fun liveSignalGroups(drive: DriveUiState): List<SignalGroup> {
                 ifReported("Cabin heater power", drive.gen2.cabinHeatPowerW) { "$it W" },
                 ifReported("Remote start time left", drive.gen2.remoteStartSecondsLeft, ::minutesSeconds),
                 ifReported("Remote starts left", drive.gen2.remoteStartsLeft) { "$it" },
+                drive.gen2.remoteStartReason?.let { SignalRow("Last started by", it) },
             ),
         ),
-        charging(drive.gen2),
+        charging(drive.gen2, h24),
         energyAndTrips(drive),
     ).filter { it.rows.isNotEmpty() }
 }
 
 /**
- * The charger's own view: its state and self-checks, the car's charge timetable and how each of the
- * last five charges ended. Each row shows only once the car has answered it.
+ * The charger's own view: its state and self-checks, the car's charge timetable (in the phone's
+ * clock) and how each of the last five charges ended. Each row shows only once the car has answered
+ * it.
  */
-private fun charging(status: Gen2Status): SignalGroup =
+private fun charging(
+    status: Gen2Status,
+    h24: Boolean,
+): SignalGroup =
     SignalGroup(
         "Charging",
         listOfNotNull(
@@ -119,10 +135,12 @@ private fun charging(status: Gen2Status): SignalGroup =
             status.chargeSystem?.let { SignalRow("Charge system", it) },
             status.chargeEnableCheck?.let { SignalRow("Enable check", it) },
             status.chargeControlCheck?.let { SignalRow("Control check", it) },
-            status.chargeStart?.let { SignalRow("Charge starts", it) },
-            status.chargeComplete?.let { SignalRow("Charge completes", it) },
-            status.chargeStart120v?.let { SignalRow("120 V charge starts", it) },
-            status.chargeComplete120v?.let { SignalRow("120 V charge completes", it) },
+            status.chargerAcDutyPct?.let { SignalRow("Charger input duty", "$it%") },
+            status.chargerOutputDutyPct?.let { SignalRow("Charger output duty", "$it%") },
+            status.chargeStart?.let { SignalRow("Charge starts", weekTimeLabel(it, h24)) },
+            status.chargeComplete?.let { SignalRow("Charge completes", weekTimeLabel(it, h24)) },
+            status.chargeStart120v?.let { SignalRow("120 V charge starts", weekTimeLabel(it, h24)) },
+            status.chargeComplete120v?.let { SignalRow("120 V charge completes", weekTimeLabel(it, h24)) },
         ) +
             status.chargeRecords.mapIndexedNotNull { index, record ->
                 record?.let { SignalRow("Charge record ${index + 1}", it) }

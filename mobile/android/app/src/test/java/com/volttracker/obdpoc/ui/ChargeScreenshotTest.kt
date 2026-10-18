@@ -15,8 +15,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The Charge tab charging (the mockups' `S-charge-<theme>.png`), plugged out with history, and
- * with no adapter or history yet — in OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
+ * The Charge tab charging (the mockups' `S-charge-<theme>.png`), plugged out with history, plugged
+ * in waiting on the car's schedule, and with no adapter or history yet — in OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/charge-<state>-<theme>.png; every case also proves the screen composes.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
@@ -55,6 +55,19 @@ class ChargeScreenshotTest(
                         socPoints = emptyList(),
                         addedKwh = 0.0,
                         statusLabel = "Live",
+                    ),
+                // Plugged in, with the car holding the charge for its own schedule.
+                "waiting" to
+                    ChargeUiState.demo.copy(
+                        charging = false,
+                        chargeKw = 0.0,
+                        fromSoc = null,
+                        startedAtMs = null,
+                        socPoints = emptyList(),
+                        addedKwh = 0.0,
+                        statusLabel = "Live",
+                        carChargeState = "Waiting",
+                        carChargeStart = "Tue 23:05",
                     ),
                 "empty" to ChargeUiState(),
                 "loading" to ChargeUiState(history = HistoryLoad.LOADING),

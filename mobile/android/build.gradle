@@ -74,7 +74,11 @@ def dashboardSourceJsStragglers = fileTree("app/src/main/dashboard-src/js") {
 // layer control, recovery-card tone borders, inset savings/session rows,
 // and the week-chart/eff-bars renderer options. Eager CSS ships raw.
 // ~3.6 KB headroom retained.
-def dashboardStartupBudgetBytes = 412_000L
+// 412k → 413.5k (gen 2 readings, 2026-10-14): funds the contract keys and Live signals rows
+// for the gen 2 reads (start reason, charge state and records, pumps, charger duty, battery
+// coolant, EGR, 12 V capacity). Every native sample key must be on the eager
+// AUTHORITATIVE_READING_KEYS list, so they cannot be lazy. ~0.7 KB headroom retained.
+def dashboardStartupBudgetBytes = 413_500L
 // 90k → 90.5k (E1 map-tile privacy disclosure, 2026-07-11): funds the one-time
 // "map imagery loads from OpenStreetMap/CARTO" notice in the lazy map chunk
 // (map.ts#maybeShowMapPrivacyNotice, ~0.4 KB). Copy resolves through the eager

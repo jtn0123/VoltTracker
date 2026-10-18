@@ -140,6 +140,12 @@ internal object ObdVoltMode22ParserRegistry {
     private val EV_DISTANCE_KM_RANGE = Range(0.0, 655.35)
     private val ODOMETER_KM_RANGE = Range(0.0, 2_000_000.0)
     private val EV_RANGE_KM_RANGE = Range(0.0, 300.0)
+    private val AUX_CAPACITY_AH_RANGE = Range(1.0, 200.0)
+    private val PILOT_VOLTAGE_RANGE = Range(0.0, 15.0)
+
+    // Unproven on a 2017 whether these are coolant- or gas-side, and EGR gas runs far hotter than
+    // TEMP_C_RANGE allows, so the bound is wide enough for either.
+    private val EGR_TEMP_C_RANGE = Range(-50.0, 600.0)
 
     // 1,000 MWh is far beyond any pack's lifetime throughput; it only rejects decode garbage.
     private val LIFETIME_CHARGE_KWH_RANGE = Range(0.0, 1_000_000.0)
@@ -253,7 +259,9 @@ internal object ObdVoltMode22ParserRegistry {
                     ObdVoltCellVoltageDecoder.aggregate(response, command, "average cell voltage", false)
                 },
             )
-            put("2240D4", wordPid("HD pack current", "A", 2, 20.0, true, CURRENT_A_RANGE))
+            // The BECM counts the pack current the other way round from 222414: negated so that,
+            // like 222414, a positive value is discharge.
+            put("2240D4", wordLinearPid("HD pack current", "A", 2, -1.0 / 20.0, 0.0, true, CURRENT_A_RANGE))
             put("224531", Mode22Parser { command, response -> chargeLevelValue(response, command) })
             put(
                 "2234B2",
@@ -282,7 +290,50 @@ internal object ObdVoltMode22ParserRegistry {
             put("222C05", bytePid("aux transmission pump speed", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
             put("224357", bytePid("power electronics coolant pump speed", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
             put("229025", bytePid("remote starts left", "count", 0, 1.0, 0.0))
+            putAll(gen2ExtraParsers())
             putAll(Gen2StatusDecoders.parsers())
+        }
+
+    /**
+     * More gen 2 reads an established Volt app makes. The first block is polled live; the rest
+     * are scan-only candidates (Detailed signals) until this car answers them with values that
+     * make sense: the trip counters' reset points, and the BCM 12 V and charge pilot reads,
+     * are unproven on a 2017.
+     */
+    private fun gen2ExtraParsers(): Map<String, Mode22Parser> =
+        buildMap {
+            put("22452D", bytePid("charger AC duty cycle", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("22452E", bytePid("charger output duty cycle", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("22002C", bytePid("EGR commanded", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("223040", wordLinearPid("EGR cooler temperature 1", "deg C", 1, 0.1, -40.0, false, EGR_TEMP_C_RANGE))
+            put("223041", wordLinearPid("EGR cooler temperature 2", "deg C", 1, 0.1, -40.0, false, EGR_TEMP_C_RANGE))
+            // A multi-frame BCM reply; the first word is the capacity in 1/256 Ah.
+            put("22CB31", wordPid("12V battery capacity", "Ah", 1, 256.0, true, AUX_CAPACITY_AH_RANGE))
+
+            put("224470", wordPid("energy used", "kWh", 1, 10.0, false))
+            put("2241C5", dwordPid("EV distance counter", "km", 1, 64.0, ODOMETER_KM_RANGE))
+            put("2241C6", dwordPid("gas distance counter", "km", 1, 64.0, ODOMETER_KM_RANGE))
+            put("2241AD", wordPid("fuel used", "L", 2, 8.0, false))
+            put("2290FB", wordPid("12V battery current", "A", 2, 128.0, true, CURRENT_A_RANGE))
+            put("2290B1", wordPid("12V battery voltage", "V", 2, 1000.0, false, AUX_VOLTAGE_RANGE))
+            put("2290F8", wordLinearPid("12V battery charge", "%", 0, 100.0 / 32_767.0, 0.0, true, PERCENT_RANGE))
+            put("224533", bytePid("charger current command", "A", 1, 0.3, 0.0, AC_CURRENT_RANGE))
+            put("224545", bytePid("charge pilot voltage", "V", 2, 0.05, 0.0, PILOT_VOLTAGE_RANGE))
+            put("224546", bytePid("charge pilot duty", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("22451E", bytePid("blower speed", "%", 0, 100.0 / 255.0, 0.0, PERCENT_RANGE))
+            put("220042", wordPid("module supply voltage", "V", 2, 1000.0, false, AUX_VOLTAGE_RANGE))
+        }
+
+    /** Four-byte unsigned PID: `ABCD / divisor`, bounded to [range]. */
+    private fun dwordPid(
+        name: String,
+        unit: String,
+        decimals: Int,
+        divisor: Double,
+        range: Range,
+    ): Mode22Parser =
+        Mode22Parser { command, response ->
+            mode22Long(response, command)?.let { bounded(it / divisor, range) }?.let { value(name, it, unit, decimals) }
         }
 
     private fun voltByteValue(

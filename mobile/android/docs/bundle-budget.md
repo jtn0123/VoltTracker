@@ -47,7 +47,7 @@ unchecked.
 
 | Bucket | Files | Budget | Roughly today |
 |--------|-------|--------|---------------|
-| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **412,000 B** | ~385 KB |
+| Startup | `js/app.js` + render-blocking `css/**/*.css` (excludes the lazy CSS below) | **413,500 B** | ~413 KB |
 | Lazy support JS | first-party lazy JS chunks except panel, expert, detail, and DTC data | **91,000 B** | ~89 KB |
 | Lazy panel JS | `js/insights-panel.js`, `js/connection-tools.js` | **45,000 B** | ~43 KB |
 | Lazy expert JS | `js/signals-panel.js`, `js/scrubber.js` | **40,000 B** | ~20 KB |
@@ -62,7 +62,10 @@ the rest of the tab-by-tab design match) — see the history comments above
 (2026-07-11) then moved the charge-history, maintenance, and DTC-detail
 renders into the lazy detail bucket, dropping the startup set from ~402 KB to
 ~385 KB (~27 KB headroom) without touching the budget — reclaimed bytes stay
-reclaimed.
+reclaimed. Later feature work used that headroom up, and the gen 2 readings
+(2026-10-14) raised the budget to 413,500 B: every key a native sample carries
+must sit on the eager `AUTHORITATIVE_READING_KEYS` list, so new readings can't
+go lazy.
 
 `lib/**` (vendored Leaflet) is excluded from both — it's third-party code we don't
 own and don't edit. Leaflet JavaScript is also off the startup script path; it is

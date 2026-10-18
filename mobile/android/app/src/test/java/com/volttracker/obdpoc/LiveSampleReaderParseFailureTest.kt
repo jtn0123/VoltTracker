@@ -311,6 +311,36 @@ class LiveSampleReaderParseFailureTest {
         assertEquals(listOf("Battery charge low", "Battery charge low"), reasons)
     }
 
+    @Test
+    fun gen2ExtraReadsFillTheirKeys() {
+        engine.responses["22900D"] = "62 90 0D 02\r>"
+        engine.responses["2241A4"] = "62 41 A4 3E\r>"
+        engine.responses["22452D"] = "62 45 2D B8\r>"
+        engine.responses["22452E"] = "62 45 2E AD\r>"
+        engine.responses["22002C"] = "62 00 2C 1F\r>"
+        engine.responses["223040"] = "62 30 40 05 14\r>"
+        engine.responses["223041"] = "62 30 41 04 D8\r>"
+        // The 12 V capacity is a two-frame BCM reply.
+        engine.responses["22CB31"] = "008\r0: 62 CB 31 29 80 00\r1: 00 00 AA AA AA AA AA\r\r>"
+        val sample = readUntil("aux12vCapacityAh")
+        assertEquals(41.5, sample.getDouble("aux12vCapacityAh"), 0.0)
+        assertTrue(sample.has("aux12vCapacityStaleMs"))
+        assertEquals("Remote start", sample.getString("remoteStartReason"))
+        assertTrue(sample.has("remoteStartCountStaleMs"))
+        assertEquals(22, sample.getInt("batteryCoolantC"))
+        assertTrue(sample.has("batteryCoolantStaleMs"))
+        assertEquals(72, sample.getInt("chargerAcDutyPct"))
+        assertEquals(68, sample.getInt("chargerOutputDutyPct"))
+        assertTrue(sample.has("chargerDutyStaleMs"))
+        assertEquals(12, sample.getInt("egrCommandedPct"))
+        assertEquals(90, sample.getInt("egrCoolerTemp1C"))
+        assertEquals(84, sample.getInt("egrCoolerTemp2C"))
+        assertTrue(sample.has("egrStaleMs"))
+        for (command in arrayOf("22900D", "2241A4", "22452D", "22452E", "22002C", "223040", "223041", "22CB31")) {
+            assertEquals(command, 0, countEvents("pid_parse_failed", command))
+        }
+    }
+
     private fun readUntilValue(
         key: String,
         value: String,

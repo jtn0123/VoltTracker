@@ -72,6 +72,14 @@ not, and what is still only a candidate.
 | Charge timetable | `ATSH7E4` / `2283E1`, `2283E2`, `228375`, `228377` | Candidate, polled live (conditional) | Weekday (1 = Sunday), hour, minute: start and complete times, and the 120 V pair. |
 | Charge records | `ATSH7E4` / `2243CB`-`2243CF` | Candidate, polled live (conditional) | Multi-frame (9 bytes). Bits in A-D say how each of the last five charges ended (full, unplugged, faults, time limit). |
 | Remote start countdown and starts left | BCM `ATSH241` / `228537`, `229025` | Candidate, polled live | `228537` byte B x 10 s; `229025` byte A. Single-frame. |
+| Remote start reason | BCM `ATSH241` / `22900D` | Candidate, polled live | Byte A: ignition switch, remote start (power take-off), remote start, not reporting. Shown as "Last started by". |
+| 12 V battery capacity | BCM `ATSH241` / `22CB31` | Candidate, polled live (every 240 cycles) | First word / 256 = Ah, bounded 1-200. A two-frame reply, so the BCM block sets flow control (`ATFCSH241`, `ATFCSD300000`, `ATFCSM1`) and hands it back with `ATFCSM0`; the adapter's own flow control only reaches 7E0-7E7. |
+| Battery coolant temperature | `ATSH7E4` / `2241A4` | Candidate, polled live | `A - 40` C. On Health's thermal card with the conditioning mode. |
+| Charger input and output duty | `ATSH7E4` / `22452D`, `22452E` | Candidate, polled live (conditional) | `A / 2.55` percent each. |
+| EGR command and cooler temperatures | `ATSH7E0` / `22002C`, `223040`, `223041` | Candidate, polled live | `22002C` `A / 2.55` %; the temperatures are words x 0.1 - 40 C, bounded wide (-50 to 600 C) because it's not known yet whether they read gas or coolant. |
+| HV insulation | `hvIsolationKohm` (already polled) | Working | Now on Health's battery card: below 400 kΩ is "low", below 300 kΩ the car is expected to refuse to charge. |
+| HD pack current sign | `ATSH7E7` / `2240D4` | Scan-only | Now negated so positive is discharge, like `222414`. The reference app counts it this way; not yet checked on this car. |
+| Gen 2 scan candidates | `ATSH7E4` / `224470`, `2241C5`, `2241C6`, `2241AD`, `224533`, `224545`, `224546`, `22451E`, `220042`; BCM `ATSH241` / `2290FB`, `2290B1`, `2290F8` | Candidate, Detailed signals scan only | Energy used, EV and gas distance counters, fuel used, charger current command, pilot voltage and duty, blower speed, module supply voltage, and the BCM's 12 V current, voltage and charge. Decoded, but not polled until the car answers with sensible values. |
 | Outside temperature | Standard/GM body signal | Candidate | Prefer standard or already-broadcast source if available. |
 | Intake air temperature | `010F` standard OBD-II | Candidate | Low-risk standard PID; add to warm lane if useful. |
 | Torque | GM/SAE calculated engine or motor torque PID | Candidate | Needs clear source; likely diagnostic-only first. |
@@ -87,6 +95,7 @@ not, and what is still only a candidate.
 | 2026-06-03 | `0.6.2-dev` | Broad Scan on user's Volt | Battery/charger/SOC fields positive; tire-pressure candidates negative. |
 | 2026-06-03 | `0.6.2-dev` | Detail Probe UI and persisted capability panel | App now shows Working/No hit/Candidate/Deferred counts from SQLite `field_capabilities`. |
 | 2026-06-09 | `0.9.3-dev` (PR #187) | Sensor-expansion wave added in code (no on-car test yet) | ~35 new diagnostic-only candidates + 7E6/7E7 scan coverage; `2241A3` capacity promoted to rare live polling on community evidence (needs on-car confirmation); TPMS candidates marked rejected. |
+| 2026-10-14 | gen 2 parity stack (#179, #180, #181) | Reads added in code from an established Volt app's gen 2 list (no on-car test yet) | See [`gen2-parity.md`](gen2-parity.md) for what is ported, what still needs the car, and what was skipped and why. |
 
 ## After Each Scan
 

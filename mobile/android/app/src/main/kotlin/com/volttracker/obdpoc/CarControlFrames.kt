@@ -259,6 +259,10 @@ object CarControlFrames {
             CarCommand.WINDOWS_UP -> windows(BCM_WINDOWS_UP)
         }
 
+    /** Whether [command]'s sequence wakes the body bus (the 12 V guard applies to those). */
+    @JvmStatic
+    fun wakesCar(command: CarCommand): Boolean = sequenceFor(command).any { it is ControlStep.HighVoltageWakeup }
+
     private fun swcanWakeup(): List<ControlStep> =
         listOf(
             ControlStep.HighVoltageWakeup,

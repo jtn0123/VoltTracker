@@ -92,7 +92,7 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 
 | Surface | Contract | Gate |
 |---|---|---|
-| Dashboard startup JS/CSS | 412,000 bytes for `js/app.js` + render-blocking CSS (raised for the v2 design work — see `bundle-budget.md`) | `verifyDashboardBundleSize` |
+| Dashboard startup JS/CSS | 413,500 bytes for `js/app.js` + render-blocking CSS (raised for the v2 design work and the gen 2 readings — see `bundle-budget.md`) | `verifyDashboardBundleSize` |
 | Lazy dashboard support JS | 90,000 bytes for non-DTC/non-panel/non-expert lazy feature chunks | `verifyDashboardBundleSize` |
 | Lazy dashboard panel JS | 45,000 bytes for deferred panel chunks (`insights-panel.js`, `connection-tools.js`) | `verifyDashboardBundleSize` |
 | Lazy dashboard expert JS | 40,000 bytes for expert-surface chunks (`signals-panel.js`, `scrubber.js`) | `verifyDashboardBundleSize` |

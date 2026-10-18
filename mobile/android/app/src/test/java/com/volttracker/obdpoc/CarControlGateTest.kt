@@ -36,7 +36,13 @@ class CarControlGateTest {
     private fun evaluate(
         adapter: Adapter = Adapter.READY,
         lastCommandAtMs: Long = Long.MIN_VALUE / 2,
-    ): Block? = gate.evaluate(now, adapter, lastCommandAtMs)
+        wakesCar: Boolean = true,
+    ): Block? = gate.evaluate(now, adapter, lastCommandAtMs, wakesCar)
+
+    private fun withVolts(
+        volts: Double,
+        staleMs: Long = 0L,
+    ): JSONObject = sample().put("voltage", volts).put("voltageStaleMs", staleMs)
 
     @Test
     fun parkedStillCarWithReadyAdapterPasses() {
@@ -123,9 +129,45 @@ class CarControlGateTest {
     }
 
     @Test
+    fun aLow12VoltBatteryRefusesAWake() {
+        gate.observe(withVolts(11.6), now)
+        assertEquals(Block.LOW_12V, evaluate())
+        gate.observe(withVolts(11.7), now)
+        assertNull(evaluate())
+    }
+
+    @Test
+    fun aCommandThatDoesNotWakeTheCarIgnoresThe12VoltReading() {
+        gate.observe(withVolts(10.9), now)
+        assertNull(evaluate(wakesCar = false))
+    }
+
+    @Test
+    fun anUnknownOrOld12VoltReadingNeverBlocks() {
+        gate.observe(sample(), now)
+        assertNull("no reading yet", evaluate())
+        gate.observe(withVolts(11.0, staleMs = 60_001L), now)
+        assertNull("too old to trust", evaluate())
+        gate.observe(withVolts(11.0), now)
+        now += 60_001L
+        gate.observe(sample(), now)
+        assertNull("the low reading aged out", evaluate())
+    }
+
+    @Test
+    fun motionStillOutranksTheLow12VoltBlock() {
+        gate.observe(withVolts(11.0).put("speedKph", 5.0), now)
+        assertEquals(Block.MOVING, evaluate())
+    }
+
+    @Test
     fun resetForgetsEverything() {
         gate.observe(sample(), now)
         gate.reset()
         assertEquals(Block.NO_LIVE_DATA, evaluate())
+        gate.observe(withVolts(11.0), now)
+        gate.reset()
+        gate.observe(sample(), now)
+        assertNull("the low reading is forgotten too", evaluate())
     }
 }

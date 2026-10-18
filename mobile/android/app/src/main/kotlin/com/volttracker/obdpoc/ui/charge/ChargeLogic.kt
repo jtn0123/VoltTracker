@@ -39,6 +39,25 @@ fun levelName(level: String?): String? =
         else -> level
     }
 
+/**
+ * The car's charge-schedule time ("Tue 23:05", always 24 h) in the user's clock: "Tue 11:05 PM"
+ * unless [h24]. Anything else is returned as it came.
+ */
+fun weekTimeLabel(
+    text: String,
+    h24: Boolean,
+): String {
+    val match = WEEK_TIME.matchEntire(text) ?: return text
+    if (h24) return text
+    val (day, hour, minute) = match.destructured
+    val h = hour.toInt()
+    val suffix = if (h < NOON) "AM" else "PM"
+    val h12 = (h % NOON).takeIf { it != 0 } ?: NOON
+    return "$day $h12:$minute $suffix"
+}
+
+private val WEEK_TIME = Regex("""([A-Z][a-z]{2}) (\d{2}):(\d{2})""")
+
 /** $/kWh for a session: the public rate for a public charger when one is set, else the home rate. */
 fun ChargeUiState.rateFor(session: ChargeSession): Double =
     if (session.publicCharger && publicRate > 0.0) publicRate else homeRate

@@ -248,6 +248,8 @@ class LiveUiStateStore(
             level = null,
             packTempF = null,
             socPoints = emptyList(),
+            carChargeState = null,
+            carChargeStart = null,
         )
 
     /**
@@ -485,6 +487,8 @@ class LiveUiStateStore(
                             null
                         },
                     socPoints = if (charging) session.chargeSocPoints else emptyList(),
+                    carChargeState = drive.gen2.chargeState,
+                    carChargeStart = drive.gen2.chargeStart,
                 ),
         )
     }
@@ -604,6 +608,8 @@ class LiveUiStateStore(
             minCellVolts = optDouble(t, "minCellVoltage") ?: current.minCellVolts,
             maxCellVolts = optDouble(t, "maxCellVoltage") ?: current.maxCellVolts,
             packResistanceMohm = optDouble(t, "packResistanceMohm") ?: current.packResistanceMohm,
+            // 0 kΩ is the pack not having measured yet, not a dead short.
+            hvIsolationKohm = optDouble(t, "hvIsolationKohm")?.toInt()?.takeIf { it > 0 } ?: current.hvIsolationKohm,
             packChargeCount = optDouble(t, "hvBatteryChargeCount")?.toInt() ?: current.packChargeCount,
             lifetimeChargedKwh = optDouble(t, "lifetimeChargeEnergyKwh") ?: current.lifetimeChargedKwh,
             packSectionTempsF = packSectionTempsF(t, current.packSectionTempsF),

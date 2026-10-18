@@ -603,9 +603,11 @@ class ObdProtocolTest {
         assertEquals("average cell voltage", average!!.name)
         assertEquals(3.7, average.valueNumeric!!, 0.001)
 
+        // The BECM counts current the other way round from 222414, so a raw +10 A reads as -10 A
+        // (charging), matching 222414's positive-is-discharge sign.
         val current = ObdProtocol.parseKnownValue("2240D4", "6240D400C8")
         assertNotNull(current)
-        assertEquals(10.0, current!!.valueNumeric!!, 0.01)
+        assertEquals(-10.0, current!!.valueNumeric!!, 0.01)
     }
 
     @Test

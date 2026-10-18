@@ -395,6 +395,18 @@ class DemoPollingLoop(
         sample.put("chargeRecord4", "Waiting for charge time; Full charge")
         sample.put("chargeRecord5", "Full charge")
         sample.put("remoteStartsLeft", 2)
+        sample.put("remoteStartReason", "Ignition switch")
+        sample.put("batteryCoolantC", 22)
+        sample.put("aux12vCapacityAh", 41.5)
+        if (charging) {
+            sample.put("chargerAcDutyPct", 72)
+            sample.put("chargerOutputDutyPct", 68)
+        }
+        if (leg == DemoLeg.GAS) {
+            sample.put("egrCommandedPct", 12)
+            sample.put("egrCoolerTemp1C", 88)
+            sample.put("egrCoolerTemp2C", 81)
+        }
     }
 
     private fun putDemoPosition(

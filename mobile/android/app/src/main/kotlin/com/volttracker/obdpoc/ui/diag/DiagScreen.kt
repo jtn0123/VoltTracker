@@ -413,6 +413,19 @@ private fun BatteryCard(
                 modifier = Modifier.padding(bottom = 10.dp),
             )
         }
+        battery.isolationLine()?.let {
+            Text(
+                it.text,
+                style = VoltType.caption,
+                color =
+                    when (it.tone) {
+                        PillTone.BAD -> VoltColors.alert
+                        PillTone.WARN -> VoltColors.warn
+                        else -> VoltColors.textSecondary
+                    },
+                modifier = Modifier.padding(bottom = 10.dp),
+            )
+        }
         val weakest = battery.weakestLabel()
         if (battery.cells.count { it != null } >= MIN_CELLS_FOR_HISTOGRAM) {
             CellHistogram(battery.cells, battery.weakestCell, Modifier.fillMaxWidth().height(46.dp))
@@ -484,6 +497,14 @@ private fun ThermalCard(thermal: BatteryThermal) {
             BatteryFigure(thermal.pumpText, if (thermal.pumpText == "Off") "" else " rpm", "coolant pump")
             BatteryFigure(thermal.heaterText, if (thermal.heaterText == "Off") "" else " kW", "pack heater")
             BatteryFigure(thermal.electronicsText, thermal.units.tempUnit, "electronics coolant")
+        }
+        thermal.conditioningLine?.let {
+            Text(
+                it,
+                style = VoltType.caption,
+                color = VoltColors.textSecondary,
+                modifier = Modifier.padding(top = 10.dp),
+            )
         }
     }
 }

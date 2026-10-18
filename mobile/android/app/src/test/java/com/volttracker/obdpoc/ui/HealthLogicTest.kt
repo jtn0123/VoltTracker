@@ -18,6 +18,7 @@ import com.volttracker.obdpoc.ui.diag.hasFreezeFrame
 import com.volttracker.obdpoc.ui.diag.healthReport
 import com.volttracker.obdpoc.ui.diag.hero
 import com.volttracker.obdpoc.ui.diag.hvBattery
+import com.volttracker.obdpoc.ui.diag.isolationLine
 import com.volttracker.obdpoc.ui.diag.liveSignalsLine
 import com.volttracker.obdpoc.ui.diag.pill
 import com.volttracker.obdpoc.ui.diag.serviceGuidance
@@ -28,6 +29,7 @@ import com.volttracker.obdpoc.ui.diag.title
 import com.volttracker.obdpoc.ui.diag.weakestLabel
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
+import com.volttracker.obdpoc.ui.drive.Gen2Status
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -235,6 +237,51 @@ class HealthLogicTest {
         val energyOnly = hvBattery(DriveUiState(lifetimeChargedKwh = 12_345.67), null, null)
         assertTrue("lifetime energy alone counts as a battery read", energyOnly.reported)
         assertEquals("12,346 kWh charged", energyOnly.agingLine())
+    }
+
+    @Test
+    fun theBatteryCardGradesTheHvInsulation() {
+        assertNull(hvBattery(DriveUiState(), null, null).isolationLine())
+        val good = hvBattery(DriveUiState(hvIsolationKohm = 2_500), null, null)
+        assertTrue("insulation alone counts as a battery read", good.reported)
+        assertEquals(HealthLine("Insulation 2,500 kΩ · good", PillTone.NEUTRAL), good.isolationLine())
+        assertEquals(
+            PillTone.NEUTRAL,
+            hvBattery(DriveUiState(hvIsolationKohm = 400), null, null).isolationLine()!!.tone,
+        )
+        assertEquals(
+            HealthLine("Insulation 399 kΩ · low, have the HV system checked", PillTone.WARN),
+            hvBattery(DriveUiState(hvIsolationKohm = 399), null, null).isolationLine(),
+        )
+        assertEquals(PillTone.WARN, hvBattery(DriveUiState(hvIsolationKohm = 300), null, null).isolationLine()!!.tone)
+        assertEquals(
+            HealthLine("Insulation 299 kΩ · too low to charge, have the HV system checked", PillTone.BAD),
+            hvBattery(DriveUiState(hvIsolationKohm = 299), null, null).isolationLine(),
+        )
+        assertTrue(
+            healthReport(DiagUiState(), good, demo = false).contains("HV battery: insulation 2,500 kΩ · good"),
+        )
+    }
+
+    @Test
+    fun theThermalCardSaysHowTheCarIsConditioningTheBattery() {
+        assertNull(batteryThermal(DriveUiState()).conditioningLine)
+        val heating =
+            batteryThermal(
+                DriveUiState(gen2 = Gen2Status(batteryConditioning = "Active heating", batteryCoolantF = 68)),
+            )
+        assertTrue(heating.reported)
+        assertEquals("Active heating · battery coolant 68°F", heating.conditioningLine)
+        assertEquals(
+            "Not conditioning",
+            batteryThermal(DriveUiState(gen2 = Gen2Status(batteryConditioning = "Off"))).conditioningLine,
+        )
+        val coolantOnly = batteryThermal(DriveUiState(gen2 = Gen2Status(batteryCoolantF = 68), metricUnits = true))
+        assertTrue("coolant alone counts as a thermal read", coolantOnly.reported)
+        assertEquals("Battery coolant 20°C", coolantOnly.conditioningLine)
+        val report =
+            healthReport(DiagUiState(), hvBattery(DriveUiState(), null, null), demo = false, thermal = heating)
+        assertTrue(report, report.contains("Battery thermal: active heating · battery coolant 68°F"))
     }
 
     @Test
