@@ -161,6 +161,8 @@ data class DriveUiState(
     /** The cluster's Trip A and Trip B odometers (miles); null until heard. */
     val carTripAMiles: Double? = null,
     val carTripBMiles: Double? = null,
+    /** The car's status words: engine start reason, pumps, conditioning and the charger's view. */
+    val gen2: Gen2Status = Gen2Status(),
     val lastDrive: LastDrive? = null,
 ) {
     /** Settings → Units, for formatting the readings. */

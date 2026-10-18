@@ -65,6 +65,13 @@ not, and what is still only a candidate.
 | Tire pressure | BCM `ATSH241` / `225008` FL, `225007` RL, `225006` FR, `225005` RR | Candidate, polled live | One word per wheel in 1/16 kPa (single-frame replies). The grouped `22C901` was refused (`7F`) at the BCM. Confirm against the SW-CAN tire frame on the car. |
 | Battery coolant pump speed | `ATSH7E4` / `22435A` | Candidate, polled live | `A x 25` rpm. `2241B2`, read as the pump before, tracks A/C compressor power instead (W, follows the SW-CAN compressor kW). |
 | Cabin heater power | `ATSH7E4` / `2241B4` | Polled live | Word in W. It was read as a one-byte "coolant valve" before; the car always sent `0000` with the heat off. |
+| Engine start reason | `ATSH7E1` / `222439` | Candidate, polled live | Four bytes of GM reason bits (low charge, acceleration, cold coolant, hood open…), joined as words; each new reason is logged. |
+| Aux transmission and electronics coolant pumps | `ATSH7E1` / `222C05`, `ATSH7E4` / `224357` | Candidate, polled live | `A / 2.55` percent duty each. |
+| Battery conditioning and 12 V top-up | `ATSH7E4` / `2243DE`, `22441E` | Candidate, polled live | `2243DE` byte A: off, active/passive cooling or heating. `22441E` byte A bit 3: the pack is charging the 12 V battery. |
+| Charge state and self-checks | `ATSH7E4` / `2243AE`, `224532`, `224530`, `22452F` | Candidate, polled live (conditional) | Byte A enums: none/waiting/charging/complete/error; not ready/ready/shutting down; passed/failed. |
+| Charge timetable | `ATSH7E4` / `2283E1`, `2283E2`, `228375`, `228377` | Candidate, polled live (conditional) | Weekday (1 = Sunday), hour, minute: start and complete times, and the 120 V pair. |
+| Charge records | `ATSH7E4` / `2243CB`-`2243CF` | Candidate, polled live (conditional) | Multi-frame (9 bytes). Bits in A-D say how each of the last five charges ended (full, unplugged, faults, time limit). |
+| Remote start countdown and starts left | BCM `ATSH241` / `228537`, `229025` | Candidate, polled live | `228537` byte B x 10 s; `229025` byte A. Single-frame. |
 | Outside temperature | Standard/GM body signal | Candidate | Prefer standard or already-broadcast source if available. |
 | Intake air temperature | `010F` standard OBD-II | Candidate | Low-risk standard PID; add to warm lane if useful. |
 | Torque | GM/SAE calculated engine or motor torque PID | Candidate | Needs clear source; likely diagnostic-only first. |

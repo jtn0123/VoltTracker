@@ -91,6 +91,8 @@ function nativeSampleKeys() {
   const read = (rel) => stripKotlinComments(readFileSync(join(KOTLIN, rel), 'utf8'));
   return new Set([
     ...sampleKeysIn(read('LiveSampleReader.kt')),
+    // Gen 2 status reads LiveSampleReader.read() delegates to (Gen2Readings.appendTo).
+    ...sampleKeysIn(sliceFunction(read('Gen2Readings.kt'), 'fun appendTo(')),
     ...sampleKeysIn(sliceFunction(read('engine/ObdPollingEngine.kt'), 'override fun appendLocation(')),
     ...sampleKeysIn(sliceFunction(read('SessionHealthTracker.kt'), 'fun append(')),
     // SW-CAN broadcast values the engine appends to every live sample (ObdPollingEngine

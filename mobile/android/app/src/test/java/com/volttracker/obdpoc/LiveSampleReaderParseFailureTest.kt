@@ -284,6 +284,43 @@ class LiveSampleReaderParseFailureTest {
         }
     }
 
+    @Test
+    fun gen2StatusReadsFillTheirKeysAndLogEachNewStartReason() {
+        engine.responses["222439"] = "62 24 39 00 00 00 08\r>"
+        engine.responses["2243AE"] = "62 43 AE 02\r>"
+        engine.responses["228537"] = "62 85 37 00 3B\r>"
+        // A charge record is multi-frame: ATH0 + CAF1 prints a length line and numbered segments.
+        engine.responses["2243CB"] = "009\r0: 62 43 CB 01 00 00\r1: 00 00 00 AA AA AA AA\r\r>"
+        val sample = readUntil("chargeRecord1")
+        assertEquals("Full charge", sample.getString("chargeRecord1"))
+        assertTrue(sample.has("chargeRecordsStaleMs"))
+        assertEquals("Battery charge low", sample.getString("engineStartReason"))
+        assertTrue(sample.has("engineStartReasonStaleMs"))
+        assertEquals("Charging", sample.getString("chargeState"))
+        assertEquals(590, sample.getInt("remoteStartSecondsLeft"))
+        assertFalse("not answered, not sent", sample.has("chargeRecord2"))
+        assertEquals(0, countEvents("pid_parse_failed", "2243CB"))
+        assertEquals("logged once, not every sample", 1, countAllEvents("engine_start_reason"))
+
+        // The engine stops (the field clears), then starts again for the same reason: a new line.
+        engine.responses["222439"] = "62 24 39 00 00 00 00\r>"
+        readUntilValue("engineStartReason", "None")
+        engine.responses["222439"] = "62 24 39 00 00 00 08\r>"
+        readUntilValue("engineStartReason", "Battery charge low")
+        val reasons = eventPayloads("engine_start_reason").map { it.optString("reason") }
+        assertEquals(listOf("Battery charge low", "Battery charge low"), reasons)
+    }
+
+    private fun readUntilValue(
+        key: String,
+        value: String,
+    ) {
+        repeat(400) {
+            if (reader.read(context).optString(key) == value) return
+        }
+        throw AssertionError("$key never read $value")
+    }
+
     /** Reads until the slow-cadence PID feeding [key] has been polled (bounded). */
     private fun readUntil(key: String): JSONObject {
         repeat(400) {

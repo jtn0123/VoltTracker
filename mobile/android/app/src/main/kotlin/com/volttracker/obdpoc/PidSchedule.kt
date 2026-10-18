@@ -168,6 +168,10 @@ object PidSchedule {
             PidSpec("222487", Header.HV_PACK_7E1, 48, 16, conditional = true), // EV distance this cycle
             // Gen 1 kept trans temp on 7E2; a gen 2 answers it on 7E1 (this car never answered 7E2).
             PidSpec("221940", Header.HV_PACK_7E1, 48, 10), // trans fluid temp
+            // Gen 2 status reads an established Volt app makes on a 2017 (Gen2StatusDecoders). 7E1
+            // is switched every cycle for pack current, so these sit on the quietest phases.
+            PidSpec("222439", Header.HV_PACK_7E1, 24, 7), // engine start reason
+            PidSpec("222C05", Header.HV_PACK_7E1, 48, 19), // aux transmission pump speed
             // Charge-family PIDs only answer while plugged/charging on some Volt model-years, so they
             // are marked conditional = exempt from the negative-PID cache (a "NO DATA" while driving
             // must not disable them before a later charge session).
@@ -178,6 +182,25 @@ object PidSchedule {
             PidSpec("224368", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC voltage
             PidSpec("224369", Header.HV_PACK_7E4, 24, 18, conditional = true), // charger AC current
             PidSpec("2243AF", Header.HV_PACK_7E4, 24, 22), // raw precise SOC
+            // The charger's own view, from the same Volt app: state, self-checks and the charge
+            // timetable, on 7E4 phases with room to spare. Conditional like the family above.
+            PidSpec("2243AE", Header.HV_PACK_7E4, 24, 11, conditional = true), // charge state
+            PidSpec("224532", Header.HV_PACK_7E4, 48, 23, conditional = true), // charge system status
+            PidSpec("224530", Header.HV_PACK_7E4, 48, 23, conditional = true), // charge enable check
+            PidSpec("22452F", Header.HV_PACK_7E4, 48, 23, conditional = true), // charge control check
+            PidSpec("2283E1", Header.HV_PACK_7E4, 48, 47, conditional = true), // charge start time
+            PidSpec("2283E2", Header.HV_PACK_7E4, 48, 47, conditional = true), // charge complete time
+            PidSpec("228375", Header.HV_PACK_7E4, 48, 47, conditional = true), // 120V charge start time
+            PidSpec("228377", Header.HV_PACK_7E4, 48, 47, conditional = true), // 120V charge complete time
+            // How the last five charges ended: multi-frame replies, so rare and on a light cycle.
+            PidSpec("2243CB", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 1
+            PidSpec("2243CC", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 2
+            PidSpec("2243CD", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 3
+            PidSpec("2243CE", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 4
+            PidSpec("2243CF", Header.HV_PACK_7E4, 240, 107, conditional = true), // charge record 5
+            PidSpec("2243DE", Header.HV_PACK_7E4, 48, 17), // battery conditioning mode
+            PidSpec("22441E", Header.HV_PACK_7E4, 48, 17), // 12V maintenance charge
+            PidSpec("224357", Header.HV_PACK_7E4, 48, 41), // power electronics coolant pump speed
             // The dash SOC and EV range are the Drive screen's headline. On the 24-cycle lane the
             // first read landed ~100 s into a session, so the ring showed the raw pack % (14) and
             // then jumped to the dash's (0). Every 6 cycles, sharing 22434F's 7E4 phase: ~10 s.
@@ -226,6 +249,8 @@ object PidSchedule {
             PidSpec("225007", Header.BODY_241, 48, 3), // tire pressure rear left
             PidSpec("225006", Header.BODY_241, 48, 3), // tire pressure front right
             PidSpec("225005", Header.BODY_241, 48, 3), // tire pressure rear right
+            PidSpec("228537", Header.BODY_241, 48, 3), // remote start time left
+            PidSpec("229025", Header.BODY_241, 48, 3), // remote starts left
         )
 
     private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }
