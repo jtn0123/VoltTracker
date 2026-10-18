@@ -156,7 +156,7 @@ object ObdElmDecode {
             "222886" -> "motor B voltage"
             "222487" -> "ev distance this cycle"
             "222889" -> "prndl state"
-            "221940", "22194001" -> "transmission temperature"
+            "221940" -> "transmission temperature"
             "22434F" -> "hv battery temperature"
             "224368" -> "charger ac voltage"
             "224369" -> "charger ac current"
@@ -194,8 +194,8 @@ object ObdElmDecode {
             "2282B7" -> "AC compressor power"
             "224531" -> "charging level"
             "228334" -> "hv battery displayed soc"
-            "2241B2" -> "battery coolant pump rpm"
-            "2241B4" -> "battery coolant valve"
+            "2241B2" -> "AC compressor power"
+            "2241B4" -> "cabin heater power"
             "2241B6" -> "battery heater power"
             "22801E" -> "outside air temperature raw"
             "22801F" -> "outside air temperature filtered"
@@ -232,14 +232,19 @@ object ObdElmDecode {
         }
     }
 
-    // Mode-22 labels added from the OVMS Volt/Ampera poll list. A lookup rather than more `when`
-    // branches, which would push nameForCommand past the detekt complexity ratchet.
+    // Later mode-22 labels (the OVMS Volt/Ampera poll list, then gen 2 DIDs). A lookup rather than
+    // more `when` branches, which would push nameForCommand past the detekt complexity ratchet.
     private val OVMS_MODE22_NAMES: Map<String, String> =
         mapOf(
             "22368F" to "motor B temperature",
             "2241A6" to "ev range estimate",
             "22439E" to "battery heater duty",
             "224389" to "lifetime charge energy",
+            "22435A" to "battery coolant pump speed",
+            "225008" to "tire pressure front left",
+            "225007" to "tire pressure rear left",
+            "225006" to "tire pressure front right",
+            "225005" to "tire pressure rear right",
         )
 
     @JvmStatic

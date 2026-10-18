@@ -82,7 +82,8 @@ object ObdProtocol {
             return false
         }
         val payload = mode22Payload(response, cleanCommand) ?: return false
-        return payload.isNotEmpty() && payload.all { it == 0 }
+        // All zeros, or a lone FFFF word: GM's "not available" (e.g. a tire with no sensor reading).
+        return payload.isNotEmpty() && (payload.all { it == 0 } || (payload.size == 2 && payload.all { it == 0xFF }))
     }
 
     @JvmStatic

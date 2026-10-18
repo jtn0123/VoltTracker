@@ -8,28 +8,28 @@ import org.junit.Test
 
 class VoltGearTest {
     @Test
-    fun confirmedCodesDecodeToParkAndDrive() {
+    fun confirmedCodesFollowTheLeverOrder() {
         val park = VoltGear.decode(8)!!
         assertEquals("P", park.letter)
         assertEquals(GearConfidence.CONFIRMED, park.confidence)
         assertTrue(park.isPark)
         assertFalse(park.isNonPark)
 
-        val drive = VoltGear.decode(3)!!
-        assertEquals("D", drive.letter)
-        assertEquals(GearConfidence.CONFIRMED, drive.confidence)
-        assertTrue(drive.isNonPark)
-    }
-
-    @Test
-    fun tentativeCodesAreMarkedTentative() {
-        mapOf(7 to "R", 6 to "N", 2 to "L", 5 to "L").forEach { (raw, letter) ->
+        mapOf(7 to "R", 6 to "N", 5 to "D", 3 to "L").forEach { (raw, letter) ->
             val gear = VoltGear.decode(raw)!!
             assertEquals("code $raw", letter, gear.letter)
-            assertEquals("code $raw", GearConfidence.TENTATIVE, gear.confidence)
+            assertEquals("code $raw", GearConfidence.CONFIRMED, gear.confidence)
             assertEquals(raw, gear.raw)
             assertTrue("code $raw is a non-Park gear", gear.isNonPark)
         }
+    }
+
+    @Test
+    fun theHardRegenCodeReadsAsATentativeLow() {
+        val gear = VoltGear.decode(2)!!
+        assertEquals("L", gear.letter)
+        assertEquals(GearConfidence.TENTATIVE, gear.confidence)
+        assertTrue(gear.isNonPark)
     }
 
     @Test
@@ -54,7 +54,7 @@ class VoltGearTest {
 
     @Test
     fun displayTextShowsUnknownCodesWithTheirNumber() {
-        assertEquals("D", VoltGear.displayText("D", 3))
+        assertEquals("D", VoltGear.displayText("D", 5))
         assertEquals("? (code 13)", VoltGear.displayText("?", 13))
         assertEquals("?", VoltGear.displayText("?", null))
     }
@@ -62,8 +62,8 @@ class VoltGearTest {
     @Test
     fun helperPredicates() {
         assertTrue(VoltGear.isPark(VoltGear.PARK_RAW))
-        assertFalse(VoltGear.isPark(3))
-        assertTrue(VoltGear.isKnownNonPark(3))
+        assertFalse(VoltGear.isPark(5))
+        assertTrue(VoltGear.isKnownNonPark(5))
         assertFalse(VoltGear.isKnownNonPark(8))
         assertEquals("confirmed", GearConfidence.CONFIRMED.wireName)
         assertEquals("tentative", GearConfidence.TENTATIVE.wireName)

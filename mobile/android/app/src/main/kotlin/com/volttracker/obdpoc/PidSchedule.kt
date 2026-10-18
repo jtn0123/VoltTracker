@@ -37,7 +37,6 @@ object PidSchedule {
         BROADCAST(null),
         POWERTRAIN_7E0("ATSH7E0"),
         HV_PACK_7E1("ATSH7E1"),
-        TRANSMISSION_7E2("ATSH7E2"),
         HV_PACK_7E4("ATSH7E4"),
         BRAKE_7E6("ATSH7E6"),
         CELL_BECM_7E7("ATSH7E7"),
@@ -167,8 +166,8 @@ object PidSchedule {
             // car; the negative-PID cache retires any the car refuses, and each decoder is bounded.
             PidSpec("221C26", Header.HV_PACK_7E1, 24, 10), // inverter temperature
             PidSpec("222487", Header.HV_PACK_7E1, 48, 16, conditional = true), // EV distance this cycle
-            PidSpec("221940", Header.TRANSMISSION_7E2, 48, 24), // trans temp
-            PidSpec("22194001", Header.TRANSMISSION_7E2, 48, 34), // trans temp, GM selector variant
+            // Gen 1 kept trans temp on 7E2; a gen 2 answers it on 7E1 (this car never answered 7E2).
+            PidSpec("221940", Header.HV_PACK_7E1, 48, 10), // trans fluid temp
             // Charge-family PIDs only answer while plugged/charging on some Volt model-years, so they
             // are marked conditional = exempt from the negative-PID cache (a "NO DATA" while driving
             // must not disable them before a later charge session).
@@ -189,8 +188,9 @@ object PidSchedule {
             PidSpec("224329", Header.HV_PACK_7E4, 24, 22), // minimum cell voltage
             PidSpec("22432B", Header.HV_PACK_7E4, 24, 22), // maximum cell voltage
             PidSpec("22435F", Header.HV_PACK_7E4, 24, 22), // cell SOC variation (balance proxy)
-            PidSpec("2241B2", Header.HV_PACK_7E4, 48, 32), // battery coolant pump
-            PidSpec("2241B4", Header.HV_PACK_7E4, 48, 32), // battery coolant valve
+            PidSpec("2241B2", Header.HV_PACK_7E4, 48, 32), // A/C compressor power
+            PidSpec("2241B4", Header.HV_PACK_7E4, 48, 32), // cabin heater power
+            PidSpec("22435A", Header.HV_PACK_7E4, 48, 32), // battery coolant pump speed
             // Min/max cell index identifies WHICH cell is the outlier; rarely moves, so poll it on
             // the slower 48-cycle lane alongside the coolant PIDs (same 7E4 phase 32).
             PidSpec("22432A", Header.HV_PACK_7E4, 48, 32), // minimum cell number
@@ -220,9 +220,12 @@ object PidSchedule {
             // Every ~10 s like OVMS; both share one phase so the filter restore happens once.
             PidSpec("2228CB", Header.MOTOR_GEN_A_257, 48, 44), // motor-generator A temperature
             PidSpec("22368F", Header.MOTOR_GEN_B_258, 48, 44), // motor-generator B temperature
-            // Tire pressures from the body control module (BcmTirePressure). Unconfirmed on the car:
-            // the negative-PID cache retires it if the BCM refuses. Early first read, then ~40 s.
-            PidSpec(BcmTirePressure.COMMAND, Header.BODY_241, 48, 3), // tire pressures, all four
+            // Tire pressures from the body control module, one DID per wheel (BcmTirePressure).
+            // Single-frame replies, so no flow control. Early first read, then ~40 s.
+            PidSpec("225008", Header.BODY_241, 48, 3), // tire pressure front left
+            PidSpec("225007", Header.BODY_241, 48, 3), // tire pressure rear left
+            PidSpec("225006", Header.BODY_241, 48, 3), // tire pressure front right
+            PidSpec("225005", Header.BODY_241, 48, 3), // tire pressure rear right
         )
 
     private val specsByCommand: Map<String, PidSpec> = SPECS.associateBy { it.command }

@@ -52,8 +52,8 @@ not, and what is still only a candidate.
 | Odometer, optional Mode 01 | `01A6` | No hit | Real car returned `NO DATA` | Do not poll live; try passive CAN idea instead. |
 | Engine oil life | `ATSH7E0` / `22119F` | No hit | Real car returned negative response | Try only if a better GM/Volt-specific source appears. |
 | Engine oil life selector variant | `ATSH7E0` / `22119F01` | No hit | Real car returned negative response | Same as above. |
-| Transmission temperature | `ATSH7E2` / `221940` | No hit | Real car returned `NO DATA` | Do not promote without a positive response. |
-| Transmission temperature selector variant | `ATSH7E2` / `22194001` | No hit | Real car returned `NO DATA` | Do not promote without a positive response. |
+| Transmission temperature | `ATSH7E2` / `221940` | No hit | Real car returned `NO DATA` | 7E2 is the gen 1 header; a gen 2 answers `221940` on `ATSH7E1`, which is now polled live. |
+| Transmission temperature selector variant | `ATSH7E2` / `22194001` | No hit | Real car returned `NO DATA` | Dropped; the gen 2 read is plain `221940` on 7E1. |
 | Tire pressure wheel candidates | `ATSH7E0` / `22248E`, `22248F`, `222490`, `222491`, `22C901`, `22C902` | No hit | Real car returned `7F2231` | Look for BCM/receiver-oriented sources before probing again. |
 | Tire receiver slot candidates | `ATSH760` / `224051`-`224054` | No hit | Real car returned `NO DATA` | Keep cached unsupported rows; skip repeated probes unless catalog changes. |
 
@@ -62,9 +62,9 @@ not, and what is still only a candidate.
 | Signal | Candidate Source | Status | Safe Validation Plan |
 | --- | --- | --- | --- |
 | Odometer | Passive CAN frame `0x120` | Deferred | Add a short passive monitor path; never send broad requests just for odometer. |
-| Tire pressure | Alternate BCM/RCDLR headers or passive receiver frames | Candidate | Research exact Volt module/header first; run a narrow Detail Probe only. |
-| Battery coolant pump RPM | GM enhanced battery thermal PIDs | Candidate | Add to catalog only with a source and diagnostic-only first. |
-| Battery coolant valve state | GM enhanced battery thermal PIDs | Candidate | Same as pump RPM; record raw frames before parsing. |
+| Tire pressure | BCM `ATSH241` / `225008` FL, `225007` RL, `225006` FR, `225005` RR | Candidate, polled live | One word per wheel in 1/16 kPa (single-frame replies). The grouped `22C901` was refused (`7F`) at the BCM. Confirm against the SW-CAN tire frame on the car. |
+| Battery coolant pump speed | `ATSH7E4` / `22435A` | Candidate, polled live | `A x 25` rpm. `2241B2`, read as the pump before, tracks A/C compressor power instead (W, follows the SW-CAN compressor kW). |
+| Cabin heater power | `ATSH7E4` / `2241B4` | Polled live | Word in W. It was read as a one-byte "coolant valve" before; the car always sent `0000` with the heat off. |
 | Outside temperature | Standard/GM body signal | Candidate | Prefer standard or already-broadcast source if available. |
 | Intake air temperature | `010F` standard OBD-II | Candidate | Low-risk standard PID; add to warm lane if useful. |
 | Torque | GM/SAE calculated engine or motor torque PID | Candidate | Needs clear source; likely diagnostic-only first. |

@@ -83,8 +83,8 @@ import { driveGear, gearDisplayText } from "./gear";
     // Thermal & fluids.
     "outsideTempC", "outsideTempRawC", "outsideTempStaleMs", "transmissionTempC",
     "transmissionTempStaleMs", "engineOilTempC", "engineOilTempStaleMs", "engineOilLifePct",
-    "engineOilLifeStaleMs", "batteryCoolantPumpRpm", "batteryCoolantPumpStaleMs",
-    "batteryCoolantValveRaw", "batteryCoolantValveStaleMs", "batteryHeaterPowerW",
+    "engineOilLifeStaleMs", "batteryCoolantPumpRpm", "batteryCoolantPumpStaleMs", "acPowerW",
+    "acPowerStaleMs", "cabinHeatPowerW", "cabinHeatPowerStaleMs", "batteryHeaterPowerW",
     "batteryHeaterPowerStaleMs", "motorTempC", "motorTempStaleMs", "inverterTempC",
     "inverterTempStaleMs", "displayedSocPct", "displayedSocStaleMs", "packResistanceMohm",
     "packResistanceStaleMs", "hvIsolationKohm", "hvIsolationStaleMs", "chargerAcVoltage",
