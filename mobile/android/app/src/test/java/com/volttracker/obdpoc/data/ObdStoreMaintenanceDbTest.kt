@@ -218,6 +218,39 @@ class ObdStoreMaintenanceDbTest {
     // ---- vacuumIfNeeded ------------------------------------------------------------
 
     @Test
+    fun prunePreservesSplitAndMergeDecisions() {
+        val (maintenance, helper) = maintenanceFor("prune-split-metadata.db")
+        val db = helper.writableDatabase
+        val sessionId = insertSession(db)
+        val oldMs = System.currentTimeMillis() - 100L * 86_400_000L
+        val split = "$sessionId:100:200"
+        val merged = "$sessionId:300:400"
+        for ((i, decision) in listOf(split to "split", merged to "split", merged to "merged").withIndex()) {
+            db.insertOrThrow(
+                VoltTrackerDb.TABLE_EVENTS,
+                null,
+                ContentValues().apply {
+                    put("session_id", sessionId)
+                    put("occurred_at_ms", oldMs + i)
+                    put("kind", ObdTripSplits.EVENT_KIND)
+                    put("detail", decision.first)
+                    put("state", decision.second)
+                    put("payload", "{}")
+                },
+            )
+        }
+        assertEquals(0, maintenance.pruneRawDataOlderThan(30))
+        assertEquals(
+            listOf(100L to 200L),
+            ObdTripSplits.activeSplits(db, sessionId).map { it.startMs to it.endMs },
+        )
+        db.rawQuery("SELECT COUNT(*) FROM ${VoltTrackerDb.TABLE_EVENTS} WHERE kind = 'trip_split'", null).use {
+            assertTrue(it.moveToFirst())
+            assertEquals("retain the superseded split and its merge-back provenance too", 3L, it.getLong(0))
+        }
+    }
+
+    @Test
     fun vacuumReclaimsFreedPagesAfterAPrune() {
         // Android-created databases default to auto_vacuum=FULL, where the freelist
         // self-drains. Rebuild this one with auto_vacuum=NONE — the shape a database file

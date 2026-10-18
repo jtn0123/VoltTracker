@@ -16,6 +16,12 @@ object DatabaseOperationLease {
 
     fun isHeld(): Boolean = active.get() != null
 
+    /** Maintenance must yield to existing writers without interrupting a recording or its drain. */
+    fun tryAcquireWhenIdle(operation: String): Token? =
+        synchronized(monitor) {
+            if (persistenceOwners.isNotEmpty()) null else tryAcquire(operation)
+        }
+
     /** Register before a service can open SQLite; a restore lease prevents new owners. */
     fun tryRegisterPersistence(): PersistenceOwner? =
         synchronized(monitor) {

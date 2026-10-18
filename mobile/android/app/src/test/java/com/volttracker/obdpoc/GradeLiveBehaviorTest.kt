@@ -1,5 +1,9 @@
 package com.volttracker.obdpoc
 
+import com.volttracker.obdpoc.ui.drive.DrivePhase
+import com.volttracker.obdpoc.ui.drive.driveSubtitle
+import com.volttracker.obdpoc.ui.drive.energyFlow
+import com.volttracker.obdpoc.ui.drive.gaugeDescription
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -9,6 +13,32 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GradeLiveBehaviorTest {
+    @Test fun silenceDoesNotClaimTheCarIsParkedAndUnrelatedReadingsDoNotResumeCharging() {
+        var now = 1_000L
+        val store = LiveUiStateStore { now }
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(
+            JSONObject()
+                .put("updatedAt", now)
+                .put("vehicleState", "charging")
+                .put("chargerPowerKw", 3.6)
+                .put("soc", 60),
+        )
+        now += 11_000L
+        store.expireCoreReadings()
+        val state = store.state.value.drive
+        assertEquals(DrivePhase.UNKNOWN, state.phase)
+        assertEquals("Connected · waiting for live data", driveSubtitle(state))
+        assertEquals("Waiting for live data", gaugeDescription(state))
+        assertEquals("Waiting for live data", energyFlow(state).caption)
+        now += 1_000L
+        store.onTelemetry(JSONObject().put("updatedAt", now).put("soc", 61))
+        assertEquals(DrivePhase.UNKNOWN, store.state.value.drive.phase)
+        assertTrue(store.state.value.charge.waitingForTelemetry)
+        store.onTelemetry(JSONObject().put("updatedAt", now + 1).put("vehicleState", "ready").put("prndlState", "P"))
+        assertEquals(DrivePhase.PARKED, store.state.value.drive.phase)
+    }
+
     @Test fun neverReportedReadingsStayUnknownButMeasuredZerosAreKnown() {
         val store = LiveUiStateStore()
         store.onStatus(JSONObject().put("state", "connected"))

@@ -132,3 +132,16 @@ competing-app allowlist and never force-stops apps automatically.
 
 Use the dashboard Settings and backup tools to export, restore, or clear local
 history. Android app uninstall also removes app-private storage.
+
+SQLite raw telemetry, GPS, PID observations and runtime events normally expire
+after **60 days**. Maintenance is requested by either dashboard's activity
+start/stop and runs in the background at most once per 24 hours after success;
+recording, backup and restore defer it. It is not guaranteed to run while the app
+is closed. The internal `raw_retention_days` preference can change that window;
+values ≤0 disable pruning. Separate JSONL logs follow their rolling-log policy.
+
+Compact trip/charge summaries and user-authored labels, favorites, hide/restore
+and split/merge decisions remain until cleared. Detailed GPS routes, raw charts
+and PID histories cannot be recovered after their samples expire. Export a
+backup before expiry to keep those details; new backups preserve only what is
+still present. Retained summary facts are included in backup/restore and merge.

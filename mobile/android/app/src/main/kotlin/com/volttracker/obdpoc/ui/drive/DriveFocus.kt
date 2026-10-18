@@ -269,6 +269,7 @@ internal fun FocusTiles(state: DriveUiState) {
         val units = state.units
         val h24 = LocalVoltPrefs.current.clock24h
         when (state.phase) {
+            DrivePhase.UNKNOWN -> Unit
             DrivePhase.DRIVE -> {
                 StatTile(
                     "This drive",

@@ -104,7 +104,7 @@ fun ChargeScreen(
             ConnectRow(state.connected, state.connecting, onConnect, onStartDemo)
             ChargeHero(state)
             Spacer(Modifier.height(10.dp))
-            ChargeFigures(state)
+            if (!state.waitingForTelemetry) ChargeFigures(state)
             if (state.charging && state.chartSpan() != null) {
                 Spacer(Modifier.height(10.dp))
                 SessionCard(state)
@@ -122,7 +122,15 @@ private fun ChargeHero(state: ChargeUiState) {
             MiniRing(state)
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                if (state.charging) ChargingSide(state) else IdleSide(state)
+                when {
+                    state.waitingForTelemetry -> {
+                        VoltPill("Waiting for live data", PillTone.NEUTRAL)
+                        Spacer(Modifier.height(12.dp))
+                        SideLine("Live readings paused. Waiting for the car.")
+                    }
+                    state.charging -> ChargingSide(state)
+                    else -> IdleSide(state)
+                }
             }
         }
     }

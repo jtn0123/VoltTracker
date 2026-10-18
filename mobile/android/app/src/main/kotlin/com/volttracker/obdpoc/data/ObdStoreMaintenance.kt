@@ -47,6 +47,7 @@ class ObdStoreMaintenance(
         val db = helper.writableDatabase
         // Finalized history is durable: build compact trip + charge summaries before removing the
         // raw samples they depend on. User-authored review events are retained below as metadata.
+        RetainedSessionHistory.preserveBeforePrune(db, cutoffMs, ObdStoreTrips(helper))
         ObdStoreTrips(helper).materializeFinalizedSessionsBefore(cutoffMs)
         ObdStoreChargeSummary.materializeFinalizedSessionsBefore(db, cutoffMs)
 
@@ -78,7 +79,7 @@ class ObdStoreMaintenance(
                 VoltTrackerDb.TABLE_EVENTS,
                 "occurred_at_ms",
                 cutoffMs,
-                "kind NOT IN ('trip_label','trip_favorite','trip_hidden')",
+                "kind NOT IN (${TripEditKinds.durable.joinToString(",") { "'$it'" }})",
             )
         deleted += deleteInBatches(db, VoltTrackerDb.TABLE_PID_OBSERVATIONS, "observed_at_ms", cutoffMs)
         invalidateTripCachesForSessions(db, affectedSessions)

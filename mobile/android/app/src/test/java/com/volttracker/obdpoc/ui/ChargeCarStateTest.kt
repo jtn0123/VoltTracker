@@ -1,9 +1,12 @@
 package com.volttracker.obdpoc.ui
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -41,6 +44,73 @@ class ChargeCarStateTest {
     }
 
     private fun count(text: String): Int = compose.onAllNodes(hasText(text)).fetchSemanticsNodes().size
+
+    @Test
+    fun aSilentChargeStreamWaitsThenRecoversTheSameCharge() {
+        var now = 1_000L
+        val store = LiveUiStateStore { now }
+        store.onStatus(JSONObject().put("state", "connected"))
+
+        fun sample() =
+            JSONObject()
+                .put("updatedAt", now)
+                .put("vehicleState", "charging")
+                .put("soc", 63)
+                .put("chargerPowerKw", 3.6)
+                .put("chargerAcVoltage", 240)
+                .put("chargerAcCurrentA", 15)
+                .put("chargeState", "Charging")
+        store.onTelemetry(sample())
+        val began = store.state.value.charge.startedAtMs
+        compose.setContent {
+            val ui by store.state.collectAsState()
+            VoltTheme { ChargeScreen(ui.charge) }
+        }
+        compose.onNodeWithText("CHARGING · LEVEL 2").assertIsDisplayed()
+        compose.runOnIdle {
+            now += 11_000L
+            store.expireCoreReadings()
+        }
+        compose.onNodeWithText("WAITING FOR LIVE DATA").assertIsDisplayed()
+        compose.onNodeWithText("Connected · waiting for live data").assertIsDisplayed()
+        compose.onNodeWithText("CHARGING · LEVEL 2").assertDoesNotExist()
+        compose.onNodeWithText("Full by", substring = true).assertDoesNotExist()
+        assertEquals(null, store.state.value.drive.chargeEta)
+        assertEquals(null, store.state.value.charge.acVolts)
+        assertEquals(null, store.state.value.charge.carChargeState)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/stale-charge.png")
+        compose.runOnIdle {
+            now += 1_000L
+            store.onTelemetry(sample())
+        }
+        compose.onNodeWithText("CHARGING · LEVEL 2").assertIsDisplayed()
+        assertEquals("a silent gap must not restart a charge", began, store.state.value.charge.startedAtMs)
+    }
+
+    @Test
+    fun chargingBeforeSocArrivesShowsAPlaceholderThenRecovers() {
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+
+        fun sample(at: Long) =
+            JSONObject()
+                .put("updatedAt", at)
+                .put("vehicleState", "charging")
+                .put("chargerPowerKw", 3.6)
+                .put("speedKph", 0)
+        store.onTelemetry(sample(1000L))
+        store.onTelemetry(sample(2000L))
+        compose.setContent {
+            val ui by store.state.collectAsState()
+            VoltTheme {
+                CompositionLocalProvider(LocalVoltPrefs provides VoltPrefs()) { ChargeScreen(ui.charge) }
+            }
+        }
+        compose.onNodeWithText("Waiting for battery percentage").assertIsDisplayed()
+        compose.runOnIdle { store.onTelemetry(sample(3000L).put("soc", 63)) }
+        compose.onNodeWithText("Waiting for battery percentage").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Charge session: 63% to 63% so far").assertIsDisplayed()
+    }
 
     @Test
     fun engineRunningInParkDoesNotShowThePlugInChargingHero() {

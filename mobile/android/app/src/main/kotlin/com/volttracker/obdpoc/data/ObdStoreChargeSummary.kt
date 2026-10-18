@@ -14,6 +14,14 @@ import org.json.JSONObject
  * [SQLiteDatabase] handle, so this carries no instance state of its own.
  */
 internal object ObdStoreChargeSummary {
+    internal fun contributionForRetention(
+        db: SQLiteDatabase,
+        session: ObdSessionRecord,
+    ): String =
+        serializeChargeContribution(
+            SessionChargeContribution(computeWithinSessionRows(db, session), computeBoundaries(db, session)),
+        ).toString()
+
     internal fun materializeFinalizedSession(
         db: SQLiteDatabase,
         sessionId: Long,
@@ -487,6 +495,18 @@ internal object ObdStoreChargeSummary {
                     while (cursor.moveToNext()) {
                         val sessionId = cursor.getLong(0)
                         parseChargeContribution(cursor.getString(1))?.let { result[sessionId] = it }
+                    }
+                }
+            db
+                .rawQuery(
+                    "SELECT session_id, charge_json FROM ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY} WHERE session_id IN ($placeholders)",
+                    chunk.map { it.toString() }.toTypedArray(),
+                ).use { cursor ->
+                    while (cursor.moveToNext()) {
+                        parseChargeContribution(cursor.getString(1))?.let {
+                            result[cursor.getLong(0)] =
+                                it
+                        }
                     }
                 }
         }

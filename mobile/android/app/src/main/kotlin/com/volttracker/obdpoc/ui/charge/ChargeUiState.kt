@@ -30,6 +30,8 @@ data class SocPoint(
  * Pure data — previewable and screenshot-testable with no service running.
  */
 data class ChargeUiState(
+    /** The adapter is linked, but telemetry stopped arriving; the car's current state is unknown. */
+    val waitingForTelemetry: Boolean = false,
     val connected: Boolean = false,
     /** A link is being set up: the Connect / Demo buttons stay hidden so a second tap can't race it. */
     val connecting: Boolean = false,

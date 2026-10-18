@@ -174,6 +174,23 @@ class UserTripSplitDbTest {
 
     // ---- helpers -------------------------------------------------------------------------
 
+    @Test
+    fun expiredRawInputsCannotProduceASuccessfulMergeWithNoChangedTrips() {
+        val old = System.currentTimeMillis() - 100L * 86_400_000L
+        val id = recordShortParkDrive(old)
+        val key = singleTripKey(id)
+        val stop = parkStop(key)
+        val split = checkNotNull(store.tripEdits.splitTripAtStop(key, stop.startMs, stop.endMs))
+        store.pruneRawDataOlderThan(60)
+        assertEquals(2, tripsFor(id).size)
+        assertNull(
+            "merging needs the original geometry, which has expired",
+            store.tripEdits.mergeTripSplit(split.splitKey),
+        )
+        assertEquals("a rejected edit must not append a misleading merge decision", 1, splitEventCount())
+        assertEquals(2, tripsFor(id).size)
+    }
+
     /** 10 min driving, a 5-min Park stop, 10 min driving: one gear-aware trip with one in-trip stop. */
     private fun recordShortParkDrive(
         baseMs: Long,

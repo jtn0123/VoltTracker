@@ -38,6 +38,7 @@ class TripEditRemapperTest {
             ObdTripLabels.EVENT_KIND,
             ObdTripFavorites.EVENT_KIND,
             ObdTripExclusions.EVENT_KIND,
+            ObdTripSplits.EVENT_KIND,
         )) {
             val cv = event(kind, "1:2000:3000", """{"routeKey":"1:2000:3000","label":"Home"}""")
             TripEditRemapper.remapEvent(cv, sessionMap)
@@ -50,6 +51,22 @@ class TripEditRemapperTest {
             )
             assertEquals("other payload fields must survive", "Home", payload.getString("label"))
         }
+    }
+
+    @Test
+    fun splitDecisionRemapsBothTheStopKeyAndItsRoute() {
+        val cv =
+            event(
+                ObdTripSplits.EVENT_KIND,
+                "1:2000:3000",
+                """{"routeKey":"1:1000:4000","splitKey":"1:2000:3000","startMs":2000}""",
+            )
+        TripEditRemapper.remapEvent(cv, sessionMap)
+        val payload = JSONObject(cv.getAsString("payload"))
+        assertEquals("87:2000:3000", cv.getAsString("detail"))
+        assertEquals("87:2000:3000", payload.getString("splitKey"))
+        assertEquals("87:1000:4000", payload.getString("routeKey"))
+        assertEquals(2000L, payload.getLong("startMs"))
     }
 
     @Test

@@ -557,10 +557,10 @@ object ObdStoreSupport {
         db
             .rawQuery(
                 "SELECT $projection FROM ${VoltTrackerDb.TABLE_SESSIONS} s " +
-                    "WHERE s.mode = ? AND EXISTS (" +
+                    "WHERE s.mode = ? AND (EXISTS (" +
                     "SELECT 1 FROM ${VoltTrackerDb.TABLE_TELEMETRY} t " +
                     "WHERE t.session_id = s._id AND $USEFUL_TELEMETRY_WHERE LIMIT 1" +
-                    ") ORDER BY s.started_at_ms ASC",
+                    ") OR EXISTS (SELECT 1 FROM ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY} r WHERE r.session_id = s._id)) ORDER BY s.started_at_ms ASC",
                 arrayOf(ObdLocalStore.MODE_OBD),
             ).use { cursor ->
                 while (cursor.moveToNext()) {

@@ -82,6 +82,9 @@ class ObdStoreTrips(
     ): List<JSONObject> {
         val trips = ArrayList<JSONObject>()
         val hiddenRouteKeys = ObdTripExclusions.hiddenRouteKeys(db, listOf(session.id))
+        RetainedSessionHistory.trips(db, session.id)?.let { facts ->
+            return facts.filterNot { hiddenRouteKeys.contains(it.optString("id")) }
+        }
         for (window in DriveWindowDetector.windowsForSession(db, session)) {
             val trip = tripJson(db, session, window, hiddenRouteKeys)
             if (trip != null) {
@@ -90,6 +93,13 @@ class ObdStoreTrips(
         }
         return trips
     }
+
+    /** Capture hidden trips too: visibility must remain reversible after the raw source expires. */
+    internal fun tripFactsForRetention(
+        db: SQLiteDatabase,
+        session: ObdSessionRecord,
+    ): List<JSONObject> =
+        DriveWindowDetector.windowsForSession(db, session).mapNotNull { tripJson(db, session, it, emptySet()) }
 
     @Throws(JSONException::class)
     private fun tripJson(

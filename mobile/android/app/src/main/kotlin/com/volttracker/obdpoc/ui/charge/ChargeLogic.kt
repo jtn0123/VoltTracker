@@ -16,7 +16,14 @@ val ChargeUiState.shownSocPercent: Double? get() = displayedSocPercent ?: socPer
 
 /** Time to the charge limit at the current charger power; null while not charging or already there. */
 val ChargeUiState.eta: ChargeEta?
-    get() = if (charging) chargeEta(shownSocPercent, chargeKw, sohPct, targetSoc.toDouble()) else null
+    get() =
+        if (charging &&
+            !waitingForTelemetry
+        ) {
+            chargeEta(shownSocPercent, chargeKw, sohPct, targetSoc.toDouble())
+        } else {
+            null
+        }
 
 /**
  * "Plugged in · Level 2" while charging, "Connected · not charging" on a live link that isn't;
@@ -25,6 +32,7 @@ val ChargeUiState.eta: ChargeEta?
 val ChargeUiState.subtitle: String
     get() =
         when {
+            waitingForTelemetry -> "Connected · waiting for live data"
             charging -> listOfNotNull("Plugged in", levelName(level)).joinToString(" · ")
             connected -> "Connected · not charging"
             else -> statusLabel

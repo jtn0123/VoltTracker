@@ -38,6 +38,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         VoltTrackerSchema.createSessionTripRollups(db)
         VoltTrackerSchema.createTripListCache(db)
         VoltTrackerSchema.createChargeSessionRollups(db)
+        VoltTrackerSchema.createRetainedSessionHistory(db)
         VoltTrackerSchema.createMaintenanceLog(db)
         VoltTrackerSchema.createCellSnapshotIndexes(db)
     }
@@ -76,7 +77,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
 
     companion object {
         const val DATABASE_NAME = "volttracker_obd_poc.db"
-        const val DATABASE_VERSION = 17
+        const val DATABASE_VERSION = 18
 
         const val TABLE_SESSIONS = "obd_sessions"
         const val TABLE_TELEMETRY = "telemetry_samples"
@@ -91,6 +92,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
         const val TABLE_SESSION_TRIP_ROLLUPS = "session_trip_rollups"
         const val TABLE_TRIP_LIST_CACHE = "trip_list_cache"
         const val TABLE_CHARGE_SESSION_ROLLUPS = "charge_session_rollups"
+        const val TABLE_RETAINED_SESSION_HISTORY = "retained_session_history"
         const val TABLE_CHARGE_SESSIONS = "charge_sessions"
         const val TABLE_BATTERY_SNAPSHOTS = "battery_snapshots"
         const val TABLE_CELL_SNAPSHOTS = "cell_snapshots"
@@ -113,6 +115,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
                 TABLE_SESSION_TRIP_ROLLUPS,
                 TABLE_TRIP_LIST_CACHE,
                 TABLE_CHARGE_SESSION_ROLLUPS,
+                TABLE_RETAINED_SESSION_HISTORY,
                 TABLE_CHARGE_SESSIONS,
                 TABLE_BATTERY_SNAPSHOTS,
                 TABLE_CELL_SNAPSHOTS,

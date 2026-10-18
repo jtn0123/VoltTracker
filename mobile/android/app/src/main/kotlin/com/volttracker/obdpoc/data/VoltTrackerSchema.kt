@@ -190,6 +190,21 @@ object VoltTrackerSchema {
         )
     }
 
+    /** Compact historical facts that remain authoritative after raw samples expire. */
+    fun createRetainedSessionHistory(db: SQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS ${VoltTrackerDb.TABLE_RETAINED_SESSION_HISTORY} (
+                session_id INTEGER PRIMARY KEY,
+                retained_at_ms INTEGER NOT NULL,
+                trip_json TEXT NOT NULL,
+                charge_json TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES ${VoltTrackerDb.TABLE_SESSIONS}(_id) ON DELETE CASCADE
+            )
+            """.trimIndent(),
+        )
+    }
+
     /**
      * User-authored maintenance log (M5). One row per logged service entry — independent of any
      * session/vehicle (the user may log service performed off-app), so it has no foreign keys and

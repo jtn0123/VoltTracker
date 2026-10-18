@@ -142,6 +142,7 @@ fun aux12Tile(drive: DriveUiState): CarTile {
             DrivePhase.PARKED -> if (drive.connected && drive.gear != NO_GEAR_TEXT) "car on" else "resting"
             DrivePhase.DRIVE -> "car on"
             DrivePhase.CHARGING -> "plugged in"
+            DrivePhase.UNKNOWN -> "last known"
         }
     val lines =
         listOfNotNull(soc?.let { "$it%" }, phase, status.text.replaceFirstChar(Char::lowercaseChar))
