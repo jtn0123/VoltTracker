@@ -2,7 +2,6 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import android.content.Intent
-import androidx.core.content.ContextCompat
 import com.volttracker.obdpoc.service.ObdService
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -39,11 +38,9 @@ class DashboardDemoTelemetrySmokeTest {
         ActivityScenario.launch(MainActivity::class.java).use { scenario ->
             awaitDashboardHandshake(scenario)
 
-            // Start the synthetic demo polling loop — the same intent the in-app "Demo" entry
-            // points send. It runs with no adapter/socket, so this works on a bare emulator.
-            val demo = Intent(context, ObdService::class.java)
-            demo.action = ObdService.ACTION_DEMO
-            ContextCompat.startForegroundService(context, demo)
+            // Start the synthetic demo polling loop the way the in-app "Demo" entry points do.
+            // It runs with no adapter/socket, so this works on a bare emulator.
+            startDemoSessionWhenDatabaseIdle(context)
 
             awaitDashboardTelemetry(scenario)
         }

@@ -18,8 +18,9 @@ import java.util.concurrent.TimeUnit
 /**
  * On-device smoke for the demo session pipeline: starting [ObdService] with [ObdService.ACTION_DEMO]
  * must produce real [ObdService.BROADCAST_TELEMETRY] broadcasts — the same telemetry stream the
- * dashboard renders. This exercises the foreground-service start path, the demo polling loop, and
- * the broadcast plumbing on a real Android runtime (no Bluetooth adapter required).
+ * dashboard renders. This exercises the service start path the app's Demo buttons use, the demo
+ * polling loop, and the broadcast plumbing on a real Android runtime (no Bluetooth adapter
+ * required).
  */
 @RunWith(AndroidJUnit4::class)
 class ObdServiceDemoSmokeTest {
@@ -60,9 +61,7 @@ class ObdServiceDemoSmokeTest {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
 
-        val demo = Intent(context, ObdService::class.java)
-        demo.action = ObdService.ACTION_DEMO
-        ContextCompat.startForegroundService(context, demo)
+        startDemoSessionWhenDatabaseIdle(context)
 
         assertTrue(
             "expected >=$MIN_TELEMETRY_BROADCASTS telemetry broadcasts from the demo loop " +
