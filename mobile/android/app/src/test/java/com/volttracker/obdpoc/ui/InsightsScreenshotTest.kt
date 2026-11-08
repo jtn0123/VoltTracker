@@ -20,6 +20,7 @@ import org.robolectric.annotation.GraphicsMode
  * year, a month with no costs set / no speed data / no drifting cell, and nothing logged — in
  * OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/insights-<state>-<theme>.png; every case also proves the screen composes.
+ * Compose-only: the reviewed, compared Insights baselines are in [LauncherTabsVisualRegressionTest].
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

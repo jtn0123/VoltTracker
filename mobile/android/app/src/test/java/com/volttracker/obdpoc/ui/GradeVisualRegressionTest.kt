@@ -1,11 +1,5 @@
 package com.volttracker.obdpoc.ui
 
-import android.provider.Settings
-import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.v2.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
-import androidx.compose.ui.test.onRoot
-import com.github.takahirom.roborazzi.captureRoboImage
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.components.VoltTab
 import com.volttracker.obdpoc.ui.diag.DiagUiState
@@ -13,37 +7,25 @@ import com.volttracker.obdpoc.ui.diag.DtcCode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.DriveUiState
 import com.volttracker.obdpoc.ui.settings.SettingsUiState
-import org.junit.After
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.ParameterizedRobolectricTestRunner
-import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.util.TimeZone
 
-/** Fixed SDK, size, clock, app fonts, themes and motion; CI compares these reviewed baselines. */
+/**
+ * Drive, Health and Charge states on the fixed [NativeVisualRule] fixture; CI compares these reviewed
+ * baselines. The other launcher tabs are in [LauncherTabsVisualRegressionTest].
+ */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "en-rUS-w412dp-h915dp-420dpi")
+@Config(sdk = [NativeVisualRule.SDK], qualifiers = NativeVisualRule.QUALIFIERS)
 class GradeVisualRegressionTest(
     private val scenario: String,
     private val theme: ThemeCase,
 ) {
-    @get:Rule val compose = createComposeRule()
-
-    private val originalZone = TimeZone.getDefault()
-
-    @Before fun fixedClock() {
-        TimeZone.setDefault(TimeZone.getTimeZone("UTC"))
-        Settings.System.putString(RuntimeEnvironment.getApplication().contentResolver, Settings.System.TIME_12_24, "12")
-    }
-
-    @After fun restoreZone() {
-        TimeZone.setDefault(originalZone)
-    }
+    @get:Rule val visual = NativeVisualRule()
 
     @Test fun capture() {
         val base =
@@ -77,23 +59,11 @@ class GradeVisualRegressionTest(
             }
         val tab = if (scenario == "refresh") VoltTab.CHARGE else VoltTab.DRIVE
         val routes = if (scenario.endsWith("health")) listOf(VoltRoute.HEALTH) else emptyList()
-        // No pulsing/infinite animations or wall-clock-dependent live data in the baseline.
-        Settings.Global.putFloat(
-            RuntimeEnvironment.getApplication().contentResolver,
-            Settings.Global.ANIMATOR_DURATION_SCALE,
-            0f,
-        )
-        compose.setContent { VoltApp(state, initialTab = tab, initialRoutes = routes) }
-        compose.onNodeWithContentDescription("Trips").assertIsDisplayed()
-        compose.waitForIdle()
-        compose.mainClock.autoAdvance = false
-        compose.mainClock.advanceTimeBy(1_000L)
-        compose.onRoot().captureRoboImage("$BASELINES/$scenario-${theme.key}.png")
+        visual.capture("$scenario-${theme.key}", state, tab, routes)
     }
 
     companion object {
         private const val RECORDING_WARNING = "Telemetry could not be saved. Check available storage."
-        private const val BASELINES = "src/test/java/com/volttracker/obdpoc/ui/baselines"
 
         @JvmStatic
         @ParameterizedRobolectricTestRunner.Parameters(name = "{0}-{1}")

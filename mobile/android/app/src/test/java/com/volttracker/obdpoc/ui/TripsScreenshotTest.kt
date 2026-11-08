@@ -20,6 +20,7 @@ import org.robolectric.annotation.GraphicsMode
  * an electric drive selected, with a drive that has no GPS route, and with nothing logged yet —
  * in OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/trips-<state>-<theme>.png; every case also proves the screen composes.
+ * Compose-only: the reviewed, compared Trips baselines are in [LauncherTabsVisualRegressionTest].
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
