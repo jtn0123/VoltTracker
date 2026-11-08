@@ -1,24 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-package_name="com.volttracker.obdpoc"
-if [[ -n "${VOLTTRACKER_PACKAGE:-}" && "${VOLTTRACKER_PACKAGE}" != "$package_name" ]]; then
-  echo "Refusing to benchmark package '${VOLTTRACKER_PACKAGE}'. This script only targets $package_name." >&2
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=benchmark-adb-target.sh
+source "$script_dir/benchmark-adb-target.sh"
+
+usage() {
+  cat <<'EOF'
+usage: tools/benchmark-adb-tabs-local.sh [options] [ADB_SERIAL_OR_IP:PORT] [RUNS]
+
+For each tab, RUNS times (default 3): cold-starts the installed app, waits until it is ready,
+taps the tab and waits until it is on screen. Never installs, uninstalls, clears app data, or
+targets another package.
+
+Tabs come from VOLTTRACKER_TAB_TARGETS (space-separated):
+  native   drive trips charge insights car settings (default: trips charge insights car settings)
+  classic  drive map charge insights diagnostics settings (default: map charge insights diagnostics settings)
+
+EOF
+  vt_target_usage
+}
+
+parse_rc=0
+vt_parse_benchmark_args "$@" || parse_rc=$?
+if [[ "$parse_rc" -eq 3 ]]; then
+  usage
+  exit 0
+elif [[ "$parse_rc" -ne 0 ]]; then
+  usage >&2
   exit 2
 fi
+package_name="$VT_PACKAGE"
+dashboard="$VT_DASHBOARD"
+if [[ -n "${VOLTTRACKER_COMPONENT:-}" ]]; then
+  vt_check_component_override "$package_name" "$VOLTTRACKER_COMPONENT" || exit 2
+fi
 
-target="${1:-${VOLTTRACKER_ADB_SERIAL:-}}"
-runs="${VOLTTRACKER_TAB_RUNS:-${2:-3}}"
-tabs_text="${VOLTTRACKER_TAB_TARGETS:-map charge insights diagnostics settings}"
-component="${VOLTTRACKER_COMPONENT:-$package_name/.MainActivity}"
-ready_text="${VOLTTRACKER_READY_TEXT:-VoltTracker dashboard ready}"
+target="${VT_ARGS[0]:-${VOLTTRACKER_ADB_SERIAL:-}}"
+runs="${VOLTTRACKER_TAB_RUNS:-${VT_ARGS[1]:-3}}"
+read -r -a requested_tabs <<<"${VOLTTRACKER_TAB_TARGETS:-$(vt_default_tabs "$dashboard")}"
+if [[ "${#requested_tabs[@]}" -eq 0 ]]; then
+  echo "VOLTTRACKER_TAB_TARGETS names no tabs." >&2
+  exit 2
+fi
+tabs_text="$(vt_check_tabs "$dashboard" "${requested_tabs[@]}")" || exit 2
+read -r -a tabs <<<"$tabs_text"
+ready_mark="$(vt_ready_mark "$dashboard")"
+ready_text="${VOLTTRACKER_READY_TEXT:-$(vt_ready_probe "$dashboard")}"
 ready_timeout_sec="${VOLTTRACKER_TAB_READY_TIMEOUT_SEC:-30}"
 tab_timeout_sec="${VOLTTRACKER_TAB_SWITCH_TIMEOUT_SEC:-10}"
-trace_tag="${VOLTTRACKER_STARTUP_TRACE_TAG:-VoltStartup}"
+trace_tag="${VOLTTRACKER_STARTUP_TRACE_TAG:-$VT_TRACE_TAG}"
 wake_device="${VOLTTRACKER_STARTUP_WAKE_DEVICE:-1}"
-tap_strategy="${VOLTTRACKER_TAB_TAP_STRATEGY:-coordinate}"
+# Native targets are found by their content description; the classic nav also has fixed slots.
+if [[ "$dashboard" == "native" ]]; then
+  tap_strategy="${VOLTTRACKER_TAB_TAP_STRATEGY:-accessibility}"
+  if [[ "$tap_strategy" != "accessibility" ]]; then
+    echo "The native dashboard is tapped by content description: VOLTTRACKER_TAB_TAP_STRATEGY must be accessibility." >&2
+    exit 2
+  fi
+else
+  tap_strategy="${VOLTTRACKER_TAB_TAP_STRATEGY:-coordinate}"
+fi
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 android_dir="$(cd "$script_dir/.." && pwd)"
 timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
 report_dir="$android_dir/build/reports/adb-tab-benchmark/$timestamp"
@@ -26,8 +69,6 @@ raw_dir="$report_dir/raw"
 trend_dir="$android_dir/build/reports/performance-trends"
 
 mkdir -p "$raw_dir" "$trend_dir"
-
-read -r -a tabs <<<"$tabs_text"
 
 pick_ready_device() {
   adb devices | awk 'NR > 1 && $2 == "device" { print $1; exit }'
@@ -55,59 +96,29 @@ parse_am_field() {
   awk -F: -v field="$field" '$1 ~ field { gsub(/[ \r]/, "", $2); print $2; exit }' "$file"
 }
 
-tab_index() {
-  case "$1" in
-    drive) echo "0" ;;
-    map) echo "1" ;;
-    charge) echo "2" ;;
-    insights) echo "3" ;;
-    diagnostics|diag) echo "4" ;;
-    settings) echo "5" ;;
-    *) return 1 ;;
-  esac
-}
-
-tab_nav_desc() {
-  case "$1" in
-    drive) echo "Drive" ;;
-    map) echo "Map" ;;
-    charge) echo "Charge" ;;
-    insights) echo "Insights" ;;
-    diagnostics|diag) echo "Diag" ;;
-    settings) echo "Settings" ;;
-    *) echo "$1" ;;
-  esac
-}
-
-tab_title() {
-  case "$1" in
-    drive) echo "Drive" ;;
-    map) echo "Map" ;;
-    charge) echo "Charge" ;;
-    insights) echo "Insights" ;;
-    diagnostics|diag) echo "Diagnostics" ;;
-    settings) echo "Settings" ;;
-    *) echo "$1" ;;
-  esac
-}
-
 dump_ui() {
   local file="$1"
   mkdir -p "$(dirname "$file")"
   adb -s "$serial" exec-out uiautomator dump /dev/tty 2>/dev/null | tr -d '\r' >"$file"
 }
 
+logcat_has_mark() {
+  adb -s "$serial" logcat -d -s "$trace_tag:I" '*:S' 2>/dev/null | grep -F "mark=$1 " >/dev/null
+}
+
 screen_width=""
 screen_height=""
 
+# The classic nav's equal slots along the bottom of the screen.
 center_by_tab_screen() {
   local tab="$1"
-  local index
-  index="$(tab_index "$tab")" || return 1
+  local index slots
+  index="$(vt_classic_tab_index "$tab")" || return 1
+  slots="$(vt_classic_tab_count)"
   if [[ -z "$screen_width" || -z "$screen_height" ]]; then
     return 1
   fi
-  local cx=$(( (screen_width * ((index * 2) + 1) + 6) / 12 ))
+  local cx=$(( (screen_width * ((index * 2) + 1) + slots) / (slots * 2) ))
   local cy=$(( (screen_height * 954 + 500) / 1000 ))
   echo "$cx $cy"
 }
@@ -116,13 +127,15 @@ xml_query() {
   local mode="$1"
   local file="$2"
   local arg="$3"
-  python3 - "$mode" "$file" "$arg" <<'PY'
+  local slot="${4:-}"
+  local slots="${5:-}"
+  python3 - "$mode" "$file" "$arg" "$slot" "$slots" <<'PY'
 import re
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-mode, file_name, arg = sys.argv[1:4]
+mode, file_name, arg, slot, slots = sys.argv[1:6]
 text = Path(file_name).read_text(errors="ignore")
 end = text.find("</hierarchy>")
 if end >= 0:
@@ -143,10 +156,17 @@ def bounds(node):
         return None
     return x1, y1, x2, y2
 
-if mode == "center-by-desc":
+def desc_matches(node):
+    # A native tab's description may carry a badge: "Car, has faults".
+    desc = node.attrib.get("content-desc", "")
+    return desc == arg or desc.startswith(arg + ", ")
+
+if mode in ("center-by-desc", "center-by-desc-prefix"):
     candidates = []
     for node in root.iter("node"):
-        if node.attrib.get("content-desc") != arg:
+        if mode == "center-by-desc" and node.attrib.get("content-desc") != arg:
+            continue
+        if mode == "center-by-desc-prefix" and not desc_matches(node):
             continue
         if node.attrib.get("clickable") != "true":
             continue
@@ -159,23 +179,20 @@ if mode == "center-by-desc":
         sys.exit(1)
     _y, _x, cx, cy = sorted(candidates)[0]
     print(f"{cx} {cy}")
+elif mode == "selected-by-desc":
+    for node in root.iter("node"):
+        if desc_matches(node) and node.attrib.get("selected") == "true":
+            print("1")
+            sys.exit(0)
+    sys.exit(1)
 elif mode == "center-by-tab":
-    order = {
-        "drive": 0,
-        "map": 1,
-        "charge": 2,
-        "insights": 3,
-        "diagnostics": 4,
-        "diag": 4,
-        "settings": 5,
-    }
-    if arg not in order:
+    if not slot or not slots:
         sys.exit(1)
     root_box = bounds(root.find("node")) or (0, 0, 1440, 3120)
     x1, y1, x2, y2 = root_box
     width = x2 - x1
     height = y2 - y1
-    cx = x1 + round(width * ((order[arg] * 2) + 1) / 12)
+    cx = x1 + round(width * ((int(slot) * 2) + 1) / (int(slots) * 2))
     cy = y1 + round(height * 0.954)
     print(f"{cx} {cy}")
 elif mode == "visible-title":
@@ -193,6 +210,59 @@ elif mode == "visible-title":
 else:
     sys.exit(2)
 PY
+}
+
+# find_tap_center TAB DUMP: where to tap TAB, from the dump (re-dumped until the target appears).
+find_tap_center() {
+  local tab="$1" dump="$2" desc center="" attempt
+  desc="$(vt_tab_field "$dashboard" "$tab" 2)"
+  if [[ "$dashboard" == "classic" ]]; then
+    if [[ "$tap_strategy" == "coordinate" ]]; then
+      center="$(center_by_tab_screen "$tab" 2>/dev/null || true)"
+    fi
+    if [[ -z "$center" ]]; then
+      if [[ ! -s "$dump" ]]; then
+        dump_ui "$dump" || true
+      fi
+      center="$(xml_query "center-by-desc" "$dump" "$desc" 2>/dev/null || true)"
+    fi
+    if [[ -z "$center" ]]; then
+      center="$(xml_query "center-by-tab" "$dump" "$tab" "$(vt_classic_tab_index "$tab")" "$(vt_classic_tab_count)" || true)"
+    fi
+    echo "$center"
+    return 0
+  fi
+  # The ready mark can land before the nav is in the accessibility tree.
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if [[ "$attempt" -gt 1 || ! -s "$dump" ]]; then
+      dump_ui "$dump" || true
+    fi
+    center="$(xml_query "center-by-desc-prefix" "$dump" "$desc" 2>/dev/null || true)"
+    if [[ -n "$center" ]]; then
+      break
+    fi
+    sleep 0.2
+  done
+  echo "$center"
+}
+
+# tab_on_screen TAB DUMP: whether the dump shows TAB (its nav button selected, or its page title).
+tab_on_screen() {
+  local tab="$1" dump="$2"
+  if [[ "$dashboard" == "native" && "$tab" != "settings" ]]; then
+    xml_query "selected-by-desc" "$dump" "$(vt_tab_field native "$tab" 2)" >/dev/null 2>&1
+  else
+    xml_query "visible-title" "$dump" "$(tab_title "$tab")" >/dev/null 2>&1
+  fi
+}
+
+tab_title() {
+  if [[ "$dashboard" == "classic" ]]; then
+    vt_tab_field classic "$1" 3
+  else
+    # The native Settings page's title.
+    vt_tab_field native "$1" 2
+  fi
 }
 
 if [[ -n "$target" && "$target" == *:* ]]; then
@@ -240,7 +310,29 @@ if [[ "$screen_width" == "$screen_height" || -z "$screen_width" || -z "$screen_h
 fi
 
 adb -s "$serial" devices -l >"$raw_dir/adb-devices.txt" 2>&1 || true
-adb -s "$serial" shell pm path "$package_name" >"$raw_dir/pm-path.txt" 2>&1
+adb -s "$serial" shell pm path "$package_name" >"$raw_dir/pm-path.txt" 2>&1 || true
+if ! component="$(vt_resolve_component "$serial" "$package_name" "$dashboard" "${VOLTTRACKER_COMPONENT:-}" \
+  "$raw_dir/resolve-activity.txt" 2>"$raw_dir/resolve-error.txt")"; then
+  cat "$raw_dir/resolve-error.txt" >&2
+  cat >"$report_dir/summary.md" <<EOF
+# VoltTracker ADB Tab Benchmark
+
+Status: \`no-launch-component\`
+
+- Serial: \`$serial\`
+- Package: \`$package_name\` ($VT_VARIANT)
+- Dashboard: \`$dashboard\`
+
+$(cat "$raw_dir/resolve-error.txt")
+EOF
+  echo "$report_dir/summary.md"
+  exit 2
+fi
+
+target_marks=""
+for tab in "${tabs[@]}"; do
+  target_marks="${target_marks:+$target_marks }$tab=$(vt_tab_mark "$dashboard" "$tab")"
+done
 
 runs_csv="$report_dir/tab-runs.csv"
 marks_csv="$report_dir/tab-marks.csv"
@@ -253,8 +345,18 @@ printf 'target,run,mark,elapsedMs\n' >"$marks_csv"
 : >"$jsonl_file"
 
 for tab in "${tabs[@]}"; do
-  nav_desc="$(tab_nav_desc "$tab")"
-  title="$(tab_title "$tab")"
+  tab_mark="$(vt_tab_mark "$dashboard" "$tab")"
+  # How each run found the tab on screen (the classic labels predate the native dashboard).
+  if [[ "$dashboard" == "classic" ]]; then
+    mark_source="logcat:tab-paint"
+  else
+    mark_source="logcat:compose-screen"
+  fi
+  if [[ "$dashboard" == "native" && "$tab" != "settings" ]]; then
+    dump_source="nav-selected"
+  else
+    dump_source="screen-title:$(tab_title "$tab")"
+  fi
   for run in $(seq 1 "$runs"); do
     adb -s "$serial" logcat -c >/dev/null 2>&1 || true
     wake_for_benchmark
@@ -281,16 +383,15 @@ for tab in "${tabs[@]}"; do
     ready_dump="$raw_dir/$safe_tab-run-$run-ready.xml"
     deadline_ms=$((start_ms + ready_timeout_sec * 1000))
     while [[ "$(now_ms)" -lt "$deadline_ms" ]]; do
-      if adb -s "$serial" logcat -d -s "$trace_tag:I" '*:S' 2>/dev/null |
-        grep -F "mark=dashboard_ready_content_description " >/dev/null; then
-          ready_found=1
-          ready_source="logcat"
-          ready_abs_ms="$(now_ms)"
-          ready_ms=$((ready_abs_ms - start_ms))
-          if [[ "$tap_strategy" == "accessibility" ]]; then
-            dump_ui "$ready_dump" || true
-          fi
-          break
+      if logcat_has_mark "$ready_mark"; then
+        ready_found=1
+        ready_source="logcat"
+        ready_abs_ms="$(now_ms)"
+        ready_ms=$((ready_abs_ms - start_ms))
+        if [[ "$tap_strategy" == "accessibility" ]]; then
+          dump_ui "$ready_dump" || true
+        fi
+        break
       fi
       if dump_ui "$ready_dump"; then
         if grep -F "$ready_text" "$ready_dump" >/dev/null; then
@@ -315,11 +416,12 @@ for tab in "${tabs[@]}"; do
 
     if [[ "$ready_found" == "1" ]]; then
       if [[ "$tab" == "drive" ]]; then
+        # Drive is the start screen: it is on screen once the dashboard is ready.
         tap_start_ms="$(now_ms)"
         if [[ ! -s "$ready_dump" ]]; then
           dump_ui "$ready_dump" || true
         fi
-        if xml_query "visible-title" "$ready_dump" "$title" >/dev/null 2>&1; then
+        if [[ "$dashboard" == "native" && "$ready_source" == "logcat" ]] || tab_on_screen "$tab" "$ready_dump"; then
           tab_found=1
           tab_source="already-visible"
           tab_ready_abs_ms="$tap_start_ms"
@@ -329,51 +431,41 @@ for tab in "${tabs[@]}"; do
         ready_to_tap=$((tap_start_ms - ready_abs_ms))
         tap_host=0
       else
-        center=""
-        if [[ "$tap_strategy" == "coordinate" ]]; then
-          center="$(center_by_tab_screen "$tab" 2>/dev/null || true)"
-        fi
-        if [[ -z "$center" ]]; then
-          if [[ ! -s "$ready_dump" ]]; then
-            dump_ui "$ready_dump" || true
-          fi
-          center="$(xml_query "center-by-desc" "$ready_dump" "$nav_desc" 2>/dev/null || true)"
-        fi
-        if [[ -z "$center" ]]; then
-          center="$(xml_query "center-by-tab" "$ready_dump" "$tab")"
-        fi
-        tap_x="${center%% *}"
-        tap_y="${center##* }"
-        tap_start_ms="$(now_ms)"
-        ready_to_tap=$((tap_start_ms - ready_abs_ms))
-        adb -s "$serial" shell input tap "$tap_x" "$tap_y" >/dev/null 2>&1 || true
-        tap_done_ms="$(now_ms)"
-        tap_host=$((tap_done_ms - tap_start_ms))
-        tab_deadline_ms=$((tap_start_ms + tab_timeout_sec * 1000))
-        tab_dump="$raw_dir/$safe_tab-run-$run-tab.xml"
-        tab_paint_mark="mark=js:tab:$tab:paint "
-        while [[ "$(now_ms)" -lt "$tab_deadline_ms" ]]; do
-          if adb -s "$serial" logcat -d -s "$trace_tag:I" '*:S' 2>/dev/null |
-            grep -F "$tab_paint_mark" >/dev/null; then
+        center="$(find_tap_center "$tab" "$ready_dump")"
+        if [[ -n "$center" ]]; then
+          tap_x="${center%% *}"
+          tap_y="${center##* }"
+          tap_start_ms="$(now_ms)"
+          ready_to_tap=$((tap_start_ms - ready_abs_ms))
+          adb -s "$serial" shell input tap "$tap_x" "$tap_y" >/dev/null 2>&1 || true
+          tap_done_ms="$(now_ms)"
+          tap_host=$((tap_done_ms - tap_start_ms))
+          tab_deadline_ms=$((tap_start_ms + tab_timeout_sec * 1000))
+          tab_dump="$raw_dir/$safe_tab-run-$run-tab.xml"
+          while [[ "$(now_ms)" -lt "$tab_deadline_ms" ]]; do
+            if logcat_has_mark "$tab_mark"; then
               tab_found=1
-              tab_source="logcat:tab-paint"
-              tab_ready_abs_ms="$(now_ms)"
-              tap_to_tab=$((tab_ready_abs_ms - tap_start_ms))
-              tab_ready_ms=$((tab_ready_abs_ms - start_ms))
-              break
-          fi
-          if dump_ui "$tab_dump"; then
-            if xml_query "visible-title" "$tab_dump" "$title" >/dev/null 2>&1; then
-              tab_found=1
-              tab_source="screen-title:$title"
+              tab_source="$mark_source"
               tab_ready_abs_ms="$(now_ms)"
               tap_to_tab=$((tab_ready_abs_ms - tap_start_ms))
               tab_ready_ms=$((tab_ready_abs_ms - start_ms))
               break
             fi
-          fi
-          sleep 0.1
-        done
+            if dump_ui "$tab_dump"; then
+              if tab_on_screen "$tab" "$tab_dump"; then
+                tab_found=1
+                tab_source="$dump_source"
+                tab_ready_abs_ms="$(now_ms)"
+                tap_to_tab=$((tab_ready_abs_ms - tap_start_ms))
+                tab_ready_ms=$((tab_ready_abs_ms - start_ms))
+                break
+              fi
+            fi
+            sleep 0.1
+          done
+        else
+          tab_source="no-tap-target"
+        fi
       fi
     fi
 
@@ -394,7 +486,8 @@ for tab in "${tabs[@]}"; do
   done
 done
 
-python3 - "$report_dir" "$trend_file" "$timestamp" "$serial" "$package_name" "$component" "$ready_text" "$runs" "$tabs_text" "$tap_strategy" "${screen_width}x${screen_height}" <<'PY'
+python3 - "$report_dir" "$trend_file" "$timestamp" "$serial" "$package_name" "$component" "$ready_text" "$runs" "$tabs_text" \
+  "$tap_strategy" "${screen_width}x${screen_height}" "$dashboard" "$VT_VARIANT" "$ready_mark" "$target_marks" <<'PY'
 import csv
 import json
 import statistics
@@ -404,7 +497,12 @@ from pathlib import Path
 
 report_dir = Path(sys.argv[1])
 trend_file = Path(sys.argv[2])
-timestamp, serial, package_name, component, ready_text, requested_runs, tabs_text, tap_strategy, screen_size = sys.argv[3:12]
+(
+    timestamp, serial, package_name, component, ready_text, requested_runs, tabs_text, tap_strategy, screen_size,
+    dashboard, variant, ready_mark, target_marks_text,
+) = sys.argv[3:16]
+# target=mark: compose_screen:<view> (native) or js:tab:<tab>:paint (classic).
+target_marks = dict(item.split("=", 1) for item in target_marks_text.split())
 runs_csv = report_dir / "tab-runs.csv"
 marks_csv = report_dir / "tab-marks.csv"
 jsonl_file = report_dir / "tab-runs.jsonl"
@@ -482,6 +580,8 @@ if trend_file.exists():
         if (
             item.get("serial") == serial and
             item.get("package") == package_name and
+            # Trend lines written before the native launcher measured the classic dashboard.
+            item.get("dashboard", "classic") == dashboard and
             item.get("requestedRuns") == requested_runs_int and
             item.get("targetsRequested") == targets_requested and
             item.get("tapStrategy") == tap_strategy and
@@ -500,6 +600,7 @@ for target in targets:
     js_data_received_values = []
     js_data_rendered_values = []
     app_ready_values = []
+    app_screen_values = []
     start_mark = f"js:tab:{target}:start"
     end_mark = f"js:tab:{target}:end"
     paint_mark = f"js:tab:{target}:paint"
@@ -511,7 +612,8 @@ for target in targets:
         first_by_mark = {}
         for event in events:
             first_by_mark.setdefault(event["mark"], event["elapsedMs"])
-        app_ready_values.append(first_by_mark.get("dashboard_ready_content_description"))
+        app_ready_values.append(first_by_mark.get(ready_mark))
+        app_screen_values.append(first_by_mark.get(target_marks.get(target)))
         tab_start_elapsed = first_by_mark.get(start_mark)
         if tab_start_elapsed is not None:
             for mark, values in [
@@ -546,6 +648,7 @@ for target in targets:
         "tapToTabReadyMs": stats(to_int(row.get("tapToTabReadyMs")) for row in target_rows),
         "hostStartToTabReadyMs": stats(to_int(row.get("hostStartToTabReadyMs")) for row in target_rows),
         "appDashboardReadyMs": stats(app_ready_values),
+        "appScreenShownMs": stats(app_screen_values),
         "jsTabSwitchMs": stats(js_switch_values),
         "jsTabEndElapsedMs": stats(js_end_elapsed_values),
         "jsTabPaintMs": stats(js_paint_values),
@@ -560,7 +663,10 @@ if previous:
     prev_targets = previous.get("targets", {})
     for target, item in target_summary.items():
         prev = prev_targets.get(target, {})
-        comparable_metrics = ["appDashboardReadyMs", "jsTabPaintMs", "jsTabPaintEndElapsedMs", "jsTabDataRenderedMs"]
+        if dashboard == "native":
+            comparable_metrics = ["appDashboardReadyMs", "appScreenShownMs"]
+        else:
+            comparable_metrics = ["appDashboardReadyMs", "jsTabPaintMs", "jsTabPaintEndElapsedMs", "jsTabDataRenderedMs"]
         if prev.get("tabSourceCounts") == item.get("tabSourceCounts"):
             comparable_metrics.extend(["tapToTabReadyMs", "hostStartToTabReadyMs"])
         for metric in comparable_metrics:
@@ -583,7 +689,11 @@ trend_payload = {
     "timestamp": timestamp,
     "serial": serial,
     "package": package_name,
+    "variant": variant,
+    "dashboard": dashboard,
     "component": component,
+    "readyMark": ready_mark,
+    "targetMarks": target_marks,
     "readyText": ready_text,
     "requestedRuns": requested_runs_int,
     "targetsRequested": targets_requested,
@@ -609,30 +719,63 @@ lines = [
     f"Generated: `{timestamp}`",
     "",
     f"- Serial: `{serial}`",
-    f"- Package: `{package_name}`",
+    f"- Package: `{package_name}` ({variant})",
+    f"- Dashboard: `{dashboard}`",
     f"- Component: `{component}`",
     f"- Requested runs per tab: `{requested_runs}`",
     f"- Targets: `{tabs_text}`",
+    f"- Ready mark: `{ready_mark}`",
+    f"- Tab marks: `{target_marks_text}`",
     f"- Ready probe: `{ready_text}`",
     f"- Tap strategy: `{tap_strategy}`",
     f"- Screen size: `{screen_size}`",
     "",
-    "This benchmark fresh-starts `com.volttracker.obdpoc`, waits for the dashboard-ready probe,",
-    "taps each requested tab, and waits for the app-reported tab paint mark.",
-    "Data hydration columns use app marks from tab start to data request/receipt/render.",
-    "It does not install, uninstall, clear data, or target any alternate package.",
-    "The benchmark checks in-app `VoltStartup` marks before slower UiAutomator title polling.",
+]
+if dashboard == "native":
+    lines += [
+        "This benchmark fresh-starts the native launcher, waits until Drive is composed, taps each",
+        "requested tab (or the Settings gear) by its content description, and waits for the tab's",
+        "`compose_screen:<view>` mark. Without marks (release builds) a tab is on screen once its",
+        "nav button is selected; Settings once its title shows.",
+    ]
+else:
+    lines += [
+        "This benchmark fresh-starts the classic WebView dashboard, waits for the dashboard-ready probe,",
+        "taps each requested tab, and waits for the app-reported tab paint mark.",
+        "Data hydration columns use app marks from tab start to data request/receipt/render.",
+    ]
+lines += [
+    "It does not install, uninstall, clear data, or target any package other than the selected",
+    "`com.volttracker.obdpoc` (release) or `com.volttracker.obdpoc.debug` (debug) app.",
+    "The benchmark checks in-app `VoltStartup` marks before slower UiAutomator polling.",
     "",
     "## Summary",
     "",
-    "| Target | Runs | Ready runs | Tab runs | App ready ms | JS switch ms | JS paint ms | Data request ms | Data received ms | Data rendered ms | App start -> tab paint ms | Host ready ms | Host tap -> tab ms | Host start -> tab ms | Ready source | Tab source |",
-    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
 ]
+if dashboard == "native":
+    lines += [
+        "| Target | Runs | Ready runs | Tab runs | App ready ms | App start -> screen ms | Host ready ms | Host tap -> tab ms | Host start -> tab ms | Ready source | Tab source |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+    ]
+else:
+    lines += [
+        "| Target | Runs | Ready runs | Tab runs | App ready ms | JS switch ms | JS paint ms | Data request ms | Data received ms | Data rendered ms | App start -> tab paint ms | Host ready ms | Host tap -> tab ms | Host start -> tab ms | Ready source | Tab source |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|---|",
+    ]
 
 for target in targets:
     item = target_summary[target]
     ready_sources = ", ".join(f"{k}:{v}" for k, v in sorted(item["readySourceCounts"].items()))
     tab_sources = ", ".join(f"{k}:{v}" for k, v in sorted(item["tabSourceCounts"].items()))
+    if dashboard == "native":
+        lines.append(
+            f"| `{target}` | {item['runs']} | {item['successfulReadyRuns']} | {item['successfulTabRuns']} | "
+            f"{fmt_stat(item['appDashboardReadyMs'])} | {fmt_stat(item['appScreenShownMs'])} | "
+            f"{fmt_stat(item['hostStartToDashboardReadyMs'])} | {fmt_stat(item['tapToTabReadyMs'])} | "
+            f"{fmt_stat(item['hostStartToTabReadyMs'])} | "
+            f"{ready_sources} | {tab_sources} |"
+        )
+        continue
     lines.append(
         f"| `{target}` | {item['runs']} | {item['successfulReadyRuns']} | {item['successfulTabRuns']} | "
         f"{fmt_stat(item['appDashboardReadyMs'])} | {fmt_stat(item['jsTabSwitchMs'])} | "

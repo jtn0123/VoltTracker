@@ -6,8 +6,11 @@ android_dir="$(cd "$script_dir/.." && pwd)"
 timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
 report_dir="$android_dir/build/reports/perf-local/$timestamp"
 raw_dir="$report_dir/raw"
+# shellcheck source-path=SCRIPTDIR source=benchmark-adb-target.sh
+source "$script_dir/benchmark-adb-target.sh"
 
 device="${VOLTTRACKER_ADB_SERIAL:-}"
+target_args=()
 db_path="${VOLTTRACKER_REAL_DB_PATH:-}"
 synthetic_db_path="${VOLTTRACKER_SYNTHETIC_DB_PATH:-}"
 synthetic_sessions="${VOLTTRACKER_SYNTHETIC_SESSIONS:-500}"
@@ -35,8 +38,13 @@ Options:
   --all                         Run startup, tabs, optional real DB, and device baseline.
   -h, --help                    Show this help.
 
-The wrapper never installs, uninstalls, clears app data, or targets another package.
-Private raw captures stay under build/reports/ and should not be committed.
+EOF
+  vt_target_usage
+  cat <<'EOF'
+
+The startup, tab and device-baseline steps all measure the selected app. The wrapper never
+installs, uninstalls or clears app data, and refuses any package other than the two VoltTracker
+builds. Private raw captures stay under build/reports/ and should not be committed.
 EOF
 }
 
@@ -44,6 +52,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --device)
       device="${2:-}"
+      shift 2
+      ;;
+    --variant|--package|--dashboard)
+      if [[ $# -lt 2 ]]; then
+        echo "$1 needs a value" >&2
+        exit 2
+      fi
+      target_args+=("$1" "$2")
       shift 2
       ;;
     --db)
@@ -113,11 +129,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# Settle the app once, then hand the same choice to every step through the environment.
+target_rc=0
+vt_parse_benchmark_args ${target_args[@]+"${target_args[@]}"} || target_rc=$?
+if [[ "$target_rc" -ne 0 ]]; then
+  usage >&2
+  exit 2
+fi
+export VOLTTRACKER_VARIANT="$VT_VARIANT" VOLTTRACKER_PACKAGE="$VT_PACKAGE" VOLTTRACKER_DASHBOARD="$VT_DASHBOARD"
+
 mkdir -p "$raw_dir"
 
 echo "VoltTracker local perf run: $timestamp"
 echo "Report dir: $report_dir"
 echo "Device: ${device:-"(first ready adb device)"}"
+echo "App: $VT_PACKAGE ($VT_VARIANT, $VT_DASHBOARD dashboard)"
 echo "Database: ${db_path:-"(none)"}"
 echo "Synthetic database: ${synthetic_db_path:-"(none)"}"
 

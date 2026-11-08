@@ -323,32 +323,61 @@ For phone-specific timing, use the local adb scripts against a connected device
 or wireless adb target:
 
 ```sh
+bash tools/perf-local.sh --device <adb-serial-or-ip:port>          # startup + tabs
 bash tools/benchmark-adb-startup-local.sh <adb-serial-or-ip:port>
 bash tools/benchmark-adb-tabs-local.sh <adb-serial-or-ip:port>
 bash tools/device-baseline-local.sh <adb-serial-or-ip:port>
 ```
 
-These scripts target only `com.volttracker.obdpoc`. They do not install,
-uninstall, clear app data, or mutate the database, so they are safe to run
-against a field-test phone that already has permissions accepted. Startup and
-tab reports are written under `build/reports/adb-startup-benchmark/` and
+Every script takes the same target options (or `VOLTTRACKER_VARIANT`,
+`VOLTTRACKER_PACKAGE`, `VOLTTRACKER_DASHBOARD`); `perf-local.sh` passes its
+choice on to each step:
+
+| Option | Measures |
+|---|---|
+| `--variant debug` (default) | `com.volttracker.obdpoc.debug`, the build that logs `VoltStartup` marks |
+| `--variant release` | `com.volttracker.obdpoc`; no marks, so readiness and tab arrival come from the accessibility tree, and device-baseline cannot copy app data (`run-as` needs a debuggable build) |
+| `--package <id>` | The same choice by application ID; any other package is refused |
+| `--dashboard native` (default) | The launcher, as the phone resolves it with `cmd package resolve-activity --brief` |
+| `--dashboard classic` | The WebView dashboard through the debug-only `DebugClassicDashboard` alias (`MainActivity` is not exported, so release has no classic entry point) |
+
+The scripts do not install, uninstall, clear app data, or mutate the database,
+so they are safe to run against a field-test phone that already has
+permissions accepted. They stop before launching anything if the package is
+not installed, if the launcher is not `ComposeDashboardActivity` (an install
+from before the native launcher), or if the classic alias is missing. Startup
+and tab reports are written under `build/reports/adb-startup-benchmark/` and
 `build/reports/adb-tab-benchmark/`, with trend JSONL files under
-`build/reports/performance-trends/`.
+`build/reports/performance-trends/`; each report and trend row records the
+variant and dashboard, and comparisons only use earlier runs of the same
+dashboard.
 
 The adb reports separate app-reported marks from host observation time:
 
-- `appFirstFrameMs` and `appDashboardReadyProbeMs` measure when the WebView
-  dashboard has painted and exposed the ready probe from inside the app.
-- `jsTabSwitchMs` and `jsTabPaintMs` measure tab switch handling and first paint
-  from dashboard JavaScript marks.
-- `hostStartToReadyMs` and `hostStartToTabReadyMs` include adb, process launch,
-  UIAutomator polling, and tap overhead, so use them for trend comparisons, not
-  as pure app work.
+- Native: the app is ready at `compose_screen:drive`, the mark a fresh start
+  logs when Drive is composed (`appDashboardReadyProbeMs` in the startup
+  report, `appDashboardReadyMs` in the tab report). The tab benchmark taps the
+  Trips, Charge, Insights and Car nav buttons and the Settings gear, and
+  `appScreenShownMs` is the target's `compose_screen:<view>` mark (`map`,
+  `charge`, `insights`, `diagnostics`, `settings`). Taps go through the
+  accessibility tree (a nav button's description may carry a badge such as
+  "Car, has faults").
+- Classic: `appFirstFrameMs` and `appDashboardReadyProbeMs` measure when the
+  WebView dashboard has painted and exposed the ready probe, and `jsTabSwitchMs`
+  and `jsTabPaintMs` measure tab switch handling and first paint from dashboard
+  JavaScript marks. Classic taps are coordinate taps by default because
+  accessibility text can make host-side tap latency look worse than the app;
+  set `VOLTTRACKER_TAB_TAP_STRATEGY=accessibility` when you need that path.
+- `hostStartToDashboardReadyMs` and `hostStartToTabReadyMs` include adb,
+  process launch, UIAutomator polling, and tap overhead, so use them for trend
+  comparisons, not as pure app work.
 
-The tab benchmark uses coordinate taps by default because accessibility text can
-make host-side tap latency look worse than the app. Set
-`VOLTTRACKER_TAB_TAP_STRATEGY=accessibility` when you specifically need the
-accessibility path.
+The package, launcher, mark and tab tables live in
+`tools/benchmark-adb-target.sh`. `bash tools/benchmark-adb-target.sh --self-test`
+checks its parsing against fixture `resolve-activity` output (also run by
+`./gradlew verifyPerformanceTooling`), and `BenchmarkTargetContractTest` pins
+the tables to the app's application IDs, manifests, `StartupTrace` marks and
+nav bar, so a rename fails a unit test instead of a phone session.
 
 Large database timing can be checked from a pulled or backup SQLite file:
 

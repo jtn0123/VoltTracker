@@ -621,9 +621,16 @@ tasks.register("verifyPerfReportIndexSelfTest", Exec) {
     inputs.dir(file("tools/perf"))
 }
 
+tasks.register("verifyBenchmarkTargetSelfTest", Exec) {
+    description = "Runs the adb benchmark target helper's package/component/tab fixture self-test."
+    workingDir = rootProject.projectDir
+    commandLine "bash", "tools/benchmark-adb-target.sh", "--self-test"
+    inputs.file(file("tools/benchmark-adb-target.sh"))
+}
+
 tasks.register("verifyPerformanceTooling") {
     description = "Runs self-tests for local performance/privacy helper scripts."
-    dependsOn("verifyPrivacyScanSelfTest", "verifyPerfReportIndexSelfTest")
+    dependsOn("verifyPrivacyScanSelfTest", "verifyPerfReportIndexSelfTest", "verifyBenchmarkTargetSelfTest")
 }
 
 tasks.register("verifyActiveApp") {
