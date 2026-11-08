@@ -14,14 +14,17 @@ import com.volttracker.obdpoc.ui.charge.ChargeProvenance
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.charge.ESTIMATE_NOTE
 import com.volttracker.obdpoc.ui.components.VoltTab
+import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import java.util.TimeZone
 
 /** An inferred charge reads as an estimate on the Charge tab, on its receipt, and in what it shares. */
 @RunWith(AndroidJUnit4::class)
@@ -32,6 +35,19 @@ class InferredChargeScreenTest {
     val compose = createAndroidComposeRule<ComponentActivity>()
 
     private val shared = mutableListOf<Pair<String, String>>()
+
+    private val originalZone = TimeZone.getDefault()
+
+    // The Charge demo's clock is Apr 30, 9:42 PM Pacific, which is already May 1 in UTC. The
+    // month line counts charges in the demo's month, so pin the zone it was written in: on a
+    // UTC machine (CI) the month would be May and the inferred April charge wouldn't count.
+    @Before fun demoZone() {
+        TimeZone.setDefault(TimeZone.getTimeZone("America/Los_Angeles"))
+    }
+
+    @After fun restoreZone() {
+        TimeZone.setDefault(originalZone)
+    }
 
     private fun show(
         charge: ChargeUiState,
