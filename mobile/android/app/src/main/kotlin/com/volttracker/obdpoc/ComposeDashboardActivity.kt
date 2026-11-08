@@ -46,6 +46,7 @@ import com.volttracker.obdpoc.ui.trips.LocalMapTileLoader
 import com.volttracker.obdpoc.ui.trips.TripExport
 import com.volttracker.obdpoc.update.UpdateCoordinator
 import com.volttracker.obdpoc.update.UpdateManager
+import com.volttracker.obdpoc.update.UpdatePrompt
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.ExecutorService
@@ -365,12 +366,12 @@ class ComposeDashboardActivity :
     private fun installUpdate() {
         val build = updates.availableBuild() ?: return
         store.onUpdateState("${build.tag} is available", build.tag, 0)
-        updates.downloadAndInstall { percent ->
-            when {
-                percent < 0 -> store.onUpdateState("Download failed — try again", build.tag, null)
-                percent >= 100 -> store.onUpdateState("Handing to Android's installer…", build.tag, null)
-                else -> store.onUpdateState("${build.tag} is available", build.tag, percent)
-            }
+        updates.downloadAndInstall(build) { event ->
+            store.onUpdateState(
+                UpdatePrompt.statusLine(event, build.tag, ::getString),
+                build.tag,
+                UpdatePrompt.percent(event),
+            )
         }
     }
 

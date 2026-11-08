@@ -34,6 +34,8 @@ import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.service.ObdServiceLauncher
 import com.volttracker.obdpoc.service.PermissionGate
 import com.volttracker.obdpoc.update.UpdateCoordinator
+import com.volttracker.obdpoc.update.UpdateFailureNotice
+import com.volttracker.obdpoc.update.UpdateFeed
 import com.volttracker.obdpoc.update.UpdateManager
 import com.volttracker.obdpoc.update.UpdatePrompt
 import org.json.JSONObject
@@ -459,7 +461,7 @@ open class MainActivity :
                 .Builder(this)
                 .setTitle(R.string.update_offer_title)
                 .setMessage(getString(R.string.update_offer_message, build.tag))
-                .setPositiveButton(R.string.update_offer_install) { _, _ -> installOfferedUpdate(build.tag) }
+                .setPositiveButton(R.string.update_offer_install) { _, _ -> installOfferedUpdate(build) }
                 .setNegativeButton(R.string.update_offer_later, null)
                 .show()
         } catch (ex: RuntimeException) {
@@ -467,16 +469,16 @@ open class MainActivity :
         }
     }
 
-    private fun installOfferedUpdate(tag: String) {
-        Toast.makeText(this, getString(R.string.update_downloading, tag), Toast.LENGTH_SHORT).show()
-        UpdateCoordinator.shared(this).downloadAndInstall { percent ->
-            val message =
-                when (UpdatePrompt.progress(percent)) {
-                    UpdatePrompt.Progress.FAILED -> R.string.update_download_failed
-                    UpdatePrompt.Progress.INSTALLING -> R.string.update_opening_installer
-                    UpdatePrompt.Progress.NONE -> null
-                }
-            if (message != null) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+    private fun installOfferedUpdate(build: UpdateFeed.AvailableBuild) {
+        Toast.makeText(this, getString(R.string.update_downloading, build.tag), Toast.LENGTH_SHORT).show()
+        UpdateCoordinator.shared(this).downloadAndInstall(build) { event ->
+            when (event) {
+                is UpdateManager.InstallEvent.Downloading -> Unit
+                UpdateManager.InstallEvent.InstallerOpened ->
+                    Toast.makeText(this, R.string.update_opening_installer, Toast.LENGTH_LONG).show()
+                is UpdateManager.InstallEvent.Failed ->
+                    UpdateFailureNotice.show(this, isActivityResumed, event.reason) { installOfferedUpdate(build) }
+            }
         }
     }
 

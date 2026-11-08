@@ -11,6 +11,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.IOException
 import java.util.concurrent.Executor
 
 @RunWith(AndroidJUnit4::class)
@@ -80,5 +81,37 @@ class UpdateCoordinatorTest {
 
         assertNotNull(coord.lastResult)
         assertNull(coord.availableBuild())
+    }
+
+    @Test
+    fun installUsesTheBuildTheCallerShowedEvenAfterALaterCheckReplacedIt() {
+        var online = true
+        val installer = RecordingInstaller()
+        val coord =
+            UpdateCoordinator {
+                UpdateManager(
+                    context = ApplicationProvider.getApplicationContext(),
+                    executor = direct,
+                    mainThread = direct,
+                    fetcher = { if (online) feedWith("v0.35.0") else throw IOException("offline") },
+                    runningVersionCode = 34_000,
+                    wantDebugVariant = false,
+                    verifyApk = { true },
+                    openConnection = { FakeConnection(body = ByteArray(4_096) { 1 }).at(it) },
+                    installer = installer,
+                )
+            }
+        coord.check { }
+        val offered = checkNotNull(coord.availableBuild())
+        online = false
+        coord.check { }
+        assertNull("a later Offline result replaced the offer", coord.availableBuild())
+
+        val events = mutableListOf<UpdateManager.InstallEvent>()
+        coord.downloadAndInstall(offered, events::add)
+
+        // The old API re-read lastResult here and returned without any callback.
+        assertEquals(UpdateManager.InstallEvent.InstallerOpened, events.last())
+        assertEquals(1, installer.launches.size)
     }
 }
