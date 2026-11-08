@@ -65,6 +65,20 @@ class ObdNotifications(
             .build()
     }
 
+    /**
+     * The notification for a start the service enters the foreground only to refuse: no Disconnect
+     * action and nothing to open. Android 12+ holds back a foreground notification without action
+     * buttons for a few seconds, and the service leaves the foreground at once, so it never shows.
+     */
+    fun buildRefusal(text: String): Notification =
+        NotificationCompat
+            .Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_stat_obd)
+            .setContentTitle(context.getString(R.string.app_name))
+            .setContentText(text)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .build()
+
     /** Updates the already-showing notification text. */
     fun post(text: String) {
         val manager = context.getSystemService(NotificationManager::class.java)

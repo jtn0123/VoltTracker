@@ -756,6 +756,111 @@ class ObdServiceIntegrationTest {
         )
     }
 
+    // ---- a start refused while a database operation holds the lease ------------------
+
+    @Test
+    fun aConnectRefusedDuringADatabaseOperationEntersTheForegroundBeforeItStops() {
+        // Regression: the refusal stopped a service launched with startForegroundService before it
+        // called startForeground, and Android crashed the app. Raw-data maintenance takes the lease
+        // 10 s after an Activity starts, so a connect tapped then could hit it.
+        DatabaseOperationLease.tryAcquire("raw maintenance")!!.use {
+            val controller =
+                newController(
+                    RecordingForegroundObdService::class.java,
+                    intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+                )
+            val service = controller.create().get()
+            shadowOf(service).grantPermissions(Manifest.permission.ACCESS_FINE_LOCATION)
+            val captured = captureBroadcasts()
+
+            controller.startCommand(0, 1)
+
+            val sessionType =
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+            assertEquals(
+                "the refusal enters the foreground with the type the session would have used",
+                listOf<Int?>(sessionType),
+                service.foregroundTypes,
+            )
+            assertTrue(
+                "an action button would make Android 12+ show the notification at once",
+                service.foregroundNotifications
+                    .single()
+                    .actions
+                    .isNullOrEmpty(),
+            )
+            assertTrue("and leaves it at once", shadowOf(service).isForegroundStopped)
+            assertTrue("taking the notification with it", shadowOf(service).notificationShouldRemoved)
+            assertFalse(service.foregroundServiceActive)
+            assertFalse("no session may start under the lease", service.running.get())
+            assertEquals(
+                service.getString(R.string.status_database_operation_running),
+                captured.lastStatus()?.optString("detail"),
+            )
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        }
+    }
+
+    @Test
+    fun aRefusedDemoNeverEntersTheForeground() {
+        DatabaseOperationLease.tryAcquire("raw maintenance")!!.use {
+            val controller =
+                newController(
+                    RecordingForegroundObdService::class.java,
+                    intentFor(ObdService.ACTION_DEMO, null, null, null),
+                )
+            val service = controller.create().get()
+
+            controller.startCommand(0, 1)
+
+            assertTrue(
+                "the demo launches as a plain service and owes no startForeground",
+                service.foregroundTypes.isEmpty(),
+            )
+            assertFalse(service.running.get())
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        }
+    }
+
+    @Test
+    fun aRefusedConnectWithoutNearbyDevicesNeverEntersTheForeground() {
+        // ObdServiceLauncher starts it as a plain service, and on Android 14 startForeground with the
+        // connectedDevice type would throw without the permission.
+        DatabaseOperationLease.tryAcquire("raw maintenance")!!.use {
+            val controller =
+                newController(
+                    RecordingForegroundObdService::class.java,
+                    intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+                    grantNearbyDevices = false,
+                )
+            val service = controller.create().get()
+
+            controller.startCommand(0, 1)
+
+            assertTrue(service.foregroundTypes.isEmpty())
+            assertFalse(service.running.get())
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        }
+    }
+
+    @Test
+    fun aRefusalWhoseForegroundEntryIsBlockedStillStops() {
+        DatabaseOperationLease.tryAcquire("raw maintenance")!!.use {
+            val controller =
+                newController(
+                    ForegroundRefusedObdService::class.java,
+                    intentFor(ObdService.ACTION_SCAN, "AA:BB:CC:DD:EE:FF", "Scanner", null),
+                )
+            val service = controller.create().get()
+
+            controller.startCommand(0, 1)
+
+            assertFalse(service.foregroundServiceActive)
+            assertFalse(service.running.get())
+            assertTrue(shadowOf(service).isStoppedBySelf)
+        }
+    }
+
     // ---- B4: onDestroy must not block the main thread on the persistence drain ------
 
     @Test
@@ -989,6 +1094,24 @@ class ObdServiceIntegrationTest {
             entered.countDown()
             assertTrue("recovery worker was released", release.await(5, TimeUnit.SECONDS))
             return 0
+        }
+    }
+
+    /**
+     * [TestObdService] that records every foreground entry. Robolectric forgets the notification
+     * once the foreground is removed, so keep it here.
+     */
+    class RecordingForegroundObdService : TestObdService() {
+        val foregroundTypes = mutableListOf<Int?>()
+        val foregroundNotifications = mutableListOf<Notification>()
+
+        override fun enterForeground(
+            notification: Notification,
+            serviceType: Int?,
+        ) {
+            foregroundTypes += serviceType
+            foregroundNotifications += notification
+            super.enterForeground(notification, serviceType)
         }
     }
 

@@ -36,6 +36,9 @@ internal object ForegroundServicePolicy {
     /** [android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION] (API 29). */
     const val TYPE_LOCATION = 0x08
 
+    // startForegroundService exists from Android 8 (O); below it every start is a plain one.
+    private const val SDK_O = 26
+
     private const val SDK_Q = 29
 
     // Android 14 (U) is where the platform started validating FGS-type prerequisites.
@@ -43,8 +46,30 @@ internal object ForegroundServicePolicy {
 
     private const val MODE_DEMO = "demo"
 
-    /** True when [action] starts a session that enters the foreground (everything but the demo). */
-    fun launchesInForeground(action: String?): Boolean = action != ObdService.ACTION_DEMO
+    /**
+     * True when a start of [action] must use `startForegroundService`: only when the session it
+     * begins will call startForeground. Android crashes an app whose foreground-launched service
+     * stops before calling startForeground, and a real session on Android 14+ without Nearby
+     * devices permission is refused before it gets there, so that start is a plain one too.
+     */
+    fun launchesInForeground(
+        action: String?,
+        sdkInt: Int,
+        hasNearbyDevicesPermission: Boolean,
+    ): Boolean =
+        sdkInt >= SDK_O &&
+            // Location only picks the foreground type, never whether there is one.
+            planForAction(action, sdkInt, hasNearbyDevicesPermission, hasLocationPermission = false) is
+                ForegroundPlan.Foreground
+
+    /** [plan] for the session a start of [action] begins, before the service knows its mode. */
+    fun planForAction(
+        action: String?,
+        sdkInt: Int,
+        hasNearbyDevicesPermission: Boolean,
+        hasLocationPermission: Boolean,
+    ): ForegroundPlan =
+        plan(action == ObdService.ACTION_DEMO, sdkInt, hasNearbyDevicesPermission, hasLocationPermission)
 
     /**
      * [hasNearbyDevicesPermission] is BLUETOOTH_CONNECT or BLUETOOTH_SCAN (either satisfies the
@@ -55,9 +80,16 @@ internal object ForegroundServicePolicy {
         sdkInt: Int,
         hasNearbyDevicesPermission: Boolean,
         hasLocationPermission: Boolean,
+    ): ForegroundPlan = plan(mode == MODE_DEMO, sdkInt, hasNearbyDevicesPermission, hasLocationPermission)
+
+    private fun plan(
+        demo: Boolean,
+        sdkInt: Int,
+        hasNearbyDevicesPermission: Boolean,
+        hasLocationPermission: Boolean,
     ): ForegroundPlan =
         when {
-            mode == MODE_DEMO -> ForegroundPlan.Background
+            demo -> ForegroundPlan.Background
             sdkInt >= SDK_UPSIDE_DOWN_CAKE && !hasNearbyDevicesPermission ->
                 ForegroundPlan.MissingNearbyDevicesPermission
             sdkInt < SDK_Q -> ForegroundPlan.Foreground(null)
