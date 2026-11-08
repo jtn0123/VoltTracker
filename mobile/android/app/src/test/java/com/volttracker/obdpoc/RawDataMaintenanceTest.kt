@@ -30,14 +30,18 @@ class RawDataMaintenanceTest {
         prefs.edit().clear().commit()
     }
 
-    private fun coordinator(maintain: (Int) -> Unit = { retention.add(it) }) =
-        RawDataMaintenance(
-            prefs = { prefs },
-            maintain = maintain,
-            schedule = { scheduled.add(it) },
-            worker = Executor { workers.add(it) },
-            nowMs = { now },
-        )
+    // maintain stays last so a trailing lambda still means the maintenance body.
+    private fun coordinator(
+        onPassEnd: () -> Unit = {},
+        maintain: (Int) -> Unit = { retention.add(it) },
+    ) = RawDataMaintenance(
+        prefs = { prefs },
+        maintain = maintain,
+        schedule = { scheduled.add(it) },
+        worker = Executor { workers.add(it) },
+        nowMs = { now },
+        onPassEnd = onPassEnd,
+    )
 
     private fun drain() {
         while (scheduled.isNotEmpty()) scheduled.removeFirst().run()
@@ -108,6 +112,45 @@ class RawDataMaintenanceTest {
         fail = false
         coordinator.request()
         drain()
+        assertEquals(listOf(60), retention)
+    }
+
+    // The emulator smoke starts its classic-phase demo only after this signal, because the service
+    // refuses a session while the pass holds the lease. It must fire however the pass ends, and
+    // only once the pass has let go of the lease.
+    @Test fun everyPassSignalsItsEndAfterReleasingTheLease() {
+        var fail = false
+        val heldAtEnd = ArrayList<Boolean>()
+        val coordinator =
+            coordinator(
+                maintain = {
+                    check(!fail) { "disk full" }
+                    retention.add(it)
+                },
+                onPassEnd = { heldAtEnd.add(DatabaseOperationLease.isHeld()) },
+            )
+
+        coordinator.request()
+        coordinator.request()
+        drain()
+        assertEquals("a due pass, with a coalesced request, ends once", listOf(false), heldAtEnd)
+        assertEquals(listOf(60), retention)
+
+        coordinator.request()
+        drain()
+        assertEquals("a pass that is not due still ends", listOf(false, false), heldAtEnd)
+
+        DatabaseOperationLease.tryRegisterPersistence()!!.use {
+            coordinator.request()
+            drain()
+        }
+        assertEquals("a pass that yields to a recording still ends", 3, heldAtEnd.size)
+
+        now += RawDataMaintenance.INTERVAL_MS
+        fail = true
+        coordinator.request()
+        drain()
+        assertEquals("a failed pass ends after releasing the lease", listOf(false, false, false, false), heldAtEnd)
         assertEquals(listOf(60), retention)
     }
 
