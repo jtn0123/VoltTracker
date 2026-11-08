@@ -408,7 +408,7 @@ vt_self_test() {
     vt_parse_benchmark_args "$@" 2>/dev/null || return $?
     echo "$VT_VARIANT $VT_PACKAGE $VT_DASHBOARD | ${VT_ARGS[*]:-}"
   }
-  expect "plain args" "$(parsed 10.0.0.2:5555 3)" "debug com.volttracker.obdpoc.debug native | 10.0.0.2:5555 3"
+  expect "plain args" "$(parsed 192.0.2.10:5555 3)" "debug com.volttracker.obdpoc.debug native | 192.0.2.10:5555 3"
   expect "flags between args" "$(parsed R5CX --variant release 3)" "release com.volttracker.obdpoc native | R5CX 3"
   expect "environment target" \
     "$(VOLTTRACKER_PACKAGE=com.volttracker.obdpoc.debug VOLTTRACKER_DASHBOARD=classic parsed R5CX)" \
