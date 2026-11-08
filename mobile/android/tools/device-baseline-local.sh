@@ -1,11 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-package_name="${VOLTTRACKER_PACKAGE:-com.volttracker.obdpoc}"
-database_name="${VOLTTRACKER_DB_NAME:-volttracker_obd_poc.db}"
-target="${1:-}"
-
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=benchmark-adb-target.sh
+source "$script_dir/benchmark-adb-target.sh"
+
+usage() {
+  cat <<'EOF'
+usage: tools/device-baseline-local.sh [target options] [ADB_SERIAL_OR_IP:PORT]
+
+Records device facts, copies the selected app's database and OBD logs through run-as (debug
+builds only), then runs the startup and tab benchmarks against that same app.
+
+EOF
+  vt_target_usage
+}
+
+parse_rc=0
+vt_parse_benchmark_args "$@" || parse_rc=$?
+if [[ "$parse_rc" -eq 3 ]]; then
+  usage
+  exit 0
+fi
+if [[ "$parse_rc" -ne 0 ]]; then
+  usage >&2
+  exit 2
+fi
+# The startup and tab benchmarks below read the same choice.
+export VOLTTRACKER_VARIANT="$VT_VARIANT" VOLTTRACKER_PACKAGE="$VT_PACKAGE" VOLTTRACKER_DASHBOARD="$VT_DASHBOARD"
+
+package_name="$VT_PACKAGE"
+database_name="${VOLTTRACKER_DB_NAME:-volttracker_obd_poc.db}"
+target="${VT_ARGS[0]:-}"
+# run-as only works on a debuggable app; release builds are not, so there is nothing to copy.
+run_as_status="not-found"
+if [[ "$VT_VARIANT" == "release" ]]; then
+  run_as_status="skipped-not-debuggable"
+fi
+
 android_dir="$(cd "$script_dir/.." && pwd)"
 timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
 report_dir="$android_dir/build/reports/device-baseline/$timestamp"
@@ -77,8 +109,10 @@ else
   sleep 1
 fi
 
-adb -s "$serial" shell "run-as $package_name sh -c 'ls -lah databases files files/obd-logs 2>/dev/null || true'" \
-  >"$raw_dir/run-as-listing.txt" 2>&1 || true
+if [[ "$run_as_status" == "not-found" ]]; then
+  adb -s "$serial" shell "run-as $package_name sh -c 'ls -lah databases files files/obd-logs 2>/dev/null || true'" \
+    >"$raw_dir/run-as-listing.txt" 2>&1 || true
+fi
 
 prop() {
   adb -s "$serial" shell getprop "$1" 2>/dev/null | tr -d '\r'
@@ -94,8 +128,9 @@ pull_run_as_file() {
 }
 
 database_path="$pulled_dir/$database_name"
-database_status="not-found"
-if pulled_database="$(pull_run_as_file "databases/$database_name" "$database_path")"; then
+database_status="$run_as_status"
+if [[ "$run_as_status" == "not-found" ]] &&
+  pulled_database="$(pull_run_as_file "databases/$database_name" "$database_path")"; then
   if [[ -n "$pulled_database" && -f "$pulled_database" ]]; then
     database_status="pulled"
     pull_run_as_file "databases/$database_name-wal" "$pulled_dir/$database_name-wal" >/dev/null || true
@@ -103,8 +138,9 @@ if pulled_database="$(pull_run_as_file "databases/$database_name" "$database_pat
   fi
 fi
 
-logs_status="not-found"
-if adb -s "$serial" shell "run-as $package_name sh -c 'test -d files/obd-logs'" >/dev/null 2>&1; then
+logs_status="$run_as_status"
+if [[ "$run_as_status" == "not-found" ]] &&
+  adb -s "$serial" shell "run-as $package_name sh -c 'test -d files/obd-logs'" >/dev/null 2>&1; then
   if adb -s "$serial" exec-out run-as "$package_name" sh -c "cd files && tar -cf - obd-logs" \
     >"$pulled_dir/obd-logs.tar" 2>"$raw_dir/obd-logs-tar.stderr"; then
     logs_status="pulled"
@@ -171,7 +207,7 @@ Device:
 
 App:
 
-- Package: \`$package_name\`
+- Package: \`$package_name\` ($VT_VARIANT, $VT_DASHBOARD dashboard)
 - Snapshot mode: \`$snapshot_mode\`
 - Database: \`$database_status\`
 - Database bytes: \`$database_bytes\`
@@ -194,11 +230,11 @@ Key files:
 
 Notes:
 
-- Source app data is read through \`run-as\`; the device database is not modified.
+- Source app data is read through \`run-as\`; the device database is not modified. \`run-as\` needs a debuggable build, so a release run copies no app data.
 - By default the app is force-stopped before the database copy so the snapshot is coherent; set \`VOLTTRACKER_KEEP_APP_RUNNING=1\` to skip that.
 - Set \`VOLTTRACKER_SKIP_STARTUP_BENCHMARK=1\` to collect data without launching the safe ADB startup benchmark.
 - Set \`VOLTTRACKER_SKIP_TAB_BENCHMARK=1\` to collect data without startup-to-tab timing.
-- Set \`VOLTTRACKER_PACKAGE\` or \`VOLTTRACKER_DB_NAME\` to override package/database names.
+- Choose the app with \`--variant debug|release\` or \`--package\` (or \`VOLTTRACKER_VARIANT\` / \`VOLTTRACKER_PACKAGE\`); set \`VOLTTRACKER_DB_NAME\` to override the database name.
 EOF
 
 echo "$report_dir/summary.md"

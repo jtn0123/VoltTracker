@@ -13,9 +13,12 @@ cd mobile/android
 bash tools/benchmark-adb-startup-local.sh <ip:port-or-adb-serial>
 ```
 
-Compare `appFirstFrameMs`, `appDashboardReadyProbeMs`, and the span table
-against `docs/performance-baseline-history.md`. Host probe times are diagnostic
-because ADB polling can dominate outliers.
+This measures the debug build's native launcher by default; add
+`--variant release` or `--dashboard classic` (debug only) to measure those.
+Compare `appDashboardReadyProbeMs` (Drive composed; for classic also
+`appFirstFrameMs`) and the span table against
+`docs/performance-baseline-history.md`, using entries for the same dashboard.
+Host probe times are diagnostic because ADB polling can dominate outliers.
 
 ## Startup Plus Tabs
 
@@ -24,10 +27,11 @@ cd mobile/android
 bash tools/benchmark-adb-tabs-local.sh <ip:port-or-adb-serial>
 ```
 
-Default tabs are Map, Charge, Insights, Diagnostics, and Settings. Use
-`VOLTTRACKER_TAB_TARGETS="map settings"` or `VOLTTRACKER_TAB_RUNS=5` for a
-narrower or deeper run. Compare app-reported tab paint timings, not raw host tap
-latency.
+Default targets are Trips, Charge, Insights, Car, and the Settings gear
+(classic: Map, Charge, Insights, Diagnostics, and Settings). Use
+`VOLTTRACKER_TAB_TARGETS="trips settings"` or `VOLTTRACKER_TAB_RUNS=5` for a
+narrower or deeper run. Compare app-reported timings (`appScreenShownMs`, or
+classic tab paint), not raw host tap latency.
 
 ## Large Database
 
@@ -66,6 +70,7 @@ bash tools/perf-local.sh --device <ip:port-or-adb-serial> --db /path/to/volttrac
 
 This runs the existing startup, tab, optional real-DB, and optional
 device-baseline scripts and writes an index under `build/reports/perf-local/`.
+`--variant`, `--package` and `--dashboard` choose the app once for every step.
 It never installs, uninstalls, clears app data, or benchmarks another package.
 
 For a fully privacy-safe large-DB sweep, generate and benchmark a synthetic DB:

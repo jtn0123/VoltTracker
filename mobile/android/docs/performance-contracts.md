@@ -42,11 +42,22 @@ When it does run, the same report links the AndroidX benchmark artifacts and
 parses any benchmark metric JSON it can find.
 
 `tools/benchmark-adb-startup-local.sh` is the no-install startup breakdown for
-real user data. It repeatedly force-stops and starts only
-`com.volttracker.obdpoc`, waits for the `VoltTracker dashboard ready` content
-description, and parses `VoltStartup` logcat marks into Android launch,
-WebView, dashboard JS, ready-handshake, and storage-summary spans. It never
-installs, uninstalls, clears app data, or targets alternate package names.
+real user data. It repeatedly force-stops and starts the selected VoltTracker
+build (`--variant debug`, the default, is `com.volttracker.obdpoc.debug`;
+`--variant release` is `com.volttracker.obdpoc`) at the launcher the phone
+resolves with `cmd package resolve-activity --brief`, and refuses to run if
+that launcher is not `ComposeDashboardActivity`. For the native dashboard it
+waits for `compose_screen:drive`, the `VoltStartup` mark a fresh start logs
+when Drive is composed, and reports Application onCreate, Drive composed and
+first-telemetry timings. `--dashboard classic` starts the WebView dashboard
+through the debug-only `DebugClassicDashboard` alias, waits for the
+`VoltTracker dashboard ready` content description, and keeps the WebView,
+dashboard JS, ready-handshake, and storage-summary spans. Release builds log no
+marks, so readiness there comes from the accessibility tree. It never installs,
+uninstalls, clears app data, or targets any other package. The package,
+launcher, mark and tab tables live in `tools/benchmark-adb-target.sh`, checked
+by its `--self-test` (part of `verifyPerformanceTooling`) and pinned to the app
+by `BenchmarkTargetContractTest`.
 Results are written under `build/reports/adb-startup-benchmark/`.
 Each completed run also appends an aggregate record to
 `build/reports/performance-trends/adb-startup-benchmark.jsonl`; the summary flags
@@ -56,12 +67,18 @@ times include ADB/logcat/UiAutomator polling overhead.
 
 `tools/benchmark-adb-tabs-local.sh` measures startup-to-responsive tab switching.
 It fresh-starts the app, waits for the dashboard-ready probe, taps each requested
-bottom-nav tab, and waits for the dashboard's app-reported tab paint mark. The
-default tap strategy uses deterministic screen coordinates so the benchmark does
-not spend seconds dumping the accessibility tree before every tap; set
-`VOLTTRACKER_TAB_TAP_STRATEGY=accessibility` to force the older content-desc
-lookup path. By default it runs `map charge insights diagnostics settings` three
-times each. Override with `VOLTTRACKER_TAB_TARGETS="map settings"` and
+target, and waits for that screen. On the native dashboard the targets are the
+`trips charge insights car` nav buttons and the `settings` gear (the default
+set), tapped by content description, and a target is shown when the app logs
+its `compose_screen:<view>` mark (`map`, `charge`, `insights`, `diagnostics`,
+`settings`); release builds, which log no marks, fall back to the nav button's
+selected state or the Settings title. On `--dashboard classic` the default
+`map charge insights diagnostics settings` tabs use deterministic screen
+coordinates so the benchmark does not spend seconds dumping the accessibility
+tree before every tap, and wait for the dashboard's app-reported tab paint
+mark; set `VOLTTRACKER_TAB_TAP_STRATEGY=accessibility` to force the
+content-desc lookup path there. Each target runs three times by default.
+Override with `VOLTTRACKER_TAB_TARGETS="trips settings"` and
 `VOLTTRACKER_TAB_RUNS=5` when you want a narrower or deeper run. Results are
 written under `build/reports/adb-tab-benchmark/` and aggregate history is
 appended to `build/reports/performance-trends/adb-tab-benchmark.jsonl`. Durable
@@ -79,7 +96,10 @@ read timings.
 `tools/device-baseline-local.sh` is the full local capture template. It uses an
 already-authorized ADB device, or attempts `adb connect` when passed an
 `ip:port`, then captures device facts, app package/memory state, app-private
-database files, and `files/obd-logs` through `run-as`. By default it
+database files, and `files/obd-logs` through `run-as`. It takes the same
+`--variant`/`--package`/`--dashboard` choice as the benchmarks and passes it on
+to them; `run-as` needs a debuggable build, so a release run records
+`skipped-not-debuggable` instead of copying app data. By default it
 force-stops the app before copying the database so the SQLite/WAL snapshot is
 coherent; set `VOLTTRACKER_KEEP_APP_RUNNING=1` to skip that. When a database is
 available it runs `tools/benchmark-real-db-local.sh` against the pulled copy; by
@@ -101,8 +121,8 @@ or `VOLTTRACKER_SKIP_TAB_BENCHMARK=1` when you only want a narrower capture.
 | Startup scripts | Leaflet and secondary action groups stay out of the startup path and load on demand | `script-order.test.js`, Playwright map tests |
 | Dashboard startup work | deterministic JS startup/long-route budgets stay green | `startup-budget.test.js` |
 | Device cold start | app launches to the dashboard-ready probe within the Macrobenchmark run | `verifyStartupPerformance` |
-| Local startup breakdown | debug builds emit `VoltStartup` marks that identify WebView, dashboard JS, ready-handshake, and storage-summary spans | `tools/benchmark-adb-startup-local.sh <device>` |
-| Startup-to-tab responsiveness | startup plus Map/Charge/Insights/Diagnostics/Settings tab readiness is trended per device | `tools/benchmark-adb-tabs-local.sh <device>` |
+| Local startup breakdown | debug builds emit `VoltStartup` marks: Application onCreate and Drive composed for the native launcher, or WebView, dashboard JS, ready-handshake, and storage-summary spans for `--dashboard classic` | `tools/benchmark-adb-startup-local.sh <device>` |
+| Startup-to-tab responsiveness | startup plus Trips/Charge/Insights/Car/Settings readiness (classic: Map/Charge/Insights/Diagnostics/Settings) is trended per device and dashboard | `tools/benchmark-adb-tabs-local.sh <device>` |
 | OBD connect/scan latency | debug builds emit `obd_*` `VoltStartup` marks (connect request, socket connect, ELM init, first sample, scan stages); spans stay under the provisional ceilings in `tools/perf/check_obd_latency.py` | `tools/perf/check_obd_latency.py` (run by `scripts/emulator-smoke.sh` with `--require demo`) |
 | Seeded storage reads | overview, details, trips, and route reads stay inside generous JVM budgets | `ObdStorePerformanceBudgetTest` |
 | Real database reads | optional local timing on a copied SQLite database, useful for large restored histories | `tools/benchmark-real-db-local.sh /path/to/volttracker_obd_poc.db` |

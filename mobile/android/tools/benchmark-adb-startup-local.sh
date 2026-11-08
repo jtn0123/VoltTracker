@@ -1,21 +1,44 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-package_name="com.volttracker.obdpoc"
-if [[ -n "${VOLTTRACKER_PACKAGE:-}" && "${VOLTTRACKER_PACKAGE}" != "$package_name" ]]; then
-  echo "Refusing to benchmark package '${VOLTTRACKER_PACKAGE}'. This script only targets $package_name." >&2
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=benchmark-adb-target.sh
+source "$script_dir/benchmark-adb-target.sh"
+
+usage() {
+  cat <<'EOF'
+usage: tools/benchmark-adb-startup-local.sh [options] [ADB_SERIAL_OR_IP:PORT] [RUNS]
+
+Cold-starts the installed app RUNS times (default 5) with `am start -W` and reports launch,
+ready and StartupTrace timings. Never installs, uninstalls, clears app data, or targets
+another package.
+
+EOF
+  vt_target_usage
+}
+
+parse_rc=0
+vt_parse_benchmark_args "$@" || parse_rc=$?
+if [[ "$parse_rc" -eq 3 ]]; then
+  usage
+  exit 0
+elif [[ "$parse_rc" -ne 0 ]]; then
+  usage >&2
   exit 2
 fi
+package_name="$VT_PACKAGE"
+if [[ -n "${VOLTTRACKER_COMPONENT:-}" ]]; then
+  vt_check_component_override "$package_name" "$VOLTTRACKER_COMPONENT" || exit 2
+fi
 
-target="${1:-${VOLTTRACKER_ADB_SERIAL:-}}"
-runs="${VOLTTRACKER_STARTUP_RUNS:-${2:-5}}"
-component="${VOLTTRACKER_COMPONENT:-$package_name/.MainActivity}"
-ready_text="${VOLTTRACKER_READY_TEXT:-VoltTracker dashboard ready}"
+target="${VT_ARGS[0]:-${VOLTTRACKER_ADB_SERIAL:-}}"
+runs="${VOLTTRACKER_STARTUP_RUNS:-${VT_ARGS[1]:-5}}"
+ready_mark="$(vt_ready_mark "$VT_DASHBOARD")"
+ready_text="${VOLTTRACKER_READY_TEXT:-$(vt_ready_probe "$VT_DASHBOARD")}"
 ready_timeout_sec="${VOLTTRACKER_STARTUP_READY_TIMEOUT_SEC:-30}"
-trace_tag="${VOLTTRACKER_STARTUP_TRACE_TAG:-VoltStartup}"
+trace_tag="${VOLTTRACKER_STARTUP_TRACE_TAG:-$VT_TRACE_TAG}"
 wake_device="${VOLTTRACKER_STARTUP_WAKE_DEVICE:-1}"
 
-script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 android_dir="$(cd "$script_dir/.." && pwd)"
 timestamp="$(date -u +"%Y%m%dT%H%M%SZ")"
 report_dir="$android_dir/build/reports/adb-startup-benchmark/$timestamp"
@@ -87,7 +110,24 @@ EOF
 fi
 
 adb -s "$serial" devices -l >"$raw_dir/adb-devices.txt" 2>&1 || true
-adb -s "$serial" shell pm path "$package_name" >"$raw_dir/pm-path.txt" 2>&1
+adb -s "$serial" shell pm path "$package_name" >"$raw_dir/pm-path.txt" 2>&1 || true
+if ! component="$(vt_resolve_component "$serial" "$package_name" "$VT_DASHBOARD" "${VOLTTRACKER_COMPONENT:-}" \
+  "$raw_dir/resolve-activity.txt" 2>"$raw_dir/resolve-error.txt")"; then
+  cat "$raw_dir/resolve-error.txt" >&2
+  cat >"$report_dir/summary.md" <<EOF
+# VoltTracker ADB Startup Benchmark
+
+Status: \`no-launch-component\`
+
+- Serial: \`$serial\`
+- Package: \`$package_name\` ($VT_VARIANT)
+- Dashboard: \`$VT_DASHBOARD\`
+
+$(cat "$raw_dir/resolve-error.txt")
+EOF
+  echo "$report_dir/summary.md"
+  exit 2
+fi
 
 runs_csv="$report_dir/startup-runs.csv"
 marks_csv="$report_dir/startup-marks.csv"
@@ -123,7 +163,7 @@ for run in $(seq 1 "$runs"); do
   deadline_ms=$((start_ms + ready_timeout_sec * 1000))
   while [[ "$(now_ms)" -lt "$deadline_ms" ]]; do
     if adb -s "$serial" logcat -d -s "$trace_tag:I" '*:S' 2>/dev/null |
-      grep -F "mark=dashboard_ready_content_description " >/dev/null; then
+      grep -F "mark=$ready_mark " >/dev/null; then
         ready_found=1
         ready_source="logcat"
         ready_ms=$(( $(now_ms) - start_ms ))
@@ -155,7 +195,8 @@ done
 
 python_bin="${PYTHON:-python3}"
 if command -v "$python_bin" >/dev/null 2>&1; then
-  "$python_bin" - "$report_dir" "$trend_file" "$timestamp" "$serial" "$package_name" "$component" "$ready_text" "$runs" <<'PY'
+  "$python_bin" - "$report_dir" "$trend_file" "$timestamp" "$serial" "$package_name" "$component" "$ready_text" "$runs" \
+    "$VT_DASHBOARD" "$VT_VARIANT" "$ready_mark" <<'PY'
 import csv
 import json
 import statistics
@@ -165,7 +206,7 @@ from pathlib import Path
 
 report_dir = Path(sys.argv[1])
 trend_file = Path(sys.argv[2])
-timestamp, serial, package_name, component, ready_text, requested_runs = sys.argv[3:9]
+timestamp, serial, package_name, component, ready_text, requested_runs, dashboard, variant, ready_mark = sys.argv[3:12]
 runs_csv = report_dir / "startup-runs.csv"
 marks_csv = report_dir / "startup-marks.csv"
 jsonl_file = report_dir / "startup-runs.jsonl"
@@ -249,82 +290,101 @@ host_metric_rows = [
     ("hostStartToDashboardReadyMs", "Host time until dashboard-ready probe"),
 ]
 
-app_metric_rows = [
-    ("appJsBootstrapStartMs", "js:actions_bootstrap_start", "App mark: dashboard JS started"),
-    ("appInitialRenderMs", "js:actions_initial_render_done", "App mark: initial Drive DOM render done"),
-    ("appFirstFrameMs", "js:actions_first_frame", "App mark: first dashboard frame completed"),
-    ("appDashboardReadyProbeMs", "dashboard_ready_content_description", "App mark: native ready probe set"),
-    ("appDashboardReadyNativeCompleteMs", "dashboard_ready_native_complete", "App mark: native ready callback returned"),
-    ("obdFirstUsefulSampleMs", "obd_first_useful_sample_read", "OBD mark: first useful sample decoded"),
-    ("obdFirstTelemetryBroadcastMs", "obd_first_telemetry_broadcast", "OBD mark: first useful sample broadcast"),
-]
+def matches(mark, name):
+    # Session marks append ":<mode>" (obd_first_sample:live, obd_connect_request:obd).
+    return mark == name or mark.startswith(name + ":")
 
-critical_marks = [
-    "reset:app_on_create",
-    "app_on_create_complete",
-    "activity_on_create_start",
-    "local_store_open_end",
-    "webview_create_end",
-    "webview_configure_end",
-    "webview_load_url_end",
-    "webview_page_started",
-    "webview_page_commit_visible",
-    "webview_page_finished",
-    "js:actions_bootstrap_start",
-    "js:actions_bind_listeners_done",
-    "js:actions_initial_render_done",
-    "bridge_refresh_devices_called",
-    "bridge_refresh_devices_ui_end",
-    "bridge_dashboard_ready_called",
-    "dashboard_ready_content_description",
-    "dashboard_ready_native_complete",
-    "storage_summary_read_start",
-    "storage_summary_read_end",
-    "storage_summary_publish_end",
-    "startup_maintenance_scheduled",
-    "startup_maintenance_start",
-    "startup_maintenance_end",
-    "startup_maintenance_skipped_active_session",
-    "startup_maintenance_skipped_store_unavailable",
-    "startup_maintenance_failed",
-    "obd_connect_requested",
-    "obd_scan_requested",
-    "obd_detail_probe_requested",
-    "obd_socket_open_start",
-    "obd_socket_open_end",
-    "obd_socket_open_failed",
+def first_mark(run, name):
+    for mark, elapsed in mark_events_by_run.get(run, []):
+        if matches(mark, name):
+            return elapsed
+    return None
+
+# StartupTrace.OBD_* marks; only present when the app connects or starts the demo during the run.
+obd_metric_rows = [
+    ("obdFirstSampleMs", "obd_first_sample", "OBD mark: first sample decoded (live or demo)"),
+]
+obd_critical_marks = [
+    "obd_connect_request",
+    "obd_socket_connected",
     "obd_elm_init_start",
     "obd_elm_init_end",
-    "obd_first_useful_sample_read",
-    "obd_first_telemetry_broadcast",
+    "obd_first_sample",
+]
+obd_span_defs = [
+    ("OBD connect request to socket", "obd_connect_request", "obd_socket_connected"),
+    ("OBD ELM init", "obd_elm_init_start", "obd_elm_init_end"),
+    ("OBD connect request to first sample", "obd_connect_request", "obd_first_sample"),
 ]
 
-span_defs = [
-    ("Activity onCreate", "activity_on_create_start", "activity_on_create_end"),
-    ("Open local SQLite store", "local_store_open_start", "local_store_open_end"),
-    ("Create WebView", "webview_create_start", "webview_create_end"),
-    ("Configure WebView", "webview_configure_start", "webview_configure_end"),
-    ("WebView load to page start", "webview_load_url_start", "webview_page_started"),
-    ("WebView load to visible commit", "webview_load_url_start", "webview_page_commit_visible"),
-    ("Page start to finish", "webview_page_started", "webview_page_finished"),
-    ("Load URL to JS bootstrap", "webview_load_url_start", "js:actions_bootstrap_start"),
-    ("JS bootstrap to listeners bound", "js:actions_bootstrap_start", "js:actions_bind_listeners_done"),
-    ("JS bootstrap to initial render", "js:actions_bootstrap_start", "js:actions_initial_render_done"),
-    ("Initial render to ready bridge", "js:actions_initial_render_done", "bridge_dashboard_ready_called"),
-    ("Refresh devices bridge/UI", "bridge_refresh_devices_called", "bridge_refresh_devices_ui_end"),
-    ("Publish device list", "publish_device_list_start", "publish_device_list_end"),
-    ("Ready bridge to probe", "bridge_dashboard_ready_called", "dashboard_ready_content_description"),
-    ("Ready native completion", "dashboard_ready_bridge_start", "dashboard_ready_native_complete"),
-    ("Storage summary read", "storage_summary_read_start", "storage_summary_read_end"),
-    ("Storage summary publish", "storage_summary_publish_start", "storage_summary_publish_end"),
-    ("Startup maintenance", "startup_maintenance_start", "startup_maintenance_end"),
-    ("OBD request to socket open", "obd_connect_requested", "obd_socket_open_start"),
-    ("OBD socket open", "obd_socket_open_start", "obd_socket_open_end"),
-    ("OBD ELM init", "obd_elm_init_start", "obd_elm_init_end"),
-    ("OBD connect to first useful sample", "obd_connect_requested", "obd_first_useful_sample_read"),
-    ("OBD socket open to first useful sample", "obd_socket_open_start", "obd_first_useful_sample_read"),
-    ("OBD sample read to telemetry broadcast", "obd_first_useful_sample_read", "obd_first_telemetry_broadcast"),
-]
+if dashboard == "native":
+    # ComposeDashboardActivity logs compose_screen:<view> when a screen composes; a fresh start
+    # composes Drive. Its first telemetry mark needs a live or demo session.
+    app_metric_rows = [
+        ("appOnCreateCompleteMs", "app_on_create_complete", "App mark: Application.onCreate finished"),
+        ("appDashboardReadyProbeMs", ready_mark, "App mark: native Drive screen composed (ready)"),
+        ("appFirstTelemetryMs", "compose_first_telemetry", "App mark: first telemetry reached the native screens"),
+    ] + obd_metric_rows
+    critical_marks = [
+        "reset:app_on_create",
+        "app_on_create_complete",
+        ready_mark,
+        "compose_first_telemetry",
+    ] + obd_critical_marks
+    span_defs = [
+        ("Application onCreate to Drive composed", "app_on_create_complete", ready_mark),
+        ("Drive composed to first telemetry", ready_mark, "compose_first_telemetry"),
+    ] + obd_span_defs
+else:
+    app_metric_rows = [
+        ("appJsBootstrapStartMs", "js:actions_bootstrap_start", "App mark: dashboard JS started"),
+        ("appInitialRenderMs", "js:actions_initial_render_done", "App mark: initial Drive DOM render done"),
+        ("appFirstFrameMs", "js:actions_first_frame", "App mark: first dashboard frame completed"),
+        ("appDashboardReadyProbeMs", ready_mark, "App mark: native ready probe set"),
+        ("appDashboardReadyNativeCompleteMs", "dashboard_ready_native_complete", "App mark: native ready callback returned"),
+    ] + obd_metric_rows
+    critical_marks = [
+        "reset:app_on_create",
+        "app_on_create_complete",
+        "activity_on_create_start",
+        "local_store_open_end",
+        "webview_create_end",
+        "webview_configure_end",
+        "webview_load_url_end",
+        "webview_page_started",
+        "webview_page_commit_visible",
+        "webview_page_finished",
+        "js:actions_bootstrap_start",
+        "js:actions_bind_listeners_done",
+        "js:actions_initial_render_done",
+        "bridge_refresh_devices_called",
+        "bridge_refresh_devices_ui_end",
+        "bridge_dashboard_ready_called",
+        ready_mark,
+        "dashboard_ready_native_complete",
+        "storage_summary_read_start",
+        "storage_summary_read_end",
+        "storage_summary_publish_end",
+    ] + obd_critical_marks
+    span_defs = [
+        ("Activity onCreate", "activity_on_create_start", "activity_on_create_end"),
+        ("Open local SQLite store", "local_store_open_start", "local_store_open_end"),
+        ("Create WebView", "webview_create_start", "webview_create_end"),
+        ("Configure WebView", "webview_configure_start", "webview_configure_end"),
+        ("WebView load to page start", "webview_load_url_start", "webview_page_started"),
+        ("WebView load to visible commit", "webview_load_url_start", "webview_page_commit_visible"),
+        ("Page start to finish", "webview_page_started", "webview_page_finished"),
+        ("Load URL to JS bootstrap", "webview_load_url_start", "js:actions_bootstrap_start"),
+        ("JS bootstrap to listeners bound", "js:actions_bootstrap_start", "js:actions_bind_listeners_done"),
+        ("JS bootstrap to initial render", "js:actions_bootstrap_start", "js:actions_initial_render_done"),
+        ("Initial render to ready bridge", "js:actions_initial_render_done", "bridge_dashboard_ready_called"),
+        ("Refresh devices bridge/UI", "bridge_refresh_devices_called", "bridge_refresh_devices_ui_end"),
+        ("Publish device list", "publish_device_list_start", "publish_device_list_end"),
+        ("Ready bridge to probe", "bridge_dashboard_ready_called", ready_mark),
+        ("Ready native completion", "dashboard_ready_bridge_start", "dashboard_ready_native_complete"),
+        ("Storage summary read", "storage_summary_read_start", "storage_summary_read_end"),
+        ("Storage summary publish", "storage_summary_publish_start", "storage_summary_publish_end"),
+    ] + obd_span_defs
 
 span_rows = []
 for label, start, end in span_defs:
@@ -332,9 +392,9 @@ for label, start, end in span_defs:
     for events in mark_events_by_run.values():
         pending = []
         for mark, elapsed in events:
-            if mark == start:
+            if matches(mark, start):
                 pending.append(elapsed)
-            elif mark == end and pending:
+            elif matches(mark, end) and pending:
                 start_elapsed = pending.pop(0)
                 values.append(elapsed - start_elapsed)
     item = stats(values)
@@ -347,7 +407,7 @@ metric_summary = {}
 for name, _note in host_metric_rows:
     metric_summary[name] = stats(to_int(row.get(name)) for row in run_rows)
 for name, mark, _note in app_metric_rows:
-    metric_summary[name] = stats(marks_first_by_run.get(row["run"], {}).get(mark) for row in run_rows)
+    metric_summary[name] = stats(first_mark(row["run"], mark) for row in run_rows)
 span_summary = {
     label: {
         "marks": [start, end],
@@ -368,6 +428,8 @@ if trend_file.exists():
         if (
             item.get("serial") == serial and
             item.get("package") == package_name and
+            # Trend lines written before the native launcher measured the classic dashboard.
+            item.get("dashboard", "classic") == dashboard and
             item.get("requestedRuns") == requested_runs_int and
             sum(item.get("readySourceCounts", {}).values()) == requested_runs_int
         ):
@@ -398,7 +460,10 @@ trend_payload = {
     "timestamp": timestamp,
     "serial": serial,
     "package": package_name,
+    "variant": variant,
+    "dashboard": dashboard,
     "component": component,
+    "readyMark": ready_mark,
     "readyText": ready_text,
     "requestedRuns": requested_runs_int,
     "report": str(summary_file),
@@ -418,16 +483,26 @@ lines = [
     f"Generated: `{timestamp}`",
     "",
     f"- Serial: `{serial}`",
-    f"- Package: `{package_name}`",
+    f"- Package: `{package_name}` ({variant})",
+    f"- Dashboard: `{dashboard}`",
     f"- Component: `{component}`",
     f"- Requested runs: `{requested_runs}`",
+    f"- Ready mark: `{ready_mark}`",
     f"- Ready probe: `{ready_text}`",
     "",
     "This benchmark uses `am force-stop`, `am start -W`, `uiautomator dump`, and logcat.",
-    "It does not install, uninstall, clear app data, or target any package other than `com.volttracker.obdpoc`.",
+    "It does not install, uninstall, clear app data, or target any package other than the selected",
+    "`com.volttracker.obdpoc` (release) or `com.volttracker.obdpoc.debug` (debug) app.",
     "By default it wakes the device and asks Android to dismiss keyguard before each run; set `VOLTTRACKER_STARTUP_WAKE_DEVICE=0` to skip that.",
-    "It checks in-app `VoltStartup` ready marks before the slower `uiautomator` accessibility dump.",
+    "It checks the in-app `VoltStartup` ready mark before the slower `uiautomator` accessibility dump.",
     "`hostStartToDashboardReadyMs` is host-observed; `app*` metrics are app-reported and are the better optimization target.",
+]
+if variant == "release":
+    lines += [
+        "Release builds log no `VoltStartup` marks, so `app*` metrics stay empty and readiness comes",
+        "from the accessibility dump alone.",
+    ]
+lines += [
     "",
     "## Host Run Metrics",
     "",
@@ -449,7 +524,7 @@ lines += [
 ]
 
 for name, mark, note in app_metric_rows:
-    values = [marks_first_by_run.get(row["run"], {}).get(mark) for row in run_rows]
+    values = [first_mark(row["run"], mark) for row in run_rows]
     cells = stat_cells(values)
     lines.append(f"| `{name}` | {cells[0]} | {cells[1]} | {cells[2]} | {cells[3]} | {note} |")
 
@@ -476,9 +551,10 @@ lines += [
 
 all_marks = sorted({mark for events in mark_events_by_run.values() for mark, _elapsed in events})
 ordered_marks = []
-for mark in critical_marks + all_marks:
-    if mark in all_marks and mark not in ordered_marks:
-        ordered_marks.append(mark)
+for name in critical_marks + all_marks:
+    for mark in all_marks:
+        if matches(mark, name) and mark not in ordered_marks:
+            ordered_marks.append(mark)
 
 for mark in ordered_marks:
     values = [marks_first_by_run.get(row["run"], {}).get(mark) for row in run_rows]
@@ -554,7 +630,8 @@ Generated: \`$timestamp\`
 Python was not available, so detailed summary generation was skipped.
 
 - Serial: \`$serial\`
-- Package: \`$package_name\`
+- Package: \`$package_name\` ($VT_VARIANT)
+- Dashboard: \`$VT_DASHBOARD\`
 - Component: \`$component\`
 - Runs CSV: \`$runs_csv\`
 - Marks CSV: \`$marks_csv\`

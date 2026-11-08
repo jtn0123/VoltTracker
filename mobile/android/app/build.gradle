@@ -252,6 +252,17 @@ android {
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {
                 systemProperty "volttracker.realDbPath", rootProject.property("voltTrackerRealDbPath")
             }
+            // Contract tests (EmulatorSmokeContractTest, ObdLatencyMarksContractTest,
+            // BenchmarkTargetContractTest) read these files as text. Declaring them means an edit
+            // to only a script re-runs the tests instead of reusing an up-to-date or cached pass.
+            inputs.files(
+                    rootProject.file("scripts/emulator-smoke.sh"),
+                    rootProject.file("tools/perf/check_obd_latency.py"),
+                    rootProject.file("tools/benchmark-adb-target.sh"),
+                    project.file("src/main/AndroidManifest.xml"),
+                    project.file("src/debug/AndroidManifest.xml"),
+                    project.file("src/main/dashboard-src/index.template.html"),
+            ).withPropertyName("contractTestFiles").withPathSensitivity(PathSensitivity.RELATIVE)
             retry {
                 // One retry absorbs pure infra flake (emulator-less CI runners hiccuping on
                 // Robolectric/SQLite I/O) so it can't fail the job. failOnPassedAfterRetry
