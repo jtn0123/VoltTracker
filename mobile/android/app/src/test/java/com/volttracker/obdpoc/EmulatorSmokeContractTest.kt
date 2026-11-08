@@ -62,6 +62,32 @@ class EmulatorSmokeContractTest {
     }
 
     /**
+     * The classic phase starts its demo only after [StartupTrace.RAW_MAINTENANCE_IDLE]: the first
+     * raw-data maintenance pass runs 10 s after the Activity starts and holds the database lease,
+     * and a demo start that lands inside it is refused without a trace. Run 42439166685 lost its
+     * demo that way. A rename on one side alone would leave the smoke waiting for a mark nobody logs.
+     */
+    @Test
+    fun smokeScriptWaitsForRawMaintenanceBeforeTheClassicDemo() {
+        val contents = locate("scripts/emulator-smoke.sh").readText()
+
+        assertTrue(
+            "emulator-smoke.sh must reference StartupTrace.RAW_MAINTENANCE_IDLE",
+            contents.contains("StartupTrace.RAW_MAINTENANCE_IDLE"),
+        )
+        assertTrue(
+            "emulator-smoke.sh must use the value of StartupTrace.RAW_MAINTENANCE_IDLE " +
+                "(\"${StartupTrace.RAW_MAINTENANCE_IDLE}\")",
+            contents.contains("\"${StartupTrace.RAW_MAINTENANCE_IDLE}\""),
+        )
+        val wait = contents.indexOf("\nwait_for_raw_maintenance_idle\n")
+        val demo = contents.indexOf("\nstart_service_as_app \"\$ACTION_DEMO\"\n")
+        assertTrue("the classic phase must wait for raw maintenance", wait >= 0)
+        assertTrue("the classic phase must start the demo by the service action", demo >= 0)
+        assertTrue("the wait must come before the classic demo start", wait < demo)
+    }
+
+    /**
      * The classic phase taps the bottom nav by geometry: NAV_COUNT equal slots across the pill. The
      * script kept 7 slots after the nav shrank to 6 buttons, so its 4th tap landed on a button
      * boundary. Pin the count and the tapped labels to the template's data-nav buttons.

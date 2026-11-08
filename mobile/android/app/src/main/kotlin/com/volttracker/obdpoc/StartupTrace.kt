@@ -30,6 +30,13 @@ object StartupTrace {
     const val COMPOSE_SCREEN = "compose_screen"
     const val COMPOSE_FIRST_TELEMETRY = "compose_first_telemetry"
 
+    // Logged each time a raw-data maintenance pass ends, so it no longer holds the database lease
+    // whether it pruned, was not due, yielded to a writer or failed. The service refuses a new
+    // session while the lease is held, and the first pass runs 10 s after an Activity starts, so
+    // the smoke's classic phase waits for this mark before it starts the demo. Also a TEST
+    // CONTRACT with scripts/emulator-smoke.sh, pinned by EmulatorSmokeContractTest.
+    const val RAW_MAINTENANCE_IDLE = "raw_maintenance_idle"
+
     private val baseElapsedMs = AtomicLong(SystemClock.elapsedRealtime())
 
     fun reset(reason: String) {

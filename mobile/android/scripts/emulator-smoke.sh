@@ -8,7 +8,8 @@
 # dashboard's script chain is dead (e.g. the file:// ES-module regression) the app
 # still *loads* and logs nothing alarming, so only the absence of that line reveals
 # it. A negative scan then rejects any crash or uncaught JS error. After the
-# handshake, the script starts demo telemetry through the native service action,
+# handshake and the startup raw-data maintenance pass (StartupTrace.RAW_MAINTENANCE_IDLE),
+# the script starts demo telemetry through the native service action,
 # taps through the real bottom-nav WebView surfaces, and captures screenshots for
 # review. That gives CI proof that native -> WebView broadcasts and real Android
 # rendering survived startup.
@@ -54,6 +55,9 @@ COMPOSE_ACTIVITY="$PKG/$CODE_PKG.ComposeDashboardActivity"
 # Values of StartupTrace.COMPOSE_SCREEN and StartupTrace.COMPOSE_FIRST_TELEMETRY.
 COMPOSE_SCREEN_MARK="compose_screen"
 COMPOSE_TELEMETRY_MARK="compose_first_telemetry"
+# Value of StartupTrace.RAW_MAINTENANCE_IDLE: a raw-data maintenance pass ended and released the
+# database lease (see wait_for_raw_maintenance_idle).
+RAW_MAINTENANCE_IDLE_MARK="raw_maintenance_idle"
 # Full component path: ObdService moved to the service/ subpackage in the A3 restructure.
 OBD_SERVICE="$PKG/$CODE_PKG.service.ObdService"
 ACTION_DEMO="$CODE_PKG.action.DEMO"
@@ -292,6 +296,23 @@ wait_for_mark() {
   exit 1
 }
 
+# Wait until the raw-data maintenance pass that this phase's Activity start scheduled has ended.
+# The pass runs 10 s after the Activity starts and holds the database lease while it prunes, and
+# the service refuses a new session during that time without logging anything. In run 42439166685
+# the demo start landed 2 s into a due pass, and the smoke saw no telemetry. The demo session that
+# follows owns SQLite, so later passes yield to it instead of taking the lease.
+wait_for_raw_maintenance_idle() {
+  for _ in $(seq 1 45); do
+    if [ "$(count_marks "$RAW_MAINTENANCE_IDLE_MARK")" -gt 0 ]; then
+      return 0
+    fi
+    sleep 2
+  done
+  echo "Raw-data maintenance never logged VoltStartup mark=$RAW_MAINTENANCE_IDLE_MARK within 90s."
+  echo "The pass is scheduled 10 s after the Activity starts; a stuck pass would block every session."
+  exit 1
+}
+
 # Open the Compose launcher on a tab (and optional route) by intent, then require the screen mark.
 open_compose() {
   local label="$1" view="$2"
@@ -368,6 +389,9 @@ echo "Dashboard handshake received — JS is live."
 sleep 2
 screenshot "startup-ready"
 check_logcat "startup ready"
+
+echo "Waiting for the startup raw-data maintenance pass to release the database lease."
+wait_for_raw_maintenance_idle
 
 echo "Starting demo telemetry through the native service action."
 start_service_as_app "$ACTION_DEMO"

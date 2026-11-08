@@ -275,6 +275,9 @@ The Compose launcher has the same kind of contract. The smoke's Compose phase
 waits for two debug-build `VoltStartup` marks, the values of
 `StartupTrace.COMPOSE_FIRST_TELEMETRY` (`compose_first_telemetry`: demo
 telemetry reached the Compose live store) and `StartupTrace.COMPOSE_SCREEN`
-(`compose_screen:<view>`: that screen composed). `EmulatorSmokeContractTest`
-pins both strings, plus the classic phase's bottom-nav tap list against the
-template's `data-nav` buttons.
+(`compose_screen:<view>`: that screen composed). Before its demo, the classic
+phase waits for `StartupTrace.RAW_MAINTENANCE_IDLE` (`raw_maintenance_idle`:
+a raw-data maintenance pass ended and released the database lease, which the
+service needs free before it accepts a session). `EmulatorSmokeContractTest`
+pins all three strings, plus the classic phase's bottom-nav tap list against
+the template's `data-nav` buttons.

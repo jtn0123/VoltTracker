@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * startup a head start. The worker checks a persisted daily throttle, takes the same exclusion as
  * backup/restore only when no recording writer owns SQLite, and opens its own short-lived store.
  * Busy or failed attempts leave the timestamp untouched and retry on a later lifecycle request.
+ * [onPassEnd] runs on the worker after every pass, once the pass no longer holds the lease.
  */
 internal class RawDataMaintenance(
     private val prefs: () -> SharedPreferences,
@@ -27,6 +28,7 @@ internal class RawDataMaintenance(
     private val schedule: (Runnable) -> Unit,
     private val worker: Executor,
     private val nowMs: () -> Long = System::currentTimeMillis,
+    private val onPassEnd: () -> Unit = {},
 ) : Application.ActivityLifecycleCallbacks {
     private val pending = AtomicBoolean(false)
 
@@ -41,6 +43,7 @@ internal class RawDataMaintenance(
                                 runIfDue()
                             } finally {
                                 pending.set(false)
+                                onPassEnd()
                             }
                         }
                     } catch (ex: RejectedExecutionException) {
@@ -112,6 +115,7 @@ internal class RawDataMaintenance(
                         }
                     },
                     worker = worker,
+                    onPassEnd = { StartupTrace.mark(StartupTrace.RAW_MAINTENANCE_IDLE) },
                 )
             app.registerActivityLifecycleCallbacks(coordinator)
         }
