@@ -356,7 +356,13 @@ open class ObdService :
         startId: Int,
     ): Int {
         if (isSessionStartAction(intent?.action) && DatabaseOperationLease.isHeld()) {
-            broadcastStatus("blocked", getString(R.string.status_database_operation_running), true)
+            val detail = getString(R.string.status_database_operation_running)
+            broadcastStatus("blocked", detail, true)
+            val nearby = hasBluetoothConnectPermission() || hasBluetoothScanPermission()
+            RefusedForegroundStart.settle(intent?.action, foregroundServiceActive, nearby, hasLocationPermission()) {
+                enterForeground(notifications.buildRefusal(detail), it)
+                ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            }
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -632,11 +638,12 @@ open class ObdService :
         val blockedDetail = startForegroundSession(request)
         if (blockedDetail != null) {
             broadcastStatus("blocked", blockedDetail, true)
-            // The service was launched via startForegroundService but never reached the
-            // foreground: without a session to own, it must stop itself or Android eventually
-            // kills the process with a RemoteServiceException for the missing startForeground
-            // call (B6). No wake lock is held here — acquisition only happens after this gate,
-            // and stopCurrentSession above released any lock a previous session held.
+            // No session to own, so stop. Stopping a foreground-launched service before it calls
+            // startForeground crashes the app, so ObdServiceLauncher starts a session that will be
+            // refused for missing Nearby devices permission as a plain service. When startForeground
+            // itself threw (B6), the platform already refused the foreground start, and staying
+            // would only wait for its timeout. No wake lock is held here — acquisition only happens
+            // after this gate, and stopCurrentSession above released any lock a previous session held.
             stopSelf()
             return
         }

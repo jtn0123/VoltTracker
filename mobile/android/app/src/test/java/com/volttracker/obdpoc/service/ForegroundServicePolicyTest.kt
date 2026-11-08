@@ -3,7 +3,6 @@ package com.volttracker.obdpoc.service
 import android.content.pm.ServiceInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ForegroundServicePolicyTest {
@@ -79,12 +78,64 @@ class ForegroundServicePolicyTest {
         assertEquals(ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION, ForegroundServicePolicy.TYPE_LOCATION)
     }
 
+    private val realActions =
+        listOf(
+            ObdService.ACTION_CONNECT,
+            ObdService.ACTION_SCAN,
+            ObdService.ACTION_TPMS_SCAN,
+            ObdService.ACTION_CLEAR_DTC,
+        )
+
+    /**
+     * Android crashes an app whose foreground-launched service stops before calling startForeground,
+     * so only a session that will reach startForeground may launch in the foreground: never the demo,
+     * and not a real session that Android 14+ refuses for missing Nearby devices permission.
+     */
     @Test
-    fun onlyTheDemoLaunchesAsAPlainStartedService() {
-        assertFalse(ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_DEMO))
-        assertTrue(ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_CONNECT))
-        assertTrue(ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_SCAN))
-        assertTrue(ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_TPMS_SCAN))
-        assertTrue(ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_CLEAR_DTC))
+    fun onlySessionsThatWillEnterTheForegroundLaunchInIt() {
+        for (sdk in listOf(26, 29, 31, 33, 34, 36)) {
+            for (nearby in listOf(true, false)) {
+                assertFalse(
+                    "demo sdk=$sdk nearby=$nearby",
+                    ForegroundServicePolicy.launchesInForeground(ObdService.ACTION_DEMO, sdk, nearby),
+                )
+                for (action in realActions) {
+                    assertEquals(
+                        "$action sdk=$sdk nearby=$nearby",
+                        nearby || sdk < 34,
+                        ForegroundServicePolicy.launchesInForeground(action, sdk, nearby),
+                    )
+                }
+            }
+        }
+        for (action in realActions) {
+            assertFalse(
+                "no startForegroundService below Android 8",
+                ForegroundServicePolicy.launchesInForeground(action, 25, true),
+            )
+        }
+    }
+
+    @Test
+    fun aStartIsPlannedLikeTheSessionItBegins() {
+        for (sdk in listOf(23, 29, 34)) {
+            for (nearby in listOf(true, false)) {
+                for (location in listOf(true, false)) {
+                    val case = "sdk=$sdk nearby=$nearby location=$location"
+                    assertEquals(
+                        "demo $case",
+                        ForegroundServicePolicy.plan("demo", sdk, nearby, location),
+                        ForegroundServicePolicy.planForAction(ObdService.ACTION_DEMO, sdk, nearby, location),
+                    )
+                    for ((action, mode) in realActions.zip(realModes)) {
+                        assertEquals(
+                            "$action $case",
+                            ForegroundServicePolicy.plan(mode, sdk, nearby, location),
+                            ForegroundServicePolicy.planForAction(action, sdk, nearby, location),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
