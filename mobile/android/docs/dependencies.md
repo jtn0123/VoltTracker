@@ -59,6 +59,20 @@ The weekly `Dependency snapshot` workflow runs a fuller advisory snapshot with
 `npm audit --audit-level=low` for both npm workspaces and uploads the Gradle
 dependency report as an artifact.
 
+## npm Overrides
+
+`dashboard-tests/package.json` has one override, added 2026-11-07:
+
+- `minimatch: ^11.0.5`. Advisory GHSA-g3hv-75wg-m249 (glob DoS) affects
+  minimatch `>=7.0.0 <11.0.1`. eslint 10.14 and typescript-eslint 8.72 still
+  declare `^10`, so `npm audit` stays red without the override. Their only
+  minimatch calls are `new Minimatch(pattern, { dot: true })`, `.match(path)`,
+  `.match(path, true)` and `minimatch(path, pattern, { dot: true })`, which are
+  unchanged in 11. The 11.0 removals (`makeRe`, `regexp`, `matchOne`, `debug`)
+  are not used. Remove the override once eslint, `@eslint/config-array` and
+  `@typescript-eslint/typescript-estree` all depend on minimatch `>=11.0.1`
+  (`npm view <pkg> dependencies.minimatch`), then rerun lint and the audit.
+
 ## Review Rules
 
 - Keep runtime dependencies small. Prefer platform SDK or existing AndroidX
