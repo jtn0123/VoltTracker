@@ -2,6 +2,7 @@ package com.volttracker.obdpoc.update
 
 import android.content.Context
 import androidx.core.content.ContextCompat
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Process-wide owner of the update flow, so Activity recreation neither
@@ -17,8 +18,9 @@ class UpdateCoordinator internal constructor(
     var lastResult: UpdateManager.CheckResult? = null
         private set
 
-    @Volatile
-    private var autoChecked = false
+    // Atomic, not a @Volatile check-then-set: the coordinator is process-wide, so the
+    // once-per-process guarantee must not depend on every caller being on one thread.
+    private val autoChecked = AtomicBoolean(false)
 
     private val manager: UpdateManager by lazy(managerFactory)
 
@@ -30,8 +32,7 @@ class UpdateCoordinator internal constructor(
      * instead.
      */
     fun autoCheckOnce(onResult: (UpdateManager.CheckResult) -> Unit): Boolean {
-        if (autoChecked) return false
-        autoChecked = true
+        if (!autoChecked.compareAndSet(false, true)) return false
         check(onResult)
         return true
     }
@@ -44,10 +45,16 @@ class UpdateCoordinator internal constructor(
         }
     }
 
-    /** Downloads and installs the offered build, if one is on record. */
-    fun downloadAndInstall(onProgress: (Int) -> Unit) {
-        val build = availableBuild() ?: return
-        manager.downloadAndInstall(build, onProgress)
+    /**
+     * Downloads and installs [build] — the one the caller showed the user, passed in rather
+     * than re-read from [lastResult], which a later check may have replaced (an Offline
+     * result, say). Ends with exactly one terminal [UpdateManager.InstallEvent].
+     */
+    fun downloadAndInstall(
+        build: UpdateFeed.AvailableBuild,
+        onEvent: (UpdateManager.InstallEvent) -> Unit,
+    ) {
+        manager.downloadAndInstall(build, onEvent)
     }
 
     companion object {

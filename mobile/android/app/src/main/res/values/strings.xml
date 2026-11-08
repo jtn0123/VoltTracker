@@ -248,6 +248,16 @@
     <string name="update_offer_install">Install</string>
     <string name="update_offer_later">Later</string>
     <string name="update_downloading">Downloading %1$s…</string>
-    <string name="update_download_failed">Update download failed. It will be offered again next launch.</string>
     <string name="update_opening_installer">Opening Android\'s installer…</string>
+    <string name="update_failed_title">Update not installed</string>
+    <string name="update_failed_retry">Try again</string>
+    <string name="update_failed_close">Close</string>
+    <string name="update_failed_busy">Another update check or download is still running. Wait a moment, then try again.</string>
+    <string name="update_failed_network">The download was interrupted. Check your connection, then try again.</string>
+    <string name="update_failed_server">GitHub didn\'t send the update file. Try again later, or get the APK from the GitHub Releases page.</string>
+    <string name="update_failed_incomplete">The update file arrived damaged or cut short. Try again.</string>
+    <string name="update_failed_not_this_app">The downloaded file isn\'t Volt Tracker signed with this app\'s key, so it was not installed. Get the update from the GitHub Releases page.</string>
+    <string name="update_failed_storage">Couldn\'t save the update. Free up some phone storage, then try again.</string>
+    <string name="update_failed_installer">Android\'s installer couldn\'t be opened. Get the APK from the GitHub Releases page and install it from your file manager.</string>
+    <string name="update_failed_unexpected">The update failed unexpectedly. Try again.</string>
 </resources>

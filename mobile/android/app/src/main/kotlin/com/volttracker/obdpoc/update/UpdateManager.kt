@@ -1,12 +1,9 @@
 package com.volttracker.obdpoc.update
 
 import android.content.Context
-import android.content.Intent
 import android.util.Log
-import androidx.core.content.FileProvider
 import com.volttracker.obdpoc.AppPrefs
 import com.volttracker.obdpoc.BuildConfig
-import com.volttracker.obdpoc.data.deleteOrLog
 import org.json.JSONArray
 import java.io.File
 import java.io.IOException
@@ -14,6 +11,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executor
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -28,8 +26,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  *    Android repeats that check itself (and is why the release workflow never
  *    rotates the signing key); checking first turns a wrong asset into a plain
  *    failed download instead of a confusing installer error.
+ *
+ * Threading: the public entry points are called on the main thread; network and
+ * file work runs on [executor]; every callback lands on [mainThread]. The only
+ * state shared across those threads is [busy], an atomic flag.
  */
-class UpdateManager(
+class UpdateManager internal constructor(
     private val context: Context,
     private val executor: Executor = Executors.newSingleThreadExecutor(),
     private val mainThread: Executor,
@@ -39,6 +41,10 @@ class UpdateManager(
     private val wantDebugVariant: Boolean = BuildConfig.DEBUG,
     /** Injectable for tests; the default compares package name and signing key. */
     private val verifyApk: (File) -> Boolean = { apk -> ApkSignerCheck.verify(context, apk) },
+    /** Injectable for tests; the default opens a real connection to the release asset. */
+    private val openConnection: (URL) -> HttpURLConnection = ::defaultOpenConnection,
+    /** Injectable for tests; the default opens Android's install sheet. */
+    private val installer: ApkInstaller = SystemApkInstaller(context),
 ) {
     sealed interface CheckResult {
         /** A newer build is published and downloadable. */
@@ -65,7 +71,52 @@ class UpdateManager(
         ) : CheckResult
     }
 
+    /** One step of [downloadAndInstall]. Every call ends with exactly one terminal event. */
+    sealed interface InstallEvent {
+        /** Bytes are arriving, 0..99. Not terminal. */
+        data class Downloading(
+            val percent: Int,
+        ) : InstallEvent
+
+        /** Android's install sheet is open; confirming is the user's step. Terminal. */
+        data object InstallerOpened : InstallEvent
+
+        /** Nothing reached the installer. Terminal. */
+        data class Failed(
+            val reason: InstallFailure,
+        ) : InstallEvent
+    }
+
+    /** Why an update did not reach the installer; each maps to one actionable message. */
+    enum class InstallFailure {
+        /** Another check or download is still running, or the worker could not take the job. */
+        BUSY,
+
+        /** The connection dropped or never opened. */
+        NETWORK,
+
+        /** GitHub answered with something other than the file, or the link was unusable. */
+        SERVER,
+
+        /** The file was not the size the release advertised. */
+        INCOMPLETE,
+
+        /** The file is not this app, or not signed with this app's key. */
+        NOT_THIS_APP,
+
+        /** The download could not be written to the app's cache. */
+        STORAGE,
+
+        /** The APK was good but Android's installer could not be opened. */
+        INSTALLER,
+
+        /** Anything else; logged with its stack trace. */
+        UNEXPECTED,
+    }
+
     private val busy = AtomicBoolean(false)
+
+    private val downloader = ApkDownloader(File(context.cacheDir, UPDATES_DIR), openConnection, verifyApk)
 
     /** Asks GitHub what the newest installable build is. Callback on [mainThread]. */
     fun checkForUpdate(onResult: (CheckResult) -> Unit) {
@@ -75,47 +126,87 @@ class UpdateManager(
             mainThread.execute { onResult(CheckResult.Failed("An update operation is already running")) }
             return
         }
-        executor.execute {
-            val result = checkNow()
-            busy.set(false)
+        submitOrRelease(onRejected = { onResult(CheckResult.Failed("Couldn't start the update check — try again")) }) {
+            val result =
+                try {
+                    checkNow()
+                } finally {
+                    busy.set(false)
+                }
             mainThread.execute { onResult(result) }
         }
     }
 
     /**
-     * Downloads [build]'s APK into the updates cache and launches the install
-     * sheet. Progress lands on [mainThread] as 0..100; a negative value means
-     * the download failed and [onProgress] receives -1 exactly once.
+     * Downloads [build]'s APK into the updates cache and opens the install
+     * sheet. Events land on [mainThread]: any number of [InstallEvent.Downloading]
+     * ticks, then exactly one [InstallEvent.InstallerOpened] or [InstallEvent.Failed].
+     * The operation stays [busy] until the installer launch has been decided, so a
+     * second tap cannot wipe the updates dir under a file the installer is opening.
      */
     fun downloadAndInstall(
         build: UpdateFeed.AvailableBuild,
-        onProgress: (percent: Int) -> Unit,
+        onEvent: (InstallEvent) -> Unit,
     ) {
         if (!busy.compareAndSet(false, true)) {
             // Terminal answer for the same reason as checkForUpdate's busy path.
-            mainThread.execute { onProgress(-1) }
+            mainThread.execute { onEvent(InstallEvent.Failed(InstallFailure.BUSY)) }
             return
         }
-        executor.execute {
-            val file =
-                try {
-                    download(build) { pct -> mainThread.execute { onProgress(pct) } }
-                } catch (ex: IOException) {
-                    Log.w(AppPrefs.LOG_TAG, "update download failed", ex)
-                    null
-                } catch (ex: RuntimeException) {
-                    Log.w(AppPrefs.LOG_TAG, "update download failed", ex)
-                    null
-                }
-            busy.set(false)
-            mainThread.execute {
-                if (file != null) {
-                    onProgress(100)
-                    launchInstaller(file)
-                } else {
-                    onProgress(-1)
-                }
+        submitOrRelease(onRejected = { onEvent(InstallEvent.Failed(InstallFailure.BUSY)) }) {
+            var handedToMain = false
+            try {
+                val result =
+                    downloader.download(build) { pct ->
+                        mainThread.execute { onEvent(InstallEvent.Downloading(pct)) }
+                    }
+                mainThread.execute { finishInstall(result, onEvent) }
+                handedToMain = true
+            } finally {
+                // Something fatal escaped the download: free the slot so the next
+                // request is not refused as "busy" for the rest of the process.
+                if (!handedToMain) busy.set(false)
             }
+        }
+    }
+
+    /** Main thread. Launching here makes a failed launch the terminal event, not a log line. */
+    private fun finishInstall(
+        result: ApkDownloader.Result,
+        onEvent: (InstallEvent) -> Unit,
+    ) {
+        val event =
+            try {
+                when (result) {
+                    is ApkDownloader.Result.Ready ->
+                        if (installer.launch(result.apk)) {
+                            InstallEvent.InstallerOpened
+                        } else {
+                            InstallEvent.Failed(InstallFailure.INSTALLER)
+                        }
+                    is ApkDownloader.Result.Failed -> InstallEvent.Failed(result.reason)
+                }
+            } finally {
+                busy.set(false)
+            }
+        onEvent(event)
+    }
+
+    /**
+     * Runs [job] on [executor] while the caller holds [busy]. A rejected job
+     * (executor shut down or saturated) releases the flag and still delivers
+     * [onRejected] on [mainThread], so the caller gets its terminal answer.
+     */
+    private fun submitOrRelease(
+        onRejected: () -> Unit,
+        job: () -> Unit,
+    ) {
+        try {
+            executor.execute(job)
+        } catch (ex: RejectedExecutionException) {
+            Log.w(AppPrefs.LOG_TAG, "update worker rejected the job", ex)
+            busy.set(false)
+            mainThread.execute(onRejected)
         }
     }
 
@@ -127,6 +218,9 @@ class UpdateManager(
             } catch (ex: IOException) {
                 Log.w(AppPrefs.LOG_TAG, "update check offline", ex)
                 return CheckResult.Offline
+            } catch (ex: RuntimeException) {
+                Log.w(AppPrefs.LOG_TAG, "update check failed", ex)
+                return CheckResult.Failed("The update check failed — try again")
             }
         val releases =
             try {
@@ -145,117 +239,18 @@ class UpdateManager(
         }
     }
 
-    /**
-     * Streams the APK to the updates cache dir. Anything downloaded earlier is
-     * thrown away first: a half-finished file from a cancelled attempt must
-     * never be offered to the installer as though it were complete, and stale
-     * 20 MB APKs add up.
-     */
-    private fun download(
-        build: UpdateFeed.AvailableBuild,
-        onProgress: (Int) -> Unit,
-    ): File {
-        val dir = File(context.cacheDir, UPDATES_DIR)
-        dir.deleteRecursively()
-        check(dir.mkdirs()) { "could not create updates dir" }
-        // Both fields come from the GitHub API response, not from the app:
-        // the asset name must not be able to path-traverse out of the updates
-        // dir, and the bytes must not travel over cleartext.
-        val destination = File(dir, UpdateFeed.safeAssetFileName(build.assetName))
-        val url = URL(build.downloadUrl)
-        if (!url.protocol.equals("https", ignoreCase = true)) {
-            throw IOException("refusing non-https download url")
-        }
-        val conn = url.openConnection() as HttpURLConnection
-        try {
-            conn.connectTimeout = CHECK_TIMEOUT_MS
-            conn.readTimeout = DOWNLOAD_READ_TIMEOUT_MS
-            conn.instanceFollowRedirects = true
-            conn.setRequestProperty("Accept", "application/octet-stream")
-            conn.setRequestProperty("User-Agent", USER_AGENT)
-            val status = conn.responseCode
-            if (status != HttpURLConnection.HTTP_OK) {
-                throw IOException("download answered $status")
-            }
-            // Content-Length may be absent; the release already told us the size.
-            // (contentLength, not contentLengthLong: the Long variant is API 24+
-            // and minSdk is 23 — an APK will not overflow Int.)
-            val total = conn.contentLength.toLong().takeIf { it > 0 } ?: build.sizeBytes.takeIf { it > 0 } ?: -1L
-            conn.inputStream.use { input ->
-                destination.outputStream().use { output ->
-                    copyWithProgress(input, output, total, onProgress)
-                }
-            }
-            // A stream that ends early "succeeds" as far as copy is concerned;
-            // a truncated APK must fail here, not as an installer parse error.
-            if (total > 0 && destination.length() != total) {
-                throw IOException("download truncated at ${destination.length()} of $total bytes")
-            }
-            if (!verifyApk(destination)) {
-                destination.deleteOrLog()
-                throw IOException("downloaded APK is not this app or not signed with its key")
-            }
-            return destination
-        } finally {
-            conn.disconnect()
-        }
-    }
-
-    internal fun copyWithProgress(
-        input: java.io.InputStream,
-        output: java.io.OutputStream,
-        totalBytes: Long,
-        onProgress: (Int) -> Unit,
-    ) {
-        val buffer = ByteArray(DOWNLOAD_BUFFER_BYTES)
-        var written = 0L
-        var lastPct = -1
-        while (true) {
-            val read = input.read(buffer)
-            if (read < 0) break
-            output.write(buffer, 0, read)
-            written += read
-            if (totalBytes <= 0) continue
-            val pct = ((written * 99) / totalBytes).toInt()
-            if (pct != lastPct) {
-                lastPct = pct
-                onProgress(pct)
-            }
-        }
-    }
-
-    /**
-     * Hands the APK to the package installer as a `content://` URI from the
-     * app's FileProvider — bare `file://` URIs have been refused since
-     * Android 7, and the read grant travels with the intent flag. The install
-     * itself belongs to the system from here.
-     */
-    private fun launchInstaller(file: File) {
-        try {
-            val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-            val intent =
-                Intent(Intent.ACTION_VIEW)
-                    .setDataAndType(uri, APK_MIME)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } catch (ex: RuntimeException) {
-            Log.w(AppPrefs.LOG_TAG, "installer launch failed", ex)
-        }
-    }
-
     internal companion object {
         const val RELEASES_API = "https://api.github.com/repos/jtn0123/VoltTracker/releases"
         const val RELEASES_PAGE = 10
         const val CHECK_TIMEOUT_MS = 15_000
         const val DOWNLOAD_READ_TIMEOUT_MS = 60_000
-        const val DOWNLOAD_BUFFER_BYTES = 64 * 1024
         const val UPDATES_DIR = "updates"
-        const val APK_MIME = "application/vnd.android.package-archive"
         const val USER_AGENT = "VoltTracker-Android"
 
+        fun defaultOpenConnection(url: URL): HttpURLConnection = url.openConnection() as HttpURLConnection
+
         fun defaultFetch(url: String): String {
-            val conn = URL(url).openConnection() as HttpURLConnection
+            val conn = defaultOpenConnection(URL(url))
             try {
                 conn.connectTimeout = CHECK_TIMEOUT_MS
                 conn.readTimeout = CHECK_TIMEOUT_MS
