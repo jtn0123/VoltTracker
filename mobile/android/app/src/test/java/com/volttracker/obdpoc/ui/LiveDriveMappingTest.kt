@@ -5,6 +5,8 @@ import com.volttracker.obdpoc.ui.drive.ChargeEta
 import com.volttracker.obdpoc.ui.drive.DriveMode
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
+import com.volttracker.obdpoc.ui.units.haversineMeters
 import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
@@ -275,6 +277,55 @@ class LiveDriveMappingTest {
                 .put("rpm", JSONObject.NULL),
         )
         assertEquals(2, store.drive().signalCount)
+    }
+
+    @Test
+    fun aClassifiedDriveAfterAChargeAgreesOnDistanceEnergyAndEfficiencyDespiteChargerPower() {
+        // Regression (C4): parked, then plugged in, then a classified drive whose samples still
+        // carry a positive charger reading. That reading used to veto the drive's energy.
+        val store = LiveUiStateStore()
+        store.onStatus(JSONObject().put("state", "connected"))
+        store.onTelemetry(
+            sample(1_000L) {
+                put("vehicleState", "parked").put("speedKph", 0).put("powerKw", 1.2)
+                put("latitude", 42.0).put("longitude", -83.0)
+            },
+        )
+        for (i in 1..4) {
+            store.onTelemetry(
+                sample(1_000L + i * 5_000L) {
+                    put("vehicleState", "charging").put("chargerPowerKw", 6.6).put("powerKw", -6.2)
+                    put("latitude", 42.0).put("longitude", -83.0)
+                },
+            )
+        }
+        assertEquals(DrivePhase.CHARGING, store.drive().phase)
+        for (i in 0..12) {
+            store.onTelemetry(
+                sample(30_000L + i * 5_000L) {
+                    put("vehicleState", "driving_ev").put("speedKph", 60)
+                    put("chargerPowerKw", 3.3).put("powerKw", 24.0).put("powerKwStaleMs", 400)
+                    put("latitude", 42.0 + i * 0.001).put("longitude", -83.0)
+                },
+            )
+        }
+        // A 30 s outage mid-drive invents nothing; the drive picks up again after it.
+        store.onTelemetry(
+            sample(120_000L) {
+                put("vehicleState", "driving_ev").put("speedKph", 60)
+                put("chargerPowerKw", 3.3).put("powerKw", 24.0).put("powerKwStaleMs", 400)
+                put("latitude", 42.013).put("longitude", -83.0)
+            },
+        )
+        val d = store.drive()
+        assertEquals(DrivePhase.DRIVE, d.phase)
+        val kwh = 24.0 * 60.0 / 3600.0
+        val miles =
+            (0 until 13).sumOf { haversineMeters(42.0 + it * 0.001, -83.0, 42.0 + (it + 1) * 0.001, -83.0) } /
+                METERS_PER_MILE
+        assertEquals(kwh, d.tripKwh ?: 0.0, 1e-9)
+        assertEquals(miles, d.tripMiles, 1e-9)
+        assertEquals(miles / kwh, d.tripMiPerKwh ?: 0.0, 1e-9)
     }
 
     @Test

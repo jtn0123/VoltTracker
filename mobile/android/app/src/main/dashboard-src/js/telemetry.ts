@@ -942,13 +942,21 @@ import { driveGear, gearDisplayText } from "./gear";
   // Net HV energy for the in-progress drive (the Drive "Current drive" card's energy,
   // cost and efficiency): pack power integrated between consecutive samples on their own
   // clocks. A gap over 10 s (adapter blip, paused WebView) or a plugged-in sample adds
-  // nothing, so a charge window or an outage never books phantom drive energy.
+  // nothing, so a charge window or an outage never books phantom drive energy. Neither
+  // does a missing, implausible (beyond ±200 kW) or held power reading older than 10 s.
+  // The classifier's verdict decides "plugged in": a classified drive counts even when a
+  // stray positive charger reading rides along, a classified charge never counts, and only
+  // a sample with no verdict falls back to the charger reading.
   function accumulateSessionEnergy(sample: PayloadRecord, powerKw: number) {
     const at = Number(sample.updatedAt);
     if (!(at > 0)) return;
     const stepS = (at - state.sessionEnergyAtMs) / 1000;
-    const counts = state.sessionEnergyAtMs > 0 && stepS > 0 && stepS <= 10 &&
-      Number.isFinite(powerKw) && !(Number(sample.chargerPowerKw) > 0);
+    const vehicleState = String(sample.vehicleState || "");
+    const driving = vehicleState === "driving_ev" || vehicleState === "driving_gas";
+    const plugged = vehicleState === "charging" || (!driving && Number(sample.chargerPowerKw) > 0);
+    const freshPower = Number.isFinite(powerKw) && Math.abs(powerKw) <= 200 &&
+      !(Number(sample.powerKwStaleMs) > 10_000);
+    const counts = state.sessionEnergyAtMs > 0 && stepS > 0 && stepS <= 10 && freshPower && !plugged;
     setState({
       sessionEnergyAtMs: at,
       ...(counts ? { sessionEnergyKwh: state.sessionEnergyKwh + (powerKw * stepS) / 3600 } : {})

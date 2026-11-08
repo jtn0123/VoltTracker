@@ -6,12 +6,15 @@ import com.volttracker.obdpoc.ui.drive.LastDrive
 import com.volttracker.obdpoc.ui.drive.usableKwh
 import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import com.volttracker.obdpoc.ui.units.haversineMeters
+import kotlin.math.abs
 
 /**
  * Running figures for the drive and charge in progress, folded from live samples the same way
  * the WebView does (`telemetry.ts` recordSampleHistory / accumulateSessionEnergy):
  *  - distance: haversine between GPS fixes, ignoring jitter (< 2 m) and fix jumps (≥ 250 m);
- *  - energy: pack power integrated between samples ≤ 10 s apart, never while plugged in;
+ *  - energy: pack power integrated over each step between two DRIVE samples ≤ 10 s apart. The
+ *    classified phase alone decides: a stray positive charger reading can't veto a classified
+ *    drive, and a missing, implausible or stale (> 10 s old) power reading books nothing;
  *  - charge: energy the charger adds, from the SOC the charge started at.
  * A new drive (entering DRIVE from parked/charging) closes the previous one into [lastDrive].
  * Samples are applied once each: anything not newer than the last applied one (a resume
@@ -98,12 +101,15 @@ internal class DriveSessionTracker {
         if (sample.phase == DrivePhase.UNKNOWN) return
         if (sample.atMs <= 0 || sample.atMs <= lastAtMs) return
         val stepS = if (lastAtMs > 0) (sample.atMs - lastAtMs) / MS_PER_S else Double.NaN
+        val previousPhase = phase
         onPhase(sample)
         sample.speedKph?.let { if (it > maxKph && sample.phase == DrivePhase.DRIVE) maxKph = it }
         addDistance(sample)
         val contiguous = stepS > 0 && stepS <= MAX_STEP_S
-        if (contiguous && sample.phase == DrivePhase.DRIVE && (sample.chargerKw ?: 0.0) <= 0.0) {
-            sample.powerKw?.let { energyKwh += it * stepS / S_PER_HOUR }
+        // Both ends of the step are this drive, like the distance: the step into a drive from
+        // parked or charging isn't driving energy.
+        if (contiguous && sample.phase == DrivePhase.DRIVE && previousPhase == DrivePhase.DRIVE) {
+            drivePowerKw(sample)?.let { energyKwh += it * stepS / S_PER_HOUR }
         }
         if (contiguous && sample.phase == DrivePhase.CHARGING) {
             sample.chargerKw?.takeIf { it > 0 }?.let { chargeIntegratedKwh += it * stepS / S_PER_HOUR }
@@ -114,6 +120,16 @@ internal class DriveSessionTracker {
         }
         if (sample.phase == DrivePhase.CHARGING) recordChargeSoc(sample)
         lastAtMs = sample.atMs
+    }
+
+    /**
+     * The pack power to integrate for this drive sample, or null when it can't describe the step:
+     * missing, not finite, beyond what the pack can do, or a held reading older than one step.
+     */
+    private fun drivePowerKw(sample: Sample): Double? {
+        val kw = sample.powerKw?.takeIf { it.isFinite() && abs(it) <= MAX_PACK_KW } ?: return null
+        val ageMs = sample.powerAgeMs
+        return kw.takeIf { ageMs == null || ageMs <= MAX_STEP_S * MS_PER_S }
     }
 
     private fun onPhase(sample: Sample) {
@@ -190,6 +206,8 @@ internal class DriveSessionTracker {
         val phase: DrivePhase,
         val speedKph: Double? = null,
         val powerKw: Double? = null,
+        /** How old the pack voltage/current behind [powerKw] are (`powerKwStaleMs`); null when not said. */
+        val powerAgeMs: Long? = null,
         val chargerKw: Double? = null,
         val soc: Double? = null,
         val sohPct: Double? = null,
@@ -201,6 +219,9 @@ internal class DriveSessionTracker {
         const val MIN_STEP_M = 2.0
         const val MAX_STEP_M = 250.0
         const val MAX_STEP_S = 10.0
+
+        // Well past the Volt's drive unit and regen limits: anything beyond is a misread.
+        const val MAX_PACK_KW = 200.0
         const val MS_PER_S = 1000.0
         const val S_PER_HOUR = 3600.0
         const val MIN_ENERGY_KWH = 0.05

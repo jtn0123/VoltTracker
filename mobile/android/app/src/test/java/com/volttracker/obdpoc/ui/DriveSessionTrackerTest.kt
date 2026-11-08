@@ -3,6 +3,8 @@ package com.volttracker.obdpoc.ui
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.live.DriveSessionTracker
 import com.volttracker.obdpoc.ui.live.DriveSessionTracker.Sample
+import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
+import com.volttracker.obdpoc.ui.units.haversineMeters
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
@@ -55,6 +57,70 @@ class DriveSessionTrackerTest {
         tracker.apply(drive(atS = 33, lat = 42.011))
         assertEquals(before, tracker.energyKwh, 0.0)
         assertNull(tracker.miPerKwh)
+    }
+
+    @Test
+    fun aClassifiedDriveCountsItsPackEnergyEvenWithAStrayChargerReading() {
+        // Regression (C4): a false-positive charger power reading used to veto the drive's energy,
+        // so efficiency went missing or inflated and the energy and cost read too low.
+        val tracker = DriveSessionTracker()
+        tracker.apply(Sample(atMs = 1_000L, phase = DrivePhase.PARKED, powerKw = 1.0, lat = 42.0, lon = -83.0))
+        for (i in 1..3) {
+            tracker.apply(
+                Sample(
+                    atMs = 1_000L + i * 5_000L,
+                    phase = DrivePhase.CHARGING,
+                    powerKw = -6.0,
+                    chargerKw = 6.6,
+                    soc = 40.0,
+                    lat = 42.0,
+                    lon = -83.0,
+                ),
+            )
+        }
+        assertEquals(0.0, tracker.energyKwh, 0.0)
+        // Drive samples 5 s apart at a known 20 kW, each carrying a stray 3.3 kW charger reading.
+        for (i in 0..10) {
+            tracker.apply(
+                Sample(
+                    atMs = 20_000L + i * 5_000L,
+                    phase = DrivePhase.DRIVE,
+                    speedKph = 60.0,
+                    powerKw = 20.0,
+                    powerAgeMs = 500L,
+                    chargerKw = 3.3,
+                    lat = 42.0 + i * 0.001,
+                    lon = -83.0,
+                ),
+            )
+        }
+        val miles =
+            (0 until 10).sumOf { haversineMeters(42.0 + it * 0.001, -83.0, 42.0 + (it + 1) * 0.001, -83.0) } /
+                METERS_PER_MILE
+        // Ten 5 s steps between drive samples: the step in from charging is not driving energy.
+        assertEquals(20.0 * 50.0 / 3600.0, tracker.energyKwh, 1e-9)
+        assertEquals(miles, tracker.driveMiles, 1e-9)
+        assertEquals(miles / (20.0 * 50.0 / 3600.0), tracker.miPerKwh ?: 0.0, 1e-9)
+    }
+
+    @Test
+    fun missingImplausibleOrStalePackPowerBooksNoDriveEnergy() {
+        val tracker = DriveSessionTracker()
+        tracker.apply(drive(atS = 1, lat = 42.0))
+        tracker.apply(drive(atS = 2, lat = 42.001))
+        val booked = tracker.energyKwh
+        assertEquals(18.0 / 3600.0, booked, 1e-12)
+        // A held reading older than one step, a misread, and no reading at all each add nothing.
+        tracker.apply(drive(atS = 3, lat = 42.002).copy(powerAgeMs = 30_000L))
+        tracker.apply(drive(atS = 4, lat = 42.003, powerKw = 5_000.0))
+        tracker.apply(drive(atS = 5, lat = 42.004, powerKw = Double.NaN))
+        tracker.apply(drive(atS = 6, lat = 42.005).copy(powerKw = null))
+        assertEquals(booked, tracker.energyKwh, 0.0)
+        // A fresh reading within one step counts again.
+        tracker.apply(drive(atS = 7, lat = 42.006).copy(powerAgeMs = 10_000L))
+        assertEquals(booked + 18.0 / 3600.0, tracker.energyKwh, 1e-12)
+        // The distance kept counting the whole time.
+        assertEquals(0.41, tracker.driveMiles, 0.01)
     }
 
     @Test

@@ -124,6 +124,46 @@ describe('Drive trip card: one drive, labelled', () => {
     VD.updateTelemetry({ source: 'obd', updatedAt: t0 + 32e3, powerKw: 36 });
     expect(VD.state.sessionEnergyKwh).toBeCloseTo(0.01, 6);
   });
+
+  // Regression (C4): a false-positive charger reading must not veto a classified drive.
+  it('counts a classified drive with a stray charger reading, and agrees on distance, energy and efficiency', () => {
+    VD.setTrips([]);
+    VD.setStorage({ overview: {} });
+    // Plugged in at the curb, then a classified EV drive whose samples still carry 3.3 kW of
+    // "charger" power: 60 s at a known 24 kW, ~20 m per sample.
+    streamSamples(91, (i) => (i < 30
+      ? { vehicleState: 'charging', chargerPowerKw: 6.6, powerKw: -6.2, latitude: 34, longitude: -118 }
+      : {
+          vehicleState: 'driving_ev',
+          chargerPowerKw: 3.3,
+          powerKw: 24,
+          powerKwStaleMs: 400,
+          speedKph: 48,
+          latitude: 34 + (i - 30) * 0.00018,
+          longitude: -118,
+        }));
+    // The 1 s step into the drive is the charge's last sample: it counts as the drive's first.
+    expect(VD.state.sessionEnergyKwh).toBeCloseTo((24 * 61) / 3600, 6);
+    const meters = VD.state.sessionDistanceM;
+    expect(meters).toBeGreaterThan(1150);
+    expect(text('thisTripKicker')).toBe('Current drive');
+    expect(text('tripEnergyValue')).toBe(`${((24 * 61) / 3600).toFixed(1)} kWh`);
+    expect(text('tripEffValue')).toBe(VD.units.efficiencyText(meters / 1609.344 / ((24 * 61) / 3600)));
+  });
+
+  it('books nothing for a classified charge or a missing, implausible or stale power reading', () => {
+    VD.setStatus({ state: 'connected' });
+    const t0 = Date.now() - 60e3;
+    const drive = { source: 'obd', vehicleState: 'driving_ev' };
+    VD.updateTelemetry({ ...drive, updatedAt: t0, powerKw: 10 });
+    VD.updateTelemetry({ source: 'obd', vehicleState: 'charging', updatedAt: t0 + 1e3, powerKw: 10 });
+    VD.updateTelemetry({ ...drive, updatedAt: t0 + 2e3, powerKw: 10, powerKwStaleMs: 30e3 });
+    VD.updateTelemetry({ ...drive, updatedAt: t0 + 3e3, powerKw: 5000 });
+    VD.updateTelemetry({ ...drive, updatedAt: t0 + 4e3 });
+    expect(VD.state.sessionEnergyKwh).toBe(0);
+    VD.updateTelemetry({ ...drive, updatedAt: t0 + 5e3, powerKw: 36, powerKwStaleMs: 900 });
+    expect(VD.state.sessionEnergyKwh).toBeCloseTo(0.01, 6);
+  });
 });
 
 describe('Battery SOC agrees across surfaces', () => {
