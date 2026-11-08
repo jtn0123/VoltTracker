@@ -338,9 +338,10 @@ export function installCanvasShim() {
  * assert what the bootstrap path called.
  *
  * Re-entrant: tests typically call this from `beforeEach`. We track every
- * setInterval/setTimeout the bootstrap registers and clear them on the next
- * call so the previous run's stale-indicator poll (and any other recurring
- * timer the scripts wire up) doesn't leak into the next test.
+ * setInterval/setTimeout the dashboard registers, at boot and for the rest of
+ * the test, and clear them in the shared afterEach (and on the next call) so the
+ * stale-indicator poll, a debounced re-render, or any other timer the scripts
+ * start doesn't leak into the next test.
  *
  * Opts:
  *   `bridge` — custom VoltBridge fixture (defaults to createVoltBridgeFixture())
@@ -381,34 +382,18 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
   };
   document.body.innerHTML = dashboardDomHtml() + (extraDom ?? '');
 
-  const nativeSetInterval = (window.setInterval || globalThis.setInterval || nodeSetInterval).bind(window);
-  const nativeSetTimeout = (window.setTimeout || globalThis.setTimeout || nodeSetTimeout).bind(window);
-  window.setInterval = (...args) => {
-    const id = nativeSetInterval(...args);
-    OWNED_INTERVAL_IDS.push(id);
-    return id;
-  };
-  window.setTimeout = (...args) => {
-    const id = nativeSetTimeout(...args);
-    OWNED_TIMEOUT_IDS.push(id);
-    return id;
-  };
-
-  try {
-    vi.resetModules();
-    const allFiles = [...DASHBOARD_EMITTED_JS_FILES, ...(extras ?? [])].filter(
-      (file) => !skip.includes(file),
-    );
-    for (const file of allFiles) {
-      const loadModule = DASHBOARD_MODULE_LOADERS[file];
-      if (!loadModule) {
-        throw new Error(`No dashboard module loader registered for ${file}`);
-      }
-      await loadModule();
+  // Track from here until the shared afterEach (setup/test-lifecycle.js) clears them.
+  trackDashboardTimers();
+  vi.resetModules();
+  const allFiles = [...DASHBOARD_EMITTED_JS_FILES, ...(extras ?? [])].filter(
+    (file) => !skip.includes(file),
+  );
+  for (const file of allFiles) {
+    const loadModule = DASHBOARD_MODULE_LOADERS[file];
+    if (!loadModule) {
+      throw new Error(`No dashboard module loader registered for ${file}`);
     }
-  } finally {
-    window.setInterval = nativeSetInterval;
-    window.setTimeout = nativeSetTimeout;
+    await loadModule();
   }
 
   // The bootstrap (actions.ts) defers secondary panel renders off the first-paint
@@ -425,11 +410,61 @@ export async function loadDashboard({ bridge, extras, extraDom, withBridge = tru
   return bridgeImpl;
 }
 
-/** IDs of intervals/timeouts created during the last `loadDashboard()` call. */
+/** IDs of intervals/timeouts the dashboard created since the last `loadDashboard()` call. */
 const OWNED_INTERVAL_IDS = [];
 const OWNED_TIMEOUT_IDS = [];
 
+/** Marks a tracking wrapper with the function it wraps, so a wrapper is never wrapped again. */
+const WRAPPED = Symbol('wrappedTimerFunction');
+
+/** The installed wrappers and the functions they replaced, or null when not tracking. */
+let timerTracking = null;
+
+/**
+ * Routes window.setTimeout/setInterval through wrappers that record each id, and leaves
+ * them in place after the load. A timer the dashboard starts later in the test belongs to
+ * that test too: a preference commit debounces a 400 ms units re-render, and when only
+ * load-time timers were tracked, that one outlived its test and fired into the next, or
+ * after vitest had torn the jsdom window down ("ReferenceError: window is not defined").
+ */
+function trackDashboardTimers() {
+  stopTrackingDashboardTimers();
+  const unwrap = (fn) => (fn && fn[WRAPPED]) || fn;
+  const nativeSetInterval = unwrap(window.setInterval || globalThis.setInterval || nodeSetInterval);
+  const nativeSetTimeout = unwrap(window.setTimeout || globalThis.setTimeout || nodeSetTimeout);
+  const trackedSetInterval = (...args) => {
+    const id = nativeSetInterval.apply(window, args);
+    OWNED_INTERVAL_IDS.push(id);
+    return id;
+  };
+  const trackedSetTimeout = (...args) => {
+    const id = nativeSetTimeout.apply(window, args);
+    OWNED_TIMEOUT_IDS.push(id);
+    return id;
+  };
+  trackedSetInterval[WRAPPED] = nativeSetInterval;
+  trackedSetTimeout[WRAPPED] = nativeSetTimeout;
+  window.setInterval = trackedSetInterval;
+  window.setTimeout = trackedSetTimeout;
+  timerTracking = { nativeSetInterval, nativeSetTimeout, trackedSetInterval, trackedSetTimeout };
+}
+
+function stopTrackingDashboardTimers() {
+  if (!timerTracking) return;
+  // A test may have installed fake timers over the wrappers since; leave those to
+  // vi.useRealTimers() and restore only what is still ours.
+  if (window.setInterval === timerTracking.trackedSetInterval) {
+    window.setInterval = timerTracking.nativeSetInterval;
+  }
+  if (window.setTimeout === timerTracking.trackedSetTimeout) {
+    window.setTimeout = timerTracking.nativeSetTimeout;
+  }
+  timerTracking = null;
+}
+
+/** Stops tracking and cancels every timer the dashboard scheduled since the last load. */
 export function clearDashboardTimers() {
+  stopTrackingDashboardTimers();
   for (const id of OWNED_INTERVAL_IDS.splice(0)) {
     try { (globalThis.clearInterval || nodeClearInterval)(id); } catch (_ignored) { /* jsdom may be torn down */ }
   }
