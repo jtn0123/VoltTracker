@@ -599,6 +599,7 @@ class ObdStoreReportsDbTest {
         val recent = charge.getJSONArray("recentSessions")
         assertEquals(1, recent.length())
         assertEquals(9_000L, recent.getJSONObject(0).getLong("startedAtMs"))
+        assertEquals("a charge the logger watched", "observed", recent.getJSONObject(0).getString("provenance"))
     }
 
     @Test
@@ -662,6 +663,12 @@ class ObdStoreReportsDbTest {
         assertEquals(15.0, latest.getDouble("startSoc"), 0.001)
         assertEquals(95.0, latest.getDouble("endSoc"), 0.001)
         assertTrue(latest.getDouble("energyKwh") > 10.0)
+        // The UI labels it an estimate from this, not from the free-text charger type.
+        assertEquals("inferred", latest.getString("provenance"))
+        assertTrue(latest.getString("id").startsWith("inferred:$first:"))
+        val exported = store.projections().chargeSessionsForExport(5).getJSONObject(0)
+        assertEquals("inferred", exported.getString("provenance"))
+        assertEquals(0.7, exported.getDouble("confidence"), 0.0)
     }
 
     @Test

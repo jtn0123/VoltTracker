@@ -136,6 +136,11 @@ internal object ObdStoreChargeSummary {
             "AND l.speed_mps IS NOT NULL AND l.speed_mps >= $CHARGE_DRIVING_SPEED_MPS" +
             ")"
 
+    /** Every inferred row's id starts with this; backup restore remaps the session ids after it. */
+    internal const val INFERRED_ID_PREFIX = "inferred:"
+    internal const val PROVENANCE_INFERRED = "inferred"
+    internal const val PROVENANCE_OBSERVED = "observed"
+
     private const val MIN_INFERRED_CHARGE_SOC_GAIN = 8.0
     private const val MIN_INFERRED_CHARGE_GAP_MS = 10L * 60_000L
     private const val MIN_OBSERVED_CHARGE_SOC_GAIN = 5.0
@@ -165,7 +170,20 @@ internal object ObdStoreChargeSummary {
         val powerKw: Double?,
         val energyKwh: Double?,
         val confidence: Double?,
-    )
+    ) {
+        /**
+         * [PROVENANCE_INFERRED] for a charge worked out from a SOC rise between two readings: its
+         * energy is an estimate and its times only bound when it happened (an observation
+         * window). [PROVENANCE_OBSERVED] for one the logger watched while plugged in. Decided by
+         * where the row came from (only the inferred scans mint `inferred:` ids), not by the
+         * free-text charger type a merged backup may carry.
+         */
+        val provenance: String
+            get() {
+                val inferred = id is String && id.startsWith(INFERRED_ID_PREFIX)
+                return if (inferred) PROVENANCE_INFERRED else PROVENANCE_OBSERVED
+            }
+    }
 
     private data class DriveSocBoundary(
         val sessionId: Long,
@@ -254,7 +272,7 @@ internal object ObdStoreChargeSummary {
             if (socGain >= MIN_INFERRED_CHARGE_SOC_GAIN && gapMs >= MIN_INFERRED_CHARGE_GAP_MS) {
                 rows.add(
                     ChargeSummaryRow(
-                        "inferred:${previous.sessionId}:${previous.endedAtMs}:${current.sessionId}:${current.startedAtMs}",
+                        inferredId(previous.sessionId, previous.endedAtMs, current.sessionId, current.startedAtMs),
                         previous.endedAtMs,
                         current.startedAtMs,
                         "inferred",
@@ -309,6 +327,14 @@ internal object ObdStoreChargeSummary {
         return rows
     }
 
+    /** `inferred:<session>:<ms>:<session>:<ms>`: the drives either side of the charge, which a restore remaps. */
+    private fun inferredId(
+        fromSession: Long,
+        fromMs: Long,
+        toSession: Long,
+        toMs: Long,
+    ): String = "$INFERRED_ID_PREFIX$fromSession:$fromMs:$toSession:$toMs"
+
     private fun maybeInferredChargeRow(
         previous: SocDriveSample,
         current: SocDriveSample,
@@ -319,7 +345,7 @@ internal object ObdStoreChargeSummary {
             return null
         }
         return ChargeSummaryRow(
-            "inferred:${previous.sessionId}:${previous.atMs}:${current.sessionId}:${current.atMs}",
+            inferredId(previous.sessionId, previous.atMs, current.sessionId, current.atMs),
             previous.atMs,
             current.atMs,
             "inferred",
@@ -661,6 +687,7 @@ internal object ObdStoreChargeSummary {
             .put("powerKw", boxedOrNull(row.powerKw))
             .put("energyKwh", boxedOrNull(row.energyKwh))
             .put("confidence", boxedOrNull(row.confidence))
+            .put("provenance", row.provenance)
 
     @Throws(JSONException::class)
     private fun chargeSummaryRowsJson(

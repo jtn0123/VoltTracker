@@ -1,8 +1,10 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.charge.ChargeWorth
+import com.volttracker.obdpoc.ui.charge.ESTIMATE_NOTE
 import com.volttracker.obdpoc.ui.charge.chargeTitle
 import com.volttracker.obdpoc.ui.charge.chargeWhen
 import com.volttracker.obdpoc.ui.charge.receipt
@@ -44,6 +46,12 @@ class UsefulnessLogicTest {
     private fun Receipt.line(label: String): ReceiptLine? = (details + costs).firstOrNull { it.label == label }
 
     private fun demoTrip(key: String) = demo.trips.first { it.routeKey == key }
+
+    private companion object {
+        // Wed Apr 29 2026 6:00 PM → Thu Apr 30 7:30 AM, UTC.
+        const val INFERRED_FROM = 1_777_485_600_000L
+        const val INFERRED_TO = 1_777_534_200_000L
+    }
 
     @Test
     fun aMixedDriveReceiptSplitsTheMilesAndPricesBothFuels() {
@@ -147,8 +155,9 @@ class UsefulnessLogicTest {
     fun aChargeReceiptAddsUpEnergyPowerCostAndRange() {
         val state = ChargeUiState.demo
         val s = state.sessions.first()
-        assertEquals(s, state.session(s.startedAtMs))
-        assertNull(state.session(-1L))
+        assertEquals(s, state.session(s.id))
+        assertNull(state.session("charge:-1"))
+        assertNull(state.session(null))
         val r = state.receipt(s, ChargeWorth(4.0, 38.0, 4.29), utc)
         assertEquals("Level 2 charge", r.title)
         assertEquals("24% → 91% (+67)", r.value("Battery"))
@@ -162,6 +171,60 @@ class UsefulnessLogicTest {
         assertEquals("home", r.line("Rate")?.note)
         assertEquals("$1.42", r.value("Total"))
         assertEquals("Those miles would cost about $5.33 on gas — this charge saved $3.91.", r.saved)
+    }
+
+    @Test
+    fun anInferredStoreRowReachesItsReceiptAndShareTextAsAnEstimate() {
+        // The row exactly as ObdStoreChargeSummary writes an inferred charge between two drives.
+        val row =
+            JSONObject()
+                .put("id", "inferred:7:$INFERRED_FROM:8:$INFERRED_TO")
+                .put("startedAtMs", INFERRED_FROM)
+                .put("endedAtMs", INFERRED_TO)
+                .put("chargerType", "inferred")
+                .put("startSoc", 20.0)
+                .put("endSoc", 90.0)
+                .put("powerKw", JSONObject.NULL)
+                .put("energyKwh", 9.8)
+                .put("confidence", 0.7)
+                .put("provenance", "inferred")
+        val s = ChargeHistory.parse(JSONArray().put(row)).single()
+        val state = ChargeUiState(sessions = listOf(s), homeRate = 0.12)
+        assertEquals(s, state.session("inferred:7:$INFERRED_FROM:8:$INFERRED_TO"))
+        val r = state.receipt(s, ChargeWorth(4.0, 38.0, 4.29), utc)
+        assertEquals("Estimated charge", r.title)
+        assertEquals("Wed, Apr 29 · between 6:00 PM and 7:30 AM", r.whenLine)
+        assertEquals("20% → 90% (+70)", r.value("Battery"))
+        assertEquals("Unknown", r.value("Charger"))
+        // The span is when the charge could have happened, not how long the car was plugged in.
+        assertEquals("13 hr 30 min", r.value("Observation window"))
+        assertNull(r.line("Plugged in"))
+        assertNull("no average power over a window the car wasn't plugged in for", r.line("Average power"))
+        assertEquals(ReceiptLine("Energy added", "9.8 kWh", "est."), r.line("Energy added"))
+        assertEquals("est.", r.line("Range added")?.note)
+        assertEquals(ReceiptLine("Total", "$1.18", "est."), r.line("Total"))
+        assertEquals("Those miles would cost about $4.43 on gas — this charge saved about $3.25.", r.saved)
+        assertEquals(ESTIMATE_NOTE, r.note)
+        val text = r.shareText()
+        assertTrue(text.startsWith("Estimated charge\nWed, Apr 29 · between 6:00 PM and 7:30 AM\n$ESTIMATE_NOTE\n\n"))
+        assertTrue(text.contains("Observation window: 13 hr 30 min\n"))
+        assertTrue(text.contains("Energy added: 9.8 kWh (est.)\n"))
+        assertTrue(text.contains("Total: $1.18 (est.)\n"))
+        assertFalse(text.contains("Plugged in"))
+        assertFalse(text.contains("Average power"))
+        assertFalse("the row id stays out of the share text", text.contains("inferred:"))
+
+        // The same charge watched by the adapter keeps the measured wording, and no note.
+        val observedRow = JSONObject(row.toString()).put("provenance", "observed")
+        val measured = ChargeHistory.parse(JSONArray().put(observedRow)).single()
+        val m = state.copy(sessions = listOf(measured)).receipt(measured, ChargeWorth(4.0, 38.0, 4.29), utc)
+        assertEquals("Charge", m.title)
+        assertEquals("Wed, Apr 29 · 6:00 PM – 7:30 AM", m.whenLine)
+        assertEquals("13 hr 30 min", m.value("Plugged in"))
+        assertEquals(ReceiptLine("Energy added", "9.8 kWh"), m.line("Energy added"))
+        assertEquals("0.7 kW", m.value("Average power"))
+        assertNull(m.note)
+        assertTrue(m.shareText().startsWith("Charge\nWed, Apr 29 · 6:00 PM – 7:30 AM\n\n"))
     }
 
     @Test

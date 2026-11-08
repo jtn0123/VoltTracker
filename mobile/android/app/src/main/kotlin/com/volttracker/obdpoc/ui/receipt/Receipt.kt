@@ -11,8 +11,9 @@ data class ReceiptLine(
 
 /**
  * A drive or charge written up like a receipt: a [title] and [whenLine], the headline figures,
- * what it measured ([details]), what it cost ([costs], empty until rates are set), and a plain
- * sentence on what it [saved] against gas, if anything.
+ * what it measured ([details]), what it cost ([costs], empty until rates are set), a plain
+ * sentence on what it [saved] against gas, if anything, and a [note] on how far its figures can
+ * be trusted when they are estimates.
  */
 data class Receipt(
     val title: String,
@@ -20,12 +21,14 @@ data class Receipt(
     val details: List<ReceiptLine>,
     val costs: List<ReceiptLine> = emptyList(),
     val saved: String? = null,
+    val note: String? = null,
 ) {
     /** The receipt as plain text for the share sheet. */
     fun shareText(): String =
         buildString {
             appendLine(title)
             appendLine(whenLine)
+            note?.let(::appendLine)
             appendLine()
             (details + costs).forEach { line ->
                 append(line.label).append(": ").append(line.value)

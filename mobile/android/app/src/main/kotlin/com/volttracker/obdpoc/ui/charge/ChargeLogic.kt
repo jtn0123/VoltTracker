@@ -79,8 +79,10 @@ data class SessionRow(
     val toSoc: Int?,
     val energyKwh: Double?,
     val cost: String?,
-    /** The logged charge's start, which opens its receipt; null for the live charge. */
-    val startedAtMs: Long? = null,
+    /** The logged charge's [ChargeSession.id], which opens its receipt; null for the live charge. */
+    val sessionId: String? = null,
+    /** An inferred charge: its energy and cost are estimates. */
+    val estimated: Boolean = false,
 )
 
 /**
@@ -117,18 +119,22 @@ fun ChargeUiState.sessionRows(
                 SessionRow(
                     title = sessionWhen(s.startedAtMs, zone, h24),
                     live = false,
-                    detail = sessionDetail(s.level, s.fromSoc, s.toSoc),
+                    detail = sessionDetail(s.level, s.fromSoc, s.toSoc, s.estimated),
                     fromSoc = s.fromSoc,
                     toSoc = s.toSoc,
                     energyKwh = s.energyKwh,
                     cost = costText(s.energyKwh, rateFor(s)),
-                    startedAtMs = s.startedAtMs,
+                    sessionId = s.id,
+                    estimated = s.estimated,
                 )
             }
     return (live + logged).take(limit)
 }
 
-/** "April · 37.0 kWh · $4.43": this month's charges (the live one included); null when none. */
+/**
+ * "April · 37.0 kWh · $4.43": this month's charges (the live one included), ending
+ * "includes 2 estimated" when inferred charges are in the total; null when none.
+ */
 fun ChargeUiState.monthSummary(
     nowMs: Long,
     zone: TimeZone = TimeZone.getDefault(),
@@ -148,10 +154,12 @@ fun ChargeUiState.monthSummary(
     val kwh = inMonth.sumOf { it.energyKwh ?: 0.0 } + liveKwh
     val dollars = inMonth.sumOf { (it.energyKwh ?: 0.0) * rateFor(it) } + liveKwh * homeRate
     val monthName = SimpleDateFormat("MMMM", Locale.US).apply { timeZone = zone }.format(Date(nowMs))
+    val estimated = inMonth.count { it.estimated }
     return listOfNotNull(
         monthName,
         String.format(Locale.US, "%.1f kWh", kwh),
         if (homeRate > 0.0 || publicRate > 0.0) String.format(Locale.US, "$%.2f", dollars) else null,
+        "includes $estimated estimated".takeIf { estimated > 0 },
     ).joinToString(" · ")
 }
 
@@ -161,11 +169,15 @@ fun costText(
     rate: Double,
 ): String? = if (kwh == null || rate <= 0.0) null else String.format(Locale.US, "$%.2f", kwh * rate)
 
-/** "Level 2 · 41% → 71%", leaving out whatever wasn't recorded. */
+/**
+ * "Level 2 · 41% → 71%" ("Estimated · 41% → 71%" for an inferred charge), leaving out whatever
+ * wasn't recorded.
+ */
 fun sessionDetail(
     level: String?,
     fromSoc: Int?,
     toSoc: Int?,
+    estimated: Boolean = false,
 ): String {
     val span =
         when {
@@ -173,8 +185,12 @@ fun sessionDetail(
             toSoc != null -> "to $toSoc%"
             else -> null
         }
-    return listOfNotNull(levelName(level), span).joinToString(" · ").ifEmpty { "Charge" }
+    val parts = listOfNotNull(ESTIMATED.takeIf { estimated }, levelName(level), span)
+    return parts.joinToString(" · ").ifEmpty { "Charge" }
 }
+
+/** What a screen reader says for [text] when it ends in the "est." note. */
+fun spokenEstimate(text: String): String = text.removeSuffix(" $EST").let { if (it != text) "$it, estimated" else text }
 
 /** "Apr 30 · 9:18 PM", or "Apr 30 · 21:18" on a 24-hour phone. */
 fun sessionWhen(
@@ -252,6 +268,7 @@ object ChargeHistory {
     private fun parseRow(row: JSONObject): ChargeSession? {
         val started = row.optLong("startedAtMs", 0L).takeIf { it > 0 } ?: return null
         val type = if (row.isNull("chargerType")) null else row.optString("chargerType", "")
+        val id = if (row.isNull("id")) null else row.optString("id", "").ifBlank { null }
         return ChargeSession(
             startedAtMs = started,
             endedAtMs = optNumber(row, "endedAtMs")?.toLong()?.takeIf { it > 0 },
@@ -260,8 +277,31 @@ object ChargeHistory {
             toSoc = optNumber(row, "endSoc")?.toInt(),
             energyKwh = optNumber(row, "energyKwh")?.takeIf { it >= 0.0 },
             publicCharger = isPublicCharger(type),
+            provenance = provenanceOf(row, type, id),
+            confidence = optNumber(row, "confidence")?.takeIf { it in 0.0..1.0 },
+            id = id ?: "charge:$started",
         )
     }
+
+    /**
+     * The store's `provenance`; a row without one (written before it existed) is inferred when it
+     * carries the inferred scans' charger type or id.
+     */
+    private fun provenanceOf(
+        row: JSONObject,
+        type: String?,
+        id: String?,
+    ): ChargeProvenance =
+        when (row.optString("provenance", "")) {
+            "inferred" -> ChargeProvenance.INFERRED
+            "observed" -> ChargeProvenance.OBSERVED
+            else ->
+                if (normalized(type) == "inferred" || id?.startsWith("inferred:") == true) {
+                    ChargeProvenance.INFERRED
+                } else {
+                    ChargeProvenance.OBSERVED
+                }
+        }
 
     private fun optNumber(
         row: JSONObject,
@@ -301,6 +341,9 @@ const val RECENT_ROWS = 6
 /** Logged charges read for the list and the month total. */
 const val CHARGE_HISTORY_LIMIT = 120
 
+/** The receipts' muted qualifier on an estimated figure. */
+internal const val EST = "est."
+private const val ESTIMATED = "Estimated"
 private const val NOON = 12
 private const val EVENING = 17
 private const val PROJECTION_STEPS = 24

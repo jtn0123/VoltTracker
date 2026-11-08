@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.data
 
 import android.database.sqlite.SQLiteDatabase
+import com.volttracker.obdpoc.ui.charge.ChargeHistory
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -178,8 +179,28 @@ class RetainedHistoryDbTest {
         saveDonor()
         store.clearAllData()
         assertTrue(store.dbMaintenance.mergeFrom(donor).ok)
-        assertEquals(1, store.projections().chargeSessionsForExport(20).length())
+        val merged = store.projections().chargeSessionsForExport(20)
+        assertEquals(1, merged.length())
+        // The receipt reopens an inferred charge by its id, so after the merge the id must name
+        // the merged sessions (remapped), and the row must still read as an estimate.
+        val row = merged.getJSONObject(0)
+        assertEquals("inferred", row.getString("provenance"))
+        val parts = row.getString("id").split(':')
+        assertEquals("inferred", parts[0])
+        val sessions = sessionIds()
+        assertTrue("${parts[1]} in $sessions", parts[1].toLong() in sessions)
+        assertTrue("${parts[3]} in $sessions", parts[3].toLong() in sessions)
+        val parsed = ChargeHistory.parse(merged).single()
+        assertTrue(parsed.estimated)
+        assertEquals(row.getString("id"), parsed.id)
     }
+
+    private fun sessionIds(): Set<Long> =
+        VoltTrackerDb(context).use { helper ->
+            helper.readableDatabase.rawQuery("SELECT _id FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { c ->
+                buildSet { while (c.moveToNext()) add(c.getLong(0)) }
+            }
+        }
 
     private fun saveDonor() {
         assertTrue(store.checkpoint())
