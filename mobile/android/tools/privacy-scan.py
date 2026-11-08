@@ -13,8 +13,10 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+# RFC 1918 ip:port, the shape of a wireless-adb target. Each range's fixed prefix is followed by
+# the octets it leaves free (10 by three, 172.16-31 and 192.168 by two).
 PRIVATE_ENDPOINT_RE = re.compile(
-    r"\b(?:(?:10|192\.168)\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):\d{2,5}\b"
+    r"\b(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}:\d{2,5}\b"
 )
 VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
 COORD_PAIR_RE = re.compile(
@@ -167,15 +169,22 @@ def run_self_test() -> int:
         allowed = root / "mobile/android/app/src/main/assets/dashboard/demos/efficiency.html"
         for file in [good, bad_ip, bad_vin, bad_gps, allowed]:
             file.parent.mkdir(parents=True, exist_ok=True)
-        good.write_text("Use <ip:port-or-adb-serial> when benchmarking.\n", encoding="utf-8")
-        bad_ip.write_text("Device serial: `10.27.27.190:34507`\n", encoding="utf-8")
+        # A documentation address (RFC 5737) is never a real device.
+        good.write_text(
+            "Use <ip:port-or-adb-serial> when benchmarking.\nExample: adb connect 192.0.2.10:5555\n",
+            encoding="utf-8",
+        )
+        bad_ip.write_text(
+            "Device serial: `10.27.27.190:34507`\nPhone: 192.168.4.27:41235\nLab: 172.20.1.9:5555\n",
+            encoding="utf-8",
+        )
         bad_vin.write_text('const val VIN = "1G1RD6S58HU000001"\n', encoding="utf-8")
         bad_gps.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
         allowed.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
         allowlist = Allowlist(("mobile/android/app/src/main/assets/dashboard/demos/efficiency.html",), ("<ip:port",))
         findings = scan_paths(root, [good, bad_ip, bad_vin, bad_gps, allowed], allowlist)
         kinds = sorted(f.kind for f in findings)
-        expected = ["gps-coordinate-pair", "private-device-endpoint", "vin-like-token"]
+        expected = ["gps-coordinate-pair"] + ["private-device-endpoint"] * 3 + ["vin-like-token"]
         if kinds != expected:
             print(f"self-test failed: expected {expected}, got {kinds}", file=sys.stderr)
             return 1
