@@ -1,6 +1,7 @@
 package com.volttracker.obdpoc.ui
 
 import com.volttracker.obdpoc.ui.charge.ChargeHistory
+import com.volttracker.obdpoc.ui.charge.ChargeProvenance
 import com.volttracker.obdpoc.ui.charge.ChargeSession
 import com.volttracker.obdpoc.ui.charge.ChargeUiState
 import com.volttracker.obdpoc.ui.charge.SocPoint
@@ -16,6 +17,7 @@ import com.volttracker.obdpoc.ui.charge.rateFor
 import com.volttracker.obdpoc.ui.charge.sessionDetail
 import com.volttracker.obdpoc.ui.charge.sessionRows
 import com.volttracker.obdpoc.ui.charge.sessionWhen
+import com.volttracker.obdpoc.ui.charge.spokenEstimate
 import com.volttracker.obdpoc.ui.charge.subtitle
 import com.volttracker.obdpoc.ui.drive.ChargeEta
 import org.json.JSONArray
@@ -83,6 +85,55 @@ class ChargeLogicTest {
     }
 
     @Test
+    fun parsesProvenanceConfidenceAndAStableIdFromTheStore() {
+        val rows =
+            JSONArray()
+                .put(
+                    JSONObject()
+                        .put("id", "inferred:3:1000:4:30000000")
+                        .put("startedAtMs", 1_000L)
+                        .put("endedAtMs", 30_000_000L)
+                        .put("chargerType", "inferred")
+                        .put("startSoc", 20.0)
+                        .put("endSoc", 90.0)
+                        .put("energyKwh", 9.8)
+                        .put("confidence", 0.7)
+                        .put("provenance", "inferred"),
+                ).put(
+                    JSONObject()
+                        .put("id", 42L)
+                        .put("startedAtMs", 40_000_000L)
+                        .put("chargerType", "level2")
+                        .put("confidence", 0.9)
+                        .put("provenance", "observed"),
+                ).put(
+                    // Written before the store said: the inferred scans' charger type still tells.
+                    JSONObject().put("startedAtMs", 50_000_000L).put("chargerType", "inferred").put("confidence", 7.0),
+                ).put(JSONObject().put("startedAtMs", 60_000_000L).put("id", "inferred:1:2:3:4"))
+                .put(JSONObject().put("startedAtMs", 70_000_000L).put("id", JSONObject.NULL))
+        val parsed = ChargeHistory.parse(rows).associateBy { it.startedAtMs }
+        val inferred = parsed.getValue(1_000L)
+        val observed = parsed.getValue(40_000_000L)
+        val legacy = parsed.getValue(50_000_000L)
+        val byId = parsed.getValue(60_000_000L)
+        val none = parsed.getValue(70_000_000L)
+        assertEquals(ChargeProvenance.INFERRED, inferred.provenance)
+        assertTrue(inferred.estimated)
+        assertEquals("inferred:3:1000:4:30000000", inferred.id)
+        assertEquals(0.7, inferred.confidence ?: 0.0, 0.0)
+        assertNull(inferred.level)
+        assertEquals(ChargeProvenance.OBSERVED, observed.provenance)
+        assertFalse(observed.estimated)
+        assertEquals("42", observed.id)
+        assertTrue(legacy.estimated)
+        assertNull("a confidence outside 0–1 is no reading", legacy.confidence)
+        assertEquals("charge:50000000", legacy.id)
+        assertTrue(byId.estimated)
+        assertFalse(none.estimated)
+        assertEquals("charge:70000000", none.id)
+    }
+
+    @Test
     fun chargerTypesMapToShortLevelsWithoutGuessing() {
         assertEquals("L2", ChargeHistory.levelFromChargerType("Level 2"))
         assertEquals("L2", ChargeHistory.levelFromChargerType("AC_2"))
@@ -101,6 +152,10 @@ class ChargeLogicTest {
         assertEquals("Apr 30 · 21:42", sessionWhen(now, utc, h24 = true))
         assertEquals("to 71%", sessionDetail(null, null, 71))
         assertEquals("Charge", sessionDetail(null, null, null))
+        assertEquals("Estimated · 41% → 71%", sessionDetail(null, 41, 71, estimated = true))
+        assertEquals("Estimated", sessionDetail(null, null, null, estimated = true))
+        assertEquals("9.8 kWh, estimated", spokenEstimate("9.8 kWh est."))
+        assertEquals("$1.18", spokenEstimate("$1.18"))
         assertEquals("Level 2", levelName("L2"))
         assertEquals("Level 1", levelName("L1"))
         assertEquals("DC fast", levelName("DC fast"))
@@ -151,6 +206,9 @@ class ChargeLogicTest {
         assertEquals("$0.52", rows[0].cost)
         assertEquals("Apr 29 · 9:42 PM", rows[1].title)
         assertFalse(rows[1].live)
+        assertEquals(state.sessions[1].id, rows[1].sessionId)
+        assertFalse(rows[1].estimated)
+        assertNull("the live row opens no receipt", rows[0].sessionId)
         // Unplugged, the open row is a finished charge the logger hasn't closed yet: keep it.
         assertEquals(2, state.copy(charging = false).sessionRows(zone = utc).size)
         assertEquals(1, state.sessionRows(limit = 1, zone = utc).size)
@@ -168,6 +226,16 @@ class ChargeLogicTest {
         assertEquals("April · 14.0 kWh · $1.40", state.monthSummary(now, utc))
         // No rate set: energy only.
         assertEquals("April · 14.0 kWh", state.copy(homeRate = 0.0).monthSummary(now, utc))
+        // Estimated charges stay in the total, and the line says how many it includes.
+        // As parsed from the store: charger type "inferred" names no level.
+        val inferred = session(now - 2 * day, kwh = 6.0).copy(level = null, provenance = ChargeProvenance.INFERRED)
+        assertEquals(
+            "April · 20.0 kWh · $2.00 · includes 1 estimated",
+            state.copy(sessions = state.sessions + inferred).monthSummary(now, utc),
+        )
+        val rows = state.copy(charging = false, sessions = listOf(inferred)).sessionRows(zone = utc)
+        assertEquals("Estimated · 30% → 90%", rows.single().detail)
+        assertTrue(rows.single().estimated)
         // Nothing this month and not charging: no summary line.
         assertNull(ChargeUiState(sessions = listOf(session(now - 40 * day))).monthSummary(now, utc))
     }

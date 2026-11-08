@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -89,7 +90,7 @@ fun ChargeScreen(
     modifier: Modifier = Modifier,
     onConnect: () -> Unit = {},
     onStartDemo: () -> Unit = {},
-    onOpenSession: (Long) -> Unit = {},
+    onOpenSession: (String) -> Unit = {},
 ) {
     val pal = LocalVoltPalette.current
     val glow = if (state.charging) pal.ev.copy(alpha = ambientAlpha(pal)) else Color.Transparent
@@ -237,10 +238,10 @@ private const val CAR_COMPLETE = "Complete"
 private const val CAR_ERROR = "Error"
 private const val NBSP = '\u00A0'
 
-/** "Level 2 · 24% → 91% · 11.8 kWh" for the unplugged hero. */
+/** "Level 2 · 24% → 91% · 11.8 kWh" for the unplugged hero; "Estimated · 22% → 86% · 9.0 kWh" if inferred. */
 private fun lastChargeDetail(last: ChargeSession): String =
     listOfNotNull(
-        sessionDetail(last.level, last.fromSoc, last.toSoc),
+        sessionDetail(last.level, last.fromSoc, last.toSoc, last.estimated),
         last.energyKwh?.let { "${oneDecimal(it)} kWh" },
     ).joinToString(" · ")
 
@@ -340,7 +341,8 @@ private fun DrawScope.polar(
 
 /**
  * Added / Cost / Battery (mockups `.kv3`), on a card like every other group of figures; the
- * last charge's figures while unplugged (the hero above already names it the last charge).
+ * last charge's figures while unplugged (the hero above already names it the last charge),
+ * labelled estimates when that charge was inferred.
  */
 @Composable
 private fun ChargeFigures(state: ChargeUiState) {
@@ -348,10 +350,11 @@ private fun ChargeFigures(state: ChargeUiState) {
     val kwh = if (state.charging) state.addedKwh else last?.energyKwh
     val rate = last?.let { state.rateFor(it) } ?: state.homeRate
     val units = state.units
+    val est = last?.estimated == true
     VoltPanel {
         Row(modifier = Modifier.fillMaxWidth()) {
-            VoltFigure("Added", kwh?.let(::oneDecimal) ?: DASH, "kWh", Modifier.weight(1f))
-            VoltFigure("Cost", costText(kwh, rate) ?: DASH, null, Modifier.weight(1f))
+            VoltFigure(if (est) "Est. added" else "Added", kwh?.let(::oneDecimal) ?: DASH, "kWh", Modifier.weight(1f))
+            VoltFigure(if (est) "Est. cost" else "Cost", costText(kwh, rate) ?: DASH, null, Modifier.weight(1f))
             VoltFigure(
                 "Battery",
                 state.packTempF?.let { units.temp(it.toDouble()).toString() } ?: DASH,
@@ -381,7 +384,7 @@ private fun SessionCard(state: ChargeUiState) {
 @Composable
 private fun RecentSessions(
     state: ChargeUiState,
-    onOpen: (Long) -> Unit,
+    onOpen: (String) -> Unit,
 ) {
     val rows = state.sessionRows(h24 = LocalVoltPrefs.current.clock24h)
     VoltPanel(padding = PaddingValues(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)) {
@@ -392,7 +395,8 @@ private fun RecentSessions(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             itemVerticalAlignment = Alignment.CenterVertically,
         ) {
-            VoltLabel("Recent sessions")
+            // The end gap keeps a long summary from touching the label; it wraps under it instead.
+            VoltLabel("Recent sessions", Modifier.padding(end = 12.dp))
             state.monthSummary(state.sampleAtMs.takeIf { it > 0 } ?: System.currentTimeMillis())?.let {
                 Text(text = it, style = VoltType.caption, color = VoltColors.textSecondary)
             }
@@ -415,7 +419,7 @@ private fun RecentSessions(
                     )
             }
         }
-        rows.forEach { row -> SessionRowView(row, row.startedAtMs?.let { at -> { onOpen(at) } }) }
+        rows.forEach { row -> SessionRowView(row, row.sessionId?.let { id -> { onOpen(id) } }) }
     }
 }
 
@@ -447,21 +451,25 @@ private fun SessionRowView(
             SocBar(row.fromSoc, row.toSoc)
         }
         Column(horizontalAlignment = Alignment.End) {
+            val estimate = if (row.estimated) " $EST" else ""
+            val energy = row.energyKwh?.let(::oneDecimal)
             Text(
                 text =
                     buildAnnotatedString {
-                        append(row.energyKwh?.let(::oneDecimal) ?: DASH)
-                        if (row.energyKwh != null) withStyle(unitStyle(11)) { append(" kWh") }
+                        append(energy ?: DASH)
+                        if (energy != null) withStyle(unitStyle(11)) { append(" kWh$estimate") }
                     },
                 style = VoltType.valueSmall,
                 color = VoltColors.textPrimary,
+                modifier = Modifier.spokenAs(energy?.takeIf { row.estimated }?.let { "$it kWh, estimated" }),
             )
             row.cost?.let {
+                val spoken = spokenEstimate(it + estimate).takeIf { row.estimated }
                 Text(
-                    text = it,
+                    text = it + estimate,
                     style = VoltType.body,
                     color = VoltColors.textSecondary,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.padding(top = 2.dp).spokenAs(spoken),
                 )
             }
         }
@@ -475,6 +483,10 @@ private fun SessionRowView(
         }
     }
 }
+
+/** Reads [spoken] to a screen reader in place of the text, when there is one ("est." → "estimated"). */
+private fun Modifier.spokenAs(spoken: String?): Modifier =
+    if (spoken == null) this else semantics { contentDescription = spoken }
 
 /** The from → to SOC span on a 0–100 % track (mockups `.sess-bar`). */
 @Composable

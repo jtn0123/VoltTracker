@@ -19,9 +19,9 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 /**
- * The usefulness pass: a drive's and a charge's receipt, Insights' plain-sentence summary, and
- * Health's battery trend, in OLED Black, Saddle Leather and Latte, full page. `-ProborazziRecord`
- * writes build/outputs/roborazzi/useful-<state>-<theme>.png.
+ * The usefulness pass: a drive's and a charge's receipt (measured and estimated), Insights'
+ * plain-sentence summary, and Health's battery trend, in OLED Black, Saddle Leather and Latte,
+ * full page. `-ProborazziRecord` writes build/outputs/roborazzi/useful-<state>-<theme>.png.
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -37,7 +37,7 @@ class UsefulnessScreenshotTest(
         val tab: VoltTab,
         val routes: List<VoltRoute> = emptyList(),
         val state: VoltAppUiState = base,
-        val charge: Long? = null,
+        val charge: String? = null,
         val tall: Boolean = false,
     )
 
@@ -91,9 +91,19 @@ class UsefulnessScreenshotTest(
                     Case(
                         VoltTab.CHARGE,
                         listOf(VoltRoute.CHARGE),
-                        charge = charge.sessions.first().startedAtMs,
+                        charge = charge.sessions.first().id,
                     ),
                 "charge-list" to Case(VoltTab.CHARGE),
+                // An inferred charge (seen only as a SOC rise between drives) on top of the same list.
+                "charge-estimated" to
+                    Case(
+                        VoltTab.CHARGE,
+                        listOf(VoltRoute.CHARGE),
+                        base.copy(charge = InferredChargeFixture.state),
+                        charge = InferredChargeFixture.id,
+                    ),
+                "charge-list-estimated" to
+                    Case(VoltTab.CHARGE, state = base.copy(charge = InferredChargeFixture.state)),
                 "insights" to Case(VoltTab.INSIGHTS, tall = true),
                 "health" to Case(VoltTab.CAR, listOf(VoltRoute.HEALTH)),
             )

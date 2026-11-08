@@ -17,7 +17,32 @@ data class ChargeSession(
     val energyKwh: Double?,
     /** Billed at the public rate (DC fast / public charger) when one is set in Settings → Costs. */
     val publicCharger: Boolean = false,
-)
+    /** Whether the logger watched this charge or worked it out afterwards from the SOC it gained. */
+    val provenance: ChargeProvenance = ChargeProvenance.OBSERVED,
+    /** The logger's confidence in the row (0–1), or null when it didn't say. */
+    val confidence: Double? = null,
+    /**
+     * The store's row id (`charge_sessions._id`, or `inferred:…` for an inferred charge), which
+     * stays the same across reloads. Held only in memory to reopen the receipt: never written
+     * to the share text or the database.
+     */
+    val id: String = "charge:$startedAtMs",
+) {
+    /**
+     * An inferred charge: its energy and cost are estimates, and [startedAtMs]–[endedAtMs] is
+     * the observation window it happened in, not when the car was plugged in.
+     */
+    val estimated: Boolean get() = provenance == ChargeProvenance.INFERRED
+}
+
+/** Where a logged charge came from. */
+enum class ChargeProvenance {
+    /** The adapter was connected for the charge: its times and energy are what it read. */
+    OBSERVED,
+
+    /** The SOC rose between two readings with no charge seen: worked out afterwards. */
+    INFERRED,
+}
 
 /** One pack SOC reading during the charge in progress. */
 data class SocPoint(

@@ -531,6 +531,7 @@ class LiveUiStateStore(
                 phase = trackedPhase,
                 speedKph = optDouble(t, "speedKph"),
                 powerKw = optDouble(t, "powerKw"),
+                powerAgeMs = optDouble(t, "powerKwStaleMs")?.toLong(),
                 chargerKw = optDouble(t, "chargerPowerKw"),
                 // The charge line/from-SOC use the driver's scale, like the ring and time-to-full.
                 soc = optDouble(t, "displayedSocPct") ?: optDouble(t, "soc"),

@@ -70,8 +70,8 @@ fun VoltApp(
     initialTab: VoltTab = VoltTab.DRIVE,
     initialRoutes: List<VoltRoute> = emptyList(),
     actions: VoltAppActions = VoltAppActions(),
-    /** The logged charge an initial [VoltRoute.CHARGE] shows, by start time. */
-    initialCharge: Long? = null,
+    /** The logged charge an initial [VoltRoute.CHARGE] shows, by its row id (`ChargeSession.id`). */
+    initialCharge: String? = null,
 ) {
     var tab by rememberSaveable { mutableStateOf(initialTab) }
     var routes by rememberSaveable(stateSaver = RouteStackSaver) { mutableStateOf(initialRoutes) }
@@ -231,7 +231,7 @@ private fun VoltTabContent(
     actions: VoltAppActions,
     onConnect: () -> Unit,
     onOpenTrip: () -> Unit,
-    onOpenCharge: (Long) -> Unit,
+    onOpenCharge: (String) -> Unit,
 ) {
     when (tab) {
         VoltTab.DRIVE ->
@@ -296,7 +296,7 @@ private fun VoltRouteContent(
     actions: VoltAppActions,
     onBack: () -> Unit,
     open: (VoltRoute) -> Unit,
-    chargeAt: Long?,
+    chargeAt: String?,
 ) {
     when (route) {
         VoltRoute.HEALTH ->
@@ -344,7 +344,7 @@ private fun VoltRouteContent(
         VoltRoute.CHARGE ->
             ChargeReceiptScreen(
                 state.charge,
-                startedAtMs = chargeAt,
+                sessionId = chargeAt,
                 worth = ChargeWorth(state.trips.trips.avgMiPerKwh(), state.trips.gasMpg, state.trips.gasPrice),
                 onBack = onBack,
                 onShare = actions.onShareText,
