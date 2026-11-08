@@ -151,6 +151,14 @@ describe('dashboard enhanced capability evidence', () => {
     VD.updateEnhancedCapabilityUi();
     expect(list.querySelector('.enhanced-capability-item')).toBe(firstRow);
 
+    // The detailed-signal card is an Advanced-only panel. Open it the way the user
+    // does, so the Export button is focusable (jsdom 30.1.2+ refuses to focus an
+    // element inside a display:none ancestor, like a real browser).
+    VD.ensureSignalsModule = () => Promise.resolve(VD);
+    VD.prefs.set('diagnosticsMode', 'advanced');
+    VD.applyDiagnosticsMode();
+    expect(document.getElementById('enhancedCard').hidden).toBe(false);
+
     // Focus an Export button; an unchanged re-render must not steal focus.
     const exportBtn = list.querySelector('[data-signal-export]');
     exportBtn.focus();
