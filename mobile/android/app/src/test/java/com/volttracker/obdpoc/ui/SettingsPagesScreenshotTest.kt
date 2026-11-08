@@ -24,6 +24,7 @@ import org.robolectric.annotation.GraphicsMode
 /**
  * Every Settings page in OLED Black and Latte, plus Appearance in Saddle Leather and OLED Lime. `-ProborazziRecord` writes
  * build/outputs/roborazzi/settings-<page>-<theme>.png; every case also proves the page composes.
+ * Compose-only: the reviewed, compared Settings baselines are in [LauncherTabsVisualRegressionTest].
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)

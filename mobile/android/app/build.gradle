@@ -243,7 +243,10 @@ android {
                 throw new GradleException("Choose native visual record OR verify; verification must not rewrite baselines.")
             }
             if (nativeVisualVerify || nativeVisualRecord) {
-                filter.includeTestsMatching("com.volttracker.obdpoc.ui.GradeVisualRegressionTest")
+                // Drive / Health / Charge states, then Trips / Insights / Car / Settings.
+                ["GradeVisualRegressionTest", "LauncherTabsVisualRegressionTest"].each {
+                    filter.includeTestsMatching("com.volttracker.obdpoc.ui.$it")
+                }
                 systemProperty "roborazzi.test.${nativeVisualVerify ? 'verify' : 'record'}", "true"
             }
             if (rootProject.hasProperty("voltTrackerRealDbPath")) {

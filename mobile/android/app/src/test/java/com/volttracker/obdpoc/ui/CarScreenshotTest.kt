@@ -26,6 +26,7 @@ import org.robolectric.annotation.GraphicsMode
  * tyre with stored codes, a door and window open with controls blocked, nothing reported (no
  * OBDLink), and metric units — in OLED Black, Saddle Leather and Latte. `-ProborazziRecord` writes
  * build/outputs/roborazzi/car-<state>-<theme>.png; every case also proves the screen composes.
+ * Compose-only: the reviewed, compared Car baselines are in [LauncherTabsVisualRegressionTest].
  */
 @RunWith(ParameterizedRobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
