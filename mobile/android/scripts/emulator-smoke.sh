@@ -218,6 +218,13 @@ tap_bottom_nav() {
 
 start_service_as_app() {
   local action="$1"
+  # Mirror ObdServiceLauncher: the demo runs as a plain started service and never calls
+  # startForeground, so a foreground-service start would oblige a call that never comes and
+  # Android would crash the app when the session stops.
+  if [ "$action" = "$ACTION_DEMO" ]; then
+    adb shell run-as "$PKG" am startservice --user 0 -n "$OBD_SERVICE" -a "$action" >/dev/null
+    return
+  fi
   if adb shell run-as "$PKG" am start-foreground-service --user 0 -n "$OBD_SERVICE" -a "$action" >/dev/null 2>&1; then
     return 0
   fi
