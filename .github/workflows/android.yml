@@ -118,7 +118,7 @@ jobs:
         run: ./gradlew --no-daemon --no-configuration-cache verifyNativeVisual -Dorg.gradle.java.installations.auto-detect=false -Dorg.gradle.java.installations.paths="$JAVA_HOME"
       - name: Upload native visual results and diffs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-visual-results
           path: |
@@ -256,7 +256,7 @@ jobs:
           :app:jacocoTestReport :app:jacocoTestCoverageVerification
       - name: Upload generated dashboard diff
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: generated-dashboard-html-diff
           path: mobile/android/build/reports/dashboard-html-diff/
@@ -271,28 +271,28 @@ jobs:
       - name: Upload debug APK
         # Paired with the conditional assemble above; emulator-smoke uploads it otherwise.
         if: always() && github.event_name == 'pull_request' && needs.changes.outputs.emulator_smoke != 'true'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: volttracker-debug-apk
           path: mobile/android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: warn
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: coverage-report
           path: mobile/android/app/build/reports/jacoco/jacocoTestReport/
           if-no-files-found: ignore
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: unit-test-report
           path: mobile/android/app/build/reports/tests/
           if-no-files-found: ignore
       - name: Upload performance trend snapshot
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: performance-trend-snapshot
           path: mobile/android/build/reports/performance-trends/
@@ -346,7 +346,7 @@ jobs:
         run: ./gradlew --no-daemon --configuration-cache :app:lintDebug
       - name: Upload lint report
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: android-lint-report
           path: mobile/android/app/build/reports/lint-results-debug.html
@@ -388,7 +388,7 @@ jobs:
       - name: Build dashboard bundle
         run: npm run build
       - name: Upload dashboard bundle
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dashboard-bundle
           # Everything build.mjs writes (see buildDashboardJs outputs in
@@ -503,7 +503,7 @@ jobs:
           NODE
       - name: Upload dashboard coverage report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dashboard-coverage
           path: mobile/android/dashboard-tests/coverage/
@@ -676,7 +676,7 @@ jobs:
           key: dashboard-e2e-retries-${{ github.head_ref || github.ref }}-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Upload Playwright report
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dashboard-e2e-report
           path: mobile/android/dashboard-e2e/playwright-report/
@@ -746,7 +746,7 @@ jobs:
         run: ./node_modules/.bin/playwright test --project=visual
       - name: Upload visual baselines + diffs
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: dashboard-visual-snapshots
           # Upload every per-spec snapshot dir (visual.spec.js + scenario-matrix),
@@ -812,7 +812,7 @@ jobs:
             --lockfile=./mobile/android/app/gradle.lockfile
       - name: Upload dependency audit artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: gradle-dependency-audit
           path: |
@@ -899,7 +899,7 @@ jobs:
       - name: Upload debug APK
         # unit-tests no longer re-assembles this APK when emulator-smoke runs; this job is the
         # volttracker-debug-apk source for main pushes (publish-debug-release) and runtime PRs.
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: volttracker-debug-apk
           path: mobile/android/app/build/outputs/apk/debug/*.apk
@@ -978,7 +978,7 @@ jobs:
           fi
       - name: Upload emulator smoke artifacts
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: emulator-smoke-artifacts
           path: |
