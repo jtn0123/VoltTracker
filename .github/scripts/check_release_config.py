@@ -136,8 +136,12 @@ def validate_active_app_builds_release(root_build_gradle_text: str) -> None:
     match = re.search(r'tasks\.register\("verifyActiveApp"\)\s*\{(.*?)\n\}', root_build_gradle_text, re.S)
     if not match:
         raise ValueError("mobile/android/build.gradle must register verifyActiveApp")
-    task_lines = [line for line in match.group(1).splitlines() if not line.lstrip().startswith("//")]
-    if '":app:assembleRelease"' not in "\n".join(task_lines):
+    # Drop /* */ block comments and // line comments (whole-line and trailing) so a
+    # commented-out entry cannot satisfy the check.
+    task_body = re.sub(r"/\*.*?\*/", "", match.group(1), flags=re.S)
+    task_body = "\n".join(line.split("//", 1)[0] for line in task_body.splitlines())
+    depends_on = re.search(r"\bdependsOn\((.*?)\)", task_body, re.S)
+    if not depends_on or '":app:assembleRelease"' not in depends_on.group(1):
         raise ValueError(
             "verifyActiveApp must depend on :app:assembleRelease so the release build runs before tagging"
         )
