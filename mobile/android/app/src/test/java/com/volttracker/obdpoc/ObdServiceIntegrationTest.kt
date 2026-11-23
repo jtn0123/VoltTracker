@@ -705,7 +705,7 @@ class ObdServiceIntegrationTest {
             service.updateNotification("Notice queued")
             val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
             assertTrue("main thread waited ${elapsedMs}ms for the recorder lock", elapsedMs < MAIN_THREAD_BUDGET_MS)
-            assertEquals("the recorder lock was still held", 1L, release.count)
+            assertTrue("openSession had already left the recorder lock", reopen.isAlive)
         } finally {
             release.countDown()
             reopen.join(ADAPTER_WINDOW_MS)
