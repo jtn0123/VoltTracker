@@ -17,6 +17,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -260,9 +261,11 @@ class BackupControllerShareTest {
         seedOneSession()
         val originalHeadroom = BackupCrypto.heapHeadroomBytes
         BackupCrypto.heapHeadroomBytes = { throw OutOfMemoryError("synthetic") }
+        val firstDisclosure: AlertDialog
         try {
             activity.backupController!!.launchEncryptedShare("hunter22")
-            latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+            firstDisclosure = latestDialog()
+            firstDisclosure.getButton(DialogInterface.BUTTON_POSITIVE).performClick()
             settle()
         } finally {
             BackupCrypto.heapHeadroomBytes = originalHeadroom
@@ -277,7 +280,13 @@ class BackupControllerShareTest {
 
         activity.backupController!!.launchEncryptedShare("hunter22")
 
-        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+        // A still-set in-flight flag would publish "Backup already in progress." and show no dialog,
+        // leaving the first (dismissed) disclosure as the latest one.
+        assertEquals("Could not create the backup file.", activity.lastDetail)
+        val retryDisclosure = latestDialog()
+        assertNotSame("the retry must open a new disclosure", firstDisclosure, retryDisclosure)
+        assertTrue(retryDisclosure.isShowing)
+        assertEquals("Share Volt Tracker backup", shadowOf(retryDisclosure).title.toString())
     }
 
     @Test

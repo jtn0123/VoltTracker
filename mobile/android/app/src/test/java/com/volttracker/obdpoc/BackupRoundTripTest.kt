@@ -521,12 +521,12 @@ class BackupRoundTripTest {
             "precondition: this passphrase is below today's creation minimum",
             DataBackup.hasMinimumPassphrase(shortPassphrase),
         )
-        // Encrypt directly through BackupCrypto, the way an older app version effectively did —
-        // buildEncryptedBackupFile now (correctly) refuses passphrases this short.
+        // Encrypt with the v3 writer an older app version used, which accepted passphrases this
+        // short — buildEncryptedBackupFile now (correctly) refuses them.
         val plain = dataBackup.buildBackupFile(store)
         assertNotNull(plain)
         val legacyEncrypted = File(context.cacheDir, "legacy-short-pass.vtdb")
-        BackupCrypto.encryptFile(plain!!, legacyEncrypted, shortPassphrase)
+        writeLegacyV3Backup(plain!!, legacyEncrypted, shortPassphrase)
         assertTrue(DataBackup.isEncryptedBackup(legacyEncrypted))
 
         val uri = registerAsSafUri(legacyEncrypted)
@@ -552,7 +552,7 @@ class BackupRoundTripTest {
         val plain = dataBackup.buildBackupFile(store)
         assertNotNull(plain)
         val legacyEncrypted = File(context.cacheDir, "legacy-trimmed-pass.vtdb")
-        BackupCrypto.encryptFile(plain!!, legacyEncrypted, "trim me please")
+        writeLegacyV3Backup(plain!!, legacyEncrypted, "trim me please")
         assertTrue(DataBackup.isEncryptedBackup(legacyEncrypted))
 
         val uri = registerAsSafUri(legacyEncrypted)

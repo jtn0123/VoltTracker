@@ -674,7 +674,7 @@ class DataBackupTest {
         val context = RuntimeEnvironment.getApplication()
         val source = currentBackupCopy(context, "encrypted-restore-source.db")
         val encrypted = File(context.cacheDir, "encrypted-restore.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, "short")
+        writeLegacyV3Backup(source, encrypted, "short")
 
         val missing = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(encrypted), null)
         assertFalse(missing.ok)
@@ -715,7 +715,7 @@ class DataBackupTest {
         val context = RuntimeEnvironment.getApplication()
         val source = currentBackupCopy(context, "encrypted-wrong-pass-source.db")
         val encrypted = File(context.cacheDir, "encrypted-wrong-pass.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, "correct-pass")
+        writeLegacyV3Backup(source, encrypted, "correct-pass")
         val snapshots = ArrayList<DataBackup.ProgressSnapshot>()
 
         val outcome =

@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
 import java.io.IOException
+import java.io.InputStream
 import java.io.InterruptedIOException
 import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
@@ -37,6 +38,19 @@ class BackupCryptoSegmentedTest {
     fun restoreHeadroom() {
         BackupCrypto.heapHeadroomBytes = originalHeadroom
         Thread.interrupted()
+    }
+
+    /** Returns at most one byte per read without reaching EOF early, as the InputStream contract allows. */
+    private class TrickleInputStream(
+        private val delegate: InputStream,
+    ) : InputStream() {
+        override fun read(): Int = delegate.read()
+
+        override fun read(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ): Int = delegate.read(b, off, if (len > 0) 1 else 0)
     }
 
     private fun payload(size: Int): ByteArray = ByteArray(size).also { Random(size.toLong() + 7).nextBytes(it) }
@@ -161,7 +175,7 @@ class BackupCryptoSegmentedTest {
             "truncated mid-segment",
             File(tmp.root, "cut.vtdb").apply {
                 writeBytes(
-                    flipped.copyOf(
+                    container.readBytes().copyOf(
                         container.length().toInt() - 4,
                     ),
                 )
@@ -210,6 +224,48 @@ class BackupCryptoSegmentedTest {
         assertFailsClosed("an out-of-range segment size", edited("seg-big.vtdb", 36, Int.MAX_VALUE))
         val prefixFlipped = container.readBytes().also { it[24] = (it[24] + 1).toByte() }
         assertFailsClosed("a changed nonce prefix", File(tmp.root, "nonce.vtdb").apply { writeBytes(prefixFlipped) })
+        val saltFlipped = container.readBytes().also { it[8] = (it[8] + 1).toByte() }
+        assertFailsClosed("a changed salt", File(tmp.root, "salt.vtdb").apply { writeBytes(saltFlipped) })
+    }
+
+    /**
+     * Rewriting the version byte must not let a v4 file be read as an older format, or a v3 file as
+     * v4. The default segment size is used so that, read as v3, the segment-size field lands where
+     * v3 keeps its iteration count and is still in range: the key derives and the tag check is what
+     * fails.
+     */
+    @Test
+    fun rewrittenVersionByteFailsClosed() {
+        val v4 = encrypt(payload(2 * segment + 1), segmentBytes = BackupSegmentStream.DEFAULT_SEGMENT_BYTES)
+
+        fun withVersion(
+            container: File,
+            version: Char,
+        ) = File(tmp.root, "as-v$version-${System.nanoTime()}.vtdb").apply {
+            writeBytes(container.readBytes().also { it[6] = version.code.toByte() })
+        }
+        for (older in listOf('1', '2', '3')) {
+            assertFailsClosed("a v4 file relabelled as v$older", withVersion(v4, older))
+        }
+
+        val v3Source = tmp.newFile().apply { writeBytes(payload(3 * segment)) }
+        val v3 = File(tmp.root, "real-v3.vtdb")
+        writeLegacyV3Backup(v3Source, v3, passphrase)
+        assertFailsClosed("a v3 file relabelled as v4", withVersion(v3, '4'))
+    }
+
+    /** A v4 container opens over a stream that returns one byte per read, header and body alike. */
+    @Test
+    fun decryptStreamSurvivesShortReadsAcrossHeaderAndSegments() {
+        val plain = payload(5 * segment + 3)
+        val container = encrypt(plain)
+        val out = File(tmp.root, "trickle.db")
+
+        container.inputStream().use { input ->
+            BackupCrypto.decryptStream(TrickleInputStream(input), out, passphrase, Long.MAX_VALUE)
+        }
+
+        assertArrayEquals("short reads must not end a segment early or truncate the backup", plain, out.readBytes())
     }
 
     @Test
@@ -253,7 +309,7 @@ class BackupCryptoSegmentedTest {
         val v4 = encrypt(plain, segmentBytes = BackupSegmentStream.DEFAULT_SEGMENT_BYTES)
         val v3Source = tmp.newFile().apply { writeBytes(plain) }
         val v3 = File(tmp.root, "legacy.vtdb")
-        BackupCrypto.encryptFile(v3Source, v3, passphrase)
+        writeLegacyV3Backup(v3Source, v3, passphrase)
 
         BackupCrypto.heapHeadroomBytes = { 5L * 1024 * 1024 }
         assertArrayEquals(plain, decrypt(v4))
@@ -267,7 +323,59 @@ class BackupCryptoSegmentedTest {
         assertFalse(out.exists())
 
         BackupCrypto.heapHeadroomBytes = { 3L * v3.length() }
+        try {
+            BackupCrypto.decryptFile(v3, out, passphrase, Long.MAX_VALUE)
+            fail("a v3 container that would leave the rest of the app no heap must be refused")
+        } catch (ex: BackupCrypto.InsufficientMemoryException) {
+            // Expected: three times the file fits, but not with the reserve on top.
+        }
+
+        BackupCrypto.heapHeadroomBytes = { BackupCrypto.legacyDecryptHeapBytes(v3.length()) }
         assertArrayEquals("with enough headroom the v3 container still restores", plain, decrypt(v3))
+    }
+
+    /**
+     * Headroom counts uncollected garbage as used. A wrong first attempt (here the exact passphrase
+     * against a backup keyed on the trimmed one) leaves its cipher buffers behind as garbage, so the
+     * trimmed retry must not run the precheck again and refuse a restore that fits: the precheck
+     * runs once per call, before the first attempt.
+     */
+    @Test
+    fun trimmedPassphraseRetryIsNotRefusedByTheFirstAttemptsGarbage() {
+        val plain = payload(4 * segment)
+        val v3Source = tmp.newFile().apply { writeBytes(plain) }
+        val v3 = File(tmp.root, "trim-keyed-v3.vtdb")
+        writeLegacyV3Backup(v3Source, v3, "correct horse")
+        val plenty = BackupCrypto.legacyDecryptHeapBytes(v3.length())
+        var measurements = 0
+        // Room for the first attempt only; afterwards its garbage makes the heap look full.
+        BackupCrypto.heapHeadroomBytes = {
+            measurements += 1
+            if (measurements == 1) plenty else 0L
+        }
+        val out = File(tmp.root, "trim-keyed.db")
+
+        val form = BackupCrypto.decryptFileWithTrimFallback(v3, out, "  correct horse ", Long.MAX_VALUE)
+
+        assertEquals(BackupCrypto.PassphraseForm.LEGACY_TRIMMED, form)
+        assertArrayEquals(plain, out.readBytes())
+        assertEquals("the precheck runs once for both attempts", 1, measurements)
+    }
+
+    @Test
+    fun trimFallbackStillPrechecksBeforeTheFirstAttempt() {
+        val v3Source = tmp.newFile().apply { writeBytes(payload(4 * segment)) }
+        val v3 = File(tmp.root, "too-big-v3.vtdb")
+        writeLegacyV3Backup(v3Source, v3, "correct horse")
+        BackupCrypto.heapHeadroomBytes = { 0L }
+        val out = File(tmp.root, "too-big.db")
+        try {
+            BackupCrypto.decryptFileWithTrimFallback(v3, out, "  correct horse ", Long.MAX_VALUE)
+            fail("a v3 container without heap headroom must be refused")
+        } catch (ex: BackupCrypto.InsufficientMemoryException) {
+            // Expected: refused before either attempt.
+        }
+        assertFalse(out.exists())
     }
 
     @Test

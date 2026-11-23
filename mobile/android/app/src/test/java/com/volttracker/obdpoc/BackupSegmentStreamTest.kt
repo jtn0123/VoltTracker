@@ -183,6 +183,52 @@ class BackupSegmentStreamTest {
         assertFailsClosed("the body under a different header", join(first), aad = otherHeader)
     }
 
+    /** Returns at most one byte per read without reaching EOF early, as the InputStream contract allows. */
+    private class TrickleInputStream(
+        private val delegate: InputStream,
+    ) : InputStream() {
+        override fun read(): Int = delegate.read()
+
+        override fun read(
+            b: ByteArray,
+            off: Int,
+            len: Int,
+        ): Int = delegate.read(b, off, if (len > 0) 1 else 0)
+    }
+
+    /**
+     * Short reads must not end a segment early: sealing over a one-byte-per-read stream gives the
+     * same segments as a full-buffer stream (a short segment there would be flagged last and the
+     * rest of the backup silently dropped), and opening over one restores every byte.
+     */
+    @Test
+    fun shortReadsNeitherSplitNorTruncateSegments() {
+        val plain = payload(7 * segment + 11)
+        val reference = seal(plain)
+        val trickled = ByteArrayOutputStream()
+        BackupSegmentStream.encrypt(
+            TrickleInputStream(ByteArrayInputStream(plain)),
+            trickled,
+            header,
+            prefix,
+            segment,
+            GcmSegmentAead(key),
+        )
+        assertArrayEquals("sealing over short reads must give the same segments", reference, trickled.toByteArray())
+
+        val opened = ByteArrayOutputStream()
+        BackupSegmentStream.decrypt(
+            TrickleInputStream(ByteArrayInputStream(reference)),
+            opened,
+            header,
+            prefix,
+            segment,
+            GcmSegmentAead(key),
+            Long.MAX_VALUE,
+        )
+        assertArrayEquals("opening over short reads must restore every byte", plain, opened.toByteArray())
+    }
+
     @Test
     fun plaintextCapStopsTheRestore() {
         val body = seal(payload(3 * segment))

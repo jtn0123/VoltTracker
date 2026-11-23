@@ -79,9 +79,18 @@ object BackupCrypto {
     private const val UNKNOWN_CONTAINER_BYTES = -1L
     private const val BYTES_PER_MIB = 1024L * 1024L
 
+    // Heap left over for the rest of the app (UI thread, other workers) while a v1-v3 decrypt holds
+    // its peak, so a file that only just fits is refused with a readable status instead of taking
+    // the whole heap and running another thread out of memory.
+    private const val LEGACY_HEAP_RESERVE_BYTES = 16L * BYTES_PER_MIB
+
     /** Free heap the memory precheck compares against; replaceable so tests can simulate a full heap. */
     @Volatile
     internal var heapHeadroomBytes: () -> Long = ::runtimeHeapHeadroom
+
+    /** Heap a v1-v3 container of [containerBytes] needs to decrypt, including the app's reserve. */
+    internal fun legacyDecryptHeapBytes(containerBytes: Long): Long =
+        LEGACY_WORKING_SET_MULTIPLIER * containerBytes + LEGACY_HEAP_RESERVE_BYTES
 
     @JvmStatic
     fun isEncryptedBackup(file: File?): Boolean {
@@ -184,7 +193,13 @@ object BackupCrypto {
             if (trimmed == passphrase || trimmed.isEmpty()) {
                 throw ex
             }
-            decryptFile(source, dest, trimmed, maxPlaintextBytes)
+            // The first attempt already passed the memory precheck, and its cipher buffers are now
+            // garbage that still counts as used until the runtime collects it, so a second precheck
+            // would refuse a restore that fits. Skip it: the retry's own allocations let the runtime
+            // collect that garbage, exactly as the first attempt's would have.
+            FileInputStream(source).use { fileIn ->
+                decryptStream(fileIn, dest, trimmed, maxPlaintextBytes, UNKNOWN_CONTAINER_BYTES)
+            }
             return PassphraseForm.LEGACY_TRIMMED
         }
     }
@@ -250,7 +265,7 @@ object BackupCrypto {
         // One GCM operation over the whole file: the platform cipher holds all of it until doFinal.
         // Fail with a readable error before deriving the key rather than run out of memory.
         if (containerBytes != UNKNOWN_CONTAINER_BYTES) {
-            requireHeapHeadroom(LEGACY_WORKING_SET_MULTIPLIER * containerBytes)
+            requireHeapHeadroom(legacyDecryptHeapBytes(containerBytes))
         }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt, iterations), GCMParameterSpec(128, iv))

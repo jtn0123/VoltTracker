@@ -57,8 +57,10 @@ protects the exported file with a passphrase. The crypto, sourced from
 - **Integrity:** the file header (format magic, salt, nonce prefix, iteration
   count and segment size) is authenticated as GCM additional authenticated data
   in every segment, so it cannot be tampered with — including tampering the
-  iteration count downward to weaken the KDF. A last-segment flag in the same
-  data means reordered, duplicated, dropped or truncated segments are rejected.
+  iteration count downward to weaken the KDF. Each segment's index is part of
+  its nonce, so reordered, duplicated or dropped segments are rejected; a
+  last-segment flag in the same authenticated data rejects a file cut at a
+  segment boundary or extended past its end.
 
 What encrypted backup **does** protect: the confidentiality and integrity of an
 *exported backup file* at rest (e.g. sitting in cloud storage or on a PC),

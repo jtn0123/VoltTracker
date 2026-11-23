@@ -18,11 +18,11 @@ import javax.crypto.spec.SecretKeySpec
  * before the segmented v4 container did.
  *
  * The app now writes only v4 ([BackupCrypto.encryptFileSegmented]), but v3 files are still out
- * there and must keep restoring. This extension lets the existing compatibility suites
- * ([BackupCryptoTest], [DataBackupTest], [BackupRoundTripTest]) keep minting real v3 containers
- * through the same `BackupCrypto.encryptFile(...)` call they always used.
+ * there and must keep restoring. The compatibility suites ([BackupCryptoTest], [DataBackupTest],
+ * [BackupRoundTripTest]) mint their v3 containers here. It is a plain top-level function, not a
+ * `BackupCrypto` extension, so a production method can never silently take over these call sites.
  */
-internal fun BackupCrypto.encryptFile(
+internal fun writeLegacyV3Backup(
     source: File,
     dest: File,
     passphrase: String,

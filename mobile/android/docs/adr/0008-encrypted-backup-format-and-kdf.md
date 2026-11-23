@@ -147,8 +147,12 @@ ciphertext+tag over the whole database:
 - **Memory precheck.** Before work starts, `BackupCrypto` compares what it needs
   with the free heap (`Runtime.maxMemory()` minus used) and throws
   `InsufficientMemoryException` instead of running out of memory: about four
-  segments for v4, and three times the file size for a v1-v3 file, which can
-  only be verified by holding it whole. `DataBackup` maps that, and any
+  segments for v4, and three times the file size plus a 16 MiB reserve for the
+  rest of the app for a v1-v3 file, which can only be verified by holding it
+  whole. Uncollected garbage counts as used, so the trimmed-passphrase retry
+  does not run the v1-v3 check a second time: the first attempt's buffers are
+  still garbage then, and a second check would refuse a file that fits.
+  `DataBackup` maps that, and any
   `OutOfMemoryError` from encrypt or decrypt, to a failed backup or the
   `TOO_LARGE_FOR_MEMORY` restore status, so the app reports it instead of
   crashing. A large older backup that this phone cannot open may still open on

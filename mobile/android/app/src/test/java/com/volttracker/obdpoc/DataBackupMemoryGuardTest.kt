@@ -93,7 +93,7 @@ class DataBackupMemoryGuardTest {
     fun olderEncryptedBackupTooLargeForTheHeapReportsTooLargeForMemory() {
         val plain = withStore { DataBackup(context).buildBackupFile(it) }!!
         val legacy = File(context.filesDir, "legacy-v3.vtdb")
-        BackupCrypto.encryptFile(plain, legacy, passphrase)
+        writeLegacyV3Backup(plain, legacy, passphrase)
         BackupCrypto.heapHeadroomBytes = { legacy.length() }
 
         val outcome = DataBackup(context).stageRestoreFileWithStatus(Uri.fromFile(legacy), passphrase)
