@@ -26,6 +26,11 @@ path:mobile/android/dashboard-e2e/map.spec.js
 path:mobile/android/dashboard-e2e/error-paths.spec.js
 path:mobile/android/dashboard-e2e/demo.spec.js
 
+# Fabricated Los Angeles-area preview route (dashboard-src/js/map.ts), used only when no
+# Android bridge is present. The whole route sits on this one line, so a line entry keeps the
+# rest of map.ts under the VIN and endpoint checks.
+line:const SAMPLE_ROUTE: Array<[number, number, number]>
+
 # The privacy scanner's own source carries synthetic example IP/VIN values in its
 # built-in self-test fixtures; they are not real data.
 path:mobile/android/tools/privacy-scan.py
