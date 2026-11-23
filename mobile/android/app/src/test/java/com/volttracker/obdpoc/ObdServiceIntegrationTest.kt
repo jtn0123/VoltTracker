@@ -687,12 +687,13 @@ class ObdServiceIntegrationTest {
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
         val parked = AtomicBoolean(false)
+        val releasedByTest = AtomicBoolean(false)
         // openSession calls this hook while it holds the recorder lock, so parking here keeps that
         // lock busy the way a slow session start (database row, system snapshot) does.
         recorder.onRecordingWarning = { warning ->
             if (parked.compareAndSet(false, true)) {
                 entered.countDown()
-                release.await(ADAPTER_WINDOW_MS, TimeUnit.MILLISECONDS)
+                releasedByTest.set(release.await(ADAPTER_WINDOW_MS, TimeUnit.MILLISECONDS))
             }
             publishWarning(warning)
         }
@@ -711,6 +712,7 @@ class ObdServiceIntegrationTest {
             reopen.join(ADAPTER_WINDOW_MS)
             recorder.onRecordingWarning = publishWarning
         }
+        assertTrue("the parked session start ended on its own timeout", releasedByTest.get())
 
         // The main thread queued both writes, so they land in the session opened after the lock freed.
         val drained = CountDownLatch(1)
