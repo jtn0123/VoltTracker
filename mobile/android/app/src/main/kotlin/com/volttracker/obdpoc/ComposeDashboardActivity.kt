@@ -110,6 +110,7 @@ class ComposeDashboardActivity :
         }
     }
     private val carControls by lazy { ComposeCarControls(this, { prefs }, store, ::showMessage) }
+    private val historyReset by lazy { HistoryResetNotice(this) }
 
     /** Listens to the body bus nonstop while the Car tab is in front (see [BodyFocusPinger]). */
     private val bodyFocus by lazy { BodyFocusPinger.forService(this) }
@@ -224,7 +225,9 @@ class ComposeDashboardActivity :
             }
         if (launch.startDemo && savedInstanceState == null) startObdService(ObdService.ACTION_DEMO, null, null)
         setContent {
-            val state by store.state.collectAsState()
+            val live by store.state.collectAsState()
+            val historyResetAtMs by historyReset.atMs.collectAsState()
+            val state = live.copy(historyResetAtMs = historyResetAtMs)
             LaunchedEffect(Unit) {
                 while (true) {
                     kotlinx.coroutines.delay(1_000L)
@@ -250,6 +253,7 @@ class ComposeDashboardActivity :
                             onOpenClassicView = ::openClassicView,
                             onOpenTroubleshooter = ::openTroubleshooter,
                             onDismissConnectionFailure = store::dismissConnectionFailure,
+                            onDismissHistoryReset = historyReset::dismiss,
                             onConnect = ::connectLastAdapter,
                             onStartDemo = { startObdService(ObdService.ACTION_DEMO, null, null) },
                             onStopDemo = ::stopObdService,
@@ -296,6 +300,7 @@ class ComposeDashboardActivity :
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
         replayServiceSnapshot()
+        historyReset.start()
         loadHistoryFor(shownView)
         // The classic dashboard may have changed a shared setting while this screen was away.
         refreshSettings()
@@ -341,6 +346,7 @@ class ComposeDashboardActivity :
         }
         signalAppForeground(false)
         bodyFocus.setResumed(false)
+        historyReset.stop()
         experience.onPause()
         super.onPause()
     }
@@ -746,7 +752,7 @@ class ComposeDashboardActivity :
     }
 
     /** The state the screens render (tests read it back). */
-    internal fun uiState(): VoltAppUiState = store.state.value
+    internal fun uiState(): VoltAppUiState = store.state.value.copy(historyResetAtMs = historyReset.atMs.value)
 
     /** Reads the Charge, Trips and Insights tabs' history (tests swap its readers). */
     internal val history: ComposeHistoryLoader by lazy {

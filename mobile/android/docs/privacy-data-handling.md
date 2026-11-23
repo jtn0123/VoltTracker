@@ -18,6 +18,13 @@ The app may store:
 Structured history lives in the app SQLite database. Field-test JSONL logs live
 under app-private `files/obd-logs/`.
 
+If SQLite reports that database damaged, the app does not delete it: it renames
+the file (with its `-wal`/`-shm` files) to `volttracker_obd_poc.db.corrupt-<time>`
+in the same app-private folder, starts a new empty database and tells you on the
+dashboard. At most two such copies are kept. They hold the same kinds of data as
+the database, including GPS routes and vehicle rows, and the 60-day expiry
+below does not apply to them.
+
 ## Backups and Diagnostics
 
 Encrypted backup is the primary export path. It creates a passphrase-protected
@@ -133,7 +140,8 @@ competing-app allowlist and never force-stops apps automatically.
 ## Delete or Export Data
 
 Use the dashboard Settings and backup tools to export, restore, or clear local
-history. Android app uninstall also removes app-private storage.
+history. Clear data also deletes any damaged database copies kept as
+`.corrupt-<time>` files. Android app uninstall also removes app-private storage.
 
 SQLite raw telemetry, GPS, PID observations and runtime events normally expire
 after **60 days**. Maintenance is requested by either dashboard's activity

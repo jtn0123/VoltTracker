@@ -1,9 +1,12 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import android.database.DatabaseErrorHandler
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import java.io.File
 import java.io.IOException
 
@@ -11,10 +14,10 @@ import java.io.IOException
  * Applies a staged, verified restore file to the live database for [BackupController]:
  * the additive merge ([applyMerge]) and the destructive replace ([applyReplace]) with its
  * staging/rollback ladder (stage to `.restore-new`, keep a `.restore-backup` safety copy,
- * roll the original back on rename/open failure, and preserve the safety copy if that
- * rollback itself fails).
+ * roll the original back on rename failure or when the restored file fails its first open and
+ * quick check, and preserve the safety copy if that rollback itself fails).
  *
- * Extracted verbatim from [BackupController] (LargeClass ratchet); behavior is identical.
+ * Extracted from [BackupController] (LargeClass ratchet).
  * The cancellation gate is a lambda because the controller owns the disposed flag and the
  * pipeline must also observe the worker thread's interrupt state at call time.
  */
@@ -116,7 +119,7 @@ class RestoreApplyPipeline<A>(
                 throw ex
             }
             try {
-                activity.localStore = ObdLocalStore(activity)
+                activity.localStore = openRestoredStore(dbFile)
             } catch (ex: RuntimeException) {
                 val rolledBack = restoreOriginalDatabase(dbFile, restoreBackup)
                 preserveRestoreBackup = !rolledBack
@@ -136,6 +139,37 @@ class RestoreApplyPipeline<A>(
             cleanUpRestoreSafetyCopy(restoreBackup, preserveRestoreBackup)
             DataBackup.deleteIfExists(staged)
         }
+    }
+
+    /**
+     * Opens and quick-checks the swapped-in file before the safety copy may go: constructing
+     * [ObdLocalStore] alone never opens the file. The check runs on a connection of its own whose
+     * corruption handler does nothing, so a file SQLite rejects never reaches the live database's
+     * handler, which would set it aside as damaged history and tell the owner their history was
+     * reset. The store then opens its writable database (running any migration) inside the same
+     * rollback window. Throws to trigger the rollback.
+     */
+    private fun openRestoredStore(dbFile: File): ObdLocalStore {
+        var detached: SQLiteDatabase? = null
+        val integrity =
+            try {
+                ObdStoreMaintenance.quickCheck(ObdStoreMaintenance.MAX_QUICK_CHECK_PROBLEMS) {
+                    // Leaves the file alone: the rollback below puts the original back over it.
+                    val keepFile = DatabaseErrorHandler { _ -> }
+                    SQLiteDatabase
+                        .openDatabase(dbFile.path, null, DETACHED_OPEN_FLAGS, keepFile)
+                        .also { detached = it }
+                }
+            } finally {
+                detached?.close()
+            }
+        check(integrity.ok) { "restored database failed its quick check: ${integrity.problems}" }
+        val store = ObdLocalStore(activity)
+        if (!store.checkpoint()) {
+            store.close()
+            throw IllegalStateException("restored database did not open")
+        }
+        return store
     }
 
     /** Checkpoints and closes the live store so its file can be swapped; false aborts the replace. */
@@ -204,6 +238,8 @@ class RestoreApplyPipeline<A>(
     companion object {
         private const val OPERATION_RESTORE = "restore"
         private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
+        private const val DETACHED_OPEN_FLAGS =
+            SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING
 
         internal fun shouldDeleteRestoreSafetyCopy(rollbackFailed: Boolean): Boolean = !rollbackFailed
 

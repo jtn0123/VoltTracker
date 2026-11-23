@@ -12,8 +12,10 @@ import com.volttracker.obdpoc.ui.VoltAppActions
 import com.volttracker.obdpoc.ui.VoltAppUiState
 import com.volttracker.obdpoc.ui.theme.VoltColors
 import com.volttracker.obdpoc.ui.theme.VoltType
+import java.text.DateFormat
+import java.util.Date
 
-/** Persistent, independently labelled connection and recording problems on every native page. */
+/** Persistent, independently labelled history, connection and recording problems on every native page. */
 @Composable
 fun DashboardNotices(
     state: VoltAppUiState,
@@ -21,6 +23,13 @@ fun DashboardNotices(
     onConnect: () -> Unit,
     onAdapter: () -> Unit,
 ) {
+    state.historyResetAtMs?.let { atMs ->
+        VoltPanel(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), padding = PaddingValues(12.dp)) {
+            Text("Saved history was reset", style = VoltType.body, color = VoltColors.warn)
+            Text(historyResetDetail(atMs), style = VoltType.caption, color = VoltColors.textSecondary)
+            TextButton(onClick = actions.onDismissHistoryReset) { Text("Dismiss") }
+        }
+    }
     state.recordingWarning?.let { detail ->
         VoltPanel(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp), padding = PaddingValues(12.dp)) {
             Text("Recording incomplete", style = VoltType.body, color = VoltColors.warn)
@@ -50,3 +59,12 @@ fun DashboardNotices(
         }
     }
 }
+
+/** What the reset notice says: when it happened, that the damaged copy was kept, and the way back. */
+internal fun historyResetDetail(
+    atMs: Long,
+    dates: DateFormat = DateFormat.getDateInstance(DateFormat.MEDIUM),
+): String =
+    "On ${dates.format(Date(atMs))} the saved history on this phone was found damaged. Volt Tracker kept " +
+        "the damaged copy and started a new, empty history. To get your drives back, restore a backup " +
+        "in Settings → Restore."

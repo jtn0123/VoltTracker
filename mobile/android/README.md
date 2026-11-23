@@ -214,6 +214,11 @@ The app now writes two layers of local data:
 
 SQLite tables capture OBD sessions, parsed telemetry samples, status/debug events, and adapter history summaries. The Settings screen shows a database summary so field tests can confirm whether sessions and samples are being saved without pulling files from the phone.
 
+If SQLite reports the database damaged, it is renamed to `volttracker_obd_poc.db.corrupt-<ms>`
+(with its `-wal`/`-shm` files) instead of deleted, a new empty database starts, and the native
+dashboard shows a "Saved history was reset" notice. At most two copies are kept; raw-data
+expiry does not touch them, and the dashboard's Clear data action deletes them.
+
 SQLite raw telemetry, GPS fixes, PID observations and runtime events default to
 **60 days** of retention (`raw_retention_days`; values ≤0 disable automatic pruning).
 Both dashboards request background maintenance on activity start/stop, delayed
