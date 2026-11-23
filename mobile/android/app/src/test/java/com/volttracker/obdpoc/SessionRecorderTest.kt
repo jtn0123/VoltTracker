@@ -249,7 +249,7 @@ class SessionRecorderTest {
         store.failStartSession = true
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-start-failure-" + System.nanoTime())
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
 
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
@@ -266,7 +266,6 @@ class SessionRecorderTest {
         logsDir.mkdirs()
         val recorder =
             SessionRecorder(
-                Any(),
                 ObdSessionLog(logsDir),
                 store,
                 null,
@@ -472,7 +471,7 @@ class SessionRecorderTest {
         val store = RecordingStore()
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-deadline-warning-" + System.nanoTime())
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
         recorder.logCommand("010C", 1_000L, 999L, "41 0C 1A F8", truncatedOnDeadline = true)
@@ -531,7 +530,7 @@ class SessionRecorderTest {
         val store = RecordingStore()
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-off-hs-" + System.nanoTime())
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
         recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
@@ -575,7 +574,7 @@ class SessionRecorderTest {
         val store = RecordingStore()
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-event-reply-" + System.nanoTime())
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
         recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
@@ -605,7 +604,7 @@ class SessionRecorderTest {
         val store = RecordingStore()
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-hs-proof-" + System.nanoTime())
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
 
         recorder.logCommand("STP 61", 1_000L, 5L, "OK\r>")
@@ -821,7 +820,6 @@ class SessionRecorderTest {
         logsDir.mkdirs()
         val recorder =
             SessionRecorder(
-                Any(),
                 ObdSessionLog(logsDir),
                 store,
                 null,
@@ -857,7 +855,7 @@ class SessionRecorderTest {
             File(System.getProperty("java.io.tmpdir"), "sr-bad-logs-" + System.nanoTime())
         assertTrue(bogusLogsDir.createNewFile())
         val sessionLog = ObdSessionLog(bogusLogsDir)
-        val recorder = SessionRecorder(Any(), sessionLog, RecordingStore(), summary, null)
+        val recorder = SessionRecorder(sessionLog, RecordingStore(), summary, null)
 
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "OBDLink MX+", 3_000L)
         assertFalse("precondition: the detail log must have failed to open", sessionLog.isOpen())
@@ -947,7 +945,7 @@ class SessionRecorderTest {
     ): SessionRecorder {
         val logsDir = File(System.getProperty("java.io.tmpdir"), dirName + System.nanoTime())
         logsDir.mkdirs()
-        return SessionRecorder(Any(), ObdSessionLog(logsDir), store, summary, null)
+        return SessionRecorder(ObdSessionLog(logsDir), store, summary, null)
     }
 
     private fun newOpenRecorder(
@@ -956,8 +954,7 @@ class SessionRecorderTest {
     ): SessionRecorder {
         val logsDir = File(System.getProperty("java.io.tmpdir"), dirName)
         logsDir.mkdirs()
-        val lock = Any()
-        val recorder = SessionRecorder(lock, ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
         return recorder
     }
@@ -968,7 +965,7 @@ class SessionRecorderTest {
     ): SessionRecorder {
         val logsDir = File(System.getProperty("java.io.tmpdir"), dirName)
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_SCAN, "AA:BB:CC:DD:EE:FF", "Test", 1_000L)
         return recorder
     }
@@ -979,7 +976,7 @@ class SessionRecorderTest {
     ): SessionRecorder {
         val logsDir = File(System.getProperty("java.io.tmpdir"), dirName)
         logsDir.mkdirs()
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
         recorder.openSession(ObdLocalStore.MODE_DEMO, "", "Demo", 1_000L)
         return recorder
     }

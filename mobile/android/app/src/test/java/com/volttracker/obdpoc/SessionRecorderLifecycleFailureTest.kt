@@ -29,8 +29,7 @@ class SessionRecorderLifecycleFailureTest {
         val store = RecordingStore()
         val logsDir = File(System.getProperty("java.io.tmpdir"), "sr-lifecycle-test")
         logsDir.mkdirs()
-        val lock = Any()
-        val recorder = SessionRecorder(lock, ObdSessionLog(logsDir), store)
+        val recorder = SessionRecorder(ObdSessionLog(logsDir), store)
 
         recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Test", 1000L)
         // openSession also calls closeSession("",...) on the prior (empty) session — that

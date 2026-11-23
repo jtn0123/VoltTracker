@@ -20,7 +20,25 @@ import java.util.Locale
  * Owns the per-session diagnostic record: JSONL field log, SQLite rows, and session lifecycle.
  */
 class SessionRecorder {
-    private val lock: Any
+    // The recorder's own monitor, deliberately not the adapter IO lock. The poll thread holds the IO
+    // lock for a whole adapter command or body-bus window (seconds), while the main thread logs car
+    // command requests, Bluetooth broadcasts and service events; sharing the IO lock froze the UI.
+    //
+    // Lock order is one-way, IO lock -> this lock. Callers may log while holding the IO lock
+    // (sendCommand, the body-bus monitor, ObdService.openSessionLog/closeSessionLog/applyAppVisibility,
+    // SessionHealthTracker), but nothing run under this lock takes the IO lock: it only writes the
+    // session log, the local and summary stores, the system snapshot and onRecordingWarning (a status
+    // broadcast and notification), and queues work on the persistence worker without waiting for it.
+    // The one exception is the lifecycle fallback that runs a finalize inline once that executor has
+    // refused it: it waits for the worker to drain, a worker task may take the IO lock, and the wait
+    // is capped at 30 s, so the worst case there is a bounded stall, never a deadlock.
+    //
+    // Lines from one thread keep their order: every log call writes its line while holding this lock,
+    // so a thread's lines land in the order it made the calls. Lines from different threads interleave
+    // in lock-acquisition order, so a main-thread line can land between two of a window's lines.
+    // offHs and currentHeader are only touched under this lock, so reply redaction still sees the
+    // state the poll thread last logged.
+    private val lock = Any()
     private val sessionLog: ObdSessionLog
     private val summaryStore: SessionSummaryStore?
     private val snapshotSource: SystemSnapshotSource?
@@ -72,28 +90,24 @@ class SessionRecorder {
     private var recentStatusWriteHead = 0
 
     constructor(
-        lock: Any,
         sessionLog: ObdSessionLog,
         localStore: ObdLocalStore?,
-    ) : this(lock, sessionLog, localStore, null, null, null)
+    ) : this(sessionLog, localStore, null, null, null)
 
     constructor(
-        lock: Any,
         sessionLog: ObdSessionLog,
         localStore: ObdLocalStore?,
         summaryStore: SessionSummaryStore?,
         snapshotSource: SystemSnapshotSource?,
-    ) : this(lock, sessionLog, localStore, summaryStore, snapshotSource, null)
+    ) : this(sessionLog, localStore, summaryStore, snapshotSource, null)
 
     constructor(
-        lock: Any,
         sessionLog: ObdSessionLog,
         localStore: ObdLocalStore?,
         summaryStore: SessionSummaryStore?,
         snapshotSource: SystemSnapshotSource?,
         completionListener: SessionCompletionListener?,
     ) {
-        this.lock = lock
         this.sessionLog = sessionLog
         this.localStore = localStore
         this.summaryStore = summaryStore
