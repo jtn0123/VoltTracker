@@ -104,7 +104,7 @@ object DatabaseCorruption {
             if (sibling.exists() && !sibling.renameTo(File(target.path + suffix))) {
                 // A stale sibling next to the fresh database would be replayed into it.
                 Log.w(TAG, "could not move ${sibling.name}; deleting it")
-                sibling.delete()
+                if (!sibling.delete()) Log.e(TAG, "could not delete ${sibling.name} either")
             }
         }
         prune(dbFile)
