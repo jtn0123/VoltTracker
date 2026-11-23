@@ -106,7 +106,7 @@ open class ObdPollingEngine(
         cellVoltageProbeRunner = CellVoltageProbeRunner(service, this)
         clearDtcRunner = ClearDtcRunner(service, this)
         val io = EngineSwcanIo(service, ::connection, ::sendCommand, ::initializeElm327, pidPolling, parkedDetector)
-        swcanListener = SwcanListenRunner(io, swcanPolicy)
+        swcanListener = SwcanListenRunner(io, swcanPolicy, carCommandPending = { carControl.hasPendingCommand() })
         val carControlIo =
             CarControlEngineIo(
                 adapter = io,
@@ -768,10 +768,10 @@ open class ObdPollingEngine(
                 deferredInitProbesPending = false
                 runDeferredInitProbes()
             }
-            // Low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner).
-            swcanListener.afterSample()
-            // A user-confirmed car command, if one is waiting (see CarControlRunner).
-            carControl.afterSample()
+            // A user-confirmed car command, if one is waiting (see CarControlRunner), then the
+            // low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner) when no
+            // command ran this cycle.
+            carControl.afterSample(swcanListener)
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout. A
             // guided car test turns the car off and on again, so it holds the session meanwhile, and

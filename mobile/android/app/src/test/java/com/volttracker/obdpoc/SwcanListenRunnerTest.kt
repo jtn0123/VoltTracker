@@ -740,6 +740,35 @@ class SwcanListenRunnerTest {
     }
 
     @Test
+    fun aWaitingCarCommandHoldsOffAWindowAndCutsOneShort() {
+        var commandPending = false
+        val waiting = SwcanListenRunner(io, policy, carCommandPending = { commandPending }) { now }
+        waiting.probeAdapter()
+        now += policy.firstWindowDelayMs
+        io.liveCycles += 1
+        waiting.afterSample() // the startup window
+        io.stationary = true
+        waiting.requestBodyFocus(30_000L)
+        commandPending = true
+        io.liveCycles += 1
+        waiting.afterSample()
+        assertEquals("no window starts while a command waits", 1, io.count("STM"))
+
+        commandPending = false
+        // The command arrives as the first 5 s chunk of a parked 10 s focus window starts.
+        io.onMonitor = { commandPending = true }
+        io.liveCycles += 1
+        waiting.afterSample()
+        assertEquals("the window stops after its current chunk", listOf(policy.startupListenMs, 5_000L), io.listenMs)
+        val restore = SwcanListenRunner.RESTORE_COMMANDS + "ATDPN"
+        assertEquals("HS polling restored", restore, io.commands.takeLast(restore.size))
+        val window = io.event("swcan_window")!!
+        assertEquals("focus", window["mode"])
+        assertEquals("ok", window["outcome"])
+        assertEquals(0, io.reinitCount)
+    }
+
+    @Test
     fun aFocusLeaseIsCappedAndAZeroOneEndsIt() {
         readyStn()
         cycle() // the startup window

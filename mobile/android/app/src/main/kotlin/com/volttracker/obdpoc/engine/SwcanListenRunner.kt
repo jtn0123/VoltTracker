@@ -23,7 +23,8 @@ import java.util.Locale
  * exactly as [ObdPollingEngine] set it up and checks the next poll cycle still gets live data.
  *
  * While the Car tab is on screen ([requestBodyFocus]) windows run back to back instead, with one HS
- * poll cycle between them, so a window moving or a door opening shows up within seconds.
+ * poll cycle between them, so a window moving or a door opening shows up within seconds. A car
+ * command waiting to run cuts a window short and holds off the next one.
  *
  * READ ONLY, by construction. Every command sent here is adapter configuration or monitoring:
  * - `STCMM 0` — monitor without acknowledging frames (the adapter stays electrically silent);
@@ -49,6 +50,12 @@ class SwcanListenRunner(
     private val policy: Policy = Policy(),
     /** The guided test's clock: one that never jumps, since that test measures intervals. */
     guidedClock: () -> Long = ::monotonicNowMs,
+    /**
+     * A confirmed car command is waiting for the poll loop ([CarControlRunner]). A window does not
+     * start meanwhile, and one under way stops after its current chunk, so the command runs on the
+     * next cycle while its live sample is still fresh enough for the gate.
+     */
+    private val carCommandPending: () -> Boolean = { false },
     /** Wall time: readings are stamped with it and aged against each live sample's `updatedAt`. */
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
@@ -389,7 +396,7 @@ class SwcanListenRunner(
 
     /**
      * Called by the poll loop after each broadcast sample. Verifies the previous window left HS
-     * polling working, then runs a window if one is due.
+     * polling working, then runs a window if one is due and no car command is waiting.
      */
     @Throws(IOException::class)
     fun afterSample() {
@@ -425,6 +432,8 @@ class SwcanListenRunner(
         // Focus runs a window after every poll cycle, but only once the startup window has run.
         val focusNext = isFocused() && windowCount > 0
         if (!focusNext && clock() < nextWindowAtMs) return
+        // A car command goes first; the window waits for a cycle that has none.
+        if (carCommandPending()) return
         runWindow()
     }
 
@@ -477,12 +486,13 @@ class SwcanListenRunner(
 
     /**
      * Monitors for [totalMs] in equal chunks no longer than [Policy.bodyTestChunkMs], stopping
-     * early if a chunk's stop prompt never comes (the adapter is then not ready for another).
+     * early if a chunk's stop prompt never comes (the adapter is then not ready for another) or a
+     * car command is waiting.
      */
     @Throws(IOException::class)
     private fun listen(totalMs: Long): Heard {
         val chunks = ((totalMs + policy.bodyTestChunkMs - 1) / policy.bodyTestChunkMs).coerceAtLeast(1L)
-        return listenInChunks(chunks.toInt(), totalMs / chunks) { true }
+        return listenInChunks(chunks.toInt(), totalMs / chunks) { !carCommandPending() }
     }
 
     /**
