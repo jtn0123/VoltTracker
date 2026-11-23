@@ -745,6 +745,39 @@ class PidPollingStateTest {
         assertFalse("an adapter error must not retire the PID as unsupported", state.isCommandDisabled("010D"))
     }
 
+    @Test
+    fun adapterVoltageAloneDoesNotRefreshTheLiveDataClock() {
+        var nowMs = 10_000L
+        state.setClockForTesting { nowMs }
+        state.reset()
+        nowMs += 5_000L
+        // Car asleep: the PID gets no answer, but the powered adapter still reports its own voltage.
+        engine.responses["010D"] = "NO DATA\r>"
+        engine.responses["ATRV"] = "12.4V\r>"
+
+        state.runScheduledPolls(specs("010D", "ATRV"), StringBuilder())
+
+        assertEquals("the adapter's voltage is not vehicle data", 5_000L, state.msSinceLastLiveData())
+        assertEquals("no cycle with a vehicle answer was counted", 0L, state.liveCycleCount())
+        assertEquals("the adapter voltage is still kept for display", "12.4V\r>", state.lastRaw("ATRV"))
+    }
+
+    @Test
+    fun adapterVoltageAloneDoesNotRetireASilentPid() {
+        var nowMs = 1_000L
+        state.setClockForTesting { nowMs }
+        engine.responses["010D"] = "NO DATA\r>"
+        engine.responses["ATRV"] = "12.4V\r>"
+
+        repeat(PidPollingState.MAX_CONSECUTIVE_NO_DATA) {
+            state.runScheduledPolls(specs("010D", "ATRV"), StringBuilder())
+            nowMs += 1_000L
+        }
+
+        assertFalse("a sleeping bus must not retire a PID just because ATRV answered", state.isCommandDisabled("010D"))
+        assertEquals(0, state.disabledCommandCount())
+    }
+
     // ---- helpers --------------------------------------------------------------------
 
     private companion object {

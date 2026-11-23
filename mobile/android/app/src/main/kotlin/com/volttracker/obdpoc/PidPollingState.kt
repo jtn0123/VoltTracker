@@ -62,15 +62,16 @@ class PidPollingState(
     // PIDs asked for out of turn ([pollSoon]): read on the next cycle, once, whatever their schedule.
     private val requestedCommands: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
 
-    // Wall-clock of the last cycle that returned at least one fresh PID value. The engine reads the
-    // age of this (see [msSinceLastLiveData]) to notice a fully asleep bus and end the session
-    // cleanly instead of polling a dead bus until Bluetooth eventually drops. @Volatile is cheap
-    // insurance: it is written and read on the poll thread today, but the engine could move the
-    // read off-thread without that being obviously unsafe.
+    // Wall-clock of the last cycle in which the vehicle answered at least one PID (an adapter-only
+    // reply such as ATRV does not count). The engine reads the age of this (see
+    // [msSinceLastLiveData]) to notice a fully asleep bus and end the session cleanly instead of
+    // polling a dead bus until Bluetooth eventually drops. @Volatile is cheap insurance: it is
+    // written and read on the poll thread today, but the engine could move the read off-thread
+    // without that being obviously unsafe.
     @Volatile private var lastLiveDataAtMs = 0L
 
-    // Cycles that returned at least one fresh value. Unlike [lastLiveDataAtMs] it cannot collide
-    // with a frozen test clock, so "did HS-CAN answer since X" is a plain counter comparison.
+    // Cycles in which the vehicle answered at least one PID. Unlike [lastLiveDataAtMs] it cannot
+    // collide with a frozen test clock, so "did HS-CAN answer since X" is a plain counter comparison.
     @Volatile private var liveCycleCount = 0L
     private var clock = Clock { System.currentTimeMillis() }
 
@@ -323,13 +324,17 @@ class PidPollingState(
      * fully silent cycle means the whole car is asleep, not that any single PID is unsupported, so no
      * PID is ever disabled during a bus-wide outage. [PidSchedule.isConditional] PIDs (charger etc.)
      * are exempt because they legitimately go NO-DATA outside their vehicle mode.
+     *
+     * An AT command (`ATRV`) is answered by the adapter itself, even with the car asleep, so its
+     * reply is kept for display but never counts as the bus being alive: otherwise the adapter's
+     * voltage would keep the live-data clock fresh and a parked session would never end.
      */
     private fun applyNoDataCache(outcomes: List<Pair<String, PollOutcome>>) {
         if (outcomes.isEmpty()) {
             return
         }
         val now = clock.nowMs()
-        val anyLive = outcomes.any { it.second == PollOutcome.LIVE }
+        val anyLive = outcomes.any { (command, outcome) -> outcome == PollOutcome.LIVE && !isAdapterCommand(command) }
         if (anyLive) {
             lastLiveDataAtMs = now
             liveCycleCount += 1
@@ -392,6 +397,9 @@ class PidPollingState(
     private fun reprobeDelayMsFor(command: String): Long =
         if (everLiveCommands.contains(command)) REPROBE_ANSWERED_PID_MS else REPROBE_SILENT_PID_MS
 
+    /** True for an ELM327 AT command, which the adapter answers without the vehicle bus. */
+    private fun isAdapterCommand(command: String): Boolean = command.startsWith("AT")
+
     private fun classifyOutcome(response: String): PollOutcome =
         when {
             ObdElmDecode.isNoDataResponse(response) -> PollOutcome.NO_DATA
@@ -407,10 +415,10 @@ class PidPollingState(
         ERROR,
     }
 
-    /** Monotonic count of poll cycles that returned at least one fresh PID value. */
+    /** Monotonic count of poll cycles in which the vehicle answered at least one PID. */
     fun liveCycleCount(): Long = liveCycleCount
 
-    /** Milliseconds since the most recent cycle that returned any fresh PID value. */
+    /** Milliseconds since the most recent cycle in which the vehicle answered any PID. */
     fun msSinceLastLiveData(): Long = maxOf(0L, clock.nowMs() - lastLiveDataAtMs)
 
     /** Count of PIDs the negative-PID cache currently has retired (logging + tests). */

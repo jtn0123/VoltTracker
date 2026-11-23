@@ -680,6 +680,40 @@ class ObdPollingEngineTest {
         assertFalse("the end was taken once", engine.guidedTest.takeSessionEnd())
     }
 
+    @Test
+    fun aParkedCarWhoseAdapterStillAnswersEndsTheSessionAsAsleep() {
+        // The car is parked and asleep: every PID goes unanswered, but the adapter stays powered
+        // from the OBD port and keeps answering ATRV with its own supply voltage.
+        fake.defaultResponse = ">"
+        fake.responses["0100"] = "41 00 00 00 00 00>"
+        fake.responses["ATRV"] = "12.4V\r>"
+        // Each poll-loop sleep moves a fake clock on, so minutes of polling take no real time. If
+        // the session never ends by itself, stop it well past the asleep-car limit.
+        val nowMs = AtomicLong(1_000_000L)
+        val safetyStopAtMs = nowMs.get() + ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS * 4
+        val sleeper =
+            ObdPollingEngine.LoopSleeper { millis ->
+                val keepGoing = nowMs.addAndGet(millis) < safetyStopAtMs
+                if (!keepGoing) service.running.set(false)
+                keepGoing
+            }
+        engine = TestObdPollingEngine(service, fake, sleeper)
+        engine.setConnectionForTest(fake)
+        val pidPolling =
+            ObdPollingEngine::class.java
+                .getDeclaredField("pidPolling")
+                .apply { isAccessible = true }
+                .get(engine) as PidPollingState
+        pidPolling.setClockForTesting { nowMs.get() }
+
+        openSession()
+        runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
+
+        assertTrue("ATRV kept answering while the car slept", fake.commandLog.count { it == "ATRV" } >= 2)
+        assertTrue("the session ends as an asleep car", latestObdLogText().contains("idle_no_data"))
+        assertTrue("it ended before the safety stop", nowMs.get() < safetyStopAtMs)
+    }
+
     /**
      * What the guided test is left with when its drive is cut after the car was heard switching
      * off ([GuidedCarTestTest.aDriveCutAfterTheCarWasHeardOffEndsAsTheLinkDrops] runs that path).
@@ -1233,7 +1267,8 @@ class ObdPollingEngineTest {
     private class TestObdPollingEngine(
         private val testService: EngineHost,
         val scriptedConnection: FakeElmConnection,
-    ) : ObdPollingEngine(testService, LoopSleeper { true }) {
+        sleeper: LoopSleeper = LoopSleeper { true },
+    ) : ObdPollingEngine(testService, sleeper) {
         val openCount = AtomicInteger()
 
         // Session ids are long on the recorder; use AtomicLong so the comparison stays
