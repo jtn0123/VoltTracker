@@ -27,6 +27,18 @@ jobs:
           python-version: "3.11"
       - name: Validate release config
         run: python .github/scripts/check_release_config.py
+      - name: Test release config checks
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
+      - name: Install the release lock
+        # Installs .github/requirements-release.txt exactly as the Release
+        # workflow's key-holding job does, so a lock that will not install on
+        # ubuntu-latest / Python 3.11 fails here instead of on main. It goes
+        # into a throwaway venv so nothing else in this job sees the packages.
+        run: |
+          python -m venv "${RUNNER_TEMP}/release-lock"
+          . "${RUNNER_TEMP}/release-lock/bin/activate"
+          pip install --only-binary ":all:" --require-hashes -r .github/requirements-release.txt
+          semantic-release --version
       - name: Predict release bump
         run: python .github/scripts/semantic_release_dry_run.py
       - name: Verify release-candidate evidence

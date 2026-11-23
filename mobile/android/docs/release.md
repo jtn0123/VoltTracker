@@ -63,7 +63,85 @@ cd mobile/android && ./gradlew --no-daemon verifyActiveApp
 ```
 
 The Python check keeps the semantic-release config, PR title lint types, release
-workflow guardrails, and `VERSION` source of truth aligned.
+workflow guardrails, and `VERSION` source of truth aligned. Its own tests run in
+the **Release dry run** workflow:
+
+```sh
+python -m unittest discover -s .github/scripts -p 'test_*.py'
+```
+
+## Release Deploy Key
+
+`release.yml` pushes the version-bump commit and tag to `main` with the write
+deploy key in the `RELEASE_PUSH_DEPLOY_KEY` secret. That key is the only bypass
+actor on the `main` ruleset, so it can push past every required check. The
+workflow keeps it away from third-party build tooling:
+
+- The `preflight` job runs the config check, the dashboard e2e `npm ci`, the
+  Playwright browser install and `scripts/release-preflight.sh` (Gradle
+  `verifyActiveApp`). It only reads the repo, checks out with
+  `persist-credentials: false`, and never sees the key.
+- The `release` job (`needs: preflight`) is the only job that checks out with
+  the key. It sets up Python only (no Node, Java or Gradle) and installs
+  python-semantic-release with `pip install --require-hashes` from
+  `.github/requirements-release.txt`, which pins every transitive package by
+  version and sha256 hash.
+
+`check_release_config.py` fails if:
+
+- the key is referenced anywhere but once, in the `release` job (a
+  workflow-level `env:` counts);
+- the `release` job uses any action other than `actions/checkout` and
+  `actions/setup-python`, has a step that is not on the script's list of known
+  step names, runs npm, Playwright, Gradle or the preflight script, runs any
+  `pip install` without `--require-hashes`, or drops `needs: preflight` or
+  `fetch-depth: 0`;
+- the `preflight` job has an `ssh-key:`, any write permission, or drops
+  `contents: read`, `persist-credentials: false`, `fetch-depth: 0` or the
+  preflight script;
+- the lock file is missing a hash or is out of step with
+  `.github/requirements-release.in`;
+- the **Release dry run** workflow stops installing the lock.
+
+Adding a step to the `release` job therefore means adding its name to
+`DEPLOY_KEY_JOB_STEPS` in the script, on purpose.
+
+The **Release dry run** workflow, which runs on every pull request to `main`,
+installs the lock into a throwaway virtualenv with the same
+`pip install --only-binary ":all:" --require-hashes` command and runs
+`semantic-release --version`. A lock that will not install on `ubuntu-latest` /
+Python 3.11, such as a Dependabot bump to a version with no wheel, fails on the
+pull request instead of in the key-holding job on `main`.
+
+To change the semantic-release version, edit `.github/requirements-release.in`
+and regenerate the lock from `.github/` with Python 3.11, the version the
+workflow sets up:
+
+```sh
+cd .github
+pip-compile --allow-unsafe --generate-hashes --strip-extras \
+  --output-file=requirements-release.txt requirements-release.in
+```
+
+Dependabot's weekly `pip` update for `/.github` does the same for new upstream
+releases.
+
+### Rotating the deploy key
+
+Earlier versions of `release.yml` kept this key on the runner while npm,
+Playwright, Gradle and an unpinned `pip install` ran, so rotate it once the
+split workflow has cut one good release. This is a manual step for the repo
+owner:
+
+1. Generate a new key pair locally, for example
+   `ssh-keygen -t ed25519 -N "" -C "release-bot push key" -f <scratch path>`.
+2. In the repo's **Settings → Deploy keys**, add the public key with
+   **Allow write access** enabled.
+3. Replace the `RELEASE_PUSH_DEPLOY_KEY` Actions secret with the new private
+   key.
+4. Make sure the `main` ruleset still lists **Deploy keys** as its bypass actor.
+5. Delete the old deploy key, then delete the local key files.
+6. Confirm the next bumpable merge to `main` pushes its version commit and tag.
 
 For release-candidate branches, run the local preflight before requesting final
 review:

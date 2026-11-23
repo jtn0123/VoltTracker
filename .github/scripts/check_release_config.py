@@ -111,6 +111,188 @@ def validate_release_workflow(workflow_text: str) -> None:
         raise ValueError("tagged release workflow must not publish unsigned release APKs")
 
 
+RELEASE_REQUIREMENTS = ".github/requirements-release.txt"
+RELEASE_PIP_INSTALL = f'pip install --only-binary ":all:" --require-hashes -r {RELEASE_REQUIREMENTS}'
+DEPLOY_KEY_SECRET = "RELEASE_PUSH_DEPLOY_KEY"
+# Anything that pulls in or runs third-party build tooling. None of it may run
+# in the job that holds the deploy key that can bypass main's ruleset.
+DEPLOY_KEY_JOB_FORBIDDEN = [
+    "release-preflight.sh",
+    "gradlew",
+    "npm ",
+    "npx ",
+    "playwright",
+    "actions/setup-node",
+    "actions/setup-java",
+]
+# The key-holding job may only use these actions, and every other step must be
+# one of these named steps. A new step there has to be added here on purpose.
+DEPLOY_KEY_JOB_ACTIONS = ("actions/checkout", "actions/setup-python")
+DEPLOY_KEY_JOB_STEPS = (
+    "Install python-semantic-release",
+    "Semantic Release — version & publish",
+    "Resolve released tag",
+    "Warn loudly if no release was cut",
+    "Strip build-only files from GitHub release",
+)
+PIP_INSTALL_RE = re.compile(r"\bpip[0-9.]*\s+install\b")
+WRITE_PERMISSION_RE = re.compile(r"(?m)^\s*[a-z-]+:\s*write\b")
+# A step's own keys sit this far in; anything deeper belongs to one of them.
+STEP_KEY_INDENT = " " * 8
+
+
+def strip_comment_lines(text: str) -> str:
+    """Drop full-line YAML comments so prose cannot satisfy or trip a check."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+
+
+def workflow_jobs(workflow_text: str) -> dict[str, str]:
+    """Split a workflow's top-level ``jobs:`` mapping into {job id: job text}.
+
+    Full-line comments are dropped so prose cannot satisfy or trip a check.
+    """
+    lines = strip_comment_lines(workflow_text).splitlines()
+    try:
+        start = lines.index("jobs:") + 1
+    except ValueError as exc:
+        raise ValueError("workflow has no top-level jobs: mapping") from exc
+    jobs: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in lines[start:]:
+        if line and not line[0].isspace():
+            break
+        job = re.match(r"^ {2}([A-Za-z0-9_-]+):\s*$", line)
+        if job:
+            current = jobs.setdefault(job.group(1), [])
+            continue
+        if current is not None:
+            current.append(line)
+    return {name: "\n".join(body) for name, body in jobs.items()}
+
+
+def job_steps(job_text: str) -> list[str]:
+    """Split a job's ``steps:`` list into one text block per step."""
+    _, found, steps_text = job_text.partition("\n    steps:\n")
+    if not found:
+        return []
+    # A step starts at its dash, whether the first key follows it or sits on the next line.
+    return [step for step in re.split(r"(?m)^ {6}-(?: |$)", steps_text) if step.strip()]
+
+
+def step_field(step: str, field: str) -> str | None:
+    """Value of one of a step's own keys, or None when the step has no such key.
+
+    Only the step's own keys count: its first line, and the lines indented
+    exactly as far. A ``name:`` or ``uses:`` deeper down (an ``env:`` entry, a
+    line of a script) cannot pass for the step's own.
+    """
+    lines = step.splitlines()
+    own = lines[:1] + [line[len(STEP_KEY_INDENT) :] for line in lines[1:] if line.startswith(STEP_KEY_INDENT)]
+    for line in own:
+        key, found, value = line.partition(":")
+        # YAML also reads `uses :` and `"uses":` as the key; leading spaces stay, they mean deeper.
+        if found and key.rstrip().strip("\"'") == field:
+            return value.strip()
+    return None
+
+
+def validate_deploy_key_job_steps(release: str) -> None:
+    steps = job_steps(release)
+    if not steps:
+        raise ValueError("release job holds the deploy key and has no readable steps")
+    for step in steps:
+        uses = step_field(step, "uses")
+        if uses is not None:
+            action = (uses.split() or [""])[0].split("@", 1)[0]
+            if action not in DEPLOY_KEY_JOB_ACTIONS:
+                raise ValueError(f"release job holds the deploy key and must not use {action!r}")
+            continue
+        name = step_field(step, "name")
+        if name not in DEPLOY_KEY_JOB_STEPS:
+            label = name or step.splitlines()[0].strip()
+            raise ValueError(f"release job holds the deploy key and has an unexpected step {label!r}")
+
+
+def validate_release_job_isolation(workflow_text: str) -> None:
+    jobs = workflow_jobs(workflow_text)
+    if strip_comment_lines(workflow_text).count(DEPLOY_KEY_SECRET) != 1:
+        raise ValueError(f"{DEPLOY_KEY_SECRET} must be referenced exactly once, in the release job's checkout")
+    key_jobs = [name for name, body in jobs.items() if DEPLOY_KEY_SECRET in body]
+    require_equal("jobs holding the release deploy key", key_jobs, ["release"])
+    validate_deploy_key_job(jobs["release"])
+    preflight = jobs.get("preflight")
+    if preflight is None:
+        raise ValueError("release workflow must have a preflight job")
+    validate_preflight_job(preflight)
+
+
+def validate_deploy_key_job(release: str) -> None:
+    for forbidden in DEPLOY_KEY_JOB_FORBIDDEN:
+        if forbidden in release:
+            raise ValueError(f"release job holds the deploy key and must not run {forbidden.strip()!r}")
+    for required in ("needs: preflight", "fetch-depth: 0"):
+        if required not in release:
+            raise ValueError(f"release job missing {required!r}")
+    if RELEASE_PIP_INSTALL not in release:
+        raise ValueError(f"release job must install semantic-release with {RELEASE_PIP_INSTALL!r}")
+    for line in release.splitlines():
+        if PIP_INSTALL_RE.search(line) and "--require-hashes" not in line:
+            raise ValueError("every pip install in the release job must use --require-hashes")
+    validate_deploy_key_job_steps(release)
+
+
+def validate_preflight_job(preflight: str) -> None:
+    for required in (
+        "./scripts/release-preflight.sh",
+        "fetch-depth: 0",
+        "persist-credentials: false",
+        "contents: read",
+    ):
+        if required not in preflight:
+            raise ValueError(f"preflight job missing {required!r}")
+    if "ssh-key:" in preflight:
+        raise ValueError("preflight job must not have 'ssh-key:'")
+    if "write-all" in preflight or WRITE_PERMISSION_RE.search(preflight):
+        raise ValueError("preflight job must not have any write permission")
+
+
+def validate_release_lock_install_on_pr(dry_run_workflow_text: str) -> None:
+    """PRs must install the lock the way the release job does, before it reaches main."""
+    if RELEASE_PIP_INSTALL not in strip_comment_lines(dry_run_workflow_text):
+        raise ValueError(f"release dry run must install the release lock with {RELEASE_PIP_INSTALL!r}")
+
+
+def validate_release_requirements(requirements_in: str, requirements_txt: str) -> None:
+    """The release requirements lock must pin every package by version and hash."""
+    pins = [line.strip() for line in requirements_in.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    if not pins:
+        raise ValueError("release requirements input lists no packages")
+    for pin in pins:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+==\S+", pin):
+            raise ValueError(f"release requirements input must pin an exact version: {pin!r}")
+    locked = locked_release_requirements(requirements_txt)
+    for pin in pins:
+        name, version = pin.split("==", 1)
+        if locked.get(name.lower()) != version:
+            raise ValueError(f"{RELEASE_REQUIREMENTS} does not lock {pin}; regenerate it with pip-compile")
+
+
+def locked_release_requirements(requirements_txt: str) -> dict[str, str]:
+    """Read the lock as {package: version}; every entry must carry a version and a hash."""
+    locked = {}
+    for entry in re.split(r"\n(?=[A-Za-z0-9])", requirements_txt):
+        first = entry.lstrip("\n").splitlines()[0] if entry.strip() else ""
+        if not first or first.startswith("#"):
+            continue
+        match = re.match(r"^([A-Za-z0-9_.-]+)==(\S+)", first)
+        if not match:
+            raise ValueError(f"release requirement not pinned with ==: {first!r}")
+        if "--hash=sha256:" not in entry:
+            raise ValueError(f"release requirement {match.group(1)!r} has no sha256 hash")
+        locked[match.group(1).lower()] = match.group(2)
+    return locked
+
+
 def validate_android_gradle_signing(build_gradle_text: str) -> None:
     required_snippets = [
         "debug {",
@@ -135,7 +317,14 @@ def main() -> int:
     config = semantic_release_config((ROOT / "pyproject.toml").read_bytes())
     validate_semantic_release_config(config)
     validate_pr_title_lint((ROOT / ".github/workflows/pr-title-lint.yml").read_text())
-    validate_release_workflow((ROOT / ".github/workflows/release.yml").read_text())
+    release_workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    validate_release_workflow(release_workflow)
+    validate_release_job_isolation(release_workflow)
+    validate_release_lock_install_on_pr((ROOT / ".github/workflows/release-dry-run.yml").read_text())
+    validate_release_requirements(
+        (ROOT / ".github/requirements-release.in").read_text(),
+        (ROOT / RELEASE_REQUIREMENTS).read_text(),
+    )
     validate_android_gradle_signing((ROOT / "mobile/android/app/build.gradle").read_text())
     validate_release_preflight((ROOT / "scripts/release-preflight.sh").read_text())
     if not (ROOT / "VERSION").read_text().strip():
