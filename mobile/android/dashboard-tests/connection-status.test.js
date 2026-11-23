@@ -162,6 +162,26 @@ describe('connection-status.ts — status popover', () => {
     expect(trip).not.toContain('0%');
   });
 
+  it('times the trip from the drive the service is counting, not the whole adapter session', async () => {
+    const VD = await loadWithSessions([]);
+    window.VoltTrackerNative.setStatus({ state: 'connected', detail: 'Streaming OBD data.', bluetoothReady: true });
+    VD.setAppState({
+      adapter: { name: 'OBDLink MX+', address: '...44:55', connected: true, remembered: true },
+      permissions: { bluetooth: true, bluetoothPermission: true, bluetoothEnabled: true },
+      // Logging for three hours (a charge, then a drive); the drive began two hours ago.
+      session: { state: 'connected', sampleCount: 1234, sessionMs: 3 * 3600e3 },
+      gps: { state: 'locked' },
+    });
+    VD.state.sessionDistanceM = 5000;
+    VD.state.telemetry.driveStartedAtMs = Date.now() - 2 * 3600e3;
+
+    badge().click();
+
+    const trip = document.getElementById('statusPopoverTrip').textContent;
+    expect(trip).toContain('2h 00m');
+    expect(trip).not.toContain('3h 00m');
+  });
+
   it('explains a missing Bluetooth permission and shows the last trip when idle', async () => {
     const VD = await loadWithSessions([
       { adapter: 'OBDLink MX+ 54242', startMs: 1_000_000, endMs: 4_600_000, outcome: 'success' },

@@ -28,6 +28,7 @@ import com.volttracker.obdpoc.FailureClass
 import com.volttracker.obdpoc.GuidedCarTestState
 import com.volttracker.obdpoc.GuidedTestStatus
 import com.volttracker.obdpoc.LiveDashboardSnapshot
+import com.volttracker.obdpoc.LiveDriveTotals
 import com.volttracker.obdpoc.OBDLog
 import com.volttracker.obdpoc.ObdSessionLog
 import com.volttracker.obdpoc.R
@@ -121,6 +122,9 @@ open class ObdService :
             ::maybeUpdateWidgetTelemetry,
             { ex -> Log.w(AppPrefs.LOG_TAG, "widget telemetry enqueue failed", ex) },
         )
+
+    // Running drive/charge totals for the live dashboards, reset with each adapter session.
+    private val liveDriveTotals = LiveDriveTotals()
 
     // The process-wide app-log mirror installed in onCreate. Held so onDestroy can detach it from
     // OBDLog and release the long-lived buffered-writer file handle (G1) instead of leaking it for
@@ -644,6 +648,7 @@ open class ObdService :
             acquireSessionWakeLock(request.mode)
         }
         sessionStartedAtMs = System.currentTimeMillis()
+        liveDriveTotals.reset()
         sessionAddress = request.address
         // Anchor for the connect→first-sample latency spans (debug builds only; see StartupTrace).
         StartupTrace.mark("${StartupTrace.OBD_CONNECT_REQUEST}:${request.mode}")
@@ -839,10 +844,13 @@ open class ObdService :
         recorder.persistTelemetry(payload)
         enqueueEventNotifications(payload)
         enqueueWidgetTelemetry(payload)
+        // The dashboards get a copy carrying the running drive/charge totals, kept here because
+        // only the service sees every sample; the persisted sample above stays as read.
+        val live = liveDriveTotals.publish(payload)
         // Record before broadcasting: the Activity deliberately stops receiving broadcasts while
         // backgrounded, but can pull this last value synchronously as soon as it resumes.
-        LiveDashboardSnapshot.recordTelemetry(payload)
-        broadcast(BROADCAST_TELEMETRY, payload)
+        LiveDashboardSnapshot.recordTelemetry(live)
+        broadcast(BROADCAST_TELEMETRY, live)
     }
 
     private fun enqueueEventNotifications(payload: JSONObject) {

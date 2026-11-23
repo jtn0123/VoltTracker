@@ -1111,10 +1111,11 @@ import { kph } from "./unit-types";
   }
 
   // The ONE drive the Drive tab's trip card describes. While samples stream it is the drive in
-  // progress (session distance/clock plus the running max-speed and net-energy totals
-  // telemetry.ts accumulates); otherwise the most recent stored trip — its rollup row when
-  // loaded, else its route. Every field on the card comes from this one object, so the card
-  // can no longer pair a lifetime total with the latest trip.
+  // progress (the distance, peak speed and net energy the service sends on each sample, timed
+  // from the drive's start; the session clock until a drive has started); otherwise the most
+  // recent stored trip — its rollup row when loaded, else its route. Every field on the card
+  // comes from this one object, so the card can no longer pair a lifetime total with the
+  // latest trip.
   type TripSummary = { live: boolean; atMs: number; meters: number; durationMs: number; maxKph: number; energyKwh: number };
 
   function newest<T>(rows: T[], startOf: (row: T) => number): T | null {
@@ -1131,11 +1132,14 @@ import { kph } from "./unit-types";
     if (liveSampleFresh()) {
       const session = (state.appState || {}).session || {};
       const startedAt = Number(state.liveRouteStartedAtMs || 0);
+      const driveStartedAt = Number(state.telemetry.driveStartedAtMs || 0);
       return {
         live: true,
         atMs: Date.now(),
         meters: Number(state.sessionDistanceM || 0),
-        durationMs: Number(state.telemetry.sessionMs || session.sessionMs || 0) || (startedAt > 0 ? Date.now() - startedAt : 0),
+        durationMs: driveStartedAt > 0
+          ? Math.max(0, Date.now() - driveStartedAt)
+          : Number(state.telemetry.sessionMs || session.sessionMs || 0) || (startedAt > 0 ? Date.now() - startedAt : 0),
         maxKph: state.sessionMaxSpeedKph,
         energyKwh: state.sessionEnergyKwh
       };

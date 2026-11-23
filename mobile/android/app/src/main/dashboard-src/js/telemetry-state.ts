@@ -28,12 +28,14 @@ export function initialTelemetryState(): VoltTelemetry {
 }
 
 /**
- * Running totals for the in-progress drive, accumulated sample by sample in
- * telemetry.ts#recordSampleHistory: the peak OBD speed and the net HV energy
- * (pack power integrated over time, drive minus regen — the live twin of a
- * stored trip row's maxSpeedKph / energyKwh). `sessionEnergyAtMs` is the
- * previous sample's clock, so the integral can size each step and skip gaps.
- * Reset alongside sessionDistanceM so every live-drive figure shares one span.
+ * Running totals for the in-progress drive: the peak OBD speed and the net HV
+ * energy (pack power integrated over time, drive minus regen — the live twin of
+ * a stored trip row's maxSpeedKph / energyKwh). Native samples carry the
+ * service's own (driveMaxSpeedKph / driveEnergyKwh), which telemetry.ts#
+ * recordSampleHistory copies in; a sample without them is folded there instead.
+ * `sessionEnergyAtMs` is the previous folded sample's clock, so the integral can
+ * size each step and skip gaps. Reset alongside sessionDistanceM so every
+ * live-drive figure shares one span.
  */
 export function initialSessionTotals() {
   return { sessionMaxSpeedKph: 0, sessionEnergyKwh: 0, sessionEnergyAtMs: 0 };

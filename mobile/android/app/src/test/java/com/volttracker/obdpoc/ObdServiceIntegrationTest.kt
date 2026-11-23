@@ -638,6 +638,41 @@ class ObdServiceIntegrationTest {
         assertTrue("an empty telemetry payload must not be broadcast", captured.telemetry.isEmpty())
     }
 
+    @Test
+    fun broadcastTelemetryCarriesTheServiceRunningDriveTotals() {
+        val controller = newController(null)
+        val service = controller.create().get()
+        val captured = captureBroadcasts()
+
+        // Three driving samples ~55.6 m apart, a second apart, at 18 kW.
+        for (i in 0..2) {
+            service.broadcastTelemetry(
+                JSONObject()
+                    .put("source", "obd")
+                    .put("updatedAt", 1_000L + i * 1_000L)
+                    .put("vehicleState", "driving_ev")
+                    .put("speedKph", 50 + i)
+                    .put("powerKw", 18.0)
+                    .put("latitude", 42.0 + i * 0.0005)
+                    .put("longitude", -83.0),
+            )
+        }
+        shadowOf(Looper.getMainLooper()).idle()
+
+        val telemetry = captured.lastTelemetry()
+        assertNotNull(telemetry)
+        assertEquals(2 * 55.6, telemetry!!.getDouble("driveDistanceM"), 1.0)
+        assertEquals(18.0 * 2 / 3600.0, telemetry.getDouble("driveEnergyKwh"), 1e-9)
+        assertEquals(52.0, telemetry.getDouble("driveMaxSpeedKph"), 0.0)
+        assertEquals(1_000L, telemetry.getLong("driveStartedAtMs"))
+        // The resume snapshot the dashboards pull on return carries the same totals.
+        assertEquals(
+            telemetry.getDouble("driveDistanceM"),
+            LiveDashboardSnapshot.latestTelemetry().getDouble("driveDistanceM"),
+            0.0,
+        )
+    }
+
     // ---- B6: foreground refusal must not leave an orphaned started service ----------
 
     @Test

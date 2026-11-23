@@ -1,23 +1,27 @@
 package com.volttracker.obdpoc.ui.live
 
+import com.volttracker.obdpoc.DriveTotals
+import com.volttracker.obdpoc.DriveTotalsFold
 import com.volttracker.obdpoc.ui.charge.SocPoint
 import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.drive.LastDrive
 import com.volttracker.obdpoc.ui.drive.usableKwh
 import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
-import com.volttracker.obdpoc.ui.units.haversineMeters
 
 /**
- * Running figures for the drive and charge in progress, folded from live samples the same way
- * the WebView does (`telemetry.ts` recordSampleHistory / accumulateSessionEnergy):
- *  - distance: haversine between GPS fixes, ignoring jitter (< 2 m) and fix jumps (≥ 250 m);
- *  - energy: pack power integrated between samples ≤ 10 s apart, never while plugged in;
- *  - charge: energy the charger adds, from the SOC the charge started at.
+ * Running figures for the drive and charge in progress. The distance, energy, peak speed, drive
+ * start and charge start come from the service, which keeps them over every sample
+ * ([com.volttracker.obdpoc.LiveDriveTotals]) and publishes them on each one: the screen misses the
+ * samples sent while it was paused, so a total folded here would lose that window. A sample that
+ * carries no published totals is folded here with the same [DriveTotalsFold].
+ * The energy a charge has added is worked out here, from the SOC it started at (see [chargeAddedKwh]).
  * A new drive (entering DRIVE from parked/charging) closes the previous one into [lastDrive].
  * Samples are applied once each: anything not newer than the last applied one (a resume
  * replay) is ignored, so backfill can't double-count.
  */
 internal class DriveSessionTracker {
+    private val fold = DriveTotalsFold()
+
     var distanceM = 0.0
         private set
     var energyKwh = 0.0
@@ -61,8 +65,6 @@ internal class DriveSessionTracker {
     private var chargePointSpacingMs = CHARGE_POINT_MS
 
     private var lastAtMs = 0L
-    private var lastLat = Double.NaN
-    private var lastLon = Double.NaN
     private var phase: DrivePhase? = null
     private var driveClosed = false
 
@@ -83,11 +85,11 @@ internal class DriveSessionTracker {
 
     /** Clears everything for a fresh adapter session. */
     fun reset() {
-        resetDrive()
-        chargeFromSoc = null
+        fold.reset()
+        adopt(DriveTotals())
+        driveClosed = false
         chargeIntegratedKwh = 0.0
         chargeLastSoc = null
-        chargeStartedAtMs = null
         chargePoints.clear()
         lastDrive = null
         lastAtMs = 0L
@@ -99,12 +101,10 @@ internal class DriveSessionTracker {
         if (sample.atMs <= 0 || sample.atMs <= lastAtMs) return
         val stepS = if (lastAtMs > 0) (sample.atMs - lastAtMs) / MS_PER_S else Double.NaN
         onPhase(sample)
-        sample.speedKph?.let { if (it > maxKph && sample.phase == DrivePhase.DRIVE) maxKph = it }
-        addDistance(sample)
+        val published = sample.published
+        if (published == null) fold.apply(sample.foldInput())
+        adopt(published ?: fold.totals())
         val contiguous = stepS > 0 && stepS <= MAX_STEP_S
-        if (contiguous && sample.phase == DrivePhase.DRIVE && (sample.chargerKw ?: 0.0) <= 0.0) {
-            sample.powerKw?.let { energyKwh += it * stepS / S_PER_HOUR }
-        }
         if (contiguous && sample.phase == DrivePhase.CHARGING) {
             sample.chargerKw?.takeIf { it > 0 }?.let { chargeIntegratedKwh += it * stepS / S_PER_HOUR }
         }
@@ -116,6 +116,16 @@ internal class DriveSessionTracker {
         lastAtMs = sample.atMs
     }
 
+    private fun adopt(totals: DriveTotals) {
+        distanceM = totals.distanceM
+        energyKwh = totals.energyKwh
+        maxKph = totals.maxKph
+        driveStartedAtMs = totals.driveStartedAtMs
+        chargeFromSoc = totals.chargeStartSoc
+        chargeStartedAtMs = totals.chargeStartedAtMs
+    }
+
+    /** Closes the finished drive and clears this screen's own charge figures on a phase change. */
     private fun onPhase(sample: Sample) {
         val previous = phase
         phase = sample.phase
@@ -123,15 +133,12 @@ internal class DriveSessionTracker {
         when (sample.phase) {
             DrivePhase.DRIVE -> {
                 closeDriveIfAny()
-                resetDrive()
-                driveStartedAtMs = sample.atMs
+                driveClosed = false
             }
             DrivePhase.CHARGING -> {
                 closeDriveIfAny()
-                chargeFromSoc = sample.soc
                 chargeIntegratedKwh = 0.0
                 chargeLastSoc = sample.soc
-                chargeStartedAtMs = sample.atMs
                 chargePoints.clear()
                 chargePointSpacingMs = CHARGE_POINT_MS
             }
@@ -163,27 +170,6 @@ internal class DriveSessionTracker {
         driveClosed = true
     }
 
-    private fun resetDrive() {
-        driveClosed = false
-        distanceM = 0.0
-        energyKwh = 0.0
-        maxKph = 0.0
-        driveStartedAtMs = 0L
-        lastLat = Double.NaN
-        lastLon = Double.NaN
-    }
-
-    private fun addDistance(sample: Sample) {
-        val lat = sample.lat ?: return
-        val lon = sample.lon ?: return
-        if (!lastLat.isNaN() && sample.phase == DrivePhase.DRIVE) {
-            val step = haversineMeters(lastLat, lastLon, lat, lon)
-            if (step >= MIN_STEP_M && step < MAX_STEP_M) distanceM += step
-        }
-        lastLat = lat
-        lastLon = lon
-    }
-
     /** The subset of a telemetry sample the tracker needs. */
     data class Sample(
         val atMs: Long,
@@ -195,11 +181,13 @@ internal class DriveSessionTracker {
         val sohPct: Double? = null,
         val lat: Double? = null,
         val lon: Double? = null,
-    )
+        /** The service's running totals, when the sample carries them. */
+        val published: DriveTotals? = null,
+    ) {
+        fun foldInput() = DriveTotalsFold.Input(atMs, phase, speedKph, powerKw, chargerKw, soc, lat, lon)
+    }
 
     private companion object {
-        const val MIN_STEP_M = 2.0
-        const val MAX_STEP_M = 250.0
         const val MAX_STEP_S = 10.0
         const val MS_PER_S = 1000.0
         const val S_PER_HOUR = 3600.0

@@ -1,5 +1,7 @@
 package com.volttracker.obdpoc.ui.live
 
+import com.volttracker.obdpoc.DrivePhaseRule
+import com.volttracker.obdpoc.DriveTotals
 import com.volttracker.obdpoc.VoltGear
 import com.volttracker.obdpoc.ui.ConnectionFailure
 import com.volttracker.obdpoc.ui.HistoryLoad
@@ -523,8 +525,7 @@ class LiveUiStateStore(
 
     /** Advances the phase and the running trip/charge figures by one sample (live or replayed). */
     private fun trackSession(t: JSONObject) {
-        val speedMph = optDouble(t, "speedKph")?.let { kmToMi(it).toInt() } ?: 0
-        trackedPhase = phaseOf(t, speedMph, trackedPhase)
+        trackedPhase = DrivePhaseRule.next(t, trackedPhase)
         session.apply(
             DriveSessionTracker.Sample(
                 atMs = t.optLong("updatedAt", 0L),
@@ -537,6 +538,7 @@ class LiveUiStateStore(
                 sohPct = optDouble(t, "sohPct"),
                 lat = optDouble(t, "latitude"),
                 lon = optDouble(t, "longitude"),
+                published = DriveTotals.fromJson(t),
             ),
         )
     }
@@ -694,28 +696,6 @@ class LiveUiStateStore(
             vehicleState.isNotBlank() -> false
             // Low or missing rpm with no classifier verdict keeps the prior mode rather than guessing.
             else -> currentMode == DriveMode.GAS
-        }
-    }
-
-    /**
-     * Charging only when the classifier confirms it from charger status. A positive power
-     * reading alone must not override ready/parked/driving or start a plug-in charge session;
-     * driving when it says so, or the car is moving / in a drive gear; parked in P or at rest.
-     */
-    private fun phaseOf(
-        t: JSONObject,
-        speedMph: Int,
-        current: DrivePhase,
-    ): DrivePhase {
-        val vehicleState = t.optString("vehicleState", "")
-        val gear = t.optString("prndlState", "")
-        return when {
-            vehicleState == "charging" -> DrivePhase.CHARGING
-            vehicleState == "driving_ev" || vehicleState == "driving_gas" -> DrivePhase.DRIVE
-            vehicleState == "parked" || gear == VoltGear.PARK -> DrivePhase.PARKED
-            speedMph > 0 || gear in DRIVE_GEARS -> DrivePhase.DRIVE
-            vehicleState == "ready" || vehicleState == "plugged" || current == DrivePhase.CHARGING -> DrivePhase.PARKED
-            else -> current
         }
     }
 
@@ -1021,7 +1001,6 @@ class LiveUiStateStore(
 
         /** SW-CAN broadcasts and cluster ranges older than this read as "not reported". */
         const val BROADCAST_STALE_MS = 120_000.0
-        val DRIVE_GEARS = setOf("D", "L", "R", "N")
         val META_KEYS =
             setOf(
                 "source",
@@ -1048,7 +1027,7 @@ class LiveUiStateStore(
                 "carControlLastOutcome",
                 "carControlLastDetail",
                 "carControlLastAtMs",
-            )
+            ) + DriveTotals.KEYS
 
         const val NO_ADAPTER_LABEL = "No adapter"
         const val NOT_CONNECTED_LABEL = "Not connected"

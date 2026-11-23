@@ -522,7 +522,11 @@ function tripRows(status: VoltStatus): StatusRow[] {
   const rows: StatusRow[] = [];
   const distanceM = Number(state.sessionDistanceM || 0);
   if (distanceM > 0) rows.push(["Distance", units.distanceText(metersToKm(meters(distanceM)))]);
-  const durationMs = Number(telemetry.sessionMs || session.sessionMs || 0);
+  // Timed from the drive's start, like the distance above; the session clock before any drive.
+  const driveStartedAt = Number(telemetry.driveStartedAtMs || 0);
+  const durationMs = driveStartedAt > 0
+    ? Math.max(0, Date.now() - driveStartedAt)
+    : Number(telemetry.sessionMs || session.sessionMs || 0);
   if (durationMs > 0) {
     rows.push(["Duration", formatDuration(durationMs)]);
   }

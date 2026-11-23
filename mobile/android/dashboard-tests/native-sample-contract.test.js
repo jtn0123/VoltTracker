@@ -36,6 +36,10 @@ const METADATA_KEYS = new Set([
   // state; blanking them between samples would erase the very history they report.
   'appForeground', 'foregroundServiceActive', 'backgroundSampleCount', 'sampleGapCount',
   'lastSampleGapMs', 'maxSampleGapMs',
+  // The service's running totals for the drive / charge in progress (LiveDriveTotals). They
+  // are on every live sample and only change when native folds a new one, so they persist.
+  'driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs',
+  'chargeStartSoc', 'chargeStartedAtMs',
 ]);
 
 function stripKotlinComments(text) {
@@ -95,6 +99,8 @@ function nativeSampleKeys() {
     ...sampleKeysIn(sliceFunction(read('Gen2Readings.kt'), 'fun appendTo(')),
     ...sampleKeysIn(sliceFunction(read('engine/ObdPollingEngine.kt'), 'override fun appendLocation(')),
     ...sampleKeysIn(sliceFunction(read('SessionHealthTracker.kt'), 'fun append(')),
+    // Running drive/charge totals ObdService adds to the copy it broadcasts (LiveDriveTotals).
+    ...sampleKeysIn(sliceFunction(read('LiveDriveTotals.kt'), 'fun writeTo(')),
     // SW-CAN broadcast values the engine appends to every live sample (ObdPollingEngine
     // appendSwcanReadings -> SwcanReadings.appendTo).
     ...sampleKeysIn(sliceFunction(read('SwcanReadings.kt'), 'fun appendTo(')),
@@ -129,6 +135,14 @@ describe('native -> dashboard live-sample contract', () => {
     expect(native.size).toBeGreaterThan(80);
     for (const anchor of ['speedKph', 'soc', 'outsideTempC', 'latitude', 'appForeground']) {
       expect(native.has(anchor), `expected ${anchor} among the extracted native keys`).toBe(true);
+    }
+  });
+
+  it('sends the running drive totals the dashboard reads instead of folding its own', () => {
+    // telemetry.ts applyServiceDriveTotals and the trip card read these by name; a rename on
+    // the Kotlin side would quietly drop the dashboard back to its own (gap-prone) fold.
+    for (const key of ['driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs']) {
+      expect(native.has(key), `expected ${key} among the extracted native keys`).toBe(true);
     }
   });
 

@@ -105,6 +105,34 @@ describe('telemetry.ts — backfillTelemetry resume catch-up', () => {
     expect(updateLivePosition).toHaveBeenLastCalledWith(34.052, -118.25);
   });
 
+  it('keeps the service drive totals whole after a pause longer than the replay ring', () => {
+    const VD = window.VoltDashboard;
+    // Native puts its running totals on every sample (LiveDriveTotals.kt). ~55.6 m and
+    // 0.005 kWh per one-second sample along a straight line north.
+    const driving = (i, peakKph) =>
+      sample(i * 1000, {
+        speedKph: 60,
+        powerKw: 18,
+        latitude: 34 + i * 0.0005,
+        longitude: -118.25,
+        driveDistanceM: i * 55.6,
+        driveEnergyKwh: i * 0.005,
+        driveMaxSpeedKph: peakKph,
+        driveStartedAtMs: T0,
+      });
+    for (let i = 0; i < 10; i += 1) VD.updateTelemetry(driving(i, 60));
+
+    // The screen is off for 990 samples; on resume the ring holds only the last 300, and the
+    // 120 km/h peak happened in the window it no longer covers.
+    const ring = [];
+    for (let i = 700; i < 1000; i += 1) ring.push(driving(i, 120));
+    VD.backfillTelemetry({ samples: ring });
+
+    expect(VD.state.sessionDistanceM).toBe(999 * 55.6);
+    expect(VD.state.sessionEnergyKwh).toBe(999 * 0.005);
+    expect(VD.state.sessionMaxSpeedKph).toBe(120);
+  });
+
   it('is isolated from demo mode: no-op while demo is active, demo-sourced samples dropped', () => {
     const VD = window.VoltDashboard;
     VD.state.demoActive = true;
