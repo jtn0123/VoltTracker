@@ -29,6 +29,13 @@ jobs:
     if: github.repository == 'jtn0123/VoltTracker'
     permissions:
       contents: read
+    # One preflight at a time, in push order. Without this, two pushes close
+    # together run their preflights side by side, and the later push can
+    # reach the release job first, leaving the earlier one to fail on a
+    # stale checkout.
+    concurrency:
+      group: release-preflight
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
