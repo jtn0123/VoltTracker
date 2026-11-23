@@ -714,6 +714,8 @@ class BackupController<A>(
                 activity.getString(R.string.restore_stage_missing_passphrase)
             DataBackup.RestoreStageStatus.DECRYPT_FAILED ->
                 activity.getString(R.string.restore_stage_decrypt_failed)
+            DataBackup.RestoreStageStatus.TOO_LARGE_FOR_MEMORY ->
+                activity.getString(R.string.restore_stage_too_large_for_memory)
             DataBackup.RestoreStageStatus.TOO_NEW ->
                 activity.getString(R.string.restore_stage_too_new)
             DataBackup.RestoreStageStatus.MIGRATION_FAILED ->

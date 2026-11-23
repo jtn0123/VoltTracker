@@ -48,7 +48,10 @@ empty map background.
 
 Encrypted backups require a passphrase of at least 8 characters. Restore performs
 schema, integrity, and foreign-key checks before merging data, so an incompatible
-or damaged file should fail before touching the live database. When restore fails,
+or damaged file should fail before touching the live database. An encrypted backup
+made by an older app version is decrypted in one piece, so a large one can fail with
+"not enough free memory" on a phone with little memory; close other apps and retry,
+or restore it on a phone with more memory. When restore fails,
 use the Settings status message and export a debug bundle if the cause is unclear.
 
 ## Useful artifacts

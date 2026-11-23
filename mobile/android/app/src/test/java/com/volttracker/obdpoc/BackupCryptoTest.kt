@@ -17,7 +17,8 @@ import java.security.SecureRandom
 /**
  * Direct unit coverage for [BackupCrypto] — the AES-256-GCM backup container. The end-to-end
  * [BackupRoundTripTest] exercises BackupCrypto only through [DataBackup] and only asserts the
- * wrong-passphrase path; this suite drives [BackupCrypto.encryptFile]/[BackupCrypto.decryptFile]
+ * wrong-passphrase path; this suite decrypts v3 containers minted by [writeLegacyV3Backup] (a
+ * legacy format the app no longer writes but still reads) through [BackupCrypto.decryptFile]
  * directly and pins the security-relevant failure branches that nothing else covers:
  *
  *  - a non-trivial binary payload round-trips byte-for-byte,
@@ -34,7 +35,7 @@ class BackupCryptoTest {
 
     private val passphrase = "correct horse battery staple"
 
-    // The v3 magic that encryptFile now writes: bytes "VTBKEN3\n". 8-byte magic, then 16-byte salt,
+    // The legacy v3 magic the app still reads: bytes "VTBKEN3\n". 8-byte magic, then 16-byte salt,
     // then 12-byte IV, then the 4-byte big-endian KDF iteration count, then GCM ciphertext (incl. the
     // 16-byte auth tag). v2 (no iter field) and v1 (no AAD) remain readable on decrypt.
     private fun magicWithVersion(version: Char): ByteArray =
@@ -51,7 +52,7 @@ class BackupCryptoTest {
 
     private val magicV3 = magicWithVersion('3')
 
-    // magic + salt + IV + 4-byte iteration field for the v3 container encryptFile writes.
+    // magic + salt + IV + 4-byte iteration field for the v3 container writeLegacyV3Backup writes.
     private val headerBytes = magicV3.size + 16 + 12 + 4
 
     private fun randomBytes(n: Int): ByteArray {
@@ -80,7 +81,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         // Sanity: the on-disk container is genuinely encrypted, not a copy of the plaintext.
         assertTrue("encrypted output should exist", encrypted.exists())
@@ -108,7 +109,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         // Flip a single bit of one ciphertext byte squarely in the middle of the file, well past
         // the header and well before the trailing auth tag.
@@ -153,7 +154,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         // Lop off the last 32 bytes — that takes out the whole 16-byte GCM tag plus a chunk of
         // ciphertext, so authentication cannot succeed.
@@ -198,7 +199,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         var threw = false
         try {
@@ -229,7 +230,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         val len = encrypted.length()
         val flipAt = headerBytes + (len - headerBytes) / 2
@@ -260,7 +261,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         try {
             BackupCrypto.decryptFile(encrypted, decrypted, "totally different passphrase", Long.MAX_VALUE)
@@ -279,7 +280,7 @@ class BackupCryptoTest {
     fun isEncryptedBackupDetectsContainerAndRejectsNonContainers() {
         val source = writeFile("plain.bin", randomBytes(1_024))
         val encrypted = tmp.newFile("encrypted.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         assertTrue("real encrypted container should be detected", BackupCrypto.isEncryptedBackup(encrypted))
 
@@ -305,22 +306,23 @@ class BackupCryptoTest {
     }
 
     /**
-     * Guard the encrypt header layout this suite reasons about (magic + salt + IV + iter field). If
-     * the on-disk format ever changes, the tamper/truncate offset math above would silently weaken,
-     * so anchor it. encryptFile writes the v3 container now (raised KDF cost, recorded count).
+     * Guard the v3 fixture layout this suite reasons about (magic + salt + IV + iter field). If the
+     * fixture ever drifted from the real v3 format, the tamper/truncate offset math above would
+     * silently weaken, so anchor it. The format the app writes today (v4) is pinned by
+     * [BackupCryptoSegmentedTest.writesTheV4HeaderWithCurrentKdfCostAndSegmentSize].
      */
     @Test
     fun encryptedContainerStartsWithV3MagicAndExpectedHeaderSize() {
         val source = writeFile("plain.bin", randomBytes(64))
         val encrypted = tmp.newFile("encrypted.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         val bytes = encrypted.readBytes()
         if (bytes.size < magicV3.size) {
             fail("encrypted container is smaller than the magic header")
         }
         assertArrayEquals(
-            "encryptFile must write the v3 magic header",
+            "the legacy v3 fixture must carry the v3 magic header",
             magicV3,
             bytes.copyOf(magicV3.size),
         )
@@ -338,9 +340,9 @@ class BackupCryptoTest {
     }
 
     /**
-     * v3 round-trip at the raised 600k cost: a payload encrypted by the current code (which writes
-     * v3 with the recorded count) decrypts back byte-for-byte. The container is recognized and is not
-     * a copy of the plaintext.
+     * v3 round-trip at the raised 600k cost: a payload in the v3 format (600k, recorded count),
+     * which releases before the segmented container wrote, decrypts back byte-for-byte. The
+     * container is recognized and is not a copy of the plaintext.
      */
     @Test
     fun v3ContainerRoundTripsAtRaisedIterationCount() {
@@ -349,7 +351,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
         assertTrue(BackupCrypto.isEncryptedBackup(encrypted))
         // Confirm it really is the v3 magic, i.e. the raised-cost path.
         assertArrayEquals(magicV3, encrypted.readBytes().copyOf(magicV3.size))
@@ -402,7 +404,7 @@ class BackupCryptoTest {
         val payload = randomBytes(512)
         val source = writeFile("plain.bin", payload)
         val encrypted = tmp.newFile("encrypted.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         // Overwrite the 4-byte big-endian iteration field (after magic+salt+IV) with a count just
         // ABOVE the 5,000,000 cap. Deliberately NOT a huge value like 0x7FFFFFFF: if the upper-bound
@@ -448,7 +450,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, " correct horse ")
+        writeLegacyV3Backup(source, encrypted, " correct horse ")
 
         val form =
             BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, " correct horse ", Long.MAX_VALUE)
@@ -469,7 +471,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, " correct horse ")
+        writeLegacyV3Backup(source, encrypted, " correct horse ")
 
         try {
             BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, "correct horse", Long.MAX_VALUE)
@@ -493,7 +495,7 @@ class BackupCryptoTest {
         val decrypted = tmp.newFile("decrypted.bin")
 
         // Simulate the old encrypt path: key derived from the TRIMMED passphrase.
-        BackupCrypto.encryptFile(source, encrypted, "correct horse")
+        writeLegacyV3Backup(source, encrypted, "correct horse")
 
         val form =
             BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, "  correct horse ", Long.MAX_VALUE)
@@ -510,7 +512,7 @@ class BackupCryptoTest {
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
 
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         try {
             BackupCrypto.decryptFileWithTrimFallback(encrypted, decrypted, " wrong passphrase ", Long.MAX_VALUE)
@@ -546,7 +548,7 @@ class BackupCryptoTest {
     fun headerSniffClassifiesContainerOverShortReadStream() {
         val source = writeFile("plain.bin", randomBytes(256))
         val encrypted = tmp.newFile("encrypted.vtdb")
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         encrypted.inputStream().use { input ->
             assertTrue(
@@ -563,7 +565,7 @@ class BackupCryptoTest {
         val source = writeFile("plain.bin", payload)
         val encrypted = tmp.newFile("encrypted.vtdb")
         val decrypted = tmp.newFile("decrypted.bin")
-        BackupCrypto.encryptFile(source, encrypted, passphrase)
+        writeLegacyV3Backup(source, encrypted, passphrase)
 
         encrypted.inputStream().use { input ->
             BackupCrypto.decryptStream(TrickleInputStream(input), decrypted, passphrase, Long.MAX_VALUE)

@@ -6,12 +6,10 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
-import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
 import java.security.SecureRandom
 import javax.crypto.Cipher
-import javax.crypto.CipherOutputStream
 import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.GCMParameterSpec
 import javax.crypto.spec.PBEKeySpec
@@ -19,6 +17,15 @@ import javax.crypto.spec.SecretKeySpec
 
 /** AES/GCM encrypted backup container used by [DataBackup]. */
 object BackupCrypto {
+    /**
+     * Thrown before decrypting (or encrypting) when the heap has too little room for the work,
+     * instead of letting the cipher run the app out of memory. [DataBackup] maps it to a readable
+     * status.
+     */
+    class InsufficientMemoryException(
+        message: String,
+    ) : IOException(message)
+
     private val ENCRYPTED_BACKUP_MAGIC =
         byteArrayOf(
             'V'.code.toByte(),
@@ -43,12 +50,19 @@ object BackupCrypto {
     // The count is authenticated alongside magic+salt+IV as GCM AAD so it can't be tampered down.
     private val ENCRYPTED_BACKUP_MAGIC_V3 =
         ENCRYPTED_BACKUP_MAGIC.copyOf().also { it[6] = '3'.code.toByte() }
+
+    // v4 keeps v3's magic/salt/iteration fields and KDF, replaces the 12-byte IV with an 8-byte
+    // nonce prefix, adds a 4-byte segment size, and seals the body as independent GCM segments
+    // (BackupSegmentStream) so memory stays at about one segment. v1-v3 were one GCM operation over
+    // the whole file, which Android's cipher can only verify by holding the whole file in memory.
+    private val ENCRYPTED_BACKUP_MAGIC_V4 =
+        ENCRYPTED_BACKUP_MAGIC.copyOf().also { it[6] = '4'.code.toByte() }
     private const val ENCRYPTION_SALT_BYTES = 16
     private const val ENCRYPTION_IV_BYTES = 12
     private const val ENCRYPTION_ITER_FIELD_BYTES = 4
     private const val ENCRYPTION_KEY_BITS = 256
 
-    // Iteration count for backups written from this version on (v3 header records it). Legacy v1/v2
+    // Iteration count for backups written from v3 on (the v3 and v4 headers record it). Legacy v1/v2
     // backups were written at LEGACY_PBKDF2_ITERATIONS and decrypt with that count.
     private const val ENCRYPTION_PBKDF2_ITERATIONS = 600_000
     private const val LEGACY_PBKDF2_ITERATIONS = 150_000
@@ -58,6 +72,25 @@ object BackupCrypto {
     private const val MIN_PBKDF2_ITERATIONS = 50_000
     private const val MAX_PBKDF2_ITERATIONS = 5_000_000
     private const val IO_BUFFER_BYTES = 8192
+
+    // A v1-v3 decrypt holds the whole ciphertext in the platform cipher's buffer, which grows by
+    // doubling, and then allocates the plaintext: about three times the file at its peak.
+    private const val LEGACY_WORKING_SET_MULTIPLIER = 3L
+    private const val UNKNOWN_CONTAINER_BYTES = -1L
+    private const val BYTES_PER_MIB = 1024L * 1024L
+
+    // Heap left over for the rest of the app (UI thread, other workers) while a v1-v3 decrypt holds
+    // its peak, so a file that only just fits is refused with a readable status instead of taking
+    // the whole heap and running another thread out of memory.
+    private const val LEGACY_HEAP_RESERVE_BYTES = 16L * BYTES_PER_MIB
+
+    /** Free heap the memory precheck compares against; replaceable so tests can simulate a full heap. */
+    @Volatile
+    internal var heapHeadroomBytes: () -> Long = ::runtimeHeapHeadroom
+
+    /** Heap a v1-v3 container of [containerBytes] needs to decrypt, including the app's reserve. */
+    internal fun legacyDecryptHeapBytes(containerBytes: Long): Long =
+        LEGACY_WORKING_SET_MULTIPLIER * containerBytes + LEGACY_HEAP_RESERVE_BYTES
 
     @JvmStatic
     fun isEncryptedBackup(file: File?): Boolean {
@@ -82,38 +115,47 @@ object BackupCrypto {
         return readExactly(input, header) && isMagic(header)
     }
 
+    /**
+     * Writes [source] to [dest] as a v4 container: the header, then the plaintext sealed in
+     * [segmentBytes] segments, so memory stays at about one segment however large the database is.
+     * On any failure [dest] is deleted, and a file cut short (a killed process) has no final
+     * segment, so it can never decrypt as a complete backup.
+     */
     @Throws(IOException::class, GeneralSecurityException::class)
-    fun encryptFile(
+    fun encryptFileSegmented(
         source: File,
         dest: File,
         passphrase: String,
+        segmentBytes: Int = BackupSegmentStream.DEFAULT_SEGMENT_BYTES,
     ) {
+        val segmentSize = BackupSegmentStream.encodeSegmentSize(segmentBytes)
+        requireHeapHeadroom(BackupSegmentStream.workingSetBytes(segmentBytes))
         val salt = ByteArray(ENCRYPTION_SALT_BYTES)
-        val iv = ByteArray(ENCRYPTION_IV_BYTES)
-        // GCM invariant: a (key, IV) pair must NEVER repeat — reuse leaks plaintext XOR and
-        // breaks authentication. The fresh SecureRandom IV per encryption is load-bearing; do not
-        // cache, reuse, or derive it deterministically. (The salt is also fresh, so even the same
-        // passphrase yields a different key each time.)
+        val noncePrefix = ByteArray(BackupSegmentStream.NONCE_PREFIX_BYTES)
+        // GCM invariant: a (key, nonce) pair must NEVER repeat — reuse leaks plaintext XOR and
+        // breaks authentication. The fresh SecureRandom salt (so a fresh key) and nonce prefix per
+        // encryption are load-bearing; do not cache, reuse, or derive them deterministically. Within
+        // a file each segment's nonce carries its own index, so no two segments share one.
         SecureRandom().apply {
             nextBytes(salt)
-            nextBytes(iv)
+            nextBytes(noncePrefix)
         }
         val iterations = ENCRYPTION_PBKDF2_ITERATIONS
-        val iterBytes = encodeIterations(iterations)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.ENCRYPT_MODE, deriveKey(passphrase, salt, iterations), GCMParameterSpec(128, iv))
-        cipher.updateAAD(ENCRYPTED_BACKUP_MAGIC_V3)
-        cipher.updateAAD(salt)
-        cipher.updateAAD(iv)
-        cipher.updateAAD(iterBytes)
-        FileInputStream(source).use { input ->
-            FileOutputStream(dest).use { fileOut ->
-                fileOut.write(ENCRYPTED_BACKUP_MAGIC_V3)
-                fileOut.write(salt)
-                fileOut.write(iv)
-                fileOut.write(iterBytes)
-                CipherOutputStream(fileOut, cipher).use { out -> copyStream(input, out) }
+        val header =
+            ENCRYPTED_BACKUP_MAGIC_V4 + salt + noncePrefix + encodeIterations(iterations) + segmentSize
+        val aead = GcmSegmentAead(deriveKey(passphrase, salt, iterations))
+        var succeeded = false
+        try {
+            FileInputStream(source).use { input ->
+                FileOutputStream(dest).use { out ->
+                    out.write(header)
+                    BackupSegmentStream.encrypt(input, out, header, noncePrefix, segmentBytes, aead)
+                    out.fd.sync()
+                }
             }
+            succeeded = true
+        } finally {
+            if (!succeeded) dest.deleteOrLog()
         }
     }
 
@@ -151,7 +193,13 @@ object BackupCrypto {
             if (trimmed == passphrase || trimmed.isEmpty()) {
                 throw ex
             }
-            decryptFile(source, dest, trimmed, maxPlaintextBytes)
+            // The first attempt already passed the memory precheck, and its cipher buffers are now
+            // garbage that still counts as used until the runtime collects it, so a second precheck
+            // would refuse a restore that fits. Skip it: the retry's own allocations let the runtime
+            // collect that garbage, exactly as the first attempt's would have.
+            FileInputStream(source).use { fileIn ->
+                decryptStream(fileIn, dest, trimmed, maxPlaintextBytes, UNKNOWN_CONTAINER_BYTES)
+            }
             return PassphraseForm.LEGACY_TRIMMED
         }
     }
@@ -163,7 +211,9 @@ object BackupCrypto {
         passphrase: String,
         maxPlaintextBytes: Long,
     ) {
-        FileInputStream(source).use { fileIn -> decryptStream(fileIn, dest, passphrase, maxPlaintextBytes) }
+        FileInputStream(source).use { fileIn ->
+            decryptStream(fileIn, dest, passphrase, maxPlaintextBytes, source.length())
+        }
     }
 
     /**
@@ -171,6 +221,9 @@ object BackupCrypto {
      * fixed-size header fields are read with [readExactly] — a single `read(buf)` filling the
      * whole buffer is not guaranteed by the [InputStream] contract (short reads without EOF are
      * legal), so treating `read(buf) != buf.size` as truncation could reject a valid backup.
+     *
+     * [containerBytes] is the encrypted file's size, used by the memory precheck for v1-v3
+     * containers; pass [UNKNOWN_CONTAINER_BYTES] when it isn't known to skip that precheck.
      */
     @Throws(IOException::class, GeneralSecurityException::class)
     internal fun decryptStream(
@@ -178,13 +231,18 @@ object BackupCrypto {
         dest: File,
         passphrase: String,
         maxPlaintextBytes: Long,
+        containerBytes: Long = UNKNOWN_CONTAINER_BYTES,
     ) {
         val magic = ByteArray(ENCRYPTED_BACKUP_MAGIC.size)
-        val salt = ByteArray(ENCRYPTION_SALT_BYTES)
-        val iv = ByteArray(ENCRYPTION_IV_BYTES)
         if (!readExactly(fileIn, magic) || !isMagic(magic)) {
             throw IOException("Not an encrypted Volt Tracker backup")
         }
+        if (magic.contentEquals(ENCRYPTED_BACKUP_MAGIC_V4)) {
+            decryptSegmentedStream(fileIn, magic, dest, passphrase, maxPlaintextBytes)
+            return
+        }
+        val salt = ByteArray(ENCRYPTION_SALT_BYTES)
+        val iv = ByteArray(ENCRYPTION_IV_BYTES)
         if (!readExactly(fileIn, salt) || !readExactly(fileIn, iv)) {
             throw IOException("Encrypted backup header is truncated")
         }
@@ -204,6 +262,11 @@ object BackupCrypto {
             } else {
                 LEGACY_PBKDF2_ITERATIONS
             }
+        // One GCM operation over the whole file: the platform cipher holds all of it until doFinal.
+        // Fail with a readable error before deriving the key rather than run out of memory.
+        if (containerBytes != UNKNOWN_CONTAINER_BYTES) {
+            requireHeapHeadroom(legacyDecryptHeapBytes(containerBytes))
+        }
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.DECRYPT_MODE, deriveKey(passphrase, salt, iterations), GCMParameterSpec(128, iv))
         // v2 and v3 authenticate the header as AAD (v3 additionally binds the iteration count so
@@ -221,11 +284,70 @@ object BackupCrypto {
         // return EOF rather than throwing), so a wrong passphrase / tampered container would
         // "succeed" and stream unauthenticated plaintext to disk — silently defeating GCM's
         // integrity guarantee and never firing DECRYPT_FAILED. writeAuthenticatedPlaintext
-        // streams the plaintext out (never buffering the whole restore in RAM) but verifies the
-        // trailing GCM tag via doFinal() and deletes dest on any failure, so no unauthenticated
-        // or partial plaintext ever survives; DataBackup maps the thrown exception to
-        // DECRYPT_FAILED.
+        // verifies the trailing GCM tag via doFinal() and deletes dest on any failure, so no
+        // unauthenticated or partial plaintext ever survives; DataBackup maps the thrown exception
+        // to DECRYPT_FAILED. This is NOT a bounded-memory stream: Android's GCM cipher returns
+        // nothing from update() and buffers the whole ciphertext until doFinal(), which is why
+        // the precheck above exists and why new backups are written as v4 segments.
         writeAuthenticatedPlaintext(cipher, fileIn, dest, maxPlaintextBytes)
+    }
+
+    /** Reads the rest of a v4 header after [magic] and opens its segments into [dest]. */
+    @Throws(IOException::class, GeneralSecurityException::class)
+    private fun decryptSegmentedStream(
+        fileIn: InputStream,
+        magic: ByteArray,
+        dest: File,
+        passphrase: String,
+        maxPlaintextBytes: Long,
+    ) {
+        val salt = ByteArray(ENCRYPTION_SALT_BYTES)
+        val noncePrefix = ByteArray(BackupSegmentStream.NONCE_PREFIX_BYTES)
+        val iterBytes = ByteArray(ENCRYPTION_ITER_FIELD_BYTES)
+        val segmentSize = ByteArray(BackupSegmentStream.SEGMENT_SIZE_FIELD_BYTES)
+        if (
+            !readExactly(fileIn, salt) ||
+            !readExactly(fileIn, noncePrefix) ||
+            !readExactly(fileIn, iterBytes) ||
+            !readExactly(fileIn, segmentSize)
+        ) {
+            throw IOException("Encrypted backup header is truncated")
+        }
+        val iterations = decodeIterations(iterBytes)
+        val segmentBytes = BackupSegmentStream.decodeSegmentSize(segmentSize)
+        requireHeapHeadroom(BackupSegmentStream.workingSetBytes(segmentBytes))
+        val header = magic + salt + noncePrefix + iterBytes + segmentSize
+        val aead = GcmSegmentAead(deriveKey(passphrase, salt, iterations))
+        var succeeded = false
+        try {
+            FileOutputStream(dest).use { out ->
+                BackupSegmentStream.decrypt(fileIn, out, header, noncePrefix, segmentBytes, aead, maxPlaintextBytes)
+                out.fd.sync()
+            }
+            succeeded = true
+        } finally {
+            if (!succeeded) dest.deleteOrLog()
+        }
+    }
+
+    /**
+     * Throws [InsufficientMemoryException] when [neededBytes] exceeds the free heap, so a backup
+     * too large for this phone fails with a readable status instead of an OutOfMemoryError.
+     */
+    @Throws(InsufficientMemoryException::class)
+    private fun requireHeapHeadroom(neededBytes: Long) {
+        val available = heapHeadroomBytes()
+        if (neededBytes > available) {
+            throw InsufficientMemoryException(
+                "Encrypted backup needs about ${neededBytes / BYTES_PER_MIB} MiB of free memory; " +
+                    "${available / BYTES_PER_MIB} MiB is available",
+            )
+        }
+    }
+
+    private fun runtimeHeapHeadroom(): Long {
+        val runtime = Runtime.getRuntime()
+        return runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory())
     }
 
     /**
@@ -250,11 +372,12 @@ object BackupCrypto {
     }
 
     /**
-     * Streams GCM plaintext from [source] to [dest] as it decrypts — the whole restore is never held
-     * in RAM — then verifies the trailing authentication tag with [Cipher.doFinal] before the output
-     * is trusted. On ANY failure (a bad tag from a wrong passphrase / tampered container, or an
-     * oversize stream) [dest] is deleted so no unauthenticated or partial plaintext is left for the
-     * caller. Output is capped at [maxPlaintextBytes].
+     * Decrypts a v1-v3 GCM body from [source] to [dest], verifying the trailing authentication tag
+     * with [Cipher.doFinal] before the output is trusted. Android's GCM cipher buffers every update()
+     * and releases the plaintext only from doFinal(), so the whole file is held in memory here (the
+     * caller's heap precheck guards that). On ANY failure (a bad tag from a wrong passphrase /
+     * tampered container, or an oversize stream) [dest] is deleted so no unauthenticated or partial
+     * plaintext is left for the caller. Output is capped at [maxPlaintextBytes].
      */
     @Throws(IOException::class, GeneralSecurityException::class)
     private fun writeAuthenticatedPlaintext(
@@ -324,34 +447,6 @@ object BackupCrypto {
     private fun isMagic(header: ByteArray): Boolean =
         header.contentEquals(ENCRYPTED_BACKUP_MAGIC) ||
             header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V2) ||
-            header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V3)
-
-    @Throws(IOException::class)
-    private fun copyStream(
-        input: InputStream,
-        out: OutputStream,
-    ) {
-        copyStream(input, out, Long.MAX_VALUE)
-    }
-
-    @Throws(IOException::class)
-    private fun copyStream(
-        input: InputStream,
-        out: OutputStream,
-        maxBytes: Long,
-    ) {
-        val buffer = ByteArray(IO_BUFFER_BYTES)
-        var total = 0L
-        while (true) {
-            val read = input.read(buffer)
-            if (read <= 0) {
-                break
-            }
-            total += read.toLong()
-            if (total > maxBytes) {
-                throw IOException("Restore file exceeds size limit")
-            }
-            out.write(buffer, 0, read)
-        }
-    }
+            header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V3) ||
+            header.contentEquals(ENCRYPTED_BACKUP_MAGIC_V4)
 }

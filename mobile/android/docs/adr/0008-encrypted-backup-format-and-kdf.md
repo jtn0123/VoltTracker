@@ -3,7 +3,8 @@
 - **Status:** Accepted (recorded 2026-06-16; documents the existing
   `BackupCrypto` container shipped across v1/v2/v3 and the PBKDF2 cost raise from
   report item E1). Closes the "encrypted-backup crypto/format has no ADR" gap
-  tracked at the end of ADR 0007 and as report item H3.
+  tracked at the end of ADR 0007 and as report item H3. Amended 2026-11-23 for
+  the segmented v4 container, which new backups now use.
 - **Deciders:** Project author.
 - **Supersedes:** —
 - **Superseded by:** —
@@ -44,20 +45,37 @@ is the app's existing model and out of scope here.
 
 ## Decision
 
-### Cipher: AES-256/GCM, streamed
+### Cipher: AES-256/GCM, in fixed-size segments
 
 - **`AES/GCM/NoPadding`, 256-bit key, 128-bit GCM tag.** GCM is authenticated
   encryption, so confidentiality and integrity come from one primitive — a
   tampered or truncated file fails the tag check on decrypt and is rejected
   rather than partially restored.
-- **Streamed both ways.** Encryption wraps the output in a `CipherOutputStream`
-  and decryption a `CipherInputStream`, copied through an 8 KB buffer, so a large
-  backup is never held in memory in full.
-- **The (key, IV) pair is never reused.** A fresh 16-byte salt and 12-byte IV are
-  drawn from `SecureRandom` on **every** encryption. GCM catastrophically leaks
-  plaintext XOR and loses authentication if an `(key, IV)` pair repeats; because
-  the salt is also fresh, even the same passphrase derives a different key each
-  time. This freshness is load-bearing and must never be cached or derived
+- **One GCM operation per 1 MiB segment (v4).** Android's platform GCM cipher
+  (Conscrypt) returns nothing from `update()` and buffers every byte until
+  `doFinal()`, so v1-v3, which ran one GCM operation over the whole file, held
+  the whole backup on the heap two to three times over and, on a typical 256 MB
+  app heap, ran the app out of memory once the database passed roughly 100 MB. v4 seals the plaintext in
+  segments, each with its own tag and its own `doFinal()`, and writes each one
+  out before reading the next, so memory stays at about one segment at any
+  backup size. This uses only the platform cipher; Tink's `StreamingAead` is the
+  off-the-shelf equivalent but would add a dependency.
+- **Segment nonce and AAD.** A segment's 12-byte nonce is the file's random
+  8-byte nonce prefix followed by the segment index as a big-endian uint32. Its
+  AAD is the whole 40-byte file header followed by one flag byte, `1` for the
+  final segment and `0` for every other. So a segment that is reordered,
+  duplicated or dropped is opened under the wrong nonce; a segment moved from
+  another file fails under that file's key, prefix and header; and a file cut at
+  a segment boundary, or extended past its final segment, fails because the
+  segment read as last was not sealed as last. The final segment is always
+  present (0 to 1 MiB of plaintext; an empty database is one empty segment).
+- **The (key, nonce) pair is never reused.** A fresh 16-byte salt and a fresh
+  nonce prefix (v4) or 12-byte IV (v1-v3) are drawn from `SecureRandom` on
+  **every** encryption, and within a v4 file each segment's index makes its
+  nonce unique. GCM catastrophically leaks plaintext XOR and loses
+  authentication if a `(key, nonce)` pair repeats; because the salt is also
+  fresh, even the same passphrase derives a different key each time. This
+  freshness is load-bearing and must never be cached or derived
   deterministically.
 
 ### Key derivation: PBKDF2-HMAC-SHA256, with the cost recorded in the file
@@ -80,7 +98,23 @@ is the app's existing model and out of scope here.
 
 ### On-disk container format
 
-A backup file is a plaintext header followed by the GCM ciphertext+tag:
+New backups are written as v4: a 40-byte plaintext header followed by the
+sealed segments.
+
+```
++--------------------------------------------------------------+
+| magic     8 bytes   "VTBKEN4\n"                               |  byte[6] = format version
+| salt     16 bytes   SecureRandom, PBKDF2 salt                 |
+| prefix    8 bytes   SecureRandom, segment nonce prefix        |
+| iters     4 bytes   big-endian PBKDF2 count                   |
+| segsize   4 bytes   big-endian plaintext bytes per segment    |  1 MiB; reader accepts 1 KiB-16 MiB
+| segments  …         each: ciphertext + 16-byte tag; the last  |
+|                     holds 0..segsize bytes of plaintext       |
++--------------------------------------------------------------+
+```
+
+v1-v3 files, still readable, are a plaintext header followed by one GCM
+ciphertext+tag over the whole database:
 
 ```
 +--------------------------------------------------------------+
@@ -92,26 +126,50 @@ A backup file is a plaintext header followed by the GCM ciphertext+tag:
 +--------------------------------------------------------------+
 ```
 
-- **Versioned magic.** The format version is the 7th magic byte (`1`/`2`/`3`), so
+- **Versioned magic.** The format version is the 7th magic byte (`1`-`4`), so
   the reader self-identifies the layout from the first 8 bytes. `isMagic`
-  accepts all three; `isEncryptedBackup` uses this to tell an encrypted backup
+  accepts all four; `isEncryptedBackup` uses this to tell an encrypted backup
   from a plaintext one.
-- **AAD per version.** v2 and v3 authenticate `magic ‖ salt ‖ iv` (v3 also the
+- **v4 keeps the v3 key derivation.** Same salt field, same recorded and
+  authenticated iteration count with the same bounds, same PBKDF2 call; only the
+  IV field becomes the nonce prefix and the segment size is added. A segment
+  size outside 1 KiB-16 MiB is rejected before any derivation, so a hostile
+  header cannot make the reader allocate an absurd buffer.
+- **AAD per version.** v4 authenticates the whole header plus the last-segment
+  flag in every segment. v2 and v3 authenticate `magic ‖ salt ‖ iv` (v3 also the
   iteration field) as GCM additional-authenticated-data, binding the header to
   the ciphertext. v1 predates AAD and wrote none, so decrypt skips AAD for the v1
   magic — that back-compat skip is the reason v1 files still open.
-- **Bounded restore.** Decrypt copies through `copyStream(..., maxPlaintextBytes)`
-  and throws if the plaintext exceeds the caller's cap, then `fd.sync()`s the
-  output so a restore is durably on disk before it is read back.
+- **Bounded restore.** Decrypt counts plaintext as it is written and throws if it
+  exceeds the caller's cap, then `fd.sync()`s the output so a restore is durably
+  on disk before it is read back. Each v4 segment is authenticated before its
+  plaintext is written; on any failure the partial output is deleted.
+- **Memory precheck.** Before work starts, `BackupCrypto` compares what it needs
+  with the free heap (`Runtime.maxMemory()` minus used) and throws
+  `InsufficientMemoryException` instead of running out of memory: about four
+  segments for v4, and three times the file size plus a 16 MiB reserve for the
+  rest of the app for a v1-v3 file, which can only be verified by holding it
+  whole. Uncollected garbage counts as used, so the trimmed-passphrase retry
+  does not run the v1-v3 check a second time: the first attempt's buffers are
+  still garbage then, and a second check would refuse a file that fits.
+  `DataBackup` maps that, and any
+  `OutOfMemoryError` from encrypt or decrypt, to a failed backup or the
+  `TOO_LARGE_FOR_MEMORY` restore status, so the app reports it instead of
+  crashing. A large older backup that this phone cannot open may still open on
+  a phone with more memory.
+- **No half-written file.** A failed or interrupted encryption deletes its
+  output, and a file cut short by a killed process has no final segment, so it
+  can never decrypt as a complete backup.
 
 ## Consequences
 
 - **Every previously-written backup still decrypts.** v1 (no AAD, 150k), v2 (AAD,
   150k), and v3 (AAD, count-in-header) all round-trip, because the reader keys off
-  the magic and the recorded count. This is the property that lets the KDF cost
+  the magic and the recorded count, as long as the phone has the heap for a
+  single-shot decrypt; v4 has no such limit. This is the property that lets the KDF cost
   keep rising without a migration or a flag day.
-- **Cost can be raised again by minting a v4-or-higher magic** (or simply writing
-  a larger count in the v3 field, which already self-describes) — the format was
+- **Cost can be raised again by minting a v5-or-higher magic** (or simply writing
+  a larger count in the v4 field, which already self-describes) — the format was
   designed for exactly this and the next raise needs no reader change as long as
   it stays inside the sanity bounds.
 - **Security rests on passphrase strength.** PBKDF2 only slows a guessing attack;
@@ -120,14 +178,17 @@ A backup file is a plaintext header followed by the GCM ciphertext+tag:
   cost, but this is the inherent limit of passphrase-based backup encryption.
 - **No key escrow / recovery.** A forgotten passphrase means an unrecoverable
   backup, by design — there is no server and no recovery key.
-- **GCM's IV-uniqueness requirement is a standing invariant** enforced by the
-  fresh-`SecureRandom`-per-encryption rule; the KDoc on `encryptFile` marks it as
-  load-bearing so a future refactor doesn't "optimize" it into reuse.
+- **GCM's nonce-uniqueness requirement is a standing invariant** enforced by the
+  fresh-`SecureRandom`-per-encryption rule and the per-segment index; the comment
+  in `encryptFileSegmented` marks it as load-bearing so a future refactor doesn't
+  "optimize" it into reuse.
 
 ## References
 
 - `app/src/main/kotlin/com/volttracker/obdpoc/BackupCrypto.kt` (container,
-  KDF, AAD, version fallback, restore cap)
+  KDF, AAD, version fallback, memory precheck, restore cap)
+- `app/src/main/kotlin/com/volttracker/obdpoc/BackupSegmentStream.kt` (v4
+  segment nonce, AAD and framing)
 - `app/src/main/kotlin/com/volttracker/obdpoc/DataBackup.kt` (caller: what is
   backed up and the restore flow)
 - `docs/privacy-data-handling.md` (user-facing data-handling + export notes)

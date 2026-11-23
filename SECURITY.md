@@ -48,12 +48,19 @@ protects the exported file with a passphrase. The crypto, sourced from
   iteration count is recorded in the file header so the backup stays decryptable
   if the cost is raised again. (Older backups derived at 150,000 iterations
   remain readable.)
-- **Per-file randomness:** a fresh `SecureRandom` salt and 12-byte GCM IV are
+- **Segments:** the database is encrypted in 1 MiB segments, each with its own
+  GCM tag, so a backup of any size needs only about one segment of memory.
+  (Older single-segment backups still restore when the phone has the memory.)
+- **Per-file randomness:** a fresh `SecureRandom` salt and nonce prefix are
   generated for every backup, so the same passphrase produces a different key and
-  ciphertext each time.
-- **Integrity:** the file header (format magic, salt, IV, and iteration count) is
-  authenticated as GCM additional authenticated data, so it cannot be tampered
-  with — including tampering the iteration count downward to weaken the KDF.
+  ciphertext each time; each segment's nonce adds its index.
+- **Integrity:** the file header (format magic, salt, nonce prefix, iteration
+  count and segment size) is authenticated as GCM additional authenticated data
+  in every segment, so it cannot be tampered with — including tampering the
+  iteration count downward to weaken the KDF. Each segment's index is part of
+  its nonce, so reordered, duplicated or dropped segments are rejected; a
+  last-segment flag in the same authenticated data rejects a file cut at a
+  segment boundary or extended past its end.
 
 What encrypted backup **does** protect: the confidentiality and integrity of an
 *exported backup file* at rest (e.g. sitting in cloud storage or on a PC),
