@@ -113,6 +113,7 @@ def validate_release_workflow(workflow_text: str) -> None:
 
 RELEASE_REQUIREMENTS = ".github/requirements-release.txt"
 RELEASE_PIP_INSTALL = f'pip install --only-binary ":all:" --require-hashes -r {RELEASE_REQUIREMENTS}'
+DEPLOY_KEY_SECRET = "RELEASE_PUSH_DEPLOY_KEY"
 # Anything that pulls in or runs third-party build tooling. None of it may run
 # in the job that holds the deploy key that can bypass main's ruleset.
 DEPLOY_KEY_JOB_FORBIDDEN = [
@@ -124,6 +125,23 @@ DEPLOY_KEY_JOB_FORBIDDEN = [
     "actions/setup-node",
     "actions/setup-java",
 ]
+# The key-holding job may only use these actions, and every other step must be
+# one of these named steps. A new step there has to be added here on purpose.
+DEPLOY_KEY_JOB_ACTIONS = ("actions/checkout", "actions/setup-python")
+DEPLOY_KEY_JOB_STEPS = (
+    "Install python-semantic-release",
+    "Semantic Release — version & publish",
+    "Resolve released tag",
+    "Warn loudly if no release was cut",
+    "Strip build-only files from GitHub release",
+)
+PIP_INSTALL_RE = re.compile(r"\bpip[0-9.]*\s+install\b")
+WRITE_PERMISSION_RE = re.compile(r"(?m)^\s*[a-z-]+:\s*write\b|write-all")
+
+
+def strip_comment_lines(text: str) -> str:
+    """Drop full-line YAML comments so prose cannot satisfy or trip a check."""
+    return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
 
 
 def workflow_jobs(workflow_text: str) -> dict[str, str]:
@@ -131,7 +149,7 @@ def workflow_jobs(workflow_text: str) -> dict[str, str]:
 
     Full-line comments are dropped so prose cannot satisfy or trip a check.
     """
-    lines = workflow_text.splitlines()
+    lines = strip_comment_lines(workflow_text).splitlines()
     try:
         start = lines.index("jobs:") + 1
     except ValueError as exc:
@@ -145,35 +163,74 @@ def workflow_jobs(workflow_text: str) -> dict[str, str]:
         if job:
             current = jobs.setdefault(job.group(1), [])
             continue
-        if current is not None and not line.lstrip().startswith("#"):
+        if current is not None:
             current.append(line)
     return {name: "\n".join(body) for name, body in jobs.items()}
 
 
+def job_steps(job_text: str) -> list[str]:
+    """Split a job's ``steps:`` list into one text block per step."""
+    _, found, steps_text = job_text.partition("\n    steps:\n")
+    if not found:
+        return []
+    return [step for step in re.split(r"(?m)^      - ", steps_text) if step.strip()]
+
+
+def validate_deploy_key_job_steps(release: str) -> None:
+    for step in job_steps(release):
+        uses = re.search(r"(?m)^(?:\s*)uses:\s*(\S+)", step)
+        if uses:
+            action = uses.group(1).split("@", 1)[0]
+            if action not in DEPLOY_KEY_JOB_ACTIONS:
+                raise ValueError(f"release job holds the deploy key and must not use {action!r}")
+            continue
+        name = re.search(r"(?m)^(?:\s*)name:\s*(.+?)\s*$", step)
+        if not name or name.group(1) not in DEPLOY_KEY_JOB_STEPS:
+            label = name.group(1) if name else step.splitlines()[0].strip()
+            raise ValueError(f"release job holds the deploy key and has an unexpected step {label!r}")
+
+
 def validate_release_job_isolation(workflow_text: str) -> None:
     jobs = workflow_jobs(workflow_text)
-    key_jobs = [name for name, body in jobs.items() if "RELEASE_PUSH_DEPLOY_KEY" in body]
+    if strip_comment_lines(workflow_text).count(DEPLOY_KEY_SECRET) != 1:
+        raise ValueError(f"{DEPLOY_KEY_SECRET} must be referenced exactly once, in the release job's checkout")
+    key_jobs = [name for name, body in jobs.items() if DEPLOY_KEY_SECRET in body]
     require_equal("jobs holding the release deploy key", key_jobs, ["release"])
     release = jobs["release"]
     for forbidden in DEPLOY_KEY_JOB_FORBIDDEN:
         if forbidden in release:
             raise ValueError(f"release job holds the deploy key and must not run {forbidden.strip()!r}")
-    if "needs: preflight" not in release:
-        raise ValueError("release job must wait for the preflight job (needs: preflight)")
+    for required in ("needs: preflight", "fetch-depth: 0"):
+        if required not in release:
+            raise ValueError(f"release job missing {required!r}")
     if RELEASE_PIP_INSTALL not in release:
         raise ValueError(f"release job must install semantic-release with {RELEASE_PIP_INSTALL!r}")
-    if re.search(r"pip install(?![^\n]*--require-hashes)", release):
-        raise ValueError("every pip install in the release job must use --require-hashes")
+    for line in release.splitlines():
+        if PIP_INSTALL_RE.search(line) and "--require-hashes" not in line:
+            raise ValueError("every pip install in the release job must use --require-hashes")
+    validate_deploy_key_job_steps(release)
 
     preflight = jobs.get("preflight")
     if preflight is None:
         raise ValueError("release workflow must have a preflight job")
-    for required in ("./scripts/release-preflight.sh", "fetch-depth: 0", "persist-credentials: false"):
+    for required in (
+        "./scripts/release-preflight.sh",
+        "fetch-depth: 0",
+        "persist-credentials: false",
+        "contents: read",
+    ):
         if required not in preflight:
             raise ValueError(f"preflight job missing {required!r}")
-    for forbidden in ("ssh-key:", "contents: write"):
-        if forbidden in preflight:
-            raise ValueError(f"preflight job must not have {forbidden!r}")
+    if "ssh-key:" in preflight:
+        raise ValueError("preflight job must not have 'ssh-key:'")
+    if WRITE_PERMISSION_RE.search(preflight):
+        raise ValueError("preflight job must not have any write permission")
+
+
+def validate_release_lock_install_on_pr(dry_run_workflow_text: str) -> None:
+    """PRs must install the lock the way the release job does, before it reaches main."""
+    if RELEASE_PIP_INSTALL not in strip_comment_lines(dry_run_workflow_text):
+        raise ValueError(f"release dry run must install the release lock with {RELEASE_PIP_INSTALL!r}")
 
 
 def validate_release_requirements(requirements_in: str, requirements_txt: str) -> None:
@@ -228,6 +285,7 @@ def main() -> int:
     release_workflow = (ROOT / ".github/workflows/release.yml").read_text()
     validate_release_workflow(release_workflow)
     validate_release_job_isolation(release_workflow)
+    validate_release_lock_install_on_pr((ROOT / ".github/workflows/release-dry-run.yml").read_text())
     validate_release_requirements(
         (ROOT / ".github/requirements-release.in").read_text(),
         (ROOT / RELEASE_REQUIREMENTS).read_text(),

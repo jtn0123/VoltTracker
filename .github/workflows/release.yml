@@ -76,6 +76,8 @@ jobs:
   # The only job that holds the release deploy key. It runs nothing but
   # git and python-semantic-release, installed from a hash-locked file, so no
   # unpinned or build-time code shares the runner with the key.
+  # .github/scripts/check_release_config.py allow-lists this job's actions and
+  # step names, so a new step here must be added there too.
   release:
     needs: preflight
     runs-on: ubuntu-latest

@@ -87,9 +87,31 @@ workflow keeps it away from third-party build tooling:
   `.github/requirements-release.txt`, which pins every transitive package by
   version and sha256 hash.
 
-`check_release_config.py` fails if the key appears in any other job, if the
-`release` job runs npm, Playwright, Gradle or the preflight script, or if the
-lock file is missing a hash or out of step with `.github/requirements-release.in`.
+`check_release_config.py` fails if:
+
+- the key is referenced anywhere but once, in the `release` job (a
+  workflow-level `env:` counts);
+- the `release` job uses any action other than `actions/checkout` and
+  `actions/setup-python`, has a step that is not on the script's list of known
+  step names, runs npm, Playwright, Gradle or the preflight script, runs any
+  `pip install` without `--require-hashes`, or drops `needs: preflight` or
+  `fetch-depth: 0`;
+- the `preflight` job has an `ssh-key:`, any write permission, or drops
+  `contents: read`, `persist-credentials: false`, `fetch-depth: 0` or the
+  preflight script;
+- the lock file is missing a hash or is out of step with
+  `.github/requirements-release.in`;
+- the **Release dry run** workflow stops installing the lock.
+
+Adding a step to the `release` job therefore means adding its name to
+`DEPLOY_KEY_JOB_STEPS` in the script, on purpose.
+
+The **Release dry run** workflow, which runs on every pull request to `main`,
+installs the lock into a throwaway virtualenv with the same
+`pip install --only-binary ":all:" --require-hashes` command and runs
+`semantic-release --version`. A lock that will not install on `ubuntu-latest` /
+Python 3.11, such as a Dependabot bump to a version with no wheel, fails on the
+pull request instead of in the key-holding job on `main`.
 
 To change the semantic-release version, edit `.github/requirements-release.in`
 and regenerate the lock from `.github/` with Python 3.11, the version the
