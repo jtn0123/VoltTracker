@@ -20,7 +20,8 @@ WORKFLOW = (ROOT / ".github/workflows/release.yml").read_text()
 REQUIREMENTS_IN = (ROOT / ".github/requirements-release.in").read_text()
 REQUIREMENTS_TXT = (ROOT / check.RELEASE_REQUIREMENTS).read_text()
 DRY_RUN_WORKFLOW = (ROOT / ".github/workflows/release-dry-run.yml").read_text()
-# Every file check.main() reads, relative to the repo root.
+# Every file check.main() reads, relative to the repo root. Both Android build
+# files are copied, so a release check on either one still finds its input here.
 MAIN_INPUTS = (
     "pyproject.toml",
     "VERSION",
@@ -29,6 +30,7 @@ MAIN_INPUTS = (
     ".github/workflows/release-dry-run.yml",
     ".github/requirements-release.in",
     check.RELEASE_REQUIREMENTS,
+    "mobile/android/build.gradle",
     "mobile/android/app/build.gradle",
     "scripts/release-preflight.sh",
 )
