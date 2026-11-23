@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -13,6 +14,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
@@ -111,6 +113,11 @@ class DiagnosticsHostDelegateTest {
         activity.cacheDirFailure = IllegalStateException("cache unavailable")
         try {
             delegate!!.shareDiagnosticsDigestFromBridge()
+
+            // The classic dashboard's tap returns at once: the bridge's own thread builds the
+            // digest, so only the "preparing" status has been published so far.
+            assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastDetail)
+            waitFor { activity.lastState == "blocked" }
         } finally {
             activity.cacheDirFailure = null
         }
@@ -151,6 +158,7 @@ class DiagnosticsHostDelegateTest {
      */
     class HarnessActivity : MainActivity() {
         var lastState: String? = null
+        var lastDetail: String? = null
         var lastStartedIntent: Intent? = null
         var startServiceCalls = 0
         var cacheDirFailure: RuntimeException? = null
@@ -179,10 +187,23 @@ class DiagnosticsHostDelegateTest {
             blocked: Boolean,
         ) {
             lastState = state
+            lastDetail = detail
         }
     }
 
     private companion object {
+        const val WAIT_MS = 5_000L
+        const val POLL_MS = 20L
+
+        /** Polls [done] (running main-thread posts between tries) until it holds or [WAIT_MS] passes. */
+        fun waitFor(done: () -> Boolean) {
+            val deadline = System.currentTimeMillis() + WAIT_MS
+            while (!done() && System.currentTimeMillis() < deadline) {
+                Thread.sleep(POLL_MS)
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+        }
+
         fun wipe(dir: File) {
             if (!dir.exists()) {
                 return

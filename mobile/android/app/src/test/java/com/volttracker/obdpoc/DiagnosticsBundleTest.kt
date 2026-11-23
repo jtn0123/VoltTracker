@@ -180,6 +180,21 @@ class DiagnosticsBundleTest {
     }
 
     @Test
+    fun tightBudgetKeepsTheNewestSessionAheadOfTheSummaryAndAppLog() {
+        // Full-size summary and app log would claim the whole budget if they were sized first.
+        writeSession(9_000L, "obd", "{\"ts\":1,\"note\":\"NEWEST-SESSION-BODY\"}\n")
+        File(sessionDir, "sessions-summary.jsonl").writeText("x".repeat(40_000) + "\n")
+        File(appLogDir, "app.log").writeText("y".repeat(40_000) + "\n")
+
+        val budget = 4_000
+        val digest = DiagnosticsBundle.build(filesDir, budget, NOW)
+
+        assertTrue("digest length ${digest.length} must stay within $budget", digest.length <= budget)
+        assertTrue("the newest session body is kept", digest.contains("NEWEST-SESSION-BODY"))
+        assertTrue(manifestByName(digest).getValue("session-9000-obd.jsonl").getBoolean("included"))
+    }
+
+    @Test
     fun manifestInclusionFlagsStayInLockstepWithEmittedBodies() {
         // Under budget pressure the MANIFEST's included flag must match exactly which session bodies are
         // embedded: no "included":true entry may be silently dropped from the output, and vice versa.
@@ -202,6 +217,51 @@ class DiagnosticsBundleTest {
         assertTrue("this budget should force at least one omission", omitted > 0)
         assertTrue("digest reports the omitted sessions", digest.contains("===== OMITTED ====="))
         assertTrue("digest stays within the advertised budget", digest.length <= 8_000)
+    }
+
+    @Test
+    fun monthsOfSessionLogsStillEmbedTheNewestBodyAndBothSectionsWithinBudget() {
+        // Session logs are never pruned. With hundreds of them and a full-size summary and app log,
+        // the newest session must still be embedded and the digest must stay within its budget.
+        for (i in 1 until SESSION_PILE) {
+            writeSession(1_000L * i, "obd", body(300, errorLines = 0))
+        }
+        val newestTs = 1_000L * SESSION_PILE
+        writeSession(
+            newestTs,
+            "obd",
+            "{\"ts\":1,\"type\":\"command\",\"note\":\"NEWEST-SESSION-BODY\"}\n" + body(300, 0),
+        )
+        File(sessionDir, "sessions-summary.jsonl").writeText("{\"outcome\":\"success\"}\n".repeat(2_000))
+        File(appLogDir, "app.log").writeText("2026-06-14T00:00:00.000 I VoltTracker: tick\n".repeat(2_000))
+
+        val budget = DiagnosticsBundle.DEFAULT_BUDGET_BYTES
+        val digest = DiagnosticsBundle.build(filesDir, budget, NOW)
+
+        assertTrue("digest length ${digest.length} must stay within $budget", digest.length <= budget)
+        assertTrue("newest session body is embedded", digest.contains("SESSION: session-$newestTs-obd.jsonl"))
+        assertTrue(digest.contains("NEWEST-SESSION-BODY"))
+        assertTrue("summary section survives", digest.contains("SESSION SUMMARY ROLLUP"))
+        assertTrue("app-log section survives", digest.contains("APP LOG TAIL"))
+    }
+
+    @Test
+    fun onlyTheNewestSessionsAreScannedAndListedOlderOnesAreCounted() {
+        // The oldest session logged errors, but it sits past the listed window, so it is neither read
+        // nor listed: the scan cost stays bounded however much history piles up.
+        writeSession(1_000L, "scan", body(300, errorLines = 2))
+        for (i in 2..SESSION_PILE) {
+            writeSession(1_000L * i, "obd", body(300, errorLines = 0))
+        }
+
+        val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
+        val manifest = manifestOf(digest)
+
+        assertEquals(DiagnosticsBundle.MAX_LISTED_SESSIONS, manifest.length())
+        assertEquals("session-${1_000L * SESSION_PILE}-obd.jsonl", manifest.getJSONObject(0).getString("name"))
+        assertFalse("an old session is not listed", digest.contains("session-1000-scan.jsonl"))
+        val older = SESSION_PILE - DiagnosticsBundle.MAX_LISTED_SESSIONS
+        assertTrue("older sessions are counted", digest.contains("older: $older older session log(s)"))
     }
 
     @Test
@@ -257,6 +317,9 @@ class DiagnosticsBundleTest {
 
     companion object {
         private const val NOW = 1_700_000_000_000L
+
+        // Enough session files that a per-file manifest reserve would once leave no room for any body.
+        private const val SESSION_PILE = 600
 
         private fun deleteRec(file: File?) {
             if (file == null || !file.exists()) return

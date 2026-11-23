@@ -29,6 +29,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import java.io.File
 import java.lang.reflect.Modifier
+import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * A1 — exercises the trivial branches of [TroubleshooterBridge] so the new code added by the
@@ -55,7 +57,9 @@ class TroubleshooterBridgeTest {
         resetFileProviderPathCache()
         SessionSummaryStore.resetForTests()
         ShadowAlertDialog.reset()
-        bridge = TroubleshooterBridge(activity)
+        // Run diagnostics builds inline so the share tests below stay deterministic; the
+        // off-UI-thread hand-off has its own tests with a queued executor.
+        bridge = TroubleshooterBridge(activity, Executor { it.run() })
     }
 
     @After
@@ -250,6 +254,79 @@ class TroubleshooterBridgeTest {
 
         assertEquals("blocked", activity.lastState)
         assertEquals("Could not build the diagnostics share.", activity.lastDetail)
+    }
+
+    @Test
+    fun diagnosticsShareBuildsOnTheExecutorAndShowsPreparingFirst() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+
+        assertEquals("the build is handed to the executor, not run on the caller", 1, queued.size)
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastDetail)
+        assertNull("no disclosure until the build finishes", ShadowAlertDialog.getLatestAlertDialog())
+
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNotNull("the disclosure follows the build", ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    @Test
+    fun diagnosticsShareIgnoresRepeatTapsWhileABuildIsRunning() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+        queuedBridge.shareDiagnostics()
+        queuedBridge.shareDiagnosticsDigest()
+
+        assertEquals("repeat taps must not queue more builds", 1, queued.size)
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastDetail)
+
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+        queuedBridge.shareDiagnosticsDigest()
+
+        assertEquals("a tap after the build finished starts a new one", 1, queued.size)
+    }
+
+    @Test
+    fun diagnosticsShareResultIsDroppedWhenTheActivityFinishesFirst() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnosticsDigest()
+        activity.finish()
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNull("no dialog over a finishing activity", ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    @Test
+    fun diagnosticsShareReportsFailureWhenTheExecutorRejectsTheBuild() {
+        val activity = controller!!.get()
+        var attempts = 0
+        val rejecting =
+            TroubleshooterBridge(
+                activity,
+                Executor {
+                    attempts += 1
+                    throw RejectedExecutionException("shut down")
+                },
+            )
+
+        rejecting.shareDiagnostics()
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not build the diagnostics share.", activity.lastDetail)
+        rejecting.shareDiagnostics()
+        assertEquals("a rejected build must not leave the share stuck as running", 2, attempts)
     }
 
     @Test

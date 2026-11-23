@@ -241,6 +241,22 @@ class ComposeDashboardToolsTest {
     }
 
     @Test
+    fun sendingDiagnosticsShowsPreparingThenTheDisclosureWithoutBlockingTheTap() {
+        ShadowAlertDialog.reset()
+        activity.runCommand(SettingsCommand.SendDiagnostics)
+
+        // The zip is built on the troubleshooter's own thread; the tap returns with only the
+        // "preparing" message, and the disclosure is posted back to the UI thread afterwards.
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), ShadowToast.getTextOfLatestToast())
+        assertNull("no disclosure before the build finishes", ShadowAlertDialog.getLatestAlertDialog())
+        waitFor { ShadowAlertDialog.getLatestAlertDialog() != null }
+        assertEquals(
+            activity.getString(R.string.dialog_diagnostics_title),
+            shadowOf(ShadowAlertDialog.getLatestAlertDialog()).title.toString(),
+        )
+    }
+
+    @Test
     fun exportingWithNoTripsSaysSo() {
         activity.runCommand(SettingsCommand.ExportTrips)
         val expected = activity.getString(R.string.status_all_trips_export_empty)

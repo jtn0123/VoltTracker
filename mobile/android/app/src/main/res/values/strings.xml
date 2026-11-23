@@ -124,6 +124,7 @@
     <string name="status_bt_settings_open_failed">Could not open Bluetooth settings. Open Android Settings &gt; Bluetooth manually.</string>
     <string name="status_no_diagnostics_yet">No diagnostics to share yet — connect once and try again.</string>
     <string name="status_diagnostics_build_failed">Could not build the diagnostics share.</string>
+    <string name="status_diagnostics_preparing">Preparing diagnostics…</string>
     <string name="dialog_diagnostics_title">Share Volt Tracker diagnostics</string>
     <string name="diagnostics_disclosure_message">This diagnostics bundle may include:\n• Recent redacted JSONL session logs and app logs\n• OBD commands, adapter state, and diagnostic events\n• Telemetry, diagnostic trouble codes, and redacted GPS fields\n\nBluetooth MAC addresses, VIN-like identifiers, and precise coordinate fields are redacted before sharing.</string>
     <string name="chooser_share_diagnostics">Share diagnostics</string>
