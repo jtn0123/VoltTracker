@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.Manifest
 import android.app.Notification
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -35,6 +36,7 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowPowerManager
+import java.io.File
 import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -746,26 +748,93 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
-    fun statusAndNotificationDoNotWaitForAStorageLockOnTheMainThread() {
+    fun statusAndNotificationDoNotWaitForTheRecorderLockOnTheMainThread() {
         val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val recorder = service.recorder
+        val publishWarning = recorder.onRecordingWarning
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        service.recorder.runAsync {
-            synchronized(service.ioLock) {
+        val parked = AtomicBoolean(false)
+        val releasedByTest = AtomicBoolean(false)
+        // openSession calls this hook while it holds the recorder lock, so parking here keeps that
+        // lock busy the way a slow session start (database row, system snapshot) does.
+        recorder.onRecordingWarning = { warning ->
+            if (parked.compareAndSet(false, true)) {
                 entered.countDown()
-                assertTrue(release.await(5, TimeUnit.SECONDS))
+                releasedByTest.set(release.await(ADAPTER_WINDOW_MS, TimeUnit.MILLISECONDS))
             }
+            publishWarning(warning)
         }
-        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val reopen = Thread { recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Garage ELM", 1L) }
+        reopen.start()
         try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
             val started = System.nanoTime()
-            service.broadcastStatus("connected", "Live", false)
-            service.updateNotification("Live")
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 500L)
-            assertEquals(1L, release.count)
+            service.broadcastStatus("connected", "Live queued", false)
+            service.updateNotification("Notice queued")
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+            assertTrue("main thread waited ${elapsedMs}ms for the recorder lock", elapsedMs < MAIN_THREAD_BUDGET_MS)
+            assertTrue("openSession had already left the recorder lock", reopen.isAlive)
         } finally {
             release.countDown()
+            reopen.join(ADAPTER_WINDOW_MS)
+            recorder.onRecordingWarning = publishWarning
         }
+        assertTrue("the parked session start ended on its own timeout", releasedByTest.get())
+
+        // The main thread queued both writes, so they land in the session opened after the lock freed.
+        val drained = CountDownLatch(1)
+        recorder.runAsync { drained.countDown() }
+        assertTrue(drained.await(5, TimeUnit.SECONDS))
+        val log = sessionLogText(service)
+        val sessionStart = log.indexOf("session_start")
+        assertTrue("the reopened session started", sessionStart >= 0)
+        assertTrue("the status line was queued, not dropped", log.indexOf("Live queued") > sessionStart)
+        assertTrue("the notification line was queued, not dropped", log.indexOf("Notice queued") > sessionStart)
+    }
+
+    @Test
+    fun carCommandRequestDoesNotWaitForAnAdapterWindowOnTheMainThread() {
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val request =
+            intentFor(ObdService.ACTION_CAR_CONTROL, null, null, null)
+                .putExtra(ObdService.EXTRA_CAR_COMMAND, CarCommand.LOCK.wireName)
+
+        assertReturnsWhileAdapterIsBusy(service) { service.onStartCommand(request, 0, 2) }
+
+        assertTrue("the refusal is still logged", sessionLogText(service).contains("\"car_control\""))
+    }
+
+    @Test
+    fun repeatConnectDoesNotWaitForAnAdapterWindowOnTheMainThread() {
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        service.broadcastStatus("connected", "Live", false)
+
+        assertReturnsWhileAdapterIsBusy(service) {
+            deliverStartCommand(
+                service,
+                intentFor(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM", null),
+                2,
+            )
+        }
+
+        assertTrue("the repeat is still logged", sessionLogText(service).contains("duplicate_connect_ignored"))
+    }
+
+    @Test
+    fun bluetoothBroadcastDoesNotWaitForAnAdapterWindowOnTheMainThread() {
+        val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val stateChanged =
+            Intent(BluetoothAdapter.ACTION_STATE_CHANGED)
+                .putExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.STATE_TURNING_OFF)
+                .putExtra(BluetoothAdapter.EXTRA_PREVIOUS_STATE, BluetoothAdapter.STATE_ON)
+
+        assertReturnsWhileAdapterIsBusy(service) {
+            RuntimeEnvironment.getApplication().sendBroadcast(stateChanged)
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+
+        assertTrue("the broadcast is still logged", sessionLogText(service).contains("bluetooth_state_changed"))
     }
 
     @Test
@@ -948,6 +1017,39 @@ class ObdServiceIntegrationTest {
         assertTrue(service.awaitSessionInitializationForTest(5_000L))
         shadowOf(Looper.getMainLooper()).idleIfPaused()
     }
+
+    /**
+     * Runs [mainThreadCall] while another thread holds the adapter IO lock, as the poll thread does
+     * for a whole command or SW-CAN listen window, and asserts it returns without waiting for it.
+     */
+    private fun assertReturnsWhileAdapterIsBusy(
+        service: ObdService,
+        mainThreadCall: () -> Unit,
+    ) {
+        val held = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        val window =
+            Thread {
+                synchronized(service.ioLock) {
+                    held.countDown()
+                    release.await(ADAPTER_WINDOW_MS, TimeUnit.MILLISECONDS)
+                }
+            }
+        window.start()
+        try {
+            assertTrue(held.await(5, TimeUnit.SECONDS))
+            val started = System.nanoTime()
+            mainThreadCall()
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+            assertTrue("main thread waited ${elapsedMs}ms for the adapter window", elapsedMs < MAIN_THREAD_BUDGET_MS)
+        } finally {
+            release.countDown()
+            window.join(ADAPTER_WINDOW_MS)
+        }
+    }
+
+    private fun sessionLogText(service: ObdService): String =
+        File(File(service.filesDir, "obd-logs"), service.recorder.logFileName()).readText()
 
     private fun newController(intent: Intent?): ServiceController<TestObdService> =
         newController(TestObdService::class.java, intent)
@@ -1165,5 +1267,9 @@ class ObdServiceIntegrationTest {
 
     private companion object {
         const val RESTART_SENTINEL_MS = 1L
+
+        // Shorter than a real SW-CAN listen window (about 10 s), but far past the main-thread budget.
+        const val ADAPTER_WINDOW_MS = 5_000L
+        const val MAIN_THREAD_BUDGET_MS = 1_000L
     }
 }

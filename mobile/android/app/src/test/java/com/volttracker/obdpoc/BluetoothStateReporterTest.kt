@@ -40,7 +40,7 @@ class BluetoothStateReporterTest {
         service = Robolectric.setupService(ObdService::class.java)
         logDir = File(System.getProperty("java.io.tmpdir"), "bt-reporter-${System.nanoTime()}")
         sessionLog = ObdSessionLog(logDir)
-        service.recorder = SessionRecorder(Any(), sessionLog, null)
+        service.recorder = SessionRecorder(sessionLog, null)
         service.recorder.openSession("obd", "AA:BB:CC:DD:EE:FF", "ELM327", System.currentTimeMillis())
     }
 

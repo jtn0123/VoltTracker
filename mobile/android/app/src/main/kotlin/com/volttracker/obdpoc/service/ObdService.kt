@@ -92,7 +92,6 @@ open class ObdService :
 
     override var recorder: SessionRecorder =
         SessionRecorder(
-            Any(),
             ObdSessionLog(
                 File(System.getProperty("java.io.tmpdir"), "volttracker-service-recorder-${System.nanoTime()}"),
             ),
@@ -287,7 +286,6 @@ open class ObdService :
         val summaryStore = SessionSummaryStore.getInstance(filesDir)
         recorder =
             SessionRecorder(
-                ioLock,
                 ObdSessionLog(File(filesDir, "obd-logs")),
                 localStore,
                 summaryStore,
@@ -1113,6 +1111,9 @@ open class ObdService :
         recorder.runAsync { applyAppVisibility(foreground) }
     }
 
+    // Runs on the recorder worker, never the main thread. The IO lock is not for the log write (the
+    // recorder has its own lock); it keeps the health-counter reads and the foreground check
+    // consistent with what the poll thread and closeSessionLog write under it.
     private fun applyAppVisibility(foreground: Boolean) {
         synchronized(ioLock) {
             recorder.logEvent(

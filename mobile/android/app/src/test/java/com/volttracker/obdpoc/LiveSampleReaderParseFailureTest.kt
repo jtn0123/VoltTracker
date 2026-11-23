@@ -46,7 +46,7 @@ class LiveSampleReaderParseFailureTest {
 
         logDir = File(System.getProperty("java.io.tmpdir"), "lsr-parse-${System.nanoTime()}")
         sessionLog = ObdSessionLog(logDir)
-        service.recorder = SessionRecorder(Any(), sessionLog, null)
+        service.recorder = SessionRecorder(sessionLog, null)
         service.recorder.openSession("obd", "AA:BB", "Test Adapter", service.sessionStartedAtMs)
 
         engine = ScriptedEngine(service)

@@ -47,7 +47,7 @@ class ServicePersistenceTeardownTest {
         runner.shutdown()
         sideEffects.shutdown()
         val logs = File(RuntimeEnvironment.getApplication().cacheDir, "teardown-${System.nanoTime()}")
-        val recorder = SessionRecorder(Any(), ObdSessionLog(logs), store)
+        val recorder = SessionRecorder(ObdSessionLog(logs), store)
         val teardown = ServicePersistenceTeardown(drainTimeoutMs = 10, forceTimeoutMs = 10)
         try {
             teardown.start(recorder, store, owner, listOf(runner, sideEffects))

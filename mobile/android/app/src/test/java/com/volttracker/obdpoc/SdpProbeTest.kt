@@ -114,7 +114,6 @@ class SdpProbeTest {
                 }
             recorder =
                 SessionRecorder(
-                    Any(),
                     ObdSessionLog(logDir),
                     null,
                 )
