@@ -8,7 +8,6 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
-import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -189,6 +188,24 @@ class RestoreApplyPipelineTest {
     }
 
     @Test
+    fun aFailedRestoreLeavesEarlierDamagedCopiesAndTheirNoticeAlone() {
+        val dbFile = activity.localStore!!.getDatabaseFile()
+        activity.localStore!!.close()
+        dbFile.writeText("older damaged history")
+        DatabaseCorruption.setAside(activity, dbFile, 1_000L)
+        dbFile.writeText("newer damaged history")
+        DatabaseCorruption.setAside(activity, dbFile, 2_000L)
+        activity.localStore = ObdLocalStore(activity)
+        val staged = File(activity.cacheDir, "not-a-database.db")
+        staged.writeBytes(ByteArray(8 * 1024) { 0x5A })
+
+        assertReplaceRollsBack(staged, expectedCopies = listOf("1000", "2000"), expectedNoticeAtMs = 2_000L)
+        val copies = DatabaseCorruption.setAsideCopies(dbFile)
+        assertEquals("older damaged history", copies.first().readText())
+        assertEquals("newer damaged history", copies.last().readText())
+    }
+
+    @Test
     fun aRestoredFileThatFailsItsQuickCheckRollsBackToTheOriginal() {
         val staged = File(activity.cacheDir, "damaged-pages.db")
         VoltTrackerDb(activity, "damaged-source.db").use { helper ->
@@ -213,8 +230,16 @@ class RestoreApplyPipelineTest {
         assertReplaceRollsBack(staged)
     }
 
-    /** Replace with [staged] must fail, leave the live session in place and leave no file behind. */
-    private fun assertReplaceRollsBack(staged: File) {
+    /**
+     * Replace with [staged] must fail, leave the live session in place and leave no file behind. A
+     * bad restore is neither kept as damaged history nor announced as a reset: the set-aside copies
+     * (by stamp) and the pending notice stay exactly as they were.
+     */
+    private fun assertReplaceRollsBack(
+        staged: File,
+        expectedCopies: List<String> = emptyList(),
+        expectedNoticeAtMs: Long? = null,
+    ) {
         val store = activity.localStore!!
         val id = store.startSession("obd", "CC:DD", "Live")
         store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
@@ -235,8 +260,16 @@ class RestoreApplyPipelineTest {
         assertFalse("safety copy is rolled back into place", File("${dbFile.path}.restore-backup").exists())
         assertFalse(File("${dbFile.path}.restore-new").exists())
         assertFalse("staged file must be consumed", staged.exists())
-        assertTrue("a bad restore is not kept as history", DatabaseCorruption.setAsideCopies(dbFile).isEmpty())
-        assertNull("nor announced as a history reset", DatabaseCorruption.pendingNoticeAtMs(activity))
+        assertEquals(
+            "a bad restore is not kept as history",
+            expectedCopies,
+            DatabaseCorruption.setAsideCopies(dbFile).map { it.name.substringAfterLast("-") },
+        )
+        assertEquals(
+            "nor announced as a history reset",
+            expectedNoticeAtMs,
+            DatabaseCorruption.pendingNoticeAtMs(activity),
+        )
     }
 
     @Test

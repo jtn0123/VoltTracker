@@ -38,7 +38,7 @@ class HistoryResetNoticeTest {
     @After
     fun tearDown() {
         while (ClassicDashboardPresence.isAlive()) ClassicDashboardPresence.onDestroyed()
-        DatabaseCorruption.setAsideCopies(liveFile).forEach { DatabaseCorruption.discard(context, it) }
+        DatabaseCorruption.discardAll(context, liveFile)
         context.deleteDatabase(VoltTrackerDb.DATABASE_NAME)
     }
 

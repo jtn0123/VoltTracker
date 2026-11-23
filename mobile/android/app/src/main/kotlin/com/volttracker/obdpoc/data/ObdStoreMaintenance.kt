@@ -35,6 +35,8 @@ class ObdStoreMaintenance(
             db.delete(VoltTrackerDb.TABLE_VEHICLES, null, null)
             db.delete(VoltTrackerDb.TABLE_ADAPTER_HISTORY, null, null)
         }
+        // Damaged copies kept after a corruption reset hold history too.
+        DatabaseCorruption.discardAll(context, getDatabaseFile())
     }
 
     fun getDatabaseFile(): File = context.getDatabasePath(VoltTrackerDb.DATABASE_NAME)
@@ -216,27 +218,7 @@ class ObdStoreMaintenance(
      * verification) and reports up to [maxProblems] problem rows. Never throws — any
      * failure to even run the check is reported as a non-ok result.
      */
-    override fun quickCheck(maxProblems: Int): IntegrityResult {
-        val bound = maxProblems.coerceAtLeast(1)
-        return try {
-            val problems = ArrayList<String>()
-            helper.writableDatabase.rawQuery("PRAGMA quick_check($bound)", null).use { cursor ->
-                while (cursor.moveToNext() && problems.size < bound) {
-                    val row = cursor.getString(0)
-                    if (!"ok".equals(row, ignoreCase = true)) {
-                        problems.add(row ?: "unknown integrity problem")
-                    }
-                }
-            }
-            IntegrityResult(problems.isEmpty(), problems)
-        } catch (ex: RuntimeException) {
-            Log.w(TAG, "quick_check could not run; treating database as suspect", ex)
-            IntegrityResult(
-                false,
-                listOf("quick_check failed: ${ex.javaClass.simpleName}: ${ex.message ?: "no detail"}"),
-            )
-        }
-    }
+    override fun quickCheck(maxProblems: Int): IntegrityResult = quickCheck(maxProblems) { helper.writableDatabase }
 
     /**
      * Reclaims disk space freed by row deletion. Databases created by Android's framework
@@ -331,6 +313,35 @@ class ObdStoreMaintenance(
             logFrames: Int,
             checkpointedFrames: Int,
         ): Boolean = logFrames <= 0 || checkpointedFrames >= logFrames
+
+        /**
+         * [ObdDbMaintenanceStore.quickCheck] on the database [open] returns, so a caller can check a
+         * file over a connection of its own. Never throws, including when [open] fails.
+         */
+        fun quickCheck(
+            maxProblems: Int,
+            open: () -> SQLiteDatabase,
+        ): IntegrityResult {
+            val bound = maxProblems.coerceAtLeast(1)
+            return try {
+                val problems = ArrayList<String>()
+                open().rawQuery("PRAGMA quick_check($bound)", null).use { cursor ->
+                    while (cursor.moveToNext() && problems.size < bound) {
+                        val row = cursor.getString(0)
+                        if (!"ok".equals(row, ignoreCase = true)) {
+                            problems.add(row ?: "unknown integrity problem")
+                        }
+                    }
+                }
+                IntegrityResult(problems.isEmpty(), problems)
+            } catch (ex: RuntimeException) {
+                Log.w(TAG, "quick_check could not run; treating database as suspect", ex)
+                IntegrityResult(
+                    false,
+                    listOf("quick_check failed: ${ex.javaClass.simpleName}: ${ex.message ?: "no detail"}"),
+                )
+            }
+        }
 
         /** Default retention for raw telemetry/location/event rows: 60 days. */
         const val DEFAULT_RAW_RETENTION_DAYS: Int = 60

@@ -1,10 +1,12 @@
 package com.volttracker.obdpoc
 
 import android.content.Context
+import android.database.DatabaseErrorHandler
+import android.database.sqlite.SQLiteDatabase
 import android.util.Log
-import com.volttracker.obdpoc.data.DatabaseCorruption
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.ObdStoreMaintenance
 import java.io.File
 import java.io.IOException
 
@@ -140,21 +142,34 @@ class RestoreApplyPipeline<A>(
     }
 
     /**
-     * Opens the swapped-in file and quick-checks it before the safety copy may go: constructing
-     * [ObdLocalStore] alone never opens the file. A file SQLite rejects outright is set aside by the
-     * live database's corruption handler and replaced with an empty one that would pass the check,
-     * so a new set-aside copy also counts as a failure. That copy is the bad restore, not history,
-     * so it is discarded along with its owner notice. Throws to trigger the rollback.
+     * Opens and quick-checks the swapped-in file before the safety copy may go: constructing
+     * [ObdLocalStore] alone never opens the file. The check runs on a connection of its own whose
+     * corruption handler does nothing, so a file SQLite rejects never reaches the live database's
+     * handler, which would set it aside as damaged history and tell the owner their history was
+     * reset. The store then opens its writable database (running any migration) inside the same
+     * rollback window. Throws to trigger the rollback.
      */
     private fun openRestoredStore(dbFile: File): ObdLocalStore {
-        val setAsideBefore = DatabaseCorruption.setAsideCopies(dbFile).toSet()
+        var detached: SQLiteDatabase? = null
+        val integrity =
+            try {
+                ObdStoreMaintenance.quickCheck(ObdStoreMaintenance.MAX_QUICK_CHECK_PROBLEMS) {
+                    // Leaves the file alone: the rollback below puts the original back over it.
+                    val keepFile = DatabaseErrorHandler { _ -> }
+                    SQLiteDatabase
+                        .openDatabase(dbFile.path, null, DETACHED_OPEN_FLAGS, keepFile)
+                        .also { detached = it }
+                }
+            } finally {
+                detached?.close()
+            }
+        check(integrity.ok) { "restored database failed its quick check: ${integrity.problems}" }
         val store = ObdLocalStore(activity)
-        val check = store.dbMaintenance.quickCheck()
-        val setAside = DatabaseCorruption.setAsideCopies(dbFile).filterNot { it in setAsideBefore }
-        if (check.ok && setAside.isEmpty()) return store
-        store.close()
-        setAside.forEach { DatabaseCorruption.discard(activity, it) }
-        throw IllegalStateException("restored database failed its first open: ${check.problems}")
+        if (!store.checkpoint()) {
+            store.close()
+            throw IllegalStateException("restored database did not open")
+        }
+        return store
     }
 
     /** Checkpoints and closes the live store so its file can be swapped; false aborts the replace. */
@@ -223,6 +238,8 @@ class RestoreApplyPipeline<A>(
     companion object {
         private const val OPERATION_RESTORE = "restore"
         private const val RESTORE_STOP_TIMEOUT_MS = 30_000L
+        private const val DETACHED_OPEN_FLAGS =
+            SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING
 
         internal fun shouldDeleteRestoreSafetyCopy(rollbackFailed: Boolean): Boolean = !rollbackFailed
 

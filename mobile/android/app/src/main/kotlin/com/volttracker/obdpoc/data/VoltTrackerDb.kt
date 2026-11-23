@@ -27,6 +27,7 @@ class VoltTrackerDb : SQLiteOpenHelper {
     }
 
     override fun onConfigure(db: SQLiteDatabase) {
+        if (databaseName == DATABASE_NAME) DatabaseCorruption.onOpened(db)
         super.onConfigure(db)
         db.setForeignKeyConstraintsEnabled(true)
     }

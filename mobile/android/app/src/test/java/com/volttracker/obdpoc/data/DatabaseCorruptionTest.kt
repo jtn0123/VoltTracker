@@ -1,6 +1,8 @@
 package com.volttracker.obdpoc.data
 
 import android.content.ContentValues
+import android.database.sqlite.SQLiteDatabase
+import android.database.sqlite.SQLiteDatabaseCorruptException
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
@@ -8,6 +10,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -17,7 +20,10 @@ import org.robolectric.annotation.Config
 import java.io.File
 import java.io.RandomAccessFile
 
-/** A damaged live database is renamed aside (never deleted), bounded to a few copies, and announced. */
+/**
+ * A damaged live database is renamed aside (never deleted) once per damaged file, bounded to a few
+ * copies that favour the one holding history, announced, and removed by "Clear data".
+ */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
 class DatabaseCorruptionTest {
@@ -31,7 +37,7 @@ class DatabaseCorruptionTest {
 
     @After
     fun tearDown() {
-        DatabaseCorruption.setAsideCopies(liveFile).forEach { DatabaseCorruption.discard(context, it) }
+        DatabaseCorruption.discardAll(context, liveFile)
         context.deleteDatabase(VoltTrackerDb.DATABASE_NAME)
         context.deleteDatabase(WORKING_NAME)
     }
@@ -81,18 +87,139 @@ class DatabaseCorruptionTest {
     }
 
     @Test
-    fun discardingTheAnnouncedCopyWithdrawsTheNotice() {
-        writeFamily(liveFile, "older")
-        val older = DatabaseCorruption.setAside(context, liveFile, 1_000L)!!
-        writeFamily(liveFile, "newer")
-        val newer = DatabaseCorruption.setAside(context, liveFile, 2_000L)!!
+    fun corruptionOnAnOpenConnectionSetsTheFileAsideWithItsWal() {
+        seedManySessions()
+        damageMiddlePages(liveFile)
 
-        DatabaseCorruption.discard(context, older)
-        assertEquals("another copy's notice stays", 2_000L, DatabaseCorruption.pendingNoticeAtMs(context))
+        VoltTrackerDb(context).use { helper ->
+            // A write that stays in the WAL, in a table whose pages are intact.
+            insertAdapter(helper, "wal-only")
 
-        DatabaseCorruption.discard(context, newer)
-        assertNull(DatabaseCorruption.pendingNoticeAtMs(context))
+            assertCorrupt { scanSessions(helper) }
+
+            val copies = DatabaseCorruption.setAsideCopies(liveFile)
+            assertEquals("the damaged file must be kept, not deleted", 1, copies.size)
+            assertNotNull("the owner must be told", DatabaseCorruption.pendingNoticeAtMs(context))
+            assertFalse("nothing is left at the live path", liveFile.exists())
+            assertEquals("the kept copy still holds the WAL write", listOf("wal-only"), adapterKeys(copies.single()))
+
+            assertEquals("the same helper carries on with a new empty database", 0, countSessions(helper))
+            assertTrue(liveFile.exists())
+        }
+    }
+
+    @Test
+    fun aSecondHelperOnTheMovedFileDoesNotMoveTheNewDatabase() {
+        seedManySessions()
+        val damaged = damageMiddlePages(liveFile)
+        val first = VoltTrackerDb(context)
+        val second = VoltTrackerDb(context)
+        try {
+            // Both open the damaged file before either finds the damage.
+            assertTrue(first.writableDatabase.isOpen)
+            assertTrue(second.writableDatabase.isOpen)
+
+            assertCorrupt { scanSessions(first) }
+            assertEquals("the first helper starts a new empty database", 0, countSessions(first))
+            assertCorrupt { scanSessions(second) }
+
+            val copies = DatabaseCorruption.setAsideCopies(liveFile)
+            assertEquals("one damaged file, one copy", 1, copies.size)
+            assertArrayEquals("the copy is the damaged history", damaged, copies.single().readBytes())
+            assertTrue("the new database stays at the live path", liveFile.exists())
+        } finally {
+            first.close()
+            second.close()
+        }
+    }
+
+    @Test
+    fun theLargestCopyOutlastsNewerSmallerOnes() {
+        writeFamily(liveFile, "history".repeat(1_000))
+        DatabaseCorruption.setAside(context, liveFile, 1_000L)
+        writeFamily(liveFile, "small")
+        DatabaseCorruption.setAside(context, liveFile, 2_000L)
+        writeFamily(liveFile, "small")
+        DatabaseCorruption.setAside(context, liveFile, 3_000L)
+
+        val kept = DatabaseCorruption.setAsideCopies(liveFile)
+
+        assertEquals(listOf("1000", "3000"), kept.map { it.name.substringAfterLast("-") })
+        assertFalse("a pruned copy's WAL goes with it", File(liveFile.path + ".corrupt-2000-wal").exists())
+    }
+
+    @Test
+    fun clearingAllDataRemovesTheCopiesAndTheNotice() {
+        writeFamily(liveFile, "damaged")
+        DatabaseCorruption.setAside(context, liveFile, 1_000L)
+
+        ObdLocalStore(context).use { it.clearAllData() }
+
         assertTrue(DatabaseCorruption.setAsideCopies(liveFile).isEmpty())
+        assertFalse(File(liveFile.path + ".corrupt-1000-wal").exists())
+        assertNull(DatabaseCorruption.pendingNoticeAtMs(context))
+    }
+
+    /** Fills the sessions table across many pages, then checkpoints so it all sits in the main file. */
+    private fun seedManySessions() {
+        VoltTrackerDb(context).use { helper ->
+            val db = helper.writableDatabase
+            repeat(SEEDED_SESSIONS) { index ->
+                db.execSQL(
+                    "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS} " +
+                        "(mode, adapter_name, started_at_ms, status, created_at_ms) VALUES ('obd', ?, ?, 'complete', 1)",
+                    arrayOf<Any>("x".repeat(1024), index.toLong()),
+                )
+            }
+            db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+        }
+    }
+
+    /** Overwrites pages in the middle of [file] with garbage; the header stays intact, so it opens. */
+    private fun damageMiddlePages(file: File): ByteArray {
+        RandomAccessFile(file, "rw").use { raf ->
+            raf.seek(maxOf(PAGE_SIZE, raf.length() / 2 / PAGE_SIZE * PAGE_SIZE))
+            raf.write(ByteArray(DAMAGED_PAGES * PAGE_SIZE.toInt()) { 0x5A })
+        }
+        return file.readBytes()
+    }
+
+    private fun scanSessions(helper: VoltTrackerDb) {
+        helper.readableDatabase.rawQuery("SELECT * FROM ${VoltTrackerDb.TABLE_SESSIONS}", null).use { it.count }
+    }
+
+    private fun assertCorrupt(block: () -> Unit) {
+        try {
+            block()
+            fail("reading the damaged pages must report corruption")
+        } catch (expected: SQLiteDatabaseCorruptException) {
+            // The handler has run by the time the caller sees this.
+        }
+    }
+
+    private fun insertAdapter(
+        helper: VoltTrackerDb,
+        key: String,
+    ) {
+        helper.writableDatabase.insertOrThrow(
+            VoltTrackerDb.TABLE_ADAPTER_HISTORY,
+            null,
+            ContentValues().apply {
+                put("adapter_key", key)
+                put("first_seen_ms", 1_000L)
+                put("last_seen_ms", 1_000L)
+            },
+        )
+    }
+
+    /** Reads a set-aside copy over its own connection, as a recovery tool would. */
+    private fun adapterKeys(copy: File): List<String> {
+        val db = SQLiteDatabase.openDatabase(copy.path, null, SQLiteDatabase.OPEN_READWRITE) { _ -> }
+        return db.use {
+            it.rawQuery("SELECT adapter_key FROM ${VoltTrackerDb.TABLE_ADAPTER_HISTORY}", null).use { cursor ->
+                buildList { while (cursor.moveToNext()) add(cursor.getString(0)) }
+            }
+        }
     }
 
     private fun seedOneSession(helper: VoltTrackerDb) {
@@ -138,5 +265,8 @@ class DatabaseCorruptionTest {
     private companion object {
         const val WORKING_NAME = "working-copy.db"
         const val HEADER_BYTES = 16
+        const val SEEDED_SESSIONS = 300
+        const val PAGE_SIZE = 4096L
+        const val DAMAGED_PAGES = 8
     }
 }
