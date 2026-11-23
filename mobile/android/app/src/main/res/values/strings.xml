@@ -221,6 +221,7 @@
     <string name="restore_stage_too_large">Restore failed - that backup is larger than the %1$d MiB on-phone importer limit.</string>
     <string name="restore_stage_missing_passphrase">Restore failed - that backup is encrypted. Enter its passphrase first.</string>
     <string name="restore_stage_decrypt_failed">Restore failed - the passphrase did not unlock that backup.</string>
+    <string name="restore_stage_too_large_for_memory">Restore failed - this phone does not have enough free memory to unlock that encrypted backup. Close other apps and try again.</string>
     <string name="restore_stage_too_new">Restore failed - that backup was created by a newer Volt Tracker app.</string>
     <string name="restore_stage_migration_failed">Restore failed - the backup could not be upgraded for this app.</string>
     <string name="restore_stage_not_prepared">Restore failed - the selected backup could not be prepared.</string>

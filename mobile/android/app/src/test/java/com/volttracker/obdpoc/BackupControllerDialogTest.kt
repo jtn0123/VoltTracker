@@ -13,6 +13,7 @@ import com.volttracker.obdpoc.data.VoltTrackerDb
 import com.volttracker.obdpoc.data.deleteOrLog
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -412,6 +413,36 @@ class BackupControllerDialogTest {
         assertEquals("blocked", activity.lastState)
         assertTrue(activity.lastDetail!!.contains("encrypted"))
         assertTrue(activity.lastDetail!!.contains("passphrase"))
+    }
+
+    @Test
+    fun encryptedRestoreWithoutHeapHeadroomExplainsAndStopsTheProgressSpinner() {
+        val id = activity.localStore!!.startSession("obd", "AA:BB", "Adapter")
+        activity.localStore!!.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+        val backup = DataBackup(activity).buildEncryptedBackupFile(activity.localStore, "correct-pass")
+        assertNotNull("buildEncryptedBackupFile should produce a backup", backup)
+        val data = Intent().setData(registerFileForPicker(backup!!))
+        val originalHeadroom = BackupCrypto.heapHeadroomBytes
+        BackupCrypto.heapHeadroomBytes = { 0L }
+        try {
+            activity.backupController!!.launchEncryptedRestorePicker("correct-pass")
+            activity.backupController!!.onRestorePickerResult(Activity.RESULT_OK, data)
+        } finally {
+            BackupCrypto.heapHeadroomBytes = originalHeadroom
+        }
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals(
+            "Restore failed - this phone does not have enough free memory to unlock that encrypted backup. " +
+                "Close other apps and try again.",
+            activity.lastDetail,
+        )
+        val last = activity.restoreProgress.last()
+        assertEquals("Restore failed", last.title)
+        assertEquals("blocked", last.tone)
+        assertFalse("the progress card must stop spinning", last.busy)
+        assertNull(ShadowAlertDialog.getLatestAlertDialog())
+        backup.deleteOrLog()
     }
 
     /** Inline executor: stage/apply work runs synchronously so the test can assert outcomes. */

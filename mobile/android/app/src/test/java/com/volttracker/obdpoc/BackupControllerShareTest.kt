@@ -256,6 +256,31 @@ class BackupControllerShareTest {
     }
 
     @Test
+    fun encryptedBackupThatRunsOutOfMemoryFailsCleanlyAndAllowsARetry() {
+        seedOneSession()
+        val originalHeadroom = BackupCrypto.heapHeadroomBytes
+        BackupCrypto.heapHeadroomBytes = { throw OutOfMemoryError("synthetic") }
+        try {
+            activity.backupController!!.launchEncryptedShare("hunter22")
+            latestDialog().getButton(DialogInterface.BUTTON_POSITIVE).performClick()
+            settle()
+        } finally {
+            BackupCrypto.heapHeadroomBytes = originalHeadroom
+        }
+
+        assertNull(activity.lastStartedIntent)
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not create the backup file.", activity.lastDetail)
+        assertEquals("Backup failed", activity.lastProgressTitle)
+        assertEquals("blocked", activity.lastProgressTone)
+        assertEquals(false, activity.lastProgressBusy)
+
+        activity.backupController!!.launchEncryptedShare("hunter22")
+
+        assertEquals("Share Volt Tracker backup", shadowOf(latestDialog()).title.toString())
+    }
+
+    @Test
     fun secondPlainBackupRequestIsBlockedWhileDisclosureIsOpen() {
         seedOneSession()
 

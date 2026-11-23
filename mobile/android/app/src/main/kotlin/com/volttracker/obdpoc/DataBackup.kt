@@ -282,7 +282,13 @@ class DataBackup(
             // identity secrets only ever land inside the AES/GCM container.
             BackupSettingsManifest.embed(context, prepared, dashboardPreferencesJson, includeIdentitySecrets = true)
             try {
-                BackupCrypto.encryptFile(prepared, dest, requireNotNull(passphrase))
+                BackupCrypto.encryptFileSegmented(prepared, dest, requireNotNull(passphrase))
+            } catch (oom: OutOfMemoryError) {
+                // The segmented container needs only a few MiB, but a heap already near its limit
+                // can still run out. Fail this backup like any other error (encryptFileSegmented has
+                // deleted dest) instead of letting the error crash the app.
+                Log.w(TAG, "Encrypted backup ran out of memory", oom)
+                throw BackupCrypto.InsufficientMemoryException("Encrypted backup ran out of memory")
             } finally {
                 deleteIfExists(prepared)
             }
@@ -357,6 +363,9 @@ class DataBackup(
         TOO_LARGE,
         MISSING_PASSPHRASE,
         DECRYPT_FAILED,
+
+        /** An encrypted backup this phone lacks the free memory to decrypt (in practice, an older format). */
+        TOO_LARGE_FOR_MEMORY,
         TOO_NEW,
         NOT_A_BACKUP,
         MIGRATION_FAILED,
@@ -517,6 +526,12 @@ class DataBackup(
                     bytesTotal = temp.length(),
                 ),
             )
+        } catch (ex: BackupCrypto.InsufficientMemoryException) {
+            Log.w(TAG, "Encrypted restore refused: ${ex.message}")
+            return tooLargeForMemory(temp, candidate, total)
+        } catch (oom: OutOfMemoryError) {
+            Log.w(TAG, "Encrypted restore ran out of memory", oom)
+            return tooLargeForMemory(temp, candidate, total)
         } catch (ex: Exception) {
             if (ex is IOException || ex is GeneralSecurityException || ex is RuntimeException) {
                 temp.deleteOrLog()
@@ -532,6 +547,16 @@ class DataBackup(
         }
         temp.deleteOrLog()
         return RestoreStageOutcome(candidate, RestoreStageStatus.OK, encrypted = true, bytesRead = total)
+    }
+
+    private fun tooLargeForMemory(
+        temp: File,
+        candidate: File,
+        total: Long,
+    ): RestoreStageOutcome {
+        temp.deleteOrLog()
+        candidate.deleteOrLog()
+        return RestoreStageOutcome(null, RestoreStageStatus.TOO_LARGE_FOR_MEMORY, encrypted = true, bytesRead = total)
     }
 
     private fun migrationRejection(migration: BackupMigrator.Result): RestoreStageStatus? =
@@ -579,11 +604,14 @@ class DataBackup(
         private const val TAG = "DataBackup"
         private const val COPYING_DETAIL = "Copying the selected file into Volt Tracker."
 
-        // Restore is staged to a temp file and opened as a SQLite DB (BackupMigrator) — it is
-        // disk-bound, not loaded into memory — so this ceiling only guards against a runaway file
-        // filling cache storage, not an OOM. Raised 512 MiB → 4 GiB so multi-hundred-MB / ~1 GB
+        // Restore is staged to a temp file and opened as a SQLite DB (BackupMigrator). Plain and v4
+        // encrypted backups stream through bounded memory, so this ceiling only guards against a
+        // runaway file filling cache storage. Raised 512 MiB → 4 GiB so multi-hundred-MB / ~1 GB
         // histories (lots of logged drives) import; a genuinely too-large file still fails cleanly
         // with TOO_LARGE. Free cache space is the real practical limit and surfaces as an IO error.
+        // Older (v1-v3) encrypted backups are the exception: they decrypt in one piece on the heap,
+        // so BackupCrypto's memory precheck refuses one too large for the free heap with
+        // TOO_LARGE_FOR_MEMORY.
         internal const val MAX_RESTORE_MIB = 4096L
         internal const val MAX_RESTORE_BYTES = MAX_RESTORE_MIB * 1024L * 1024L
         const val MIN_PASSPHRASE_LENGTH = 8

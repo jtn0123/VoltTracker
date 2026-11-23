@@ -29,8 +29,10 @@ make the encrypted file easier to attack offline.
 
 An encrypted backup is protected with AES-256-GCM, and the key is derived from
 your passphrase with PBKDF2-HMAC-SHA256 at 600,000 iterations (`BackupCrypto.kt`).
-The current backup format (v3) records that iteration count in its header; older
-backups written before this change still decrypt at the legacy count of 150,000.
+The current backup format (v4) records that iteration count in its header and
+encrypts the database in 1 MiB segments, so large histories back up without
+running out of memory; older backups still decrypt (v1/v2 at the legacy count of
+150,000).
 Because the key is stretched per-passphrase rather than stored, the strength of
 the encryption rests on the passphrase you choose.
 
