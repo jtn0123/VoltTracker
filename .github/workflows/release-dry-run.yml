@@ -27,6 +27,8 @@ jobs:
           python-version: "3.11"
       - name: Validate release config
         run: python .github/scripts/check_release_config.py
+      - name: Test release config checks
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
       - name: Predict release bump
         run: python .github/scripts/semantic_release_dry_run.py
       - name: Verify release-candidate evidence

@@ -21,38 +21,21 @@ permissions:
   contents: read
 
 jobs:
-  release:
+  # Every check that runs third-party build tooling (npm, Playwright, Gradle
+  # and its plugins) lives in this job, which never sees the release deploy
+  # key: it checks out without persisted credentials and only reads the repo.
+  preflight:
     runs-on: ubuntu-latest
     if: github.repository == 'jtn0123/VoltTracker'
     permissions:
-      # Pushes the version commit and tag.
-      contents: write
-    outputs:
-      released: ${{ steps.resolve_tag.outputs.released }}
-      tag: ${{ steps.resolve_tag.outputs.tag }}
-    concurrency:
-      group: release
-      cancel-in-progress: false
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # python-semantic-release needs the full history to walk commits
-          # since the last tag and decide the bump type.
+          # semantic_release_dry_run.py (run by release-preflight.sh) walks
+          # the tags to predict the bump, so it needs the full history.
           fetch-depth: 0
-          # We push the version-bump commit + tag back to protected main. The
-          # default GITHUB_TOKEN cannot bypass the main ruleset (GitHub does
-          # not allow the Actions app as a ruleset bypass actor on user-owned
-          # repos), so the checkout authenticates with the write deploy key
-          # stored in RELEASE_PUSH_DEPLOY_KEY — deploy keys are the ruleset's
-          # bypass actor.
-          ssh-key: ${{ secrets.RELEASE_PUSH_DEPLOY_KEY }}
-          # Deploy-key pushes DO trigger workflows (unlike GITHUB_TOKEN), and
-          # that is by design: the bump-commit push re-runs android.yml so the
-          # rolling latest-debug APK gets the new versionName baked in. It
-          # can't loop releases: the bump commit's subject ("X.Y.Z") is not a
-          # bumpable conventional-commits type, so the retriggered release run
-          # cuts nothing.
-          persist-credentials: true
+          persist-credentials: false
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
@@ -90,8 +73,51 @@ jobs:
           REQUIRE_RELEASE_CANDIDATE_EVIDENCE: "1"
         run: ./scripts/release-preflight.sh
 
+  # The only job that holds the release deploy key. It runs nothing but
+  # git and python-semantic-release, installed from a hash-locked file, so no
+  # unpinned or build-time code shares the runner with the key.
+  release:
+    needs: preflight
+    runs-on: ubuntu-latest
+    if: github.repository == 'jtn0123/VoltTracker'
+    permissions:
+      # Pushes the version commit and tag.
+      contents: write
+    outputs:
+      released: ${{ steps.resolve_tag.outputs.released }}
+      tag: ${{ steps.resolve_tag.outputs.tag }}
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # python-semantic-release needs the full history to walk commits
+          # since the last tag and decide the bump type.
+          fetch-depth: 0
+          # We push the version-bump commit + tag back to protected main. The
+          # default GITHUB_TOKEN cannot bypass the main ruleset (GitHub does
+          # not allow the Actions app as a ruleset bypass actor on user-owned
+          # repos), so the checkout authenticates with the write deploy key
+          # stored in RELEASE_PUSH_DEPLOY_KEY — deploy keys are the ruleset's
+          # bypass actor.
+          ssh-key: ${{ secrets.RELEASE_PUSH_DEPLOY_KEY }}
+          # Deploy-key pushes DO trigger workflows (unlike GITHUB_TOKEN), and
+          # that is by design: the bump-commit push re-runs android.yml so the
+          # rolling latest-debug APK gets the new versionName baked in. It
+          # can't loop releases: the bump commit's subject ("X.Y.Z") is not a
+          # bumpable conventional-commits type, so the retriggered release run
+          # cuts nothing.
+          persist-credentials: true
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.11"
+
       - name: Install python-semantic-release
-        run: pip install --only-binary ":all:" python-semantic-release==9.21.1
+        # Every package is pinned by version and sha256 hash, so a new or
+        # tampered upstream release cannot run next to the deploy key.
+        run: pip install --only-binary ":all:" --require-hashes -r .github/requirements-release.txt
 
       - name: Semantic Release — version & publish
         env:

@@ -1,0 +1,9 @@
+# The only Python package the Release workflow's key-holding job installs.
+# requirements-release.txt pins it and every transitive dependency by version
+# and sha256 hash; release.yml installs it with `pip install --require-hashes`.
+# After changing this file, regenerate the lock from this directory with
+# Python 3.11 (the version release.yml sets up):
+#
+#   pip-compile --allow-unsafe --generate-hashes --strip-extras \
+#     --output-file=requirements-release.txt requirements-release.in
+python-semantic-release==9.21.1

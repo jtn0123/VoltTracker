@@ -35,6 +35,12 @@ updates:
     directory: "/mobile/android/dashboard-e2e"
     schedule:
       interval: "weekly"
+  # The Release workflow installs python-semantic-release from the hash-locked
+  # requirements-release.txt; Dependabot regenerates it from the .in file.
+  - package-ecosystem: "pip"
+    directory: "/.github"
+    schedule:
+      interval: "weekly"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

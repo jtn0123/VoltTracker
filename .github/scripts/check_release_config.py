@@ -111,6 +111,96 @@ def validate_release_workflow(workflow_text: str) -> None:
         raise ValueError("tagged release workflow must not publish unsigned release APKs")
 
 
+RELEASE_REQUIREMENTS = ".github/requirements-release.txt"
+RELEASE_PIP_INSTALL = f'pip install --only-binary ":all:" --require-hashes -r {RELEASE_REQUIREMENTS}'
+# Anything that pulls in or runs third-party build tooling. None of it may run
+# in the job that holds the deploy key that can bypass main's ruleset.
+DEPLOY_KEY_JOB_FORBIDDEN = [
+    "release-preflight.sh",
+    "gradlew",
+    "npm ",
+    "npx ",
+    "playwright",
+    "actions/setup-node",
+    "actions/setup-java",
+]
+
+
+def workflow_jobs(workflow_text: str) -> dict[str, str]:
+    """Split a workflow's top-level ``jobs:`` mapping into {job id: job text}.
+
+    Full-line comments are dropped so prose cannot satisfy or trip a check.
+    """
+    lines = workflow_text.splitlines()
+    try:
+        start = lines.index("jobs:") + 1
+    except ValueError as exc:
+        raise ValueError("workflow has no top-level jobs: mapping") from exc
+    jobs: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in lines[start:]:
+        if line and not line[0].isspace():
+            break
+        job = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+        if job:
+            current = jobs.setdefault(job.group(1), [])
+            continue
+        if current is not None and not line.lstrip().startswith("#"):
+            current.append(line)
+    return {name: "\n".join(body) for name, body in jobs.items()}
+
+
+def validate_release_job_isolation(workflow_text: str) -> None:
+    jobs = workflow_jobs(workflow_text)
+    key_jobs = [name for name, body in jobs.items() if "RELEASE_PUSH_DEPLOY_KEY" in body]
+    require_equal("jobs holding the release deploy key", key_jobs, ["release"])
+    release = jobs["release"]
+    for forbidden in DEPLOY_KEY_JOB_FORBIDDEN:
+        if forbidden in release:
+            raise ValueError(f"release job holds the deploy key and must not run {forbidden.strip()!r}")
+    if "needs: preflight" not in release:
+        raise ValueError("release job must wait for the preflight job (needs: preflight)")
+    if RELEASE_PIP_INSTALL not in release:
+        raise ValueError(f"release job must install semantic-release with {RELEASE_PIP_INSTALL!r}")
+    if re.search(r"pip install(?![^\n]*--require-hashes)", release):
+        raise ValueError("every pip install in the release job must use --require-hashes")
+
+    preflight = jobs.get("preflight")
+    if preflight is None:
+        raise ValueError("release workflow must have a preflight job")
+    for required in ("./scripts/release-preflight.sh", "fetch-depth: 0", "persist-credentials: false"):
+        if required not in preflight:
+            raise ValueError(f"preflight job missing {required!r}")
+    for forbidden in ("ssh-key:", "contents: write"):
+        if forbidden in preflight:
+            raise ValueError(f"preflight job must not have {forbidden!r}")
+
+
+def validate_release_requirements(requirements_in: str, requirements_txt: str) -> None:
+    """The release requirements lock must pin every package by version and hash."""
+    pins = [line.strip() for line in requirements_in.splitlines() if line.strip() and not line.lstrip().startswith("#")]
+    if not pins:
+        raise ValueError("release requirements input lists no packages")
+    for pin in pins:
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+==\S+", pin):
+            raise ValueError(f"release requirements input must pin an exact version: {pin!r}")
+    locked = {}
+    for entry in re.split(r"\n(?=[A-Za-z0-9])", requirements_txt):
+        first = entry.lstrip("\n").splitlines()[0] if entry.strip() else ""
+        if not first or first.startswith("#"):
+            continue
+        match = re.match(r"^([A-Za-z0-9_.-]+)==(\S+)", first)
+        if not match:
+            raise ValueError(f"release requirement not pinned with ==: {first!r}")
+        if "--hash=sha256:" not in entry:
+            raise ValueError(f"release requirement {match.group(1)!r} has no sha256 hash")
+        locked[match.group(1).lower()] = match.group(2)
+    for pin in pins:
+        name, version = pin.split("==", 1)
+        if locked.get(name.lower()) != version:
+            raise ValueError(f"{RELEASE_REQUIREMENTS} does not lock {pin}; regenerate it with pip-compile")
+
+
 def validate_android_gradle_signing(build_gradle_text: str) -> None:
     required_snippets = [
         "debug {",
@@ -135,7 +225,13 @@ def main() -> int:
     config = semantic_release_config((ROOT / "pyproject.toml").read_bytes())
     validate_semantic_release_config(config)
     validate_pr_title_lint((ROOT / ".github/workflows/pr-title-lint.yml").read_text())
-    validate_release_workflow((ROOT / ".github/workflows/release.yml").read_text())
+    release_workflow = (ROOT / ".github/workflows/release.yml").read_text()
+    validate_release_workflow(release_workflow)
+    validate_release_job_isolation(release_workflow)
+    validate_release_requirements(
+        (ROOT / ".github/requirements-release.in").read_text(),
+        (ROOT / RELEASE_REQUIREMENTS).read_text(),
+    )
     validate_android_gradle_signing((ROOT / "mobile/android/app/build.gradle").read_text())
     validate_release_preflight((ROOT / "scripts/release-preflight.sh").read_text())
     if not (ROOT / "VERSION").read_text().strip():
