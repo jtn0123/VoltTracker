@@ -25,6 +25,7 @@ import { numberSeriesSignature } from "./render-signatures";
 
 import { VD } from "./vd-registry";
 import { meters, metersToKm } from "./unit-types";
+import { liveDriveDurationMs } from "./telemetry-state";
 
 type DriveChip = {
   tone: DataToneValue;
@@ -121,8 +122,10 @@ type ChartPoint = {
     // sessionMs, and no native builder has ever emitted runtimeMs — so this fallback was
     // dead and the duration read 0 whenever telemetry had no sessionMs of its own. Found by
     // native-payload-contract.test.js; the fixtures had been seeding runtimeMs, which is why
-    // the tests covered a shape production cannot produce.
-    const runtimeMs = Number(tm.sessionMs || session.sessionMs || 0);
+    // the tests covered a shape production cannot produce. (liveDriveDurationMs reads it.)
+    // Timed on the same span as the distance: the drive the service is counting when the
+    // sample carries its totals, else the adapter session.
+    const runtimeMs = liveDriveDurationMs(tm, session);
     const distance = Number(state.sessionDistanceM || 0);
     const hasLiveEvidence = Boolean(
       samples ||

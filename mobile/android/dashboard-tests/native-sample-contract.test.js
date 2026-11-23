@@ -38,8 +38,8 @@ const METADATA_KEYS = new Set([
   'lastSampleGapMs', 'maxSampleGapMs',
   // The service's running totals for the drive / charge in progress (LiveDriveTotals). They
   // are on every live sample and only change when native folds a new one, so they persist.
-  'driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs',
-  'chargeStartSoc', 'chargeStartedAtMs',
+  'driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs', 'driveLastAtMs',
+  'driveStartSoc', 'chargeStartSoc', 'chargeStartedAtMs',
 ]);
 
 function stripKotlinComments(text) {
@@ -139,9 +139,9 @@ describe('native -> dashboard live-sample contract', () => {
   });
 
   it('sends the running drive totals the dashboard reads instead of folding its own', () => {
-    // telemetry.ts applyServiceDriveTotals and the trip card read these by name; a rename on
+    // telemetry.ts applyServiceDriveTotals and telemetry-state.ts read these by name; a rename on
     // the Kotlin side would quietly drop the dashboard back to its own (gap-prone) fold.
-    for (const key of ['driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs']) {
+    for (const key of ['driveDistanceM', 'driveEnergyKwh', 'driveMaxSpeedKph', 'driveStartedAtMs', 'driveStartSoc']) {
       expect(native.has(key), `expected ${key} among the extracted native keys`).toBe(true);
     }
   });

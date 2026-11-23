@@ -1,10 +1,14 @@
 package com.volttracker.obdpoc.ui
 
+import com.volttracker.obdpoc.DriveTotals
 import com.volttracker.obdpoc.LiveDriveTotals
+import com.volttracker.obdpoc.ui.drive.DrivePhase
 import com.volttracker.obdpoc.ui.live.LiveUiStateStore
 import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -54,6 +58,96 @@ class LiveTotalsResumeTest {
         // 120 km/h, reached while the screen was off.
         assertEquals(74, shown.tripMaxMph)
         assertEquals("17 min", shown.tripDuration)
+    }
+
+    /** A 1 000-sample drive a second apart from [startMs], ~55.6 m per sample at 18 kW. */
+    private fun drive(startMs: Long): List<JSONObject> =
+        (0 until 1_000).map { i ->
+            broadcast(startMs + i * 1_000L) {
+                put("vehicleState", "driving_ev")
+                put("speedKph", 60)
+                put("powerKw", 18.0)
+                put("latitude", 42.0 + i * 0.0005)
+                put("longitude", -83.0)
+            }
+        }
+
+    /** [count] parked samples 2.5 s apart from [startMs]: the ring then spans ~12.5 min of Park. */
+    private fun parked(
+        startMs: Long,
+        count: Int,
+    ): List<JSONObject> =
+        (0 until count).map { i ->
+            broadcast(startMs + i * 2_500L) { put("vehicleState", "parked").put("prndlState", "P") }
+        }
+
+    @Test
+    fun aDriveThatEndedWhileTheScreenWasOffClosesLastDriveOnItsWholeDistance() {
+        val drive = drive(startMs = 1_000L)
+        val park = parked(startMs = 1_001_000L, count = 400)
+        val store = connectedStore()
+        // On screen for the first 100 samples; the drive ends and the car sits in Park for longer
+        // than the ring covers, so every replayed sample is parked.
+        drive.take(100).forEach(store::onTelemetry)
+        store.onTelemetryBackfill((drive + park).takeLast(300))
+
+        val shown = store.state.value.drive
+        assertEquals(DrivePhase.PARKED, shown.phase)
+        val last = shown.lastDrive
+        assertNotNull(last)
+        // ~34.5 mi, not the ~3.4 mi the screen saw before it went off.
+        assertEquals(drive.last().getDouble("driveDistanceM") / METERS_PER_MILE, last!!.miles, 1e-9)
+        assertTrue(last.miles > 34.0)
+        // Ended at its last driving sample, not when the screen went off or the ring began.
+        assertEquals(drive.last().getLong("updatedAt"), last.endedAtMs)
+    }
+
+    @Test
+    fun aDriveThatStartedAndEndedWhileTheScreenWasOffBecomesTheLastDrive() {
+        val store = connectedStore()
+        parked(startMs = 1_000L, count = 4).forEach(store::onTelemetry)
+        // The whole drive and a long Park after it happen while the screen is off.
+        val drive = drive(startMs = 20_000L)
+        val park = parked(startMs = 1_020_000L, count = 400)
+        store.onTelemetryBackfill((drive + park).takeLast(300))
+
+        val last = store.state.value.drive.lastDrive
+        assertNotNull("the drive missed in full still closes into Last drive", last)
+        assertEquals(drive.last().getDouble("driveDistanceM") / METERS_PER_MILE, last!!.miles, 1e-9)
+        assertEquals(drive.last().getLong("updatedAt"), last.endedAtMs)
+    }
+
+    @Test
+    fun thePublishedTotalsAreNotCountedAsReadings() {
+        val raw =
+            JSONObject()
+                .put("updatedAt", 5_000L)
+                .put("source", "obd")
+                .put("vehicleState", "charging")
+                .put("soc", 40.0)
+                .put("packVoltage", 356.4)
+        val plain = connectedStore().apply { onTelemetry(JSONObject(raw.toString())) }
+        // Published mid-session: a drive (with its start SOC) and a charge start, so every total
+        // key is present.
+        for (i in 0..2) {
+            service.publish(
+                JSONObject()
+                    .put("updatedAt", 1_000L + i * 1_000L)
+                    .put("vehicleState", "driving_ev")
+                    .put("soc", 41.0)
+                    .put("latitude", 42.0 + i * 0.0005)
+                    .put("longitude", -83.0),
+            )
+        }
+        val published = service.publish(raw)
+        assertTrue(DriveTotals.KEYS.all(published::has))
+        val withTotals = connectedStore().apply { onTelemetry(published) }
+
+        assertEquals(plain.state.value.drive.signalCount, withTotals.state.value.drive.signalCount)
+        val keys =
+            withTotals.state.value.drive.rawReadings
+                .map { it.key }
+        assertFalse("bookkeeping shown as a reading: $keys", keys.any { it in DriveTotals.KEYS })
     }
 
     @Test

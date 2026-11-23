@@ -38,6 +38,7 @@ import { prefs, units } from "./prefs";
 import { registerRenderer } from "./render-pass";
 import { storageRollupSignature } from "./render-signatures";
 import { kph } from "./unit-types";
+import { liveDriveDurationMs } from "./telemetry-state";
 
 // Module scope (the old IIFE wrapper is redundant under ESM and blocks
 // `export` declarations).
@@ -1132,14 +1133,11 @@ import { kph } from "./unit-types";
     if (liveSampleFresh()) {
       const session = (state.appState || {}).session || {};
       const startedAt = Number(state.liveRouteStartedAtMs || 0);
-      const driveStartedAt = Number(state.telemetry.driveStartedAtMs || 0);
       return {
         live: true,
         atMs: Date.now(),
         meters: Number(state.sessionDistanceM || 0),
-        durationMs: driveStartedAt > 0
-          ? Math.max(0, Date.now() - driveStartedAt)
-          : Number(state.telemetry.sessionMs || session.sessionMs || 0) || (startedAt > 0 ? Date.now() - startedAt : 0),
+        durationMs: liveDriveDurationMs(state.telemetry, session) || (startedAt > 0 ? Date.now() - startedAt : 0),
         maxKph: state.sessionMaxSpeedKph,
         energyKwh: state.sessionEnergyKwh
       };

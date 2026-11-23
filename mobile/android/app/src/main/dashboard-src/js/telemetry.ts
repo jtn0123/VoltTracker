@@ -954,12 +954,11 @@ import { driveGear, gearDisplayText } from "./gear";
   function applyServiceDriveTotals(sample: PayloadRecord): boolean {
     const distanceM = sample.driveDistanceM;
     if (typeof distanceM !== "number" || !Number.isFinite(distanceM)) return false;
-    const energyKwh = Number(sample.driveEnergyKwh);
-    const maxKph = Number(sample.driveMaxSpeedKph);
+    // JSON carries no Infinity, so `|| 0` only has NaN (absent) to replace.
     setState({
       sessionDistanceM: distanceM,
-      sessionEnergyKwh: Number.isFinite(energyKwh) ? energyKwh : 0,
-      sessionMaxSpeedKph: Number.isFinite(maxKph) ? maxKph : 0
+      sessionEnergyKwh: Number(sample.driveEnergyKwh) || 0,
+      sessionMaxSpeedKph: Number(sample.driveMaxSpeedKph) || 0
     });
     serviceDriveTotalsSeen = true;
     return true;

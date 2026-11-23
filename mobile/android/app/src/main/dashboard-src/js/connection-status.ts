@@ -15,6 +15,7 @@ import { formatDuration, formatWhen, gpsText } from "./telemetry";
 // every wrap in the chain (actions.ts / troubleshooter.ts) composes.
 import { VD } from "./vd-registry";
 import { meters, metersToKm } from "./unit-types";
+import { liveDriveDurationMs, liveDriveStartSoc } from "./telemetry-state";
 
 // Pick up the device locale once at module load so the demo-migrated copy below
 // resolves to a registered translation when one matches navigator.language. The
@@ -522,18 +523,15 @@ function tripRows(status: VoltStatus): StatusRow[] {
   const rows: StatusRow[] = [];
   const distanceM = Number(state.sessionDistanceM || 0);
   if (distanceM > 0) rows.push(["Distance", units.distanceText(metersToKm(meters(distanceM)))]);
-  // Timed from the drive's start, like the distance above; the session clock before any drive.
-  const driveStartedAt = Number(telemetry.driveStartedAtMs || 0);
-  const durationMs = driveStartedAt > 0
-    ? Math.max(0, Date.now() - driveStartedAt)
-    : Number(telemetry.sessionMs || session.sessionMs || 0);
+  // Duration and the battery delta below cover the same drive as the distance above.
+  const durationMs = liveDriveDurationMs(telemetry, session);
   if (durationMs > 0) {
     rows.push(["Duration", formatDuration(durationMs)]);
   }
   // Null-safe: SOC fields default to null. Number(null) === 0 is finite, which
   // would fabricate a "Battery 0%" row (soc null) or a bogus "0% → N%" delta
   // (startSoc null) — map null/empty to NaN so the isFinite gates below drop them.
-  const startSoc = state.sessionStartSoc == null ? NaN : Number(state.sessionStartSoc);
+  const startSoc = liveDriveStartSoc(telemetry, state.sessionStartSoc);
   const soc = telemetry.soc == null || telemetry.soc === "" ? NaN : Number(telemetry.soc);
   if (Number.isFinite(soc)) {
     rows.push([

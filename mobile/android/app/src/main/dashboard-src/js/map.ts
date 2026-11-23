@@ -901,12 +901,16 @@ import { VD } from "./vd-registry";
     // available (and larger than the buffered window), pair it with the original drive start;
     // otherwise use the buffered window's own span — anchored on its current first point, not a
     // first fix that has already rolled out of the buffer.
+    // When the sample carries the service's drive totals, sessionDistanceM is the whole current
+    // drive (it restarts at each new drive), so show it timed from that drive's start: the
+    // buffer may also hold an earlier drive of this session.
+    const driveStartedAtMs = Number(sample.driveStartedAtMs);
     const windowedDistanceMeters = routeDistanceMeters(points);
     const sessionDistanceMeters = Number(state.sessionDistanceM) || 0;
-    const useSessionDistance = sessionDistanceMeters > windowedDistanceMeters;
+    const useSessionDistance = driveStartedAtMs > 0 || sessionDistanceMeters > windowedDistanceMeters;
     const distanceMeters = useSessionDistance ? sessionDistanceMeters : windowedDistanceMeters;
     const startedAtMs = useSessionDistance
-      ? (liveRouteStartedAtMs || firstPoint.atMs)
+      ? (driveStartedAtMs || liveRouteStartedAtMs || firstPoint.atMs)
       : firstPoint.atMs;
     const powerTrack = points
       .filter((point) => Number.isFinite(Number(point.powerKw)))

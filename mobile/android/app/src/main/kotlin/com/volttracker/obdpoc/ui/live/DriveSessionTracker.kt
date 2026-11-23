@@ -15,7 +15,7 @@ import com.volttracker.obdpoc.ui.units.METERS_PER_MILE
  * samples sent while it was paused, so a total folded here would lose that window. A sample that
  * carries no published totals is folded here with the same [DriveTotalsFold].
  * The energy a charge has added is worked out here, from the SOC it started at (see [chargeAddedKwh]).
- * A new drive (entering DRIVE from parked/charging) closes the previous one into [lastDrive].
+ * Leaving DRIVE closes the drive into [lastDrive], on the service's totals for the whole drive.
  * Samples are applied once each: anything not newer than the last applied one (a resume
  * replay) is ignored, so backfill can't double-count.
  */
@@ -65,6 +65,7 @@ internal class DriveSessionTracker {
     private var chargePointSpacingMs = CHARGE_POINT_MS
 
     private var lastAtMs = 0L
+    private var driveLastAtMs = 0L
     private var phase: DrivePhase? = null
     private var driveClosed = false
 
@@ -100,10 +101,23 @@ internal class DriveSessionTracker {
         if (sample.phase == DrivePhase.UNKNOWN) return
         if (sample.atMs <= 0 || sample.atMs <= lastAtMs) return
         val stepS = if (lastAtMs > 0) (sample.atMs - lastAtMs) / MS_PER_S else Double.NaN
-        onPhase(sample)
         val published = sample.published
         if (published == null) fold.apply(sample.foldInput())
-        adopt(published ?: fold.totals())
+        val totals = published ?: fold.totals()
+        if (sample.phase == DrivePhase.DRIVE) {
+            // Close the previous drive on its own figures before taking the new drive's.
+            onPhase(sample)
+            adopt(totals)
+        } else {
+            // Out of DRIVE the totals are the finished drive's, whole even when it ended while
+            // this screen was paused, so take them before closing it.
+            val driveMissed = totals.driveStartedAtMs > 0 && totals.driveStartedAtMs != driveStartedAtMs
+            adopt(totals)
+            if (driveMissed) driveClosed = false
+            onPhase(sample)
+            // A drive that started and ended while the screen was paused brings no phase change.
+            if (driveMissed) closeDriveIfAny()
+        }
         val contiguous = stepS > 0 && stepS <= MAX_STEP_S
         if (contiguous && sample.phase == DrivePhase.CHARGING) {
             sample.chargerKw?.takeIf { it > 0 }?.let { chargeIntegratedKwh += it * stepS / S_PER_HOUR }
@@ -121,6 +135,7 @@ internal class DriveSessionTracker {
         energyKwh = totals.energyKwh
         maxKph = totals.maxKph
         driveStartedAtMs = totals.driveStartedAtMs
+        driveLastAtMs = totals.driveLastAtMs
         chargeFromSoc = totals.chargeStartSoc
         chargeStartedAtMs = totals.chargeStartedAtMs
     }
@@ -164,9 +179,13 @@ internal class DriveSessionTracker {
         }
     }
 
-    /** Closes the drive into [lastDrive] once — a later phase change must not re-stamp its end time. */
+    /**
+     * Closes the drive into [lastDrive] once — a later phase change must not re-stamp its end time.
+     * It ended at its latest driving sample, which may be one this screen never received.
+     */
     private fun closeDriveIfAny() {
-        if (!driveClosed && driveMiles >= MIN_MILES) lastDrive = LastDrive(driveMiles, miPerKwh, lastAtMs)
+        val endedAtMs = driveLastAtMs.takeIf { it > 0 } ?: lastAtMs
+        if (!driveClosed && driveMiles >= MIN_MILES) lastDrive = LastDrive(driveMiles, miPerKwh, endedAtMs)
         driveClosed = true
     }
 

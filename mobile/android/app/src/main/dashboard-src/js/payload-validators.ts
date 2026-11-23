@@ -78,6 +78,8 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
       driveEnergyKwh: "number",
       driveMaxSpeedKph: "number",
       driveStartedAtMs: "number",
+      driveLastAtMs: "number",
+      driveStartSoc: "number",
       chargeStartSoc: "number",
       chargeStartedAtMs: "number"
     }

@@ -42,7 +42,9 @@ internal class LiveDriveTotals {
  * Which phase a live sample puts the car in. Charging only when the classifier confirms it from
  * charger status: a positive power reading alone must not override ready/parked/driving or start
  * a plug-in charge session. Driving when it says so, or the car is moving / in a drive gear;
- * parked in P or at rest.
+ * parked in P or at rest. "ready" alone does not end a drive: the classifier reports it at every
+ * stop while the car is on, so a sample with no usable gear reading would otherwise end the drive
+ * (and restart its totals) at each red light. A drive ends on P, "parked", "plugged" or a charge.
  */
 internal object DrivePhaseRule {
     private val DRIVE_GEARS = setOf("D", "L", "R", "N")
@@ -60,18 +62,26 @@ internal object DrivePhaseRule {
             vehicleState == "driving_ev" || vehicleState == "driving_gas" -> DrivePhase.DRIVE
             vehicleState == "parked" || gear == VoltGear.PARK -> DrivePhase.PARKED
             speedMph > 0 || gear in DRIVE_GEARS -> DrivePhase.DRIVE
-            vehicleState == "ready" || vehicleState == "plugged" || current == DrivePhase.CHARGING -> DrivePhase.PARKED
+            vehicleState == "plugged" || current == DrivePhase.CHARGING -> DrivePhase.PARKED
+            vehicleState == "ready" && current != DrivePhase.DRIVE -> DrivePhase.PARKED
             else -> current
         }
     }
 }
 
-/** The running totals one sample carries: the current drive's, and the current charge's start. */
+/**
+ * The running totals one sample carries: the current (or, once parked, the latest) drive's, and the
+ * current charge's start. [driveLastAtMs] is the drive's latest driving sample, so its end once the
+ * car has left DRIVE. [driveStartSoc] is the sample's own `soc` when the drive started (the WebView
+ * shows it beside `soc`); [chargeStartSoc] is on the driver's scale, like the native Charge screen.
+ */
 internal data class DriveTotals(
     val distanceM: Double = 0.0,
     val energyKwh: Double = 0.0,
     val maxKph: Double = 0.0,
     val driveStartedAtMs: Long = 0L,
+    val driveLastAtMs: Long = 0L,
+    val driveStartSoc: Double? = null,
     val chargeStartSoc: Double? = null,
     val chargeStartedAtMs: Long? = null,
 ) {
@@ -80,6 +90,8 @@ internal data class DriveTotals(
         out.put("driveEnergyKwh", energyKwh)
         out.put("driveMaxSpeedKph", maxKph)
         out.put("driveStartedAtMs", driveStartedAtMs)
+        out.put("driveLastAtMs", driveLastAtMs)
+        driveStartSoc?.let { out.put("driveStartSoc", it) }
         chargeStartSoc?.let { out.put("chargeStartSoc", it) }
         chargeStartedAtMs?.let { out.put("chargeStartedAtMs", it) }
     }
@@ -92,6 +104,8 @@ internal data class DriveTotals(
                 "driveEnergyKwh",
                 "driveMaxSpeedKph",
                 "driveStartedAtMs",
+                "driveLastAtMs",
+                "driveStartSoc",
                 "chargeStartSoc",
                 "chargeStartedAtMs",
             )
@@ -104,6 +118,8 @@ internal data class DriveTotals(
                 energyKwh = finite(t, "driveEnergyKwh") ?: 0.0,
                 maxKph = finite(t, "driveMaxSpeedKph") ?: 0.0,
                 driveStartedAtMs = t.optLong("driveStartedAtMs", 0L),
+                driveLastAtMs = t.optLong("driveLastAtMs", 0L),
+                driveStartSoc = finite(t, "driveStartSoc"),
                 chargeStartSoc = finite(t, "chargeStartSoc"),
                 chargeStartedAtMs = if (t.isNull("chargeStartedAtMs")) null else t.optLong("chargeStartedAtMs"),
             )
@@ -117,8 +133,10 @@ internal data class DriveTotals(
  *  - distance: haversine between GPS fixes while driving, ignoring jitter (< 2 m) and fix jumps
  *    (≥ 250 m);
  *  - energy: pack power integrated between driving samples ≤ 10 s apart, never while plugged in;
+ *  - drive: the time and SOC it started at, and the time of its latest driving sample;
  *  - charge: the SOC and time the charge in progress started at.
- * Entering DRIVE from parked/charging starts a new drive. Samples are applied once each: anything
+ * Entering DRIVE from parked/charging starts a new drive; leaving it keeps the finished drive's
+ * figures until the next one starts. Samples are applied once each: anything
  * not newer than the last applied one (a resume replay) is ignored, so it can't double-count.
  */
 internal class DriveTotalsFold {
@@ -126,6 +144,8 @@ internal class DriveTotalsFold {
     private var energyKwh = 0.0
     private var maxKph = 0.0
     private var driveStartedAtMs = 0L
+    private var driveLastAtMs = 0L
+    private var driveStartSoc: Double? = null
     private var chargeStartSoc: Double? = null
     private var chargeStartedAtMs: Long? = null
     private var lastAtMs = 0L
@@ -134,7 +154,16 @@ internal class DriveTotalsFold {
     private var phase: DrivePhase? = null
 
     fun totals(): DriveTotals =
-        DriveTotals(distanceM, energyKwh, maxKph, driveStartedAtMs, chargeStartSoc, chargeStartedAtMs)
+        DriveTotals(
+            distanceM,
+            energyKwh,
+            maxKph,
+            driveStartedAtMs,
+            driveLastAtMs,
+            driveStartSoc,
+            chargeStartSoc,
+            chargeStartedAtMs,
+        )
 
     fun reset() {
         resetDrive()
@@ -150,6 +179,7 @@ internal class DriveTotalsFold {
         val stepS = if (lastAtMs > 0) (input.atMs - lastAtMs) / MS_PER_S else Double.NaN
         if (input.phase != phase) onPhase(input)
         phase = input.phase
+        if (input.phase == DrivePhase.DRIVE) driveLastAtMs = input.atMs
         input.speedKph?.let { if (it > maxKph && input.phase == DrivePhase.DRIVE) maxKph = it }
         addDistance(input)
         val contiguous = stepS > 0 && stepS <= MAX_STEP_S
@@ -164,6 +194,7 @@ internal class DriveTotalsFold {
             DrivePhase.DRIVE -> {
                 resetDrive()
                 driveStartedAtMs = input.atMs
+                driveStartSoc = input.packSoc
             }
             DrivePhase.CHARGING -> {
                 chargeStartSoc = input.soc
@@ -178,6 +209,8 @@ internal class DriveTotalsFold {
         energyKwh = 0.0
         maxKph = 0.0
         driveStartedAtMs = 0L
+        driveLastAtMs = 0L
+        driveStartSoc = null
         lastLat = Double.NaN
         lastLon = Double.NaN
     }
@@ -203,6 +236,8 @@ internal class DriveTotalsFold {
         val soc: Double? = null,
         val lat: Double? = null,
         val lon: Double? = null,
+        /** The sample's own `soc`, for [DriveTotals.driveStartSoc]. */
+        val packSoc: Double? = null,
     ) {
         companion object {
             fun fromJson(
@@ -218,6 +253,7 @@ internal class DriveTotalsFold {
                 soc = finite(t, "displayedSocPct") ?: finite(t, "soc"),
                 lat = finite(t, "latitude"),
                 lon = finite(t, "longitude"),
+                packSoc = finite(t, "soc"),
             )
         }
     }
