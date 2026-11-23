@@ -196,18 +196,24 @@ class CarControlRunner(
         sample.put("carControlLastAtMs", result.atMs)
     }
 
-    /** Called by the poll loop after each broadcast sample: health check, then the pending command. */
+    /** A request is waiting for the poll loop. Safe from any thread. */
+    fun hasPending(): Boolean = pending.get() != null
+
+    /**
+     * Called by the poll loop after each broadcast sample: health check, then the pending command.
+     * True when it re-initialized the adapter or took a command (sent or refused) this cycle.
+     */
     @Throws(IOException::class)
-    fun afterSample() {
+    fun afterSample(): Boolean {
         if (healthCheckPending) {
             healthCheckPending = false
             if (io.liveCycleCount() == liveCyclesAtEnd) {
                 io.logEvent("car_control_hs_reinit", "reason", "no_live_data_after_command")
                 io.reinitialize()
-                return
+                return true
             }
         }
-        val next = pending.get() ?: return
+        val next = pending.get() ?: return false
         running = true
         pending.set(null)
         try {
@@ -215,6 +221,7 @@ class CarControlRunner(
         } finally {
             running = false
         }
+        return true
     }
 
     @Throws(IOException::class)

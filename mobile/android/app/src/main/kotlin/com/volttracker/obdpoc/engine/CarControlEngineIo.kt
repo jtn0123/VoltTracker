@@ -62,7 +62,7 @@ internal class CarControlEngineIo(
  * The polling engine's whole car-control surface, kept out of [ObdPollingEngine] so the engine only
  * makes one-line calls: it tracks whether a live HS-CAN session is polling (the only time a command
  * may run), refuses requests outside one, stamps gate/outcome state onto each sample, and runs a
- * queued command after the sample (see [CarControlRunner]).
+ * queued command after the sample, ahead of the SW-CAN listen window (see [CarControlRunner]).
  */
 internal class CarControlSession(
     private val runner: CarControlRunner,
@@ -93,7 +93,28 @@ internal class CarControlSession(
 
     fun resetSession() = runner.resetSession()
 
-    fun afterSample() = runner.afterSample()
+    /** A confirmed command is waiting for the poll loop; the SW-CAN listener yields to it. */
+    fun hasPendingCommand(): Boolean = runner.hasPending()
+
+    /**
+     * The poll loop's step after each broadcast sample. The [listener] first checks that its last
+     * window left HS polling working, so the gate sees any doubt about the adapter. A pending
+     * command then runs while the sample the gate just saw is fresh: a listen window before it
+     * would age that sample past the gate's limit. The listener's own step (guided test, body test,
+     * quiet capture, window) waits for the next cycle when HS was quiet after a window, or when the
+     * runner took a command or re-initialized the adapter.
+     */
+    fun afterSample(listener: SwcanListenRunner) {
+        val hsQuiet = listener.checkHsAfterWindow()
+        val runnerTookCycle = runner.afterSample()
+        if (!hsQuiet && !runnerTookCycle) listener.runDueStep()
+    }
+
+    /**
+     * How long the poll loop sleeps before its next cycle: [intervalMs], or nothing while a command
+     * waits, so a command queued during a listen window is not held back by the parked cadence.
+     */
+    fun nextPollDelayMs(intervalMs: Long): Long = if (runner.hasPending()) 0L else intervalMs
 
     fun appendTo(sample: JSONObject) {
         val now = clock()

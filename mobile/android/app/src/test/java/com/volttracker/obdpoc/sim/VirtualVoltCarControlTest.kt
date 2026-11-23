@@ -7,6 +7,7 @@ import com.volttracker.obdpoc.CarCommand
 import com.volttracker.obdpoc.CarControlAuth
 import com.volttracker.obdpoc.CarControlFrames
 import com.volttracker.obdpoc.CarControlSettings
+import com.volttracker.obdpoc.engine.ObdPollingEngine
 import com.volttracker.obdpoc.engine.SwcanListenRunner
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.sim.VirtualVoltCatalog.Mode
@@ -23,6 +24,7 @@ import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ServiceController
 import org.robolectric.annotation.Config
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * End-to-end car controls against the [VirtualVolt]: the real service receives
@@ -52,6 +54,7 @@ class VirtualVoltCarControlTest {
         }
         VirtualVoltService.nextConnection = null
         VirtualVoltService.nextSwcanPolicy = null
+        VirtualVoltService.nextSleeper = null
         CarControlAuth.resetForTest()
     }
 
@@ -160,6 +163,48 @@ class VirtualVoltCarControlTest {
         assertTrue(adapter.transmitted.isEmpty())
     }
 
+    @Test
+    fun aCommandQueuedDuringACarTabWindowCutsItShortAndIsSentNext() {
+        val (adapter, service) = start(Mode.CHARGING, stn = true, recordSleeps = true)
+        waitForGate(service, "ready")
+        service.onStartCommand(
+            Intent(service, VirtualVoltService::class.java)
+                .setAction(ObdService.ACTION_BODY_FOCUS)
+                .putExtra(ObdService.EXTRA_DURATION_MS, 30_000L),
+            0,
+            2,
+        )
+        // The second window to switch buses from here on started after the focus request, so it is
+        // a 10 s parked focus window (two 5 s chunks). The owner confirms as it starts listening.
+        val switches = AtomicInteger()
+        val windowAt = AtomicInteger(-1)
+        adapter.afterCommand("STP61") {
+            if (switches.incrementAndGet() == 2) {
+                windowAt.set(adapter.exchanges.size - 1)
+                CarControlAuth.confirm(CarCommand.LOCK, System.currentTimeMillis())
+                service.onStartCommand(controlIntent(service, CarCommand.LOCK), 0, 3)
+            }
+        }
+        waitFor("LOCK outcome") {
+            synchronized(service.engineSamples) {
+                service.engineSamples.any { it.optString("carControlLastCommand") == CarCommand.LOCK.wireName }
+            }
+        }
+        val result =
+            synchronized(service.engineSamples) {
+                service.engineSamples.last { it.optString("carControlLastCommand") == CarCommand.LOCK.wireName }
+            }
+        assertEquals(result.getString("carControlLastDetail"), "confirmed", result.getString("carControlLastOutcome"))
+        assertOnlyAllowlistedFramesSent(adapter)
+
+        val after = adapter.commands().drop(windowAt.get())
+        val restore = after.indexOf("ATSP6")
+        assertEquals("the window stopped after its first chunk", 1, after.take(restore).count { it == "STM" })
+        val firstTransmit = after.indexOfFirst { it.startsWith("STPX") }
+        val sleeps = after.subList(restore, firstTransmit).filter { it.startsWith(SLEEP) }
+        assertEquals("the loop went straight on to the command", listOf("${SLEEP}0"), sleeps)
+    }
+
     private fun assertOnlyAllowlistedFramesSent(adapter: VirtualVolt) {
         val stpx = adapter.commands().filter { it.startsWith("STPX") }
         assertFalse(stpx.isEmpty())
@@ -222,9 +267,18 @@ class VirtualVoltCarControlTest {
         stn: Boolean,
         enabled: Boolean = true,
         connect: Boolean = true,
+        recordSleeps: Boolean = false,
     ): Pair<VirtualVolt, VirtualVoltService> {
         val adapter = VirtualVolt(mode, stn = stn)
         VirtualVoltService.nextConnection = adapter
+        if (recordSleeps) {
+            // Each poll-loop sleep, in line with the adapter traffic (the loop does not really sleep).
+            VirtualVoltService.nextSleeper =
+                ObdPollingEngine.LoopSleeper { ms ->
+                    adapter.exchanges.add(VirtualVolt.Exchange("", "$SLEEP$ms", ""))
+                    true
+                }
+        }
         VirtualVoltService.nextSwcanPolicy =
             SwcanListenRunner.Policy(
                 firstWindowDelayMs = 0L,
@@ -263,5 +317,8 @@ class VirtualVoltCarControlTest {
     private companion object {
         const val SAMPLES = 40
         const val WAIT_TIMEOUT_MS = 60_000L
+
+        /** Marks a recorded poll-loop sleep among the adapter's exchanges. */
+        const val SLEEP = "<sleep>"
     }
 }
