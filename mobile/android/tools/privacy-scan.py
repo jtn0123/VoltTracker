@@ -19,9 +19,11 @@ PRIVATE_ENDPOINT_RE = re.compile(
     r"\b(?:10\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])|192\.168)\.\d{1,3}\.\d{1,3}:\d{2,5}\b"
 )
 VIN_RE = re.compile(r"\b[A-HJ-NPR-Z0-9]{17}\b")
+# A latitude, longitude pair with at least four decimals on each side. The pair must not sit inside
+# a longer number, so plain integers such as "90, 180" or "190,1800" are not read as a position.
 COORD_PAIR_RE = re.compile(
-    r"(?P<lat>[+-]?(?:[1-8]?\d(?:\.\d{4,})|90(?:\.0+)?))\s*,\s*"
-    r"(?P<lon>[+-]?(?:(?:1[0-7]\d|[1-9]?\d)(?:\.\d{4,})|180(?:\.0+)?))"
+    r"(?<![\d.])(?P<lat>[+-]?(?:[1-8]?\d\.\d{4,}|90\.0{4,}))\s*,\s*"
+    r"(?P<lon>[+-]?(?:(?:1[0-7]\d|[1-9]?\d)\.\d{4,}|180\.0{4,}))(?!\.?\d)"
 )
 
 SKIP_DIR_PARTS = {
@@ -155,7 +157,9 @@ def run_self_test() -> int:
             file.parent.mkdir(parents=True, exist_ok=True)
         # A documentation address (RFC 5737) is never a real device.
         good.write_text(
-            "Use <ip:port-or-adb-serial> when benchmarking.\nExample: adb connect 192.0.2.10:5555\n",
+            "Use <ip:port-or-adb-serial> when benchmarking.\nExample: adb connect 192.0.2.10:5555\n"
+            # Plain integers and numbers inside longer numbers are not a position.
+            "Rotate through 90, 180, 270 degrees.\nmargin: 190,1800\nscale 123.45678, 12.34567.8\n",
             encoding="utf-8",
         )
         bad_ip.write_text(
@@ -164,12 +168,16 @@ def run_self_test() -> int:
         )
         bad_vin.write_text('const val VIN = "1G1RD6S58HU000001"\n', encoding="utf-8")
         bad_gps.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
-        bad_gps_plain.write_text("Parked at 34.11872, -118.30064 overnight.\n", encoding="utf-8")
+        # A sentence-ending period after the longitude must not hide the pair.
+        bad_gps_plain.write_text(
+            "Parked at 34.11872, -118.30064 overnight.\nLast fix: 34.11872,-118.30064.\n",
+            encoding="utf-8",
+        )
         allowed.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
         allowlist = Allowlist(("mobile/android/app/src/main/assets/dashboard/demos/efficiency.html",), ("<ip:port",))
         findings = scan_paths(root, [good, bad_ip, bad_vin, bad_gps, bad_gps_plain, allowed], allowlist)
         kinds = sorted(f.kind for f in findings)
-        expected = ["gps-coordinate-pair"] * 2 + ["private-device-endpoint"] * 3 + ["vin-like-token"]
+        expected = ["gps-coordinate-pair"] * 3 + ["private-device-endpoint"] * 3 + ["vin-like-token"]
         if kinds != expected:
             print(f"self-test failed: expected {expected}, got {kinds}", file=sys.stderr)
             return 1
