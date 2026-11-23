@@ -641,6 +641,11 @@ tasks.register("verifyActiveApp") {
             ":app:spotlessCheck",
             ":app:detekt",
             ":app:assembleDebug",
+            // The release variant (R8 + resource shrinking + lintVitalRelease). The release
+            // workflow runs this task before semantic-release tags, so a toolchain bump that
+            // breaks the minified build fails there instead of after the tag. With no
+            // keystore.properties the APK is simply left unsigned.
+            ":app:assembleRelease",
             ":app:jacocoTestCoverageVerification",
             "dashboardLint",
             "dashboardTypecheck",

@@ -15,7 +15,8 @@ npm --prefix dashboard-tests ci
 
 # 1b) PRE-PUSH — full active-app verification, matching CI (adds assemble, lint, jacoco
 #     verification, the Playwright e2e suite, and the bundle-size/straggler gates). Run before
-#     opening or updating a PR.
+#     opening or updating a PR. It also builds the minified release APK (unsigned without a
+#     keystore), which PR CI skips and the release workflow runs before tagging.
 ./gradlew verifyActiveApp --configuration-cache
 
 # 1c) PERFORMANCE — dashboard asset report, bundle budget, dashboard tests, and Android

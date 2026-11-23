@@ -161,6 +161,8 @@ jobs:
         # CI keeps the same checks as verifyActiveApp split into separate steps
         # so failures point at the exact lane and artifact uploads still run.
         # Keep this list in sync with mobile/android/build.gradle:verifyActiveApp.
+        # The one deliberate gap is :app:assembleRelease: PRs skip the minified
+        # build, and release.yml runs it through verifyActiveApp before tagging.
         run: |
           chmod +x ./gradlew
           ./gradlew --no-daemon --configuration-cache :app:testDebugUnitTest

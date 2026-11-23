@@ -131,6 +131,18 @@ def validate_release_preflight(preflight_text: str) -> None:
             raise ValueError(f"release preflight missing {snippet!r}")
 
 
+def validate_active_app_builds_release(root_build_gradle_text: str) -> None:
+    """The pre-tag preflight runs verifyActiveApp, so it must build the minified release APK."""
+    match = re.search(r'tasks\.register\("verifyActiveApp"\)\s*\{(.*?)\n\}', root_build_gradle_text, re.S)
+    if not match:
+        raise ValueError("mobile/android/build.gradle must register verifyActiveApp")
+    task_lines = [line for line in match.group(1).splitlines() if not line.lstrip().startswith("//")]
+    if '":app:assembleRelease"' not in "\n".join(task_lines):
+        raise ValueError(
+            "verifyActiveApp must depend on :app:assembleRelease so the release build runs before tagging"
+        )
+
+
 def main() -> int:
     config = semantic_release_config((ROOT / "pyproject.toml").read_bytes())
     validate_semantic_release_config(config)
@@ -138,6 +150,7 @@ def main() -> int:
     validate_release_workflow((ROOT / ".github/workflows/release.yml").read_text())
     validate_android_gradle_signing((ROOT / "mobile/android/app/build.gradle").read_text())
     validate_release_preflight((ROOT / "scripts/release-preflight.sh").read_text())
+    validate_active_app_builds_release((ROOT / "mobile/android/build.gradle").read_text())
     if not (ROOT / "VERSION").read_text().strip():
         raise ValueError("VERSION must not be empty")
     return 0

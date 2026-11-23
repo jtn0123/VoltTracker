@@ -53,6 +53,12 @@ with `keytool`, and removes both files in the final cleanup step. Tagged release
 builds fail when these secrets are absent instead of publishing an unsigned
 release APK.
 
+Before semantic-release tags, the release workflow's preflight runs
+`verifyActiveApp`, which also builds `:app:assembleRelease` (R8 and resource
+shrinking). It runs without the signing secrets, so that build leaves the APK
+unsigned and never publishes it. A toolchain bump that breaks the minified build
+therefore fails the preflight instead of leaving a tag with no release APK.
+
 ## Release Validation
 
 Before changing release automation, run:
