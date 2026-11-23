@@ -680,26 +680,47 @@ class ObdServiceIntegrationTest {
     }
 
     @Test
-    fun statusAndNotificationDoNotWaitForAStorageLockOnTheMainThread() {
+    fun statusAndNotificationDoNotWaitForTheRecorderLockOnTheMainThread() {
         val service = dispatch(ObdService.ACTION_CONNECT, "AA:BB:CC:DD:EE:FF", "Garage ELM")
+        val recorder = service.recorder
+        val publishWarning = recorder.onRecordingWarning
         val entered = CountDownLatch(1)
         val release = CountDownLatch(1)
-        service.recorder.runAsync {
-            synchronized(service.ioLock) {
+        val parked = AtomicBoolean(false)
+        // openSession calls this hook while it holds the recorder lock, so parking here keeps that
+        // lock busy the way a slow session start (database row, system snapshot) does.
+        recorder.onRecordingWarning = { warning ->
+            if (parked.compareAndSet(false, true)) {
                 entered.countDown()
-                assertTrue(release.await(5, TimeUnit.SECONDS))
+                release.await(ADAPTER_WINDOW_MS, TimeUnit.MILLISECONDS)
             }
+            publishWarning(warning)
         }
-        assertTrue(entered.await(5, TimeUnit.SECONDS))
+        val reopen = Thread { recorder.openSession(ObdLocalStore.MODE_OBD, "AA:BB:CC:DD:EE:FF", "Garage ELM", 1L) }
+        reopen.start()
         try {
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
             val started = System.nanoTime()
-            service.broadcastStatus("connected", "Live", false)
-            service.updateNotification("Live")
-            assertTrue(TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started) < 500L)
-            assertEquals(1L, release.count)
+            service.broadcastStatus("connected", "Live queued", false)
+            service.updateNotification("Notice queued")
+            val elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - started)
+            assertTrue("main thread waited ${elapsedMs}ms for the recorder lock", elapsedMs < MAIN_THREAD_BUDGET_MS)
+            assertEquals("the recorder lock was still held", 1L, release.count)
         } finally {
             release.countDown()
+            reopen.join(ADAPTER_WINDOW_MS)
+            recorder.onRecordingWarning = publishWarning
         }
+
+        // The main thread queued both writes, so they land in the session opened after the lock freed.
+        val drained = CountDownLatch(1)
+        recorder.runAsync { drained.countDown() }
+        assertTrue(drained.await(5, TimeUnit.SECONDS))
+        val log = sessionLogText(service)
+        val sessionStart = log.indexOf("session_start")
+        assertTrue("the reopened session started", sessionStart >= 0)
+        assertTrue("the status line was queued, not dropped", log.indexOf("Live queued") > sessionStart)
+        assertTrue("the notification line was queued, not dropped", log.indexOf("Notice queued") > sessionStart)
     }
 
     @Test
