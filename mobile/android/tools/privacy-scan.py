@@ -60,18 +60,6 @@ TEXT_SUFFIXES = {
     ".kml",
     ".geojson",
 }
-GPS_PATH_HINTS = (
-    "gps",
-    "location",
-    "route",
-    "trip",
-    "track",
-    "baseline",
-    "benchmark",
-    "fixture",
-    "sample",
-    "demo",
-)
 
 
 @dataclass(frozen=True)
@@ -131,11 +119,6 @@ def should_scan(path: Path, root: Path) -> bool:
     return path.suffix in TEXT_SUFFIXES or path.name in {"README", "LICENSE"}
 
 
-def should_scan_gps(path: str) -> bool:
-    lowered = path.lower()
-    return any(hint in lowered for hint in GPS_PATH_HINTS)
-
-
 def scan_paths(root: Path, paths: list[Path], allowlist: Allowlist) -> list[Finding]:
     findings: list[Finding] = []
     for path in paths:
@@ -153,9 +136,8 @@ def scan_paths(root: Path, paths: list[Path], allowlist: Allowlist) -> list[Find
                 findings.append(Finding(rel, line_number, "private-device-endpoint", match.group(0)))
             for match in VIN_RE.finditer(line):
                 findings.append(Finding(rel, line_number, "vin-like-token", match.group(0)))
-            if should_scan_gps(rel):
-                for match in COORD_PAIR_RE.finditer(line):
-                    findings.append(Finding(rel, line_number, "gps-coordinate-pair", match.group(0)))
+            for match in COORD_PAIR_RE.finditer(line):
+                findings.append(Finding(rel, line_number, "gps-coordinate-pair", match.group(0)))
     return findings
 
 
@@ -166,8 +148,10 @@ def run_self_test() -> int:
         bad_ip = root / "mobile/android/docs/performance-baseline-history.md"
         bad_vin = root / "mobile/android/app/src/main/kotlin/com/example/Foo.kt"
         bad_gps = root / "mobile/android/docs/private-route-sample.md"
+        # No location-sounding word in this path: every scanned file gets the coordinate check.
+        bad_gps_plain = root / "mobile/android/docs/adr/notes.md"
         allowed = root / "mobile/android/app/src/main/assets/dashboard/demos/efficiency.html"
-        for file in [good, bad_ip, bad_vin, bad_gps, allowed]:
+        for file in [good, bad_ip, bad_vin, bad_gps, bad_gps_plain, allowed]:
             file.parent.mkdir(parents=True, exist_ok=True)
         # A documentation address (RFC 5737) is never a real device.
         good.write_text(
@@ -180,11 +164,12 @@ def run_self_test() -> int:
         )
         bad_vin.write_text('const val VIN = "1G1RD6S58HU000001"\n', encoding="utf-8")
         bad_gps.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
+        bad_gps_plain.write_text("Parked at 34.11872, -118.30064 overnight.\n", encoding="utf-8")
         allowed.write_text("route: 34.11872,-118.30064\n", encoding="utf-8")
         allowlist = Allowlist(("mobile/android/app/src/main/assets/dashboard/demos/efficiency.html",), ("<ip:port",))
-        findings = scan_paths(root, [good, bad_ip, bad_vin, bad_gps, allowed], allowlist)
+        findings = scan_paths(root, [good, bad_ip, bad_vin, bad_gps, bad_gps_plain, allowed], allowlist)
         kinds = sorted(f.kind for f in findings)
-        expected = ["gps-coordinate-pair"] + ["private-device-endpoint"] * 3 + ["vin-like-token"]
+        expected = ["gps-coordinate-pair"] * 2 + ["private-device-endpoint"] * 3 + ["vin-like-token"]
         if kinds != expected:
             print(f"self-test failed: expected {expected}, got {kinds}", file=sys.stderr)
             return 1
