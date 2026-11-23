@@ -2,6 +2,7 @@ package com.volttracker.obdpoc
 
 import android.content.Context
 import android.util.Log
+import com.volttracker.obdpoc.data.DatabaseCorruption
 import com.volttracker.obdpoc.data.DatabaseMerger
 import com.volttracker.obdpoc.data.ObdLocalStore
 import java.io.File
@@ -11,10 +12,10 @@ import java.io.IOException
  * Applies a staged, verified restore file to the live database for [BackupController]:
  * the additive merge ([applyMerge]) and the destructive replace ([applyReplace]) with its
  * staging/rollback ladder (stage to `.restore-new`, keep a `.restore-backup` safety copy,
- * roll the original back on rename/open failure, and preserve the safety copy if that
- * rollback itself fails).
+ * roll the original back on rename failure or when the restored file fails its first open and
+ * quick check, and preserve the safety copy if that rollback itself fails).
  *
- * Extracted verbatim from [BackupController] (LargeClass ratchet); behavior is identical.
+ * Extracted from [BackupController] (LargeClass ratchet).
  * The cancellation gate is a lambda because the controller owns the disposed flag and the
  * pipeline must also observe the worker thread's interrupt state at call time.
  */
@@ -116,7 +117,7 @@ class RestoreApplyPipeline<A>(
                 throw ex
             }
             try {
-                activity.localStore = ObdLocalStore(activity)
+                activity.localStore = openRestoredStore(dbFile)
             } catch (ex: RuntimeException) {
                 val rolledBack = restoreOriginalDatabase(dbFile, restoreBackup)
                 preserveRestoreBackup = !rolledBack
@@ -136,6 +137,24 @@ class RestoreApplyPipeline<A>(
             cleanUpRestoreSafetyCopy(restoreBackup, preserveRestoreBackup)
             DataBackup.deleteIfExists(staged)
         }
+    }
+
+    /**
+     * Opens the swapped-in file and quick-checks it before the safety copy may go: constructing
+     * [ObdLocalStore] alone never opens the file. A file SQLite rejects outright is set aside by the
+     * live database's corruption handler and replaced with an empty one that would pass the check,
+     * so a new set-aside copy also counts as a failure. That copy is the bad restore, not history,
+     * so it is discarded along with its owner notice. Throws to trigger the rollback.
+     */
+    private fun openRestoredStore(dbFile: File): ObdLocalStore {
+        val setAsideBefore = DatabaseCorruption.setAsideCopies(dbFile).toSet()
+        val store = ObdLocalStore(activity)
+        val check = store.dbMaintenance.quickCheck()
+        val setAside = DatabaseCorruption.setAsideCopies(dbFile).filterNot { it in setAsideBefore }
+        if (check.ok && setAside.isEmpty()) return store
+        store.close()
+        setAside.forEach { DatabaseCorruption.discard(activity, it) }
+        throw IllegalStateException("restored database failed its first open: ${check.problems}")
     }
 
     /** Checkpoints and closes the live store so its file can be swapped; false aborts the replace. */

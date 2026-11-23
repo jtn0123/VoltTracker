@@ -17,6 +17,8 @@ data class VoltAppUiState(
     val historyRefreshing: Boolean = false,
     val connectionFailure: ConnectionFailure? = null,
     val recordingWarning: String? = null,
+    /** When damaged saved history was set aside and a fresh database started; null once dismissed. */
+    val historyResetAtMs: Long? = null,
     val drive: DriveUiState = DriveUiState(),
     val charge: ChargeUiState = ChargeUiState(),
     val trips: TripsUiState = TripsUiState(),

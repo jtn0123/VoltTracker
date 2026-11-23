@@ -14,6 +14,8 @@ data class VoltAppActions(
     val onOpenClassicView: (String) -> Unit = {},
     val onOpenTroubleshooter: () -> Unit = {},
     val onDismissConnectionFailure: () -> Unit = {},
+    /** The owner has read the "saved history was reset" notice. */
+    val onDismissHistoryReset: () -> Unit = {},
     /** Connect to the remembered adapter. False = none chosen yet, so the app opens the picker. */
     val onConnect: () -> Boolean = { true },
     val onStartDemo: () -> Unit = {},

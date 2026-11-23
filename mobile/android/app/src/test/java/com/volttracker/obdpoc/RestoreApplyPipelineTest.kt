@@ -1,11 +1,14 @@
 package com.volttracker.obdpoc
 
 import android.os.Bundle
+import com.volttracker.obdpoc.data.DatabaseCorruption
 import com.volttracker.obdpoc.data.ObdLocalStore
+import com.volttracker.obdpoc.data.VoltTrackerDb
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -15,12 +18,14 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.io.RandomAccessFile
 
 /**
  * Exercises [RestoreApplyPipeline] directly (the [BackupControllerDialogTest] suite drives the
  * same code through the Replace / Merge dialog): the replace file-swap, the merge fold-in, the
- * lease / logging-active / missing-store fail-closed branches, cancellation, and the
- * safety-copy preservation invariant behind the replace rollback ladder.
+ * lease / logging-active / missing-store fail-closed branches, cancellation, the rollback when the
+ * restored file fails its first open or quick check, and the safety-copy preservation invariant
+ * behind the replace rollback ladder.
  */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [34])
@@ -176,9 +181,72 @@ class RestoreApplyPipelineTest {
     }
 
     @Test
+    fun aRestoredFileThatIsNotADatabaseRollsBackToTheOriginal() {
+        val staged = File(activity.cacheDir, "not-a-database.db")
+        staged.writeBytes(ByteArray(8 * 1024) { 0x5A })
+
+        assertReplaceRollsBack(staged)
+    }
+
+    @Test
+    fun aRestoredFileThatFailsItsQuickCheckRollsBackToTheOriginal() {
+        val staged = File(activity.cacheDir, "damaged-pages.db")
+        VoltTrackerDb(activity, "damaged-source.db").use { helper ->
+            val db = helper.writableDatabase
+            repeat(300) { index ->
+                db.execSQL(
+                    "INSERT INTO ${VoltTrackerDb.TABLE_SESSIONS} " +
+                        "(mode, adapter_name, started_at_ms, status, created_at_ms) VALUES ('obd', ?, ?, 'complete', 1)",
+                    arrayOf<Any>("x".repeat(1024), index.toLong()),
+                )
+            }
+            db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { it.moveToFirst() }
+        }
+        activity.getDatabasePath("damaged-source.db").copyTo(staged, overwrite = true)
+        activity.deleteDatabase("damaged-source.db")
+        RandomAccessFile(staged, "rw").use { raf ->
+            // Header intact, so the file opens; pages in the middle are garbage.
+            raf.seek(maxOf(PAGE_SIZE, raf.length() / 2 / PAGE_SIZE * PAGE_SIZE))
+            raf.write(ByteArray(2 * PAGE_SIZE.toInt()) { 0x5A })
+        }
+
+        assertReplaceRollsBack(staged)
+    }
+
+    /** Replace with [staged] must fail, leave the live session in place and leave no file behind. */
+    private fun assertReplaceRollsBack(staged: File) {
+        val store = activity.localStore!!
+        val id = store.startSession("obd", "CC:DD", "Live")
+        store.finishSession(id, ObdLocalStore.STATUS_COMPLETE, 4000L, "")
+        val dbFile = store.getDatabaseFile()
+
+        val result = pipeline.applyReplace(staged, emitter())
+
+        assertEquals(RestoreApplyPipeline.Result.OTHER, result)
+        assertNotNull("the original store must be reopened", activity.localStore)
+        assertEquals("the live session must survive", 1, activity.localStore!!.getRecentSessions(10).size)
+        assertTrue(
+            "the original passes its own check",
+            activity.localStore!!
+                .dbMaintenance
+                .quickCheck()
+                .ok,
+        )
+        assertFalse("safety copy is rolled back into place", File("${dbFile.path}.restore-backup").exists())
+        assertFalse(File("${dbFile.path}.restore-new").exists())
+        assertFalse("staged file must be consumed", staged.exists())
+        assertTrue("a bad restore is not kept as history", DatabaseCorruption.setAsideCopies(dbFile).isEmpty())
+        assertNull("nor announced as a history reset", DatabaseCorruption.pendingNoticeAtMs(activity))
+    }
+
+    @Test
     fun failedRollbackPreservesTheOnlyRestoreSafetyCopy() {
         assertFalse(RestoreApplyPipeline.shouldDeleteRestoreSafetyCopy(rollbackFailed = true))
         assertTrue(RestoreApplyPipeline.shouldDeleteRestoreSafetyCopy(rollbackFailed = false))
+    }
+
+    private companion object {
+        const val PAGE_SIZE = 4096L
     }
 
     /** Minimal MainActivity that wires a real store and stubs the WebView-facing surfaces. */

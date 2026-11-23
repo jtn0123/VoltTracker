@@ -9,11 +9,14 @@ import androidx.core.database.sqlite.transaction
 class VoltTrackerDb : SQLiteOpenHelper {
     constructor(context: Context) : this(context, DATABASE_NAME)
 
+    // Only the live database gets the set-aside handler: other names are working copies
+    // (BackupMigrator, tests) whose loss costs nothing, so Android's default handler stays.
     constructor(context: Context, databaseName: String) : super(
         context.applicationContext,
         databaseName,
         null,
         DATABASE_VERSION,
+        if (databaseName == DATABASE_NAME) DatabaseCorruption.handler(context) else null,
     ) {
         // Write-ahead logging lets dashboard reads (storage summary, trips, route render)
         // run concurrently with the single-thread telemetry writer instead of serializing
