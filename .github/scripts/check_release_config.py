@@ -136,7 +136,9 @@ DEPLOY_KEY_JOB_STEPS = (
     "Strip build-only files from GitHub release",
 )
 PIP_INSTALL_RE = re.compile(r"\bpip[0-9.]*\s+install\b")
-WRITE_PERMISSION_RE = re.compile(r"(?m)^\s*[a-z-]+:\s*write\b|write-all")
+WRITE_PERMISSION_RE = re.compile(r"(?m)(?:^\s*[a-z-]+:\s*write\b)|(?:write-all)")
+# A step's own keys sit this far in; anything deeper belongs to one of them.
+STEP_KEY_INDENT = " " * 8
 
 
 def strip_comment_lines(text: str) -> str:
@@ -159,7 +161,7 @@ def workflow_jobs(workflow_text: str) -> dict[str, str]:
     for line in lines[start:]:
         if line and not line[0].isspace():
             break
-        job = re.match(r"^  ([A-Za-z0-9_-]+):\s*$", line)
+        job = re.match(r"^ {2}([A-Za-z0-9_-]+):\s*$", line)
         if job:
             current = jobs.setdefault(job.group(1), [])
             continue
@@ -173,20 +175,36 @@ def job_steps(job_text: str) -> list[str]:
     _, found, steps_text = job_text.partition("\n    steps:\n")
     if not found:
         return []
-    return [step for step in re.split(r"(?m)^      - ", steps_text) if step.strip()]
+    return [step for step in re.split(r"(?m)^ {6}- ", steps_text) if step.strip()]
+
+
+def step_field(step: str, field: str) -> str | None:
+    """Value of one of a step's own keys, or None when the step has no such key.
+
+    Only the step's own keys count: its first line, and the lines indented
+    exactly as far. A ``name:`` or ``uses:`` deeper down (an ``env:`` entry, a
+    line of a script) cannot pass for the step's own.
+    """
+    lines = step.splitlines()
+    own = lines[:1] + [line[len(STEP_KEY_INDENT) :] for line in lines[1:] if line.startswith(STEP_KEY_INDENT)]
+    for line in own:
+        key, found, value = line.partition(":")
+        if found and key == field:
+            return value.strip()
+    return None
 
 
 def validate_deploy_key_job_steps(release: str) -> None:
     for step in job_steps(release):
-        uses = re.search(r"(?m)^(?:\s*)uses:\s*(\S+)", step)
-        if uses:
-            action = uses.group(1).split("@", 1)[0]
+        uses = step_field(step, "uses")
+        if uses is not None:
+            action = (uses.split() or [""])[0].split("@", 1)[0]
             if action not in DEPLOY_KEY_JOB_ACTIONS:
                 raise ValueError(f"release job holds the deploy key and must not use {action!r}")
             continue
-        name = re.search(r"(?m)^(?:\s*)name:\s*(.+?)\s*$", step)
-        if not name or name.group(1) not in DEPLOY_KEY_JOB_STEPS:
-            label = name.group(1) if name else step.splitlines()[0].strip()
+        name = step_field(step, "name")
+        if name not in DEPLOY_KEY_JOB_STEPS:
+            label = name or step.splitlines()[0].strip()
             raise ValueError(f"release job holds the deploy key and has an unexpected step {label!r}")
 
 
@@ -196,7 +214,14 @@ def validate_release_job_isolation(workflow_text: str) -> None:
         raise ValueError(f"{DEPLOY_KEY_SECRET} must be referenced exactly once, in the release job's checkout")
     key_jobs = [name for name, body in jobs.items() if DEPLOY_KEY_SECRET in body]
     require_equal("jobs holding the release deploy key", key_jobs, ["release"])
-    release = jobs["release"]
+    validate_deploy_key_job(jobs["release"])
+    preflight = jobs.get("preflight")
+    if preflight is None:
+        raise ValueError("release workflow must have a preflight job")
+    validate_preflight_job(preflight)
+
+
+def validate_deploy_key_job(release: str) -> None:
     for forbidden in DEPLOY_KEY_JOB_FORBIDDEN:
         if forbidden in release:
             raise ValueError(f"release job holds the deploy key and must not run {forbidden.strip()!r}")
@@ -210,9 +235,8 @@ def validate_release_job_isolation(workflow_text: str) -> None:
             raise ValueError("every pip install in the release job must use --require-hashes")
     validate_deploy_key_job_steps(release)
 
-    preflight = jobs.get("preflight")
-    if preflight is None:
-        raise ValueError("release workflow must have a preflight job")
+
+def validate_preflight_job(preflight: str) -> None:
     for required in (
         "./scripts/release-preflight.sh",
         "fetch-depth: 0",
@@ -241,6 +265,15 @@ def validate_release_requirements(requirements_in: str, requirements_txt: str) -
     for pin in pins:
         if not re.fullmatch(r"[A-Za-z0-9_.-]+==\S+", pin):
             raise ValueError(f"release requirements input must pin an exact version: {pin!r}")
+    locked = locked_release_requirements(requirements_txt)
+    for pin in pins:
+        name, version = pin.split("==", 1)
+        if locked.get(name.lower()) != version:
+            raise ValueError(f"{RELEASE_REQUIREMENTS} does not lock {pin}; regenerate it with pip-compile")
+
+
+def locked_release_requirements(requirements_txt: str) -> dict[str, str]:
+    """Read the lock as {package: version}; every entry must carry a version and a hash."""
     locked = {}
     for entry in re.split(r"\n(?=[A-Za-z0-9])", requirements_txt):
         first = entry.lstrip("\n").splitlines()[0] if entry.strip() else ""
@@ -252,10 +285,7 @@ def validate_release_requirements(requirements_in: str, requirements_txt: str) -
         if "--hash=sha256:" not in entry:
             raise ValueError(f"release requirement {match.group(1)!r} has no sha256 hash")
         locked[match.group(1).lower()] = match.group(2)
-    for pin in pins:
-        name, version = pin.split("==", 1)
-        if locked.get(name.lower()) != version:
-            raise ValueError(f"{RELEASE_REQUIREMENTS} does not lock {pin}; regenerate it with pip-compile")
+    return locked
 
 
 def validate_android_gradle_signing(build_gradle_text: str) -> None:
