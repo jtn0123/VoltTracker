@@ -33,6 +33,9 @@ class RawDataMaintenanceTest {
     // maintain stays last so a trailing lambda still means the maintenance body.
     private fun coordinator(
         onPassEnd: () -> Unit = {},
+        acquireLease: () -> DatabaseOperationLease.Token? = {
+            DatabaseOperationLease.tryAcquireWhenIdle("raw maintenance")
+        },
         maintain: (Int) -> Unit = { retention.add(it) },
     ) = RawDataMaintenance(
         prefs = { prefs },
@@ -41,6 +44,7 @@ class RawDataMaintenanceTest {
         worker = Executor { workers.add(it) },
         nowMs = { now },
         onPassEnd = onPassEnd,
+        acquireLease = acquireLease,
     )
 
     private fun drain() {
@@ -93,6 +97,31 @@ class RawDataMaintenanceTest {
         coordinator.request()
         drain()
         assertEquals(listOf(60), retention)
+    }
+
+    // The service refuses every session start while the lease is held, and every Activity start and
+    // stop requests a pass, so only a pass that will prune may take it.
+    @Test fun aPassThatIsNotDueNeverTakesTheLease() {
+        var acquisitions = 0
+        val coordinator =
+            coordinator(acquireLease = {
+                acquisitions += 1
+                DatabaseOperationLease.tryAcquireWhenIdle("raw maintenance")
+            })
+
+        coordinator.request()
+        drain()
+        assertEquals(1, acquisitions)
+        repeat(3) {
+            coordinator.request()
+            drain()
+        }
+        assertEquals("passes inside the daily window never ask for the lease", 1, acquisitions)
+        now += RawDataMaintenance.INTERVAL_MS
+        coordinator.request()
+        drain()
+        assertEquals(2, acquisitions)
+        assertEquals(listOf(60, 60), retention)
     }
 
     @Test fun theLeaseCoversTheWholeMaintenanceAndFailuresReleaseItForRetry() {

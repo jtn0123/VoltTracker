@@ -17,10 +17,12 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Process-owned retention for either dashboard. Lifecycle requests coalesce and give connection
- * startup a head start. The worker checks a persisted daily throttle, takes the same exclusion as
- * backup/restore only when no recording writer owns SQLite, and opens its own short-lived store.
- * Busy or failed attempts leave the timestamp untouched and retry on a later lifecycle request.
- * [onPassEnd] runs on the worker after every pass, once the pass no longer holds the lease.
+ * startup a head start. The worker checks a persisted daily throttle first, then takes the same
+ * exclusion as backup/restore only when no recording writer owns SQLite, and opens its own
+ * short-lived store. The service refuses every new session while that exclusion is held, so a pass
+ * that is not due never takes it. Busy or failed attempts leave the timestamp untouched and retry
+ * on a later lifecycle request. [onPassEnd] runs on the worker after every pass, once the pass no
+ * longer holds the lease.
  */
 internal class RawDataMaintenance(
     private val prefs: () -> SharedPreferences,
@@ -29,6 +31,9 @@ internal class RawDataMaintenance(
     private val worker: Executor,
     private val nowMs: () -> Long = System::currentTimeMillis,
     private val onPassEnd: () -> Unit = {},
+    private val acquireLease: () -> DatabaseOperationLease.Token? = {
+        DatabaseOperationLease.tryAcquireWhenIdle("raw maintenance")
+    },
 ) : Application.ActivityLifecycleCallbacks {
     private val pending = AtomicBoolean(false)
 
@@ -59,18 +64,20 @@ internal class RawDataMaintenance(
     }
 
     private fun runIfDue() {
-        val lease = DatabaseOperationLease.tryAcquireWhenIdle("raw maintenance") ?: return
-        lease.use {
-            try {
-                val settings = prefs()
-                val lastRun = settings.getLong(LAST_SUCCESS, 0L)
-                if (lastRun > 0 && nowMs() - lastRun in 0 until INTERVAL_MS) return
+        try {
+            val settings = prefs()
+            val lastRun = settings.getLong(LAST_SUCCESS, 0L)
+            // Check the throttle before the lease: every Activity start and stop requests a pass,
+            // and a session started while one held the lease was refused.
+            if (lastRun > 0 && nowMs() - lastRun in 0 until INTERVAL_MS) return
+            val lease = acquireLease() ?: return
+            lease.use {
                 val days = settings.getInt("raw_retention_days", ObdLocalStore.DEFAULT_RAW_RETENTION_DAYS)
                 if (days > 0) maintain(days)
                 settings.edit(commit = true) { putLong(LAST_SUCCESS, nowMs()) }
-            } catch (ex: RuntimeException) {
-                Log.w(AppPrefs.LOG_TAG, "Raw maintenance failed; retrying on a later lifecycle request", ex)
             }
+        } catch (ex: RuntimeException) {
+            Log.w(AppPrefs.LOG_TAG, "Raw maintenance failed; retrying on a later lifecycle request", ex)
         }
     }
 
