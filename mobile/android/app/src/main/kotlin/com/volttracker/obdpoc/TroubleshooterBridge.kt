@@ -196,14 +196,15 @@ class TroubleshooterBridge<A>(
     }
 
     /**
-     * Shows a "preparing" status, runs [build] on [diagnosticsExecutor] and posts the result back to
-     * the UI thread. A tap while a build is already running only repeats the status.
+     * Shows a "preparing" notice, runs [build] on [diagnosticsExecutor] and posts the result back to
+     * the UI thread. A tap while a build is already running only repeats the notice. The notice is not
+     * a status: publishing one would end a live session's "connected" state on the classic dashboard.
      */
     private fun prepareDiagnosticsShare(
         label: String,
         build: () -> Intent?,
     ) {
-        activity.publishStatus("ready", activity.getString(R.string.status_diagnostics_preparing), false)
+        activity.showProgressNotice(activity.getString(R.string.status_diagnostics_preparing))
         if (!diagnosticsShareInFlight.compareAndSet(false, true)) {
             return
         }

@@ -3,6 +3,7 @@ package com.volttracker.obdpoc
 import android.content.Context
 import android.content.Intent
 import android.os.Looper
+import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import com.volttracker.obdpoc.service.ObdService
 import com.volttracker.obdpoc.ui.insights.InsightsPeriod
@@ -25,6 +26,7 @@ import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.shadows.ShadowToast
+import java.lang.reflect.Modifier
 import java.util.concurrent.atomic.AtomicInteger
 
 /** The native Settings tools run through the shared helpers, with the restore guards in front. */
@@ -40,6 +42,9 @@ class ComposeDashboardToolsTest {
         controller = Robolectric.buildActivity(ComposeDashboardActivity::class.java).create()
         activity = controller.get()
         activity.loggingProbe = { false }
+        // FileProvider caches its path roots statically; one cached by an earlier test class points
+        // at that test's cache dir and would make the diagnostics share's getUriForFile throw here.
+        resetFileProviderPathCache()
     }
 
     @After
@@ -281,6 +286,15 @@ class ComposeDashboardToolsTest {
     private companion object {
         const val WAIT_MS = 5_000L
         const val POLL_MS = 20L
+
+        fun resetFileProviderPathCache() {
+            for (field in FileProvider::class.java.declaredFields) {
+                if (Modifier.isStatic(field.modifiers) && MutableMap::class.java.isAssignableFrom(field.type)) {
+                    field.isAccessible = true
+                    (field.get(null) as? MutableMap<*, *>)?.clear()
+                }
+            }
+        }
     }
 
     @Test

@@ -108,12 +108,17 @@ object DiagnosticsBundle {
         budgetBytes: Int = DEFAULT_BUDGET_BYTES,
     ): String = build(filesDir, budgetBytes, System.currentTimeMillis())
 
-    /** Deterministic entry point: [nowMs] feeds the header timestamp so tests can pin the output. */
+    /**
+     * Deterministic entry point: [nowMs] feeds the header timestamp so tests can pin the output.
+     * [countErrors] reads one session log to count its error lines; tests pass a counting wrapper to
+     * check that only the newest [MAX_LISTED_SESSIONS] logs are ever opened.
+     */
     @JvmStatic
     internal fun build(
         filesDir: File,
         budgetBytes: Int,
         nowMs: Long,
+        countErrors: (File) -> Int = ::countErrorLines,
     ): String {
         val budget = maxOf(HEADER_RESERVE, budgetBytes)
         val sessionDir = File(filesDir, SESSION_LOG_DIR)
@@ -121,7 +126,7 @@ object DiagnosticsBundle {
         val summaryFile = File(sessionDir, SUMMARY_NAME)
         val appLogFile = File(appLogDir, APP_LOG_NAME)
 
-        val scan = scanSessions(sessionDir)
+        val scan = scanSessions(sessionDir, countErrors)
         val layout = planSessions(scan, summaryFile, appLogFile, budget)
         val plans = layout.plans
 
@@ -202,7 +207,10 @@ object DiagnosticsBundle {
         return out.toString()
     }
 
-    private fun scanSessions(sessionDir: File): SessionScan {
+    private fun scanSessions(
+        sessionDir: File,
+        countErrors: (File) -> Int,
+    ): SessionScan {
         val none = SessionScan(emptyList(), 0, 0L)
         if (!sessionDir.isDirectory) {
             return none
@@ -220,7 +228,13 @@ object DiagnosticsBundle {
         return SessionScan(
             recent =
                 ranked.take(MAX_LISTED_SESSIONS).map { (file, modified, ts) ->
-                    scanSessionFile(file, modified, ts)
+                    SessionFile(
+                        file = file,
+                        bytes = file.length(),
+                        lastModified = modified,
+                        errorLines = countErrors(file),
+                        tsFromName = ts,
+                    )
                 },
             olderCount = older.size,
             olderBytes = older.sumOf { it.first.length() },
@@ -234,11 +248,7 @@ object DiagnosticsBundle {
             ?.get(1)
             ?.toLongOrNull() ?: 0L
 
-    private fun scanSessionFile(
-        file: File,
-        lastModified: Long,
-        tsFromName: Long,
-    ): SessionFile {
+    private fun countErrorLines(file: File): Int {
         var errors = 0
         try {
             file.bufferedReader(Charsets.UTF_8).useLines { lines ->
@@ -251,13 +261,7 @@ object DiagnosticsBundle {
         } catch (_: IOException) {
             // Best-effort: a session we can't scan still appears in the manifest with whatever we have.
         }
-        return SessionFile(
-            file = file,
-            bytes = file.length(),
-            lastModified = lastModified,
-            errorLines = errors,
-            tsFromName = tsFromName,
-        )
+        return errors
     }
 
     /**

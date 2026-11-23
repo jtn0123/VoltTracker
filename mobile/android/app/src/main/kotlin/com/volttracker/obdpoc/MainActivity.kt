@@ -775,6 +775,12 @@ open class MainActivity :
         deviceListPublisher.publish()
     }
 
+    /**
+     * The classic dashboard's buttons show their own busy label while a tool works, and its status
+     * line is the connection state, so progress notes are not shown here.
+     */
+    override fun showProgressNotice(detail: String) = Unit
+
     override fun publishStatus(
         state: String?,
         detail: String?,

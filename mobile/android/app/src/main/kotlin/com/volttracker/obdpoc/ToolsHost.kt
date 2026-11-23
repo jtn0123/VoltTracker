@@ -19,7 +19,16 @@ interface StatusSink {
  */
 interface TroubleshooterHost :
     DeviceCommands,
-    StatusSink
+    StatusSink {
+    /**
+     * A short progress note ("Preparing diagnostics…") that must not change the published status.
+     * The default suits a host whose [publishStatus] only shows a passing message (the native
+     * dashboard's toast). A host whose status line is the live connection state must override it:
+     * on the classic dashboard a note sent through [publishStatus] would flip a live session's badge
+     * and reset its on-screen stats.
+     */
+    fun showProgressNotice(detail: String) = publishStatus(null, detail, false)
+}
 
 /**
  * What backup and restore ([BackupController], [BackupRestoreProgressPresenter],

@@ -254,9 +254,16 @@ class DiagnosticsBundleTest {
             writeSession(1_000L * i, "obd", body(300, errorLines = 0))
         }
 
-        val digest = DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW)
+        val opened = ArrayList<String>()
+        val digest =
+            DiagnosticsBundle.build(filesDir, DiagnosticsBundle.DEFAULT_BUDGET_BYTES, NOW) { file ->
+                opened += file.name
+                file.readLines().count { it.contains("\"type\":\"error\"") }
+            }
         val manifest = manifestOf(digest)
 
+        assertEquals("only the newest logs are opened", DiagnosticsBundle.MAX_LISTED_SESSIONS, opened.size)
+        assertFalse("the old session is never read", opened.contains("session-1000-scan.jsonl"))
         assertEquals(DiagnosticsBundle.MAX_LISTED_SESSIONS, manifest.length())
         assertEquals("session-${1_000L * SESSION_PILE}-obd.jsonl", manifest.getJSONObject(0).getString("name"))
         assertFalse("an old session is not listed", digest.contains("session-1000-scan.jsonl"))
