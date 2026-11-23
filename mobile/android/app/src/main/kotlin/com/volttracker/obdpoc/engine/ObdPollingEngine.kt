@@ -26,6 +26,7 @@ import com.volttracker.obdpoc.PidPollingState
 import com.volttracker.obdpoc.SessionHealthTracker
 import com.volttracker.obdpoc.SpeedPlausibilityFilter
 import com.volttracker.obdpoc.StartupTrace
+import com.volttracker.obdpoc.classify.Confidence
 import com.volttracker.obdpoc.classify.VehicleState
 import com.volttracker.obdpoc.location.FilteredLocation
 import org.json.JSONException
@@ -775,8 +776,10 @@ open class ObdPollingEngine(
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout. A
             // guided car test turns the car off and on again, so it holds the session meanwhile, and
-            // ends it once the car is switched off after the test's drive.
-            val asleep = shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState)
+            // ends it once the car is switched off after the test's drive. A weak state comes from the
+            // adapter's voltage alone, so it holds the session for a bounded time only.
+            val voltageOnlyState = sample.optString("vehicleStateConfidence") == Confidence.WEAK.asPayloadKey()
+            val asleep = shouldEndForVehicleSleep(pidPolling.msSinceLastLiveData(), lastVehicleState, voltageOnlyState)
             if (swcanListener.endsSession() || asleep && !swcanListener.holdsSession()) {
                 endForVehicleSleep()
                 return
@@ -1127,19 +1130,33 @@ open class ObdPollingEngine(
         const val VEHICLE_SLEEP_GIVE_UP_MS = 180_000L
 
         /**
+         * The longest a state read from the adapter's voltage alone can hold a silent session open.
+         * With every PID unanswered, a 12 V reading above the DC-DC level classifies as "ready". That
+         * is what a running car with failing PIDs looks like, but also a parked car whose battery
+         * still reads high after switch-off, so it buys time (15 min) rather than holding forever.
+         */
+        const val VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS = 900_000L
+
+        /**
          * Pure decision (extracted for testability): end the live session because the vehicle is
          * asleep when no fresh PID data has arrived for [VEHICLE_SLEEP_GIVE_UP_MS] AND the last known
          * state is not an actively-driving one. During real sleep the classifier yields
          * parked/unknown, so the state guard only blocks a false stop on a transient mid-drive stall
-         * that still reports motion.
+         * that still reports motion. A state that rests on the adapter's voltage alone
+         * ([stateFromAdapterVoltageOnly]) blocks the stop only until
+         * [VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS].
          */
         @JvmStatic
         fun shouldEndForVehicleSleep(
             msSinceLiveData: Long,
             vehicleState: String,
+            stateFromAdapterVoltageOnly: Boolean = false,
         ): Boolean {
             if (msSinceLiveData < VEHICLE_SLEEP_GIVE_UP_MS) {
                 return false
+            }
+            if (stateFromAdapterVoltageOnly && msSinceLiveData >= VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS) {
+                return true
             }
             return when (vehicleState) {
                 VehicleState.DRIVING_EV.asPayloadKey(),

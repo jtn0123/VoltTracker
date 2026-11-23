@@ -682,18 +682,50 @@ class ObdPollingEngineTest {
 
     @Test
     fun aParkedCarWhoseAdapterStillAnswersEndsTheSessionAsAsleep() {
-        // The car is parked and asleep: every PID goes unanswered, but the adapter stays powered
-        // from the OBD port and keeps answering ATRV with its own supply voltage.
+        val safetyStopAfterMs = ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS * 4
+
+        val endedAfterMs = runParkedSessionWhereOnlyTheAdapterAnswers("12.4V\r>", safetyStopAfterMs)
+
+        assertTrue("the session ends as an asleep car", latestObdLogText().contains("idle_no_data"))
+        assertTrue("it ended before the safety stop", endedAfterMs < safetyStopAfterMs)
+    }
+
+    @Test
+    fun aHighAdapterVoltageHoldsAParkedSessionOnlyForABoundedTime() {
+        // Above the DC-DC level the adapter's voltage alone classifies as "ready", which is also what
+        // a running car with failing PIDs looks like. It may hold the session, but not forever.
+        val safetyStopAfterMs = ObdPollingEngine.VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS * 2
+
+        val endedAfterMs = runParkedSessionWhereOnlyTheAdapterAnswers("13.2V\r>", safetyStopAfterMs)
+
+        val log = latestObdLogText()
+        assertTrue("the voltage reads as ready", log.contains("\"lastVehicleState\":\"ready\""))
+        assertTrue("the session ends as an asleep car", log.contains("idle_no_data"))
+        assertTrue(
+            "a ready voltage holds the session past the asleep-car limit",
+            endedAfterMs >= ObdPollingEngine.VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS,
+        )
+        assertTrue("it ended before the safety stop", endedAfterMs < safetyStopAfterMs)
+    }
+
+    /**
+     * Runs a session on a parked, asleep car: every PID goes unanswered, but the adapter stays
+     * powered from the OBD port and keeps answering ATRV with [atrvReply]. Each poll-loop sleep moves
+     * a fake clock on, so minutes of polling take no real time; if the session never ends by itself
+     * it is stopped [safetyStopAfterMs] in. Returns how long the session ran on the fake clock.
+     */
+    private fun runParkedSessionWhereOnlyTheAdapterAnswers(
+        atrvReply: String,
+        safetyStopAfterMs: Long,
+    ): Long {
         fake.defaultResponse = ">"
         fake.responses["0100"] = "41 00 00 00 00 00>"
-        fake.responses["ATRV"] = "12.4V\r>"
-        // Each poll-loop sleep moves a fake clock on, so minutes of polling take no real time. If
-        // the session never ends by itself, stop it well past the asleep-car limit.
-        val nowMs = AtomicLong(1_000_000L)
-        val safetyStopAtMs = nowMs.get() + ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS * 4
+        fake.responses["ATRV"] = atrvReply
+        val startMs = 1_000_000L
+        val nowMs = AtomicLong(startMs)
         val sleeper =
             ObdPollingEngine.LoopSleeper { millis ->
-                val keepGoing = nowMs.addAndGet(millis) < safetyStopAtMs
+                val keepGoing = nowMs.addAndGet(millis) - startMs < safetyStopAfterMs
                 if (!keepGoing) service.running.set(false)
                 keepGoing
             }
@@ -710,8 +742,7 @@ class ObdPollingEngineTest {
         runEngineUntilFinished { engine.runBluetoothLoop("AA:BB:CC:DD:EE:FF", false) }
 
         assertTrue("ATRV kept answering while the car slept", fake.commandLog.count { it == "ATRV" } >= 2)
-        assertTrue("the session ends as an asleep car", latestObdLogText().contains("idle_no_data"))
-        assertTrue("it ended before the safety stop", nowMs.get() < safetyStopAtMs)
+        return nowMs.get() - startMs
     }
 
     /**
@@ -880,6 +911,26 @@ class ObdPollingEngineTest {
                 ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS * 5, state),
             )
         }
+    }
+
+    @Test
+    fun aReadyStateFromTheAdapterVoltageAloneHoldsTheSessionForABoundedTime() {
+        val voltageOnlyLimit = ObdPollingEngine.VEHICLE_SLEEP_VOLTAGE_ONLY_GIVE_UP_MS
+        // Still inside the asleep-car limit: never end, whatever the state rests on.
+        assertEquals(
+            false,
+            ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS - 1, "parked", true),
+        )
+        // A voltage-only parked or unknown reading ends the session at the usual limit.
+        assertEquals(
+            true,
+            ObdPollingEngine.shouldEndForVehicleSleep(ObdPollingEngine.VEHICLE_SLEEP_GIVE_UP_MS, "parked", true),
+        )
+        // A voltage-only "ready" holds the session past the usual limit, up to the voltage-only limit.
+        assertEquals(false, ObdPollingEngine.shouldEndForVehicleSleep(voltageOnlyLimit - 1, "ready", true))
+        assertEquals(true, ObdPollingEngine.shouldEndForVehicleSleep(voltageOnlyLimit, "ready", true))
+        // A "ready" the vehicle itself reported is still not given up on.
+        assertEquals(false, ObdPollingEngine.shouldEndForVehicleSleep(voltageOnlyLimit, "ready", false))
     }
 
     @Test
