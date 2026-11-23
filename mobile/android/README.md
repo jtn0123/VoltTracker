@@ -298,7 +298,8 @@ npm --prefix dashboard-tests ci
 ./gradlew verifyActiveApp
 ```
 
-This runs Android unit tests, lint, Spotless, debug assemble, JaCoCo coverage,
+This runs Android unit tests, lint, Spotless, debug and release (R8, unsigned
+without a keystore) assemble, JaCoCo coverage,
 dashboard ESLint/typecheck/Vitest, Playwright e2e, bundle budgets, generated
 dashboard drift, and migration straggler guards. See
 [`docs/validation-matrix.md`](docs/validation-matrix.md) for what this proves
