@@ -6,4 +6,4 @@
 #
 #   pip-compile --allow-unsafe --generate-hashes --strip-extras \
 #     --output-file=requirements-release.txt requirements-release.in
-python-semantic-release==9.21.1
+python-semantic-release==10.7.0
