@@ -13,12 +13,13 @@ import java.util.Locale
  * Builds a single, budget-bounded, redacted text digest of on-device diagnostics, sized so it can be
  * handed to an external debugging tool (for example an AI assistant) without overflowing its context.
  *
- * The app -- not the user -- decides what to include. Every per-session log is catalogued in the
- * MANIFEST so nothing is hidden, but only the most relevant bodies are embedded: the most recent
- * session is always included, then sessions whose logs contain `error` events, then the remaining
- * sessions by recency, until [budgetBytes] is consumed. Sessions that don't fit are listed in the
- * manifest with `included=false` so the caller can ask for one by name. All embedded text passes
- * through [DataBackup.redactDebugLogText].
+ * The app -- not the user -- decides what to include. The newest [MAX_LISTED_SESSIONS] per-session
+ * logs are scanned and catalogued in the MANIFEST; older ones are only counted, so the work stays
+ * bounded however much history piles up. Only the most relevant bodies are embedded: the most recent
+ * session is always included (its slice is reserved before any other section), then sessions whose
+ * logs contain `error` events, then the remaining sessions by recency, until [budgetBytes] is
+ * consumed. Sessions that don't fit are listed in the manifest with `included=false` so the caller
+ * can ask for one by name. All embedded text passes through [DataBackup.redactDebugLogText].
  */
 object DiagnosticsBundle {
     /** Default total byte budget (~50k tokens at ~4 bytes/token) -- a safe slice for an AI context. */
@@ -26,6 +27,13 @@ object DiagnosticsBundle {
 
     /** Zip entry name used when this digest is folded into the diagnostics share zip. */
     internal const val BUNDLE_ENTRY_NAME = "diagnostics-bundle.txt"
+
+    /**
+     * How many of the newest session logs are read (to count error lines), listed in the MANIFEST and
+     * eligible for embedding. The logs are never pruned, so reading all of them would grow without
+     * bound; older ones are reported as a single count instead.
+     */
+    internal const val MAX_LISTED_SESSIONS = 40
 
     private const val SESSION_LOG_DIR = "obd-logs"
     private const val APP_LOG_DIR = "app-log"
@@ -38,6 +46,13 @@ object DiagnosticsBundle {
     private const val PER_SESSION_CAP = 64 * 1024
     private const val MIN_SESSION_BYTES = 256
     private const val HEADER_RESERVE = 1024
+
+    // Slice held for the most recent session before the summary and app-log sections are sized, so a
+    // tight budget never squeezes out the session a user is most likely debugging.
+    private const val NEWEST_SESSION_RESERVE = 16 * 1024
+
+    // Upper bound on the one-line "older sessions" note that follows the MANIFEST.
+    private const val OLDER_NOTE_RESERVE = 160
 
     // Upper bound on the marginal cost of one pretty-printed MANIFEST entry. A worst-case entry — long
     // filename, max-width byte/ms numbers, longest reason — adds ~260 chars per entry inside the
@@ -73,18 +88,37 @@ object DiagnosticsBundle {
         val truncated: Boolean get() = included && tailBytes < source.bytes
     }
 
+    /** The newest sessions (scanned) plus a count of the older ones that were left unread. */
+    private class SessionScan(
+        val recent: List<SessionFile>,
+        val olderCount: Int,
+        val olderBytes: Long,
+    )
+
+    /** Per-session plans plus the byte caps left over for the summary and app-log sections. */
+    private class Layout(
+        val plans: List<Plan>,
+        val summaryCap: Int,
+        val appLogCap: Int,
+    )
+
     @JvmStatic
     fun build(
         filesDir: File,
         budgetBytes: Int = DEFAULT_BUDGET_BYTES,
     ): String = build(filesDir, budgetBytes, System.currentTimeMillis())
 
-    /** Deterministic entry point: [nowMs] feeds the header timestamp so tests can pin the output. */
+    /**
+     * Deterministic entry point: [nowMs] feeds the header timestamp so tests can pin the output.
+     * [countErrors] reads one session log to count its error lines; tests pass a counting wrapper to
+     * check that only the newest [MAX_LISTED_SESSIONS] logs are ever opened.
+     */
     @JvmStatic
     internal fun build(
         filesDir: File,
         budgetBytes: Int,
         nowMs: Long,
+        countErrors: (File) -> Int = ::countErrorLines,
     ): String {
         val budget = maxOf(HEADER_RESERVE, budgetBytes)
         val sessionDir = File(filesDir, SESSION_LOG_DIR)
@@ -92,8 +126,9 @@ object DiagnosticsBundle {
         val summaryFile = File(sessionDir, SUMMARY_NAME)
         val appLogFile = File(appLogDir, APP_LOG_NAME)
 
-        val sessions = scanSessions(sessionDir)
-        val plans = planSessions(sessions, summaryFile, appLogFile, budget)
+        val scan = scanSessions(sessionDir, countErrors)
+        val layout = planSessions(scan, summaryFile, appLogFile, budget)
+        val plans = layout.plans
 
         val out = StringBuilder()
         out.append("VoltTracker diagnostics digest\n")
@@ -102,26 +137,38 @@ object DiagnosticsBundle {
         out.append("note: text is redacted (bluetooth addresses, VINs, GPS coordinates).\n")
         out.append("note: the app auto-selects which session bodies fit the budget; see MANIFEST.\n\n")
 
-        // The MANIFEST is the irreducible catalog -- it always ships so no session is hidden. It and the
-        // session bodies below are both rendered from the same `plans`, so the manifest can never claim a
-        // session is included/truncated differently from what is actually emitted. Budget safety comes
+        // The MANIFEST is the irreducible catalog -- it always ships, listing the newest sessions and
+        // counting the older ones, so no session is silently hidden. It and the session bodies below are
+        // both rendered from the same `plans`, so the manifest can never claim a session is
+        // included/truncated differently from what is actually emitted. Budget safety comes
         // from planSessions reserving an upper bound for the manifest + fixed sections (see the reserves
         // in planSessions and MANIFEST_BYTES_PER_ENTRY), plus the runtime clamp on the summary/app-log
         // tails below for tiny caller budgets.
-        out.append("===== MANIFEST (every session log; order = inclusion priority) =====\n")
-        out.append(manifestJson(plans).toString(2)).append("\n\n")
+        out.append(
+            "===== MANIFEST (up to the newest $MAX_LISTED_SESSIONS session logs; order = inclusion priority) =====\n",
+        )
+        out.append(manifestJson(plans).toString(2)).append("\n")
+        if (scan.olderCount > 0) {
+            out
+                .append("older: ")
+                .append(scan.olderCount)
+                .append(" older session log(s), ")
+                .append(scan.olderBytes)
+                .append(" bytes, not scanned or listed.\n")
+        }
+        out.append('\n')
 
         appendCappedFile(
             out,
             "SESSION SUMMARY ROLLUP ($SUMMARY_NAME)",
             summaryFile,
-            minOf(SUMMARY_CAP, remainingBudget(out, budget)),
+            minOf(layout.summaryCap, remainingBudget(out, budget)),
         )
         appendCappedFile(
             out,
             "APP LOG TAIL ($APP_LOG_DIR/$APP_LOG_NAME)",
             appLogFile,
-            minOf(APP_LOG_CAP, remainingBudget(out, budget)),
+            minOf(layout.appLogCap, remainingBudget(out, budget)),
         )
 
         for (plan in plans) {
@@ -160,18 +207,48 @@ object DiagnosticsBundle {
         return out.toString()
     }
 
-    private fun scanSessions(sessionDir: File): List<SessionFile> {
+    private fun scanSessions(
+        sessionDir: File,
+        countErrors: (File) -> Int,
+    ): SessionScan {
+        val none = SessionScan(emptyList(), 0, 0L)
         if (!sessionDir.isDirectory) {
-            return emptyList()
+            return none
         }
         val files =
             sessionDir.listFiles { _, name ->
                 name.startsWith("session-") && name.endsWith(".jsonl")
-            } ?: return emptyList()
-        return files.map { scanSessionFile(it) }
+            } ?: return none
+        // Rank by file metadata only; just the newest MAX_LISTED_SESSIONS are opened and read.
+        val ranked =
+            files
+                .map { Triple(it, it.lastModified(), tsFromName(it)) }
+                .sortedWith(compareByDescending<Triple<File, Long, Long>> { it.second }.thenByDescending { it.third })
+        val older = ranked.drop(MAX_LISTED_SESSIONS)
+        return SessionScan(
+            recent =
+                ranked.take(MAX_LISTED_SESSIONS).map { (file, modified, ts) ->
+                    SessionFile(
+                        file = file,
+                        bytes = file.length(),
+                        lastModified = modified,
+                        errorLines = countErrors(file),
+                        tsFromName = ts,
+                    )
+                },
+            olderCount = older.size,
+            olderBytes = older.sumOf { it.first.length() },
+        )
     }
 
-    private fun scanSessionFile(file: File): SessionFile {
+    private fun tsFromName(file: File): Long =
+        NAME_TS
+            .find(file.name)
+            ?.groupValues
+            ?.get(1)
+            ?.toLongOrNull() ?: 0L
+
+    private fun countErrorLines(file: File): Int {
         var errors = 0
         try {
             file.bufferedReader(Charsets.UTF_8).useLines { lines ->
@@ -184,18 +261,7 @@ object DiagnosticsBundle {
         } catch (_: IOException) {
             // Best-effort: a session we can't scan still appears in the manifest with whatever we have.
         }
-        return SessionFile(
-            file = file,
-            bytes = file.length(),
-            lastModified = file.lastModified(),
-            errorLines = errors,
-            tsFromName =
-                NAME_TS
-                    .find(file.name)
-                    ?.groupValues
-                    ?.get(1)
-                    ?.toLongOrNull() ?: 0L,
-        )
+        return errors
     }
 
     /**
@@ -203,13 +269,19 @@ object DiagnosticsBundle {
      * and greedily assigns each a tail slice until the body budget is spent.
      */
     private fun planSessions(
-        sessions: List<SessionFile>,
+        scan: SessionScan,
         summaryFile: File,
         appLogFile: File,
         budget: Int,
-    ): List<Plan> {
+    ): Layout {
+        val sessions = scan.recent
+        val olderNoteReserve = if (scan.olderCount > 0) OLDER_NOTE_RESERVE else 0
+        // The manifest lists at most MAX_LISTED_SESSIONS entries, so this reserve is bounded too.
+        val manifestReserve = sessions.size * MANIFEST_BYTES_PER_ENTRY + 256 + olderNoteReserve
+        var remaining = maxOf(0, budget - HEADER_RESERVE - manifestReserve)
         if (sessions.isEmpty()) {
-            return emptyList()
+            val summaryCap = minOf(cappedSize(summaryFile, SUMMARY_CAP), remaining)
+            return Layout(emptyList(), summaryCap, minOf(cappedSize(appLogFile, APP_LOG_CAP), remaining - summaryCap))
         }
         val mostRecent = sessions.maxWithOrNull(compareBy({ it.lastModified }, { it.tsFromName }))
         val rest =
@@ -222,29 +294,36 @@ object DiagnosticsBundle {
                 )
         val ordered = listOfNotNull(mostRecent) + rest
 
-        val summaryReserve = cappedSize(summaryFile, SUMMARY_CAP)
-        val appLogReserve = cappedSize(appLogFile, APP_LOG_CAP)
-        val manifestReserve = sessions.size * MANIFEST_BYTES_PER_ENTRY + 256
-        var remaining = maxOf(0, budget - HEADER_RESERVE - summaryReserve - appLogReserve - manifestReserve)
+        // Hold the most recent session's slice first, then size the summary and app-log sections from
+        // what is left, then hand the held slice back so the session loop below can spend it.
+        val newestReserve = minOf(ordered.first().bytes, NEWEST_SESSION_RESERVE.toLong(), remaining.toLong()).toInt()
+        remaining -= newestReserve
+        val summaryCap = minOf(cappedSize(summaryFile, SUMMARY_CAP), remaining)
+        remaining -= summaryCap
+        val appLogCap = minOf(cappedSize(appLogFile, APP_LOG_CAP), remaining)
+        remaining -= appLogCap
+        remaining += newestReserve
 
-        return ordered.mapIndexed { index, session ->
-            val cap = minOf(session.bytes, PER_SESSION_CAP.toLong()).toInt()
-            val tail = minOf(cap, remaining)
-            val wholeFileFits = session.bytes <= tail.toLong()
-            // Always give the most recent session a real slice even when the budget is tight, since it
-            // is the session a user is most likely debugging right now. Also keep any session that fits
-            // in full even when it is under MIN_SESSION_BYTES, so short error sessions stay eligible
-            // instead of being dropped by the min-slice floor (which would break "errors before clean").
-            val include =
-                session.bytes > 0L &&
-                    (wholeFileFits || tail >= MIN_SESSION_BYTES || (index == 0 && tail > 0))
-            if (include) {
-                remaining -= tail
-                Plan(session, true, tail, reasonFor(index, session))
-            } else {
-                Plan(session, false, 0, "budget exceeded")
+        val plans =
+            ordered.mapIndexed { index, session ->
+                val cap = minOf(session.bytes, PER_SESSION_CAP.toLong()).toInt()
+                val tail = minOf(cap, remaining)
+                val wholeFileFits = session.bytes <= tail.toLong()
+                // Always give the most recent session a real slice even when the budget is tight, since it
+                // is the session a user is most likely debugging right now. Also keep any session that fits
+                // in full even when it is under MIN_SESSION_BYTES, so short error sessions stay eligible
+                // instead of being dropped by the min-slice floor (which would break "errors before clean").
+                val include =
+                    session.bytes > 0L &&
+                        (wholeFileFits || tail >= MIN_SESSION_BYTES || (index == 0 && tail > 0))
+                if (include) {
+                    remaining -= tail
+                    Plan(session, true, tail, reasonFor(index, session))
+                } else {
+                    Plan(session, false, 0, "budget exceeded")
+                }
             }
-        }
+        return Layout(plans, summaryCap, appLogCap)
     }
 
     private fun reasonFor(

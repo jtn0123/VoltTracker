@@ -19,16 +19,29 @@ import com.volttracker.obdpoc.service.ObdService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
+import java.util.concurrent.Executor
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * Test connection, notify-when-ready ("wait for adapter"), connection recovery and the diagnostics
  * share. Either dashboard Activity can host it through [TroubleshooterHost]; the ready
  * notification reopens the Activity that armed it.
+ *
+ * [diagnosticsExecutor] builds the diagnostics share off the UI thread: the build reads session logs
+ * from disk, and those grow with history. The default owns its own thread so a long build never
+ * queues behind (or delays) the Activity's database work; [shutdown] stops it.
  */
 class TroubleshooterBridge<A>(
     private val activity: A,
+    private val diagnosticsExecutor: Executor = Executors.newSingleThreadExecutor(),
 ) where A : Activity, A : TroubleshooterHost {
     private var adapterReadyDeadlineMs = 0L
+
+    /** Set while a diagnostics share is being built, so repeat taps don't queue duplicate builds. */
+    private val diagnosticsShareInFlight = AtomicBoolean(false)
 
     @Volatile private var adapterReadyActive = false
 
@@ -63,11 +76,13 @@ class TroubleshooterBridge<A>(
         }
 
     /**
-     * Drain both internal handlers. Called from the host Activity's onDestroy.
+     * Drain both internal handlers and stop the diagnostics build thread. Called from the host
+     * Activity's onDestroy.
      */
     fun shutdown() {
         adapterReadyHandler?.removeCallbacksAndMessages(null)
         testConnectionStopHandler?.removeCallbacksAndMessages(null)
+        (diagnosticsExecutor as? ExecutorService)?.shutdown()
     }
 
     /**
@@ -164,46 +179,70 @@ class TroubleshooterBridge<A>(
         }
 
     /**
-     * Bundle recent diagnostics into a zip and launch the system share sheet.
+     * Bundle recent diagnostics into a zip and launch the system share sheet. The zip is built on
+     * [diagnosticsExecutor]; the disclosure dialog follows on the UI thread.
      */
     fun shareDiagnostics() {
-        try {
-            val share = DiagnosticsShareIntent.buildIntent(activity)
-            if (share == null) {
-                activity.publishStatus(
-                    "blocked",
-                    activity.getString(R.string.status_no_diagnostics_yet),
-                    true,
-                )
-                return
-            }
-            showDiagnosticsDisclosure(share)
-        } catch (ex: RuntimeException) {
-            Log.w(AppPrefs.LOG_TAG, "shareDiagnostics failed", ex)
-            activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
-        }
+        prepareDiagnosticsShare("shareDiagnostics") { DiagnosticsShareIntent.buildIntent(activity) }
     }
 
     /**
      * Build the standalone AI digest (single redacted, budget-bounded text file) and launch the
-     * system share sheet behind the same disclosure dialog as the full diagnostics zip.
+     * system share sheet behind the same disclosure dialog as the full diagnostics zip. Built on
+     * [diagnosticsExecutor] like [shareDiagnostics].
      */
     fun shareDiagnosticsDigest() {
+        prepareDiagnosticsShare("shareDiagnosticsDigest") { DiagnosticsShareIntent.buildDigestIntent(activity) }
+    }
+
+    /**
+     * Shows a "preparing" notice, runs [build] on [diagnosticsExecutor] and posts the result back to
+     * the UI thread. A tap while a build is already running only repeats the notice. The notice is not
+     * a status: publishing one would end a live session's "connected" state on the classic dashboard.
+     */
+    private fun prepareDiagnosticsShare(
+        label: String,
+        build: () -> Intent?,
+    ) {
+        activity.showProgressNotice(activity.getString(R.string.status_diagnostics_preparing))
+        if (!diagnosticsShareInFlight.compareAndSet(false, true)) {
+            return
+        }
         try {
-            val share = DiagnosticsShareIntent.buildDigestIntent(activity)
-            if (share == null) {
-                activity.publishStatus(
-                    "blocked",
-                    activity.getString(R.string.status_no_diagnostics_yet),
-                    true,
-                )
-                return
+            diagnosticsExecutor.execute {
+                val result =
+                    try {
+                        Result.success(build())
+                    } catch (ex: RuntimeException) {
+                        Log.w(AppPrefs.LOG_TAG, "$label failed", ex)
+                        Result.failure(ex)
+                    }
+                activity.runOnUiThread { finishDiagnosticsShare(result) }
             }
-            showDiagnosticsDisclosure(share)
-        } catch (ex: RuntimeException) {
-            Log.w(AppPrefs.LOG_TAG, "shareDiagnosticsDigest failed", ex)
+        } catch (ex: RejectedExecutionException) {
+            // The executor is shut down: the Activity is being torn down.
+            diagnosticsShareInFlight.set(false)
+            Log.w(AppPrefs.LOG_TAG, "$label rejected", ex)
             activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
         }
+    }
+
+    private fun finishDiagnosticsShare(result: Result<Intent?>) {
+        diagnosticsShareInFlight.set(false)
+        if (activity.isFinishing || activity.isDestroyed) {
+            Log.w(AppPrefs.LOG_TAG, "diagnostics share dropped; activity is gone")
+            return
+        }
+        val share =
+            result.getOrElse {
+                activity.publishStatus("blocked", activity.getString(R.string.status_diagnostics_build_failed), true)
+                return
+            }
+        if (share == null) {
+            activity.publishStatus("blocked", activity.getString(R.string.status_no_diagnostics_yet), true)
+            return
+        }
+        showDiagnosticsDisclosure(share)
     }
 
     fun diagnosticsDisclosureMessage(): String = activity.getString(R.string.diagnostics_disclosure_message)

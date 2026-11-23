@@ -29,6 +29,8 @@ import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowAlertDialog
 import java.io.File
 import java.lang.reflect.Modifier
+import java.util.concurrent.Executor
+import java.util.concurrent.RejectedExecutionException
 
 /**
  * A1 — exercises the trivial branches of [TroubleshooterBridge] so the new code added by the
@@ -55,7 +57,9 @@ class TroubleshooterBridgeTest {
         resetFileProviderPathCache()
         SessionSummaryStore.resetForTests()
         ShadowAlertDialog.reset()
-        bridge = TroubleshooterBridge(activity)
+        // Run diagnostics builds inline so the share tests below stay deterministic; the
+        // off-UI-thread hand-off has its own tests with a queued executor.
+        bridge = TroubleshooterBridge(activity, Executor { it.run() })
     }
 
     @After
@@ -253,6 +257,122 @@ class TroubleshooterBridgeTest {
     }
 
     @Test
+    fun diagnosticsShareBuildsOnTheExecutorAndShowsPreparingFirst() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+
+        assertEquals("the build is handed to the executor, not run on the caller", 1, queued.size)
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastNotice)
+        assertNull("the preparing notice is not a status", activity.lastState)
+        assertNull("no disclosure until the build finishes", ShadowAlertDialog.getLatestAlertDialog())
+
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNotNull("the disclosure follows the build", ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    @Test
+    fun diagnosticsShareIgnoresRepeatTapsWhileABuildIsRunning() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+        queuedBridge.shareDiagnostics()
+        queuedBridge.shareDiagnosticsDigest()
+
+        assertEquals("repeat taps must not queue more builds", 1, queued.size)
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastNotice)
+
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+        queuedBridge.shareDiagnosticsDigest()
+
+        assertEquals("a tap after the build finished starts a new one", 1, queued.size)
+    }
+
+    @Test
+    fun diagnosticsShareDuringALiveSessionPublishesNoStatus() {
+        val activity = controller!!.get()
+        activity.loggingActive = true
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+        queuedBridge.shareDiagnosticsDigest()
+
+        // On the classic dashboard any published status replaces the live connection state, so the
+        // tap must leave it alone and send its progress note through the notice hook instead.
+        assertNull("a share tap must not replace the live session's status", activity.lastState)
+        assertEquals(activity.getString(R.string.status_diagnostics_preparing), activity.lastNotice)
+
+        queued.removeAt(0).run()
+        shadowOf(Looper.getMainLooper()).idle()
+
+        assertNull("a successful build shows the disclosure without a status", activity.lastState)
+        assertNotNull(ShadowAlertDialog.getLatestAlertDialog())
+    }
+
+    @Test
+    fun diagnosticsShareResultIsDroppedWhenTheActivityFinishesFirst() {
+        val activity = controller!!.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnosticsDigest()
+        activity.finish()
+        runFailingBuild(activity, queued.removeAt(0))
+
+        assertNull("a failed build reports nothing to a finishing activity", activity.lastState)
+        assertNull(activity.lastDetail)
+        assertNull("no dialog over a finishing activity", ShadowAlertDialog.getLatestAlertDialog())
+        queuedBridge.shareDiagnosticsDigest()
+        assertEquals("the dropped result must not leave the share stuck as running", 1, queued.size)
+    }
+
+    @Test
+    fun diagnosticsShareResultIsDroppedWhenTheActivityIsDestroyedFirst() {
+        val destroyedController = Robolectric.buildActivity(HarnessActivity::class.java).create()
+        val activity = destroyedController.get()
+        val queued = ArrayList<Runnable>()
+        val queuedBridge = TroubleshooterBridge(activity, Executor { queued += it })
+
+        queuedBridge.shareDiagnostics()
+        destroyedController.destroy()
+        runFailingBuild(activity, queued.removeAt(0))
+
+        assertNull("a failed build reports nothing to a destroyed activity", activity.lastState)
+        assertNull(activity.lastDetail)
+        queuedBridge.shareDiagnostics()
+        assertEquals("the dropped result must not leave the share stuck as running", 1, queued.size)
+    }
+
+    @Test
+    fun diagnosticsShareReportsFailureWhenTheExecutorRejectsTheBuild() {
+        val activity = controller!!.get()
+        var attempts = 0
+        val rejecting =
+            TroubleshooterBridge(
+                activity,
+                Executor {
+                    attempts += 1
+                    throw RejectedExecutionException("shut down")
+                },
+            )
+
+        rejecting.shareDiagnostics()
+
+        assertEquals("blocked", activity.lastState)
+        assertEquals("Could not build the diagnostics share.", activity.lastDetail)
+        rejecting.shareDiagnostics()
+        assertEquals("a rejected build must not leave the share stuck as running", 2, attempts)
+    }
+
+    @Test
     fun diagnosticsShareShowsDisclosureBeforeChooser() {
         bridge!!.showDiagnosticsDisclosure(Intent(Intent.ACTION_SEND))
 
@@ -430,9 +550,17 @@ class TroubleshooterBridgeTest {
         var activityManagerUnavailable = false
         var filesDirFailure: RuntimeException? = null
         var cacheDirFailure: RuntimeException? = null
+        var lastNotice: String? = null
+        var loggingActive = false
 
         override fun onCreate(savedInstanceState: Bundle?) {
             deviceCatalog = DeviceCatalog(this, getSharedPreferences("troubleshooter-test", 0))
+        }
+
+        override fun isLoggingActive(): Boolean = loggingActive || super.isLoggingActive()
+
+        override fun showProgressNotice(detail: String) {
+            lastNotice = detail
         }
 
         override fun getSystemService(name: String): Any? {
@@ -474,6 +602,20 @@ class TroubleshooterBridgeTest {
     }
 
     private companion object {
+        /** Runs a queued diagnostics build with the cache dir denied, so it takes the failure branch. */
+        private fun runFailingBuild(
+            activity: HarnessActivity,
+            build: Runnable,
+        ) {
+            activity.cacheDirFailure = IllegalStateException("cache unavailable")
+            try {
+                build.run()
+            } finally {
+                activity.cacheDirFailure = null
+            }
+            shadowOf(Looper.getMainLooper()).idle()
+        }
+
         private fun status(
             state: String,
             lastVoltage: Double,

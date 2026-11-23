@@ -3,19 +3,23 @@ package com.volttracker.obdpoc
 import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
+import android.os.Looper
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.android.controller.ActivityController
 import org.robolectric.annotation.Config
 import java.io.File
+import java.util.concurrent.Executor
 
 /**
  * A1 — pins every [DiagnosticsHostDelegate] forward onto the matching [TroubleshooterBridge]
@@ -33,18 +37,20 @@ class DiagnosticsHostDelegateTest {
     private var delegate: DiagnosticsHostDelegate? = null
     private var troubleshooterReads = 0
     private var openSetupGuideCalls = 0
+    private val queuedBuilds = ArrayList<Runnable>()
 
     @Before
     fun setUp() {
         val controller = Robolectric.buildActivity(HarnessActivity::class.java).create()
         this.controller = controller
         val activity = controller.get()
-        // Guarantee the "nothing to share" branch for the zip share below.
         wipe(File(activity.filesDir, "obd-logs"))
         wipe(File(activity.filesDir, "app-log"))
         troubleshooterReads = 0
         openSetupGuideCalls = 0
-        val bridge = TroubleshooterBridge(activity)
+        queuedBuilds.clear()
+        // Diagnostics builds are queued, not run on a thread, so each test decides whether one runs.
+        val bridge = TroubleshooterBridge(activity, Executor { queuedBuilds += it })
         this.bridge = bridge
         delegate =
             DiagnosticsHostDelegate(
@@ -96,11 +102,13 @@ class DiagnosticsHostDelegateTest {
 
     @Test
     fun shareDiagnosticsForwardsToTroubleshooter() {
-        // With no session logs on disk the bridge publishes a status instead of sharing;
-        // the delegate's job is only to get the call there.
+        // The bridge hands the zip build to its executor; the delegate's job is only to get the
+        // call there, so the queued build is not run.
         delegate!!.shareDiagnosticsFromBridge()
 
         assertEquals(1, troubleshooterReads)
+        assertEquals("the zip build is queued off the UI thread", 1, queuedBuilds.size)
+        assertNull("the tap publishes no status of its own", controller!!.get().lastState)
     }
 
     @Test
@@ -111,6 +119,13 @@ class DiagnosticsHostDelegateTest {
         activity.cacheDirFailure = IllegalStateException("cache unavailable")
         try {
             delegate!!.shareDiagnosticsDigestFromBridge()
+
+            // The classic dashboard's tap returns at once and leaves the status line (the live
+            // connection state) alone; its button shows its own "Preparing…" label.
+            assertEquals("the digest build is queued off the UI thread", 1, queuedBuilds.size)
+            assertNull("the tap publishes no status of its own", activity.lastState)
+            queuedBuilds.removeAt(0).run()
+            shadowOf(Looper.getMainLooper()).idle()
         } finally {
             activity.cacheDirFailure = null
         }
