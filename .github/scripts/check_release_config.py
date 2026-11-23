@@ -136,7 +136,7 @@ DEPLOY_KEY_JOB_STEPS = (
     "Strip build-only files from GitHub release",
 )
 PIP_INSTALL_RE = re.compile(r"\bpip[0-9.]*\s+install\b")
-WRITE_PERMISSION_RE = re.compile(r"(?m)(?:^\s*[a-z-]+:\s*write\b)|(?:write-all)")
+WRITE_PERMISSION_RE = re.compile(r"(?m)^\s*[a-z-]+:\s*write\b")
 # A step's own keys sit this far in; anything deeper belongs to one of them.
 STEP_KEY_INDENT = " " * 8
 
@@ -175,7 +175,8 @@ def job_steps(job_text: str) -> list[str]:
     _, found, steps_text = job_text.partition("\n    steps:\n")
     if not found:
         return []
-    return [step for step in re.split(r"(?m)^ {6}- ", steps_text) if step.strip()]
+    # A step starts at its dash, whether the first key follows it or sits on the next line.
+    return [step for step in re.split(r"(?m)^ {6}-(?: |$)", steps_text) if step.strip()]
 
 
 def step_field(step: str, field: str) -> str | None:
@@ -189,13 +190,17 @@ def step_field(step: str, field: str) -> str | None:
     own = lines[:1] + [line[len(STEP_KEY_INDENT) :] for line in lines[1:] if line.startswith(STEP_KEY_INDENT)]
     for line in own:
         key, found, value = line.partition(":")
-        if found and key == field:
+        # YAML also reads `uses :` and `"uses":` as the key; leading spaces stay, they mean deeper.
+        if found and key.rstrip().strip("\"'") == field:
             return value.strip()
     return None
 
 
 def validate_deploy_key_job_steps(release: str) -> None:
-    for step in job_steps(release):
+    steps = job_steps(release)
+    if not steps:
+        raise ValueError("release job holds the deploy key and has no readable steps")
+    for step in steps:
         uses = step_field(step, "uses")
         if uses is not None:
             action = (uses.split() or [""])[0].split("@", 1)[0]
@@ -247,7 +252,7 @@ def validate_preflight_job(preflight: str) -> None:
             raise ValueError(f"preflight job missing {required!r}")
     if "ssh-key:" in preflight:
         raise ValueError("preflight job must not have 'ssh-key:'")
-    if WRITE_PERMISSION_RE.search(preflight):
+    if "write-all" in preflight or WRITE_PERMISSION_RE.search(preflight):
         raise ValueError("preflight job must not have any write permission")
 
 

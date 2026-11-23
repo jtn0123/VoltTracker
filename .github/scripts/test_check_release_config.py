@@ -162,6 +162,8 @@ class ReleaseJobIsolationTest(unittest.TestCase):
         for step in (
             "      - uses: some-org/some-action@v1\n",
             "      - name: Resolve released tag\n        uses: some-org/some-action@v1\n",
+            "      - name: Resolve released tag\n        uses : some-org/some-action@v1\n",
+            '      - name: Resolve released tag\n        "uses": some-org/some-action@v1\n',
         ):
             extra = append_to_release(step)
             with self.subTest(step=step):
@@ -177,6 +179,24 @@ class ReleaseJobIsolationTest(unittest.TestCase):
             with self.subTest(step=step):
                 with self.assertRaisesRegex(ValueError, f"unexpected step {label}"):
                     check.validate_release_job_isolation(extra)
+
+    def test_step_written_with_a_bare_dash_is_still_checked(self) -> None:
+        for step in (
+            "      -\n        uses: some-org/some-action@v1\n",
+            "      -\n          uses: some-org/some-action@v1\n",
+            "      -\n          name: Resolve released tag\n          uses: some-org/some-action@v1\n",
+            "      -\n        run: ./helper.sh\n",
+        ):
+            extra = append_to_release(step)
+            with self.subTest(step=step):
+                with self.assertRaisesRegex(ValueError, "must not use 'some-org/some-action'|unexpected step"):
+                    check.validate_release_job_isolation(extra)
+
+    def test_deploy_key_job_with_unreadable_steps_fails(self) -> None:
+        relabelled = with_job("release", lambda block: block.replace("\n    steps:\n", "\n    steps: # all\n"))
+        self.assertNotEqual(relabelled, WORKFLOW)
+        with self.assertRaisesRegex(ValueError, "has no readable steps"):
+            check.validate_release_job_isolation(relabelled)
 
     def test_nested_key_does_not_pass_for_the_step_s_own(self) -> None:
         for step in (
@@ -292,7 +312,7 @@ class MainRunsEveryCheckTest(unittest.TestCase):
 
     def test_main_checks_lock_hashes(self) -> None:
         unhashed, count = re.subn(
-            r"(?m)^([A-Za-z0-9_.-]+==\S+) \\\n(?:    --hash=sha256:\w+(?: \\)?\n)+",
+            r"(?m)^([A-Za-z0-9_.-]+==\S+) \\\n(?: {4}--hash=sha256:\w+(?: \\)?\n)+",
             r"\1\n",
             REQUIREMENTS_TXT,
             count=1,
