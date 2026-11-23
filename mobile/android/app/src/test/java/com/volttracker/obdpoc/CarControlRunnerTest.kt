@@ -453,9 +453,9 @@ class CarControlRunnerTest {
     @Test
     fun noLiveDataAfterCommandForcesReinitOnce() {
         run(CarCommand.FLASH_LIGHTS)
-        runner.afterSample()
+        assertTrue("the re-init takes the cycle", runner.afterSample())
         assertEquals(1, io.reinitCount)
-        runner.afterSample()
+        assertFalse("nothing to do", runner.afterSample())
         assertEquals(1, io.reinitCount)
     }
 

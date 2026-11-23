@@ -768,9 +768,10 @@ open class ObdPollingEngine(
                 deferredInitProbesPending = false
                 runDeferredInitProbes()
             }
-            // A user-confirmed car command, if one is waiting (see CarControlRunner), then the
-            // low-frequency, self-disabling SW-CAN listen window (see SwcanListenRunner) when no
-            // command ran this cycle.
+            // The SW-CAN listener's check that its last window left HS working, then a user-confirmed
+            // car command if one is waiting (see CarControlRunner), then the listener's own step
+            // (the low-frequency, self-disabling listen window; see SwcanListenRunner) unless HS was
+            // quiet or the car-control step ran a command or re-initialized the adapter.
             carControl.afterSample(swcanListener)
             // When the car has been asleep long enough (no fresh PID data while parked), stop instead
             // of polling a dead bus for an hour and eventually logging a bogus connect_timeout. A
@@ -783,8 +784,9 @@ open class ObdPollingEngine(
             }
             // Adapt the cadence to the vehicle state: a parked/charging car changes slowly, so we
             // poll less often to save adapter round-trips and battery; a moving car keeps the
-            // responsive ~850 ms cadence. Derived from the sample the engine just read/broadcast.
-            if (!sleeper.sleep(pollIntervalMs(sample))) {
+            // responsive ~850 ms cadence. Derived from the sample the engine just read/broadcast. A
+            // waiting car command skips the sleep, so it runs on the very next cycle.
+            if (!sleeper.sleep(carControl.nextPollDelayMs(pollIntervalMs(sample)))) {
                 return
             }
         }

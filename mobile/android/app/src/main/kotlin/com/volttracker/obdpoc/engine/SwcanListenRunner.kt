@@ -395,16 +395,28 @@ class SwcanListenRunner(
     }
 
     /**
-     * Called by the poll loop after each broadcast sample. Verifies the previous window left HS
-     * polling working, then runs a window if one is due and no car command is waiting.
+     * The whole step after a broadcast sample for a loop without car controls: [checkHsAfterWindow],
+     * then [runDueStep] unless HS was quiet. The engine runs the halves around a waiting car command
+     * instead ([CarControlSession.afterSample]).
      */
     @Throws(IOException::class)
     fun afterSample() {
+        if (!checkHsAfterWindow()) runDueStep()
+    }
+
+    /**
+     * The first half of the poll loop's step after each broadcast sample: verifies the previous
+     * window left HS polling working. It runs before a waiting car command, so the gate sees a quiet
+     * HS bus after a window (no longer [CarControlGate.Adapter.READY]) in the same cycle. True when
+     * HS was quiet, and [runDueStep] is skipped this cycle.
+     */
+    @Throws(IOException::class)
+    fun checkHsAfterWindow(): Boolean {
         if (healthCheckPending) {
             healthCheckPending = false
             if (io.liveCycleCount() == liveCyclesAtWindowEnd) {
                 onHsQuietAfterWindow()
-                return
+                return true
             }
         }
         if (unexplainedQuiet && io.liveCycleCount() > quietAtLiveCycles) {
@@ -412,6 +424,16 @@ class SwcanListenRunner(
             unexplainedQuiet = false
             countTrouble("hs_not_restored")
         }
+        return false
+    }
+
+    /**
+     * The second half: the guided test's next step, a requested body test, the quiet capture, or a
+     * window if one is due and no car command is waiting. Skipped in a cycle where the car-control
+     * step ran a command or re-initialized the adapter.
+     */
+    @Throws(IOException::class)
+    fun runDueStep() {
         if (guidedTest.runNext()) return
         val bodyTestMs = bodyTestRequestMs
         if (bodyTestMs > 0L) {

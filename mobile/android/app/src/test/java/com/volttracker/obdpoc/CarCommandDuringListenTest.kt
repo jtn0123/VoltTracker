@@ -39,10 +39,17 @@ class CarCommandDuringListenTest {
         /** Runs as a monitor chunk starts, at that moment on the clock. */
         var onMonitor: () -> Unit = {}
 
+        /** Runs as each command is sent, at that moment on the clock. */
+        var onSend: (String) -> Unit = {}
+
+        /** How long the adapter takes to print its prompt after the stop byte. */
+        var stopMs = STOP_MS
+
         override fun send(
             command: String,
             timeoutMs: Long,
         ): String {
+            onSend(command)
             commands += command
             now += SEND_MS
             return when (command) {
@@ -60,7 +67,7 @@ class CarCommandDuringListenTest {
             commands += command
             chunkMs += listenMs
             onMonitor()
-            now += listenMs + STOP_MS
+            now += listenMs + stopMs
             return ElmConnection.MonitorResult(BROADCASTS, true, false, false)
         }
 
@@ -204,6 +211,64 @@ class CarCommandDuringListenTest {
             assertFalse(session.hasPendingCommand())
         }
 
+    @Test
+    fun aSlowStopPromptStillLeavesTimeToSendTheCommand() =
+        session.whileLive {
+            carTabOpen()
+            // Every chunk's prompt comes only at the stop timeout, and the request lands just after
+            // the window checked for one, as it starts switching to SW-CAN.
+            adapter.stopMs = SwcanListenRunner.Policy().stopTimeoutMs
+            var requested = false
+            adapter.onSend = { command ->
+                if (!requested && command == SwcanListenRunner.SETUP_COMMANDS.first()) {
+                    requested = true
+                    request(CarCommand.LOCK)
+                }
+            }
+            pollCycle()
+            assertTrue(requested)
+            pollCycle()
+            val result = runner.lastResult()!!
+            assertEquals(result.detail, "confirmed", result.outcome)
+            assertSentOnlyAllowlistedFrames()
+        }
+
+    @Test
+    fun aQuietHsCycleAfterAWindowStillRefusesTheCommand() =
+        session.whileLive {
+            carTabOpen()
+            adapter.onMonitor = {
+                adapter.onMonitor = {}
+                request(CarCommand.LOCK)
+            }
+            pollCycle()
+            // The next HS read gets no answers, yet the carried-forward sample still looks fresh.
+            pollCycle(answered = false)
+            val result = runner.lastResult()!!
+            assertEquals("refused", result.outcome)
+            assertEquals(CarControlGate.Block.SWCAN_UNVERIFIED.message, result.detail)
+            assertTrue(adapter.transmits().isEmpty())
+            assertTrue("the listener re-initialized the adapter", "<reinit>" in adapter.commands)
+            // HS answering again shows the window's restore had broken it: no car controls after that.
+            pollCycle()
+            assertEquals(CarControlGate.Adapter.STN_UNVERIFIED, listener.controlCapability())
+        }
+
+    @Test
+    fun aReinitAfterACommandHoldsOffTheListenerForThatCycle() =
+        session.whileLive {
+            carTabOpen()
+            request(CarCommand.LOCK)
+            pollCycle()
+            assertEquals("confirmed", runner.lastResult()!!.outcome)
+            val chunks = adapter.chunkMs.size
+            pollCycle(answered = false)
+            assertEquals(listOf("<reinit>"), adapter.commands.filter { it == "<reinit>" })
+            assertEquals("no window or quiet capture after the re-init", chunks, adapter.chunkMs.size)
+            pollCycle()
+            assertTrue("the Car tab's windows carry on afterwards", adapter.chunkMs.size > chunks)
+        }
+
     /** Connects, lets the startup window hear the car, then opens the Car tab and runs a focus window. */
     private fun carTabOpen() {
         listener.probeAdapter()
@@ -222,19 +287,24 @@ class CarCommandDuringListenTest {
         assertTrue(session.hasPendingCommand())
     }
 
-    /** One pass of the poll loop on a parked car: read, broadcast, the after-sample step, sleep. */
-    private fun pollCycle() {
-        val sample = liveSample()
+    /**
+     * One pass of the poll loop on a parked car: read, broadcast, the after-sample step, sleep. When
+     * the HS read is not [answered], the loop still hands over a sample carrying the last values.
+     */
+    private fun pollCycle(answered: Boolean = true) {
+        val sample = liveSample(answered)
         session.afterSample(listener)
-        now += ObdPollingEngine.pollIntervalMs(sample)
+        now += session.nextPollDelayMs(ObdPollingEngine.pollIntervalMs(sample))
     }
 
-    /** An HS read that answered, its sample handed to the gate; the Car tab keeps its lease. */
-    private fun liveSample(): JSONObject {
+    /** An HS read, its sample handed to the gate; the Car tab keeps its lease. */
+    private fun liveSample(answered: Boolean = true): JSONObject {
         listener.requestBodyFocus(FOCUS_LEASE_MS)
         now += HS_READ_MS
-        adapter.liveCycles += 1
-        adapter.liveAtMs = now
+        if (answered) {
+            adapter.liveCycles += 1
+            adapter.liveAtMs = now
+        }
         val sample =
             JSONObject()
                 .put("speedKph", 0.0)
@@ -256,7 +326,7 @@ class CarCommandDuringListenTest {
         /** Each adapter exchange; a window's switch to SW-CAN and back costs about 2 s. */
         const val SEND_MS = 150L
 
-        /** The adapter's prompt after the stop byte. */
+        /** The adapter's usual prompt after the stop byte. */
         const val STOP_MS = 500L
 
         /** One HS poll cycle's PID reads. */

@@ -200,7 +200,8 @@ class VirtualVoltScorecardTest {
         service: VirtualVoltService,
         connection: VirtualVolt,
         swcanPolicy: SwcanListenRunner.Policy,
-    ) : ObdPollingEngine(service, LoopSleeper { true }, ExtendedReconnectTier(), swcanPolicy) {
+        sleeper: LoopSleeper = LoopSleeper { true },
+    ) : ObdPollingEngine(service, sleeper, ExtendedReconnectTier(), swcanPolicy) {
         val openCount = AtomicInteger()
 
         init {
@@ -224,6 +225,7 @@ class VirtualVoltScorecardTest {
                 this,
                 nextConnection ?: error("Install a VirtualVolt before onCreate"),
                 nextSwcanPolicy ?: SwcanListenRunner.Policy(),
+                nextSleeper ?: ObdPollingEngine.LoopSleeper { true },
             )
 
         override fun broadcastTelemetry(payload: JSONObject?) {
@@ -242,6 +244,10 @@ class VirtualVoltScorecardTest {
 
             @Volatile
             var nextSwcanPolicy: SwcanListenRunner.Policy? = null
+
+            /** The poll loop's sleep between cycles; null for none (the loop runs flat out). */
+            @Volatile
+            var nextSleeper: ObdPollingEngine.LoopSleeper? = null
         }
     }
 

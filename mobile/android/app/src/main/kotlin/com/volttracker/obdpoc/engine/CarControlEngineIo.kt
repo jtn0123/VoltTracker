@@ -97,13 +97,24 @@ internal class CarControlSession(
     fun hasPendingCommand(): Boolean = runner.hasPending()
 
     /**
-     * The poll loop's step after each broadcast sample. A pending command runs first, while the
-     * sample the gate just saw is fresh: a listen window before it would age that sample past the
-     * gate's limit. The [listener]'s window then waits for the next cycle.
+     * The poll loop's step after each broadcast sample. The [listener] first checks that its last
+     * window left HS polling working, so the gate sees any doubt about the adapter. A pending
+     * command then runs while the sample the gate just saw is fresh: a listen window before it
+     * would age that sample past the gate's limit. The listener's own step (guided test, body test,
+     * quiet capture, window) waits for the next cycle when HS was quiet after a window, or when the
+     * runner took a command or re-initialized the adapter.
      */
     fun afterSample(listener: SwcanListenRunner) {
-        if (!runner.afterSample()) listener.afterSample()
+        val hsQuiet = listener.checkHsAfterWindow()
+        val runnerTookCycle = runner.afterSample()
+        if (!hsQuiet && !runnerTookCycle) listener.runDueStep()
     }
+
+    /**
+     * How long the poll loop sleeps before its next cycle: [intervalMs], or nothing while a command
+     * waits, so a command queued during a listen window is not held back by the parked cadence.
+     */
+    fun nextPollDelayMs(intervalMs: Long): Long = if (runner.hasPending()) 0L else intervalMs
 
     fun appendTo(sample: JSONObject) {
         val now = clock()
