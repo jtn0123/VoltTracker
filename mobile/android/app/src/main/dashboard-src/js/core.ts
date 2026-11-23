@@ -1094,8 +1094,10 @@ import { VD } from "./vd-registry";
     // "Δ since session start" chip on the SOC micro-card so it stays honest
     // even after the rolling-window socHistory has rotated out the start.
     sessionStartSoc: null,
-    // Running session distance in meters, derived from haversine-stepped GPS
-    // samples. Reset on session start; surfaced in the Drive "Recording" chip.
+    // Running live-drive distance in meters: the service's per-drive total
+    // (driveDistanceM, restarting at each new drive) when the sample carries it,
+    // else derived here from haversine-stepped GPS samples. Reset on session
+    // start; surfaced in the Drive "Recording" chip and the trip card.
     sessionDistanceM: 0,
     ...initialSessionTotals(),
     sessionLastLat: null,

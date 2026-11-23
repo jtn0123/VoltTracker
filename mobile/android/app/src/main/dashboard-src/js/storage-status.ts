@@ -38,6 +38,7 @@ import { prefs, units } from "./prefs";
 import { registerRenderer } from "./render-pass";
 import { storageRollupSignature } from "./render-signatures";
 import { kph } from "./unit-types";
+import { liveDriveDurationMs } from "./telemetry-state";
 
 // Module scope (the old IIFE wrapper is redundant under ESM and blocks
 // `export` declarations).
@@ -1111,10 +1112,11 @@ import { kph } from "./unit-types";
   }
 
   // The ONE drive the Drive tab's trip card describes. While samples stream it is the drive in
-  // progress (session distance/clock plus the running max-speed and net-energy totals
-  // telemetry.ts accumulates); otherwise the most recent stored trip — its rollup row when
-  // loaded, else its route. Every field on the card comes from this one object, so the card
-  // can no longer pair a lifetime total with the latest trip.
+  // progress (the distance, peak speed and net energy the service sends on each sample, timed
+  // from the drive's start; the session clock until a drive has started); otherwise the most
+  // recent stored trip — its rollup row when loaded, else its route. Every field on the card
+  // comes from this one object, so the card can no longer pair a lifetime total with the
+  // latest trip.
   type TripSummary = { live: boolean; atMs: number; meters: number; durationMs: number; maxKph: number; energyKwh: number };
 
   function newest<T>(rows: T[], startOf: (row: T) => number): T | null {
@@ -1135,7 +1137,7 @@ import { kph } from "./unit-types";
         live: true,
         atMs: Date.now(),
         meters: Number(state.sessionDistanceM || 0),
-        durationMs: Number(state.telemetry.sessionMs || session.sessionMs || 0) || (startedAt > 0 ? Date.now() - startedAt : 0),
+        durationMs: liveDriveDurationMs(state.telemetry, session) || (startedAt > 0 ? Date.now() - startedAt : 0),
         maxKph: state.sessionMaxSpeedKph,
         energyKwh: state.sessionEnergyKwh
       };

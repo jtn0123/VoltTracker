@@ -114,6 +114,29 @@ describe('Drive trip card: one drive, labelled', () => {
     expect(text('tripEffValue')).toBe(VD.units.efficiencyText(meters / 1609.344 / 0.6));
   });
 
+  it('shows the service totals for the live drive, timed from the drive start', () => {
+    const now = Date.now();
+    // The adapter session (sessionMs) is only seconds old in streamSamples, but the drive the
+    // service has been counting began two hours ago: 10 mi, 4 kWh, a 96.56 km/h peak.
+    streamSamples(3, (i) => ({
+      speedKph: 48,
+      powerKw: 18,
+      latitude: 34 + i * 0.00018,
+      longitude: -118,
+      driveDistanceM: 16093.44,
+      driveEnergyKwh: 4,
+      driveMaxSpeedKph: 96.56,
+      driveStartedAtMs: now - 2 * HOUR,
+    }));
+
+    expect(text('thisTripKicker')).toBe('Current drive');
+    expect(text('overviewDistance')).toBe(VD.formatDistance(16093.44));
+    expect(text('tripTimeValue')).toBe(VD.formatDuration(2 * HOUR));
+    expect(text('overviewMaxSpeed')).toBe('60 mph');
+    expect(text('tripEnergyValue')).toBe('4.0 kWh');
+    expect(text('tripEffValue')).toBe(VD.units.efficiencyText(10 / 4));
+  });
+
   it('does not book energy across a sample gap or while plugged in', () => {
     VD.setStatus({ state: 'connected' });
     const t0 = Date.now() - 60e3;

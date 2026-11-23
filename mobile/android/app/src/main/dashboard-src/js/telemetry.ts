@@ -194,6 +194,9 @@ import { driveGear, gearDisplayText } from "./gear";
   // as fresh when its updatedAt actually advances past this marker — otherwise
   // a wedged adapter keeps the stale indicator and rate chip reporting "live".
   let lastSeenSampleUpdatedAt = 0;
+  // Set once a sample has brought the service's own drive totals (applyServiceDriveTotals);
+  // from then on the distance summed from a recovered route must not replace them.
+  let serviceDriveTotalsSeen = false;
   // A genuinely new drive should reset the JS session baseline (distance / SOC
   // delta / history buffers) on the inactive→active status edge, but a mid-drive
   // Bluetooth blip that dips through disconnected/error/reconnecting before
@@ -408,6 +411,7 @@ import { driveGear, gearDisplayText } from "./gear";
       lastSampleAt: 0
     });
     lastSeenSampleUpdatedAt = 0;
+    serviceDriveTotalsSeen = false;
     liveRouteHydrated = false;
     liveRouteHydrationAttempts = 0;
     if (liveRouteHydrationRetryTimer !== null) {
@@ -496,7 +500,7 @@ import { driveGear, gearDisplayText } from "./gear";
     }
     const lastPoint = mapped[mapped.length - 1]!;
     setState({
-      sessionDistanceM: recoveredDistanceM,
+      ...(serviceDriveTotalsSeen ? {} : { sessionDistanceM: recoveredDistanceM }),
       sessionLastLat: lastPoint.lat,
       sessionLastLng: lastPoint.lng,
       liveRouteStartedAtMs: firstPoint.atMs,
@@ -884,14 +888,15 @@ import { driveGear, gearDisplayText } from "./gear";
   }
 
   // Shared by the live updateTelemetry path and the resume backfill below: appends one
-  // sample's readings to the bounded chart histories and advances the session distance /
-  // live route. Deliberately does NOT touch state.telemetry or state.lastSampleAt — only a
+  // sample's readings to the bounded chart histories and advances the drive totals / live
+  // route. Deliberately does NOT touch state.telemetry or state.lastSampleAt — only a
   // genuinely fresh live sample may drive the tiles and the staleness clock.
   function recordSampleHistory(sample: PayloadRecord) {
+    const serviceTotals = applyServiceDriveTotals(sample);
     const kph = Number(sample.speedKph);
     if (Number.isFinite(kph)) {
       pushBounded(state.speedHistory, kph, 48);
-      if (kph > state.sessionMaxSpeedKph) setState({ sessionMaxSpeedKph: kph });
+      if (!serviceTotals && kph > state.sessionMaxSpeedKph) setState({ sessionMaxSpeedKph: kph });
     }
     // Drive-tab live charts: power bars and SOC trace. Same fixed-window
     // discipline as the speed history.
@@ -899,7 +904,7 @@ import { driveGear, gearDisplayText } from "./gear";
     if (Number.isFinite(power)) {
       pushBounded(state.powerHistory, power, 60);
     }
-    accumulateSessionEnergy(sample, power);
+    if (!serviceTotals) accumulateSessionEnergy(sample, power);
     const soc = Number(sample.soc);
     if (Number.isFinite(soc)) {
       // Capture the session-start SOC so the "Δ since session" chip on the
@@ -931,12 +936,32 @@ import { driveGear, gearDisplayText } from "./gear";
         );
         // Reject tiny GPS jitter and very large jumps (likely a fix
         // reacquisition) so the distance counter stays honest.
-        if (step >= 2 && step < 250) setState({ sessionDistanceM: state.sessionDistanceM + (step) });
+        if (!serviceTotals && step >= 2 && step < 250) {
+          setState({ sessionDistanceM: state.sessionDistanceM + (step) });
+        }
       }
       setState({ sessionLastLat: lat, sessionLastLng: lon });
       if (typeof VD.updateLivePosition === "function") VD.updateLivePosition(lat, lon);
       else recordQueuedLivePosition(lat, lon);
     }
+  }
+
+  // The native service keeps the drive's distance, net energy and peak speed over every
+  // sample and sends them on each one (LiveDriveTotals.kt), so they stay whole however long
+  // the WebView was paused: the resume backfill only holds the last few minutes. Those
+  // figures replace the local fold below, which is kept for samples that carry none (the
+  // bridge-less browser demo). Returns whether the sample carried them.
+  function applyServiceDriveTotals(sample: PayloadRecord): boolean {
+    const distanceM = sample.driveDistanceM;
+    if (typeof distanceM !== "number" || !Number.isFinite(distanceM)) return false;
+    // JSON carries no Infinity, so `|| 0` only has NaN (absent) to replace.
+    setState({
+      sessionDistanceM: distanceM,
+      sessionEnergyKwh: Number(sample.driveEnergyKwh) || 0,
+      sessionMaxSpeedKph: Number(sample.driveMaxSpeedKph) || 0
+    });
+    serviceDriveTotalsSeen = true;
+    return true;
   }
 
   // Net HV energy for the in-progress drive (the Drive "Current drive" card's energy,
@@ -958,8 +983,9 @@ import { driveGear, gearDisplayText } from "./gear";
   // Resume catch-up: the native side buffers the samples broadcast while the Activity was
   // paused (the WebView is suspended and the broadcast receiver unregistered, so they were
   // never delivered) and replays them here in one batch right after resume/handshake.
-  // Replaying through recordSampleHistory rebuilds the speed/power/SOC charts, the session
-  // distance, and the live route as if the dashboard had been foregrounded the whole time.
+  // Replaying through recordSampleHistory rebuilds the speed/power/SOC charts and the live
+  // route as if the dashboard had been foregrounded the whole time; the drive totals come
+  // whole on each sample from the service, so a pause longer than the batch loses none.
   // History only: the newest fresh sample still arrives via updateTelemetry (the native side
   // keeps it out of the batch), so this path never bumps lastSampleAt or the live tiles.
   const BACKFILL_MAX_SAMPLES = 300;

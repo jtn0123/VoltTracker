@@ -28,13 +28,38 @@ export function initialTelemetryState(): VoltTelemetry {
 }
 
 /**
- * Running totals for the in-progress drive, accumulated sample by sample in
- * telemetry.ts#recordSampleHistory: the peak OBD speed and the net HV energy
- * (pack power integrated over time, drive minus regen — the live twin of a
- * stored trip row's maxSpeedKph / energyKwh). `sessionEnergyAtMs` is the
- * previous sample's clock, so the integral can size each step and skip gaps.
- * Reset alongside sessionDistanceM so every live-drive figure shares one span.
+ * Running totals for the in-progress drive: the peak OBD speed and the net HV
+ * energy (pack power integrated over time, drive minus regen — the live twin of
+ * a stored trip row's maxSpeedKph / energyKwh). Native samples carry the
+ * service's own (driveMaxSpeedKph / driveEnergyKwh), which telemetry.ts#
+ * recordSampleHistory copies in; a sample without them is folded there instead.
+ * `sessionEnergyAtMs` is the previous folded sample's clock, so the integral can
+ * size each step and skip gaps. Reset alongside sessionDistanceM so every
+ * live-drive figure shares one span.
  */
 export function initialSessionTotals() {
   return { sessionMaxSpeedKph: 0, sessionEnergyKwh: 0, sessionEnergyAtMs: 0 };
+}
+
+/**
+ * How long the live drive has run, on the same span as sessionDistanceM: from the
+ * service's drive start when the sample carries one (driveStartedAtMs), else the
+ * adapter session's clock (samples without service totals are folded per session).
+ * 0 when neither is known.
+ */
+export function liveDriveDurationMs(telemetry: VoltTelemetry, session: VoltSessionState): number {
+  const driveStartedAt = Number(telemetry.driveStartedAtMs) || 0;
+  return driveStartedAt > 0
+    ? Math.max(0, Date.now() - driveStartedAt)
+    : Number(telemetry.sessionMs || session.sessionMs || 0);
+}
+
+/**
+ * The SOC the live drive started from, on the same span as sessionDistanceM: the
+ * service's driveStartSoc (on the sample's own `soc` scale) when the sample carries
+ * the service totals, else the session-start SOC. NaN when unknown.
+ */
+export function liveDriveStartSoc(telemetry: VoltTelemetry, sessionStartSoc: unknown): number {
+  const soc = Number(telemetry.driveStartedAtMs) > 0 ? telemetry.driveStartSoc : sessionStartSoc;
+  return soc == null ? NaN : Number(soc);
 }

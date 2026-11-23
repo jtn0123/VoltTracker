@@ -25,7 +25,8 @@ internal object LiveDashboardSnapshot {
 
     // Recent-sample ring for the resume backfill. The largest dashboard chart window is 240
     // samples (the SOC trace), so 300 covers every chart plus margin; anything older would be
-    // evicted from the JS-side bounded histories immediately after replay anyway.
+    // evicted from the JS-side bounded histories immediately after replay anyway. Running totals
+    // must not be rebuilt from it: a longer pause outruns the ring, so they ride on each sample.
     private const val TELEMETRY_HISTORY_CAP = 300
     private val historyLock = Any()
     private val history = ArrayDeque<JSONObject>()
@@ -97,8 +98,9 @@ internal class LiveDashboardStatePublisher(
     /**
      * Pulls and publishes one coherent resume/ready refresh, so every tab derives from the same
      * newest service state. While a session is live, the ring history newer than
-     * [sinceUpdatedAtExclusive] is replayed first as a `backfillTelemetry` batch so the charts,
-     * session distance, and live route rebuild the background window in order; a genuinely fresh
+     * [sinceUpdatedAtExclusive] is replayed first as a `backfillTelemetry` batch so the charts and
+     * live route rebuild the background window in order (the drive and charge totals need no
+     * rebuild: every sample carries the service's own, see [LiveDriveTotals]); a genuinely fresh
      * newest sample then advances the live tiles by one point via the normal `updateTelemetry`
      * path (and is kept out of the batch so it cannot land in the histories twice). An old newest
      * sample is left to setAppState's timestamp-aware stale handling instead of being made to

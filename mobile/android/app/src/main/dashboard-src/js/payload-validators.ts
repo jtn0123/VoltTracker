@@ -72,7 +72,16 @@ const PAYLOAD_SPECS: Record<string, PayloadSpec> = {
       powerKw: "number",
       soc: "number",
       latitude: "number",
-      longitude: "number"
+      longitude: "number",
+      // The service's running totals for the drive / charge in progress (LiveDriveTotals.kt).
+      driveDistanceM: "number",
+      driveEnergyKwh: "number",
+      driveMaxSpeedKph: "number",
+      driveStartedAtMs: "number",
+      driveLastAtMs: "number",
+      driveStartSoc: "number",
+      chargeStartSoc: "number",
+      chargeStartedAtMs: "number"
     }
   },
   backfillTelemetry: {
