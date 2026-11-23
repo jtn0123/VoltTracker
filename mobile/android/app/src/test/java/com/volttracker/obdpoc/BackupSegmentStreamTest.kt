@@ -11,7 +11,6 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.GeneralSecurityException
-import java.util.Random
 import javax.crypto.spec.SecretKeySpec
 
 /**
@@ -26,7 +25,14 @@ class BackupSegmentStreamTest {
     private val prefix = ByteArray(BackupSegmentStream.NONCE_PREFIX_BYTES) { (0x40 + it).toByte() }
     private val header = "synthetic-header".toByteArray(Charsets.US_ASCII)
 
-    private fun payload(size: Int): ByteArray = ByteArray(size).also { Random(size.toLong()).nextBytes(it) }
+    /** Fixed filler bytes for a given size: repeatable test data, not a secret. */
+    private fun payload(size: Int): ByteArray {
+        var state = size.toLong() + 1
+        return ByteArray(size) {
+            state = state * 6364136223846793005L + 1442695040888963407L
+            (state ushr 56).toByte()
+        }
+    }
 
     private fun seal(
         plain: ByteArray,

@@ -28,12 +28,11 @@ internal fun writeLegacyV3Backup(
     passphrase: String,
 ) {
     val magic = "VTBKEN3\n".toByteArray(Charsets.US_ASCII)
+    val random = SecureRandom()
     val salt = ByteArray(16)
+    random.nextBytes(salt)
     val iv = ByteArray(12)
-    SecureRandom().apply {
-        nextBytes(salt)
-        nextBytes(iv)
-    }
+    random.nextBytes(iv)
     val iterBytes = ByteBuffer.allocate(4).putInt(V3_ITERATIONS).array()
     val spec = PBEKeySpec(passphrase.toCharArray(), salt, V3_ITERATIONS, 256)
     val key = SecretKeySpec(SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded, "AES")

@@ -15,7 +15,6 @@ import java.io.InputStream
 import java.io.InterruptedIOException
 import java.nio.ByteBuffer
 import java.security.GeneralSecurityException
-import java.util.Random
 
 /**
  * File-level coverage for the v4 encrypted backup container written by
@@ -53,7 +52,14 @@ class BackupCryptoSegmentedTest {
         ): Int = delegate.read(b, off, if (len > 0) 1 else 0)
     }
 
-    private fun payload(size: Int): ByteArray = ByteArray(size).also { Random(size.toLong() + 7).nextBytes(it) }
+    /** Fixed filler bytes for a given size: repeatable test data, not a secret. */
+    private fun payload(size: Int): ByteArray {
+        var state = size.toLong() + 7
+        return ByteArray(size) {
+            state = state * 6364136223846793005L + 1442695040888963407L
+            (state ushr 56).toByte()
+        }
+    }
 
     private fun encrypt(
         plain: ByteArray,
